@@ -582,18 +582,36 @@ const runBinaryApply = async (args: Args): Promise<number> => {
 /**
  * `cawco binary-units`: this build's units, as it writes them. `services`:
  * the hub's, the dashboard's and the agent's and the dashboard's socket
- * (service.ts `refreshServices`); else its keeper's own unit.
+ * (service.ts `refreshServices`), and the install's record of where the
+ * dashboard answers, which the update's verification probes (core
+ * binary-health.ts), as the socket now names it; else its keeper's own unit.
  */
 const writeBinaryUnits = async (services: boolean): Promise<void> => {
   const { binaryLayout } = await import("./binary-install");
   const { refreshServices, refreshUnits } = await import("./service");
   const say = (line: string) => console.log(`units: ${line}`);
   if (services) {
-    await refreshServices(
+    const { dashboardUrl } = await refreshServices(
       ["hub", "dashboard", "agent"],
       binaryLayout(CLI_VERSION),
       say
     );
+    const { installationPath, readInstallation, writeJsonAtomic } =
+      await import("@cawco/core/binary-installation");
+    const installation = await readInstallation();
+    if (
+      dashboardUrl &&
+      installation?.role === "hub" &&
+      installation.dashboardUrl !== dashboardUrl
+    ) {
+      await writeJsonAtomic(installationPath(), {
+        ...installation,
+        dashboardUrl,
+      });
+      say(
+        `the dashboard answers at ${dashboardUrl} (was ${installation.dashboardUrl ?? "not recorded"})`
+      );
+    }
   } else {
     await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), say);
   }

@@ -276,52 +276,44 @@ const here = (): Layout => {
 const HERE = here();
 const ROOT = HERE.root;
 
-const LISTEN_STREAM = /^ListenStream=(.+):(\d+)$/m;
+const LISTEN_STREAM = /^ListenStream=(.+):\d+$/m;
 /** An IPv6 host as `ListenStream=` writes it, in brackets (`listenAddress`). */
 const BRACKETED = /^\[(.*)\]$/;
 const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/;
-const SOCK_SERVICE = /<key>SockServiceName<\/key>\s*<string>([^<]*)<\/string>/;
 
 /**
- * The address the installed dashboard socket already listens on, read back out
+ * The host the installed dashboard socket already listens on, read back out
  * of its socket unit or its plist. Every binary update rewrites the dashboard's
  * units from the incoming build (`refreshServices`, run as `cawco binary-units
- * --services`), in a process with no PORT or HOST in its environment; without
- * this, a dashboard installed on another port would be moved back to 3000 by
- * the next update.
+ * --services`), in a process with no HOST in its environment; without this, a
+ * dashboard installed on one address would be moved back to every interface
+ * by the next update.
  */
-const installedDashboardAddress = ():
-  { host: string; port: string } | undefined => {
+const installedDashboardHost = (): string | undefined => {
   if (platform() === "darwin") {
     const path = launchAgentPath("dashboard");
     const text = existsSync(path) ? readFileSync(path, "utf8") : "";
-    const host = SOCK_NODE.exec(text)?.[1];
-    const port = SOCK_SERVICE.exec(text)?.[1];
-    return host && port ? { host, port } : undefined;
+    return SOCK_NODE.exec(text)?.[1] || undefined;
   }
   const path = socketPath("dashboard");
   const listen = existsSync(path)
     ? LISTEN_STREAM.exec(readFileSync(path, "utf8"))
     : null;
-  return listen?.[1] && listen[2]
-    ? { host: listen[1].replace(BRACKETED, "$1"), port: listen[2] }
-    : undefined;
+  return listen?.[1]?.replace(BRACKETED, "$1") || undefined;
 };
 
 /**
- * Where the dashboard listens. Read from the installing shell so a second
- * machine can differ, then from the socket already installed, with the
- * defaults this one's browser expects. Read as each unit is written: an
- * update's refresh clears PORT and HOST (`asInstalled`), so the socket keeps
- * the address it has.
+ * Where the dashboard listens: its port is the dashboard's everywhere (core
+ * `localDashboardPort`, 3455, which the hub's unit records, so an update
+ * keeps it), and its host is the installing shell's HOST, then the socket
+ * already installed's, then every interface. Read as each unit is written: an
+ * update's refresh clears HOST (`asInstalled`), so the socket keeps the host
+ * it has.
  */
-const dashboardAddress = (): { host: string; port: string } => {
-  const installed = installedDashboardAddress();
-  return {
-    port: process.env.PORT ?? installed?.port ?? "3000",
-    host: process.env.HOST ?? installed?.host ?? "0.0.0.0",
-  };
-};
+const dashboardAddress = (): { host: string; port: string } => ({
+  port: String(localDashboardPort()),
+  host: process.env.HOST ?? installedDashboardHost() ?? "0.0.0.0",
+});
 
 /** One listening socket a service is handed (`ServiceSpec.sockets`). */
 interface SocketSpec {
@@ -342,31 +334,45 @@ interface SocketSpec {
 }
 
 /**
- * The dashboard's sockets: where the network reaches it (required, its own
- * unit, `cawco-dashboard.socket`; installedDashboardAddress reads it back),
- * and this computer's loopback at the dashboard's loopback port (core
- * `localDashboardPort`), so `http://localhost:3455` is the dashboard here as
- * it is on every computer whose agent carries it (agent hub-loopback.ts).
+ * The loopback addresses a listener on `host` already answers: the IPv4
+ * wildcard takes 127.0.0.1 and a loopback address itself; `::` is left to
+ * name each, since an IPv6 wildcard takes IPv4 only where the system maps it.
+ */
+const coveredLoopback = (host: string): string[] => {
+  if (host === "0.0.0.0") {
+    return ["127.0.0.1"];
+  }
+  return host === "127.0.0.1" || host === "::1" ? [host] : [];
+};
+
+/**
+ * The dashboard's sockets, on its one port (core `localDashboardPort`,
+ * 3455): where the network reaches it (required, its own unit,
+ * `cawco-dashboard.socket`; installedDashboardHost reads it back), and each
+ * loopback address that one does not already answer
+ * ({@link coveredLoopback}), so `http://localhost:3455` is the dashboard
+ * here by either family as it is on every computer whose agent carries it
+ * (agent hub-loopback.ts). On the hub's computer the agent carries nothing,
+ * so these are the only listeners on the port. Under the default HOST
+ * (0.0.0.0) that is `::1` alone, where this computer has an IPv6 loopback
+ * ({@link hasIpv6Loopback}); none is a unit of none.
  *
  * The loopback is a unit of its own, `cawco-dashboard-local.socket`, wanted
  * and not required: systemd fails a whole socket unit on one address it
  * cannot open, closing the rest (src/core/socket.c `socket_open_fds`: `p->fd
  * = socket_address_listen_in_cgroup(…); if (p->fd < 0) return p->fd;`, then
- * "Failed to listen on sockets"), so a 3455 something else holds (obelisk's
- * agent, 2026-10-18) took 3000 down with it while both were one unit. Apart,
- * the service gets the loopback's descriptors only when it opened
+ * "Failed to listen on sockets"), so a loopback address something else
+ * holds would take the network's down with it in one unit. Apart, the
+ * service gets the loopback's descriptors only when it opened
  * (src/core/service.c `service_collect_fds`: a socket with none, `if (cn_fds
- * == 0) continue;`), and starts on the network's alone otherwise. It is left
- * out when the loopback port is the network port already, and `::1` on a
- * computer that has no IPv6 loopback ({@link hasIpv6Loopback}).
+ * == 0) continue;`), and starts on the network's alone otherwise.
  */
 const dashboardSockets = (): SocketSpec[] => {
-  const local = String(localDashboardPort());
   const network = dashboardAddress();
-  const loopback = [
-    { host: "127.0.0.1", port: local },
-    ...(hasIpv6Loopback() ? [{ host: "::1", port: local }] : []),
-  ];
+  const covered = coveredLoopback(network.host);
+  const loopback = ["127.0.0.1", ...(hasIpv6Loopback() ? ["::1"] : [])]
+    .filter((host) => !covered.includes(host))
+    .map((host) => ({ host, port: network.port }));
   return [
     {
       unit: "dashboard",
@@ -374,7 +380,7 @@ const dashboardSockets = (): SocketSpec[] => {
       listens: [network],
       required: true,
     },
-    ...(local === network.port
+    ...(loopback.length === 0
       ? []
       : [
           {
@@ -634,13 +640,21 @@ const probeSessiond = async (): Promise<string | undefined> => {
   return `${endpoint} accepts connections`;
 };
 
-/** The browser address corresponding to the socket we install. */
-export const dashboardUrl = (): string => {
-  const { host: listening, port } = dashboardAddress();
+/** The browser address of a socket listening at `address`. */
+const browserUrl = ({
+  host: listening,
+  port,
+}: {
+  host: string;
+  port: string;
+}): string => {
   const host =
     listening === "0.0.0.0" || listening === "::" ? "localhost" : listening;
   return `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
 };
+
+/** The browser address corresponding to the socket we install. */
+export const dashboardUrl = (): string => browserUrl(dashboardAddress());
 
 const READY_TIMEOUT_MS = 90_000;
 
@@ -883,11 +897,9 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         ...(readEnv(CAWCO_ENV.previewPorts)
           ? { [CAWCO_ENV.previewPorts]: readEnv(CAWCO_ENV.previewPorts) }
           : {}),
-        // The dashboard socket's port, which the hub's preview ports never
-        // take (hub config.ts `FLEET_PORTS`) and its bridge's links name.
-        [CAWCO_ENV.dashboardPort]: dashboardAddress().port,
-        // Its loopback port, the one the hub names to every agent: the same
-        // one the dashboard's loopback socket listens on here (`dashboardSockets`).
+        // The dashboard's port, the one its sockets listen on here
+        // (`dashboardSockets`) and the hub names to every agent; the hub's
+        // preview ports never take it (hub config.ts `FLEET_PORTS`).
         [CAWCO_ENV.localDashboardPort]: String(localDashboardPort()),
       },
       workingDirectory: LAYOUT_ROOT,
@@ -2435,12 +2447,11 @@ const recordedEnvironment = (
 
 /**
  * What a unit's text takes from the installing shell's environment: its
- * PATH, its XDG homes and CawCo's settings, and the dashboard's PORT and HOST
- * (which no unit records: the socket's own address stands for them,
+ * PATH, its XDG homes and CawCo's settings, and the dashboard's HOST (which
+ * no unit records: the socket's own address stands for it,
  * `dashboardAddress`).
  */
 const fromShell = (name: string): boolean =>
-  name === "PORT" ||
   name === "HOST" ||
   name === "PATH" ||
   name === "XDG_CONFIG_HOME" ||
@@ -2503,6 +2514,14 @@ const renderInstalled = (
     }
   );
 
+/** The browser address of the socket-activated service among `specs` (the dashboard), by its network socket. */
+const dashboardUrlOf = (
+  specs: readonly ServiceSpec[]
+): { dashboardUrl?: string } => {
+  const network = specs.find((spec) => spec.sockets)?.sockets?.[0]?.listens[0];
+  return network ? { dashboardUrl: browserUrl(network) } : {};
+};
+
 /**
  * THE UPDATE'S UNIT REFRESH: what a binary update runs from the build it
  * installs (`cawco binary-units --services`, binary-apply.ts), before it
@@ -2511,9 +2530,14 @@ const renderInstalled = (
  * writes. Only a unit this machine has is refreshed. Each is written as the
  * install wrote it, from the environment it recorded then (the installing
  * shell's PATH, XDG homes and CawCo settings, {@link asInstalled}), with the
- * dashboard's loopback port as the hub's unit records it; the socket's
- * network address is read back from the socket itself
- * (`installedDashboardAddress`). Only a unit whose text changed is rewritten.
+ * dashboard's port as the hub's unit records it (its loopback port, which
+ * the dashboard's socket listens on too: an install from before that,
+ * listening on 3000, moves to it here); the socket's host is read back from
+ * the socket itself (`installedDashboardHost`). Only a unit whose text
+ * changed is rewritten. Answers the dashboard's browser address as its
+ * socket now names it, when this machine has the dashboard, for the
+ * install's record (cli.ts `writeBinaryUnits`), which the update's
+ * verification probes.
  *
  * systemd: one daemon-reload for the set; a socket that changed (or is not
  * listening) is rebound through `bindSockets`, which stops the dashboard and
@@ -2530,11 +2554,12 @@ export const refreshServices = async (
   ids: readonly ServiceId[],
   binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>,
   note: (line: string) => void
-): Promise<void> => {
+): Promise<{ dashboardUrl?: string }> => {
   const mac = platform() === "darwin";
   const fileOf = (id: ServiceId) =>
     mac ? launchAgentPath(id) : systemdPath(id);
   const installed = new Map<ServiceId, string>();
+  const rendered: ServiceSpec[] = [];
   for (const id of ids) {
     // biome-ignore lint/performance/noAwaitInLoops: a handful of files, read in order
     const text = await Bun.file(fileOf(id))
@@ -2558,6 +2583,7 @@ export const refreshServices = async (
       local,
       binaryLayout,
     });
+    rendered.push(spec);
     const path = fileOf(id);
     if (text !== before) {
       // biome-ignore lint/performance/noAwaitInLoops: units rewrite one at a time, each note in its order
@@ -2590,6 +2616,7 @@ export const refreshServices = async (
   if (rebind) {
     await bindSockets(rebind.spec, rebind.moving, note);
   }
+  return dashboardUrlOf(rendered);
 };
 
 /**

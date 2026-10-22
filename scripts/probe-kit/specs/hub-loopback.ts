@@ -16,13 +16,15 @@
  * 8b. A dev server started on 3000 after the agent registered binds it on
  *    each of 127.0.0.1 and ::1 that 3000 was free on before the agent
  *    started; a family something else held then is said with its holder.
- * 9. The hub's computer: the installer writes the network address as
- *    `cawco-dashboard.socket` (required) and 127.0.0.1:P and, where this
- *    computer has an IPv6 loopback, [::1]:P as `cawco-dashboard-local.socket`
- *    (`Service=` the dashboard, wanted through its `Sockets=`), and as two
- *    plist keys; serve.js, run under `systemd-socket-activate` on those very
- *    listens, answers the dashboard on each, and its `/ws` gate admits
- *    `http://localhost:P` and refuses another origin.
+ * 9. The hub's computer, as installed (HOST unset, so every interface): the
+ *    installer writes the dashboard on its one port P, 0.0.0.0:P as
+ *    `cawco-dashboard.socket` (required) and, where this computer has an
+ *    IPv6 loopback, [::1]:P as `cawco-dashboard-local.socket` (`Service=`
+ *    the dashboard, wanted through its `Sockets=`), and as as many plist
+ *    keys; serve.js, run under `systemd-socket-activate` on those very
+ *    listens, answers the dashboard at 127.0.0.1:P and [::1]:P, its `/ws`
+ *    gate admits `http://localhost:P` and refuses another origin, and none
+ *    of the hub, the agent or serve.js listens on 3000.
  * 9c. serve.js handed the network socket alone (the loopback unit did not
  *    open): it says so, and answers the dashboard there.
  *
@@ -135,9 +137,9 @@ export type HeldBefore = Partial<Record<(typeof FAMILIES)[number], string>>;
 
 /**
  * Who holds 3000 on 127.0.0.1 and on ::1 now, read before the agent starts:
- * a host's own dashboard socket holds `0.0.0.0:3000` (obelisk's
- * cawco-dashboard.socket), so its 127.0.0.1:3000 was never free, whatever
- * the agent does.
+ * a host's own dev server, or an install from before the dashboard moved to
+ * 3455 (its cawco-dashboard.socket on `0.0.0.0:3000`), leaves its
+ * 127.0.0.1:3000 never free, whatever the agent does.
  */
 export const holdersOf3000 = async (): Promise<HeldBefore> => {
   const holders = (await $`ss -Hltnp`.text())
@@ -205,17 +207,17 @@ export const devServerOn3000 = async (
 };
 
 /**
- * The dashboard's socket as `cawco service install` writes it on the hub's
- * computer (cli service.ts `dashboardSocketTexts`), its network address at
- * 127.0.0.1:`network` and its loopback port `local`: read from the
- * installing shell's environment, as the installer reads it, and put back after.
+ * The dashboard's sockets as `cawco service install` writes them on the
+ * hub's computer (cli service.ts `dashboardSocketTexts`), on the dashboard's
+ * port `port` and the installer's default host, every interface (core
+ * install-script.ts `HOST`): read from the installing shell's environment,
+ * as the installer reads it, and put back after.
  */
-const installedSocket = async (network: number, local: number) => {
-  const names = ["PORT", "HOST", "CAWCO_LOCAL_DASHBOARD_PORT"] as const;
+const installedSocket = async (port: number) => {
+  const names = ["HOST", "CAWCO_LOCAL_DASHBOARD_PORT"] as const;
   const was = names.map((name) => process.env[name]);
-  process.env.PORT = String(network);
-  process.env.HOST = "127.0.0.1";
-  process.env.CAWCO_LOCAL_DASHBOARD_PORT = String(local);
+  process.env.HOST = "0.0.0.0";
+  process.env.CAWCO_LOCAL_DASHBOARD_PORT = String(port);
   try {
     const { dashboardSocketTexts } =
       await import("../../../packages/cli/src/service");
@@ -317,22 +319,55 @@ const dashboardAt = (addresses: string[], host: string) =>
   );
 
 /**
+ * Whether the installer's loopback socket is as written for this computer:
+ * [::1]:`port` alone, wanted by the dashboard and starting it, where it has
+ * an IPv6 loopback; none at all where it has not (0.0.0.0 answers
+ * 127.0.0.1 already).
+ */
+const loopbackAsWritten = (
+  texts: Awaited<ReturnType<typeof installedSocket>>,
+  port: number,
+  v6: boolean
+): boolean => {
+  const [, loopback] = texts.systemd;
+  if (!v6) {
+    return (
+      loopback === undefined &&
+      texts.systemd.length === 1 &&
+      !texts.service.includes("Sockets=")
+    );
+  }
+  return (
+    loopback?.unit === "cawco-dashboard-local.socket" &&
+    JSON.stringify(listensOf(loopback.text)) ===
+      JSON.stringify([`[::1]:${port}`]) &&
+    loopback.text.includes("FileDescriptorName=dashboard-local") &&
+    loopback.text.includes("Service=cawco-dashboard.service") &&
+    texts.service.includes(
+      "Sockets=cawco-dashboard.socket cawco-dashboard-local.socket"
+    ) &&
+    !texts.service.includes("Requires=cawco-dashboard-local.socket")
+  );
+};
+
+/**
  * 9. The hub's computer: the dashboard's sockets as the installer writes
  * them, under systemd's own socket activation, with serve.js on the
  * published build; then (9c) serve.js handed the network socket alone, as
  * systemd hands it when the loopback socket unit did not open.
- * `started` is handed each serve.js process, for the spec to end.
+ * `started` is handed each serve.js process, for the spec to end; `fleetPids`
+ * are the hub's and the agent's, which with serve.js hold no 3000.
  */
 async function hubComputer(
   kit: Kit,
   fleet: KitFleet,
+  fleetPids: number[],
   started: (child: ReturnType<typeof Bun.spawn>) => void
 ): Promise<void> {
   const dashboard = fleet.localDashboardPort;
   const local = `http://localhost:${dashboard}`;
-  const network = await freePort();
   const v6 = hasIpv6Loopback();
-  const texts = await installedSocket(network, dashboard);
+  const texts = await installedSocket(dashboard);
   const [own, loopback] = texts.systemd;
   const networkListens = listensOf(own?.text ?? "");
   const loopbackListens = listensOf(loopback?.text ?? "");
@@ -343,28 +378,17 @@ async function hubComputer(
     (match) => match[1] as string
   );
   kit.check(
-    `9: the installer writes the network address and the loopback (127.0.0.1${v6 ? " and ::1" : "; this computer has no ::1"}) as two socket units, the loopback's wanted by the dashboard and starting it, and as two plist socket keys`,
+    `9: the installer writes the dashboard on its one port P (${dashboard}): 0.0.0.0:P as its own socket, required, ${v6 ? "and [::1]:P as the loopback socket, wanted by the dashboard and starting it" : "and no loopback socket (this computer has no ::1)"}, and as ${v6 ? "two plist socket keys" : "one plist socket key"}`,
     own?.unit === "cawco-dashboard.socket" &&
       JSON.stringify(networkListens) ===
-        JSON.stringify([`127.0.0.1:${network}`]) &&
-      loopback?.unit === "cawco-dashboard-local.socket" &&
-      JSON.stringify(loopbackListens) ===
-        JSON.stringify([
-          `127.0.0.1:${dashboard}`,
-          ...(v6 ? [`[::1]:${dashboard}`] : []),
-        ]) &&
-      loopback.text.includes("FileDescriptorName=dashboard-local") &&
-      loopback.text.includes("Service=cawco-dashboard.service") &&
-      texts.service.includes(
-        "Sockets=cawco-dashboard.socket cawco-dashboard-local.socket"
-      ) &&
+        JSON.stringify([`0.0.0.0:${dashboard}`]) &&
       texts.service.includes("Requires=cawco-dashboard.socket") &&
-      !texts.service.includes("Requires=cawco-dashboard-local.socket") &&
+      loopbackAsWritten(texts, dashboard, v6) &&
       JSON.stringify(keys) ===
-        JSON.stringify(["dashboard", "dashboard-local"]) &&
+        JSON.stringify(["dashboard", ...(v6 ? ["dashboard-local"] : [])]) &&
       JSON.stringify(nodes) ===
-        JSON.stringify(["127.0.0.1", "127.0.0.1", ...(v6 ? ["::1"] : [])]),
-    `${own?.unit}: ${networkListens.join(", ")}; ${loopback?.unit}: ${loopbackListens.join(", ")}; plist keys ${keys.join(", ")}, SockNodeName ${nodes.join(", ")}`
+        JSON.stringify(["0.0.0.0", ...(v6 ? ["::1"] : [])]),
+    `${own?.unit}: ${networkListens.join(", ")}; ${loopback?.unit ?? "no loopback unit"}: ${loopbackListens.join(", ") || "none"}; plist keys ${keys.join(", ")}, SockNodeName ${nodes.join(", ")}`
   );
   kit.note(
     `9: the socket units as written:\n${texts.systemd.map((one) => `# ${one.unit}\n${one.text}`).join("\n")}`
@@ -384,7 +408,7 @@ async function hubComputer(
   );
   started(both);
   const loads = await dashboardAt(
-    [...networkListens, ...loopbackListens],
+    [`127.0.0.1:${dashboard}`, ...(v6 ? [`[::1]:${dashboard}`] : [])],
     `localhost:${dashboard}`
   );
   const ws = `ws://127.0.0.1:${dashboard}/ws/dashboard`;
@@ -400,11 +424,21 @@ async function hubComputer(
   });
   const said = (await Bun.file(serveLog).text()).trim();
   kit.check(
-    "9: on the hub's computer serve.js answers on every address its sockets name: localhost:P is the dashboard, and its /ws gate admits that origin and refuses another",
+    "9: on the hub's computer serve.js answers on every address its sockets name: localhost:P is the dashboard by each loopback family, and its /ws gate admits that origin and refuses another",
     loads.every((line) => line.endsWith("(the dashboard)")) &&
       heard === "heard" &&
       foreign.startsWith("closed"),
     `${loads.join("; ")}; /ws ${local}: ${heard}, ${FOREIGN}: ${foreign}; serve.js said: ${said}`
+  );
+  const on3000 = await Promise.all(
+    [...fleetPids, both.pid].map(
+      async (pid) => `${pid}: ${portList(await listening(pid, [3000]))}`
+    )
+  );
+  kit.check(
+    "9: with the dashboard up on P, none of the hub, the agent or serve.js listens on 3000",
+    on3000.every((line) => line.endsWith(": none")),
+    `3000 held by pid ${on3000.join("; ")}`
   );
   both.kill();
   await both.exited;
@@ -441,7 +475,7 @@ const run = async (kit: Kit) => {
   try {
     fleet.launch("sessiond");
     await fleet.sessiondUp();
-    fleet.launch("hub");
+    const hub = fleet.launch("hub");
     await fleet.hubUp();
     fleet.fileAccount();
     const before = await holdersOf3000();
@@ -461,7 +495,7 @@ const run = async (kit: Kit) => {
     );
 
     // 9.
-    await hubComputer(kit, fleet, (child) => {
+    await hubComputer(kit, fleet, [hub.pid, agent.pid], (child) => {
       hubSide = child;
     });
   } finally {

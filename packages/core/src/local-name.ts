@@ -1,7 +1,7 @@
 /**
  * The hub's `.local` name (hub mdns.ts), and the address it opens the
  * dashboard at: the dashboard's own listener, on its own port
- * (`http://cawco.local:3000`). CawCo binds no other port for it.
+ * (`http://cawco.local:3455`). CawCo binds no other port for it.
  */
 
 /**
@@ -22,7 +22,7 @@ export interface LocalName {
   /** The `.local` name the hub holds, while `held`. */
   name?: string;
   state: LocalNameState;
-  /** The dashboard at the name, with its port (`http://cawco.local:3000`), while `held`. */
+  /** The dashboard at the name, with its port (`http://cawco.local:3455`), while `held`. */
   url?: string;
 }
 

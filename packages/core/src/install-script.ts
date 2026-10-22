@@ -1,5 +1,5 @@
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
-import { CAWCO_ENV, CAWCO_HUB_PORT } from "./index";
+import { CAWCO_ENV, CAWCO_HUB_PORT, CAWCO_LOCAL_DASHBOARD_PORT } from "./index";
 import { INSTALL_CODE_ENV } from "./install";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { RELEASE_PUBLIC_KEY } from "./release-key";
@@ -389,10 +389,10 @@ ${
     ? `  say "joining $HUB"
   set -- binary-install agent --hub "$HUB" --channel "$CHANNEL"`
     : `  # Fix the socket address explicitly so the printed URL names this install.
-  PORT="\${PORT:-3000}"
+  ${CAWCO_ENV.localDashboardPort}="\${${CAWCO_ENV.localDashboardPort}:-${CAWCO_LOCAL_DASHBOARD_PORT}}"
   HOST="\${HOST:-0.0.0.0}"
   ${CAWCO_ENV.hubPort}="\${${CAWCO_ENV.hubPort}:-${CAWCO_HUB_PORT}}"
-  export PORT HOST ${CAWCO_ENV.hubPort}
+  export ${CAWCO_ENV.localDashboardPort} HOST ${CAWCO_ENV.hubPort}
   # A hub already on this network or tailnet: this machine joins it unless a person says to start another.
   JOINED_EXISTING=0
   FOUND="$("$ROOT/current/$EXE" binary-find-hub </dev/null 2>/dev/null || :)"
@@ -434,7 +434,7 @@ ${
       *:*) DASHBOARD_HOST="[$HOST]" ;;
       *) DASHBOARD_HOST="$HOST" ;;
     esac
-    printf '\\nCawCo is ready. Open your dashboard:\\n  %s\\n' "http://$DASHBOARD_HOST:$PORT"
+    printf '\\nCawCo is ready. Open your dashboard:\\n  %s\\n' "http://$DASHBOARD_HOST:$${CAWCO_ENV.localDashboardPort}"
   fi
 `
 }  case ":$PATH:" in

@@ -71,11 +71,11 @@ export CLAUDE_LATE_S
 
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
-RIGS=(sshadd admitted held3455 spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry
+RIGS=(sshadd admitted spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry
   pins workspace wsarchive runaway memory capped slowfleet bare nightlyjoin)
 # How many systemd machines each rig boots (its `machines` refuses any other count): what it holds of the host user's
 # inotify instances while it runs.
-declare -A RIG_MACHINES=([sshadd]=3 [admitted]=2 [held3455]=1 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1
+declare -A RIG_MACHINES=([sshadd]=3 [admitted]=2 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1
   [swapkill]=1 [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [pins]=1 [workspace]=2
   [wsarchive]=2 [runaway]=1 [memory]=1 [capped]=2 [slowfleet]=2 [bare]=2 [nightlyjoin]=2)
 # THE HOST USER'S INOTIFY INSTANCES are every rig's to share. The kernel charges an instance to its user in each user
@@ -1029,6 +1029,22 @@ export -f machines
 
 # ---------------------------------------------------------------- installing and joining, a check or a rig's setup
 
+# The hub's machine serves its dashboard on 3455 alone: 127.0.0.1, its own address and [::1] where it has one are the
+# dashboard, and nothing on the machine listens on 3000.
+check_hub_dashboard_3455() {
+  local at
+  for at in 127.0.0.1 "$hub_ip"; do
+    as_user "$hubc" curl -fsS --max-time 5 "http://$at:3455/session" | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: $at:3455 is not the dashboard"; return 1; }
+  done
+  if has_ipv6_loopback "$hubc"; then
+    as_user "$hubc" curl -fsS --max-time 5 -g 'http://[::1]:3455/session' | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+  fi
+  local on3000
+  on3000=$(as_user "$hubc" ss -Hltnp 'sport = :3000')
+  [[ -z "$on3000" ]] || { echo "ASSERTION FAILED: something on the hub's machine listens on 3000: $on3000"; return 1; }
+}
 # The hub installs from the rig's feed (build $1, from channel $2 when one is named, the installer's own otherwise):
 # pristine first (no git, Bun, Node or openssl), and the installer places none of git, Bun or Node.
 install_hub() {
@@ -1036,15 +1052,12 @@ install_hub() {
   as_user "$hubc" sh -c 'for tool in git bun node openssl; do if command -v $tool > /dev/null; then echo "$tool is already there"; exit 1; fi; done; echo pristine'
   as_user "$hubc" env ${channel:+CAWCO_CHANNEL=$channel} sh /shared/installer.sh
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
-  as_user "$hubc" curl -fsS -o /dev/null http://127.0.0.1:3000/
-  # The binary's dashboard serves every address its socket names: the loopback port too, and [::1] where the
-  # machine has it (the socket names it there alone). `/` answers 307 to /session, the page with the app's markup.
-  as_user "$hubc" curl -fsS http://127.0.0.1:3455/session | grep -q _app/immutable \
-    || { echo "ASSERTION FAILED: 127.0.0.1:3455 is not the dashboard"; return 1; }
-  if has_ipv6_loopback "$hubc"; then
-    as_user "$hubc" curl -fsS -g 'http://[::1]:3455/session' | grep -q _app/immutable \
-      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
-  fi
+  # On the hub's machine 3455 is the dashboard on every address its sockets name: the network's (0.0.0.0, so the
+  # machine's own address and 127.0.0.1) and [::1] where the machine has it (the loopback socket names it there
+  # alone). `/` answers 307 to /session, the page with the app's markup. Nothing listens on 3000.
+  check_hub_dashboard_3455
+  [[ "$(as_user "$hubc" grep -o '"dashboardUrl":"[^"]*"' /home/cawco/.local/share/cawco/binary/installation.json)" == '"dashboardUrl":"http://localhost:3455"' ]] \
+    || { echo "ASSERTION FAILED: the install's record names another dashboard address than http://localhost:3455"; return 1; }
   [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == "versions/$version" ]]
   as_user "$hubc" sh -c 'for tool in git bun node; do if command -v $tool > /dev/null; then echo "$tool appeared"; exit 1; fi; done; echo still-none'
@@ -1106,7 +1119,7 @@ fleet() {
   fi
   [[ -z $signed ]] || setup "sign in $signed to a CawCo account" sign_in $signed
 }
-export -f install_hub join_machine signed_in_on new_account sign_in
+export -f check_hub_dashboard_3455 install_hub join_machine signed_in_on new_account sign_in
 
 # ---------------------------------------------------------------- the person's side of an update, its stand-ins slow
 # What reached the person through updates on 2026-10-16, which no rig saw while its stand-ins were fast: a message
@@ -1276,10 +1289,12 @@ loopback_carried() {
   own=$(as_user "$hubc" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service | grep "\[hub loopback\]" || true')
   echo "== the joined machine's agent"; echo "$joined"
   echo "== the hub machine's agent"; echo "$own"
-  [[ "$joined" == *"the hub at $hub_ip is served on"* ]] \
-    || { echo "ASSERTION FAILED: the joined machine's agent says nothing of serving the hub at $hub_ip"; return 1; }
+  [[ "$joined" == *"the hub at $hub_ip is served on"*"http://localhost:3455 (its dashboard at :3455)"* ]] \
+    || { echo "ASSERTION FAILED: the joined machine's agent says nothing of serving the hub's dashboard at $hub_ip:3455 on localhost:3455"; return 1; }
   [[ "$own" == *"the hub says this is its own computer"* && "$own" != *"is served on"* ]] \
     || { echo "ASSERTION FAILED: the hub machine's agent does not say the hub is its own computer, or serves it"; return 1; }
+  # With both agents up, the hub's machine still answers 3455 itself and nothing there took 3000.
+  check_hub_dashboard_3455
 }
 export -f loopback_carried
 
@@ -1632,47 +1647,6 @@ rig_admitted() {
   check "a machine that joins a hub requiring paired devices by itself is held with none of its frames refused register first, the person admits it, and it is the machine's registered connection: online, two heartbeats taken, none refused after either" admitted_heartbeats 900
 }
 
-# ---------------------------------------------------------------- held3455: something else holds 127.0.0.1:3455
-# before the hub installs. The loopback socket is a unit of its own, wanted by the dashboard: it fails alone, said in
-# its journal, and the dashboard comes up on 3000 without it (systemd hands a service no descriptors from a socket
-# that did not open: src/core/service.c `service_collect_fds`). Once the port is free, the dashboard's next start opens
-# it (its `Sockets=` is a `Wants=`, which a start or restart job pulls in: src/core/transaction.c).
-held_loopback_install() {
-  local version=$1
-  as_user "$hubc" systemd-run --user --unit=cawco-proof-holder socat TCP-LISTEN:3455,bind=127.0.0.1,reuseaddr,fork SYSTEM:'echo held'
-  # The holder answers a bare line with no HTTP headers, which curl reads only with --http0.9.
-  wait_until 20 '[[ "$(as_user "$hubc" curl -s --http0.9 --max-time 2 http://127.0.0.1:3455/ || true)" == *held* ]]'
-  as_user "$hubc" sh /shared/installer.sh
-  [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
-  as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3000/session | grep -q _app/immutable \
-    || { echo "ASSERTION FAILED: the dashboard does not answer on 3000 with 3455 held"; return 1; }
-  [[ "$(as_user "$hubc" systemctl --user is-active cawco-dashboard.service || true)" == active ]] \
-    || { echo "ASSERTION FAILED: the dashboard's service is not active"; return 1; }
-  [[ "$(as_user "$hubc" systemctl --user is-active cawco-dashboard.socket || true)" == active ]] \
-    || { echo "ASSERTION FAILED: the dashboard's own socket is not active"; return 1; }
-  local state socket_log service_log
-  state=$(as_user "$hubc" systemctl --user is-active cawco-dashboard-local.socket || true)
-  socket_log=$(as_user "$hubc" sh -c 'journalctl --user --no-pager -o cat -u cawco-dashboard-local.socket || true')
-  service_log=$(as_user "$hubc" sh -c 'journalctl --user --no-pager -o cat -u cawco-dashboard.service || true')
-  echo "== cawco-dashboard-local.socket: $state"; echo "$socket_log"
-  [[ $state != active && "$socket_log" == *"Address already in use"* ]] \
-    || { echo "ASSERTION FAILED: the loopback socket's failure on the held port is not in its journal"; return 1; }
-  [[ "$service_log" == *"no dashboard-local socket was handed over"* ]] \
-    || { echo "ASSERTION FAILED: the dashboard does not say it runs without its loopback socket"; return 1; }
-  as_user "$hubc" systemctl --user stop cawco-proof-holder
-  as_user "$hubc" systemctl --user restart cawco-dashboard.service
-  wait_until 30 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/session | grep -q _app/immutable'
-  [[ "$(as_user "$hubc" systemctl --user is-active cawco-dashboard-local.socket || true)" == active ]] \
-    || { echo "ASSERTION FAILED: the loopback socket did not open on the dashboard's next start"; return 1; }
-}
-export -f held_loopback_install
-rig_held3455() {
-  use_feed base
-  setup "boot the machine: hub" machines hub
-  setup_done
-  check "with 127.0.0.1:3455 held before the install, the hub installs and the dashboard answers on 3000, the loopback socket's failure in its journal; once the port is free the dashboard's next start opens it" "held_loopback_install $BASE"
-}
-
 # ---------------------------------------------------------------- spare: installs that must stop, on a machine
 # nothing is installed on, and that must leave it as it was.
 no_linger_no_terminal() {
@@ -1741,36 +1715,50 @@ rig_spare() {
 
 # ---------------------------------------------------------------- hubself: the hub's own machine updates (the hub
 # restarts itself) with a child held on its keeper and sessions asked for while it installs.
-# Before it, the machine's units are put back to what builds before the loopback dashboard wrote: the dashboard's
-# socket on its network address alone, no loopback socket unit, no `Sockets=` in the dashboard's unit, no loopback
-# port in the hub's. So the update to NEXT carries units NEXT writes otherwise, and no `cawco service install` runs
-# after it. The agent's, the hub's and the dashboard's units are kept to compare after.
-units_before_loopback() {
+# Before it, the machine's units are put back to what builds before the dashboard moved to 3455 wrote: the dashboard's
+# socket on 0.0.0.0:3000, its loopback socket on 127.0.0.1:3455 (and [::1]:3455 where the machine has ::1) named in the
+# dashboard's `Sockets=`, the dashboard's port in the hub's unit as `CAWCO_DASHBOARD_PORT=3000`, and the install's
+# record naming http://localhost:3000, the address the update's verification probes. So the update to NEXT carries units
+# NEXT writes otherwise, and no `cawco service install` runs after it. The agent's and the hub's units are kept to
+# compare after.
+units_before_3455() {
+  local v6=0
+  has_ipv6_loopback "$hubc" && v6=1
   as_user "$hubc" sh -c '
     set -e
     u=/home/cawco/.config/systemd/user
+    record=/home/cawco/.local/share/cawco/binary/installation.json
     systemctl --user stop cawco-dashboard.service
-    systemctl --user disable --now cawco-dashboard-local.socket || true
-    rm -f $u/cawco-dashboard-local.socket
+    systemctl --user disable --now cawco-dashboard-local.socket 2> /dev/null || true
+    sed -i "s/^ListenStream=0\.0\.0\.0:3455\$/ListenStream=0.0.0.0:3000/" $u/cawco-dashboard.socket
+    {
+      printf "[Unit]\nDescription=CawCo dashboard dashboard-local socket\n\n[Socket]\nListenStream=127.0.0.1:3455\n"
+      [ "$1" = 1 ] && printf "ListenStream=[::1]:3455\n"
+      printf "FileDescriptorName=dashboard-local\nService=cawco-dashboard.service\nNoDelay=true\nFreeBind=true\nReusePort=true\n\n[Install]\nWantedBy=sockets.target\n"
+    } > $u/cawco-dashboard-local.socket
     sed -i "/^Sockets=/d" $u/cawco-dashboard.service
-    sed -i "/^Environment=CAWCO_LOCAL_DASHBOARD_PORT=/d" $u/cawco-hub.service
+    sed -i "/^WorkingDirectory=/a Sockets=cawco-dashboard.socket cawco-dashboard-local.socket" $u/cawco-dashboard.service
+    sed -i "/^Environment=CAWCO_LOCAL_DASHBOARD_PORT=/i Environment=CAWCO_DASHBOARD_PORT=3000" $u/cawco-hub.service
+    sed -i "s#\"dashboardUrl\":\"http://localhost:3455\"#\"dashboardUrl\":\"http://localhost:3000\"#" $record
     cp $u/cawco-agent.service /tmp/agent-before.service
     cp $u/cawco-hub.service /tmp/hub-before.service
-    cp $u/cawco-dashboard.service /tmp/dashboard-before.service
-    cp $u/cawco-dashboard.socket /tmp/dashboard-socket-before.socket
     systemctl --user daemon-reload
     systemctl --user restart cawco-dashboard.socket
-    systemctl --user start cawco-dashboard.service'
-  [[ "$(as_user "$hubc" grep -c '^ListenStream=' /home/cawco/.config/systemd/user/cawco-dashboard.socket)" == 1 ]] \
-    || { echo "ASSERTION FAILED: the dashboard's socket names more than its network address"; return 1; }
-  if as_user "$hubc" curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:3455/; then
-    echo "ASSERTION FAILED: localhost:3455 answers before the update, so the update proves nothing"
+    systemctl --user enable --now cawco-dashboard-local.socket
+    systemctl --user start cawco-dashboard.service' sh "$v6"
+  as_user "$hubc" grep -qx 'ListenStream=0\.0\.0\.0:3000' /home/cawco/.config/systemd/user/cawco-dashboard.socket \
+    || { echo "ASSERTION FAILED: the dashboard's socket was not put back on 0.0.0.0:3000"; return 1; }
+  as_user "$hubc" grep -q '"dashboardUrl":"http://localhost:3000"' /home/cawco/.local/share/cawco/binary/installation.json \
+    || { echo "ASSERTION FAILED: the install's record was not put back on http://localhost:3000"; return 1; }
+  wait_until 30 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3000/session | grep -q _app/immutable'
+  if as_user "$hubc" curl -fsS --max-time 5 -o /dev/null "http://$hub_ip:3455/"; then
+    echo "ASSERTION FAILED: the hub's address answers on 3455 before the update, so the update proves nothing"
     return 1
   fi
 }
 hub_self_update() {
   need_hub
-  units_before_loopback
+  units_before_3455
   spawn_child "$hubc" held
   child=$(child_pids "$hubc" boundary-held)
   keeper=$(keeper_pid "$hubc")
@@ -1809,55 +1797,54 @@ held_survives() {
   wait_until 60 '[[ "$(retiring $hid)" == *"$BASE:"* ]]'
   echo "retiring keepers: $(retiring $hid)"
 }
-# After the update, with no `cawco service install`: NEXT wrote the loopback socket unit (127.0.0.1:3455, and
-# [::1]:3455 where the machine has ::1) and named it in the dashboard's `Sockets=`, the dashboard's own socket is as it
-# was, localhost:3455 is the dashboard, the hub's unit gained the loopback port and nothing else, the agent's unit is
-# as it was, and the apply log says NEXT wrote them.
+# After the update, with no `cawco service install`: NEXT moved the dashboard to 3455. Its socket is 0.0.0.0:3455 alone;
+# its loopback socket is [::1]:3455 alone where the machine has ::1 and gone where it has not (0.0.0.0 answers
+# 127.0.0.1); 127.0.0.1, the hub's address and [::1] answer the dashboard on 3455 and nothing listens on 3000; the hub's
+# unit lost `CAWCO_DASHBOARD_PORT=3000` and nothing else; the agent's unit is as it was; the install's record names
+# http://localhost:3455, which the update's verification probed to install NEXT; and the apply log says NEXT wrote them.
 units_carried() {
   need_hub
   local u=/home/cawco/.config/systemd/user
   local loopback="$u/cawco-dashboard-local.socket"
-  echo "== the loopback socket after the update"
-  as_user "$hubc" cat "$loopback"
-  as_user "$hubc" grep -qx 'ListenStream=127\.0\.0\.1:3455' "$loopback" \
-    || { echo "ASSERTION FAILED: no loopback socket unit names 127.0.0.1:3455"; return 1; }
-  as_user "$hubc" grep -qx 'Service=cawco-dashboard.service' "$loopback" \
-    || { echo "ASSERTION FAILED: the loopback socket starts no dashboard"; return 1; }
-  as_user "$hubc" grep -qx 'Sockets=cawco-dashboard.socket cawco-dashboard-local.socket' "$u/cawco-dashboard.service" \
-    || { echo "ASSERTION FAILED: the dashboard's unit names no loopback socket"; return 1; }
-  as_user "$hubc" cmp /tmp/dashboard-socket-before.socket "$u/cawco-dashboard.socket" \
-    || { echo "ASSERTION FAILED: the dashboard's own socket changed though nothing in it did"; return 1; }
-  wait_until 60 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/session | grep -q _app/immutable'
-  # [::1]:3455 exactly where the machine has an IPv6 loopback (cli service.ts `hasIpv6Loopback`).
+  echo "== the dashboard's sockets after the update"
+  as_user "$hubc" sh -c "cat $u/cawco-dashboard.socket; cat $loopback 2> /dev/null || echo 'no $loopback'"
+  [[ "$(as_user "$hubc" grep '^ListenStream=' "$u/cawco-dashboard.socket")" == 'ListenStream=0.0.0.0:3455' ]] \
+    || { echo "ASSERTION FAILED: the dashboard's socket does not listen on 0.0.0.0:3455 alone"; return 1; }
   if has_ipv6_loopback "$hubc"; then
-    as_user "$hubc" grep -qx 'ListenStream=\[::1\]:3455' "$loopback" \
-      || { echo "ASSERTION FAILED: the machine has ::1, and the loopback socket names no [::1]:3455"; return 1; }
-    as_user "$hubc" curl -fsS --max-time 5 -g 'http://[::1]:3455/session' | grep -q _app/immutable \
-      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
-  elif as_user "$hubc" grep -q '^ListenStream=\[::1\]' "$loopback"; then
-    echo "ASSERTION FAILED: the machine has no ::1, and the loopback socket names one"
+    [[ "$(as_user "$hubc" grep '^ListenStream=' "$loopback")" == 'ListenStream=[::1]:3455' ]] \
+      || { echo "ASSERTION FAILED: the machine has ::1, and the loopback socket does not name [::1]:3455 alone"; return 1; }
+    as_user "$hubc" grep -qx 'Sockets=cawco-dashboard.socket cawco-dashboard-local.socket' "$u/cawco-dashboard.service" \
+      || { echo "ASSERTION FAILED: the dashboard's unit names no loopback socket"; return 1; }
+  elif as_user "$hubc" test -e "$loopback"; then
+    echo "ASSERTION FAILED: the machine has no ::1, and a loopback socket unit is still there"
     return 1
   fi
+  wait_until 60 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/session | grep -q _app/immutable'
+  check_hub_dashboard_3455
   local hub_diff
   hub_diff=$(as_user "$hubc" sh -c "diff /tmp/hub-before.service $u/cawco-hub.service || true")
   echo "== the hub's unit, before and after"
   echo "$hub_diff"
-  [[ "$(grep -c '^[<>]' <<< "$hub_diff")" == 1 && "$hub_diff" == *"> Environment=CAWCO_LOCAL_DASHBOARD_PORT=3455"* ]] \
-    || { echo "ASSERTION FAILED: the hub's unit changed by more than its loopback port"; return 1; }
+  [[ "$(grep -c '^[<>]' <<< "$hub_diff")" == 1 && "$hub_diff" == *"< Environment=CAWCO_DASHBOARD_PORT=3000"* ]] \
+    || { echo "ASSERTION FAILED: the hub's unit changed by more than losing its 3000"; return 1; }
   as_user "$hubc" cmp /tmp/agent-before.service "$u/cawco-agent.service" \
     || { echo "ASSERTION FAILED: the agent's unit changed though nothing in it did"; return 1; }
+  as_user "$hubc" grep -q '"dashboardUrl":"http://localhost:3455"' /home/cawco/.local/share/cawco/binary/installation.json \
+    || { echo "ASSERTION FAILED: the install's record does not name http://localhost:3455"; return 1; }
   (( $(apply_log_count "units $NEXT: units: .*rewrote") >= 1 )) \
     || { echo "ASSERTION FAILED: the apply log says nothing of $NEXT rewriting the units"; return 1; }
+  (( $(apply_log_count "units $NEXT: .*the dashboard answers at http://localhost:3455") >= 1 )) \
+    || { echo "ASSERTION FAILED: the apply log says nothing of $NEXT recording the dashboard at http://localhost:3455"; return 1; }
   as_user "$hubc" grep "units $NEXT" /home/cawco/.local/share/cawco/binary/apply.log
 }
-export -f units_before_loopback hub_self_update hub_starts_held held_survives units_carried
+export -f units_before_3455 hub_self_update hub_starts_held held_survives units_carried
 rig_hubself() {
   fleet base "$BASE" hub hub
   setup "the hub's own machine updates, with a child held and sessions asked for while it installs" hub_self_update
   setup_done
   check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held 900
   check "a child held by the session keeper survives the update on that keeper, untouched, while the new build's keeper becomes the machine's" held_survives
-  check "the update rewrites the units from the build it installs: a loopback socket unit on 127.0.0.1:3455 (and [::1]:3455 where the machine has ::1), wanted by the dashboard, and localhost:3455 answers; the dashboard's own socket and the agent's unit are untouched, the hub's unit gains its loopback port alone; no service install run" units_carried
+  check "the update moves the hub's machine from 3000 to 3455 from the build it installs, no service install run: the dashboard's socket on 0.0.0.0:3455, its loopback socket on [::1]:3455 alone (none without ::1), 3455 the dashboard and nothing on 3000, the hub's unit loses its 3000 alone, the agent's unit untouched, the install's record names localhost:3455" units_carried
 }
 
 # ---------------------------------------------------------------- rollbacks, each on a hub of its own
@@ -3246,7 +3233,7 @@ rig_memory() {
 rig_capped() {
   fleet base "$BASE" "hub joiner"
   setup_done
-  check "the joined machine's localhost:3455 is the hub's dashboard, carried by its agent; the hub's own agent carries nothing" loopback_carried 300
+  check "the joined machine's localhost:3455 is the hub's dashboard, carried by its agent; the hub's own agent carries nothing, and the hub's machine answers 3455 alone, nothing on 3000" loopback_carried 300
   check "the keeper's children run each in a cgroup of its own in its delegated cgroup, all of them capped below the keeper's reserve" keeper_children_capped 600
 }
 

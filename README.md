@@ -18,7 +18,7 @@ On macOS, missing command-line tools or other prerequisites stop installation wi
 
 ## After install
 
-Open the dashboard URL printed by the installer, normally <http://localhost:3000> on the hub machine. On any computer running cawco, the hub machine included, open <http://localhost:3455>; previews there run in their own process on Chrome, Edge and Brave. The root opens the Fleet board. Check that the connection is live and your machine is online.
+Open the dashboard at <http://localhost:3455>, the URL the installer prints. That address is the dashboard on every computer running cawco: the hub machine serves it itself, and every other machine's agent carries it to the hub. Previews there run in their own process on Chrome, Edge and Brave. From a device without cawco, open the hub machine's name or address on the same port, such as <http://cawco.local:3455>. The root opens the Fleet board. Check that the connection is live and your machine is online.
 
 On a tailnet, turn on HTTPS Certificates on Tailscale's [DNS page](https://console.tailscale.com/admin/dns), and give your user Tailscale's certificate once with `sudo tailscale set --operator=$USER` on the hub machine. The hub then serves the dashboard and every preview at `https://<machine>.<tailnet>.ts.net:<port>` on its tailnet address, so every device on the tailnet opens a secure context. The LAN address, `cawco.local` and localhost keep plain http on the same ports; the plain tailnet IP stops answering. Until both steps are done, Caw's Needs you shows the next one.
 
@@ -50,7 +50,7 @@ In another terminal at the repository root, start the hub, machine daemon, and d
 CAWCO_DEV_HUB_URL=http://localhost:3456 bun run dev:all
 ```
 
-Open the dashboard URL Vite prints, normally <http://localhost:3000>.
+Open the dashboard URL Vite prints, normally <http://localhost:3455>.
 
 Build and check the workspace with:
 

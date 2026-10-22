@@ -52,13 +52,24 @@ export const PREVIEW_PORTS = (() => {
 export const PREVIEW_PORTS_TEXT = `${PREVIEW_PORTS.first}–${PREVIEW_PORTS.last}`;
 
 /**
- * The port the dashboard is served on (`CAWCO_DASHBOARD_PORT`): the
- * installer writes the dashboard socket's own port into the hub's unit (cli
- * service.ts `DASHBOARD_PORT`), and 3000 is its default there too. A value
- * that is not a port stops the hub at start.
+ * The dashboard's port on every computer's loopback (core
+ * `localDashboardPort`, 3455): every agent serves it on its own, carried
+ * to {@link DASHBOARD_PORT} here.
+ */
+export const LOCAL_DASHBOARD_PORT = localDashboardPort();
+
+/**
+ * The port the dashboard is served on on this machine: its loopback port
+ * ({@link LOCAL_DASHBOARD_PORT}), where the installer's sockets listen (cli
+ * service.ts `dashboardAddress`), unless `CAWCO_DASHBOARD_PORT` names
+ * another (a scratch fleet's). A value that is not a port stops the hub at
+ * start.
  */
 export const DASHBOARD_PORT = (() => {
-  const raw = readEnv(CAWCO_ENV.dashboardPort) ?? "3000";
+  const raw = readEnv(CAWCO_ENV.dashboardPort);
+  if (raw === undefined) {
+    return LOCAL_DASHBOARD_PORT;
+  }
   const port = Number(raw);
   if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
     throw new Error(
@@ -69,13 +80,6 @@ export const DASHBOARD_PORT = (() => {
 })();
 
 /**
- * The dashboard's port on every computer's loopback (core
- * `localDashboardPort`): the dashboard's socket listens on it on this
- * computer, and every agent serves it on its own, carried here.
- */
-export const LOCAL_DASHBOARD_PORT = localDashboardPort();
-
-/**
  * The fleet's own listeners on the hub's machine, each in the words a moved
  * preview's line says it with: no session's preview ever takes one of these
  * ports, even while its listener is down (a restart, a socket being
@@ -84,8 +88,9 @@ export const LOCAL_DASHBOARD_PORT = localDashboardPort();
  */
 export const FLEET_PORTS: ReadonlyMap<number, string> = new Map([
   [mcpGatewayPort(), "the MCP gateway's"],
-  [DASHBOARD_PORT, "the dashboard's"],
+  // The two are one port on an installed hub, which reads as the dashboard's.
   [LOCAL_DASHBOARD_PORT, "the dashboard's loopback"],
+  [DASHBOARD_PORT, "the dashboard's"],
   [HUB_PORT, "the hub's"],
 ]);
 

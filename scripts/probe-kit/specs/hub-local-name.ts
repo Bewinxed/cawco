@@ -389,7 +389,7 @@ const lanLeg = async (
   kit.note(`leg 5's links, hub log and answers: ${dir}`);
 };
 
-/** The port of a local address as `ss` writes it (`[::]:3000`, `0.0.0.0:5353`, `*:22`). */
+/** The port of a local address as `ss` writes it (`[::]:3455`, `0.0.0.0:5353`, `*:22`). */
 const portOf = (local: string): number =>
   Number(local.slice(local.lastIndexOf(":") + 1));
 

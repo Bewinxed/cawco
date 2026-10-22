@@ -466,11 +466,12 @@ export default defineConfig(({ command }) => {
       Icons({ compiler: "svelte" }),
     ],
     server: {
-      port: 3000,
+      // The dashboard's port everywhere (core `CAWCO_LOCAL_DASHBOARD_PORT`).
+      port: 3455,
       host: true,
       // The dashboard is reached from the other machines on the tailnet, by name,
       // and from the LAN by the hub's `.local` name (hub mdns.ts:
-      // `http://cawco.local:3000`). Vite refuses an unknown Host header with a
+      // `http://cawco.local:3455`). Vite refuses an unknown Host header with a
       // 403, so both suffixes are named here (`vite preview` inherits it);
       // `.ts.net` covers this tailnet's MagicDNS names without pinning the
       // machine's own hostname into the repo, and a `.local` name is answered

@@ -1753,13 +1753,13 @@ export type FramePayload =
 export const CAWCO_HUB_PORT = 3456;
 
 /**
- * The dashboard's port on every computer's loopback, beside the hub's
- * (IANA lists 3455 as `prsvp`, a legacy RSVP encapsulation; no dev server
- * defaults to it, unlike 3000): `http://localhost:3455` is the dashboard on
- * the hub's computer, where the dashboard's socket listens on it, and on
- * every other computer running the agent, which carries it to the hub
- * (agent hub-loopback.ts). Loopback is a secure context, so its previews run
- * in a process of their own.
+ * The dashboard's port, beside the hub's (IANA lists 3455 as `prsvp`, a
+ * legacy RSVP encapsulation; no dev server defaults to it, as Vite, Next and
+ * Rails do to 3000): on the hub's computer the dashboard's socket listens on
+ * it, on the network and loopback alike, and on every other computer running
+ * the agent `http://localhost:3455` is carried to it (agent hub-loopback.ts).
+ * Every address of the dashboard ends in it. Loopback is a secure context,
+ * so its previews run in a process of their own.
  */
 export const CAWCO_LOCAL_DASHBOARD_PORT = 3455;
 
@@ -2061,12 +2061,13 @@ export const CAWCO_ENV = {
   /** Where the links the hub hands out point. */
   dashboardUrl: "CAWCO_DASHBOARD_URL",
   /**
-   * The port the dashboard's socket listens on, as the installer wrote it
-   * into the hub's unit: the hub's preview ports never take it, and the
-   * hub's composed links point at it.
+   * The dashboard's port on the hub's machine when it is not
+   * {@link localDashboardPort}: a scratch fleet's, which serves its
+   * dashboard on a port of its own beside the loopback port its agents
+   * carry. The installer writes none (hub config.ts `DASHBOARD_PORT`).
    */
   dashboardPort: "CAWCO_DASHBOARD_PORT",
-  /** The dashboard's loopback port on every computer ({@link localDashboardPort}). */
+  /** The dashboard's port, on the hub's machine and every computer's loopback ({@link localDashboardPort}). */
   localDashboardPort: "CAWCO_LOCAL_DASHBOARD_PORT",
   /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
@@ -2181,7 +2182,8 @@ export const mcpGatewayPort = (): number => {
  * The dashboard's loopback port: `CAWCO_LOCAL_DASHBOARD_PORT`, else
  * {@link CAWCO_LOCAL_DASHBOARD_PORT}. The hub names it to every agent in its
  * register answer, and the installer listens on it with the dashboard's
- * socket on the hub's computer; both read it here.
+ * sockets on the hub's computer (cli service.ts `dashboardAddress`); both
+ * read it here.
  */
 export const localDashboardPort = (): number => {
   const named = readEnv(CAWCO_ENV.localDashboardPort);

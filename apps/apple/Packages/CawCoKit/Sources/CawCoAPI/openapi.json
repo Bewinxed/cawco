@@ -47342,7 +47342,7 @@
             "$ref": "#/components/schemas/LocalNameState"
           },
           "url": {
-            "description": "The dashboard at the name, with its port (`http://cawco.local:3000`), while `held`.",
+            "description": "The dashboard at the name, with its port (`http://cawco.local:3455`), while `held`.",
             "type": "string"
           }
         },

@@ -125,7 +125,7 @@ export const OWNER_SCHEME = "Owner";
 /**
  * The browser's copy of it: HttpOnly, SameSite=Lax, Path=/. On an https
  * origin it carries the `__Host-` prefix and `Secure`; on plain http (a
- * tailnet name on :3000) that prefix cannot be set, so the plain name is
+ * tailnet name on :3455) that prefix cannot be set, so the plain name is
  * used. Both start `cawco-`, which every previewed app's request is
  * stripped of (core frames.ts `DASHBOARD_COOKIE`).
  *

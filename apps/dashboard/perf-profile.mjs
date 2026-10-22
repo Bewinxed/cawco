@@ -7,7 +7,7 @@
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const TARGET = process.argv[2] || "http://localhost:3000";
+const TARGET = process.argv[2] || "http://localhost:3455";
 const CDP_PORT = 9234;
 
 // ── Launch Brave headless with CDP ──────────────────────────────────
