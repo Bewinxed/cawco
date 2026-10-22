@@ -52,9 +52,9 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** A tool's detailed answer, the hub's record as JSON; empty when it answered words (a refusal). */
-const recordOf = (text: string): Record<string, unknown> => {
+const recordOf = (said: string): Record<string, unknown> => {
   try {
-    return JSON.parse(text) as Record<string, unknown>;
+    return JSON.parse(said) as Record<string, unknown>;
   } catch {
     return {};
   }
@@ -166,13 +166,13 @@ const callAs = async (
     content?: { text?: string }[];
     isError?: boolean;
   };
-  const text = (result.content ?? [])
+  const words = (result.content ?? [])
     .map((block) => block.text ?? "")
     .join("\n");
   return {
     isError: !!result.isError,
-    structured: recordOf(text),
-    text,
+    structured: recordOf(words),
+    text: words,
   };
 };
 
