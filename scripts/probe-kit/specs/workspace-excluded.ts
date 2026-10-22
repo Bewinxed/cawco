@@ -350,7 +350,7 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   check(
     "(a) the parent's delegate_list lists X under held, naming its excluded paths",
     delegates.status === 200 &&
-      delegates.text.includes(wx.id) &&
+      delegates.text.includes(wx.id.slice(0, 8)) &&
       delegates.text.includes("1 excluded file, 1 excluded folder") &&
       delegates.text.includes(X_FILE) &&
       delegates.text.includes(X_FOLDER),

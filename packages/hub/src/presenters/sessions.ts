@@ -14,7 +14,11 @@ import {
 } from "@cawco/core";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import type { DelegateList, DelegateNode } from "../delegation-tree";
-import type { HeldWork, QueuedDelegate } from "../work-items";
+import {
+  excludedNamed,
+  type HeldWork,
+  type QueuedDelegate,
+} from "../work-items";
 import { ago, ahead, count, handle, lasted, lines, quote } from "./words";
 
 /** How many of a list's newest a concise answer names; the rest are counted. */
@@ -96,8 +100,10 @@ const newestFirst = (nodes: DelegateNode[]): DelegateNode[] =>
 const queuedLine = (one: QueuedDelegate, now: number): string =>
   `- ${quote(one.title, 120)} ${handle(one.id)} · queued ${ago(one.queuedAt, now)}${one.heldBy ? `, behind ${quote(one.heldBy.title, 80)} (${one.heldBy.globs})` : ""}`;
 
-const heldLine = (work: HeldWork, now: number): string =>
-  `- workspace ${handle(work.workspaceId)} on ${work.machine} · held ${ago(work.heldAt, now)} · ${work.holds} · ${work.size}`;
+const heldLine = (work: HeldWork, now: number): string => {
+  const excluded = excludedNamed(work.excluded);
+  return `- workspace ${handle(work.workspaceId)} on ${work.machine} · held ${ago(work.heldAt, now)} · ${work.holds} · ${work.size}${excluded ? ` · kept out of git: ${excluded}` : ""}`;
+};
 
 /** `delegate_list`: the tree newest first, then the queued and the held. */
 export const delegateListWords = (
@@ -121,7 +127,7 @@ export const delegateListWords = (
       "Queued for files a live item owns (stop_delegate takes the id):",
     tree.queued.map((one) => queuedLine(one, now)),
     tree.held.length > 0 &&
-      `Held workspaces, with work on no remote (delegate's from or workspace, or discard_workspace, take the id):`,
+      `Held workspaces, with work on no remote (delegate's from or workspace, or discard_workspace, take the handle):`,
     tree.held.map((work) => heldLine(work, now))
   );
 };

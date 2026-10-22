@@ -273,9 +273,6 @@ const dialogWith = async (
   // alone, and the form as the tab last left it (NewSessionForm's
   // `cawco:new-session-form`, in the tab's own storage) goes too.
   await page.evaluate((entries) => {
-    // The form keeps its picks per tab across a reload (NewSessionForm's
-    // `cawco:new-session-form`): a fresh tab holds none.
-    sessionStorage.clear();
     localStorage.clear();
     sessionStorage.clear();
     for (const [key, value] of Object.entries(entries)) {

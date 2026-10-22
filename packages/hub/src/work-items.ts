@@ -356,8 +356,14 @@ export interface ArchivedWorkspace {
   workspace: WorkspaceRow;
 }
 
-/** How many of a held workspace's excluded paths its refusal names; its held entry lists them all. */
+/** How many of a held workspace's excluded paths are named in words; the rest are counted. */
 const EXCLUDED_NAMED = 20;
+
+/** A held workspace's excluded paths in words ("a, b and 3 more"), or "" when it has none. */
+export const excludedNamed = (excluded: readonly string[] = []): string =>
+  excluded.length > EXCLUDED_NAMED
+    ? `${excluded.slice(0, EXCLUDED_NAMED).join(", ")} and ${excluded.length - EXCLUDED_NAMED} more`
+    : excluded.join(", ");
 
 /**
  * An archive refused because the clone holds work that is nowhere else: it
@@ -368,11 +374,7 @@ const EXCLUDED_NAMED = 20;
 export class WorkspaceHoldsWork extends WorkItemRefusal {
   readonly held: HeldWork;
   constructor(held: HeldWork) {
-    const excluded = held.excluded ?? [];
-    const named =
-      excluded.length > EXCLUDED_NAMED
-        ? `${excluded.slice(0, EXCLUDED_NAMED).join(", ")} and ${excluded.length - EXCLUDED_NAMED} more`
-        : excluded.join(", ");
+    const named = excludedNamed(held.excluded);
     super(
       409,
       `Workspace ${handle(held.workspaceId)} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`
