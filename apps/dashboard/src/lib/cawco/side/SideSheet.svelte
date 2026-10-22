@@ -451,7 +451,8 @@
       // still below it, and WebKit can pan the page for a few frames with the
       // composer above its top. A sheet sized from either frame dropped by
       // hundreds of pixels and came back; it keeps its size until the
-      // composer stands in the visible area again, the next resize or scroll.
+      // composer stands in the visible area again, as the area is next
+      // published or the composer next changes size.
       const visibleBottom = viewport
         ? viewport.offsetTop + viewport.height
         : innerHeight;
@@ -525,9 +526,21 @@
       composer.addEventListener("outroend", remeasure, { capture: true });
       composer.addEventListener("focusin", toComposer);
     }
-    window.addEventListener("resize", measure);
-    window.visualViewport?.addEventListener("resize", measure);
-    window.visualViewport?.addEventListener("scroll", measure);
+    // A keyboard, a resized window or a pan moves the composer through the
+    // visible area as published (visible-viewport), in the frame after the
+    // event: the shell takes its height from it there, and the composer
+    // moves with it without resizing. Measured at the event, the shell still
+    // stood at its old height, the sheet kept its old place, and it caught
+    // up only on a later change, 450ms after the keyboard went down on a
+    // loaded phone (artifact-resize-loop). Measured as the area is
+    // published, after the shell has its height, it steps in that frame.
+    $effect(() => {
+      // Its top too: a pan moves the area without resizing it. A height of
+      // 0 is an area not measured yet.
+      if (visibleArea.top >= 0 && visibleArea.height > 0) {
+        untrack(measure);
+      }
+    });
     return () => {
       observer.disconnect();
       shows.disconnect();
@@ -535,9 +548,6 @@
       composer?.removeEventListener("introend", remeasure, { capture: true });
       composer?.removeEventListener("outroend", remeasure, { capture: true });
       composer?.removeEventListener("focusin", toComposer);
-      window.removeEventListener("resize", measure);
-      window.visualViewport?.removeEventListener("resize", measure);
-      window.visualViewport?.removeEventListener("scroll", measure);
     };
   });
 </script>

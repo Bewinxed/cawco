@@ -50,6 +50,7 @@
  * held back.
  *
  *   bun scripts/probe-kit/run.ts artifact-resize-loop
+ *   bun scripts/probe-kit/run.ts artifact-resize-loop --phone-sheet 20
  */
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -1393,6 +1394,17 @@ const TALL_SWEEP = [...sweep(900, 240, 20), ...sweep(260, 900, 20)].map(
   (height) => ({ width: 1440, height })
 );
 
+/**
+ * `--phone-sheet <n>`: the phone sheet at 390×844 alone, n times on one
+ * fleet ({@link runPhoneSheet}), and nothing else: how often a leg of it
+ * fails, counted.
+ */
+const phoneSheetRuns = (): number => {
+  const at = process.argv.indexOf("--phone-sheet");
+  const runs = at === -1 ? 0 : Number(process.argv[at + 1]);
+  return Number.isInteger(runs) && runs > 0 ? runs : 0;
+};
+
 const run = async (kit: Kit) => {
   const fleet = await fleetUp(kit);
   // The session runs in a project's checkout, so the navigation lists it
@@ -1411,6 +1423,14 @@ const run = async (kit: Kit) => {
     return;
   }
   const base = await fleet.dashboard();
+  const repeat = phoneSheetRuns();
+  if (repeat > 0) {
+    for (let at = 0; at < repeat; at += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
+      await runPhoneSheet(kit, base, { session, view: "phone" });
+    }
+    return;
+  }
   for (const view of ["phone", "phoneWide"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
     await runPhoneSheet(kit, base, { session, view });

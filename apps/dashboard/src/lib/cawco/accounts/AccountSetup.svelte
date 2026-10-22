@@ -376,9 +376,7 @@
         ? { strategy: "pinned", pinnedAccountId: other?.id }
         : { ...defaults.yours });
     delegates = held?.delegates ?? { ...defaults.delegates };
-    if (held?.atLimit) {
-      ({ atLimit } = held);
-    }
+    atLimit = held?.atLimit ?? { ...DEFAULT_AT_LIMIT };
     dragged = held?.dragged ?? null;
     nickname = held?.nickname ?? resumed.label ?? "";
     step = Math.max(
