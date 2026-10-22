@@ -56,6 +56,7 @@
   } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import {
+    failureClause,
     failureSentence,
     type HubRead,
     failureWords as message,
@@ -97,6 +98,8 @@
     updateTask,
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
@@ -121,7 +124,6 @@
     pickTask,
     selection,
   } from "#lib/cawco/tasks/task-select.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
@@ -1078,15 +1080,48 @@
 
   let keeping = $state<string | null>(null);
   let discarding = $state<string | null>(null);
+  /**
+   * What the hub refused of a view (Keep, Discard, Place on a page), said
+   * under the view's own bar or head, in words, with Try again, until a try
+   * goes or another view's act replaces it; never a toast (DESIGN.md, The
+   * Work Outlives Its Surface Rule).
+   */
+  /** A refusal's closing stop, dropped so it sits inside the sentence. */
+  const REASON_STOP = /\.$/;
+  type ViewAct =
+    { act: "keep" | "discard" } | { act: "place"; on: BlockPageId };
+  /** Where a view's refused act is said: kept through a reload (refusals.svelte.ts). */
+  const viewKey = (name: string) => `view:${projectId}:${name}`;
+  /** The refused act's words and its Try again, for the view `name`. */
+  function viewFaultOf(
+    name: string
+  ): { reason: string; again: () => Promise<void> } | null {
+    const said = refusals.get(viewKey(name));
+    if (!said) {
+      return null;
+    }
+    const asked = said.asked as ViewAct;
+    const again = (): Promise<void> => {
+      if (asked.act === "place") {
+        return placeView(name, asked.on);
+      }
+      return asked.act === "keep" ? keep(name) : discard(name);
+    };
+    return { reason: said.reason, again };
+  }
 
   /** Keep: the draft becomes a kept view where its tab stands. */
   async function keep(name: string) {
     keeping = name;
+    refusals.delete(viewKey(name));
     try {
       const kept = await keepView(projectId, name);
       views = views.map((view) => (view.name === name ? kept : view));
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(viewKey(name), {
+        reason: `The ${viewLabel(name)} view was not kept: ${failureClause(error)}. It stays a draft.`,
+        asked: { act: "keep" } satisfies ViewAct,
+      });
     } finally {
       keeping = null;
     }
@@ -1095,12 +1130,16 @@
   /** Discard: the draft goes, and the board comes back. */
   async function discard(name: string) {
     discarding = name;
+    refusals.delete(viewKey(name));
     try {
       await discardView(projectId, name);
       choose("board");
       views = views.filter((view) => view.name !== name);
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(viewKey(name), {
+        reason: `The ${viewLabel(name)} view was not discarded: ${failureClause(error)}. It stays a draft.`,
+        asked: { act: "discard" } satisfies ViewAct,
+      });
     } finally {
       discarding = null;
     }
@@ -1178,6 +1217,7 @@
 
   /** A kept view placed on a page: it leaves the strip, and the page shows it. */
   async function placeView(name: string, on: BlockPageId) {
+    refusals.delete(viewKey(name));
     if (await blocks.place(name, on)) {
       if (current !== on) {
         choose(on);
@@ -1185,8 +1225,15 @@
       tab = on;
       remember();
     } else {
-      // Refused, the view stays where it is: its tab, which says why.
-      toast.error(blocks.refused[on] ?? blocksWords.notPlaced);
+      // Refused, the view stays where it is: under its head, which says why.
+      const why = (blocks.refused[on] ?? blocksWords.notPlaced).replace(
+        REASON_STOP,
+        ""
+      );
+      refusals.set(viewKey(name), {
+        reason: `The ${viewLabel(name)} view was not placed on ${BLOCK_PAGE_TITLES[on]}: ${why}. It stays a tab of its own.`,
+        asked: { act: "place", on } satisfies ViewAct,
+      });
     }
   }
 
@@ -1781,6 +1828,12 @@
               />
             </div>
           </div>
+          {@const fault = viewFaultOf(view.name)}
+          <RowFault
+            again={fault?.again}
+            data-view-refusal={view.name}
+            reason={fault?.reason}
+          />
         {:else}
           <!-- A kept view's head: its ⋯ places it on a page, as a block. -->
           <div
@@ -1826,6 +1879,12 @@
               </DropdownMenu.Root>
             </span>
           </div>
+          {@const fault = viewFaultOf(view.name)}
+          <RowFault
+            again={fault?.again}
+            data-view-refusal={view.name}
+            reason={fault?.reason}
+          />
         {/if}
         <ViewOpenUi
           hrefOf={(id) => hrefOf(id)}

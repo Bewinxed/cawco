@@ -21,7 +21,9 @@
   import { commentWords } from "./preview/comment-words";
   import PinMark, { markState } from "./preview/PinMark.svelte";
   import PinPeek from "./preview/PinPeek.svelte";
+  import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
+  import { refusals } from "./refusals.svelte";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
 
@@ -78,6 +80,20 @@
     }
     return `Pin ${number} on ${words}`;
   });
+  /** Where the last press's refusal is said: beside the chip, kept through a reload. */
+  const refKey = $derived(`ref:${id}:pin`);
+  async function press(): Promise<void> {
+    if (!named) {
+      return;
+    }
+    const key = refKey;
+    const refused = await openReference(named.artifact, { pin: named.number });
+    if (refused) {
+      refusals.set(key, { reason: refused });
+    } else {
+      refusals.delete(key);
+    }
+  }
 </script>
 
 <!-- The chip stands in a line of text as a word does (ui/chip `inline`). -->
@@ -90,9 +106,7 @@
   onblur={leave}
   onclick={() => {
     leave();
-    if (named) {
-      openReference(named.artifact, { pin: named.number });
-    }
+    return press();
   }}
   onpointerenter={rest}
   onpointerleave={leave}
@@ -109,7 +123,15 @@
     />
   </span>
   <span data-slot="label">{words}</span>
-</button><Portal>
+</button>
+<!-- A press the hub refused, said beside the chip in the sentence it
+     stands in, with Try again. -->
+<RowFault
+  again={press}
+  class="inline-block max-w-full align-baseline"
+  data-reference-refused
+  reason={refusals.reason(refKey)}
+/><Portal>
   {#if peekAt && pin}
     <!-- The viewport is its room: a transcript's rows clip what stands inside them. -->
     <div

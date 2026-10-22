@@ -1,7 +1,7 @@
 <script lang="ts">
   import { hookSentence } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { deleteHook } from "#lib/cawco/config/deletes.js";
+  import { deleteHook, notDeleted } from "#lib/cawco/config/deletes.js";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -28,7 +28,7 @@
   import { newId } from "#lib/cawco/id.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconHook, IconPlus, IconTrash } from "#lib/icons.js";
@@ -50,6 +50,8 @@
   let seedFailed = $state<{ title: string; reason: string } | null>(null);
   /** Why a hook's switch did not take, by hook: said under its row. */
   let toggleFailed = $state<Record<string, string>>({});
+  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
+  const deleteKey = (id: string) => `delete:/config/hooks:${id}`;
 
   async function toggle(row: FleetHook, enabled: boolean) {
     busy[row.id] = true;
@@ -64,13 +66,14 @@
     }
   }
 
-  /** Delete: at once, with Undo in the toast (deletes.ts). */
+  /** Delete: at once, with Undo in the toast (deletes.ts); a refusal is said under its row. */
   async function remove(row: FleetHook) {
     busy[row.id] = true;
+    refusals.delete(deleteKey(row.id));
     try {
       await deleteHook(store, row);
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(deleteKey(row.id), { reason: notDeleted(row.name, error) });
     } finally {
       delete busy[row.id];
     }
@@ -200,6 +203,11 @@
             <RowFault
               again={() => toggle(row, !row.enabled)}
               reason={toggleFailed[row.id]}
+            />
+            <RowFault
+              again={() => remove(row)}
+              data-delete-refusal={row.id}
+              reason={refusals.reason(deleteKey(row.id))}
             />
             <RowFaults key={row.id} kind="hooks" {machines} />
           {/snippet}

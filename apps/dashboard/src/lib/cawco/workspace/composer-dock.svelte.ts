@@ -28,6 +28,8 @@ export interface ComposerBinding {
   /** The session whose delegates the composer's tray shows. */
   readonly delegatesOf: string;
   readonly draft: ComposerDraft;
+  /** What `sendError` says is a failed command: its Try again (Composer `faultAgain`). */
+  readonly faultAgain?: () => unknown;
   /** The conversation `@` names others from (Composer `mentionsFrom`); null names nothing. */
   readonly mentionsFrom: string | null;
   /** What the composer stands over the transcript's foot (Composer `ComposerFoot`). */
@@ -49,7 +51,7 @@ export interface ComposerBinding {
   readonly recallOf: string;
   /** The failed send never reached the hub and its words are back in the field: Send again stands on its line. */
   readonly sendAgain?: boolean;
-  /** Why the last send failed; empty when it did not. */
+  /** Why the last send failed, or the last command; empty when nothing did. */
   readonly sendError: string;
   readonly sending: boolean;
   readonly suggest: { candidates: SuggestCandidate[] };

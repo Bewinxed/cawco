@@ -5,7 +5,7 @@
     parseAgentFrontMatter,
   } from "@cawco/core";
   import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
-  import { deleteAgent } from "#lib/cawco/config/deletes.js";
+  import { deleteAgent, notDeleted } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
@@ -21,7 +21,7 @@
   import OsMark from "#lib/cawco/OsMark.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -52,6 +52,8 @@
   let pushing = $state(false);
   let pushFailed = $state(false);
   let busy = $state<Record<string, boolean>>({});
+  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
+  const deleteKey = (id: string) => `delete:/config/subagents:${id}`;
   /** Why an adopt was refused, by machine and name: said under its row. */
   let adoptFailed = $state<Record<string, string>>({});
   /** Why the last push was refused: said under Push to machines. */
@@ -117,10 +119,13 @@
   /** Remove: at once, with Undo in the toast (deletes.ts). */
   async function forget(row: FleetAgent) {
     busy[row.name] = true;
+    refusals.delete(deleteKey(row.name));
     try {
       await deleteAgent(store, row.name);
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(deleteKey(row.name), {
+        reason: notDeleted(row.name, error),
+      });
     } finally {
       delete busy[row.name];
     }
@@ -229,7 +234,15 @@
           meta={describe(row)}
           mono
           name={row.name}
-        />
+        >
+          {#snippet below()}
+            <RowFault
+              again={() => forget(row)}
+              data-delete-refusal={row.name}
+              reason={refusals.reason(deleteKey(row.name))}
+            />
+          {/snippet}
+        </SectionRow>
       {/each}
     </RowList>
   {/if}

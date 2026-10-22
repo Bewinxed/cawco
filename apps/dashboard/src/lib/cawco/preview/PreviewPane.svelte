@@ -109,6 +109,7 @@
   } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
+  import { refusals } from "../refusals.svelte";
   import { watchInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
   import { sideExpand } from "../side/expand";
@@ -287,6 +288,40 @@
     message: string;
     again: "reload" | "close" | null;
   } | null>(null);
+  /**
+   * An act of the pane's own the hub refused (Verify, a show from the
+   * title's menu): said on the same line, with Try again, kept through a
+   * reload (refusals.svelte.ts), until a try goes.
+   */
+  type PaneAct = { act: "verify" } | { act: "show"; id: string; name: string };
+  const actKey = $derived(`pane:${instanceId}`);
+  const paneRefused = $derived(refusals.get(actKey));
+  /** The refused act's Try again is running. */
+  let rerunning = $state(false);
+  async function rerun(): Promise<void> {
+    const asked = paneRefused?.asked as PaneAct | undefined;
+    if (!asked) {
+      return;
+    }
+    rerunning = true;
+    try {
+      if (asked.act === "verify") {
+        await verify();
+        return;
+      }
+      try {
+        await showArtifact(instanceId, asked.id);
+        refusals.delete(actKey);
+      } catch (error) {
+        refusals.set(actKey, {
+          reason: `${asked.name} was not shown: ${failureClause(error)}.`,
+          asked,
+        });
+      }
+    } finally {
+      rerunning = false;
+    }
+  }
   let well = $state<HTMLDivElement>();
   /** The session's panel, row and machines, from whichever store this tree set (pane-fleet.ts). */
   const fleet = paneFleet();
@@ -2683,10 +2718,19 @@
       return;
     }
     verifying = true;
+    const key = actKey;
     try {
       toast.info(await verifyArtifact(instanceId, artifact.id));
+      if ((refusals.get(key)?.asked as PaneAct | undefined)?.act === "verify") {
+        refusals.delete(key);
+      }
     } catch (error) {
-      toast.error(failureWords(error));
+      // Said on the pane's own line, with Try again, never a toast
+      // (DESIGN.md, The Work Outlives Its Surface Rule).
+      refusals.set(key, {
+        reason: `${artifact.name} was not verified: ${failureClause(error)}. The canvas stays as it is.`,
+        asked: { act: "verify" } satisfies PaneAct,
+      });
     } finally {
       verifying = false;
     }
@@ -3086,6 +3130,16 @@
       line={headLine}
       lineDropped={!lineStands}
       lineId={`${paneId}-line`}
+      onrefused={(reason, chosen) => {
+        refusals.set(actKey, {
+          reason,
+          asked: {
+            act: "show",
+            id: chosen.id,
+            name: chosen.name,
+          } satisfies PaneAct,
+        });
+      }}
       shown={artifact}
     />
   {/if}
@@ -3687,17 +3741,21 @@
       </fieldset>
     {/if}
   </div>
-  {#if failure}
+  {#if failure || paneRefused}
+    <!-- The pane's own line: a frame's failure, or an act of the pane's the
+         hub refused, kept through a reload. -->
     <div
       data-slot="failure"
-      class="absolute inset-x-0 bottom-0 flex items-center gap-space-3 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
+      class="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
       role="alert"
       transition:appear
     >
-      <p class="flex-1 min-w-0 m-0 text-data-bad text-size-body font-normal">
-        {failure.message}
+      <p
+        class="flex-1 basis-c-draft-line min-w-0 m-0 text-data-bad text-size-body font-normal text-pretty wrap-anywhere"
+      >
+        {failure ? failure.message : paneRefused?.reason}
       </p>
-      {#if failure.again === "reload"}
+      {#if failure?.again === "reload"}
         <Button
           label="Try again"
           onclick={retry}
@@ -3706,12 +3764,22 @@
           size="sm"
           variant="outline"
         />
-      {:else if failure.again === "close"}
+      {:else if failure?.again === "close"}
         <Button
           label="Try again"
           onclick={close}
           pending={closing}
           pendingLabel="Closing…"
+          size="sm"
+          variant="outline"
+        />
+      {:else if !failure && paneRefused}
+        <Button
+          data-again
+          label="Try again"
+          onclick={rerun}
+          pending={rerunning}
+          pendingLabel="Trying again…"
           size="sm"
           variant="outline"
         />

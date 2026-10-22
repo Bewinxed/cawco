@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type FleetMcpServer, mcpWords as words } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { deleteMcpServer } from "#lib/cawco/config/deletes.js";
+  import { deleteMcpServer, notDeleted } from "#lib/cawco/config/deletes.js";
   import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
@@ -28,7 +28,7 @@
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -64,6 +64,8 @@
 
   /** Why a server's switch did not take, by server: said under its row. */
   let toggleFailed = $state<Record<string, string>>({});
+  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
+  const deleteKey = (id: string) => `delete:/config/mcp:${id}`;
   /** Why Sync all was refused: said under it. */
   let syncProblem = $state<string | null>(null);
 
@@ -92,10 +94,13 @@
    */
   async function remove(row: FleetMcpServer) {
     busy[row.name] = true;
+    refusals.delete(deleteKey(row.name));
     try {
       await deleteMcpServer(store, row.name);
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(deleteKey(row.name), {
+        reason: notDeleted(row.name, error),
+      });
     } finally {
       delete busy[row.name];
     }
@@ -234,6 +239,11 @@
             <RowFault
               again={() => toggle(row, !row.enabled)}
               reason={toggleFailed[row.name]}
+            />
+            <RowFault
+              again={() => remove(row)}
+              data-delete-refusal={row.name}
+              reason={refusals.reason(deleteKey(row.name))}
             />
             <RowFaults
               hub={row.auth?.state === "failed"

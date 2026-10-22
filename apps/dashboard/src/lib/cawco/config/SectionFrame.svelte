@@ -11,7 +11,7 @@
    * skeleton rows.
    */
   import { configureWords } from "@cawco/core";
-  import { type Snippet, untrack } from "svelte";
+  import { onDestroy, type Snippet, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { appear, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -21,9 +21,13 @@
   import { IconWarningTriangle } from "#lib/icons.js";
   import { page } from "$app/state";
   import { cawco } from "../client.svelte";
+  import RowFault from "../RowFault.svelte";
+  import { refusals } from "../refusals.svelte";
   import { type Cards, rememberCard } from "./cards";
   import { hubDown } from "./hub.svelte";
   import SkeletonRows from "./SkeletonRows.svelte";
+  import { configStore } from "./store.svelte";
+  import { unrestoredOn } from "./unrestored.svelte";
 
   let {
     title,
@@ -83,6 +87,32 @@
       sizes.disconnect();
     };
   };
+  /** The section this page is: `/config/<section>`, its list or an editor under it. */
+  const sectionOf = (path: string) => `/config/${path.split("/")[2] ?? ""}`;
+  const store = configStore();
+  /**
+   * This section's refused Undos (unrestored.svelte.ts), kept through a
+   * reload. Try again after a reload reads the section's lists again, the
+   * Configure store's and a page's own (`cawco:config-restored`).
+   */
+  const refusedUndos = $derived(
+    unrestoredOn(sectionOf(page.url.pathname), () => {
+      // biome-ignore lint/complexity/noVoid: the lists say what they read
+      void store.loadAll();
+      window.dispatchEvent(new CustomEvent("cawco:config-restored"));
+    })
+  );
+  // Leaving the section for another page is acting on what it said; a
+  // reload is not, and keeps it.
+  const here = sectionOf(page.url.pathname);
+  onDestroy(() => {
+    if (sectionOf(page.url.pathname) === here) {
+      return;
+    }
+    for (const said of unrestoredOn(here, () => undefined)) {
+      refusals.delete(said.key);
+    }
+  });
   /** Rows read, nothing wrong, the hub up: the size worth keeping. */
   const settled = $derived(ready && !problem && cawco.hub === "connected");
 </script>
@@ -158,6 +188,13 @@
             {#if problem}
               {@render fault(problem)}
             {/if}
+            {#each refusedUndos as said (said.key)}
+              <RowFault
+                again={said.again}
+                data-unrestored={said.key}
+                reason={said.reason}
+              />
+            {/each}
             {@render children()}
           </div>
         {:else}

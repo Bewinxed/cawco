@@ -172,6 +172,13 @@
     callbackUrl = `${window.location.origin}/api/connections/oauth/callback`;
     // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
     void read();
+    // A refused Undo tried again after a reload (SectionFrame) put one back.
+    const reread = () => {
+      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
+      void read();
+    };
+    window.addEventListener("cawco:config-restored", reread);
+    return () => window.removeEventListener("cawco:config-restored", reread);
   });
 
   const serviceOf = (row: ConnectionView) =>
@@ -565,7 +572,8 @@
         `deleted:${row.name}`,
         configureWords.removed(labelOf(row)),
         deleted,
-        () => read()
+        () => read(),
+        { section: "/config/connections", name: labelOf(row) }
       );
     } catch (error) {
       problems[row.name] = failureWords(error);

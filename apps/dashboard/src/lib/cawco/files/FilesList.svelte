@@ -78,6 +78,7 @@
     onshow,
     onask,
     onattach,
+    pickRefused = null,
   }: {
     /** The session whose files these are. */
     instanceId: string;
@@ -93,6 +94,12 @@
     onask: () => void;
     /** Attach a file pressed: the composer's own attach picker opens. */
     onattach: () => void;
+    /**
+     * An artifact chosen here that the hub would not show: said over the
+     * artifacts, in its words, with Try again, never a toast (DESIGN.md,
+     * The Work Outlives Its Surface Rule).
+     */
+    pickRefused?: { reason: string; again: () => unknown } | null;
   } = $props();
 
   /**
@@ -606,6 +613,11 @@
 {/snippet}
 
 {#snippet artifactsBody()}
+  <RowFault
+    again={pickRefused?.again}
+    data-files-pick-refused
+    reason={pickRefused?.reason}
+  />
   {#if artifactsFailed}
     <RowFault
       again={() => readArtifacts(instanceId)}

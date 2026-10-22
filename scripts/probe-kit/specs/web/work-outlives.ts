@@ -1,8 +1,7 @@
 /**
  * Work that outlives its surface (DESIGN.md, The Work Outlives Its Surface
  * Rule), read from the engine on a scratch fleet (a real hub, one machine)
- * on three passes: Chromium and WebKit at the desk, and Chromium on a 390
- * phone, each on its own fixtures. The hub's refusals are its answers swapped in the page
+ * on five passes, each on its own fixtures. The hub's refusals are its answers swapped in the page
  * (`page.route`), and a stop's landing is the hub's own `project.stop` frame
  * said on the page's socket (`routeWebSocket`). Per surface:
  *
@@ -31,12 +30,31 @@
  *  (e) pairing: a reload shows the same code again, and the hub was asked
  *      for one code only;
  *
- * and across every leg, no toast was ever drawn.
+ * and a failure is said where it happened, never a toast (the same rule):
+ *  (f) a Configure delete the hub refuses is said under the row, with Try
+ *      again; the row stays;
+ *  (g) a Caw-drafted view's Keep the hub refuses is said under its bar,
+ *      with Try again; it stays a draft;
+ *  (h) the artifact menu: a list it can't read is said at the menu's top, a
+ *      refused removal under its row, a refused show on the pane's own
+ *      line, each with Try again;
+ *  (i) a Stop the hub refuses is said over the session's composer in the
+ *      error formula, with Try again, which stops the turn;
+ *  (j) a harness that couldn't list a machine's stored sessions is said
+ *      under Recent, with Try again, which lists them again;
+ *  (k) a copy the browser refuses is said under the menu item, with Try
+ *      again and the text under Show details;
+ *  (l) Behind's failed line, with a hub sentence of 60+ words, wraps inside
+ *      the pane at 390, 820 and 1440, and nothing overflows;
+ *
+ * on five passes (Chromium, WebKit and Firefox at the desk; Chromium and
+ * WebKit on a 390 phone), and across every leg, no toast was ever drawn.
  *
  *   bun scripts/probe-kit/run.ts web work-outlives
  */
 import type { Page, WebSocketRoute } from "playwright-core";
-import { MACHINE } from "../../../scratch-fleet";
+import { HOOK_TEMPLATES } from "../../../../packages/core/src/hooks";
+import { MACHINE, type Seen } from "../../../scratch-fleet";
 import {
   type Engine,
   type Kit,
@@ -64,6 +82,13 @@ const PASSES: Pass[] = [
     view: "phone",
     phone: true,
   },
+  {
+    label: "webkit phone 390",
+    engine: "webkit",
+    view: "phone",
+    phone: true,
+  },
+  { label: "firefox desk", engine: "firefox", view: "desk", phone: false },
 ];
 
 /**
@@ -103,6 +128,13 @@ async function until(
 }
 
 const SHELL = '[data-slot="shell"]';
+/** A prompt the mock answers slowly: a turn long enough to press Stop in. */
+const SLOW = "probe-slow: take your time";
+/** The mock's answer: slow for {@link SLOW}, at once for anything else. */
+const respond = (seen: Seen) =>
+  seen.last.includes("probe-slow")
+    ? { everyMs: 1000, words: Array.from({ length: 90 }, () => "slowly") }
+    : { everyMs: 0, words: ["ok."] };
 const REFUSED_LAUNCH = "The machine refused the directory probe-refused";
 const REFUSED_RUN = "The routine's machine is away right now";
 const STOP_FAILED = "The machine would not end the process";
@@ -142,16 +174,121 @@ async function reload(page: Page): Promise<void> {
   await settle(page, 400);
 }
 
-/** The dashboard's socket, through the spec: it can say a frame as the hub. */
-async function socketOf(page: Page): Promise<(payload: object) => void> {
+/** The dashboard's socket as the spec holds it. */
+interface Socket {
+  /** While set, a `listSessions` answer leaves this harness out with this error. */
+  listFails: { harness: string; error: string } | null;
+  /** While set, the page's interrupts are refused by the hub in these words. */
+  refuseInterrupt: string | null;
+  /** Says a frame to the page as the hub. */
+  say: (payload: object) => void;
+}
+
+/** Parsed JSON, or null for a frame that is not (a part, bytes). */
+function parsedFrame(message: string | Buffer): Record<string, unknown> | null {
+  if (typeof message !== "string") {
+    return null;
+  }
+  try {
+    const value: unknown = JSON.parse(message);
+    return typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Every object in `value`, depth first: a frame wherever the envelope puts it. */
+function* objectsIn(value: unknown): Generator<Record<string, unknown>> {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      yield* objectsIn(item);
+    }
+  } else if (typeof value === "object" && value !== null) {
+    yield value as Record<string, unknown>;
+    for (const item of Object.values(value)) {
+      yield* objectsIn(item);
+    }
+  }
+}
+
+/**
+ * A machine's `listSessions` answer with `fails` left out of it, as its
+ * agent says a harness whose listing threw; null for any other frame.
+ */
+function leftOut(
+  message: string | Buffer,
+  fails: Socket["listFails"],
+  listings: Set<string>
+): string | null {
+  const heard =
+    fails && typeof message === "string" && message.includes("control_result")
+      ? parsedFrame(message)
+      : null;
+  if (!(fails && heard)) {
+    return null;
+  }
+  let changed = false;
+  for (const frame of objectsIn(heard)) {
+    if (
+      frame.kind === "control_result" &&
+      listings.has(String(frame.requestId))
+    ) {
+      frame.failed = [fails];
+      changed = true;
+    }
+  }
+  return changed ? JSON.stringify(heard) : null;
+}
+
+/**
+ * The dashboard's socket, through the spec: it can say a frame as the hub,
+ * refuse an interrupt as the hub does (a `failed` command ack), and leave a
+ * harness out of a machine's `listSessions` answer as its agent does.
+ */
+async function socketOf(page: Page): Promise<Socket> {
   let current: WebSocketRoute | null = null;
+  const listings = new Set<string>();
+  const socket: Socket = {
+    say: (payload) =>
+      current?.send(
+        JSON.stringify({ verb: "frames", machineId: "hub", payload })
+      ),
+    refuseInterrupt: null,
+    listFails: null,
+  };
   await page.routeWebSocket(
     (url) => url.pathname === "/ws/dashboard",
     (ws) => {
       current = ws;
       const server = ws.connectToServer();
-      ws.onMessage((message) => server.send(message));
-      server.onMessage((message) => ws.send(message));
+      ws.onMessage((message) => {
+        const sent = parsedFrame(message);
+        if (
+          socket.refuseInterrupt &&
+          sent?.type === "command" &&
+          sent.kind === "interrupt"
+        ) {
+          ws.send(
+            JSON.stringify({
+              type: "command.ack",
+              commandId: sent.commandId,
+              stage: "failed",
+              reason: socket.refuseInterrupt,
+            })
+          );
+          return;
+        }
+        const asked = sent?.payload as { method?: string } | undefined;
+        if (sent?.verb === "control" && asked?.method === "listSessions") {
+          listings.add(String(sent.requestId));
+        }
+        server.send(message);
+      });
+      server.onMessage((message) => {
+        ws.send(leftOut(message, socket.listFails, listings) ?? message);
+      });
       ws.onClose(() => {
         if (current === ws) {
           current = null;
@@ -159,10 +296,7 @@ async function socketOf(page: Page): Promise<(payload: object) => void> {
       });
     }
   );
-  return (payload) =>
-    current?.send(
-      JSON.stringify({ verb: "frames", machineId: "hub", payload })
-    );
+  return socket;
 }
 
 const textOf = (page: Page, selector: string) =>
@@ -1070,10 +1204,560 @@ async function pairingLeg(kit: Kit, page: Page, base: string, hub: string) {
   );
 }
 
+/* ── (f)–(l): a failure said where it happened, never a toast ─────── */
+
+const LONG_WHY =
+  "The hub could not read this part of the conversation because the machine that keeps its transcript answered with a partial page, which the hub refuses to hand on, since a page with rows missing from its middle would be read as the whole of what was said, and a person reading it would act on a conversation that never happened the way it shows; the hub asks the machine again on its own schedule, and the rows already on screen stay where they are until the read lands whole";
+
+/** What a refusal line says and offers: its words, and whether Try again stands in it. */
+const faultOf = (page: Page, selector: string) =>
+  page.evaluate((sel) => {
+    // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, where nothing of the module's reaches
+    const again = /Try again/;
+    // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, where nothing of the module's reaches
+    const showDetails = /Show details/;
+    const line = document.querySelector(sel);
+    return {
+      text: line?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      again: [...(line?.querySelectorAll("button") ?? [])].some((button) =>
+        again.test(button.textContent ?? "")
+      ),
+      details: [...(line?.querySelectorAll("button") ?? [])].some((button) =>
+        showDetails.test(button.textContent ?? "")
+      ),
+    };
+  }, selector);
+
+/** Toasts on screen now: none may be, after any refusal. */
+const toastsNow = (page: Page) => page.locator("[data-sonner-toast]").count();
+
+async function configDeleteLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  n: number,
+  pass: Pass
+) {
+  const id = `probe-hook-${n}`;
+  const name = `Probe hook ${n}`;
+  const { draft } = HOOK_TEMPLATES[0] as (typeof HOOK_TEMPLATES)[number];
+  await page.goto(`${base}/config/hooks`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(SHELL, { timeout: 60_000 });
+  const made = await page.evaluate(
+    async ({ id: hook, body }) =>
+      (
+        await fetch(`/api/fleet/hooks/${encodeURIComponent(hook)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      ).status,
+    {
+      id,
+      body: {
+        name,
+        enabled: draft.enabled,
+        event: draft.event,
+        matcher: draft.matcher ?? null,
+        handler: draft.handler,
+        script: draft.script ?? null,
+        scope: null,
+        projectId: null,
+      },
+    }
+  );
+  const refusal = "The hook's file is open in another editor";
+  await page.route(`**/api/fleet/hooks/${id}`, (route) =>
+    route.request().method() === "DELETE"
+      ? route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({ error: refusal }),
+        })
+      : route.fallback()
+  );
+  await reload(page);
+  await pick(
+    kit,
+    page,
+    pass,
+    page.getByRole("button", { name: `More for ${name}` })
+  );
+  await pick(
+    kit,
+    page,
+    pass,
+    page.getByRole("menuitem", { name: "Delete hook" })
+  );
+  const line = `[data-delete-refusal="${id}"]`;
+  await until(async () => (await textOf(page, line)).includes(refusal), 10_000);
+  const said = await faultOf(page, line);
+  kit.check(
+    "config delete: a refused delete is said under its row in words, with Try again, and the row stays",
+    said.text.includes(refusal) &&
+      said.text.includes(`${name} stays as it was`) &&
+      said.again &&
+      (await page.getByRole("button", { name: `More for ${name}` }).count()) ===
+        1 &&
+      (await toastsNow(page)) === 0,
+    JSON.stringify({ made, said })
+  );
+  await reload(page);
+  const kept = await faultOf(page, line);
+  kit.check(
+    "config delete: a reload says the refusal under the row again, with Try again",
+    kept.text.includes(refusal) && kept.again,
+    JSON.stringify(kept)
+  );
+  await page.unroute(`**/api/fleet/hooks/${id}`);
+  await page.locator(`${line} [data-again]`).click();
+  const deleted = await until(
+    async () =>
+      (await page.getByRole("button", { name: `More for ${name}` }).count()) ===
+      0,
+    10_000
+  );
+  kit.check(
+    "config delete: Try again deletes it, and the line goes with its row",
+    deleted && (await page.locator(line).count()) === 0
+  );
+}
+
+async function viewKeepLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  project: { id: string; name: string },
+  pass: Pass
+) {
+  const view = "probe-digest";
+  const views = `**/api/projects/${project.id}/views`;
+  await page.route(views, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              draft: true,
+              dropped: [],
+              name: view,
+              source: 'root = Stack([Text("Probe digest")])',
+            },
+          ]),
+        })
+      : route.fallback()
+  );
+  const refusal = "The project's views folder is not writable";
+  const keepRoute = `**/api/projects/${project.id}/views/${view}/keep`;
+  await page.route(keepRoute, (route) =>
+    route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({ error: refusal }),
+    })
+  );
+  await page.goto(
+    `${base}/project/${project.id}?view=${encodeURIComponent(`view:${view}`)}`,
+    { waitUntil: "domcontentloaded" }
+  );
+  await page.waitForSelector(SHELL, { timeout: 60_000 });
+  await pick(
+    kit,
+    page,
+    pass,
+    page.getByRole("button", { name: "Keep", exact: true })
+  );
+  const line = `[data-view-refusal="${view}"]`;
+  await until(async () => (await textOf(page, line)).includes(refusal), 10_000);
+  const said = await faultOf(page, line);
+  kit.check(
+    "view keep: a refused Keep is said under the draft's bar, with Try again; it stays a draft",
+    said.text.includes("was not kept") &&
+      said.text.includes(refusal) &&
+      said.text.includes("It stays a draft") &&
+      said.again &&
+      (await page.getByRole("button", { name: "Keep", exact: true }).count()) >
+        0 &&
+      (await toastsNow(page)) === 0,
+    JSON.stringify(said)
+  );
+  await reload(page);
+  const kept = await faultOf(page, line);
+  kit.check(
+    "view keep: a reload says the refused Keep under the bar again",
+    kept.text.includes(refusal) && kept.again,
+    JSON.stringify(kept)
+  );
+  await page.unroute(keepRoute);
+  await page.unroute(views);
+}
+
+/** Seeds pages in a session's panel through the dashboard's origin; their ids, oldest first. */
+const seedPages = (page: Page, instanceId: string, names: string[]) =>
+  page.evaluate(
+    async ({ id, all }) => {
+      const made: string[] = [];
+      for (const name of all) {
+        // biome-ignore lint/performance/noAwaitInLoops: each page after the last, so the newest is shown
+        const response = await fetch(
+          `/api/instances/${encodeURIComponent(id)}/artifacts`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              kind: "page",
+              name,
+              does: "judge",
+              ask: `Judge ${name}`,
+              html: `<!doctype html><html><body><h1>${name}</h1></body></html>`,
+            }),
+          }
+        );
+        made.push(((await response.json()) as { id: string }).id);
+      }
+      return made;
+    },
+    { id: instanceId, all: names }
+  );
+
+const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts$/;
+
+async function artifactMenuLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  instanceId: string,
+  pass: Pass,
+  n: number
+) {
+  await page.goto(`${base}/session/${instanceId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForSelector(SHELL, { timeout: 60_000 });
+  const [older, newer] = await seedPages(page, instanceId, [
+    `probe-older-${n}`,
+    `probe-newer-${n}`,
+  ]);
+  const trigger = page.locator("[data-artifact-trigger]:visible").first();
+  await trigger.waitFor({ state: "visible", timeout: 30_000 });
+
+  // The list unreadable: said at the menu's top, with Try again.
+  await page.route(ARTIFACT_LIST, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "The artifact store is locked" }),
+        })
+      : route.fallback()
+  );
+  await pick(kit, page, pass, trigger);
+  const listLine = "[data-artifact-list-refused]";
+  await until(
+    async () => (await textOf(page, listLine)).includes("locked"),
+    10_000
+  );
+  const listSaid = await faultOf(page, listLine);
+  await page.unroute(ARTIFACT_LIST);
+  await page.locator(`${listLine} [data-again]`).click();
+  const listed = await until(
+    async () =>
+      (await page.locator("[data-artifact-row]").count()) >= 2 &&
+      (await page.locator(listLine).count()) === 0,
+    10_000
+  );
+  kit.check(
+    "artifact menu: an unreadable list is said at the menu's top with Try again, which reads it",
+    listSaid.text.includes("were not read") && listSaid.again && listed,
+    JSON.stringify({ listSaid, listed })
+  );
+
+  // A refused removal: under its row, the row stays.
+  const one = `**/api/instances/${instanceId}/artifacts/${older}`;
+  await page.route(one, (route) =>
+    route.request().method() === "DELETE"
+      ? route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "A decision page still embeds it" }),
+        })
+      : route.fallback()
+  );
+  await page
+    .getByRole("button", { name: `Remove probe-older-${n}` })
+    .click({ force: true });
+  const removeLine = `[data-artifact-remove-refused="${older}"]`;
+  await until(
+    async () => (await textOf(page, removeLine)).includes("embeds"),
+    10_000
+  );
+  const removeSaid = await faultOf(page, removeLine);
+  kit.check(
+    "artifact menu: a refused removal is said under its row with Try again, the row standing",
+    removeSaid.text.includes("wasn't removed") &&
+      removeSaid.again &&
+      (await page
+        .locator(`[data-artifact-row][data-artifact="${older}"]`)
+        .count()) === 1,
+    JSON.stringify(removeSaid)
+  );
+  await page.unroute(one);
+
+  // A refused show: the menu closes, the pane's own line says it.
+  const show = `**/api/instances/${instanceId}/artifacts/${older}/show`;
+  await page.route(show, (route) =>
+    route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "The panel is held by its delegate" }),
+    })
+  );
+  await page
+    .locator(`[data-artifact-row][data-artifact="${older}"]`)
+    .first()
+    .click();
+  const paneLine = '[data-slot="failure"]';
+  await until(
+    async () => (await textOf(page, paneLine)).includes("held by"),
+    10_000
+  );
+  const showSaid = await faultOf(page, paneLine);
+  kit.check(
+    "artifact menu: a refused show is said on the pane's own line, with Try again",
+    showSaid.text.includes(`probe-older-${n} was not shown`) &&
+      showSaid.again &&
+      (await toastsNow(page)) === 0,
+    JSON.stringify({ showSaid, newer })
+  );
+  await reload(page);
+  const showKept = await until(
+    async () => (await textOf(page, paneLine)).includes("held by"),
+    15_000
+  );
+  kit.check(
+    "artifact menu: a reload says the refused show on the pane's line again",
+    showKept && (await faultOf(page, paneLine)).again,
+    await textOf(page, paneLine)
+  );
+  await page.unroute(show);
+  await page.locator(`${paneLine} [data-again]`).click();
+  const shownNow = await until(
+    async () => (await page.locator(paneLine).count()) === 0,
+    10_000
+  );
+  kit.check("artifact menu: Try again shows it, and the line goes", shownNow);
+}
+
+async function interruptLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  instanceId: string,
+  socket: Socket,
+  send: (id: string, text: string) => Promise<string>,
+  pass: Pass
+) {
+  await page.goto(`${base}/session/${instanceId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForSelector(SHELL, { timeout: 60_000 });
+  await send(instanceId, SLOW);
+  const stop = page
+    .locator('button[aria-label="Stop the agent"]:visible')
+    .first();
+  await stop.waitFor({ state: "visible", timeout: 60_000 });
+  await until(() => stop.isEnabled(), 30_000);
+  const refusal = "The machine did not take the stop in time";
+  socket.refuseInterrupt = refusal;
+  await pick(kit, page, pass, stop);
+  const line = '[data-slot="send-error"]';
+  await until(async () => (await textOf(page, line)).includes(refusal), 10_000);
+  const said = await textOf(page, line);
+  const again = page.locator(`${line} [data-fault-again]`);
+  kit.check(
+    "interrupt: a refused Stop is said over the composer in the error formula, with Try again",
+    said.includes(`The turn was not stopped: ${refusal}. It goes on.`) &&
+      (await again.count()) === 1 &&
+      (await toastsNow(page)) === 0,
+    said
+  );
+  await reload(page);
+  const kept = await until(
+    async () => (await textOf(page, line)).includes(refusal),
+    15_000
+  );
+  kit.check(
+    "interrupt: a reload says the refused Stop over the composer again, with Try again",
+    kept && (await again.count()) === 1,
+    await textOf(page, line)
+  );
+  socket.refuseInterrupt = null;
+  await pick(kit, page, pass, again);
+  const gone = await until(
+    async () => (await page.locator(line).count()) === 0,
+    15_000
+  );
+  kit.check("interrupt: Try again stops the turn and the line goes", gone);
+}
+
+async function catalogueLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  socket: Socket
+) {
+  const error = "the session index is being rebuilt";
+  socket.listFails = { harness: "opencode", error };
+  await page.goto(`${base}/session`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(SHELL, { timeout: 60_000 });
+  const line = `[data-catalog-left-out="${MACHINE}"]`;
+  await until(async () => (await textOf(page, line)).includes(error), 30_000);
+  const said = await faultOf(page, line);
+  kit.check(
+    "catalogue: a harness that couldn't list is said under Recent in the machine's words, with Try again",
+    said.text.includes("couldn't list its stored sessions") &&
+      said.text.includes(error) &&
+      said.again &&
+      (await toastsNow(page)) === 0,
+    JSON.stringify(said)
+  );
+  socket.listFails = null;
+  await page.locator(`${line} [data-again]`).first().click();
+  const gone = await until(
+    async () => (await page.locator(line).count()) === 0,
+    15_000
+  );
+  kit.check(
+    "catalogue: Try again lists the machine again and the line goes",
+    gone
+  );
+}
+
+async function copyLeg(kit: Kit, page: Page, base: string, instanceId: string) {
+  await page.goto(`${base}/session/${instanceId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForSelector(SHELL, { timeout: 60_000 });
+  await page.evaluate(() => {
+    const refuse = () =>
+      Promise.reject(
+        new DOMException("Write permission denied.", "NotAllowedError")
+      );
+    if (navigator.clipboard) {
+      Object.defineProperty(navigator.clipboard, "writeText", {
+        configurable: true,
+        value: refuse,
+      });
+    }
+  });
+  const tab = page.locator('[data-slot="tab"]:visible').first();
+  await tab.waitFor({ state: "visible", timeout: 30_000 });
+  await tab.dispatchEvent("contextmenu", { button: 2 });
+  const item = page.getByRole("menuitem", { name: "Copy link" }).first();
+  await item.waitFor({ state: "visible", timeout: 10_000 });
+  await item.click();
+  const line = "[data-copy-refused]";
+  await until(
+    async () => (await textOf(page, line)).includes("didn't allow"),
+    10_000
+  );
+  const said = await faultOf(page, line);
+  kit.check(
+    "copy: a copy the browser refused is said under the item, the menu open, with Try again and the text under Show details",
+    said.text.includes("The browser didn't allow copying the link") &&
+      said.again &&
+      said.details &&
+      (await item.isVisible()) &&
+      (await toastsNow(page)) === 0,
+    JSON.stringify(said)
+  );
+  await page.keyboard.press("Escape");
+}
+
+/** Behind's line at each width: inside the pane, wrapping, nothing past its box. */
+async function behindLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  instanceId: string
+) {
+  await page.goto(`${base}/session/${instanceId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForSelector(SHELL, { timeout: 60_000 });
+  await page.waitForSelector('[data-slot="pane"] [role=log]', {
+    timeout: 60_000,
+  });
+  await page.route("**/api/instances/*/transcript*", (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: LONG_WHY }),
+    })
+  );
+  // The socket drops: the catch-up read on reconnecting is refused.
+  await page.evaluate(() =>
+    (
+      globalThis as unknown as { __cawcoSocket?: WebSocket }
+    ).__cawcoSocket?.close()
+  );
+  const line = '[data-slot="behind"]';
+  const saidLong = await until(
+    async () => (await textOf(page, line)).includes("schedule"),
+    30_000
+  );
+  const words = (await textOf(page, line)).split(" ").length;
+  for (const width of [390, 820, 1440]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one width after another
+    await page.setViewportSize({ width, height: 844 });
+    await settle(page, 400);
+    const box = await page.evaluate((sel) => {
+      const behind = document.querySelector<HTMLElement>(sel);
+      const pane = behind?.closest<HTMLElement>('[data-slot="pane"]');
+      const p = behind?.querySelector("p");
+      if (!(behind && pane && p)) {
+        return null;
+      }
+      const b = behind.getBoundingClientRect();
+      const r = pane.getBoundingClientRect();
+      const lineHeight = Number.parseFloat(getComputedStyle(p).lineHeight);
+      return {
+        inside:
+          b.left >= r.left - 0.5 &&
+          b.right <= r.right + 0.5 &&
+          b.top >= r.top - 0.5 &&
+          b.bottom <= r.bottom + 0.5,
+        lines: Math.round(p.getBoundingClientRect().height / lineHeight),
+        behindOverflow: behind.scrollWidth - behind.clientWidth,
+        pOverflow: p.scrollWidth - p.clientWidth,
+        pageOverflow:
+          (document.scrollingElement?.scrollWidth ?? 0) - window.innerWidth,
+        rects: {
+          behind: [b.left, b.right, b.top, b.bottom].map(Math.round),
+          pane: [r.left, r.right, r.top, r.bottom].map(Math.round),
+        },
+      };
+    }, line);
+    kit.check(
+      `behind at ${width}: a ${words}-word failed line wraps inside the pane and nothing overflows`,
+      saidLong &&
+        words >= 60 &&
+        box?.inside === true &&
+        box.lines > 1 &&
+        box.behindOverflow <= 0 &&
+        box.pOverflow <= 0 &&
+        box.pageOverflow <= 0,
+      JSON.stringify(box)
+    );
+  }
+  await page.unroute("**/api/instances/*/transcript*");
+}
+
 const spec: Spec = {
   name: "work-outlives",
   run: async (kit) => {
-    const fleet = await kit.fleet(() => ({ everyMs: 0, words: ["ok."] }));
+    const fleet = await kit.fleet(respond);
     fleet.launch("hub");
     await fleet.hubUp();
     const base = await fleet.dashboard();
@@ -1082,6 +1766,7 @@ const spec: Spec = {
     fleet.fileAccount();
     fleet.launch("agent");
     await fleet.agentUp();
+    await fleet.accountSignedIn();
     const program =
       'import { z } from "zod";\n\nexport const inputs = z.object({});\n\nexport default async function () {\n  return {};\n}\n';
     /** Each pass its own project, Caw's project, workflow and routine, so no pass reads another's. */
@@ -1113,16 +1798,19 @@ const spec: Spec = {
         now + 365 * 86_400_000,
         now
       );
-      return { project, cawProject, workflow, routine };
+      const chat = await fleet.spawn("claude", `Probe chat ${n}`, fleet.repo);
+      return { project, cawProject, workflow, routine, chat };
     };
 
     for (const [n, pass] of passes().entries()) {
       const k = named(kit, pass);
-      // biome-ignore lint/performance/noAwaitInLoops: one pass after another, each on its own fixtures
-      const { project, cawProject, workflow, routine } = await fixtures(n);
+      const { project, cawProject, workflow, routine, chat } =
+        // biome-ignore lint/performance/noAwaitInLoops: one pass after another, each on its own fixtures
+        await fixtures(n);
       const page = await kit.page(pass.view, { engine: pass.engine });
       await page.context().addInitScript(countToasts);
-      const say = await socketOf(page);
+      const socket = await socketOf(page);
+      const { say } = socket;
       const legs: [string, () => Promise<void>][] = [
         ["updates", () => updatesLeg(k, page, base, fleet.base)],
         ["launch", () => launchLeg(k, page, base, workflow, fleet.repo, pass)],
@@ -1132,6 +1820,16 @@ const spec: Spec = {
           "caw off",
           () => cawOffLeg(k, page, base, fleet.base, cawProject, say, pass),
         ],
+        ["config delete", () => configDeleteLeg(k, page, base, n, pass)],
+        ["view keep", () => viewKeepLeg(k, page, base, project, pass)],
+        [
+          "interrupt",
+          () => interruptLeg(k, page, base, chat, socket, fleet.send, pass),
+        ],
+        ["artifact menu", () => artifactMenuLeg(k, page, base, chat, pass, n)],
+        ["catalogue", () => catalogueLeg(k, page, base, socket)],
+        ["copy", () => copyLeg(k, page, base, chat)],
+        ["behind", () => behindLeg(k, page, base, chat)],
       ];
       for (const [name, leg] of legs) {
         try {

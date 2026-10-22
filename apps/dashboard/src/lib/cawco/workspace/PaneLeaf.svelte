@@ -540,6 +540,7 @@
           recallOf={lent.recallOf}
           {trayRows}
           sendAgain={lent.sendAgain}
+          faultAgain={lent.faultAgain}
           sendError={lent.sendError}
           sending={lent.sending}
           showing={viewId}

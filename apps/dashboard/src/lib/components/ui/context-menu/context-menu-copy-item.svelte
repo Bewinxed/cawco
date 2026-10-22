@@ -6,11 +6,14 @@
    * the menu close, so the check shows on the item that did it. The first
    * select keeps the menu open (preventDefault); closing is a second select
    * of the same item, which bits-ui handles as any other: it closes the menu
-   * and returns focus. A failed copy closes it at once, the toast saying why.
+   * and returns focus. A copy the browser refused keeps the menu open and
+   * says so under the item (RowFault, cawco/copy.ts `copyRefused`), with Try
+   * again and the text under Show details to copy by hand; never a toast.
    */
   import type { Snippet } from "svelte";
-  import { copyToClipboard } from "#lib/cawco/copy.js";
+  import { copyRefused, copyToClipboard } from "#lib/cawco/copy.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { IconCheck, IconCopy } from "#lib/icons.js";
   import ContextMenuItem from "./context-menu-item.svelte";
 
@@ -29,6 +32,8 @@
 
   let ref = $state<HTMLElement | null>(null);
   let copied = $state(false);
+  /** The browser refused the last copy. */
+  let refused = $state(false);
   let closing = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => () => clearTimeout(timer));
@@ -43,8 +48,15 @@
       return;
     }
     event.preventDefault();
+    await copy();
+  }
+
+  async function copy() {
     copied = await copyToClipboard(what, text);
-    timer = setTimeout(close, copied ? dur("--dur-hold") : 0);
+    refused = !copied;
+    if (copied) {
+      timer = setTimeout(close, dur("--dur-hold"));
+    }
   }
 </script>
 
@@ -55,3 +67,11 @@
   </span>
   <span class="mark-text">{@render children()}</span>
 </ContextMenuItem>
+<RowFault
+  again={copy}
+  data-copy-refused
+  details={text}
+  end="var(--space-2)"
+  indent="var(--space-2)"
+  reason={refused ? copyRefused(what) : null}
+/>

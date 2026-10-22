@@ -12,8 +12,7 @@ import { page } from "$app/state";
 import { showArtifact } from "./artifact-api";
 import { artifactNamed, askOpen, type OpenAt } from "./artifact-names.svelte";
 import { cawco, revealPreview } from "./client.svelte";
-import { failureWords } from "./hub-read";
-import { toast } from "./toasts";
+import { failureClause } from "./hub-read";
 
 /** The address of artifact `id`'s own tab, opening at `at`. */
 const ownTab = (id: string, at: OpenAt): string => {
@@ -27,27 +26,36 @@ const ownTab = (id: string, at: OpenAt): string => {
   return base;
 };
 
-/** Artifact `id` opened in the panel at `at`; a refusal is said in a toast. */
-export async function openReference(id: string, at: OpenAt): Promise<void> {
+/**
+ * Artifact `id` opened in the panel at `at`. Answers the hub's refusal in
+ * the error formula, for the chip that was pressed to say beside itself
+ * with Try again (never a toast: DESIGN.md, The Work Outlives Its Surface
+ * Rule), or null once it opened.
+ */
+export async function openReference(
+  id: string,
+  at: OpenAt
+): Promise<string | null> {
   const named = artifactNamed(id);
   if (!named) {
-    return;
+    return null;
   }
   if (page.route.id === "/artifact/[id]" && page.params.id !== id) {
     await goto(ownTab(id, at));
-    return;
+    return null;
   }
   askOpen(id, at);
   // Already in front: the pane opens the place where the page stands, with no show to load it again.
   const panel = cawco.previews[named.instanceId];
   if (panel?.state === "open" && panel.artifact.id === id) {
     revealPreview(named.instanceId);
-    return;
+    return null;
   }
   try {
     await showArtifact(named.instanceId, id);
     revealPreview(named.instanceId);
+    return null;
   } catch (error) {
-    toast.error(failureWords(error));
+    return `${named.name} was not opened: ${failureClause(error)}. The panel stays as it was.`;
   }
 }

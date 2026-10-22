@@ -10,8 +10,9 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { IconAlert, IconCheck, IconCopy } from "#lib/icons.js";
-  import { copyToClipboard } from "./copy";
+  import { copyRefused, copyToClipboard } from "./copy";
   import { dur } from "./motion/curves.svelte";
+  import RowFault from "./RowFault.svelte";
 
   let {
     title,
@@ -20,12 +21,15 @@
   }: { title: string; message: string; open?: boolean } = $props();
 
   let copied = $state(false);
+  /** The browser refused the last copy: said over the footer, with Try again. */
+  let refused = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => () => clearTimeout(timer));
 
   async function copy() {
     clearTimeout(timer);
     copied = await copyToClipboard("Error", message);
+    refused = !copied;
     timer = setTimeout(() => {
       copied = false;
     }, dur("--dur-hold"));
@@ -45,6 +49,12 @@
       <pre
         class="m-0 max-h-c-report-text-max min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
         data-error-text>{message}</pre>
+
+      <RowFault
+        again={copy}
+        data-copy-refused
+        reason={refused ? copyRefused("Error", "from the text above") : null}
+      />
 
       <Dialog.Footer>
         <Button onclick={copy} type="button" variant="outline">

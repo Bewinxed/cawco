@@ -13,7 +13,9 @@
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconDecisions } from "#lib/icons.js";
   import { artifactMarks } from "./artifact-names.svelte";
+  import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
+  import { refusals } from "./refusals.svelte";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
 
@@ -35,16 +37,26 @@
   const title = $derived(
     picked === null ? words : `${words} · ${picked ? "picked" : "not picked"}`
   );
+  /** Where the last press's refusal is said: beside the chip, kept through a reload. */
+  const refKey = $derived(`ref:${id}:card`);
+  async function press(): Promise<void> {
+    if (!named) {
+      return;
+    }
+    const key = refKey;
+    const refused = await openReference(named.artifact, { card: named.card });
+    if (refused) {
+      refusals.set(key, { reason: refused });
+    } else {
+      refusals.delete(key);
+    }
+  }
 </script>
 
 <button
   class={chipVariants({ variant: "inline" })}
   data-decision-chip={id}
-  onclick={() => {
-    if (named) {
-      openReference(named.artifact, { card: named.card });
-    }
-  }}
+  onclick={press}
   {title}
   type="button"
 >
@@ -58,3 +70,11 @@
   </span>
   <span data-slot="label">{words}</span>
 </button>
+<!-- A press the hub refused, said beside the chip in the sentence it
+     stands in, with Try again. -->
+<RowFault
+  again={press}
+  class="inline-block max-w-full align-baseline"
+  data-reference-refused
+  reason={refusals.reason(refKey)}
+/>

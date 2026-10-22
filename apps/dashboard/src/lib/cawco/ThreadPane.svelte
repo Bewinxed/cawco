@@ -51,6 +51,7 @@
     type BlockedRequest,
     blankSession,
     cawco,
+    commandFault,
     readThread,
     readTranscript,
     type SendExtras,
@@ -702,6 +703,15 @@
     }
   }
 
+  /**
+   * A stop of the lead's turn that failed, said over this composer with Try
+   * again (client.svelte.ts `commandFault`), unless a send's failure stands
+   * there already.
+   */
+  const leadFault = $derived(lead ? commandFault(lead) : null);
+  const composerError = $derived(sendError || (leadFault?.words ?? ""));
+  const faultAgain = $derived(sendError ? undefined : leadFault?.again);
+
   /** Stop interrupts the lead's turn. */
   function onstop() {
     const row = lead ? cawco.instanceIndex.byId.get(lead) : undefined;
@@ -724,10 +734,13 @@
       return sending;
     },
     get sendError() {
-      return sendError;
+      return composerError;
     },
     get sendAgain() {
       return sendAgain;
+    },
+    get faultAgain() {
+      return faultAgain;
     },
     get paneVisible() {
       return visible;
@@ -1137,8 +1150,9 @@
             perch={hero ? undefined : perch}
             placeholder={binding.placeholder}
             recallOf={viewId}
+            {faultAgain}
             {sendAgain}
-            {sendError}
+            sendError={composerError}
             {sending}
             suggest={binding.suggest}
           />

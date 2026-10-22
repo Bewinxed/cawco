@@ -44,22 +44,29 @@
    * instead (picks.md), and his slot here closes.
    */
   import { machineLabel, viewsWords } from "@cawco/core";
-  import type { UpstreamPosts } from "@cawco/core/upstream-guard";
+  import {
+    UPSTREAM_WORDS,
+    type UpstreamPosts,
+    upstreamPostsWords,
+  } from "@cawco/core/upstream-guard";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import { cawco, editProject } from "#lib/cawco/client.svelte.js";
   import ForgetProjectTray from "#lib/cawco/ForgetProjectTray.svelte";
   import { forgetHost, forgetProject } from "#lib/cawco/forget.svelte.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import {
+    failureClause,
+    failureWords as message,
+  } from "#lib/cawco/hub-read.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import UpstreamMenu from "#lib/cawco/project/UpstreamMenu.svelte";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
@@ -247,12 +254,25 @@
     }
   }
 
+  /**
+   * What the hub refused of the upstream choice, said under the head where
+   * the ⋯ that asked stands, with Try again; never a toast (DESIGN.md, The
+   * Work Outlives Its Surface Rule).
+   */
+  const upstreamKey = $derived(`upstream:${project.id}`);
+  const upstreamFault = $derived(refusals.get(upstreamKey));
+
   /** The project's own upstream answer, or null for the fleet's (UpstreamMenu). */
   async function setUpstream(posts: UpstreamPosts | null): Promise<void> {
+    refusals.delete(upstreamKey);
     try {
       await editProject(project.id, { upstreamPosts: posts });
     } catch (error) {
-      toast.error(message(error));
+      const asked = posts ? upstreamPostsWords(posts) : UPSTREAM_WORDS.inherit;
+      refusals.set(upstreamKey, {
+        reason: `${UPSTREAM_WORDS.title} was not set to “${asked}”: ${failureClause(error)}. It stays as it was.`,
+        asked: posts,
+      });
     }
   }
 
@@ -358,6 +378,13 @@
       </h1>
       <!-- A rename the hub refused, under the name, in its words. -->
       <RowFault again={commitName} reason={renameFault} />
+      <!-- The upstream choice the hub refused, under the head its ⋯ is on. -->
+      <RowFault
+        again={() =>
+          setUpstream((upstreamFault?.asked as UpstreamPosts | null) ?? null)}
+        data-upstream-refusal
+        reason={upstreamFault?.reason}
+      />
       <!-- Words change by MorphText. The line is one ellipsized line as wide
            as its column, with nothing standing after it on its row: its box
            neither grows nor narrows, so there is no size for morph() to

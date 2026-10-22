@@ -102,7 +102,12 @@
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { IconChevronUp, IconSend, IconStop } from "#lib/icons.js";
+  import {
+    IconChevronUp,
+    IconRefresh,
+    IconSend,
+    IconStop,
+  } from "#lib/icons.js";
   import { handBack, stages } from "../canvas/stage.svelte";
   import {
     cawco,
@@ -172,6 +177,7 @@
     sending = false,
     sendError = "",
     sendAgain = false,
+    faultAgain,
     held = false,
     paneVisible = true,
     commands = [],
@@ -223,6 +229,12 @@
      * field: the error line offers Send again, which sends them as Enter does.
      */
     sendAgain?: boolean;
+    /**
+     * What `sendError` says is a command of the session that failed (a
+     * stop, a model change, an answer): the error line offers Try again,
+     * which asks for it again.
+     */
+    faultAgain?: () => unknown;
     /**
      * A swipe is carrying the conversations under this composer. The action
      * button waits until one has landed, so nothing is sent to a chat that
@@ -3406,6 +3418,15 @@
             size="sm"
             variant="ghost">Send again</Button
           >
+        {:else if faultAgain && sendError === sendNotice}
+          <Button
+            data-fault-again
+            icon={IconRefresh}
+            label="Try again"
+            onclick={faultAgain}
+            size="sm"
+            variant="ghost"
+          />
         {/if}
       </div>
     {:else if signInNote}

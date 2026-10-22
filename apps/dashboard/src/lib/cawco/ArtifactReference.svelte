@@ -17,7 +17,9 @@
     IconWindow,
   } from "#lib/icons.js";
   import { artifactNamed } from "./artifact-names.svelte";
+  import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
+  import { refusals } from "./refusals.svelte";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
 
@@ -33,12 +35,23 @@
   const named = $derived(artifactNamed(id));
   const Glyph = $derived(GLYPH[named?.kind ?? "page"]);
   const words = $derived(named?.name ?? label);
+  /** Where the last press's refusal is said: beside the chip, kept through a reload. */
+  const refKey = $derived(`ref:${id}:top`);
+  async function press(): Promise<void> {
+    const key = refKey;
+    const refused = await openReference(id, { top: true });
+    if (refused) {
+      refusals.set(key, { reason: refused });
+    } else {
+      refusals.delete(key);
+    }
+  }
 </script>
 
 <button
   class={chipVariants({ variant: "inline" })}
   data-artifact-chip={id}
-  onclick={() => openReference(id, { top: true })}
+  onclick={press}
   title={words}
   type="button"
 >
@@ -52,3 +65,11 @@
   </span>
   <span data-slot="label">{words}</span>
 </button>
+<!-- A press the hub refused, said beside the chip in the sentence it
+     stands in, with Try again. -->
+<RowFault
+  again={press}
+  class="inline-block max-w-full align-baseline"
+  data-reference-refused
+  reason={refusals.reason(refKey)}
+/>

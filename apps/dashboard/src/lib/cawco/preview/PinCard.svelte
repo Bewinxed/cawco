@@ -55,7 +55,9 @@
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import type { SendExtras } from "../client.svelte";
   import RowMenu from "../config/RowMenu.svelte";
-  import { copyToClipboard } from "../copy";
+  import { copyRefused, copyToClipboard } from "../copy";
+  import RowFault from "../RowFault.svelte";
+  import { refusals } from "../refusals.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import DocThumb from "../transcript/DocThumb.svelte";
   import Shot from "../transcript/Shot.svelte";
@@ -275,6 +277,18 @@
     (attachments ?? []).filter((one) => one.kind === "image");
   const documents = (attachments: CommentAttachment[] | undefined) =>
     (attachments ?? []).filter((one) => one.kind !== "image");
+
+  /** The browser refused the last Copy link: said over the reply, kept through a reload. */
+  const linkKey = $derived(`copy:pin:${link}`);
+  const linkRefused = $derived(refusals.get(linkKey) !== undefined);
+  async function copyLink(): Promise<void> {
+    const key = linkKey;
+    if (await copyToClipboard("Link", link)) {
+      refusals.delete(key);
+    } else {
+      refusals.set(key, { reason: copyRefused("Link") });
+    }
+  }
 </script>
 
 {#snippet gallery(attachments: CommentAttachment[] | undefined)}
@@ -350,9 +364,7 @@
         {
           icon: IconLink,
           label: said.copyLink,
-          onselect: () => {
-            copyToClipboard("Link", link);
-          },
+          onselect: copyLink,
         },
         ...(pin.movedAt
           ? [
@@ -514,6 +526,14 @@
   data-slot="foot"
   class="flex shrink-0 flex-col gap-space-2"
 >
+  <!-- A Copy link the browser refused, over the reply, with Try again and
+       the link under Show details: the menu that asked has closed. -->
+  <RowFault
+    again={copyLink}
+    data-copy-refused
+    details={link}
+    reason={linkRefused ? copyRefused("Link") : null}
+  />
   <!-- The reply takes the keyboard as the thread opens: ringed when a key opened it, quiet after a press (The One Target Rule). -->
   <CommentComposer
     action="Reply"

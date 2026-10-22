@@ -1,4 +1,13 @@
+<script lang="ts" module>
+  /**
+   * The rail's Recents mounted now. A machine's left-out listing is said
+   * once: in the rail's Recent while one stands, else in the home's.
+   */
+  const rails = $state({ mounted: 0 });
+</script>
+
 <script lang="ts">
+  import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   /**
@@ -7,17 +16,24 @@
    * on the machines — behind one disclosure, with search.
    * On the phone it closes the home; in the wide rail it sits under
    * Projects, so the projects come straight after what is live.
+   *
+   * A harness that left its stored sessions out of a machine's last listing
+   * (not in time, or its listing threw) is said under the disclosure, in
+   * the machine's words, with Try again, which lists that machine again;
+   * never a toast (DESIGN.md, The Work Outlives Its Surface Rule). Said
+   * once: in the rail's Recent while it stands, else in the home's.
    */
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconChevronRight, IconSearch } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { type BoardRow, cawco } from "../client.svelte";
+  import { type BoardRow, cawco, loadCatalog } from "../client.svelte";
   import { conversationHref } from "../links";
   import { echoBeat } from "../motion/echo.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { runningWords } from "../older";
+  import RowFault from "../RowFault.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import { store, stored } from "../storage";
   import { workspace } from "../workspace/workspace.svelte";
@@ -32,6 +48,22 @@
   import { TreeView } from "./tree-view.svelte";
 
   let { inset = false }: { inset?: boolean } = $props();
+
+  $effect(() => {
+    if (!inset) {
+      return;
+    }
+    untrack(() => {
+      rails.mounted += 1;
+    });
+    return () => {
+      untrack(() => {
+        rails.mounted -= 1;
+      });
+    };
+  });
+  /** This Recent is the one place the left-out listings are said. */
+  const sayer = $derived(inset || rails.mounted === 0);
 
   const stale = $derived(!home.live);
   const current = $derived(
@@ -75,6 +107,15 @@
   const recentListed = $derived(
     recentMatches.length - recentShown > 1 ? recentShown : recentMatches.length
   );
+  /** Each machine whose last listing left a harness out, with the sentences for it. */
+  const leftOut = $derived(
+    (sayer ? cawco.machines : []).flatMap((machine) => {
+      const said = cawco.catalogLeftOutOf(machine.machineId);
+      return said.length > 0
+        ? [{ machineId: machine.machineId, words: said.join(" ") }]
+        : [];
+    })
+  );
   function toggleRecent() {
     recentOpen = !recentOpen;
     store("local", RECENT_KEY, String(recentOpen));
@@ -82,8 +123,9 @@
 </script>
 
 <!-- The count and whether there is anything come from `recentCount`: the
-     list itself is built only while it is open. -->
-{#if home.ready && home.recentCount > 0}
+     list itself is built only while it is open. A machine whose listing
+     left a harness out stands it too, to say so. -->
+{#if home.ready && (home.recentCount > 0 || leftOut.length > 0)}
   <section
     data-slot="recent"
     class="flex flex-col gap-space-row data-inset:px-space-2 data-inset:pt-space-1 data-inset:pb-space-2"
@@ -131,6 +173,13 @@
         {/if}
       </span>
     </button>
+    {#each leftOut as each (each.machineId)}
+      <RowFault
+        again={() => loadCatalog(each.machineId)}
+        data-catalog-left-out={each.machineId}
+        reason={each.words}
+      />
+    {/each}
     {#if recentOpen}
       <div
         class="flex flex-col gap-space-row"

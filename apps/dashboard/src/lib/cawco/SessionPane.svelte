@@ -32,6 +32,7 @@
     cawco,
     clearReadFault,
     clearRestore,
+    commandFault,
     faultMessage,
     latestCommandFor,
     loadMcpServers,
@@ -925,8 +926,20 @@
     }
   });
 
-  /** Why this session's last send failed, said over its composer's field. */
-  const sendFailure = $derived(sendFailureNotice(viewId));
+  /**
+   * Why this session's last send failed, said over its composer's field; or
+   * else a command of it that failed with nowhere else to say it (a stop, a
+   * model change with its details card closed, an answer whose card has
+   * gone), with Try again where a try can go (client.svelte.ts
+   * `commandFault`).
+   */
+  const failedCommand = $derived(commandFault(viewId));
+  const sendFailure = $derived(
+    sendFailureNotice(viewId) || (failedCommand?.words ?? "")
+  );
+  const faultAgain = $derived(
+    sendFailureNotice(viewId) ? undefined : failedCommand?.again
+  );
 
   /**
    * "Edit" on a message that never sent: the store parks the whole payload in
@@ -1062,6 +1075,9 @@
     },
     get sendError() {
       return sendFailure;
+    },
+    get faultAgain() {
+      return faultAgain;
     },
     get commands() {
       return commands;
@@ -1330,6 +1346,7 @@
             paneVisible={visible}
             recallOf={viewId}
             sendError={sendFailure}
+            {faultAgain}
             {sending}
             showing={viewId}
             {suggest}
