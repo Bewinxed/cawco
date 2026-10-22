@@ -20,14 +20,15 @@
  * A running install is written to `installs.json` beside the database, so a
  * hub that restarts finds it again, as lost: nothing carried its run over
  * the restart. A lost install whose machine the fleet then lists online is
- * joined. A failed, stopped or lost install stands until the person acts on
- * it (Retry, Remove install, or closing its outcome); a joined one until its
- * outcome is acknowledged. The draft the person filled in before starting
- * (never a password) is kept beside them.
+ * joined. Every ended install stands until the person removes it (Remove
+ * install in its window, a joined one's notice dismissed) or a Retry or a
+ * new add of the same machine replaces it; closing its window parks it, so
+ * Retry stays where the person left it. The draft the person filled in
+ * before starting (never a password) is kept beside them.
  */
 import { dirname, join as joinPath } from "node:path";
 import {
-  CHECK_STEP,
+  checkStep,
   currentStep,
   INSTALL_CHECKS,
   INSTALL_GRACE_MS,
@@ -164,7 +165,11 @@ interface Run {
 
 interface InstallsRecord {
   draft: InstallDraft | null;
-  installs: (Install & { code?: string | null })[];
+  /** `keys` is absent from a record written before the hub kept it: none known. */
+  installs: (Omit<Install, "keys"> & {
+    code?: string | null;
+    keys?: Install["keys"];
+  })[];
 }
 
 /** A machine as the fleet lists it. */
@@ -420,7 +425,11 @@ export const createInstalls = (deps: InstallsDeps) => {
     const record = readRecordSync<InstallsRecord>(path);
     draft = record?.draft ?? null;
     for (const entry of record?.installs ?? []) {
-      const { code: _code, ...install } = entry;
+      const { code: _code, keys, ...rest } = entry;
+      const install: Install = {
+        ...rest,
+        keys: keys ?? { hub: false, machine: false },
+      };
       if (install.state === "running") {
         const step = currentStep(install);
         if (step) {
@@ -573,7 +582,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     if (problem?.kind === "check") {
       failCheck(entry, problem.check);
       // The check's own step is where it failed, whichever the installer was on.
-      install.problemStep = CHECK_STEP[problem.check];
+      install.problemStep = checkStep(install.route, problem.check);
     }
     if (state === "joined") {
       passChecks(entry);
@@ -819,6 +828,9 @@ export const createInstalls = (deps: InstallsDeps) => {
         );
         return;
       }
+      // The trust step ran whole: the hub's key is in the machine's authorized_keys.
+      install.keys.hub = true;
+      changed();
     }
     const tunnel = deps.tunnels.open(install.target, install.port, (line) =>
       take(entry, line)
@@ -877,6 +889,8 @@ export const createInstalls = (deps: InstallsDeps) => {
       end(entry, "failed", { kind: "key", said: unkept });
       return;
     }
+    install.keys.machine = true;
+    changed();
     entry.exitCode = await session(
       entry,
       run,
@@ -953,6 +967,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     steps: [],
     checks: [],
     signedIn: false,
+    keys: { hub: false, machine: false },
     problem: null,
     problemStep: null,
     machineId: null,
@@ -1031,17 +1046,6 @@ export const createInstalls = (deps: InstallsDeps) => {
       }
       trust = made;
     }
-    // An earlier outcome for the same machine gives way to this run.
-    for (const [id, entry] of kept) {
-      if (
-        entry.install.route === "ssh" &&
-        entry.install.target === target &&
-        entry.install.port === port
-      ) {
-        kept.delete(id);
-        deps.settled(id);
-      }
-    }
     const install = fresh({
       route: "ssh",
       target,
@@ -1050,6 +1054,20 @@ export const createInstalls = (deps: InstallsDeps) => {
       address: null,
       command: null,
     });
+    // An earlier outcome for the same machine gives way to this run; the
+    // keys it wrote there stay on the machine, so this run knows them.
+    for (const [id, entry] of kept) {
+      if (
+        entry.install.route === "ssh" &&
+        entry.install.target === target &&
+        entry.install.port === port
+      ) {
+        install.keys.hub ||= entry.install.keys.hub;
+        install.keys.machine ||= entry.install.keys.machine;
+        kept.delete(id);
+        deps.settled(id);
+      }
+    }
     const returning = returningFor(target);
     install.returning = returning?.machineId ?? null;
     install.hostname = returning?.hostname ?? null;
@@ -1244,16 +1262,18 @@ export const createInstalls = (deps: InstallsDeps) => {
       endedAt: null,
       tail: [],
     } satisfies Partial<Install>);
+    // The keys an earlier run wrote stay on the machine: `keys` keeps them.
     entry.lines = [];
     entry.exitCode = null;
     entry.hubUrl = "";
+    entry.legacyStep = undefined;
     console.log(`[installs] ${id}: retried`);
     launchSsh(entry, trust);
     changed();
     return { install, existing: false };
   };
 
-  /** Gone from the band: a finished install the person removed, or whose outcome they closed. */
+  /** Gone from the band: a finished install the person removed. */
   const remove = (id: string): Refused | boolean => {
     const entry = kept.get(id);
     if (!entry) {

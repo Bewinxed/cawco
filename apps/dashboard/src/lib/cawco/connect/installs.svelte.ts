@@ -240,19 +240,6 @@ class Connect {
     this.#writeUrl();
   }
 
-  /**
-   * ×, Esc or a press outside: the window closes and the work goes on. An
-   * outcome the window stood on is acknowledged by its closing (hub
-   * installs.ts): it leaves the band.
-   */
-  dismiss(): void {
-    const { install } = this;
-    this.close();
-    if (install && install.state !== "running") {
-      this.remove(install.id).catch(() => undefined);
-    }
-  }
-
   /** Open output: the window parks into its row as the output's sheet opens. */
   openOutput(): void {
     this.open = false;
@@ -260,7 +247,11 @@ class Connect {
     this.#writeUrl();
   }
 
-  /** The window goes, nothing settled. */
+  /**
+   * ×, Esc, a press outside, a drag down: the window parks and the work goes
+   * on. An outcome stays where it was parked too (its row, a joined one's
+   * notice), Retry on it, until Remove install takes it away.
+   */
   close(): void {
     this.open = false;
     this.output = false;
@@ -272,12 +263,7 @@ class Connect {
     clearTimeout(this.#saveTimer);
     const send = () => {
       this.#saveTimer = undefined;
-      const draft: InstallDraft = { ...this.fields };
-      fetch("/api/installs/draft", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(draft),
-      })
+      this.#putDraft(false)
         .then(async (response) => {
           if (response.ok) {
             this.take((await response.json()) as InstallsRead);
@@ -290,6 +276,30 @@ class Connect {
     } else {
       this.#saveTimer = setTimeout(send, DRAFT_SAVE_MS);
     }
+  }
+
+  /**
+   * The page is going (a reload, the tab closed): a draft save still waiting
+   * goes now, outliving the page (`keepalive`), since its timer never runs
+   * after the page has gone, and nothing typed is lost.
+   */
+  flushDraft(): void {
+    if (this.#saveTimer === undefined) {
+      return;
+    }
+    clearTimeout(this.#saveTimer);
+    this.#saveTimer = undefined;
+    this.#putDraft(true).catch(() => undefined);
+  }
+
+  #putDraft(keepalive: boolean): Promise<Response> {
+    const draft: InstallDraft = { ...this.fields };
+    return fetch("/api/installs/draft", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(draft),
+      keepalive,
+    });
   }
 
   /** Back to Route: the draft forgets its route, nothing else. */
@@ -381,7 +391,7 @@ class Connect {
     this.#writeUrl();
   }
 
-  /** Remove install, or an outcome closed: it leaves the band. */
+  /** Remove install, or a joined one's notice dismissed: it leaves the band. */
   async remove(id: string): Promise<void> {
     const response = await fetch(`/api/installs/${id}`, { method: "DELETE" });
     if (!response.ok) {
@@ -409,3 +419,21 @@ export function takeInstallsFrame(frame: InstallsFrame): void {
 
 /** A running install's step line, as the band and the window's head say it. */
 export const runningStep = (install: Install) => currentStep(install);
+
+/**
+ * Where an install's work is parked, for focus to go back to as its window
+ * or its output closes: its row where one is drawn, else what opens the
+ * place its row lives in (the bar's machines item at the desk, the
+ * navigation's button on a phone, whose sheet holds the band).
+ */
+export function parkedAt(id: string | null): HTMLElement | null {
+  const rows = id
+    ? document.querySelectorAll<HTMLElement>(
+        `[data-install-row="${CSS.escape(id)}"]`
+      )
+    : [];
+  const openers = document.querySelectorAll<HTMLElement>(
+    "[data-machines], [data-slot=burger]"
+  );
+  return [...rows, ...openers].find((one) => one.checkVisibility()) ?? null;
+}

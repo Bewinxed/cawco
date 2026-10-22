@@ -11,8 +11,9 @@
    *   opens from that side (origin-aware, 260ms) and leaves over 160ms. On a
    *   phone it is the drawer recipe, flush at the foot, as tall as it holds
    *   and never over 85vh. No scrim either way: the page stays live.
-   * - **Dismiss parks it.** ×, Esc and a press outside close it; the work
-   *   goes on. With an install running it flies into the install's row in
+   * - **Dismiss parks it.** ×, Esc, a press outside and a drag down close
+   *   it; the work goes on, and an outcome stays in its row with its Retry
+   *   until Remove install takes it away. On an install it flies into its row in
    *   the machines list over 280ms on the drawer curve when that row is on
    *   screen, else into the bar's machines item, the row hidden while the
    *   copy flies; a press on the row brings it back out of it. On a phone the
@@ -38,7 +39,7 @@
   } from "../motion/curves.svelte";
   import { morph } from "../motion/morph.svelte";
   import { closeInto, land } from "../motion/share.svelte";
-  import { connect, INSTALL_PARAM, phone } from "./installs.svelte";
+  import { connect, INSTALL_PARAM, parkedAt, phone } from "./installs.svelte";
   import OutcomeStep from "./OutcomeStep.svelte";
   import OutputSheet from "./OutputSheet.svelte";
   import ReachStep from "./ReachStep.svelte";
@@ -63,6 +64,14 @@
   const step = $derived(connect.step);
   const install = $derived(connect.install);
   const title = $derived(titleOf(install));
+  /**
+   * The page the body shows: its step, and on an outcome which one, so an
+   * outcome that turns into another on its own (Lost, then Joined once the
+   * fleet lists the machine online) cross-fades inside the body's resize.
+   */
+  const shownPage = $derived(
+    step === "outcome" ? `outcome:${install?.state ?? ""}` : step
+  );
 
   /**
    * How one step hands its place to the next: Route and Reach as pages side
@@ -120,12 +129,15 @@
     return document.querySelector<HTMLElement>("[data-machines]");
   }
 
-  /** Where focus goes back to as it closes: what opened it, while it is on the page. */
+  /**
+   * Where focus goes back to as it closes: what opened it, while it is on
+   * the page, else where its install is parked (`parkedAt`).
+   */
   function returnOf(): HTMLElement | null {
     const own = connect.anchor;
     return own?.isConnected && own.checkVisibility()
       ? own
-      : document.querySelector<HTMLElement>("[data-machines]");
+      : parkedAt(connect.id);
   }
 
   /**
@@ -200,6 +212,13 @@
     void connect.load();
   });
 
+  /** A reload or a closed tab takes nothing typed with it: a draft save still waiting goes as the page does. */
+  $effect(() => {
+    const flush = () => connect.flushDraft();
+    addEventListener("pagehide", flush);
+    return () => removeEventListener("pagehide", flush);
+  });
+
   /** The URL's window: after a reload, or a link that names an install. */
   $effect(() => {
     const named = page.url.searchParams.get(INSTALL_PARAM);
@@ -208,9 +227,20 @@
     }
   });
 
-  /** Reach needs the hub's addresses and key; read each time the window opens. */
+  /**
+   * Reach needs the hub's addresses and key, which change on the hub's
+   * machine: read once each time the window opens, as Reach first shows (a
+   * window on an install never needs them). Reach reads them again only
+   * while the hub has no key or the read failed.
+   */
+  let joinRead = false;
   $effect(() => {
-    if (connect.open) {
+    if (!connect.open) {
+      joinRead = false;
+      return;
+    }
+    if (step === "reach" && !joinRead) {
+      joinRead = true;
       // biome-ignore lint/complexity/noVoid: fire-and-forget; Reach draws the addresses and key when they land
       void connect.loadJoin();
     }
@@ -377,7 +407,7 @@
       surface.style.transition = "";
       surface.style.translate = "";
       if (away) {
-        connect.dismiss();
+        connect.close();
       }
     };
     node.addEventListener("pointerdown", down);
@@ -463,7 +493,7 @@
       ) {
         return;
       }
-      connect.dismiss();
+      connect.close();
     };
     document.addEventListener("pointerdown", outside, true);
     return () => document.removeEventListener("pointerdown", outside, true);
@@ -473,7 +503,7 @@
     if (event.key === "Escape" && !event.defaultPrevented) {
       event.preventDefault();
       event.stopPropagation();
-      connect.dismiss();
+      connect.close();
     }
   }
 </script>
@@ -544,7 +574,7 @@
         aria-label="Close"
         title="Close"
         class="pressable touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
-        onclick={() => connect.dismiss()}
+        onclick={() => connect.close()}
       >
         <IconClose aria-hidden="true" class="size-icon-md" />
       </button>
@@ -554,7 +584,7 @@
       class="relative grid overflow-clip px-space-5 pt-space-3 pb-space-5"
       {@attach morph()}
     >
-      {#key step}
+      {#key shownPage}
         <div
           data-slot="page"
           data-page={step}

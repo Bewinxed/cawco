@@ -44697,6 +44697,22 @@
           "id": {
             "type": "string"
           },
+          "keys": {
+            "description": "The keys an SSH add wrote to the machine, which stay there whatever its\noutcome (the installer's undo never touches them), kept over a Retry:\n`hub`, the hub's SSH key a password sign-in put in its\n`~/.ssh/authorized_keys`; `machine`, the key the hub gave it to prove\n(`$XDG_CONFIG_HOME/cawco/machine-key`).",
+            "type": "object",
+            "properties": {
+              "hub": {
+                "type": "boolean"
+              },
+              "machine": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "hub",
+              "machine"
+            ]
+          },
           "machineId": {
             "description": "The machine it joined as, once known.",
             "type": [
@@ -45024,6 +45040,7 @@
           "endedAt",
           "hostname",
           "id",
+          "keys",
           "machineId",
           "port",
           "returning",

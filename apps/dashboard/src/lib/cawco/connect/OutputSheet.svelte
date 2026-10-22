@@ -6,21 +6,28 @@
    * now (or how it ended), Stop install while it runs, and Close. Add
    * machine's window parks into its row as the sheet opens. It follows the
    * output as it grows while it runs, unless the reader has scrolled up.
+   *
+   * Stop asks first, as the window's does: the question stands under the
+   * head with what stopping now leaves on the machine. Focus moves into the
+   * sheet as it opens; closed, it goes back to where the window that opened
+   * it parked (its Open output went with it): the install's row when it is
+   * drawn, else what opens the band (installs.svelte.ts `parkedAt`).
    */
-  import type { Install } from "@cawco/core";
+  import { causeLine, type Install } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose } from "#lib/icons.js";
+  import AskHere from "../AskHere.svelte";
+  import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { failureWords } from "../hub-read";
-  import { connect, phone } from "./installs.svelte";
+  import { connect, parkedAt, phone } from "./installs.svelte";
   import { currentRow } from "./steps";
-  import { causeLine, titleOf } from "./words";
+  import { stopQuestion, titleOf } from "./words";
 
   let { install }: { install: Install } = $props();
 
   let lines = $state<string[]>([]);
   let failed = $state("");
   let scroller = $state<HTMLElement | null>(null);
-  let stopping = $state(false);
   let open = $state(false);
 
   const step = $derived(
@@ -61,15 +68,29 @@
     return () => clearInterval(again);
   });
 
-  async function stop() {
-    stopping = true;
-    try {
-      await connect.stop(install.id);
-    } catch (error) {
-      failed = failureWords(error);
-    } finally {
-      stopping = false;
-    }
+  const asks = new Asker<AskHereRequest>();
+  function askStop() {
+    asks.ask({
+      at: "stop-output",
+      ...stopQuestion(install),
+      cancelLabel: "Cancel",
+      confirmLabel: "Stop install",
+      pendingLabel: "Stopping…",
+      destructive: true,
+      run: () => connect.stop(install.id),
+    });
+  }
+
+  /** In hand as it opens; given back where the window parked as it goes. */
+  function focusing(node: HTMLElement) {
+    node.focus({ preventScroll: true });
+    return () => {
+      // Only when focus was still the sheet's: a press elsewhere keeps its own.
+      const active = document.activeElement;
+      if (!active || active === document.body || node.contains(active)) {
+        parkedAt(install.id)?.focus({ preventScroll: true });
+      }
+    };
   }
 </script>
 
@@ -86,6 +107,7 @@
   aria-modal="false"
   data-connect-output
   tabindex="-1"
+  {@attach focusing}
   data-state={open ? "open" : "closed"}
   aria-label="Output of {titleOf(install)}"
   class={[
@@ -116,9 +138,7 @@
       <Button
         data-box
         label="Stop install"
-        onclick={stop}
-        pending={stopping}
-        pendingLabel="Stopping…"
+        onclick={askStop}
         size="sm"
         variant="destructive"
       />
@@ -135,6 +155,13 @@
       <IconClose aria-hidden="true" class="size-icon-md" />
     </button>
   </header>
+  <AskHere
+    asker={asks}
+    at="stop-output"
+    class="flex-none border-b border-b-border-hairline py-space-3"
+    end="var(--space-5)"
+    indent="var(--space-5)"
+  />
   <div
     bind:this={scroller}
     class="kit-edge-fade-block min-h-0 flex-1 overflow-y-auto bg-code-bg px-space-5 py-space-3"

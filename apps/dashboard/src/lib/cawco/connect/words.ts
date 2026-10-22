@@ -10,6 +10,7 @@ import {
   CHECK_WORDS,
   type Install,
   type InstallProblem,
+  installerRan,
   stepWords,
   targetHost,
 } from "@cawco/core";
@@ -60,10 +61,36 @@ export interface ProblemWords {
 /** The command an installer's refusal names ("run: sudo …, then"), if it names one. */
 const RUN_SAID = /[Rr]un:? (sudo [^,]+?|[a-z-]+ [^,]+?)(?:, then|\.|$)/;
 
-const left = (install: Install, name: string): string =>
-  install.signedIn
-    ? `The installer removes what it created when it fails, so nothing of CawCo is left on ${name}.`
+/**
+ * The keys an SSH add wrote that stay on the machine (hub installs.ts
+ * `keys`), as a sentence with the machine as its subject; empty when none.
+ */
+export const keysLeft = (install: Install, name: string): string => {
+  const kept = [
+    install.keys.hub ? "the hub's SSH key in ~/.ssh/authorized_keys" : null,
+    install.keys.machine
+      ? "its CawCo key in ~/.config/cawco/machine-key"
+      : null,
+  ].filter((one) => one !== null);
+  return kept.length > 0 ? `${name} keeps ${kept.join(" and ")}.` : "";
+};
+
+/**
+ * What a failed install left on the machine, by how far it really got: the
+ * installer's own undo once it ran, and the keys the add wrote there, which
+ * no undo touches.
+ */
+export const left = (install: Install, name: string): string => {
+  const keys = keysLeft(install, name);
+  if (installerRan(install)) {
+    return keys
+      ? `The installer removes what it created when it fails. ${keys}`
+      : `The installer removes what it created when it fails, so nothing of CawCo is left on ${name}.`;
+  }
+  return keys
+    ? `The installer never ran. ${keys}`
     : `Nothing on ${name} was changed.`;
+};
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one case per kind of Problem, each its own four lines
 export function problemWords(
@@ -113,7 +140,7 @@ export function problemWords(
         where: `In ${name}'s sshd settings, set`,
         command: "AllowTcpForwarding yes",
         fix: "then restart sshd there.",
-        next: `Then Retry. It signed in; ${left(install, name).toLowerCase()}`,
+        next: `Then Retry. ${left(install, name)}`,
       };
     case "exposed":
       return {
@@ -167,7 +194,7 @@ export function problemWords(
         where: null,
         command: null,
         fix: "On the hub, check Configure › Updates.",
-        next: `Then Retry. It signed in; nothing was installed on ${name}.`,
+        next: `Then Retry. ${left(install, name)}`,
       };
     case "check": {
       const command =
@@ -182,7 +209,7 @@ export function problemWords(
         fix: command
           ? ""
           : `Install ${CHECK_WORDS[problem.check]} on ${name} with its package manager.`,
-        next: `Then Retry. The installer removes what it created when it fails, so nothing of CawCo is left on ${name}.`,
+        next: `Then Retry. ${left(install, name)}`,
       };
     }
     case "step": {
@@ -193,7 +220,7 @@ export function problemWords(
         where: command ? `On ${name}, run` : null,
         command,
         fix: command ? "" : `Fix what it names on ${name}.`,
-        next: "Then Retry. The installer removes what it created when it fails.",
+        next: `Then Retry. ${left(install, name)}`,
       };
     }
     case "never-online": {
@@ -231,43 +258,28 @@ export function problemWords(
   }
 }
 
-/** The band row's second line for an install that ended badly: where, and the one-line cause. */
-export const causeLine = (install: Install): string => {
-  const { problem } = install;
-  if (install.state === "stopped") {
-    return install.signedIn
-      ? "Stopped after it signed in · the install may be part-way in"
-      : "Stopped before it signed in · nothing on it changed";
+/**
+ * What stopping an install now leaves on the machine, as the question
+ * before a Stop says it (the window's and the output's alike).
+ */
+export const stopQuestion = (
+  install: Install
+): { title: string; body: string } => {
+  const name = machineWord(install);
+  if (install.route === "command") {
+    return {
+      title: "Stop listening for the command?",
+      body: "The command stops working. Nothing on the machine is touched unless it already ran.",
+    };
   }
-  if (install.state === "lost") {
-    return "Lost when the hub restarted · open it to retry";
+  const keys = keysLeft(install, name);
+  let body = `Nothing on ${name} has changed yet.`;
+  if (installerRan(install)) {
+    body = `It has signed in and the installer runs; the install may be part-way in.${keys ? ` ${keys}` : ""}`;
+  } else if (install.signedIn) {
+    body = `It has signed in; the installer hasn't run yet.${keys ? ` ${keys}` : ""}`;
   }
-  if (!problem) {
-    return "Failed";
-  }
-  const step = install.problemStep
-    ? stepWords(install.route, install.problemStep)
-    : "the install";
-  const cause: Record<InstallProblem["kind"], string> = {
-    unreachable: "it didn't answer",
-    "host-key": "its host key changed",
-    "sign-in": "it refused the sign-in",
-    forwarding: "its SSH server won't forward",
-    exposed: "it would expose the hub",
-    "port-held": "its port is taken",
-    key: "its key didn't arrive",
-    download: "the installer didn't arrive",
-    unsigned: "this hub has no installer",
-    offer: "the hub has no build to offer",
-    check:
-      problem.kind === "check"
-        ? `it lacks ${CHECK_WORDS[problem.check]}`
-        : "a check failed",
-    step: "an installer step failed",
-    "never-online": "it never came online",
-    lost: "the hub restarted",
-  };
-  return `Failed at ${step} · ${cause[problem.kind]}`;
+  return { title: `Stop installing on ${name}?`, body };
 };
 
 /** A running time as the window and the band set it: "0:07", "2:14", "1:02:03". */

@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Outcome: how the install ended, standing until the person acts on it
-   * (Retry, Remove install, or closing it).
+   * (Retry or Remove install); closing the window parks it in its row.
    *
    * - **Problem**: "Failed at <step>" (an assertive live region), then the
    *   error formula: why, the fix and where it is done with its command to
@@ -9,13 +9,17 @@
    *   lines where they hold the answer.
    * - **Lost**: the hub restarted during it; what the fleet says of the
    *   machine just now; Retry runs it all again.
-   * - **Stopped**: before or after it signed in, and what that left.
-   * - **Joined**: the machine in the fleet, its presence, and Open.
+   * - **Stopped**: before it signed in, before the installer ran, or while
+   *   it ran, and what that left.
+   * - **Joined**: the machine in the fleet, then its presence as the fleet
+   *   says it, with the name it lists it by, and Open on the same line: a
+   *   line shorter than Lost by more than a rung of the height ladder, as
+   *   Lost turns into it on its own.
    *
    * Retry keeps every detail; a password sign-in asks for its password
    * again, which was used once and forgotten.
    */
-  import type { Install } from "@cawco/core";
+  import { type Install, installerRan } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
@@ -25,7 +29,7 @@
   import MonoWell from "./MonoWell.svelte";
   import PasswordField from "./PasswordField.svelte";
   import StepMark from "./StepMark.svelte";
-  import { machineWord, problemWords } from "./words";
+  import { keysLeft, machineWord, problemWords } from "./words";
 
   let { install }: { install: Install } = $props();
 
@@ -103,30 +107,35 @@
         {name} is in the fleet.
       </p>
     </div>
-    <div class="mark-line flex items-start gap-space-2">
-      <span class="mark-cell type-body">
-        <span
-          aria-hidden="true"
-          class={[
-            "size-(--status-dot-size) rounded-pill",
-            machine?.status === "online"
-              ? "bg-presence-online"
-              : "bg-presence-off",
-          ]}
-          data-box
-        ></span>
-      </span>
-      <p class="m-0 type-body text-pretty text-ink-muted wrap-anywhere">
-        {machine?.status === "online"
-          ? "Online · ready for agents. This line changes on its own if anything on it needs you."
-          : "Offline just now. This line changes on its own once it is back."}
-      </p>
-    </div>
-    <div class="flex justify-end">
+    <!-- A long name wraps Open onto a line of its own, at the end. -->
+    <div class="flex flex-wrap items-center gap-space-2">
+      <div class="mark-line flex min-w-0 flex-1 items-start gap-space-2">
+        <span class="mark-cell type-body">
+          <span
+            aria-hidden="true"
+            class={[
+              "size-(--status-dot-size) rounded-pill",
+              machine?.status === "online"
+                ? "bg-presence-online"
+                : "bg-presence-off",
+            ]}
+            data-box
+          ></span>
+        </span>
+        <p
+          data-slot="presence"
+          class="m-0 type-body text-pretty text-ink-muted wrap-anywhere"
+        >
+          {machine?.status === "online"
+            ? `Online as ${machine.hostname}.`
+            : "Offline just now. This changes on its own once it is back."}
+        </p>
+      </div>
       <Button
+        class="ms-auto max-w-full flex-none"
         onclick={() => {
           const id = install.machineId;
-          connect.dismiss();
+          connect.close();
           if (id) {
             barGlass.showMachine(id);
           }
@@ -158,11 +167,17 @@
           {#if install.route === "command"}
             Stopped. The command no longer works; nothing on the machine was
             touched unless it already ran. Retry gives a new command.
-          {:else if install.signedIn}
-            Stopped after it signed in. The install may be part-way in on
-            {name}. Retry runs it again from the start.
-          {:else}
+          {:else if !install.signedIn}
             Stopped before it signed in. Nothing on {name} was changed.
+          {:else if installerRan(install)}
+            Stopped after it signed in, while the installer ran. The install may
+            be part-way in. {keysLeft(install, name)} Retry runs it again from the
+            start.
+          {:else}
+            Stopped after it signed in, before the installer ran. {keysLeft(
+              install,
+              name
+            ) || `Nothing on ${name} was changed.`}
           {/if}
         </p>
       </div>

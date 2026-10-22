@@ -70,11 +70,12 @@ export const INSTALL_CHECKS = [
 export type InstallCheck = (typeof INSTALL_CHECKS)[number];
 
 /**
- * The step whose work a check serves: the platform and the download's tools
- * for the fetch, the service manager and the signature's tool for the
- * install. The installer makes them all before it fetches anything.
+ * Over SSH, the step whose work a check serves: the platform and the
+ * download's tools for the fetch, the service manager and the signature's
+ * tool for the install. The installer makes them all before it fetches
+ * anything.
  */
-export const CHECK_STEP: Record<InstallCheck, InstallStep> = {
+const SSH_CHECK_STEP: Record<InstallCheck, InstallStep> = {
   os: "fetch",
   arch: "fetch",
   curl: "fetch",
@@ -83,6 +84,16 @@ export const CHECK_STEP: Record<InstallCheck, InstallStep> = {
   systemd: "install",
   openssl: "install",
 };
+
+/**
+ * The step of `route` a check stands under and fails at: over SSH the one
+ * its work serves; by a command the hub sees only that the machine
+ * installs, so every check is that step's.
+ */
+export const checkStep = (
+  route: InstallRoute,
+  check: InstallCheck
+): InstallStep => (route === "ssh" ? SSH_CHECK_STEP[check] : "install");
 
 /** One step as it ran: when it started, and when it ended (null while it runs). */
 export interface InstallMark {
@@ -145,6 +156,14 @@ export interface Install {
   /** The name the fleet shows the machine by, once it is known. */
   hostname: string | null;
   id: string;
+  /**
+   * The keys an SSH add wrote to the machine, which stay there whatever its
+   * outcome (the installer's undo never touches them), kept over a Retry:
+   * `hub`, the hub's SSH key a password sign-in put in its
+   * `~/.ssh/authorized_keys`; `machine`, the key the hub gave it to prove
+   * (`$XDG_CONFIG_HOME/cawco/machine-key`).
+   */
+  keys: { hub: boolean; machine: boolean };
   /** The machine it joined as, once known. */
   machineId: string | null;
   port: number | null;
@@ -283,26 +302,94 @@ export const CHECK_WORDS: Record<InstallCheck, string> = {
 export const installName = (install: Install): string =>
   install.hostname ?? (install.target || "New machine");
 
-/** An outcome in one line, as the band, the window's head and a push say it. */
-export const outcomeLine = (install: Install): string => {
+/**
+ * Whether the installer itself ran on the machine: by a command once the
+ * line fetched it; over SSH once the machine fetched it, unless that fetch
+ * is what failed.
+ */
+export const installerRan = (install: Install): boolean => {
+  const reached = (step: InstallStep) =>
+    install.steps.some((one) => one.step === step);
+  if (install.route === "command") {
+    return reached("install");
+  }
+  return (
+    reached("fetch") &&
+    install.problem?.kind !== "download" &&
+    install.problem?.kind !== "unsigned"
+  );
+};
+
+/** The keys an add left on the machine, in a band line's few words; null when it left none. */
+const keysStay = (install: Install): string | null => {
+  const { hub, machine } = install.keys;
+  if (hub && machine) {
+    return "its two keys stay";
+  }
+  if (hub) {
+    return "the hub's SSH key stays";
+  }
+  return machine ? "its CawCo key stays" : null;
+};
+
+/** Each kind of Problem in a few words: the band row's and a push's cause. */
+const CAUSE: Record<Exclude<InstallProblem["kind"], "check">, string> = {
+  unreachable: "it didn't answer",
+  "host-key": "its host key changed",
+  "sign-in": "it refused the sign-in",
+  forwarding: "its SSH server won't forward",
+  exposed: "it would expose the hub",
+  "port-held": "its port is taken",
+  key: "its key didn't arrive",
+  download: "the installer didn't arrive",
+  unsigned: "this hub has no installer",
+  offer: "the hub has no build to offer",
+  step: "an installer step failed",
+  "never-online": "it never came online",
+  lost: "the hub restarted",
+};
+
+/**
+ * An install in one line with its cause, as its band row, the output's head
+ * and its push say it: the step it is on, or where it ended and why, or
+ * what stopping left.
+ */
+export const causeLine = (install: Install): string => {
+  const { problem } = install;
   switch (install.state) {
-    case "joined":
-      return `${installName(install)} is in the fleet.`;
-    case "lost":
-      return "The hub restarted during the install and lost it.";
-    case "stopped":
-      return install.signedIn
-        ? "Stopped after it signed in"
-        : "Stopped before it signed in";
-    case "failed":
-      return install.problemStep
-        ? `Failed at ${stepWords(install.route, install.problemStep)}`
-        : "Failed";
     case "running":
       return stepWords(
         install.route,
         currentStep(install)?.step ??
           (install.route === "ssh" ? "sign-in" : "run")
       );
+    case "joined":
+      return "In the fleet";
+    case "lost":
+      return "Lost when the hub restarted · open it to retry";
+    case "stopped":
+      if (install.route === "command") {
+        return "Stopped · its command no longer works";
+      }
+      if (!install.signedIn) {
+        return "Stopped before it signed in · nothing on it changed";
+      }
+      if (installerRan(install)) {
+        return "Stopped while it installed · it may be part-way in";
+      }
+      return `Stopped before it installed · ${keysStay(install) ?? "nothing on it changed"}`;
+    case "failed": {
+      if (!problem) {
+        return "Failed";
+      }
+      const step = install.problemStep
+        ? stepWords(install.route, install.problemStep)
+        : "the install";
+      const cause =
+        problem.kind === "check"
+          ? `it lacks ${CHECK_WORDS[problem.check]}`
+          : CAUSE[problem.kind];
+      return `Failed at ${step} · ${cause}`;
+    }
   }
 };

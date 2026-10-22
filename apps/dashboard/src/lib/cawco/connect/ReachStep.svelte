@@ -54,7 +54,7 @@
       words: "with a password, once",
       says: "It plants the hub's key, then the hub forgets it.",
     },
-    { value: "by-hand", words: "with a key I put there myself" },
+    { value: "by-hand", words: "I'll put the key there myself" },
   ];
 
   /**
@@ -270,21 +270,45 @@
     }
   }
 
-  /** Reach reads the hub's addresses and key as it opens: they change on the hub's machine. */
+  /**
+   * The window read the hub's addresses and key as it opened. While the hub
+   * has no key, or that read failed, they are asked again now and then:
+   * Reach changes on its own once the key exists or the hub answers.
+   */
+  const rereads = $derived(
+    connect.joinFailed !== null || (noKey && route === "ssh")
+  );
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; Reach draws the addresses and key when they land
-    void connect.loadJoin();
-  });
-
-  /** While the hub has no key, it is asked again now and then: this changes on its own once it exists. */
-  $effect(() => {
-    if (!(noKey && route === "ssh")) {
+    if (!rereads) {
       return;
     }
     const again = setInterval(() => {
       connect.loadJoin().catch(() => undefined);
     }, 3000);
     return () => clearInterval(again);
+  });
+  let rereading = $state(false);
+  async function readAgain() {
+    rereading = true;
+    try {
+      await connect.loadJoin();
+    } finally {
+      rereading = false;
+    }
+  }
+
+  /** Why Copy command can't start yet, in words beside it; empty when it can. */
+  const copyWaits = $derived.by(() => {
+    if (copied || line) {
+      return "";
+    }
+    if (connect.joinFailed) {
+      return "Waits for the hub's addresses";
+    }
+    if (join && !address) {
+      return "The hub lists no address for it";
+    }
+    return "Waits for the hub's line";
   });
 
   const user = $derived(
@@ -451,14 +475,25 @@
             You can leave. The install carries on without you.
           </p>
           <Checklist />
-          <div class="flex justify-end">
+          <!-- A disabled Add machine says why in words beside it. -->
+          <div class="flex items-center justify-end gap-space-3">
+            {#if noKey}
+              <p
+                id="connect-add-waits"
+                data-slot="waits"
+                class="m-0 min-w-0 type-meta text-pretty text-ink-muted"
+              >
+                Waits for the hub's SSH key
+              </p>
+            {/if}
             <Button
+              aria-describedby={noKey ? "connect-add-waits" : undefined}
+              class="flex-none"
               disabled={noKey}
               label="Add machine"
               onclick={addOverSsh}
               {pending}
               pendingLabel="Adding…"
-              title={noKey ? "The hub needs an SSH key first" : undefined}
               variant="default"
             />
           </div>
@@ -468,10 +503,24 @@
               It reaches the hub at
             </p>
             {#if connect.joinFailed}
-              <p class="m-0 type-meta text-pretty text-status-fail-ink">
-                The hub's addresses couldn't be read. {connect.joinFailed} Close Add
-                machine and open it again to read them again.
-              </p>
+              <div data-slot="join-failed" class="flex items-start gap-space-3">
+                <p
+                  class="m-0 min-w-0 flex-1 type-meta text-pretty text-status-fail-ink"
+                  aria-live="polite"
+                >
+                  The hub's addresses couldn't be read: {connect.joinFailed} It asks
+                  again on its own.
+                </p>
+                <Button
+                  class="flex-none"
+                  label="Try again"
+                  onclick={readAgain}
+                  pending={rereading}
+                  pendingLabel="Reading…"
+                  size="sm"
+                  variant="outline"
+                />
+              </div>
             {:else}
               <div
                 role="radiogroup"
@@ -545,7 +594,12 @@
           </div>
           <MonoWell
             label="The command to run on the machine"
-            lines={[line || "Reading the hub's addresses…"]}
+            lines={[
+              line ||
+                (connect.joinFailed
+                  ? "No command until the hub's addresses are read"
+                  : "Reading the hub's addresses…"),
+            ]}
           />
           <div class="flex flex-col gap-space-1">
             <p class="m-0 type-meta text-ink-muted">
@@ -562,12 +616,24 @@
               {refused}
             </p>
           {/if}
-          <div class="flex justify-end">
+          <!-- A disabled Copy command says why in words beside it. -->
+          <div class="flex items-center justify-end gap-space-3">
+            {#if copyWaits}
+              <p
+                id="connect-copy-waits"
+                data-slot="waits"
+                class="m-0 min-w-0 type-meta text-pretty text-ink-muted"
+              >
+                {copyWaits}
+              </p>
+            {/if}
             <!-- Both wordings stand in one cell, as wide as the wider, so the
                  button never changes width as the copy lands (The Steady Swap
                  Rule); the ellipsis breathes while the hub listens. -->
             <Button
+              aria-describedby={copyWaits ? "connect-copy-waits" : undefined}
               aria-label={copied ? "Copied. Listening for it" : "Copy command"}
+              class="flex-none"
               data-copied={copied || undefined}
               disabled={!line || copied}
               onclick={copyCommand}

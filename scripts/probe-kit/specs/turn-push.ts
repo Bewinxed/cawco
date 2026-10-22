@@ -74,10 +74,13 @@ const steerTag = (harness: Harness) => `PROBE-STEER-${harness}`;
 /** The hub's line for a burst sent as one push (push.ts `sentLine`): its id, and the items it held. */
 const BURST_SENT = /\[notify\] push (needs-\S+): \d+ in one \(([^)]*)\)/;
 
-/** A push the stand-in Cawrier took: a visible one under its collapse id. */
+/** A push the stand-in Cawrier took: a visible one under its collapse id, its alert as the lock screen shows it. */
 interface Pushed {
   collapseId?: string;
-  payload: { cawco?: { instanceId?: string; kind?: string } };
+  payload: {
+    aps?: { alert?: { body?: string; subtitle?: string; title?: string } };
+    cawco?: { installId?: string; instanceId?: string; kind?: string };
+  };
 }
 
 /**
@@ -130,6 +133,11 @@ export const standInPhone = (fleet: KitFleet) => {
     },
     /** Every push's collapse id so far, for a failure's detail. */
     ids: (): string[] => pushed.map((one) => one.collapseId ?? "background"),
+    /** The alert of each push so far about install `id` (hub push.ts `install`), oldest first. */
+    installAlerts: (id: string) =>
+      pushed
+        .filter((one) => one.payload.cawco?.installId === id)
+        .map((one) => one.payload.aps?.alert ?? {}),
     stop: () => cawrier.stop(true),
   };
 };

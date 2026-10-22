@@ -17,7 +17,7 @@
    * The machine it brings back (`returning`) keeps its own tile and name:
    * the row grows out of that machine's own (MachinesList).
    */
-  import { type Install, installName } from "@cawco/core";
+  import { causeLine, type Install, installName } from "@cawco/core";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import {
     machineHue,
@@ -28,7 +28,7 @@
   import { connect, phone } from "./installs.svelte";
   import StepMark from "./StepMark.svelte";
   import { currentRow, stepRows } from "./steps";
-  import { causeLine, clockOf } from "./words";
+  import { clockOf } from "./words";
 
   let {
     install,
@@ -61,8 +61,11 @@
       : "New machine · by a command"
   );
 
-  /** The second line's words, and whether they read stuck. */
-  /** The step it is on, or how it ended: words that morph as they change (The Steady Swap Rule). */
+  /**
+   * The step it is on, or how it ended: words that morph as they change (The
+   * Steady Swap Rule). Over SSH, from its key on, the steps are the install's
+   * own, so they read under "Installing · ".
+   */
   const words = $derived.by(() => {
     if (install.state !== "running") {
       return causeLine(install);
@@ -71,7 +74,7 @@
       return "Starting";
     }
     return install.route === "ssh" &&
-      ["fetch", "install", "agent"].includes(current.step)
+      ["key", "fetch", "install", "agent"].includes(current.step)
       ? `Installing · ${current.words}`
       : current.words;
   });

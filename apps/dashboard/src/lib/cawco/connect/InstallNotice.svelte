@@ -2,8 +2,8 @@
   /**
    * A machine that joined, as a notice in Caw's panel (NoticeRow): the
    * install's outcome where the person is when it lands. Its row opens Add
-   * machine's window on the outcome; its ✕ acknowledges it, as closing that
-   * window does, and the push of it comes down everywhere (hub installs.ts).
+   * machine's window on the outcome, whose closing parks it here; its ✕
+   * removes it, and the push of it comes down everywhere (hub installs.ts).
    */
   import type { Install } from "@cawco/core";
   import { IconSuccess } from "#lib/icons.js";

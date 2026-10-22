@@ -162,7 +162,7 @@
     if (ids.length > 0) {
       feed.acknowledge(ids);
     }
-    // A machine brought in is acknowledged as closing its outcome does: its install goes.
+    // A machine brought in is acknowledged as its notice's ✕ does: its install goes.
     for (const install of joined) {
       connect.remove(install.id).catch(() => undefined);
     }

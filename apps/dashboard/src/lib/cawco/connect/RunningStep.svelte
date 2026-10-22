@@ -26,14 +26,13 @@
   import MonoWell from "./MonoWell.svelte";
   import StepMark from "./StepMark.svelte";
   import { stepRows } from "./steps";
-  import { clockOf, machineWord, timeOf } from "./words";
+  import { clockOf, stopQuestion, timeOf } from "./words";
 
   let { install }: { install: Install } = $props();
 
   const clock = tickingClock(() => install.state === "running");
   const rows = $derived(stepRows(install));
   const current = $derived(rows.find((row) => row.state === "current"));
-  const name = $derived(machineWord(install));
 
   /** A step's figures: its time while it runs, its limit before it starts. */
   function figures(row: (typeof rows)[number]): {
@@ -58,23 +57,11 @@
   }
 
   const asks = new Asker<AskHereRequest>();
-  /** What stopping leaves on the machine: the sign-in fact, or what a void code means. */
-  const stopLeaves = $derived.by(() => {
-    if (install.route === "command") {
-      return "The command stops working. Nothing on the machine is touched unless it already ran.";
-    }
-    return install.signedIn
-      ? "It has signed in; the install may be part-way in."
-      : `Nothing on ${name} has changed yet.`;
-  });
+  /** Stop asks first, with what stopping now leaves on the machine. */
   function askStop() {
     asks.ask({
       at: "stop-install",
-      title:
-        install.route === "ssh"
-          ? `Stop installing on ${name}?`
-          : "Stop listening for the command?",
-      body: stopLeaves,
+      ...stopQuestion(install),
       cancelLabel: "Cancel",
       confirmLabel: "Stop install",
       pendingLabel: "Stopping…",

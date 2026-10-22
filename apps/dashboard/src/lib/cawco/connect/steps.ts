@@ -1,12 +1,12 @@
 /**
  * An install's steps as its window and its band row draw them: each step of
  * its route in order with where it stands, when it started and ended, its
- * limit, and the installer's checks under the step that serves them (core
- * install.ts `CHECK_STEP`). Read from the hub's install alone.
+ * limit, and the installer's checks under the step of its route they stand
+ * under (core install.ts `checkStep`). Read from the hub's install alone.
  */
 import {
-  CHECK_STEP,
   CHECK_WORDS,
+  checkStep,
   INSTALL_CHECKS,
   type Install,
   type InstallCheck,
@@ -63,11 +63,8 @@ export const stepRows = (install: Install): StepRow[] => {
     } else if (index === at) {
       state = ending;
     }
-    // By a command the hub sees only that it installs: every check stands under that.
-    const parentOf = (check: InstallCheck): InstallStep =>
-      install.route === "command" ? "install" : CHECK_STEP[check];
     const checks = INSTALL_CHECKS.filter(
-      (check) => parentOf(check) === step
+      (check) => checkStep(install.route, check) === step
     ).map((check): CheckRow => {
       const said = install.checks.find((one) => one.check === check);
       let checkState: MarkState = "future";

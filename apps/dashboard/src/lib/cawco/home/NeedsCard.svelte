@@ -49,6 +49,7 @@
    * ticking once the hub holds the port.
    */
   import {
+    causeLine,
     localNameWords,
     pairingWords,
     questionsOf,
@@ -103,7 +104,6 @@
     submitCommand,
     takeOverBrowser,
   } from "../client.svelte";
-  import { causeLine } from "../connect/words";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
   import CopyBox from "../join/CopyBox.svelte";

@@ -31,7 +31,26 @@
  * - the command route's three steps tick from the hub's fetch and join, and
  *   its Claude Code step (installs.ts `ready`) ends it joined;
  * - the window's flight into its row, scrubbed at 0, 0.5 and 1;
- * - in WebKit, focusing each Reach field moves nothing inside the drawer.
+ * - in WebKit, focusing each Reach field moves nothing inside the drawer;
+ * - (1) a press outside, × and Esc each park a failed install: it stays on
+ *   the hub, its row reopens it with Retry;
+ * - (2) a command install whose installer fails a check fails at its own
+ *   route's step (Installing on it), never an SSH one;
+ * - (3) Stop in the output sheet asks first, the install running meanwhile;
+ * - (4) what a failure left is said by how far it got: the key the add
+ *   wrote named; a password add refused its forward after planting the
+ *   hub's key says the installer never ran and names that key;
+ * - (7) focus moves into the output sheet as it opens and back to where the
+ *   window parked as it closes;
+ * - (8) on a phone every Reach text field computes 16px or more, in
+ *   Chromium and WebKit;
+ * - (9) a disabled Add machine says why in words beside it, with no title;
+ * - (10) a failed read of the hub's addresses says so with Try again, the
+ *   well says no command, Copy command says why it waits, and the window
+ *   reads them again on its own until they come;
+ * - (12) a failure's push says where it failed and why, the band's line;
+ * - (14) the window reads the hub's addresses once per opening, as Reach shows;
+ * - Lost and Joined are a ladder's rung apart.
  *
  *   bun scripts/probe-kit/run.ts connect-machine
  */
@@ -60,6 +79,7 @@ import {
   serveTarget,
   WAYS,
 } from "../ssh-target";
+import { type Phone, standInPhone } from "./turn-push";
 
 const USER = "deploy";
 const PASSWORD = `pw-${crypto.randomUUID()}`;
@@ -70,6 +90,16 @@ const FETCHING = /Fetching the signed build/;
 const LACKS_TAR = /Failed at Fetching the signed build · it lacks tar/;
 const CODE_IN = /code=([A-Z0-9]+)/;
 const OPEN_NAVIGATION = /Open navigation/;
+const OUTPUT = "[data-connect-output]";
+/** What the forced failure left: the installer undid itself; the key the add gave the machine stays. */
+const MACHINE_KEY_LEFT =
+  "The installer removes what it created when it fails. 127.0.0.1 keeps its CawCo key in ~/.config/cawco/machine-key.";
+/** What a password add refused its forward left: the hub's key it planted, and no installer run. */
+const HUB_KEY_LEFT =
+  "Then Retry. The installer never ran. 127.0.0.1 keeps the hub's SSH key in ~/.ssh/authorized_keys.";
+/** The hub's addresses read by the window, and nothing else of `/api/join*`. */
+const isJoinRead = (url: string | URL): boolean =>
+  new URL(url).pathname === "/api/join";
 /** The least two neighbouring steps' heights may differ by (the wireframe's ladder). */
 const LADDER_GAP = 36;
 /** The phone's visual viewport with the keyboard up: 844 less a 336 keyboard and its bar. */
@@ -195,6 +225,55 @@ async function choose(page: Page, label: string, words: string) {
   await page.getByRole("menuitemradio", { name: words }).first().click();
 }
 
+/**
+ * A press outside the window, on the page under it: a point where nothing
+ * that answers a press stands (no control, no row, nothing of the window's).
+ * A finger on a phone, the mouse at the desk.
+ */
+async function pressOutside(page: Page, view: "desk" | "phone") {
+  const at = await page.evaluate(() => {
+    const live =
+      "a, button, input, textarea, select, label, summary, [role], [tabindex], [contenteditable], [data-connect-window], [data-connect-output], [data-install-row], [data-machines]";
+    for (let y = 60; y < innerHeight - 8; y += 23) {
+      for (let x = 8; x < innerWidth - 8; x += 29) {
+        const hit = document.elementFromPoint(x, y);
+        if (hit && hit !== document.documentElement && !hit.closest(live)) {
+          return { x, y, what: hit.tagName };
+        }
+      }
+    }
+    return null;
+  });
+  if (!at) {
+    throw new Error("no point on the page outside the window to press");
+  }
+  if (view === "phone") {
+    await page.touchscreen.tap(at.x, at.y);
+  } else {
+    await page.mouse.click(at.x, at.y);
+  }
+}
+
+/** Each text field of Reach's SSH pane and its computed font size, px. */
+const fieldSizes = (page: Page) =>
+  page.evaluate(() =>
+    ["#connect-target", "#connect-port", "#connect-password"].map((sel) => {
+      const field = document.querySelector<HTMLElement>(sel);
+      return {
+        field: sel,
+        px: field ? Number.parseFloat(getComputedStyle(field).fontSize) : -1,
+      };
+    })
+  );
+
+/** Opens the port's field ("Port 22 ▾" gives way to it), so its size can be read. */
+async function openPort(page: Page) {
+  if (!(await page.locator("#connect-port").count())) {
+    await page.locator(`${WINDOW} button[data-slot=port]`).click();
+  }
+  await page.waitForSelector("#connect-port");
+}
+
 interface Ladder {
   [state: string]: number;
 }
@@ -251,19 +330,40 @@ async function run(kit: Kit): Promise<void> {
     path,
     port: 0,
   });
+  // The same machine behind an sshd that refuses every forward
+  // (`AllowTcpForwarding no`): a password add plants the hub's key, then
+  // fails before the installer runs.
+  const closed = await serveTarget({
+    authenticate,
+    forwards: false,
+    home,
+    host: "127.0.0.1",
+    hostKey: readFileSync(join(dir, "host_key")),
+    path,
+    port: 0,
+  });
   const target = `${USER}@127.0.0.1`;
   const hold = join(home, ".hold");
   const holdOn = () => writeFileSync(hold, "");
   const holdOff = () => rmSync(hold, { force: true });
+  // Pushes go to a stand-in Cawrier, a phone paired with the hub: what a failure's push says.
+  const pushes = standInPhone(fleet);
 
   try {
     fleet.launch("sessiond");
     await fleet.sessiondUp();
     fleet.launch("hub", [], { PATH: `${bin}:${fleet.env.PATH}` });
     await fleet.hubUp();
+    await pushes.pair();
     fleet.launch("agent");
     await fleet.agentUp();
     const dashboard = await fleet.dashboard();
+
+    await refusedForward(kit, fleet, dashboard, {
+      pushes,
+      port: closed.port,
+      target,
+    });
 
     /** Starts an SSH install held at its fetch, as Add machine does, and answers its id. */
     const startHeld = async (): Promise<string> => {
@@ -296,6 +396,7 @@ async function run(kit: Kit): Promise<void> {
           hubKey,
           startHeld,
           holdOff,
+          pushes,
           target,
           port,
         });
@@ -324,6 +425,8 @@ async function run(kit: Kit): Promise<void> {
       ["running-command", "joined"],
       ["running-command", "stopped-command"],
       ["problem", "running-ssh"],
+      // Lost turns into Joined on its own once the fleet lists the machine.
+      ["lost", "joined"],
     ];
     for (const view of ["desk", "phone"] as const) {
       const ladder = ladders[`${view}-light`] ?? {};
@@ -362,6 +465,8 @@ async function run(kit: Kit): Promise<void> {
       }
     }
     server.close();
+    closed.server.close();
+    pushes.stop();
     writeFileSync(
       join(kit.out, "hub.log"),
       await fleet.logs("hub").catch(() => "")
@@ -373,6 +478,8 @@ interface WalkOptions {
   holdOff: () => void;
   hubKey: string;
   port: number;
+  /** The stand-in phone every push reaches. */
+  pushes: Phone;
   startHeld: () => Promise<string>;
   target: string;
   theme: Theme;
@@ -421,12 +528,36 @@ async function walk(
   await page.locator(`${WINDOW} button[data-route=ssh]`).click();
   const noKey = await settled(page, "reach", "The hub has no SSH key yet");
   note("reach-no-key", noKey);
+  const waits = await page.evaluate((win) => {
+    const button = [
+      ...document.querySelectorAll<HTMLButtonElement>(`${win} button`),
+    ].find((one) => one.textContent?.trim().startsWith("Add machine"));
+    const said = button?.getAttribute("aria-describedby");
+    const words = said ? document.getElementById(said) : null;
+    const a = button?.getBoundingClientRect();
+    const b = words?.getBoundingClientRect();
+    return {
+      disabled: button?.disabled ?? false,
+      title: button?.getAttribute("title") ?? null,
+      words: words?.textContent?.trim() ?? "",
+      shown: Boolean(b && b.width > 0 && b.height > 0),
+      // Beside it: on its line, ending before it starts.
+      beside: Boolean(
+        a &&
+        b &&
+        Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) <= 1 &&
+        b.right <= a.left
+      ),
+    };
+  }, WINDOW);
   kit.check(
-    `${leg}: with no hub key, Add machine is disabled`,
-    await page
-      .locator(WINDOW)
-      .getByRole("button", { name: "Add machine" })
-      .isDisabled()
+    `${leg}: (9) with no hub key, Add machine is disabled and says why in words beside it, no title`,
+    waits.disabled &&
+      waits.title === null &&
+      waits.words === "Waits for the hub's SSH key" &&
+      waits.shown &&
+      waits.beside,
+    JSON.stringify(waits)
   );
   renameSync(aside, options.hubKey);
   renameSync(`${aside}.pub`, `${options.hubKey}.pub`);
@@ -437,11 +568,25 @@ async function walk(
   await choose(page, "Sign in", "with a password, once");
   const password = await settled(page, "reach", "Sign in");
   note("reach-password", password);
+  if (view === "phone") {
+    await openPort(page);
+    const sizes = await fieldSizes(page);
+    await page.locator("#connect-target").focus();
+    kit.check(
+      `${leg}: (8) every Reach text field computes 16px or more on a phone, so iOS never zooms into it`,
+      sizes.every((one) => one.px >= 16),
+      JSON.stringify(sizes)
+    );
+  }
   await page.fill("#connect-target", options.target);
   await page.fill("#connect-password", "typed-and-forgotten");
   await page.waitForTimeout(700);
+  // What the hub kept of the draft as the page goes, and once it is back: a
+  // failure says whether the typing reached the hub or the restore lost it.
+  const keptBefore = (await installs(fleet)).draft;
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#connect-password", { timeout: 30_000 });
+  const keptAfter = (await installs(fleet)).draft;
   const after = await page.evaluate(() => ({
     target: (document.querySelector("#connect-target") as HTMLInputElement)
       ?.value,
@@ -459,16 +604,146 @@ async function walk(
       after.target === options.target &&
       after.password === "" &&
       RELOAD_FORGETS.test(after.placeholder ?? ""),
-    JSON.stringify(after)
+    `${JSON.stringify(after)}; the hub's draft as it reloaded ${JSON.stringify(keptBefore)}, after ${JSON.stringify(keptAfter)}`
+  );
+  // Typed, and reloaded at once, inside the draft save's wait: the save still
+  // waiting goes as the page does, and the reload restores what was typed.
+  const typed = "fast@127.0.0.1";
+  await page.fill("#connect-target", typed);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#connect-target", { timeout: 30_000 });
+  const restored = await page
+    .waitForFunction(
+      (value) =>
+        (document.querySelector("#connect-target") as HTMLInputElement | null)
+          ?.value === value,
+      typed,
+      { timeout: 5000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  const keptFast = (await installs(fleet)).draft?.target;
+  kit.check(
+    `${leg}: typed and reloaded at once, the reload still restores what was typed (the waiting save goes as the page does)`,
+    restored && keptFast === typed,
+    `field ${await page.inputValue("#connect-target")}; the hub's draft ${keptFast}`
   );
 
   // B: the key put there by hand.
-  await choose(page, "Sign in", "with a key I put there myself");
+  await choose(page, "Sign in", "I'll put the key there myself");
   note("reach-by-hand", await settled(page, "reach", "authorized_keys"));
 
   // B: by a command.
   await choose(page, "Bring it in", "by a command");
   note("reach-command", await settled(page, "reach", "It reaches the hub at"));
+
+  // (14) and (10): the window reads the hub's addresses once per opening, as Reach shows;
+  // a read that fails says so, and the window reads them again on its own.
+  let joinReads = 0;
+  /** Whether the hub's answer to the read is a refusal, as the leg turns it. */
+  const hub: { refuses: boolean } = { refuses: true };
+  const reads = (request: { url: () => string }) => {
+    if (isJoinRead(request.url())) {
+      joinReads += 1;
+    }
+  };
+  page.on("request", reads);
+  await page.route(isJoinRead, (route) =>
+    hub.refuses
+      ? route.fulfill({
+          status: 503,
+          contentType: "text/plain",
+          body: "The hub is starting",
+        })
+      : route.continue()
+  );
+  await page.focus(`${WINDOW} [data-slot=close]`);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+    timeout: 10_000,
+  });
+  joinReads = 0;
+  await openWindow(page, dashboard, "new");
+  const failing = await settled(page, "reach", "couldn't be read");
+  const readsOnOpen = joinReads;
+  const waiting = await page.evaluate((win) => {
+    const node = document.querySelector<HTMLElement>(win);
+    const copy = [...(node?.querySelectorAll("button") ?? [])].find((one) =>
+      one.textContent?.includes("Copy command")
+    );
+    const said = copy?.getAttribute("aria-describedby");
+    return {
+      well:
+        node
+          ?.querySelector<HTMLElement>("[data-slot=well]")
+          ?.innerText.replace(/\s+/g, " ")
+          .trim() ?? "",
+      copyDisabled: copy?.disabled ?? false,
+      copyWaits: said
+        ? (document.getElementById(said)?.textContent?.trim() ?? "")
+        : "",
+      tryAgain: Boolean(
+        [...(node?.querySelectorAll("button") ?? [])].find((one) =>
+          one.textContent?.includes("Try again")
+        )
+      ),
+    };
+  }, WINDOW);
+  const beforePress = joinReads;
+  await page.locator(WINDOW).getByRole("button", { name: "Try again" }).click();
+  await page.waitForTimeout(300);
+  const pressed = joinReads - beforePress;
+  kit.check(
+    `${leg}: (10) the hub's addresses unread: the window says so with Try again, the well says no command, Copy command says why it waits; Try again reads them again`,
+    failing.text.includes(
+      "The hub's addresses couldn't be read: The hub is starting"
+    ) &&
+      waiting.tryAgain &&
+      waiting.well.includes("No command until the hub's addresses are read") &&
+      waiting.copyDisabled &&
+      waiting.copyWaits === "Waits for the hub's addresses" &&
+      pressed >= 1,
+    `${JSON.stringify(waiting)}; Try again read ${pressed}; ${failing.text.slice(0, 200)}`
+  );
+  // The hub answers again: the window reads its addresses on its own.
+  hub.refuses = false;
+  const recovered = await page
+    .waitForFunction(
+      (win) =>
+        Boolean(
+          document.querySelector(`${win} [role=radiogroup]`) &&
+          !document
+            .querySelector(win)
+            ?.textContent?.includes("couldn't be read")
+        ),
+      WINDOW,
+      { timeout: 10_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  kit.check(
+    `${leg}: (10) once the hub answers, the window reads its addresses again on its own, no press`,
+    recovered,
+    `reads ${joinReads}`
+  );
+  await page.unroute(isJoinRead);
+  // One open, one read: closed and opened again on the SSH route.
+  await page.focus(`${WINDOW} [data-slot=close]`);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+    timeout: 10_000,
+  });
+  await setDraft(fleet, { route: "ssh" });
+  joinReads = 0;
+  await openWindow(page, dashboard, "new");
+  await settled(page, "reach", "Sign in");
+  await page.waitForTimeout(1500);
+  page.off("request", reads);
+  kit.check(
+    `${leg}: (14) the window reads the hub's addresses once per opening, as Reach shows`,
+    readsOnOpen === 1 && joinReads === 1,
+    `failing open read ${readsOnOpen}; SSH open read ${joinReads}`
+  );
 
   // C: Running over SSH, held at its fetch, started from the window.
   await choose(page, "Bring it in", "over SSH");
@@ -566,6 +841,75 @@ async function walk(
   );
   note("running-stop", asking);
   await page.locator(`${WINDOW} [data-ask-cancel]`).click();
+  await settled(page, "running", "Fetching the signed build");
+
+  // (7) and (3): Open output. Focus goes into the sheet; its Stop asks
+  // first, in the same words as the window's, and nothing stops meanwhile;
+  // closed, focus goes back to where the window parked.
+  await page
+    .locator(WINDOW)
+    .getByRole("button", { name: "Open output" })
+    .click();
+  await page.waitForSelector(`${OUTPUT}[data-state=open]`);
+  const focusIn = await page.evaluate(
+    (sel) =>
+      document.querySelector(sel)?.contains(document.activeElement) ?? false,
+    OUTPUT
+  );
+  await page
+    .locator(OUTPUT)
+    .getByRole("button", { name: "Stop install" })
+    .click();
+  await page.waitForSelector(
+    `${OUTPUT} [data-ask="stop-output"] [data-ask-cancel]`
+  );
+  const sheetAsks = await page
+    .locator(`${OUTPUT} [data-ask="stop-output"]`)
+    .innerText();
+  await page.waitForTimeout(600);
+  const runsOn =
+    (await installs(fleet)).installs.find((one) => one.id === id)?.state ??
+    "gone";
+  await page.locator(`${OUTPUT} [data-ask-cancel]`).click();
+  await page.waitForFunction(
+    (sel) => !document.querySelector(`${sel} [data-ask]`),
+    OUTPUT
+  );
+  kit.check(
+    `${leg}: (3) Stop in the output sheet asks first, with what stopping leaves, and the install runs on until it is answered`,
+    sheetAsks.includes("Stop installing on 127.0.0.1?") &&
+      sheetAsks.includes("the install may be part-way in") &&
+      runsOn === "running",
+    `${sheetAsks.replace(/\s+/g, " ")}; the install ${runsOn}`
+  );
+  await page
+    .locator(OUTPUT)
+    .getByRole("button", { name: "Close output" })
+    .click();
+  await page.waitForFunction((sel) => !document.querySelector(sel), OUTPUT, {
+    timeout: 10_000,
+  });
+  // Where it parked: its row when drawn, else what opens the band (the
+  // bar's machines item at the desk, the navigation's button on a phone).
+  const focusBack = await page.evaluate((install) => {
+    const active = document.activeElement as HTMLElement | null;
+    return {
+      parked: Boolean(
+        active?.matches(
+          `[data-install-row="${install}"], [data-machines], [data-slot=burger]`
+        ) && active.checkVisibility()
+      ),
+      what: active
+        ? `${active.tagName} ${active.dataset.installRow ? "row" : (active.getAttribute("aria-label") ?? "")}`
+        : "none",
+    };
+  }, id);
+  kit.check(
+    `${leg}: (7) focus moves into the output sheet as it opens, and back to where its window parked (its row, else what opens the band) as it closes`,
+    focusIn && focusBack.parked,
+    `in ${focusIn}; back on ${focusBack.what}`
+  );
+  await openWindow(page, dashboard, id);
   await settled(page, "running", "Fetching the signed build");
 
   // A second Add machine for the same target opens that install.
@@ -721,6 +1065,79 @@ async function walk(
       !toasts.some((one) => one.includes("tar")),
     `window: ${problem.text.slice(0, 200)}; row: ${rowWords}; toasts: ${JSON.stringify(toasts)}`
   );
+
+  // (4) What it left, by how far it got: the installer ran and undid itself;
+  // the key the add gave the machine stays there, named.
+  const failedNow = (await installs(fleet)).installs.find(
+    (one) => one.id === failedId
+  );
+  kit.check(
+    `${leg}: (4) the failure says what it left by how far it got: the installer's undo, and the machine key the add wrote, named`,
+    problem.text.includes(MACHINE_KEY_LEFT) &&
+      failedNow?.keys.machine === true &&
+      !failedNow.keys.hub,
+    `keys ${JSON.stringify(failedNow?.keys)}; ${problem.text.slice(problem.text.indexOf("Then Retry"), problem.text.indexOf("Then Retry") + 200)}`
+  );
+
+  // (12) Its push says where it failed and why: the row's own line.
+  const alerts = await until(
+    "the failure's push",
+    async () => options.pushes.installAlerts(failedId),
+    (seen) => seen.length > 0,
+    20_000
+  ).catch(() => options.pushes.installAlerts(failedId));
+  kit.check(
+    `${leg}: (12) the failure's push says where it failed and why, the row's own line`,
+    alerts.at(-1)?.body ===
+      "Failed at Fetching the signed build · it lacks tar",
+    JSON.stringify(alerts)
+  );
+
+  // (1) Dismissing parks the outcome: a press outside, × and Esc each close
+  // the window, the install stays on the hub, and its row reopens it with Retry.
+  const parks: string[] = [];
+  let parked = true;
+  for (const how of ["a press outside", "×", "Esc"] as const) {
+    if (how === "a press outside") {
+      // biome-ignore lint/performance/noAwaitInLoops: one way of closing after another, each on the window the last reopened
+      await pressOutside(page, view);
+    } else if (how === "×") {
+      await page.locator(`${WINDOW} [data-slot=close]`).click();
+    } else {
+      await page.focus(`${WINDOW} [data-slot=close]`);
+      await page.keyboard.press("Escape");
+    }
+    await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+      timeout: 10_000,
+    });
+    await page.waitForTimeout(500);
+    const kept =
+      (await installs(fleet)).installs.find((one) => one.id === failedId)
+        ?.state ?? "gone";
+    await rowShown(page, view, failedId);
+    await page
+      .locator(`[data-install-row="${failedId}"] >> visible=true`)
+      .first()
+      .click();
+    const again = await settled(
+      page,
+      "outcome",
+      "Failed at Fetching the signed build"
+    );
+    const retry = await page
+      .locator(WINDOW)
+      .getByRole("button", { name: "Retry" })
+      .isVisible();
+    parks.push(
+      `${how}: ${kept}, its row reopened ${again.step}, Retry ${retry}`
+    );
+    parked &&= kept === "failed" && retry;
+  }
+  kit.check(
+    `${leg}: (1) a press outside, × and Esc each park the failed install: it stays, and its row reopens it with Retry`,
+    parked,
+    parks.join("; ")
+  );
   // Remove install: the outcome goes from the band.
   await page
     .locator(WINDOW)
@@ -853,6 +1270,51 @@ async function walk(
     timeout: 10_000,
   });
 
+  // (2) A command install whose installer fails a check: it fails at its
+  // own route's step, the one its window and row name, never an SSH one.
+  const checkId = await copyCommand();
+  await settled(page, "running", "Waiting for the command to run on it");
+  const checkCode =
+    CODE_IN.exec(
+      (await installs(fleet)).installs.find((one) => one.id === checkId)
+        ?.command ?? ""
+    )?.[1] ?? "";
+  await fetch(`${fleet.base}/install.sh?code=${checkCode}`).then((r) =>
+    r.text()
+  );
+  // What the installer's end says when its check for tar fails (core install-script.ts).
+  await fetch(`${fleet.base}/api/installs/code/${checkCode}/ended`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      status: 1,
+      said: "tar is needed to unpack the build. Install it with the machine's package manager, then run this again.",
+      host: "build-01",
+    }),
+  });
+  const checkFailed = await settled(
+    page,
+    "outcome",
+    "Failed at Installing on it"
+  );
+  const checkInstall = (await installs(fleet)).installs.find(
+    (one) => one.id === checkId
+  );
+  await rowShown(page, view, checkId);
+  const checkRow = await readRow(page, checkId);
+  kit.check(
+    `${leg}: (2) a command install whose installer fails a check fails at its own step, Installing on it, in the window and on its row`,
+    checkInstall?.problemStep === "install" &&
+      checkFailed.text.includes("Failed at Installing on it") &&
+      !checkFailed.text.includes("Fetching the signed build") &&
+      checkRow.startsWith("Failed at Installing on it · it lacks tar"),
+    `step ${checkInstall?.problemStep}; row ${checkRow}; window ${checkFailed.text.slice(0, 120)}`
+  );
+  await fetch(`${fleet.base}/api/installs/${checkId}`, { method: "DELETE" });
+  await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+    timeout: 10_000,
+  });
+
   // A command install stopped: its code goes void.
   await copyCommand();
   await settled(page, "running", "Waiting for the command to run on it");
@@ -882,6 +1344,69 @@ async function walk(
   );
   await page.close();
   return ladder;
+}
+
+/**
+ * (4) and (12) before the installer: a password add whose machine's sshd
+ * refuses every forward. Its one sign-in planted the hub's key, then the
+ * hub's own connection was refused, so the installer never ran: the window
+ * says so in its own sentence's case and names the key it left; the push
+ * says where it failed and why.
+ */
+async function refusedForward(
+  kit: Kit,
+  fleet: KitFleet,
+  dashboard: string,
+  options: { port: number; pushes: Phone; target: string }
+): Promise<void> {
+  await clearInstalls(fleet);
+  const started = await fleet.api<{ install: { id: string } }>(
+    "/api/installs",
+    {
+      route: "ssh",
+      target: options.target,
+      port: options.port,
+      signIn: "password",
+      password: PASSWORD,
+    }
+  );
+  const { id } = started.install;
+  const ended = await until(
+    "the password add refused its forward",
+    () => installs(fleet),
+    (now) =>
+      now.installs.some((one) => one.id === id && one.state !== "running"),
+    60_000
+  );
+  const install = ended.installs.find((one) => one.id === id);
+  const page = await kit.page("desk", { theme: "light" });
+  await openWindow(page, dashboard, id);
+  const at = await settled(page, "outcome", "Then Retry");
+  const alerts = await until(
+    "its push",
+    async () => options.pushes.installAlerts(id),
+    (all) => all.length > 0,
+    20_000
+  ).catch(() => options.pushes.installAlerts(id));
+  const said = at.text.slice(at.text.indexOf("Then Retry"));
+  kit.check(
+    "desk light: (4) a password add whose forward is refused after its sign-in planted the hub's key says the installer never ran and names the key it left, its sentence's case kept",
+    install?.state === "failed" &&
+      install.problem?.kind === "forwarding" &&
+      install.keys.hub &&
+      !install.keys.machine &&
+      said.startsWith(HUB_KEY_LEFT) &&
+      !at.text.includes("removes what it created"),
+    `${install?.state} ${JSON.stringify(install?.problem)} at ${install?.problemStep}, keys ${JSON.stringify(install?.keys)}; ${said.slice(0, 200)}`
+  );
+  kit.check(
+    "desk light: (12) its push says where it failed and why, the row's own line",
+    alerts.at(-1)?.body ===
+      "Failed at Opening its path to the hub · its SSH server won't forward",
+    JSON.stringify(alerts)
+  );
+  await fetch(`${fleet.base}/api/installs/${id}`, { method: "DELETE" });
+  await page.close();
 }
 
 /** The second line of the install's row, where it is drawn. */
@@ -1146,6 +1671,13 @@ async function webkitFocus(
     "phone WebKit: focusing each Reach field moves nothing inside the drawer (scrollTop stays 0)",
     moved.length === 0,
     moved.join("; ") || "target, port, password"
+  );
+  await openPort(page);
+  const sizes = await fieldSizes(page);
+  kit.check(
+    "phone WebKit: (8) every Reach text field computes 16px or more, so iOS never zooms into it",
+    sizes.every((one) => one.px >= 16),
+    JSON.stringify(sizes)
   );
   await page.close();
   if (existsSync(join(kit.out, "unused"))) {

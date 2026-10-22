@@ -232,9 +232,14 @@ const running = (
   });
 };
 
-/** The target on `host`:`port` (0: any), signing in by `authenticate`; answers its port. */
+/**
+ * The target on `host`:`port` (0: any), signing in by `authenticate`;
+ * answers its port. `forwards: false` refuses every `tcpip-forward`, as an
+ * sshd with `AllowTcpForwarding no` does.
+ */
 export const serveTarget = async (options: {
   authenticate: (ctx: AuthContext) => void;
+  forwards?: boolean;
   home: string;
   host: string;
   hostKey: Buffer;
@@ -245,7 +250,11 @@ export const serveTarget = async (options: {
     client
       .on("authentication", options.authenticate)
       .on("ready", () => {
-        forwarding(client);
+        if (options.forwards === false) {
+          client.on("request", (_accept, reject) => reject?.());
+        } else {
+          forwarding(client);
+        }
         running(client, options);
       })
       .on("error", () => undefined);

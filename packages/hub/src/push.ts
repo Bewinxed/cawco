@@ -56,6 +56,7 @@
  */
 import {
   BROWSER_ASK_TOOL,
+  causeLine,
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
   type Envelope,
@@ -65,7 +66,6 @@ import {
   installName,
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
-  outcomeLine,
   type PairingRequest,
   type PermissionRequestFrame,
   PROJECT_SETTINGS_TOOL,
@@ -1863,17 +1863,13 @@ export const createPush = ({
 
     /**
      * An install of a machine ended while nobody may be watching (installs.ts):
-     * its outcome in the band's own words, the machine as the title. A join
-     * is told as a notice, a failure as needing you; the person's act on the
-     * outcome takes it down ({@link installSettled}).
+     * its outcome in its band row's own line (core install.ts `causeLine`:
+     * where it failed and why), the machine as the title. The person's act on
+     * the outcome takes it down ({@link installSettled}).
      */
     install(install: Install): void {
       const collapseId = installCollapseId(install.id);
-      const alert = alertOf(
-        installName(install),
-        null,
-        install.state === "joined" ? "In the fleet" : outcomeLine(install)
-      );
+      const alert = alertOf(installName(install), null, causeLine(install));
       console.log(
         `[push] install ${install.id} ${install.state}: sent as ${collapseId}`
       );
