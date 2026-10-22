@@ -1174,7 +1174,7 @@ async function markEntrance(kit: Kit, base: string): Promise<void> {
           runs[0]?.kind === "CSSAnimation" &&
           runs[0]?.name === "kit-fade-in"
       ),
-    JSON.stringify(marked).slice(0, 400)
+    JSON.stringify(marked).slice(0, 600)
   );
   await page.close();
 }

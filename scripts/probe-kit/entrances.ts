@@ -70,13 +70,77 @@ export function recordRuns(): void {
     keep(animation);
     return animation;
   };
-  const started = (event: Event) => {
-    const at = event.target instanceof Element ? event.target : null;
-    for (const animation of at?.getAnimations({ subtree: true }) ?? []) {
-      if ((animation.effect as KeyframeEffect | null)?.target === at) {
-        keep(animation);
+  /** A CSS list's items, split at its top-level commas (a `cubic-bezier(…)` keeps its own). */
+  const items = (list: string): string[] => {
+    const out: string[] = [];
+    let depth = 0;
+    let item = "";
+    for (const c of list) {
+      if (c === "(") {
+        depth += 1;
+      } else if (c === ")") {
+        depth -= 1;
+      }
+      if (c === "," && depth === 0) {
+        out.push(item.trim());
+        item = "";
+      } else {
+        item += c;
       }
     }
+    out.push(item.trim());
+    return out;
+  };
+  /** A CSS time (`0.28s`, `280ms`) in ms. */
+  const ms = (time: string) => {
+    const n = Number.parseFloat(time);
+    return time.trim().endsWith("ms") ? n : n * 1000;
+  };
+  const started = (event: Event) => {
+    const at = event.target instanceof Element ? event.target : null;
+    if (!at) {
+      return;
+    }
+    const css = event as AnimationEvent & TransitionEvent;
+    const pseudo = css.pseudoElement || null;
+    const found = at.getAnimations({ subtree: true }).filter((animation) => {
+      const effect = animation.effect as KeyframeEffect | null;
+      return effect?.target === at && (effect.pseudoElement ?? null) === pseudo;
+    });
+    for (const animation of found) {
+      keep(animation);
+    }
+    if (found.length > 0) {
+      return;
+    }
+    // WebKit lists no pseudo-element's run here (`getAnimations` on its
+    // element comes back empty as its `animationstart` is heard): it is
+    // said from the event, its length from the pseudo-element's style.
+    const style = getComputedStyle(at, pseudo ?? undefined);
+    const keyframed = event.type === "animationstart";
+    const names = items(
+      keyframed ? style.animationName : style.transitionProperty
+    );
+    const name = keyframed ? css.animationName : css.propertyName;
+    const index = Math.max(0, names.indexOf(name));
+    const pick = (list: string) => {
+      const all = items(list);
+      return all[index % all.length] ?? "";
+    };
+    runs.push({
+      kind: keyframed ? "CSSAnimation" : "CSSTransition",
+      name,
+      duration: ms(
+        pick(keyframed ? style.animationDuration : style.transitionDuration)
+      ),
+      easing: pick(
+        keyframed
+          ? style.animationTimingFunction
+          : style.transitionTimingFunction
+      ),
+      target: at,
+      pseudo,
+    });
   };
   for (const type of ["transitionrun", "animationstart"]) {
     addEventListener(type, started, true);

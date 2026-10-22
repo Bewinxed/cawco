@@ -65,10 +65,12 @@
  *    390, each at ½ of the fold's held clock, then played on: the scroll
  *    stays where the reader put it on every frame, and the fold and the
  *    flight still land (L489, L491-492).
- * 9. In WebKit at 1440, with motion and with less: Continue's foot, Change
- *    and the decided chips' line each come in by one animation on itself
- *    (motion/curves `appearOnMount`), never a @starting-style transition,
- *    which WebKit sometimes skips for an element just added.
+ * 9. In WebKit at 1440, with motion and with less: Continue's foot comes in
+ *    by one animation on itself (motion/curves `appearOnMount`); Change and
+ *    the decided chips' line by one run of their own opacity transition from
+ *    their `data-entering` mark (`enterByStyle`), so a turn caught mid-way
+ *    still fades back from where they stand. Never a @starting-style
+ *    transition, which WebKit sometimes skips for an element just added.
  *
  *   bun scripts/probe-kit/run.ts web decision-pick
  */
@@ -2069,13 +2071,13 @@ async function stillLeg(
   await settle(still, 400);
   const picked = await pickedIn(still, "path");
   const fade = await tokenMs(still, "--dur-fade");
-  const footFade = pickRuns.find(
-    (run) => run.type === "CSSTransition" && run.name === "opacity"
-  );
+  // Continue's fade is its foot's own entrance (motion/curves
+  // `appearOnMount`), the one Web Animation: no height tween runs beside it.
+  const webs = pickRuns.filter((run) => run.type === "WebAnimation");
+  const footFade = webs.length === 1 ? webs[0] : undefined;
   kit.check(
     `${label} reduced motion: a pick's colour changes and Continue fades in where it stands over --dur-fade, with no height tween, and the card stays open`,
-    pickRuns.every((run) => run.type !== "WebAnimation") &&
-      !!footFade &&
+    !!footFade &&
       Math.abs(footFade.end - fade) < 1 &&
       footHalf.shown === 1 &&
       footHalf.opacity > 0 &&
@@ -2569,14 +2571,15 @@ async function costLeg(
 
 /**
  * 9. In WebKit, at the desk, with motion and with less: what a pick and its
- * Continue bring onto the card comes in by one animation on itself
- * (motion/curves `appearOnMount`), never a @starting-style transition,
- * which WebKit sometimes skips for an element just added
- * (bugs.webkit.org 275184). Continue's foot over --dur-morph (--dur-fade
- * with less motion); Change, as the card moves to its decided line, over
+ * Continue bring onto the card comes in by one run on itself, never a
+ * @starting-style transition, which WebKit sometimes skips for an element
+ * just added (bugs.webkit.org 275184). Continue's foot by its own animation
+ * (motion/curves `appearOnMount`) over --dur-morph (--dur-fade with less
+ * motion); Change, as the card moves to its decided line, by its own
+ * opacity transition from its `data-entering` mark (`enterByStyle`) over
  * --dur-settle (--dur-fade); the decided chips' line, whose chips fly home
- * with motion, runs nothing of its own then and fades over --dur-fade with
- * less motion.
+ * with motion, runs nothing of its own then and fades the same way over
+ * --dur-fade with less motion.
  */
 async function entranceLeg(kit: Kit, url: string, reduced: boolean) {
   const label = `WebKit 1440 ${reduced ? "reduced motion" : "with motion"}`;
@@ -2628,19 +2631,30 @@ async function entranceLeg(kit: Kit, url: string, reduced: boolean) {
     foot.length === 1 && oneEntrance(foot[0]?.runs ?? [], footMs),
     JSON.stringify(foot)
   );
+  // Change and the decided chips' line come in by their own opacity
+  // transitions, which also carry them out (motion/curves `enterByStyle`):
+  // one run on each, from its `data-entering` mark, which is gone.
+  const byStyle = (seen: typeof change, ms: number) =>
+    seen.length === 1 &&
+    seen[0]?.runs.length === 1 &&
+    seen[0]?.runs[0]?.kind === "CSSTransition" &&
+    seen[0]?.runs[0]?.name === "opacity" &&
+    Math.abs((seen[0]?.runs[0]?.duration ?? 0) - ms) < 1;
+  const marked = await page.evaluate(
+    () => document.querySelectorAll("#decision-path [data-entering]").length
+  );
   kit.check(
-    `9 ${label}: Change comes in by one animation on itself as the card moves, over ${reduced ? "--dur-fade" : "--dur-settle"} (${changeMs}ms), never @starting-style`,
-    change.length === 1 && oneEntrance(change[0]?.runs ?? [], changeMs),
-    JSON.stringify(change)
+    `9 ${label}: Change comes in by one run on itself as the card moves, its own opacity transition over ${reduced ? "--dur-fade" : "--dur-settle"} (${changeMs}ms) from its data-entering mark, never @starting-style`,
+    byStyle(change, changeMs) && marked === 0,
+    JSON.stringify({ change, marked })
   );
   kit.check(
     reduced
-      ? `9 ${label}: the decided chips' line fades in by one animation on itself over --dur-fade (${fade}ms), never @starting-style`
+      ? `9 ${label}: the decided chips' line comes in by one run on itself, its own opacity transition over --dur-fade (${fade}ms) from its data-entering mark, never @starting-style`
       : `9 ${label}: the decided chips' line runs nothing of its own (its chips fly home), and no @starting-style`,
-    decided.length === 1 &&
-      (reduced
-        ? oneEntrance(decided[0]?.runs ?? [], fade)
-        : (decided[0]?.runs.length ?? 1) === 0),
+    reduced
+      ? byStyle(decided, fade)
+      : decided.length === 1 && (decided[0]?.runs.length ?? 1) === 0,
     JSON.stringify(decided)
   );
   await page.close();

@@ -80,6 +80,7 @@
     appearOnMount,
     dur,
     ease,
+    enterByStyle,
     motionOk,
   } from "../../motion/curves.svelte";
   import { fold, landFold } from "../../motion/fold.svelte";
@@ -810,23 +811,18 @@
   /*
    * What the decided line and the card's foot come in by as they mount,
    * read off the card as they do (`data-instant`: it lands in one frame;
-   * `data-moving`: it moves to its answer): `appearOnMount`, never
-   * `@starting-style`, which WebKit sometimes skips for an element just
-   * added. The decided chips fade only with less motion (with motion they
-   * fly home); Change fades where it stands as the card moves; Continue
-   * grows out of the card's foot on its height tween.
+   * `data-moving`: it moves to its answer); never `@starting-style`, which
+   * WebKit sometimes skips for an element just added. The decided chips'
+   * line (with less motion; with motion its chips fly home) and Change come
+   * in by their own transitions, which also carry them out, so a turn caught
+   * mid-way fades back from where they stand (`enterByStyle`); Continue
+   * grows out of the card's foot on its height tween (`appearOnMount`).
    */
   const lands = (node: HTMLElement) => node.closest("[data-instant]") !== null;
-  const decidedIn = appearOnMount({
-    when: (node) => !lands(node),
-    motion: false,
-    reduced: { over: "--dur-fade" },
-  });
-  const changeIn = appearOnMount({
-    when: (node) => node.closest("[data-moving]") !== null && !lands(node),
-    motion: { over: "--dur-settle", easing: "--ease-crossfade" },
-    reduced: { over: "--dur-fade" },
-  });
+  const decidedIn = enterByStyle((node) => !lands(node));
+  const changeIn = enterByStyle(
+    (node) => node.closest("[data-moving]") !== null && !lands(node)
+  );
   const footIn = appearOnMount({
     when: (node) => !lands(node),
     motion: { over: "--dur-morph", easing: "--ease-drawer" },
@@ -867,7 +863,8 @@
           <!-- biome-ignore lint/a11y/useSemanticElements: a mark of the pick, named for a screen reader; no control is inside it. -->
           <span
             aria-label={`Decided: ${decidedLine}`}
-            class="flex flex-wrap items-center gap-space-2 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:in-data-leaving:opacity-0 group-data-instant/card:transition-none"
+            class="flex flex-wrap items-center gap-space-2 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:in-data-leaving:opacity-0 motion-reduce:data-entering:opacity-0 group-data-instant/card:transition-none"
+            data-entering
             data-slot="decided"
             role="group"
             {@attach decidedIn}
@@ -891,7 +888,8 @@
             {/each}
           </span>
           <span
-            class="transition-opacity duration-(--dur-settle) ease-crossfade in-data-leaving:opacity-0 motion-reduce:duration-(--dur-fade) motion-reduce:ease-out group-data-instant/card:transition-none"
+            class="transition-opacity duration-(--dur-settle) ease-crossfade in-data-leaving:opacity-0 data-entering:opacity-0 motion-reduce:duration-(--dur-fade) motion-reduce:ease-out group-data-instant/card:transition-none"
+            data-entering
             {@attach changeIn}
           >
             <Button
