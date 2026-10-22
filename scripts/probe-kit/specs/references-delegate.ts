@@ -13,6 +13,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -62,30 +63,12 @@ const credentialOf = async (fleet: KitFleet, parent: string): Promise<string> =>
     .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
     ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
 
-/** A CawCo tool called as the parent, through the door its MCP server and the CLI share. */
-const callAs = async (
-  fleet: KitFleet,
-  parent: string,
-  name: string,
-  args: object
-): Promise<{ structured: Record<string, unknown>; text: string }> => {
-  const response = await fetch(`${fleet.base}/api/delegation/call/${parent}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${await credentialOf(fleet, parent)}`,
-    },
-    body: JSON.stringify({ name, arguments: args }),
-  });
-  const result = (await response.json().catch(() => ({}))) as {
-    content?: { text?: string }[];
-    structuredContent?: Record<string, unknown>;
-  };
-  return {
-    structured: result.structuredContent ?? {},
-    text: (result.content ?? []).map((block) => block.text ?? "").join("\n"),
-  };
-};
+/** The parent as a tool caller, through the door its MCP server and the CLI share (scripts/lib/tool-call.ts). */
+const parentSession = async (fleet: KitFleet, parent: string) => ({
+  base: fleet.base,
+  id: parent,
+  credential: await credentialOf(fleet, parent),
+});
 
 const spec: Spec = {
   name: "references-delegate",
@@ -119,27 +102,35 @@ const spec: Spec = {
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
-    const cut = await callAs(fleet, parent, "delegate", {
+    const me = await parentSession(fleet, parent);
+    // The delegate's session id, from delegate's record (DelegateResult).
+    const cut = await toolRecord<{ instanceId?: string }>(me, "delegate", {
       prompt: `${BRIEF}: write your plan.`,
       title: "Plan writer",
       harness: "claude",
       lands: "none",
     });
-    const delegate = String(cut.structured.delegateInstanceId ?? "");
+    const delegate = cut.refused ? "" : String(cut.record.instanceId ?? "");
+    // delegate_list's words, as the parent's agent reads them.
+    const words = async () => (await toolWords(me, "delegate_list")).text;
     const listed = await until(
       "delegate_list naming the delegate with its plan",
-      async () => (await callAs(fleet, parent, "delegate_list", {})).text,
+      words,
       (text) => text.includes(`cawco:plan/${delegate}`),
       120_000
-    ).catch(
-      async () => (await callAs(fleet, parent, "delegate_list", {})).text
+    ).catch(words);
+    // Its session link carries the handle handoff takes (`<dir>#<id8>`,
+    // hub presenters/sessions.ts), which the dashboard resolves; its plan's
+    // link carries the session's id.
+    const sessionLinked = new RegExp(
+      `\\]\\(cawco:session/[^)#\\s]+#${delegate.slice(0, 8)}\\)`
     );
     kit.check(
       "delegate_list answers each delegate with its session's link and, once it has written a plan, its plan's",
       !!delegate &&
-        listed.includes(`](cawco:session/${delegate})`) &&
+        sessionLinked.test(listed) &&
         listed.includes(`](cawco:plan/${delegate})`),
-      `delegate ${delegate}; ${listed.slice(0, 800)}`
+      `delegate ${delegate}; ${cut.refused ? `delegate refused: ${cut.text.slice(0, 300)}; ` : ""}${listed.slice(0, 800)}`
     );
   },
 };
