@@ -5,9 +5,11 @@
  *
  *   bun scripts/probe-kit/run.ts web files-panel
  *
- * A scratch fleet; three sessions: one with nothing, one with one page, and
- * one with 42 pages (one with a 63-character name, one whose words hold
- * "pricing tiers", one whose kept picture won't decode, two never pictured)
+ * A scratch fleet; three sessions: one with nothing, one with one page (its
+ * picture 305×656, taller than a card's 3:4), and one with 42 pages (one with
+ * a 63-character name, one whose words hold "pricing tiers", one whose kept
+ * picture won't decode, two never pictured, one picture 305×656 and one
+ * 1600×320, and two decision pages never pictured, one titled in 40 words)
  * and nine attachments (texts and pictures, over three sends). Seeded
  * through the hub's own routes, as the dashboard and the pane write them.
  * At 1440 (desk), 680 and 390, light and dark:
@@ -31,7 +33,11 @@
  *     Artifacts | Attachments tabs (pins 3, 11);
  * 10. none, one, the list unreadable (offline): each says so in place;
  * 11. the overflow sweep (journeys/scan.ts) over every state totals zero;
- * 12. no console error.
+ * 12. no console error;
+ * 33. at 390, 680 and 1440, in Chromium and WebKit, with one card and with
+ *     many: every card, and everything its thumbnail paints, lies inside the
+ *     card's slot in the masonry, every card inside Files' region, and an
+ *     overflow scan of Files totals zero.
  *
  * One capture per state at 390 and 1440, light and dark, in caps/files-panel/.
  */
@@ -44,6 +50,7 @@ import { tokenColour } from "../../geom";
 import { scan } from "../../journeys/scan";
 import {
   COMPOSER,
+  type Engine,
   type Kit,
   open,
   ROOT,
@@ -61,6 +68,50 @@ const PRICING = "pricing-notes";
 const BROKEN = "broken-picture";
 const UNPICTURED = ["never-pictured", "also-unpictured"];
 const ATTACHMENT_SENDS = 3;
+/** A picture taller than the cards' 3:4: the owner's "What workflows become", 305×656. */
+const TALL = "tall-decision-picture";
+/** A picture five times wider than tall. */
+const WIDE = "wide-picture";
+/** Each seeded picture's own size, where it is not the 320-wide default. */
+const SHAPES: Record<string, [number, number]> = {
+  [TALL]: [305, 656],
+  [WIDE]: [1600, 320],
+  "the-only-page": [305, 656],
+};
+/** A decision page's title of 40 words. */
+const FORTY_WORDS = Array.from(
+  { length: 40 },
+  (_, i) =>
+    [
+      "what",
+      "workflows",
+      "become",
+      "once",
+      "a",
+      "saved",
+      "program",
+      "runs",
+      "real",
+      "delegates",
+    ][i % 10]
+).join(" ");
+/** Decision pages no pane has drawn: Files draws them unseen, through the overlay's own picture. */
+const DECISIONS = [
+  {
+    name: "what-workflows-become",
+    program: `root = Decisions("${FORTY_WORDS}", [shape])
+shape = Decision("shape", "A saved program that runs real delegates", [saved, adhoc], "Today a workflow is a script in the session.")
+saved = Option("saved", "A saved program", "Runs again from the project, with its own name.", true, [], "One more thing to keep.")
+adhoc = Option("adhoc", "As it is", "Nothing new to learn.", false, [], "Nothing to run again.")`,
+  },
+  {
+    name: "resize-handle-pick",
+    program: `root = Decisions("Which resize handle?", [handle])
+handle = Decision("handle", "Which handle does the panel's edge wear?", [bead, light], "Today the edge has none.")
+bead = Option("bead", "A bead", "A dot at the edge's middle.", true, [], "It covers a line of the page.")
+light = Option("light", "A light", "The edge lights under the pointer.", false, [], "Nothing shows until the pointer comes.")`,
+  },
+];
 
 /** The session's artifact list read, which the offline leg refuses. */
 const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts$/;
@@ -68,8 +119,27 @@ const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts$/;
 const SEARCH_READ = /\/artifacts\/search\?/;
 /** The session's attachments read. */
 const ATTACHMENT_LIST = /\/api\/instances\/[^/]+\/attachments$/;
-/** How long the slow legs hold each list read back: past the grace, so the skeleton stands. */
-const HELD_MS = 2500;
+/**
+ * The session's two list reads, held until the leg releases them, so the
+ * skeleton stands past the grace however long the page took to open: they
+ * start once the conversation is on screen (files.svelte.ts `followFiles`,
+ * for the bar's count), not when Files opens.
+ */
+const heldReads = () => {
+  let release: () => void = () => undefined;
+  const released = new Promise<void>((done) => {
+    release = () => done();
+  });
+  const hold = async (page: Page) => {
+    for (const read of [ARTIFACT_LIST, ATTACHMENT_LIST]) {
+      await page.route(read, async (route) => {
+        await released;
+        await route.continue();
+      });
+    }
+  };
+  return { hold, release: () => release() };
+};
 /** The sidebar row's name once its count stands. */
 const FILES_COUNTED = /Files, \d+/;
 
@@ -113,9 +183,10 @@ const openSession = async (
   view: View,
   theme: Theme,
   id: string,
-  before?: (page: Page) => Promise<void>
+  before?: (page: Page) => Promise<void>,
+  engine?: Engine
 ): Promise<Page> => {
-  const page = await kit.page(view, { theme });
+  const page = await kit.page(view, { theme, engine });
   watch(page);
   await page.addInitScript(
     ([tab]) => {
@@ -143,7 +214,7 @@ const openSession = async (
 const seed = (page: Page, id: string, names: string[]) =>
   page.evaluate(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, every seed in it
-    async ({ instanceId, names: all, pricing, broken, unpictured }) => {
+    async ({ instanceId, names: all, pricing, broken, unpictured, shapes }) => {
       const made: string[] = [];
       for (const [i, name] of all.entries()) {
         const words =
@@ -186,8 +257,12 @@ const seed = (page: Page, id: string, names: string[]) =>
           light = btoa(String.fromCharCode(...bytes));
         } else {
           const canvas = document.createElement("canvas");
-          canvas.width = 320;
-          canvas.height = [200, 240, 427, 180][i % 4] ?? 200;
+          const [w, h] = shapes[name] ?? [
+            320,
+            [200, 240, 427, 180][i % 4] ?? 200,
+          ];
+          canvas.width = w;
+          canvas.height = h;
           const ctx = canvas.getContext("2d");
           if (ctx) {
             ctx.fillStyle = `oklch(0.94 0.03 ${(i * 37) % 360})`;
@@ -224,7 +299,37 @@ const seed = (page: Page, id: string, names: string[]) =>
       pricing: PRICING,
       broken: BROKEN,
       unpictured: UNPICTURED,
+      shapes: SHAPES,
     }
+  );
+
+/** Seeds the decision pages, unpictured, as a session's agent makes them (OpenUI programs). */
+const seedDecisions = (page: Page, id: string) =>
+  page.evaluate(
+    async ({ instanceId, pages }) => {
+      for (const { name, program } of pages) {
+        const response = await fetch(
+          `/api/instances/${encodeURIComponent(instanceId)}/artifacts`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              kind: "page",
+              name,
+              does: "pick",
+              ask: "Pick one option on each card",
+              program,
+            }),
+          }
+        );
+        if (!response.ok) {
+          throw new Error(
+            `create ${name}: ${response.status} ${await response.text()}`
+          );
+        }
+      }
+    },
+    { instanceId: id, pages: DECISIONS }
   );
 
 /** A small PNG, base64, a picture an attachment carries. */
@@ -256,7 +361,7 @@ const run = async (kit: Kit) => {
   const seeder = await openSession(kit, base, "desk", "light", many);
   const names = [
     ...Array.from(
-      { length: MANY - 4 - UNPICTURED.length },
+      { length: MANY - 6 - UNPICTURED.length - DECISIONS.length },
       (_, i) => `page-${i + 1}`
     ),
     LONG_NAME,
@@ -264,8 +369,12 @@ const run = async (kit: Kit) => {
     BROKEN,
     "tall-board",
     ...UNPICTURED,
+    WIDE,
+    TALL,
   ];
   await seed(seeder, many, names);
+  // The newest: decision pages, at the top of the masonry as the owner's were.
+  await seedDecisions(seeder, many);
   await seed(seeder, one, ["the-only-page"]);
   await seeder.close();
   // Three sends, each carrying two texts and a picture.
@@ -305,6 +414,7 @@ const run = async (kit: Kit) => {
   await reviewLegs(kit, base, { many, one });
   await askLegs(kit, base, none, noneOpenCode);
   await roundThree(kit, base, fleet, { many, one, none });
+  await slotLegs(kit, base, { many, one });
   for (const theme of THEMES) {
     await desk(kit, base, theme, { many, one, none });
     for (const view of ["phone", "narrowDesk"] as const) {
@@ -513,11 +623,33 @@ const desk = async (
   );
 
   // 8. Pictures that don't load, and pages never pictured, stand as glyphs.
+  // A card's picture is asked for once it nears the region's view (lazy), so
+  // the broken one is scrolled to, as a person would, and the region back.
+  await page
+    .locator(`[data-files-card][title="${BROKEN}"]`)
+    .scrollIntoViewIfNeeded();
+  await until(
+    "the broken picture's glyph",
+    () =>
+      page
+        .locator(
+          `[data-files-card][title="${BROKEN}"] [data-files-thumb="glyph"]`
+        )
+        .count(),
+    (n) => n > 0,
+    10_000
+  ).catch(() => 0);
   const glyphs = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>("[data-files-card]")]
       .filter((card) => card.querySelector('[data-files-thumb="glyph"]'))
       .map((card) => card.title)
   );
+  await page.evaluate(() => {
+    const scroller = document.querySelector(
+      '[data-files-region="artifacts"] [data-files-scroll]'
+    );
+    scroller?.scrollTo({ top: 0 });
+  });
   kit.check(
     `8 (${theme}): a picture that won't decode stands as its kind's glyph in the well`,
     glyphs.includes(BROKEN),
@@ -728,20 +860,14 @@ const reviewLegs = async (
   ids: { many: string; one: string }
 ) => {
   // 13. Both reads held back past the grace: nothing, then the skeleton, then the read.
+  const slowReads = heldReads();
   const slow = await openSession(
     kit,
     base,
     "desk",
     "light",
     ids.many,
-    async (p) => {
-      for (const read of [ARTIFACT_LIST, ATTACHMENT_LIST]) {
-        await p.route(read, async (route) => {
-          await new Promise((done) => setTimeout(done, HELD_MS));
-          await route.continue();
-        });
-      }
-    }
+    slowReads.hold
   );
   await recordIntros(
     slow,
@@ -770,6 +896,7 @@ const reviewLegs = async (
       "[data-glass-card-frame='files-pop'] [data-files-head-count]"
     ).length,
   }));
+  slowReads.release();
   await slow.locator("[data-files-card]").first().waitFor({ timeout: 15_000 });
   await slow.waitForTimeout(400);
   const arrival = await introsOf(slow);
@@ -1738,20 +1865,14 @@ const roundThree = async (
   await drawn.close();
 
   // 31. The skeleton gives its place to the empty state in one cross-fade.
+  const emptiedReads = heldReads();
   const emptied = await openSession(
     kit,
     base,
     "desk",
     "light",
     ids.none,
-    async (p) => {
-      for (const read of [ARTIFACT_LIST, ATTACHMENT_LIST]) {
-        await p.route(read, async (route) => {
-          await new Promise((done) => setTimeout(done, HELD_MS));
-          await route.continue();
-        });
-      }
-    }
+    emptiedReads.hold
   );
   await recordIntros(emptied, "[data-files-empty]");
   await emptied.locator("[data-files-control]").click();
@@ -1759,6 +1880,7 @@ const roundThree = async (
     .locator("[data-files-wait]")
     .first()
     .waitFor({ timeout: 10_000 });
+  emptiedReads.release();
   await emptied.locator("[data-files-empty]").waitFor({ timeout: 15_000 });
   await emptied.waitForTimeout(400);
   const emptyIntro = await introsOf(emptied);
@@ -1769,6 +1891,221 @@ const roundThree = async (
     `intros ${JSON.stringify(emptyIntro)} (--dur-control ${emptyCross})`
   );
   await emptied.close();
+};
+
+/**
+ * Each card's slot in the masonry against what it draws, read in the page:
+ * the slot's columns from the grid's resolved tracks and its column gap at
+ * the card's lane, its rows from the card's top down its row span (1px rows,
+ * no row gap: a card's span is its height and the gap under it). Every box
+ * the card draws (itself, its thumbnail's well and everything in it, its
+ * words) must lie inside its slot; every card inside Files' region. Then the
+ * overflow scan of Files: every element whose box reaches past Files' own
+ * box sideways, and every scroller in it that scrolls sideways.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, every read in it
+const slotsOf = () => {
+  const SLACK = 0.5;
+  const files =
+    document.querySelector<HTMLElement>("[data-files-sheet]") ??
+    document.querySelector<HTMLElement>("[data-glass-card-frame='files-pop']");
+  const grid = files?.querySelector<HTMLElement>("[data-files-cards]");
+  const region = grid?.closest<HTMLElement>("[data-files-region]");
+  if (!(files && grid && region)) {
+    return null;
+  }
+  const said = (r: DOMRect) =>
+    `${r.left.toFixed(1)}..${r.right.toFixed(1)}×${r.top.toFixed(1)}..${r.bottom.toFixed(1)}`;
+  const style = getComputedStyle(grid);
+  const tracks = style.gridTemplateColumns.split(" ").map(Number.parseFloat);
+  const gap = Number.parseFloat(style.columnGap) || 0;
+  const start =
+    grid.getBoundingClientRect().left +
+    grid.clientLeft +
+    Number.parseFloat(style.paddingLeft);
+  const regionBox = region.getBoundingClientRect();
+  const misses: string[] = [];
+  const cards = [...grid.querySelectorAll<HTMLElement>("[data-files-card]")];
+  const thumbs = { picture: 0, tall: 0 };
+  for (const card of cards) {
+    const own = getComputedStyle(card);
+    const lane = Number.parseInt(own.gridColumnStart, 10);
+    const span = Number.parseInt(own.gridRowEnd.replace("span", ""), 10);
+    const left =
+      start +
+      tracks.slice(0, lane - 1).reduce((sum, w) => sum + w, 0) +
+      gap * (lane - 1);
+    const box = card.getBoundingClientRect();
+    const slot = {
+      left,
+      right: left + (tracks[lane - 1] ?? 0),
+      top: box.top,
+      bottom: box.top + span,
+    };
+    const inSlot = (r: DOMRect) =>
+      r.left >= slot.left - SLACK &&
+      r.right <= slot.right + SLACK &&
+      r.top >= slot.top - SLACK &&
+      r.bottom <= slot.bottom + SLACK;
+    const thumb = card.querySelector<HTMLElement>("[data-files-thumb]");
+    const img = thumb?.querySelector("img");
+    if (img?.complete && img.naturalWidth > 0) {
+      thumbs.picture += 1;
+      if (img.naturalHeight / img.naturalWidth > 4 / 3) {
+        thumbs.tall += 1;
+      }
+    }
+    const drawn = [card, ...card.querySelectorAll<HTMLElement>("*")].filter(
+      (el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }
+    );
+    for (const el of drawn) {
+      const r = el.getBoundingClientRect();
+      if (!inSlot(r)) {
+        misses.push(
+          `${card.title}: ${el === card ? "the card" : `${el.tagName.toLowerCase()}${el === thumb ? " (its well)" : ""}`} ${said(r)} past its slot ${slot.left.toFixed(1)}..${slot.right.toFixed(1)}×${slot.top.toFixed(1)}..${slot.bottom.toFixed(1)}`
+        );
+      }
+    }
+    if (
+      box.left < regionBox.left - SLACK ||
+      box.right > regionBox.right + SLACK
+    ) {
+      misses.push(
+        `${card.title}: the card ${said(box)} past Files' region ${said(regionBox)}`
+      );
+    }
+  }
+  const filesBox = files.getBoundingClientRect();
+  const overflow: string[] = [];
+  for (const el of files.querySelectorAll<HTMLElement>("*")) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) {
+      continue;
+    }
+    const s = getComputedStyle(el);
+    if (r.left < filesBox.left - SLACK || r.right > filesBox.right + SLACK) {
+      overflow.push(
+        `${el.tagName.toLowerCase()} ${said(r)} past Files ${said(filesBox)}`
+      );
+    } else if (
+      ["auto", "scroll"].includes(s.overflowX) &&
+      el.scrollWidth > el.clientWidth + 1
+    ) {
+      overflow.push(
+        `${el.tagName.toLowerCase()} scrolls sideways: ${el.scrollWidth}px in ${el.clientWidth}px`
+      );
+    }
+  }
+  return {
+    cards: cards.length,
+    columns: tracks.length,
+    thumbs,
+    misses,
+    overflow,
+  };
+};
+
+/**
+ * 33. The cards' slots (the owner: "why is one of the artifacts spilling out
+ * from the files panel?"): at 390 and 680 (the drawer) and 1440 (the bar's
+ * card), in Chromium and WebKit, with one card (its picture taller than
+ * 3:4) and with many (a decision page titled in 40 words, pictures taller
+ * than 3:4 and five times wider than tall).
+ */
+const slotLegs = async (
+  kit: Kit,
+  base: string,
+  ids: { many: string; one: string }
+) => {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["phone", "narrowDesk", "desk"] as const) {
+      await slotLeg(kit, base, engine, view, "one", ids.one);
+      await slotLeg(kit, base, engine, view, "many", ids.many);
+    }
+  }
+};
+
+const SLOT_WIDTHS = { phone: 390, narrowDesk: 680, desk: 1440 } as const;
+
+/** One of 33's legs: an engine, a width, one card or many. */
+const slotLeg = async (
+  kit: Kit,
+  base: string,
+  engine: Engine,
+  view: keyof typeof SLOT_WIDTHS,
+  count: "one" | "many",
+  id: string
+) => {
+  const leg = `${engine} ${SLOT_WIDTHS[view]} ${count}`;
+  const page = await openSession(
+    kit,
+    base,
+    view,
+    "light",
+    id,
+    undefined,
+    engine
+  );
+  if (view === "desk") {
+    await page.locator("[data-files-control]").click();
+  } else {
+    await page.locator('[data-slot="burger"]').click();
+    await page.locator("[data-sidebar-files]").click();
+  }
+  await page.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
+  // The pictures on show, the decision pages' among them, loaded and drawn.
+  await until(
+    `${leg}: the pictures on show`,
+    () =>
+      page.evaluate(
+        picturesShown,
+        DECISIONS.map((one) => one.name)
+      ),
+    (ready) => ready,
+    30_000
+  ).catch(() => false);
+  await page.waitForTimeout(400);
+  const read = await page.evaluate(slotsOf);
+  kit.check(
+    `33 (${leg}): every card and everything its thumbnail draws lie inside the card's slot, every card inside Files' region`,
+    !!read &&
+      read.cards === (count === "one" ? 1 : MANY) &&
+      read.thumbs.tall > 0 &&
+      read.misses.length === 0,
+    read
+      ? `${read.cards} cards in ${read.columns} columns, ${read.thumbs.picture} pictures drawn (${read.thumbs.tall} taller than 3:4); ${read.misses.slice(0, 4).join(" | ") || "none past its slot"}`
+      : "Files' cards not found"
+  );
+  kit.check(
+    `33 (${leg}): an overflow scan of Files totals zero`,
+    !!read && read.overflow.length === 0,
+    read
+      ? `${read.overflow.length} found${read.overflow.length ? `: ${read.overflow.slice(0, 4).join(" | ")}` : ""}`
+      : "Files not found"
+  );
+  await sweep(page, `slots ${leg}`);
+  await page.close();
+};
+
+/** The first cards' pictures loaded, and the decision pages pictured. */
+const picturesShown = (names: string[]) => {
+  const shown = [
+    ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
+  ].slice(0, 6);
+  const ready = shown.every((card) => {
+    const img = card.querySelector("img");
+    return !img || (img.complete && img.naturalWidth > 0);
+  });
+  return (
+    ready &&
+    names.every((name) => {
+      const card = document.querySelector(`[data-files-card][title="${name}"]`);
+      return !card || !!card.querySelector("img");
+    })
+  );
 };
 
 /** The drawer's legs at 390 and 680, in one theme. */

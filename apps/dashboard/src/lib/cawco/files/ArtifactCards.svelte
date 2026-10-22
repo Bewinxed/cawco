@@ -196,10 +196,11 @@
     <!-- mark-line: the picture stands over the words; the caption is the card's mark line.
          The card: the thumbnail and its words on one surface, a space-1 inset
          so the hover ghost and the pill frame the picture; its corner the
-         picture's plus that inset (The Concentric Rule). -->
+         picture's plus that inset (The Concentric Rule). Its one column is
+         `minmax(0, 1fr)`, its slot's width: nothing it holds widens it. -->
     <button
       aria-current={artifact.id === chosen || undefined}
-      class="select-none col-start-(--lane) row-end-(--span) grid min-w-0 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"
+      class="select-none col-start-(--lane) row-end-(--span) grid min-w-0 grid-cols-1 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"
       data-artifact={artifact.id}
       data-files-card
       style:--lane={lane + 1}
@@ -212,7 +213,10 @@
       <!-- The picture in a well (DESIGN.md, Surfaces: `surface-well` with
            `border-well`, "a content well inside a raised card"): the well's
            ground while it loads, and its edge drawn over the picture, so a
-           pale page keeps an edge on the cream card by day. -->
+           pale page keeps an edge on the cream card by day. Its shape is
+           its own (`--shape`), whatever the picture's: the picture lies
+           over the well, out of its flow, so a page taller than 3:4 never
+           sizes it. -->
       <span
         class="relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-surface-well after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-well"
         data-files-thumb={pictured(artifact) ? "picture" : "glyph"}
@@ -222,7 +226,7 @@
           <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load stands as its kind's glyph. -->
           <img
             alt=""
-            class="block size-full max-w-none object-cover object-top"
+            class="absolute inset-0 size-full object-cover object-top"
             decoding="async"
             loading="lazy"
             onerror={() => broken.add(artifact.id)}
