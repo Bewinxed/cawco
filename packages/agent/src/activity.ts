@@ -22,8 +22,8 @@
  *   table), so its `org.gnome.Mutter.IdleMonitor.GetIdletime` on the
  *   session bus, in ms.
  * - **Idle, Linux on X11**: `org.freedesktop.ScreenSaver.GetSessionIdleTime`.
- * - **Lock, Linux**: logind's `LockedHint` on the person's session
- *   (`GetSession("auto")`), which desktops "keep up to date to allow
+ * - **Lock, Linux**: logind's `LockedHint` on the person's graphical session
+ *   (their user's `Display`), which desktops "keep up to date to allow
  *   applications to easily track session's Lock status" (systemd 42d35e1);
  *   KDE's lock screen sets it on lock and unlock (kscreenlocker ksldapp.cpp
  *   `m_logind->setLocked(true)`).
@@ -32,9 +32,14 @@
  * - **Idle, macOS**: CoreGraphics' `CGEventSourceSecondsSinceLastEventType`
  *   for any input in the combined session state, through Bun's FFI.
  * - **Lock, macOS**: `CGSSessionScreenIsLocked` in the console user's
- *   session, as `ioreg -n Root -d1` lists IOConsoleUsers. Sleep on the Mac
- *   is silence: the hub reads a machine that stops beating as unknown, its
- *   last input still counting.
+ *   session, as `ioreg -n Root -d1` lists IOConsoleUsers.
+ * - **Sleep, macOS**: NSWorkspace's `NSWorkspaceWillSleepNotification` and
+ *   `NSWorkspaceDidWakeNotification`, heard by a small script on macOS's own
+ *   JavaScript bridge (`osascript -l JavaScript`, its ObjC bridge passing a
+ *   function where a block is expected), which runs in the logged-in
+ *   session the agent runs in. Asleep is said once the script says it
+ *   listens; before that, and wherever it cannot, a Mac that stops beating
+ *   is unknown to the hub, its last input still counting.
  *
  * A machine with none of these (no graphical session, a desktop that answers
  * none) has no activity, said once in the log, and its beats carry none.
@@ -359,20 +364,43 @@ const x11Idle = async (): Promise<IdleSource | undefined> => {
   };
 };
 
-/** The person's logind session (`GetSession("auto")`): its object path, or undefined. */
+/**
+ * The person's graphical session as logind names it: their user's
+ * `Display`, which "encodes which graphical session should be used as the
+ * primary UI display for the user" (org.freedesktop.login1(5)); its object
+ * path, or undefined. An agent run as a user service is in no session of
+ * its own, so it asks by its user.
+ */
 const logindSession = async (): Promise<string | undefined> => {
-  const [path] =
+  const uid = process.getuid?.();
+  if (uid === undefined) {
+    return;
+  }
+  const [user] =
     (await busctl([
       "--system",
       "call",
       "org.freedesktop.login1",
       "/org/freedesktop/login1",
       "org.freedesktop.login1.Manager",
-      "GetSession",
-      "s",
-      "auto",
+      "GetUser",
+      "u",
+      String(uid),
     ])) ?? [];
-  return typeof path === "string" ? path : undefined;
+  if (typeof user !== "string") {
+    return;
+  }
+  const [display] =
+    (await busctl([
+      "--system",
+      "get-property",
+      "org.freedesktop.login1",
+      user,
+      "org.freedesktop.login1.User",
+      "Display",
+    ])) ?? [];
+  const path = Array.isArray(display) ? display[1] : undefined;
+  return typeof path === "string" && path !== "/" ? path : undefined;
 };
 
 /** logind's `LockedHint` on that session; undefined when it could not be read. */
@@ -463,6 +491,47 @@ const macIdle = async (): Promise<IdleSource | undefined> => {
   }
 };
 
+/**
+ * macOS's sleep and wake, from NSWorkspace's notification centre, through
+ * `osascript -l JavaScript`: the script prints `listening` once both
+ * observers stand, then `sleep` or `wake` as each is posted.
+ */
+const MAC_SLEEP = `ObjC.import("AppKit");
+const out = $.NSFileHandle.fileHandleWithStandardOutput;
+const say = (word) => out.writeData($(word + "\\n").dataUsingEncoding($.NSUTF8StringEncoding));
+const center = $.NSWorkspace.sharedWorkspace.notificationCenter;
+center.addObserverForNameObjectQueueUsingBlock("NSWorkspaceWillSleepNotification", $(), $.NSOperationQueue.mainQueue, () => say("sleep"));
+center.addObserverForNameObjectQueueUsingBlock("NSWorkspaceDidWakeNotification", $(), $.NSOperationQueue.mainQueue, () => say("wake"));
+say("listening");
+$.NSRunLoop.currentRunLoop.run;`;
+
+const hearMacSleep = (
+  onSleep: (going: boolean) => void,
+  listening: () => void
+): void => {
+  const child = spawn(
+    "/usr/bin/osascript",
+    ["-l", "JavaScript", "-e", MAC_SLEEP],
+    {
+      stdio: ["ignore", "pipe", "ignore"],
+    }
+  );
+  child.unref();
+  let carry = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    const lines = (carry + chunk.toString("utf8")).split("\n");
+    carry = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line === "listening") {
+        listening();
+      } else if (line === "sleep" || line === "wake") {
+        onSleep(line === "sleep");
+      }
+    }
+  });
+  child.on("error", () => undefined);
+};
+
 /** macOS: whether the console user's screen is locked, as `ioreg` lists IOConsoleUsers. */
 const macLocked = (): Promise<boolean | undefined> =>
   new Promise((resolve) => {
@@ -536,6 +605,15 @@ export const watchActivity = async (): Promise<Activity> => {
     find = macIdle;
     lock = macLocked;
     lockName = "ioreg IOConsoleUsers";
+    hearMacSleep(
+      (going) => {
+        asleep = going;
+        look().catch(() => undefined);
+      },
+      () => {
+        sleepName = "NSWorkspace sleep";
+      }
+    );
   } else if (process.platform === "linux") {
     const wayland =
       process.env.XDG_SESSION_TYPE === "wayland" ||

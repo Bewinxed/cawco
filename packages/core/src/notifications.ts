@@ -82,6 +82,11 @@ export const PRESENCE_TTL_MS = 60_000;
  * intensive throttling).
  */
 export const DEVICE_TTL_MS = 150_000;
+/**
+ * A machine's agent silent this long says nothing of its desktop any more:
+ * three of its 15 s heartbeats missed, as a Mac asleep stops beating.
+ */
+export const MACHINE_TTL_MS = 45_000;
 /** The away clock (the owner's pick): no input on any device this long, and the person is away. */
 export const AWAY_AFTER_MS = 10 * 60_000;
 /**
@@ -99,7 +104,7 @@ export interface PresenceDevice {
   readonly id: string;
   /** The machine's name, as the fleet shows it. */
   readonly name: string;
-  /** What its desktop says now; null when it hasn't said for {@link DEVICE_TTL_MS}. */
+  /** What its desktop says now; null when it hasn't said for {@link MACHINE_TTL_MS}. */
   readonly state: MachineState | null;
 }
 

@@ -50,6 +50,7 @@ import {
   AWAY_AFTER_MS,
   DEVICE_TTL_MS,
   type DismissVia,
+  MACHINE_TTL_MS,
   type MachineActivity,
   type MachineState,
   machineLabel,
@@ -192,6 +193,10 @@ export interface Rolled extends Person {
 const gone = (machine: MachineState | null): boolean =>
   machine === "locked" || machine === "asleep";
 
+/** How long a device's machine word holds: a machine's agent beats every 15 s, a hidden tab once a minute. */
+const wordHolds = (device: Pick<DeviceFacts, "kind">): number =>
+  device.kind === "machine" ? MACHINE_TTL_MS : DEVICE_TTL_MS;
+
 /**
  * The person's last input on a client, as its beat says it: the idle time a
  * tab reads, else now for an app with a chat in front and read, else what
@@ -225,8 +230,8 @@ const lockSince = (
  *
  * 1. Appear away (`manualAt`): away, whatever any device says.
  * 2. A device whose machine is locked or asleep (and still said so within
- *    {@link DEVICE_TTL_MS}) counts for nothing: neither its chat in front
- *    nor its input.
+ *    {@link MACHINE_TTL_MS} for a machine, {@link DEVICE_TTL_MS} for a tab)
+ *    counts for nothing: neither its chat in front nor its input.
  * 3. Any device in use means here: a machine active, or a chat in front and
  *    read (within {@link PRESENCE_TTL_MS}) whose machine is not idle. `on`
  *    is the chat in front on the one that beat last.
@@ -240,7 +245,7 @@ export const rollup = (
   now: number
 ): Rolled => {
   const usable = devices.filter(
-    (device) => !(gone(device.machine) && now - device.at < DEVICE_TTL_MS)
+    (device) => !(gone(device.machine) && now - device.at < wordHolds(device))
   );
   const inputs = usable.flatMap((device) =>
     device.inputAt === null ? [] : [device.inputAt]
@@ -260,7 +265,7 @@ export const rollup = (
     .filter((device) => {
       const fresh = now - device.at;
       const machineActive =
-        device.machine === "active" && fresh < DEVICE_TTL_MS;
+        device.machine === "active" && fresh < wordHolds(device);
       const reading =
         device.front !== null &&
         fresh < PRESENCE_TTL_MS &&
@@ -282,7 +287,7 @@ export const rollup = (
   const locks = devices.flatMap((device) =>
     gone(device.machine) &&
     device.lockedAt !== null &&
-    now - device.at < DEVICE_TTL_MS
+    now - device.at < wordHolds(device)
       ? [device.lockedAt]
       : []
   );
@@ -413,7 +418,7 @@ export const createNotifications = ({
             id,
             name: machineLabel(name),
             counts: counted.has(id),
-            state: word && now - word.at < DEVICE_TTL_MS ? word.state : null,
+            state: word && now - word.at < MACHINE_TTL_MS ? word.state : null,
           },
         ];
       })
