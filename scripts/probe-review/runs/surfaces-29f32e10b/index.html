@@ -1,0 +1,459 @@
+<!-- The owner's review page for captures that differ from their approved baselines: reads manifest.json beside it (scripts/probe-review/README.md). -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      name="viewport"
+    />
+    <title>Review</title>
+    <link href="data:," rel="icon" />
+    <style>
+      @layer base, page;
+
+      @layer base {
+        :root {
+          color-scheme: dark;
+          --bg: oklch(17% 0.005 265deg);
+          --card: oklch(22% 0.008 265deg);
+          --line: oklch(31% 0.01 265deg);
+          --text: oklch(94% 0.004 265deg);
+          --dim: oklch(70% 0.01 265deg);
+          --accent: oklch(64% 0.15 262deg);
+          --approve: oklch(68% 0.14 158deg);
+          --reject: oklch(63% 0.17 25deg);
+          --well: oklch(13% 0.003 265deg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        html,
+        body {
+          margin: 0;
+          background: var(--bg);
+          color: var(--text);
+          font:
+            16px / 1.4 system-ui,
+            -apple-system,
+            sans-serif;
+          text-wrap: pretty;
+        }
+
+        h1,
+        h2 {
+          text-wrap: balance;
+        }
+
+        img {
+          display: block;
+          max-inline-size: 100%;
+        }
+      }
+
+      @layer page {
+        main {
+          max-inline-size: 1200px;
+          margin-inline: auto;
+          padding-block: calc(16px + env(safe-area-inset-top))
+            calc(32px + env(safe-area-inset-bottom));
+          padding-inline: 14px;
+        }
+
+        header {
+          margin-block-end: 20px;
+
+          h1 {
+            font-size: 21px;
+            line-height: 1.25;
+            margin: 0 0 6px;
+            font-weight: 650;
+          }
+
+          p {
+            color: var(--dim);
+            font-size: 14px;
+            margin: 0;
+          }
+        }
+
+        .surface {
+          background: var(--card);
+          border: 2px solid var(--line);
+          border-radius: 14px;
+          margin-block-end: 20px;
+          padding: 14px;
+
+          &:has([data-option="approve"][aria-pressed="true"]) {
+            border-color: var(--approve);
+          }
+
+          &:has([data-option="reject"][aria-pressed="true"]) {
+            border-color: var(--reject);
+          }
+
+          h2 {
+            font-size: 18px;
+            font-weight: 650;
+            margin: 0 0 4px;
+            overflow-wrap: anywhere;
+          }
+        }
+
+        .commit {
+          color: var(--dim);
+          font-size: 13px;
+          margin: 0 0 6px;
+          overflow-wrap: anywhere;
+
+          code {
+            color: var(--text);
+            font-family: ui-monospace, monospace;
+          }
+        }
+
+        .more {
+          margin-block-end: 12px;
+
+          summary {
+            color: var(--accent);
+            font-size: 13px;
+            min-block-size: 32px;
+          }
+        }
+
+        .entry {
+          border-block-start: 1px solid var(--line);
+          padding-block: 12px;
+
+          h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 0 0 8px;
+            overflow-wrap: anywhere;
+
+            span {
+              color: var(--dim);
+              font-weight: 400;
+            }
+          }
+        }
+
+        .trio {
+          display: block grid;
+          gap: 10px;
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(min(100%, 280px), 1fr)
+          );
+        }
+
+        figure {
+          margin: 0;
+          min-inline-size: 0;
+
+          figcaption {
+            color: var(--dim);
+            font-size: 12px;
+            margin-block-end: 4px;
+          }
+
+          img {
+            background: var(--well);
+            border-radius: 6px;
+            inline-size: 100%;
+            block-size: auto;
+          }
+        }
+
+        .held {
+          position: relative;
+          touch-action: pan-x pan-y;
+          user-select: none;
+          -webkit-touch-callout: none;
+          -webkit-user-select: none;
+
+          .orig {
+            background: var(--accent);
+            border-radius: 6px;
+            color: oklch(100% 0 0deg);
+            display: none;
+            font-size: 12px;
+            font-weight: 600;
+            inset-block-start: 8px;
+            inset-inline-start: 8px;
+            padding: 3px 8px;
+            position: absolute;
+          }
+
+          &.on .orig {
+            display: block;
+          }
+        }
+
+        .none {
+          align-content: center;
+          background: var(--well);
+          border-radius: 6px;
+          color: var(--dim);
+          font-size: 13px;
+          min-block-size: 80px;
+          padding: 12px;
+          text-align: center;
+        }
+
+        .decide {
+          display: block flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-block-start: 12px;
+
+          button {
+            background: var(--line);
+            border: 2px solid transparent;
+            border-radius: 11px;
+            color: var(--text);
+            flex: 1 1 0;
+            font-size: 17px;
+            font-weight: 650;
+            min-block-size: 52px;
+            min-inline-size: 140px;
+            padding-inline: 16px;
+
+            &[data-option="approve"][aria-pressed="true"] {
+              background: var(--approve);
+              color: oklch(18% 0.04 158deg);
+            }
+
+            &[data-option="reject"][aria-pressed="true"] {
+              background: var(--reject);
+              color: oklch(98% 0 0deg);
+            }
+          }
+        }
+
+        .err {
+          color: var(--reject);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="main"><p>Loading…</p></main>
+    <script>
+      "use strict";
+      // One section per surface: each capture as the approved baseline, the new
+      // capture (hold it to see the approved one) and what changed, then one
+      // Approve or Reject for the whole surface. The buttons are a CawCo choice
+      // (data-cawco-choice, data-option): the overlay keeps the pick on the hub,
+      // and artifact_read answers it. Manifest schema: scripts/probe-review/README.md.
+      const main = document.getElementById("main");
+
+      const el = (tag, cls, text) => {
+        const node = document.createElement(tag);
+        if (cls) {
+          node.className = cls;
+        }
+        if (text !== undefined) {
+          node.textContent = text;
+        }
+        return node;
+      };
+
+      function picture(caption, src) {
+        const fig = el("figure");
+        fig.append(el("figcaption", "", caption));
+        if (src) {
+          const img = el("img");
+          img.alt = caption;
+          img.loading = "lazy";
+          img.src = src;
+          fig.append(img);
+        }
+        return fig;
+      }
+
+      function absent(caption, why) {
+        const fig = el("figure");
+        fig.append(el("figcaption", "", caption), el("div", "none", why));
+        return fig;
+      }
+
+      /** The new capture; held, the approved one in its place. */
+      function held(entry) {
+        const fig = picture("New capture, hold for the approved", entry.after);
+        if (!entry.before) {
+          fig.querySelector("figcaption").textContent = "New capture";
+          return fig;
+        }
+        fig.classList.add("held");
+        fig.append(el("span", "orig", "Approved"));
+        const img = fig.querySelector("img");
+        let timer;
+        const show = () => {
+          img.src = entry.before;
+          fig.classList.add("on");
+        };
+        const hide = () => {
+          clearTimeout(timer);
+          if (fig.classList.contains("on")) {
+            img.src = entry.after;
+            fig.classList.remove("on");
+          }
+        };
+        fig.addEventListener("pointerdown", () => {
+          timer = setTimeout(show, 220);
+        });
+        for (const ev of ["pointerup", "pointerleave", "pointercancel"]) {
+          fig.addEventListener(ev, hide);
+        }
+        fig.addEventListener("contextmenu", (e) => e.preventDefault());
+        return fig;
+      }
+
+      function entryRow(entry) {
+        const row = el("div", "entry");
+        const h = el("h3", "", entry.label);
+        const said =
+          entry.size ??
+          (entry.pixels === null
+            ? "no approved baseline"
+            : `${entry.pixels} px differ`);
+        h.append(" ", el("span", "", `· ${said}`));
+        const trio = el("div", "trio");
+        trio.append(
+          entry.before
+            ? picture("Approved baseline", entry.before)
+            : absent("Approved baseline", "None approved yet"),
+          held(entry),
+          entry.diff
+            ? picture("What changed", entry.diff)
+            : absent(
+                "What changed",
+                entry.size
+                  ? `The size changed: ${entry.size}`
+                  : "Nothing to hold it to"
+              )
+        );
+        row.append(h, trio);
+        return row;
+      }
+
+      function surfaceCard(s) {
+        const card = el("section", "surface");
+        card.append(el("h2", "", `${s.label} (${s.entries.length})`));
+        if (s.commits.length === 0) {
+          card.append(el("p", "commit", "No commit named"));
+        }
+        // The commits that reach most of its changed states first; past the
+        // first few, the rest fold under one line.
+        const line = (c) => {
+          const p = el("p", "commit");
+          p.append(
+            el("code", "", c.sha.slice(0, 9)),
+            ` ${c.subject} `,
+            el("span", "states", `(${c.states.join(", ")})`)
+          );
+          return p;
+        };
+        const SHOWN = 6;
+        for (const c of s.commits.slice(0, SHOWN)) {
+          card.append(line(c));
+        }
+        if (s.commits.length > SHOWN) {
+          const more = el("details", "more");
+          more.append(
+            el(
+              "summary",
+              "",
+              `${s.commits.length - SHOWN} more commits on its files`
+            )
+          );
+          for (const c of s.commits.slice(SHOWN)) {
+            more.append(line(c));
+          }
+          card.append(more);
+        }
+        if (s.style) {
+          card.append(
+            el(
+              "p",
+              "commit",
+              "Approve also writes its style snapshot, as the dashboard reads it now."
+            )
+          );
+        }
+        for (const entry of s.entries) {
+          card.append(entryRow(entry));
+        }
+        const decide = el("div", "decide");
+        decide.dataset.cawcoChoice = s.id;
+        for (const [option, label] of [
+          ["approve", "Approve"],
+          ["reject", "Reject"],
+        ]) {
+          const b = el("button", "", label);
+          b.type = "button";
+          b.dataset.option = option;
+          decide.append(b);
+        }
+        card.append(decide);
+        return card;
+      }
+
+      function render(m) {
+        document.title = m.title;
+        main.replaceChildren();
+        const head = el("header");
+        const count = m.surfaces.reduce((n, s) => n + s.entries.length, 0);
+        head.append(
+          el("h1", "", m.title),
+          el(
+            "p",
+            "",
+            `${m.surfaces.length} surfaces, ${count} captures. Approve writes a surface's new captures as its baselines; Reject keeps the approved ones.`
+          ),
+          el(
+            "p",
+            "",
+            "Each surface's commits are those on main that touched a file its changed states render, in the stretch of history where they changed, first those that reach most of its states."
+          )
+        );
+        main.append(head);
+        for (const s of m.surfaces) {
+          main.append(surfaceCard(s));
+        }
+        // Drawn after the overlay's first marking: the stored picks, marked here
+        // as the overlay marks a plain button option (aria-pressed).
+        window.cawco?.on("picks", mark);
+      }
+
+      function mark(picks) {
+        for (const option of document.querySelectorAll(
+          "[data-cawco-choice] [data-option]"
+        )) {
+          const choice = option.closest("[data-cawco-choice]").dataset
+            .cawcoChoice;
+          const on = (picks[choice]?.options ?? []).includes(
+            option.dataset.option
+          );
+          option.setAttribute("aria-pressed", String(on));
+        }
+      }
+
+      fetch("manifest.json")
+        .then((r) => {
+          if (!r.ok) {
+            throw new Error(`manifest.json: HTTP ${r.status}`);
+          }
+          return r.json();
+        })
+        .then(render)
+        .catch((e) => {
+          main.replaceChildren(el("p", "err", String(e)));
+        });
+    </script>
+  </body>
+</html>
