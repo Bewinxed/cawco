@@ -21,6 +21,13 @@
  *   artifact not named yet is its label); the browser asks the hub for the
  *   artifact (`GET /api/artifacts/<id>`) and its pins, draws both chips, and
  *   the artifact's takes the hub's name.
+ * - artifact read again: a second artifact in the same message, whose first
+ *   read the hub refuses (503), is not taken as gone. The browser says why
+ *   in one console line (`[cawco] reading artifact <id> failed: …`) and
+ *   keeps nothing, so the message's next draw asks again: the stub holds the
+ *   first artifact's answer until the refusal is out, and that answer
+ *   landing redraws the message. The chip takes the hub's name on the
+ *   second read, with no reload.
  * - sent captions (ToolGroup.svelte `captionText`): a `send_to_user` call
  *   attached a lone `.vtt` file. The server draws the row, the file
  *   waiting; the browser reads it through the hub
@@ -39,6 +46,10 @@ const MACHINE = "ssr-machine";
 const ARTIFACT = "art-ssr-launch-plan";
 const ARTIFACT_LABEL = "PROBE-label-written";
 const ARTIFACT_NAME = "PROBE-launch-plan-named-by-hub";
+/** The artifact whose first read the hub refuses. */
+const FLAKY = "art-ssr-refused-once";
+const FLAKY_LABEL = "PROBE-flaky-label-written";
+const FLAKY_NAME = "PROBE-flaky-named-on-second-read";
 const VTT_PATH = "/home/probe/clips/PROBE-captions.vtt";
 const VTT_WORDS = "PROBE-caption-line-read-by-browser";
 const AGENT_WORDS = "PROBE-agent-message-rendered-on-server";
@@ -64,7 +75,7 @@ const PAGE: TranscriptPage = {
     block(
       "a1",
       "assistant",
-      `${AGENT_WORDS}: see [${ARTIFACT_LABEL}](cawco:artifact/${ARTIFACT}) and [its first pin](cawco:pin/${ARTIFACT}/1).`
+      `${AGENT_WORDS}: see [${ARTIFACT_LABEL}](cawco:artifact/${ARTIFACT}) and [its first pin](cawco:pin/${ARTIFACT}/1), then [${FLAKY_LABEL}](cawco:artifact/${FLAKY}).`
     ),
     block("t1", "tool.use", "", {
       toolCallId: "call-send",
@@ -98,6 +109,8 @@ interface Asked {
  * page stays connecting and raises no banner.
  */
 function stubHub(asked: Asked[], phase: () => Asked["phase"]): string {
+  let flakyReads = 0;
+  const refused = Promise.withResolvers<void>();
   const hub = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -112,14 +125,31 @@ function stubHub(asked: Asked[], phase: () => Asked["phase"]): string {
       if (url.pathname === `/api/instances/${SESSION}/transcript`) {
         return Response.json(PAGE);
       }
-      if (url.pathname === `/api/artifacts/${ARTIFACT}`) {
+      if (url.pathname === `/api/artifacts/${FLAKY}`) {
+        flakyReads += 1;
+        if (flakyReads === 1) {
+          setTimeout(refused.resolve, 0);
+          return new Response("PROBE-hub-busy", { status: 503 });
+        }
         return Response.json({
-          id: ARTIFACT,
+          id: FLAKY,
           instanceId: SESSION,
           kind: "page",
-          name: ARTIFACT_NAME,
+          name: FLAKY_NAME,
           shown: false,
         });
+      }
+      if (url.pathname === `/api/artifacts/${ARTIFACT}`) {
+        // Answered once the refusal is out: its landing is the next draw.
+        return refused.promise.then(() =>
+          Response.json({
+            id: ARTIFACT,
+            instanceId: SESSION,
+            kind: "page",
+            name: ARTIFACT_NAME,
+            shown: false,
+          })
+        );
       }
       if (url.pathname === `/api/instances/${SESSION}/artifacts/comments`) {
         return Response.json({ artifacts: [{ id: ARTIFACT, pins: [] }] });
@@ -198,6 +228,10 @@ const spec: Spec = {
 
     phase = "browser";
     const page = await kit.page("desk", { engine: "chromium" });
+    const consoleLines: string[] = [];
+    page.on("console", (message) => {
+      consoleLines.push(message.text());
+    });
     await page.goto(`${base}/session/${SESSION}`, {
       waitUntil: "domcontentloaded",
     });
@@ -248,6 +282,35 @@ const spec: Spec = {
         artifactReads,
         pinReads,
       })
+    );
+
+    // artifact read again
+    const flakyNamed = await page
+      .waitForFunction(
+        ([id, name]) =>
+          document
+            .querySelector(`[data-artifact-chip="${id}"]`)
+            ?.getAttribute("title") === name,
+        [FLAKY, FLAKY_NAME] as const,
+        { timeout: 20_000 }
+      )
+      .then(
+        () => true,
+        () => false
+      );
+    const flakyReads = asked.filter((one) =>
+      one.path.startsWith(`/api/artifacts/${FLAKY}`)
+    );
+    const failedLines = consoleLines.filter((line) =>
+      line.startsWith(`[cawco] reading artifact ${FLAKY} failed: `)
+    );
+    kit.check(
+      "artifact read again: the hub refuses the second artifact's first read (503); the browser says why in one line and keeps nothing, the next draw asks again, and its chip takes the hub's name with no reload",
+      flakyReads.length === 2 &&
+        flakyReads.every((one) => one.phase === "browser") &&
+        failedLines.length === 1 &&
+        flakyNamed,
+      JSON.stringify({ flakyReads, failedLines, flakyNamed })
     );
 
     // sent captions

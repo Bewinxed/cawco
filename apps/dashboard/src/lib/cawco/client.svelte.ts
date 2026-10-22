@@ -6409,20 +6409,6 @@ export async function projectAtFolder(project: {
 }
 
 /**
- * A session's plan, read now (`GET /api/instances/:id/plan`); its followers
- * hear the same plan live through {@link cawco.planOf}.
- */
-export async function planOf(instanceId: string): Promise<SessionPlan> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/plan`
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, "so the plan is not known.");
-  }
-  return (await response.json()) as SessionPlan;
-}
-
-/**
  * The standing "make this a project" offers, as the hub holds them now: each
  * session's as the read answered it, or as a `project_offer` frame since left it.
  */

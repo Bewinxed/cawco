@@ -11,7 +11,7 @@
   import { getContext, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { ShowRefused, showArtifact } from "#lib/cawco/artifact-api.js";
+  import { ArtifactRefused, showArtifact } from "#lib/cawco/artifact-api.js";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -226,7 +226,7 @@
       revealPreview(m.instanceId);
     } catch (error) {
       // A hub that didn't answer already says to try again.
-      const retry = error instanceof ShowRefused && error.status !== 404;
+      const retry = error instanceof ArtifactRefused && error.status !== 404;
       openFailed.set(
         key,
         retry

@@ -8,7 +8,9 @@
  * the doc that pane joins, live. Any other is asked of the hub once
  * (`GET /api/artifacts/<id>`, then its pins by the person's read, which
  * counts as no one's hearing), and the answer is kept for this tab; one the
- * hub holds no longer is null, and its chip is its label alone.
+ * hub holds no longer (404) is null, and its chip is its label alone. A read
+ * that failed otherwise (the hub unreached, a 5xx) keeps nothing: it says
+ * why in one line, and the next draw asks again.
  *
  * A press on a chip asks the panel to open the artifact at a place
  * ({@link askOpen}): the request stands until the pane holding that artifact
@@ -19,7 +21,7 @@ import type { ArtifactKind, ChoiceEntry } from "@cawco/core";
 import type { Pin } from "@cawco/core/comments";
 import { SvelteMap } from "svelte/reactivity";
 import { browser } from "$app/env";
-import { findArtifact } from "./artifact-api";
+import { ArtifactRefused, findArtifact } from "./artifact-api";
 
 /** An artifact as a chip names it. */
 export interface NamedArtifact {
@@ -101,7 +103,7 @@ function askPins(id: string, instanceId: string): void {
     });
 }
 
-/** Asks the hub what artifact `id` is, once; the browser asks ({@link askPins}). */
+/** Asks the hub what artifact `id` is, once it answers; the browser asks ({@link askPins}). */
 function ask(id: string): void {
   if (!browser || asking.has(id)) {
     return;
@@ -115,9 +117,14 @@ function ask(id: string): void {
         name: found.name,
       });
     })
-    .catch(() => {
-      // Gone, or never one: its chip is its label alone.
-      answered.set(id, null);
+    .catch((error: unknown) => {
+      if (error instanceof ArtifactRefused && error.status === 404) {
+        // Gone, or never one: its chip is its label alone.
+        answered.set(id, null);
+        return;
+      }
+      const why = error instanceof Error ? error.message : String(error);
+      console.error(`[cawco] reading artifact ${id} failed: ${why}`);
     })
     .finally(() => {
       asking.delete(id);

@@ -95,8 +95,8 @@ export async function keepThumbnail(
   );
 }
 
-/** The hub's refusal of a show, in its own words, with its status: a 404 is an artifact no longer there, which no retry brings back. */
-export class ShowRefused extends Error {
+/** The hub's refusal of a read or a show of an artifact, in its own words, with its status: a 404 is an artifact no longer there, which no retry brings back. */
+export class ArtifactRefused extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
     super(message);
@@ -116,7 +116,7 @@ export async function showArtifact(
     method: "POST",
   });
   if (!response.ok) {
-    throw new ShowRefused(
+    throw new ArtifactRefused(
       response.status,
       (await hubRefusal(response)).message
     );
@@ -272,9 +272,14 @@ export async function canvasSent(
 export async function findArtifact(
   id: string
 ): Promise<ArtifactSummary & { instanceId: string; shown: boolean }> {
-  return (
-    await ok(await fetch(`/api/artifacts/${encodeURIComponent(id)}`))
-  ).json();
+  const response = await fetch(`/api/artifacts/${encodeURIComponent(id)}`);
+  if (!response.ok) {
+    throw new ArtifactRefused(
+      response.status,
+      (await hubRefusal(response)).message
+    );
+  }
+  return response.json();
 }
 
 /** Closes the session's panel; each store marks its own copy closed once the hub took it. */
