@@ -17,6 +17,8 @@
  * one still listed is still stopping, and the end runs once none is left.
  */
 import type { CawRunning, CawView, ProjectStopFrame } from "@cawco/core";
+import { untrack } from "svelte";
+import { SvelteSet } from "svelte/reactivity";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import {
@@ -206,6 +208,9 @@ const asRows = (
 /** The key a job is kept under. */
 const keyOf = (kind: StopKind, projectId: string) => `${kind}:${projectId}`;
 
+/** Caw's switch's place (CawLeadSwitch): his off tray stands there when asked there. */
+export const cawOffAt = (projectId: string): string => `caw:${projectId}`;
+
 /** The key a tray travels under, into its parked place and back out. */
 export const stopShare = (job: { kind: StopKind; projectId: string }): string =>
   `stop-tray:${keyOf(job.kind, job.projectId)}`;
@@ -219,6 +224,8 @@ const KEY = "cawco:stop-work";
 
 class StopWork {
   jobs = $state<Record<string, StopJob>>({});
+  /** The places drawn now that can hold a tray (`head:<id>`, `rail:<id>`, `caw:<id>`). */
+  private readonly places = new SvelteSet<string>();
   private readonly timers = new Map<
     string,
     Set<ReturnType<typeof setTimeout>>
@@ -251,7 +258,8 @@ class StopWork {
 
   /** Writes every job to the tab's storage. */
   private keep(): void {
-    writeJson(KEY, $state.snapshot(this.jobs), "session");
+    // Read untracked: a write from inside an effect never makes it depend on every job.
+    untrack(() => writeJson(KEY, $state.snapshot(this.jobs), "session"));
   }
 
   /** The job of `kind` on `projectId`, or null. */
@@ -410,8 +418,18 @@ class StopWork {
     this.keep();
   }
 
-  /** One press on its parked place: the tray again, at `at`, where it was. */
-  reopen(job: StopJob, at: string): void {
+  /** A place that can hold a tray is drawn; it is gone when the returned call runs. */
+  place(at: string): () => void {
+    this.places.add(at);
+    return () => this.places.delete(at);
+  }
+
+  /**
+   * One press on its parked place (`from`): the tray again where it stood,
+   * while that place is drawn; else at `from`.
+   */
+  reopen(job: StopJob, from: string): void {
+    const at = this.places.has(job.at) ? job.at : from;
     job.at = at;
     job.open = true;
     this.keep();

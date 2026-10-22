@@ -58,7 +58,7 @@
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
-  import { stopWork } from "#lib/cawco/stop-work.svelte.js";
+  import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -115,7 +115,16 @@
   const touch = new MediaQuery(
     "(hover: none), (pointer: coarse), (max-width: 640px)"
   );
-  let cawOpen = $state(false);
+  /**
+   * Caw's settings stand open: open again after a reload while his off
+   * tray stands in them (stop-work.svelte.ts), so it comes back where it was.
+   */
+  let cawOpen = $state(
+    untrack(() => {
+      const off = stopWork.of("caw-off", project.id);
+      return off?.open === true && off.at === cawOffAt(project.id);
+    })
+  );
   let more = $state<HTMLElement | null>(null);
   /** The place a forget asked from this head's `⋯` stands (forget.svelte.ts). */
   const forgetAt = $derived(`head:${project.id}`);

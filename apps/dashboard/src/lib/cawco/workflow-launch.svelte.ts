@@ -13,6 +13,7 @@
  * A start that lands while the form stands open goes to the run's page, as
  * Start run always has.
  */
+import { untrack } from "svelte";
 import { goto } from "$app/navigation";
 import { failureWords } from "./hub-read";
 import { readJson, writeJson } from "./storage";
@@ -78,10 +79,14 @@ class WorkflowLaunches {
 
   /** Writes the launches to the tab's storage. */
   keep(): void {
-    writeJson(
-      KEY,
-      { open: this.open, launches: $state.snapshot(this.launches) },
-      "session"
+    // Read untracked: a form's effect writes its draft through here, and
+    // must not come to depend on every launch it writes.
+    untrack(() =>
+      writeJson(
+        KEY,
+        { open: this.open, launches: $state.snapshot(this.launches) },
+        "session"
+      )
     );
   }
 

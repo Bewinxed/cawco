@@ -1093,6 +1093,7 @@
                 >
                   <ForgetProjectTray
                     at={forgetAtRail(project.id)}
+                    parks
                     projectId={project.id}
                   />
                 </div>

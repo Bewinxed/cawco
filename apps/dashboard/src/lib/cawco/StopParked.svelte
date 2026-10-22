@@ -27,7 +27,7 @@
     class: className,
   }: {
     job: StopJob;
-    /** This place: a press here brings the tray back here. */
+    /** This place: a press here brings the tray back where it stood, or here once that is gone. */
     at: string;
     class?: string;
   } = $props();

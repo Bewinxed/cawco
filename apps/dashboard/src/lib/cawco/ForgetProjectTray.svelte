@@ -5,7 +5,7 @@
    * asked (forget.svelte.ts): the project head's `⋯` or a folder's row in
    * the rail. Each of those places draws one of these with its own `at`;
    * the tray shows at the one it stands at, and the forget parked meanwhile
-   * shows its line (StopParked) under the rail's row and the project's head.
+   * shows its line (StopParked) under the project's row in the rail alone.
    * Caw turned off with what he started still stopping (CawLeadSwitch) is
    * the same kind of work on the same project, so it parks here too.
    *
@@ -36,12 +36,18 @@
   let {
     at,
     projectId,
+    parks = false,
     class: className,
   }: {
     /** This place: the forget asked here (`head:<id>`, `rail:<id>`) shows here. */
     at: string;
-    /** The project this place belongs to: its forget, parked, shows here. */
+    /** The project this place belongs to. */
     projectId: string;
+    /**
+     * This place is where the project's stops are parked (its rail row):
+     * one place, never also the head, so the line is never drawn twice.
+     */
+    parks?: boolean;
     class?: string;
   } = $props();
 
@@ -90,6 +96,9 @@
     unread = null;
   });
 
+  // This place can hold a tray while it is drawn (stop-work `reopen`).
+  $effect(() => stopWork.place(at));
+
   // This place goes (its page left, its row dropped) while the forget it
   // asked is still being read: the ask ends with it. A job already asked
   // is the work's, and goes on.
@@ -126,5 +135,7 @@
   {#if job.at === at}
     <StopTray class={className} {job} />
   {/if}
-  <StopParked {at} class={className} {job} />
+  {#if parks}
+    <StopParked {at} class={className} {job} />
+  {/if}
 {/each}
