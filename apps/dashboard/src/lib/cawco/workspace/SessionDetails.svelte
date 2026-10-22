@@ -15,8 +15,8 @@
   import {
     IconChevronDown as Down,
     IconCheck,
-    IconConnection as Link,
     IconRefresh,
+    IconConnection as Link,
   } from "#lib/icons.js";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
