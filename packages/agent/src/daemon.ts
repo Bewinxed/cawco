@@ -217,7 +217,7 @@ import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { serveHubCredential } from "./hub-git";
-import { carryHub, stopCarrying } from "./hub-loopback";
+import { carryHub, followHub, stopCarrying } from "./hub-loopback";
 import { keepHubPreviews } from "./hub-previews";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
@@ -2712,7 +2712,8 @@ const attach = (
             dashboard: (envelope.payload as RegisterAckPayload).dashboardPorts,
             previews: (envelope.payload as RegisterAckPayload).previewPorts,
           },
-          (envelope.payload as RegisterAckPayload).hostsHub
+          (envelope.payload as RegisterAckPayload).hostsHub,
+          (envelope.payload as RegisterAckPayload).tailnetHttps
         );
         // The hub's own preview origins, which this machine's workspaces
         // reach through their relays from the host (hub-previews.ts).
@@ -2875,6 +2876,7 @@ const attach = (
         liveWorkItems(beat?.liveWorkspaces);
         takeSessionLimits(beat?.sessionLimits);
         takeUpstream(beat?.upstream);
+        followHub(beat?.tailnetHttps);
         supervisor.acknowledged(beat);
         return;
       }

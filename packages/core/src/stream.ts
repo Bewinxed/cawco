@@ -17,6 +17,7 @@
 
 import type { CarrySessionRequest } from "./harness";
 import type { HubPreviewOrigins } from "./hub-previews";
+import type { TailnetServing } from "./tailnet-https";
 
 /**
  * The dashboard wire's version, raised only when the wire breaks: when a
@@ -418,6 +419,12 @@ export interface RegisterAckPayload {
    * every start of the machine's agent.
    */
   sessions?: CarrySessionRequest[];
+  /**
+   * The tailnet name and addresses the hub serves HTTPS on, while it does
+   * ({@link TailnetServing}); every beat's ack carries it again, so the
+   * agent's loopback follows HTTPS starting, stopping and moving.
+   */
+  tailnetHttps?: TailnetServing;
   /**
    * Of the account stores the machine named at register (`accountStores`),
    * the ids of accounts this hub removed: removed while the machine was

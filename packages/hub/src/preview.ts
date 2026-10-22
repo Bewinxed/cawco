@@ -70,7 +70,7 @@ import type { PreviewsDb } from "./db/previews";
 import { DECISION_ASSETS } from "./decision-program";
 import { enter, lockedResponse, type PassLock, passOf } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
-import type { TailnetHttpsService } from "./tailnet-https";
+import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
 /**
  * A session's preview: the artifact its panel shows, and the machine and
@@ -1079,10 +1079,11 @@ const probePattern = async (pattern: HostPattern): Promise<string | null> => {
  * previewed app's HMR socket cannot be upgraded there.)
  *
  * While the hub serves HTTPS on its machine's tailnet name
- * (tailnet-https.ts), every listener has a TLS twin on each tailnet address,
- * the same handler behind it, and a session's address names its origin on
- * that name too (`tailnet`). Both bind with `reusePort`, which Linux needs on
- * both sockets to let an address's listener stand beside the wildcard one.
+ * (tailnet-https.ts), every listener has a TLS twin, the same handler behind
+ * it, which the port's door on each tailnet address carries TLS to, and a
+ * session's address names its origin on that name too (`tailnet`). The
+ * plain one binds with `reusePort`, which Linux needs on both sockets to let
+ * a door on an address stand beside the wildcard listener.
  */
 export function createPreviewListeners(
   hostname: string,
@@ -1176,15 +1177,12 @@ export function createPreviewListeners(
       error,
       fetch,
     });
-    const secure = tailnet.beside(port, (address, tls) =>
+    const secure = tailnet.beside(port, (at) =>
       Bun.serve<ListenerSocket>({
-        hostname: address,
-        port,
-        tls,
-        reusePort: true,
+        ...at,
         websocket,
         error,
-        fetch,
+        fetch: (request, server) => fetch(asReached(request), server),
       })
     );
     return {

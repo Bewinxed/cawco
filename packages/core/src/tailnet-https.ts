@@ -70,6 +70,18 @@ export interface TailnetHttps {
 }
 
 /**
+ * The tailnet name the hub serves HTTPS on, and the addresses its doors
+ * stand on (hub tailnet-https.ts), as the register's ack and every beat's
+ * hand them to each agent while it serves: an agent that reaches the hub at
+ * one of `ips` carries its loopback there over https, verifying the
+ * certificate against `name` (agent hub-loopback.ts).
+ */
+export interface TailnetServing {
+  ips: string[];
+  name: string;
+}
+
+/**
  * A session's preview origin on the tailnet name, beside its port
  * ({@link PreviewAddress}): `origin` is `https://<name>:<port>`, and `hosts`
  * every host a client reaches the hub's machine by over the tailnet (its

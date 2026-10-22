@@ -816,7 +816,11 @@ import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
-import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
+import {
+  createTailnetHttps,
+  dashboardRelay,
+  type TailnetHttpsService,
+} from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
 import { TaskDoc } from "./task-file";
 import {
@@ -1615,7 +1619,8 @@ const registerAck = (
   hostsHub: boolean,
   revokedCredentials: string[],
   gitOrigins: string[],
-  previewOrigins: HubPreviewOrigins
+  previewOrigins: HubPreviewOrigins,
+  tailnetHttps: ReturnType<TailnetHttpsService["serving"]>
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1634,6 +1639,8 @@ const registerAck = (
     hostsHub,
     previewPorts: PREVIEW_PORTS,
     previewOrigins,
+    // Where that loopback carries over https, while this hub serves it.
+    ...(tailnetHttps ? { tailnetHttps } : {}),
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
     instances,
@@ -31462,7 +31469,8 @@ export const createServer = (
                   // hub has revoked since: those leave the store.
                   db.revokedAmong(credentialHashesOf(message.payload)),
                   hubGitOrigins(),
-                  hubPreviewOrigins()
+                  hubPreviewOrigins(),
+                  tailnetHttps.serving()
                 )
               );
               // Behind its ack, which it waits for to take requests: what
@@ -31800,6 +31808,7 @@ export const createServer = (
               ) {
                 publishInstances(message.machineId);
               }
+              const tailnetServing = tailnetHttps.serving();
               sendFrame(ws, {
                 ...ack(message),
                 payload: {
@@ -31813,6 +31822,8 @@ export const createServer = (
                   sessionLimits: db.sessionLimits(),
                   // Each workspace's shims judge by the choice as it stands.
                   upstream: upstreamRules(db),
+                  // Its loopback carries over https while this hub serves it.
+                  ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),
                 } satisfies HeartbeatAckPayload,
               });
               break;

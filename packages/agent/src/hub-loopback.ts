@@ -1,5 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { networkInterfaces } from "node:os";
+import type { TailnetServing } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import {
   causeOf,
   type PreviewSocket,
@@ -24,10 +26,21 @@ import type { Server } from "bun";
  * a preview at `localhost:<port>` is the dashboard's own site, so its cookies
  * and storage are as in its own tab.
  *
- * Every request goes on as the browser sent it: its Host (the dashboard's
- * `publicOrigin` reads it, and its `/ws` gate holds the page's Origin to it)
- * and its Accept-Encoding, the answer's bytes untouched, gzip and all. No
- * `X-Forwarded-*` is added: `publicOrigin` would read those first.
+ * Every request goes on as the browser sent it: its Host and its
+ * Accept-Encoding, the answer's bytes untouched, gzip and all. It names its
+ * hop, `X-Forwarded-Proto: http` and `X-Forwarded-Host` the browser's Host:
+ * the first hop is what the dashboard's `publicOrigin` reads (its `/ws` gate
+ * holds the page's Origin to it), and what the hub's TLS listeners keep
+ * ahead of their own when the loopback carries over https.
+ *
+ * Over the tailnet, while the hub serves HTTPS on its tailnet name (hub
+ * tailnet-https.ts), its tailnet addresses answer plain http with a redirect
+ * alone: so when the agent reaches the hub at one of them, the loopback
+ * carries over https and wss to that address, verifying the certificate
+ * against the name (`serverName`), and needs no MagicDNS on this computer.
+ * Elsewhere (the LAN, no tailnet HTTPS) it carries plain http. The hub's
+ * register answer and every beat's say which ({@link TailnetServing}), so it
+ * follows HTTPS starting and stopping without a restart.
  */
 const HOP = "hub loopback";
 
@@ -53,8 +66,28 @@ export interface HubPorts {
 }
 
 export interface HubLoopback {
+  /** The hub's tailnet HTTPS as its latest answer says it: the next request carries by it. */
+  follow: (tailnet: TailnetServing | undefined) => void;
   stop: () => Promise<void>;
 }
+
+/** How the loopback reaches the hub now: plain http, or https verified against the tailnet name. */
+type Route = { secure: false } | { secure: true; serverName: string };
+
+/**
+ * The route to a hub the agent reaches at `addresses` (its host, resolved):
+ * https to the tailnet name when one of them is an address the hub serves
+ * HTTPS on, else plain http.
+ */
+const routeOf = (
+  addresses: string[],
+  tailnet: TailnetServing | undefined
+): Route => {
+  const served = new Set(tailnet?.ips.map((ip) => ip.toLowerCase()));
+  return tailnet && addresses.some((one) => served.has(one.toLowerCase()))
+    ? { secure: true, serverName: tailnet.name }
+    : { secure: false };
+};
 
 /** `ports` as a person reads them: runs as `3457–3556`. */
 const portRuns = (ports: number[]): string => {
@@ -84,12 +117,13 @@ const unreachable = (hub: string, cause: string): Response =>
     }
   );
 
-/** One loopback listener: `hostname:local`, every request and socket carried to `hubHost:port`. */
+/** One loopback listener: `hostname:local`, every request and socket carried to `hubHost:port` by the route as it stands. */
 const listen = (
   hubHost: string,
   hostname: string,
   local: number,
-  port: number
+  port: number,
+  route: () => Route
 ): Server<PreviewSocket> =>
   Bun.serve<PreviewSocket>({
     hostname,
@@ -99,25 +133,31 @@ const listen = (
       const url = new URL(request.url);
       const at = `${url.pathname}${url.search}`;
       const headers = proxyHeaders(request.headers);
+      headers.set("x-forwarded-proto", "http");
+      headers.set("x-forwarded-host", request.headers.get("host") ?? url.host);
+      const now = route();
+      const serverName = now.secure ? now.serverName : undefined;
+      const scheme = now.secure ? "s" : "";
       if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
         return upgradePreview(
           request,
           server,
-          `ws://${hubHost}:${port}${at}`,
+          `ws${scheme}://${hubHost}:${port}${at}`,
           headers,
-          { hop: HOP, instanceId: null }
+          { hop: HOP, instanceId: null, serverName }
         )
           ? undefined
           : new Response("WebSocket upgrade failed", { status: 400 });
       }
       let answer: Response;
       try {
-        answer = await fetch(`http://${hubHost}:${port}${at}`, {
+        answer = await fetch(`http${scheme}://${hubHost}:${port}${at}`, {
           method: request.method,
           headers,
           body: request.body,
           redirect: "manual",
           decompress: false,
+          ...(serverName ? { tls: { serverName } } : {}),
         });
       } catch (error) {
         previewFailed(
@@ -148,7 +188,8 @@ const listen = (
 async function listenAll(
   hubHost: string,
   hosts: string[],
-  all: [local: number, hub: number][]
+  all: [local: number, hub: number][],
+  route: () => Route
 ): Promise<{
   absent: string[];
   held: Map<string, number[]>;
@@ -161,7 +202,7 @@ async function listenAll(
     for (const hostname of hosts) {
       for (const [local, port] of all) {
         try {
-          servers.push(listen(hubHost, hostname, local, port));
+          servers.push(listen(hubHost, hostname, local, port, route));
         } catch (error) {
           const { code } = error as { code?: unknown };
           if (code === "EADDRINUSE") {
@@ -185,23 +226,20 @@ async function listenAll(
 }
 
 /**
- * Why the hub at `hubHost` is on this computer, or undefined when it is
- * elsewhere: the hub's own word (`hostsHub`, its register answer: this
- * machine's id is the hub's), or an address it resolves to that is this
- * computer's: its loopback ({@link loopbackAddress}) or one of its own
+ * Why the hub at `hubHost` (resolved, `addresses`) is on this computer, or
+ * undefined when it is elsewhere: the hub's own word (`hostsHub`, its
+ * register answer: this machine's id is the hub's), or an address that is
+ * this computer's: its loopback ({@link loopbackAddress}) or one of its own
  * interfaces' (obelisk's agent reached its hub at 192.168.3.100, its own LAN
  * address, and took 3455 from its dashboard socket, 2026-10-18).
  */
-async function onThisComputer(
-  hubHost: string,
+function onThisComputer(
+  addresses: string[],
   hostsHub: boolean
-): Promise<string | undefined> {
+): string | undefined {
   if (hostsHub) {
     return "the hub says this is its own computer";
   }
-  const addresses = (
-    await lookup(hubHost.replace(BRACKETS, ""), { all: true })
-  ).map((one) => one.address);
   if (addresses.some(loopbackAddress)) {
     return "it is this computer's loopback";
   }
@@ -214,6 +252,10 @@ async function onThisComputer(
   return mine ? `${mine} is this computer's own address` : undefined;
 }
 
+/** How a route is said in the agent's lines. */
+const routeWords = (route: Route): string =>
+  route.secure ? `over https as ${route.serverName}` : "over plain http";
+
 /**
  * Serves the hub at `hubUrl` (the address the agent is connected to it on)
  * on this computer's loopback: the dashboard's loopback port, carried to its
@@ -221,21 +263,42 @@ async function onThisComputer(
  * computer ({@link onThisComputer}) gets nothing: its dashboard socket listens
  * on the loopback port itself, and a listener of the agent's would only take
  * that port and relay to its own computer. A port another listener holds is
- * said once and left to it.
+ * said once and left to it. `tailnet` is the hub's tailnet HTTPS as its
+ * register answer says it ({@link routeOf}); `follow` takes each later word.
  */
 export async function startHubLoopback(
   hubUrl: string,
   ports: HubPorts,
-  hostsHub: boolean
+  hostsHub: boolean,
+  tailnet: TailnetServing | undefined
 ): Promise<HubLoopback> {
   const hubHost = new URL(hubUrl).hostname;
-  const here = await onThisComputer(hubHost, hostsHub);
+  const addresses = (
+    await lookup(hubHost.replace(BRACKETS, ""), { all: true })
+  ).map((one) => one.address);
+  const here = onThisComputer(addresses, hostsHub);
   if (here) {
     console.info(
       `[${HOP}] the hub at ${hubHost} is on this computer (${here}): its dashboard socket is localhost here, so nothing is carried`
     );
-    return { stop: async () => undefined };
+    return { follow: () => undefined, stop: async () => undefined };
   }
+  return await carryElsewhere(hubHost, addresses, ports, tailnet);
+}
+
+/**
+ * The hub at `hubHost` (resolved, `addresses`), on another computer, served
+ * on this one's loopback by {@link routeOf}. The probe kit's
+ * hub-loopback-relay calls it straight: on one computer every address the
+ * hub can stand on is this computer's own.
+ */
+export async function carryElsewhere(
+  hubHost: string,
+  addresses: string[],
+  ports: HubPorts,
+  tailnet: TailnetServing | undefined
+): Promise<HubLoopback> {
+  let route = routeOf(addresses, tailnet);
   /** Each loopback port, and the hub's port it is carried to. */
   const all: [local: number, hub: number][] = [
     [ports.dashboard.local, ports.dashboard.hub],
@@ -252,7 +315,12 @@ export async function startHubLoopback(
       all.push([port, port]);
     }
   }
-  const { servers, held, absent } = await listenAll(hubHost, LOOPBACK, all);
+  const { servers, held, absent } = await listenAll(
+    hubHost,
+    LOOPBACK,
+    all,
+    () => route
+  );
   for (const hostname of absent) {
     console.info(
       `[${HOP}] this computer has no ${hostname}, so localhost is served without it`
@@ -264,9 +332,18 @@ export async function startHubLoopback(
     );
   }
   console.info(
-    `[${HOP}] the hub at ${hubHost} is served on ${LOOPBACK.filter((host) => !absent.includes(host)).join(" and ")}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
+    `[${HOP}] the hub at ${hubHost} is served on ${LOOPBACK.filter((host) => !absent.includes(host)).join(" and ")} ${routeWords(route)}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
   );
   return {
+    follow: (next) => {
+      const now = routeOf(addresses, next);
+      if (JSON.stringify(now) !== JSON.stringify(route)) {
+        route = now;
+        console.info(
+          `[${HOP}] the hub at ${hubHost} is carried ${routeWords(route)} now`
+        );
+      }
+    },
     stop: async () => {
       await Promise.all(servers.map((server) => server.stop(true)));
     },
@@ -277,26 +354,29 @@ export async function startHubLoopback(
 let carried: { key: string; loopback: Promise<HubLoopback | null> } | undefined;
 
 /**
- * The agent registered with the hub at `hubUrl`, which named `ports` and
- * whether this machine is its own computer (`hostsHub`): its loopback serves
- * that hub. Started on the first register; a register with another hub
- * address (a rediscovery repinned it), other ports or another word stops the
- * one before and starts anew.
+ * The hub at `hubUrl` answered the agent's register or beat, naming `ports`,
+ * whether this machine is its own computer (`hostsHub`) and its tailnet
+ * HTTPS (`tailnet`): its loopback serves that hub. Started on the first
+ * register; a register with another hub address (a rediscovery repinned
+ * it), other ports or another word stops the one before and starts anew;
+ * otherwise the loopback follows `tailnet` as it stands.
  */
 export function carryHub(
   hubUrl: string,
   ports: HubPorts,
-  hostsHub: boolean
+  hostsHub: boolean,
+  tailnet: TailnetServing | undefined
 ): void {
   const key = JSON.stringify([hubUrl, ports, hostsHub]);
   if (carried?.key === key) {
+    followHub(tailnet);
     return;
   }
   const before = carried?.loopback;
   const start = async (): Promise<HubLoopback | null> => {
     await (await before)?.stop();
     try {
-      return await startHubLoopback(hubUrl, ports, hostsHub);
+      return await startHubLoopback(hubUrl, ports, hostsHub, tailnet);
     } catch (error) {
       console.warn(
         `[${HOP}] the hub at ${hubUrl} isn't served on this computer's loopback: ${causeOf(error)}`
@@ -309,6 +389,17 @@ export function carryHub(
     }
   };
   carried = { key, loopback: start() };
+}
+
+/** A beat's word on the hub's tailnet HTTPS: the loopback carrying the hub follows it. */
+export function followHub(tailnet: TailnetServing | undefined): void {
+  const now = carried;
+  if (now) {
+    detach(
+      now.loopback.then((loopback) => loopback?.follow(tailnet)),
+      "hub loopback follow"
+    );
+  }
 }
 
 /** The agent is stopping: its loopback stops serving the hub. */

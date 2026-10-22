@@ -654,6 +654,12 @@ export interface HeartbeatAckPayload {
    */
   sessionLimits?: SessionLimits;
   /**
+   * The tailnet name and addresses the hub serves HTTPS on now, absent while
+   * it doesn't (tailnet-https.ts `TailnetServing`), on every beat: the
+   * agent's loopback carries to the hub by it (agent hub-loopback.ts).
+   */
+  tailnetHttps?: import("./tailnet-https").TailnetServing;
+  /**
    * The upstream guard's rules as the hub holds them now (upstream-guard.ts
    * `UpstreamRules`), on every beat: each workspace's shims judge the next
    * call by them (agent boundary.ts `takeUpstreamRules`).

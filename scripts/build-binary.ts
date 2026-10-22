@@ -12,7 +12,7 @@ import { decisionHostAssets } from "../packages/core/src/decision-host";
 import { bundleOverlay } from "../packages/core/src/preview-proxy";
 import { publishedFile } from "../packages/core/src/runtime";
 
-export const PINNED_BUN = "1.4.3";
+export const PINNED_BUN = "1.4.4";
 export const TARGETS = [
   "linux-x64",
   "linux-arm64",

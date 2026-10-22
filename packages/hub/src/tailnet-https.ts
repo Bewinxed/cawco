@@ -22,11 +22,14 @@
  *   tailscaled answers it from its cache and starts a renewal in the
  *   background when ARI says one is due (feature/acme/cert.go "starting
  *   async renewal"), so asking again is the renewal: a new pair rebinds.
- * - A listener on the tailnet address beside the wildcard one, both with
+ * - A door on each tailnet address beside the wildcard listener, both with
  *   SO_REUSEPORT (Bun's `reusePort`; the dashboard's systemd socket's
  *   `ReusePort=`): Linux gives a connection to the address-bound one
- *   (measured), so the tailnet addresses answer HTTPS alone. A peer's plain
- *   http to the tailnet IP is retired with it.
+ *   (measured), so the tailnet addresses answer HTTPS alone. The door
+ *   (tailnet-door.ts) carries a TLS connection to the port's TLS listener on
+ *   loopback and answers plain http with a 308 to the same path on the name,
+ *   so a peer that types `http://<name>:<port>` (a browser upgrades no
+ *   non-default port) or `http://<tailnet IP>:<port>` lands on HTTPS.
  *
  * Tailscale is the one VPN here whose client issues certificates for its
  * names. Another that does would answer {@link Reading} from its own CLI or
@@ -48,6 +51,7 @@ import {
   upgradePreview,
 } from "@cawco/core/preview-proxy";
 import type { HubLifetimeShape } from "./lifetime";
+import { openTailnetDoor, type TailnetDoor } from "./tailnet-door";
 import { firstLine, runTailscale } from "./tailscale-cli";
 
 /** How often the hub reads Tailscale's state and certificate again, for a renewal or a change. Our choice. */
@@ -100,19 +104,48 @@ interface Listening {
   stop: (closeActiveConnections?: boolean) => Promise<void>;
 }
 
-/** Opens one TLS listener on `hostname` for a port: the caller's own `Bun.serve`, with `tls` and `reusePort`. */
-export type OpenSecure = (hostname: string, tls: Pair) => Listening;
+/** A port's TLS listener, at the port it took. */
+interface Secure extends Listening {
+  readonly port: number | undefined;
+}
 
-/** A port's TLS listeners on the tailnet addresses, beside its plain one. */
+/**
+ * Opens a port's TLS listener: the caller's own `Bun.serve` with these
+ * `hostname`, `port` and `tls` (loopback, a port the system picks), which
+ * the port's doors on the tailnet addresses carry TLS connections to.
+ */
+export type OpenSecure = (at: {
+  hostname: string;
+  port: number;
+  tls: Pair;
+}) => Secure;
+
+/** What serves a port's HTTPS: its TLS listener and its door on each tailnet address. */
+interface Held {
+  doors: TailnetDoor[];
+  secure: Secure;
+}
+
+/** A port's HTTPS on the tailnet addresses, beside its plain listener. */
 interface Beside {
+  held: Held | null;
   open: OpenSecure;
   port: number;
-  servers: Listening[];
 }
 
 /** `server` stopped: at once with its connections (`now`), or once they finish. */
 const stopped = (server: Listening, now: boolean): void =>
   detach(server.stop(now), "tailnet listener stop");
+
+/** A port's doors, then its TLS listener, stopped. */
+const stoppedHeld = (serving: Held | null, now: boolean): void => {
+  for (const door of serving?.doors ?? []) {
+    stopped(door, now);
+  }
+  if (serving) {
+    stopped(serving.secure, now);
+  }
+};
 
 /** What the person's machine is, by its sign-in. */
 const user = userInfo().username;
@@ -302,21 +335,34 @@ export const createTailnetHttps = ({
   };
 
   /**
-   * `beside`'s TLS listeners on every tailnet address, with `pair`; the ones
-   * opened so far stop when one is refused, and the refusal is thrown. An
-   * address this machine can't bind at all (an IPv6 one with IPv6 off) is
-   * left out with a line.
+   * `beside`'s TLS listener with `at`'s pair, and its door on every tailnet
+   * address; what opened so far stops when a door is refused, and the
+   * refusal is thrown. An address this machine can't bind at all (an IPv6
+   * one with IPv6 off) is left out with a line.
    */
-  const openOn = (beside: Beside, ips: string[], pair: Pair): Listening[] => {
-    const opened: Listening[] = [];
-    for (const ip of ips) {
+  const openOn = (
+    beside: Beside,
+    at: { name: string; ips: string[]; pair: Pair }
+  ): Held => {
+    const secure = beside.open({
+      hostname: "127.0.0.1",
+      port: 0,
+      tls: at.pair,
+    });
+    const opened: Held = { secure, doors: [] };
+    for (const ip of at.ips) {
       try {
-        opened.push(beside.open(ip, pair));
+        opened.doors.push(
+          openTailnetDoor({
+            hostname: ip,
+            name: at.name,
+            port: beside.port,
+            tlsPort: secure.port as number,
+          })
+        );
       } catch (thrown) {
         if (held(thrown)) {
-          for (const server of opened) {
-            stopped(server, true);
-          }
+          stoppedHeld(opened, true);
           throw thrown;
         }
         console.warn(
@@ -327,29 +373,27 @@ export const createTailnetHttps = ({
     return opened;
   };
 
-  /** Every TLS listener stopped: nothing serves HTTPS on the tailnet addresses. */
+  /** Every door and TLS listener stopped: the tailnet addresses answer plain http again. */
   const closeAll = (): void => {
     for (const beside of besides) {
-      for (const server of beside.servers) {
-        stopped(server, true);
-      }
-      beside.servers = [];
+      stoppedHeld(beside.held, true);
+      beside.held = null;
     }
     live = null;
   };
 
   /**
-   * Every port's TLS listeners on `at`: each new one opens beside the one it
-   * replaces before that one stops taking connections, so a renewal drops
-   * nothing. The dashboard's refused, nothing serves and the port is the
-   * person's step; a preview port's refused, that preview keeps its plain
-   * listener alone, said in a line.
+   * Every port's HTTPS on `at`: each new TLS listener and door opens beside
+   * the one it replaces before that one stops taking connections, so a
+   * renewal drops nothing. The dashboard's refused, nothing serves and the
+   * port is the person's step; a preview port's refused, that preview keeps
+   * its plain listener alone, said in a line.
    */
   const serve = (at: Extract<Reading, { state: "ready" }>): Reading => {
     for (const beside of besides) {
-      let opened: Listening[];
+      let opened: Held | null;
       try {
-        opened = openOn(beside, at.ips, at.pair);
+        opened = openOn(beside, at);
       } catch (thrown) {
         if (beside.port === dashboardPort) {
           closeAll();
@@ -365,13 +409,11 @@ export const createTailnetHttps = ({
         console.warn(
           `[tailnet] preview port ${beside.port} serves no HTTPS: ${causeOf(thrown)}`
         );
-        opened = [];
+        opened = null;
       }
-      const replaced = beside.servers;
-      beside.servers = opened;
-      for (const server of replaced) {
-        stopped(server, false);
-      }
+      const replaced = beside.held;
+      beside.held = opened;
+      stoppedHeld(replaced, false);
     }
     live = { name: at.name, ips: at.ips, pair: at.pair };
     return at;
@@ -496,16 +538,27 @@ export const createTailnetHttps = ({
     },
 
     /**
-     * `port`'s TLS listeners on the tailnet addresses, opened by `open`
-     * now while serving and whenever serving starts or renews; `close`
-     * stops them with the plain listener they stand beside.
+     * The name and addresses HTTPS is served on now, as the register and
+     * every beat hand them to each agent (agent hub-loopback.ts): null
+     * while it isn't.
+     */
+    serving(): { name: string; ips: string[] } | null {
+      return live && state.state === "serving"
+        ? { name: live.name, ips: live.ips }
+        : null;
+    },
+
+    /**
+     * `port`'s HTTPS on the tailnet addresses, its TLS listener opened by
+     * `open`, now while serving and whenever serving starts or renews;
+     * `close` stops it with the plain listener it stands beside.
      */
     beside(port: number, open: OpenSecure): { close: () => void } {
-      const beside: Beside = { port, open, servers: [] };
+      const beside: Beside = { port, open, held: null };
       besides.add(beside);
       if (live) {
         try {
-          beside.servers = openOn(beside, live.ips, live.pair);
+          beside.held = openOn(beside, live);
         } catch (thrown) {
           console.warn(
             `[tailnet] port ${port} serves no HTTPS: ${causeOf(thrown)}`
@@ -514,9 +567,8 @@ export const createTailnetHttps = ({
       }
       return {
         close(): void {
-          for (const server of beside.servers) {
-            stopped(server, true);
-          }
+          stoppedHeld(beside.held, true);
+          beside.held = null;
           besides.delete(beside);
         },
       };
@@ -527,42 +579,78 @@ export const createTailnetHttps = ({
 export type TailnetHttpsService = ReturnType<typeof createTailnetHttps>;
 
 const RELAY_HOP = "tailnet dashboard relay";
-/** What a browser or a proxy before it says of where it came from: the relay says it instead. */
-const FORWARDED_HEADERS = [
-  "forwarded",
-  "x-forwarded-for",
-  "x-forwarded-host",
-  "x-forwarded-proto",
-];
+/** What a client says of where it came from that the relay doesn't carry on: it says its hop in `X-Forwarded-*` alone. */
+const UNCARRIED_HEADERS = ["forwarded", "x-forwarded-for"];
+const LIST_SEPARATOR = /\s*,\s*/;
+
+/** `headers`' first hop of `name`, as public-origin.js reads it. */
+const firstHop = (headers: Headers, name: string): string | undefined =>
+  headers.get(name)?.split(LIST_SEPARATOR)[0]?.trim() || undefined;
+
+/**
+ * Where the browser reached `request`: the first hop's scheme and host when
+ * a hop before this listener named them (the agent's loopback relay names
+ * `http://localhost:<port>`, agent hub-loopback.ts), else this TLS
+ * listener's own, `https://` at the Host the browser named.
+ */
+const reachedOf = (request: Request): string => {
+  const proto = firstHop(request.headers, "x-forwarded-proto")?.toLowerCase();
+  const said = firstHop(request.headers, "x-forwarded-host");
+  const before = `${proto}://${said}`;
+  return (proto === "http" || proto === "https") && said && URL.canParse(before)
+    ? before
+    : `https://${request.headers.get("host") ?? new URL(request.url).host}`;
+};
+
+/**
+ * A preview port's request on its TLS listener as the browser reached it:
+ * at the first hop's scheme and host ({@link reachedOf}), so a page served
+ * through the agent's relay reads its origin as `http://localhost:<port>`,
+ * the origin its embeds' frame ancestors and addresses name (hub preview.ts
+ * `pageOrigin`, `embedAt`). An upgrade goes on as it came: Bun upgrades only
+ * the request it handed over (measured: a rebuilt one answers "Expected 101
+ * status code: 400"), and a socket's route reads no scheme.
+ */
+export const asReached = (request: Request): Request => {
+  const reached = reachedOf(request);
+  const url = new URL(request.url);
+  if (
+    request.headers.get("upgrade") ||
+    `${url.protocol}//${url.host}` === reached
+  ) {
+    return request;
+  }
+  return new Request(`${reached}${url.pathname}${url.search}`, request);
+};
 
 /**
  * The dashboard on its tailnet name: every request and socket on to the
- * dashboard's own server on loopback, saying it came over HTTPS at the Host
- * the browser named (`X-Forwarded-Proto`, `X-Forwarded-Host`), which is the
- * origin the dashboard's server reads (apps/dashboard public-origin.js) for
- * its gate, its CSRF check and the page origin it tells the hub. Answers go
- * back as they came, compressed or not.
+ * dashboard's own server on loopback, saying this hop came over HTTPS at the
+ * Host the browser named (`X-Forwarded-Proto`, `X-Forwarded-Host`) after any
+ * hop before it, whose first the dashboard's server reads as its origin
+ * (apps/dashboard public-origin.js) for its gate, its CSRF check and the
+ * page origin it tells the hub: a browser on the name is `https://<name>`,
+ * one on the agent's relay `http://localhost:<port>`, as each page's Origin
+ * says. Answers go back as they came, compressed or not.
  */
 export const dashboardRelay =
   (port: number): OpenSecure =>
-  (address, tls) =>
+  (at) =>
     Bun.serve<PreviewSocket>({
-      hostname: address,
-      port,
-      tls,
-      reusePort: true,
+      ...at,
       websocket: previewWebSocket,
       async fetch(request, server) {
         const url = new URL(request.url);
         const headers = proxyHeaders(request.headers);
-        for (const name of FORWARDED_HEADERS) {
+        for (const name of UNCARRIED_HEADERS) {
           headers.delete(name);
         }
-        headers.set("x-forwarded-proto", "https");
-        headers.set(
-          "x-forwarded-host",
-          request.headers.get("host") ?? url.host
-        );
+        const hop = (name: string, value: string): void => {
+          const before = request.headers.get(name);
+          headers.set(name, before ? `${before}, ${value}` : value);
+        };
+        hop("x-forwarded-proto", "https");
+        hop("x-forwarded-host", request.headers.get("host") ?? url.host);
         const upstream = `127.0.0.1:${port}${url.pathname}${url.search}`;
         if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
           return upgradePreview(request, server, `ws://${upstream}`, headers, {

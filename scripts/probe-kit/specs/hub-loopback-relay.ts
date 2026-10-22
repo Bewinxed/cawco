@@ -14,6 +14,19 @@
  * check, saying so. The relay to a hub on another computer is proven by
  * stage 2's joined machine (scripts/binary/prove-stage2.sh, rig install).
  *
+ * 0. Runs anywhere, first: the relay over the tailnet's HTTPS. A scratch hub
+ *    serves HTTPS on the tailnet stub's address `::1` (tailnet-https.ts's
+ *    stub), where plain http answers the door's 308 alone; the agent's relay
+ *    carries it as an agent on another computer does (agent hub-loopback.ts
+ *    `carryElsewhere`, past the check that finds every address here this
+ *    computer's own), told by the hub's word that it serves the name on
+ *    `::1`. `http://localhost:<P>/session` answers 200 with the dashboard
+ *    and its `/ws` opens through the relay and hears the hub; told HTTPS
+ *    stopped, the same listeners carry plain http (the door's 308 comes
+ *    back), and told again, 200, with no restart. The stub's certificate is
+ *    its own, so this process takes it unverified
+ *    (NODE_TLS_REJECT_UNAUTHORIZED, which Bun reads per request); verifying
+ *    the real name is the two-computer check's (the Mac on obelisk).
  * 1. The fleet's agent, whose machine id is the hub's: the register answer
  *    says `hostsHub`; it carries nothing, and listens on neither P, a
  *    preview port nor 3000 (`ss`, by its pid).
@@ -26,7 +39,10 @@
  *   bun scripts/probe-kit/run.ts hub-loopback-relay   # on the host, outside every workspace
  */
 import { networkInterfaces } from "node:os";
+import { carryElsewhere } from "../../../packages/agent/src/hub-loopback";
+import { until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { freePort } from "../socket-served";
 import {
   devServerOn3000,
   holdersOf3000,
@@ -35,7 +51,9 @@ import {
   onThisComputerLine,
   portList,
   respond,
+  socketHeard,
 } from "./hub-loopback";
+import { NAME, plainAt, tailnetStub } from "./tailnet-https";
 
 /** This computer's first IPv4 address off loopback, or none. */
 const ownAddress = (): string | undefined =>
@@ -43,7 +61,93 @@ const ownAddress = (): string | undefined =>
     .flat()
     .find((one) => one && !one.internal && one.family === "IPv4")?.address;
 
+/** 0: the relay over the tailnet's HTTPS, on this one computer. */
+const overTailnet = async (kit: Kit) => {
+  const fleet = await kit.fleet(respond);
+  const stub = await tailnetStub(fleet);
+  await stub.set("on");
+  fleet.launch("hub", [], stub.env);
+  await fleet.hubUp();
+  // The hub again, its dashboard port the built dashboard's, which its TLS
+  // listener relays to on loopback (as tailnet-https.ts stands it).
+  const dashboardPort = Number(new URL(await fleet.dashboard()).port);
+  await fleet.stop("hub");
+  fleet.launch("hub", [], {
+    ...stub.env,
+    CAWCO_DASHBOARD_PORT: String(dashboardPort),
+  });
+  await fleet.hubUp();
+  const serving = await until(
+    "the hub serving HTTPS on the stub's tailnet address",
+    async () =>
+      (await (await fetch(`${fleet.base}/api/tailnet-https`)).json()) as {
+        state: string;
+      },
+    (read) => read.state === "serving",
+    45_000
+  );
+  const plainOnTailnet = await plainAt(dashboardPort, "/session");
+  kit.check(
+    "0: the hub serves HTTPS on ::1, where plain http to the dashboard port answers the door's 308 alone",
+    serving.state === "serving" &&
+      plainOnTailnet === `308 https://${NAME}:${dashboardPort}/session`,
+    `${JSON.stringify(serving)}; plain http on ::1: ${plainOnTailnet}`
+  );
+
+  const local = await freePort();
+  const tailnet = { name: NAME, ips: ["::1"] };
+  const rejecting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  const loopback = await carryElsewhere(
+    "[::1]",
+    ["::1"],
+    {
+      dashboard: { hub: dashboardPort, local },
+      previews: { first: 1, last: 0 },
+    },
+    tailnet
+  );
+  const session = async () => {
+    const answer = await fetch(`http://localhost:${local}/session`, {
+      redirect: "manual",
+    });
+    const body = await answer.text();
+    return `${answer.status} ${answer.headers.get("location") ?? ""} ${body.includes("<html") ? "html" : body.slice(0, 80)}`.trim();
+  };
+  try {
+    const page = await session();
+    const heard = await socketHeard(`ws://localhost:${local}/ws/dashboard`, {
+      origin: `http://localhost:${local}`,
+    });
+    kit.check(
+      "0: told the hub serves HTTPS on the address it reaches, the relay carries http://localhost:<P>/session over https: 200 with the dashboard, and its /ws opens through the relay and hears the hub",
+      page === "200  html" && heard === "heard",
+      `session: ${page}; socket: ${heard}`
+    );
+    loopback.follow(undefined);
+    const plain = await session();
+    loopback.follow(tailnet);
+    const again = await session();
+    kit.check(
+      "0: told HTTPS stopped, the same listeners carry plain http (the door's 308 comes back to the browser); told again, 200, with no restart",
+      plain.startsWith(`308 https://${NAME}:${dashboardPort}/session`) &&
+        again === "200  html",
+      `stopped: ${plain}; again: ${again}`
+    );
+  } finally {
+    await loopback.stop();
+    if (rejecting === undefined) {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    } else {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = rejecting;
+    }
+    await stub.set("absent");
+    await fleet.stop("hub");
+  }
+};
+
 const run = async (kit: Kit) => {
+  await overTailnet(kit);
   const address = ownAddress();
   if (!address) {
     kit.check(

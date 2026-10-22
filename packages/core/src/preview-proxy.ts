@@ -770,6 +770,12 @@ export interface PreviewSocket {
   protocol: string;
   /** The viewer's own release, once its socket opened; said when it closes. */
   release?: () => void;
+  /**
+   * The name a `wss://` `url` at an address verifies its certificate
+   * against (the agent's loopback to the hub's tailnet name, agent
+   * hub-loopback.ts); the URL's own host when absent.
+   */
+  serverName?: string;
   upstream?: WebSocket;
   url: string;
   /**
@@ -804,7 +810,10 @@ export function upgradePreview(
   server: Server<PreviewSocket>,
   url: string,
   headers: Headers,
-  at: Pick<PreviewSocket, "viewer" | "hop" | "instanceId" | "nothingListens">
+  at: Pick<
+    PreviewSocket,
+    "viewer" | "hop" | "instanceId" | "nothingListens" | "serverName"
+  >
 ): boolean {
   const protocol =
     request.headers.get("sec-websocket-protocol")?.split(",")[0]?.trim() ?? "";
@@ -849,6 +858,9 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
     const upstream = new ProxyWebSocket(data.url, {
       protocols: data.protocol ? [data.protocol] : [],
       headers: Object.fromEntries(data.headers),
+      // Bun's client verifies against `serverName` from 1.4.4; 1.4.3's
+      // ignored it (measured; oven-sh/bun#43635).
+      ...(data.serverName ? { tls: { serverName: data.serverName } } : {}),
     });
     data.upstream = upstream;
     upstream.binaryType = "arraybuffer";
