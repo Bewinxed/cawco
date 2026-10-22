@@ -1076,9 +1076,9 @@ const byMarketplace = (
  * Writes one vendored marketplace from the bytes the hub resolved for one
  * fleet marketplace.
  *
- * Per plugin, not the whole directory at once. The hub leaves out the bytes of
- * anything this machine already holds, so a rewrite of everything would erase
- * the plugins whose content it deliberately did not resend. Every plugin is
+ * Per plugin, not the whole directory at once. A plugin this disk already
+ * holds at its hash comes without its bytes ({@link syncVendoredPlugins}), so
+ * a rewrite of everything would erase it. Every plugin is
  * vendored as a relative `source`, which is a form the CLI already installs
  * from — the official marketplace vendors its own the same way — so the
  * install that follows reaches the network for nothing.
@@ -1335,9 +1335,8 @@ const readVendoredPlugins = async (): Promise<Record<string, string>> => {
 /**
  * What claude's copy of the fleet holds on this disk now: the skills cawco
  * wrote under `~/.claude/skills`, and the plugins in the vendored marketplace.
- * Read, never remembered: the hub asks just before every sync and leaves out
- * the bytes of exactly this, so a wiped or edited copy is carried again in
- * that same sync.
+ * Read, never remembered, and reported with each converge (the report's
+ * `have`), so the hub tells live sessions when their content moved.
  */
 export const fleetHoldings = async (): Promise<FleetHoldings> => ({
   skills: await heldSkills(
@@ -1369,11 +1368,17 @@ const syncVendoredPlugins = async (
   const groups = byMarketplace(payloads);
   const present = await readdir(VENDOR_ROOT).catch(() => [] as string[]);
 
-  // The hub read this disk just before it built this sync (READ_FLEET_HOLDINGS)
-  // and left out the bytes of exactly what it held; whatever came with files
-  // is what the disk lacked.
+  // Every payload the agent holds carries its bytes (fleet-desired.ts); only
+  // a plugin this disk does not hold at that hash is written, so a converge
+  // for some other item rewrites no plugin tree under its running hooks.
+  const before = await readVendoredPlugins();
+  const lacking = payloads.map((plugin) =>
+    before[payloadId(plugin)] === plugin.hash
+      ? { ...plugin, files: undefined }
+      : plugin
+  );
   const changed = new Set([
-    ...payloads
+    ...lacking
       .filter((plugin) => plugin.files !== undefined)
       .map(({ marketplace }) => marketplace),
     ...Object.keys(managed)
@@ -1386,7 +1391,7 @@ const syncVendoredPlugins = async (
   const gone = present.filter((marketplace) => !groups.has(marketplace));
 
   if (changed.size > 0 || gone.length > 0) {
-    await writeVendoredMarketplaces(payloads);
+    await writeVendoredMarketplaces(lacking);
   }
   const held = await readVendoredPlugins();
 
@@ -1418,9 +1423,8 @@ const syncVendoredPlugins = async (
     }
     const vendoredId = vendoredIdOf(id);
     if (held[id] !== plugin.hash) {
-      // Neither on this disk nor in this sync: the disk changed between the
-      // hub's read and this write. The report claims nothing for it, so the
-      // next sync's read finds it missing and carries the bytes.
+      // Not on this disk after the write: its bytes did not land. The
+      // report says so, and the item's Retry sends it again.
       report[id] = {
         state: "failed",
         cause: "missing-bytes",
@@ -1559,10 +1563,8 @@ const syncSkillFiles = async (
       continue;
     }
 
-    // The hub read this disk just before it built this sync and left out the
-    // bytes of exactly what it held. Reaching here without files means the
-    // disk changed in between; nothing is written, and the next sync's read
-    // finds the skill missing and carries it.
+    // A skill item always carries its bytes; one without them is written
+    // nowhere and says so, and its Retry sends it again.
     if (!skill.files) {
       if (managed[skill.name] !== undefined) {
         written[skill.name] = managed[skill.name];

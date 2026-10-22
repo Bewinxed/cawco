@@ -4511,7 +4511,7 @@ let narrowAgain: { readonly why: string } | undefined;
  *   ({@link setProject}, written by those and a browser door's);
  * - its project's folder on the hub (`projectFolder`): moved away only by
  *   the hub (a project's delete or merge), which then syncs every machine's
- *   fleet config; the sync checks (session.ts `FLEET_SYNC`);
+ *   fleet config; the delta's `recheck` checks (session.ts `FLEET_DELTA`);
  * - what the fleet sync writes (`fleetSyncedPaths`, the user layer under
  *   Claude Code's home): the sync checks;
  * - this machine's accounts and the credential stores they make
