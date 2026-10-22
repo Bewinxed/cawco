@@ -5345,10 +5345,21 @@ export class SessionSupervisor {
           ? worstFleetState([skills[name], item])
           : item;
       }
-      Object.assign(memoryDocs, report.memoryDocs ?? {});
+      // The memory and its documents too: each harness keeps its own copy
+      // (Claude Code's CLAUDE.md, OpenCode's and pi's), and one edited on the
+      // machine is drift whatever the others say. Taken as the last harness's
+      // word, OpenCode's "applied" hid a hand-edited CLAUDE.md, so it was
+      // never offered to compare or adopt (machine-away, 2026-10-22).
+      for (const [path, item] of Object.entries(report.memoryDocs ?? {})) {
+        memoryDocs[path] = memoryDocs[path]
+          ? worstFleetState([memoryDocs[path], item])
+          : item;
+      }
       Object.assign(hooks, report.hooks ?? {});
       if (report.memory) {
-        ({ memory } = report);
+        memory = memory
+          ? worstFleetState([memory, report.memory])
+          : report.memory;
       }
       if (report.toolchain) {
         toolchain = { ...toolchain, ...report.toolchain };
