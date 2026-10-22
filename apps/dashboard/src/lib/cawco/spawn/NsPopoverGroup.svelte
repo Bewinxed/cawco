@@ -14,8 +14,8 @@
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { dur, easeOut, numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     glidePopoverVariants,
@@ -53,28 +53,6 @@
   let shown = $state.raw<PopoverMember | undefined>(undefined);
   /** Set once the open surface retargets a sibling, cleared when it closes. */
   let morphing = $state(false);
-  /**
-   * The content's height, held on the surface so a retarget tweens it. Let go
-   * when the surface closes: a fresh open is drawn at its own content's size,
-   * not grown from the last surface's.
-   */
-  let height = $state(0);
-  /**
-   * The content's height, read in the frame after it changed
-   * (frameObserver) and held on the surface there. Written inside the
-   * observer's delivery (an offsetHeight binding), the surface's height
-   * changed under the floating wrapper floating-ui's `autoUpdate` watches, at
-   * a depth the delivery had already passed: picking Full Send swapped the
-   * content for its confirm and the page raised "ResizeObserver loop
-   * completed with undelivered notifications" (new-session-full-send, desk).
-   */
-  const measured = (node: HTMLElement) => {
-    const sized = frameObserver(() => {
-      height = node.offsetHeight;
-    });
-    sized.observe(node);
-    return () => sized.disconnect();
-  };
   /** The room floating-ui leaves the surface, a frame after it says so (glide-popover `popoverRoom`). */
   let room = $state<string>();
   const roomed = popoverRoom((next) => {
@@ -88,7 +66,6 @@
     if (!next) {
       morphing = false;
       last = undefined;
-      height = 0;
       return;
     }
     if (last && last !== next) {
@@ -203,32 +180,27 @@
                 {@attach shown?.rows
                   ? highlight({ rows: shown.rows })
                   : undefined}
+                {@attach morph({ ms: dur("--dur-pop"), followUnfolds: true })}
               >
-                <!-- The surface is held at its content's measured height and
-                     tweens to the next one, whether it glides to a sibling or
-                     its own list filters; clipped with a margin so focus rings
-                     at its edges survive. -->
-                <div
-                  class="overflow-clip clip-margin-space-1 motion-safe:transition-[height] motion-safe:duration-(--dur-pop) motion-safe:ease-drawer"
-                  style:height={height ? `${height}px` : undefined}
-                >
-                  <div {@attach measured}>
-                    {#key shown?.id}
-                      <!-- As the surface: a row with a long path shrinks and
-                           ellipsises it, never widening the set past it. -->
-                      <div
-                        class="grid grid-cols-1 content-start gap-(--ns-pop-gap,0px)"
-                        style={`--ns-pop-gap:${shown?.gap ?? 0}px`}
-                        use:focusFirst
-                        in:panelIn
-                      >
-                        {#if shown}
-                          {@render shown.children()}
-                        {/if}
-                      </div>
-                    {/key}
+                <!-- The surface tweens to its content's next height (motion/
+                     morph) as it glides to a sibling or its own list filters;
+                     a question unfolding in it (Full Send's) is the one
+                     motion, the surface laid out at its size frame by frame.
+                     A fresh open is drawn at its own content's size. -->
+                {#key shown?.id}
+                  <!-- As the surface: a row with a long path shrinks and
+                       ellipsises it, never widening the set past it. -->
+                  <div
+                    class="grid grid-cols-1 content-start gap-(--ns-pop-gap,0px)"
+                    style={`--ns-pop-gap:${shown?.gap ?? 0}px`}
+                    use:focusFirst
+                    in:panelIn
+                  >
+                    {#if shown}
+                      {@render shown.children()}
+                    {/if}
                   </div>
-                </div>
+                {/key}
               </div>
             </div>
           {/snippet}

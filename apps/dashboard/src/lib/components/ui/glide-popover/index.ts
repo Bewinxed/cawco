@@ -14,8 +14,9 @@ import { tv } from "#lib/utils.js";
  * on the glide's curve, a keyframe so it plays on the first frame the content
  * exists, while gliding between siblings keeps the content open and never
  * replays it. A group's surface (`data-morph`) also tweens its width. The
- * permission rows never wrap, so their popover takes the rows' width; a `fit`
- * surface (`data-fit`) takes its content's. Its rows are menu items, 44px
+ * permission rows never wrap, so their popover takes the rows' width, and
+ * Full Send's question under them wraps inside it, never widening it
+ * (PermissionSection); a `fit` surface (`data-fit`) takes its content's. Its rows are menu items, 44px
  * tall on touch (The 44 Touch Rule); a kit Button keeps its drawn size and
  * reaches 44px through its own `touch-hit`. Content never outgrows the
  * surface: a wide row shrinks. The fit and the permission rows' width hold at

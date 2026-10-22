@@ -140,5 +140,9 @@
   {/each}
 </div>
 <!-- Full Send's question, under the rows: they place their fill by index,
-     so it stands after them, not between. -->
-<AskHere asker={asks} at="fullSend" />
+     so it stands after them, not between. It takes the width the rows set
+     and never sets one (inline-size containment): in a popover drawn at its
+     content's width (glide-popover, the permission rows' `w-max`), its
+     paragraphs' unwrapped length would otherwise stretch the surface across
+     the window. -->
+<AskHere asker={asks} at="fullSend" class="contain-inline-size" />

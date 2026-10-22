@@ -10,16 +10,28 @@
    *
    * In the reader's theme; `?case=` (4, 11, 1r, 1f, 3r2f, 5f, 7r13f,
    * 20r) seeds running and failed delegates instead of the twelve.
+   *
+   * `?details` stands the session's details card over the conversation, as
+   * its tab's hover hangs it (the real SessionDetails), the session on
+   * Bypass on a connected machine whose Claude takes every mode and three
+   * efforts: its mode chip opens the picker, Full Send's question in it,
+   * and its effort chip the sibling the picker's surface glides to.
    */
-  import type { InstanceRow, SessionPulse, WorkItemSummary } from "@cawco/core";
+  import {
+    CAPABILITIES_NONE,
+    type InstanceRow,
+    type SessionPulse,
+    type WorkItemSummary,
+  } from "@cawco/core";
   import { onMount } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
+  import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
   import type { HeldPlan } from "#lib/cawco/plan.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
   import { composerBindings } from "#lib/cawco/workspace/composer-dock.svelte.js";
+  import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
   import { page } from "$app/state";
 
   const ID = "delegate-tray-bench";
@@ -103,6 +115,7 @@
     globalThis as unknown as {
       __cawcoDebug: {
         state: {
+          status: string;
           pulses: Record<string, SessionPulse>;
           sessions: Record<string, ReturnType<typeof blankSession>>;
           workItems: Record<string, WorkItemSummary>;
@@ -149,6 +162,49 @@
     at: now,
   };
   debug.state.sessions[ID] = session;
+  /** The details card stands over the conversation (`?details`). */
+  const details = page.url.searchParams.has("details");
+  if (details) {
+    session.harness = "claude";
+    session.permissionMode = "bypassPermissions";
+    session.model = "claude-opus-4-5";
+    session.effort = "medium";
+    cawco.machines.push({
+      auth: "unknown",
+      harnesses: [
+        {
+          auth: "authenticated",
+          capabilities: {
+            ...CAPABILITIES_NONE,
+            effort: true,
+            permissionModes: [
+              "default",
+              "plan",
+              "acceptEdits",
+              "bypassPermissions",
+              "fullSend",
+            ],
+          },
+          harness: "claude",
+          installed: true,
+          models: [
+            {
+              displayName: "Opus 4.5",
+              value: "claude-opus-4-5",
+              supportedEffortLevels: ["low", "medium", "high"],
+            },
+          ],
+        },
+      ],
+      hostname: "bench",
+      lastSeenAt: null,
+      machineId: "bench",
+      os: "linux",
+      pausedUntil: null,
+      pauseStopped: null,
+      status: "online",
+    });
+  }
   debug.state.plans[ID] = {
     rev: 1,
     plan: {
@@ -241,6 +297,16 @@
     entered.set(item.instanceId, "none");
   });
 
+  // The card's live controls take changes while the machine is connected
+  // and the session runs on it. The page opens its socket to the bench's
+  // stand-in, which never sends a board (the page stays connecting): the
+  // bench says the hub is reached, after the page has said it is reaching.
+  $effect(() => {
+    if (details && cawco.status !== "connected") {
+      debug.state.status = "connected";
+    }
+  });
+
   /** The conversation's binding, lent to the group's composer as PaneLeaf lends it. */
   const lent = $derived(composerBindings.get(ID));
 
@@ -254,6 +320,12 @@
     delete debug.state.plans[ID];
     delete debug.state.pulses[ID];
     debug.adoptInstances([]);
+    if (details) {
+      cawco.machines.splice(
+        cawco.machines.findIndex((one) => one.machineId === "bench"),
+        1
+      );
+    }
   });
 </script>
 
@@ -317,6 +389,24 @@
             { delegatesOf: lent.delegatesOf, id: ID, prompts: lent.prompts },
           ]}
         />
+      </div>
+    {/if}
+    {#if details}
+      <!-- As its tab's hover hangs it: Caw's lead card's width, on the
+           floating surface, over the conversation's top. -->
+      <div class="pointer-events-none absolute inset-x-space-3 top-space-3 z-2">
+        <div
+          data-slot="details-card"
+          class="pointer-events-auto w-c-lead-card-w max-w-full overflow-hidden rounded-lg border border-border-control bg-surface-raised shadow-overlay"
+        >
+          <SessionDetails
+            dir={1}
+            href="/motion/delegate-tray?details"
+            onclose={() => undefined}
+            sessionId={ID}
+            title="Delegate tray bench"
+          />
+        </div>
       </div>
     {/if}
   </div>

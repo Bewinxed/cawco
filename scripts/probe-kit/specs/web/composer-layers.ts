@@ -24,6 +24,17 @@
  * mid-history. `LAYERS_ONLY=<part>,…` runs only the legs whose key
  * (`chromium-390-11-end`, `webkit-1440-4-mid-history`) holds a part, and
  * `LAYERS_SURFACES=<part>,…` only the surfaces whose name holds one.
+ *
+ * The session's mode picker, on the same widths and engines (legs
+ * `mode-picker-<engine>-<width>`), from the details card's chips over the
+ * conversation (the bench's `?details`): its effort chip, then its mode chip
+ * (the surface glides, its height tweened); Full Send asked, Cancel, asked
+ * again, and its yes. At every point of each held clock, the transcript,
+ * its first and last rows in view, the composer, the card, the chip and
+ * every scroll on the page stand where they stood; the picker keeps the
+ * width its rows set (±0.5px) inside the viewport; the question's height
+ * is one run, the picker's edge moving with it (under its cap, its last row
+ * as far from its edge as at rest; at its cap, it scrolls inside itself).
  */
 import type { Page } from "playwright-core";
 import {
@@ -111,9 +122,11 @@ function differs(then: Reading, now: Reading | null): string {
 /**
  * A control's colour easing to its state (a button's hover ink) is that
  * control's feedback, not the surface's motion: it never stands on the
- * surface's clock.
+ * surface's clock. Nor does the hover ghost showing under the pointer
+ * (components/ui/highlight, `--hl-*`): the press that asked put the pointer
+ * on a row.
  */
-const COLOUR = /(^|-)color$|^fill$|^stroke$/;
+const COLOUR = /(^|-)color$|^fill$|^stroke$|^--hl-/;
 
 /**
  * A control's own answer to being pressed (a button's scale on `:active`),
@@ -670,6 +683,376 @@ async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
   await page.close();
 }
 
+/**
+ * The session's mode picker (owner: "choosing this mode layout shifts the
+ * whole screen and stretches the popover"): the details card's mode chip
+ * (`?details`, the real SessionDetails on Bypass) opens the picker; Full
+ * Send asks its question inside it.
+ */
+const PICKER_CHIP =
+  '[data-slot="details-card"] button[aria-label^="Permission mode"]';
+const PICKER = "#details-permission-popover";
+const PICKER_ASK = `${PICKER} [data-ask="fullSend"]`;
+
+/** Where everything outside the picker stands, and the picker's own box. */
+interface Stage {
+  /** Each box outside the popover, by name. */
+  boxes: Record<string, Box | null>;
+  /** The picker's height cap (its `max-height`), px: past it, it scrolls inside itself. */
+  cap: number | null;
+  picker: (Box & { right: number }) | null;
+  /** Every element scrolled from its origin, and the window: what a scroll moved. */
+  scrolled: Record<string, [number, number]>;
+  /**
+   * From the content's last row (the question, once asked) to the picker's
+   * bottom edge: the same at every point of a motion when the edge and the
+   * row it opens move on one clock.
+   */
+  tail: number | null;
+  viewport: number;
+}
+
+function stage([log, picker]: readonly [string, string]): Stage {
+  const at = (el: Element | null): Box | null => {
+    if (!el) {
+      return null;
+    }
+    const r = el.getBoundingClientRect();
+    return { top: r.top, left: r.left, width: r.width, height: r.height };
+  };
+  const scroller = document.querySelector<HTMLElement>(log);
+  const view = scroller?.getBoundingClientRect();
+  const shown = [
+    ...(scroller?.querySelectorAll<HTMLElement>("[data-message]") ?? []),
+  ].filter((row) => {
+    const r = row.getBoundingClientRect();
+    return view && r.height > 0 && r.top < view.bottom && r.bottom > view.top;
+  });
+  const scrolled: Stage["scrolled"] = {
+    window: [window.scrollX, window.scrollY],
+  };
+  let n = 0;
+  for (const el of document.querySelectorAll<HTMLElement>("*")) {
+    n += 1;
+    if ((el.scrollTop !== 0 || el.scrollLeft !== 0) && !el.closest(picker)) {
+      const name = `${el.tagName.toLowerCase()}${el.dataset.slot ? `[${el.dataset.slot}]` : ""}#${n}`;
+      scrolled[name] = [el.scrollLeft, el.scrollTop];
+    }
+  }
+  const surface = document.querySelector(picker);
+  const box = at(surface);
+  const last = surface?.firstElementChild?.lastElementChild;
+  const tail =
+    surface && last
+      ? surface.getBoundingClientRect().bottom -
+        last.getBoundingClientRect().bottom
+      : null;
+  return {
+    tail,
+    cap: surface
+      ? Number.parseFloat(getComputedStyle(surface).maxHeight) || null
+      : null,
+    boxes: {
+      transcript: at(scroller),
+      "first visible message": at(shown[0] ?? null),
+      "last visible message": at(shown.at(-1) ?? null),
+      composer: at(document.querySelector('form[data-slot="cin"]')),
+      "details card": at(document.querySelector('[data-slot="details-card"]')),
+      "mode chip": at(
+        document.querySelector(
+          '[data-slot="details-card"] button[aria-label^="Permission mode"]'
+        )
+      ),
+    },
+    scrolled,
+    picker: box ? { ...box, right: box.left + box.width } : null,
+    viewport: document.documentElement.clientWidth,
+  };
+}
+
+/** How each box outside the picker moved from `then` to `now`, in words. */
+function boxesMoved(then: Stage, now: Stage): string[] {
+  const out: string[] = [];
+  for (const [name, was] of Object.entries(then.boxes)) {
+    const is = now.boxes[name];
+    if (!(was && is)) {
+      if (was !== is) {
+        out.push(`${name} ${was ? "gone" : "came"}`);
+      }
+      continue;
+    }
+    for (const key of ["top", "left", "width", "height"] as const) {
+      if (Math.abs(was[key] - is[key]) > SAME) {
+        out.push(`${name}.${key} ${was[key]}→${is[key]}`);
+      }
+    }
+  }
+  return out;
+}
+
+/** What scrolled outside the picker from `then` to `now`, in words. */
+function scrollsMoved(then: Stage, now: Stage): string[] {
+  const names = new Set([
+    ...Object.keys(then.scrolled),
+    ...Object.keys(now.scrolled),
+  ]);
+  return [...names].flatMap((name) => {
+    const [x0, y0] = then.scrolled[name] ?? [0, 0];
+    const [x1, y1] = now.scrolled[name] ?? [0, 0];
+    return Math.abs(x0 - x1) > SAME || Math.abs(y0 - y1) > SAME
+      ? [`${name} scrolled ${x0},${y0}→${x1},${y1}`]
+      : [];
+  });
+}
+
+/** How the page outside the picker moved from `then` to `now`, in words; empty when still. */
+const moved = (then: Stage, now: Stage): string =>
+  [...boxesMoved(then, now), ...scrollsMoved(then, now)].join(", ");
+
+/** The picker's width against what it was, and its edges against the viewport, in words. */
+function pickerHeld(then: Stage, now: Stage): string {
+  if (!(then.picker && now.picker)) {
+    return "the picker is gone";
+  }
+  const out: string[] = [];
+  if (Math.abs(then.picker.width - now.picker.width) > 0.5) {
+    out.push(`width ${then.picker.width}→${now.picker.width}`);
+  }
+  if (now.picker.left < -0.5 || now.picker.right > now.viewport + 0.5) {
+    out.push(
+      `edges ${now.picker.left}…${now.picker.right} outside 0…${now.viewport}`
+    );
+  }
+  return out.join(", ");
+}
+
+const EFFORT_CHIP = '[data-slot="details-card"] button[aria-label^="Effort"]';
+
+/**
+ * The card's effort chip opened, then its mode chip: the one surface glides
+ * to its sibling (NsPopoverGroup), its height tweened from the effort's to
+ * the picker's (motion/morph), never a jump, and nothing outside it moves.
+ * The surface closes again after.
+ */
+async function glide(
+  kit: Kit,
+  page: Page,
+  clock: SurfaceClock,
+  name: string
+): Promise<void> {
+  if (!(await visible(page, EFFORT_CHIP))) {
+    kit.check(`${name} · glide: the card has its effort chip`, false, "none");
+    return;
+  }
+  await page.locator(EFFORT_CHIP).click();
+  await page.waitForSelector("#details-effort-popover");
+  await settle(page, 600);
+  const read = () => page.evaluate(stage, [LOG, "[data-ns-pop]"] as const);
+  const before = await read();
+  const runs = await clock.catchRuns(
+    () => page.locator(PICKER_CHIP).click(),
+    "[data-ns-pop]"
+  );
+  const heights: number[] = [];
+  const faults: string[] = [];
+  for (const f of FRACTIONS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one point of the clock at a time
+    await clock.seek(f);
+    const now = await page.evaluate(stage, [LOG, "[data-ns-pop]"] as const);
+    heights.push(now.picker?.height ?? Number.NaN);
+    const shift = moved(before, now);
+    if (shift) {
+      faults.push(`${f * 100}%: ${shift}`);
+    }
+  }
+  await clock.release();
+  await settle(page, 500);
+  const after = await page.evaluate(stage, [LOG, PICKER] as const);
+  const from = before.picker?.height ?? Number.NaN;
+  const to = after.picker?.height ?? Number.NaN;
+  const [h0, , h50, , h100] = heights;
+  const tweened =
+    Math.abs(h0 - from) <= 0.5 &&
+    Math.abs(h100 - to) <= 0.5 &&
+    Math.abs(to - from) > 1 &&
+    Math.min(from, to) + 0.5 < h50 &&
+    h50 < Math.max(from, to) - 0.5;
+  kit.check(
+    `${name} · glide from the effort chip to the mode chip: the surface's height tweens from the one to the other (between them at ½), never a jump`,
+    tweened,
+    `${from.toFixed(1)} → ${heights.map((one) => one.toFixed(1)).join(", ")} → ${to.toFixed(1)}; ${runsOf(runs)}`
+  );
+  kit.check(
+    `${name} · glide: nothing outside the surface moves (0, ¼, ½, ¾, 1)`,
+    faults.length === 0,
+    faults.slice(0, 3).join("; ") || "every box where it was"
+  );
+  await page.keyboard.press("Escape");
+  await settle(page, 600);
+}
+
+/**
+ * One leg of the mode picker: open it, then Full Send's question in it, its
+ * Cancel, the question again and its yes. Each step on the held clock where
+ * it moves (0, ¼, ½, ¾, 1, settled): nothing outside the picker moves, the
+ * picker keeps its width inside the viewport, its height runs on one clock.
+ */
+async function modePicker(
+  kit: Kit,
+  base: string,
+  engine: Engine,
+  view: View,
+  width: number
+): Promise<void> {
+  const name = `${engine} ${width} · mode picker`;
+  const page = await kit.page(view, { engine });
+  const thrown: string[] = [];
+  page.on("pageerror", (error) => {
+    thrown.push(`${error.name}: ${error.message}`.slice(0, 400));
+  });
+  await open(page, `${base}${BENCH}?case=4&details`, LOG, 120_000);
+  await page.waitForSelector(`${LOG} [data-message]`, { timeout: 30_000 });
+  const chip = await page
+    .waitForSelector(PICKER_CHIP, { timeout: 30_000 })
+    .catch(() => null);
+  if (!chip) {
+    const card = await page.evaluate(
+      () =>
+        document
+          .querySelector('[data-slot="details-card"] [data-slot="settings"]')
+          ?.outerHTML.slice(0, 600) ?? "no details card"
+    );
+    kit.check(`${name}: the details card's mode chip opens`, false, card);
+    await page.close();
+    return;
+  }
+  await place(page, "end");
+  const clock =
+    engine === "chromium" ? await protocolClock(page) : waapiClock(page);
+  await glide(kit, page, clock, name);
+  await page.locator(PICKER_CHIP).click();
+  await page.waitForSelector(`${PICKER} [data-perm="fullSend"]`);
+  await settle(page, 600);
+  const read = () => page.evaluate(stage, [LOG, PICKER] as const);
+  const before = await read();
+  kit.check(
+    `${name}: the picker opens inside the viewport`,
+    pickerHeld(before, before) === "",
+    `${before.picker?.left}…${before.picker?.right} of ${before.viewport}, ${before.picker?.width}px wide`
+  );
+
+  /** One step on the held clock: its runs, what moved at each fraction and settled. */
+  const step = async (what: string, action: () => Promise<unknown>) => {
+    const runs = await clock.catchRuns(action, PICKER);
+    const oneClock = clock.oneClock();
+    const faults: string[] = [];
+    const heights: string[] = [];
+    const edges: string[] = [];
+    for (const f of FRACTIONS) {
+      // biome-ignore lint/performance/noAwaitInLoops: one point of the clock at a time
+      await clock.seek(f);
+      const now = await read();
+      heights.push(`${f * 100}% ${now.picker?.height.toFixed(1)}`);
+      // At its cap it scrolls inside itself; under it, its edge stands
+      // where it stood at rest from its last row.
+      const capped =
+        now.picker !== null &&
+        now.cap !== null &&
+        now.picker.height >= now.cap - 0.5;
+      const held =
+        capped ||
+        (now.tail !== null &&
+          before.tail !== null &&
+          Math.abs(now.tail - before.tail) <= 0.5);
+      edges.push(
+        `${f * 100}% ${capped ? "at its cap" : now.tail?.toFixed(2)}${held ? "" : " ✗"}`
+      );
+      const fault = [moved(before, now), pickerHeld(before, now)]
+        .filter(Boolean)
+        .join(", ");
+      if (fault) {
+        faults.push(`${f * 100}%: ${fault}`);
+      }
+    }
+    await clock.release();
+    await settle(page, 500);
+    const settled = await read();
+    const fault = [moved(before, settled), pickerHeld(before, settled)]
+      .filter(Boolean)
+      .join(", ");
+    if (fault) {
+      faults.push(`settled: ${fault}`);
+    }
+    kit.check(
+      `${name} · ${what}: nothing outside the picker moves (transcript, its first and last rows, composer, card, chip, every scroll) and the picker keeps its width (±0.5px) inside the viewport (0, ¼, ½, ¾, 1, settled)`,
+      faults.length === 0,
+      faults.slice(0, 4).join("; ") ||
+        `width ${settled.picker?.width.toFixed(1)} at ${settled.picker?.left.toFixed(1)}…${settled.picker?.right.toFixed(1)} of ${settled.viewport}; height ${heights.join(", ")}`
+    );
+    kit.check(
+      `${name} · ${what}: the picker's height runs on one clock`,
+      oneClock.length === 0,
+      oneClock.slice(0, 4).join("; ") || runsOf(runs)
+    );
+    kit.check(
+      `${name} · ${what}: the picker's edge moves with the row it opens or folds, never clipping it or leaving room under it (under its cap its last row stands from its edge as at rest, ±0.5px, at 0, ¼, ½, ¾, 1)`,
+      !edges.some((one) => one.endsWith("✗")),
+      `at rest ${before.tail?.toFixed(2)}; ${edges.join(", ")}`
+    );
+    return settled;
+  };
+
+  const asked = await step("Full Send asked", () =>
+    page.locator(`${PICKER} [data-perm="fullSend"]`).click()
+  );
+  const ask = await page.evaluate(
+    ([sel, surface]) => {
+      const el = document.querySelector<HTMLElement>(sel);
+      const box = document.querySelector<HTMLElement>(surface);
+      return {
+        ask: el?.getBoundingClientRect().height ?? 0,
+        surface: box?.clientHeight ?? 0,
+        scroll: box?.scrollHeight ?? 0,
+        viewport: window.innerHeight,
+      };
+    },
+    [PICKER_ASK, PICKER] as const
+  );
+  kit.note(
+    `${name}: the question stands ${ask.ask.toFixed(1)}px tall in a picker ${asked.picker?.width.toFixed(1)}px wide; the picker shows ${ask.surface}px of its ${ask.scroll}px (viewport ${ask.viewport}px tall)${ask.scroll > ask.surface ? ": it scrolls inside itself" : ""}`
+  );
+  await step("Cancel", () =>
+    page.locator(`${PICKER_ASK} [data-ask-cancel]`).click()
+  );
+  await step("Full Send asked again", () =>
+    page.locator(`${PICKER} [data-perm="fullSend"]`).click()
+  );
+  // The yes closes the picker: what stands outside it is read settled.
+  await page
+    .locator(`${PICKER_ASK} button`, { hasText: "Switch to Full Send" })
+    .click();
+  await settle(page, 800);
+  const after = await read();
+  // The chip now names Full Send: its own width follows its label; where it
+  // stands does not move.
+  const chipBefore = before.boxes["mode chip"];
+  const chipAfter = after.boxes["mode chip"];
+  before.boxes["mode chip"] = chipBefore && { ...chipBefore, width: 0 };
+  after.boxes["mode chip"] = chipAfter && { ...chipAfter, width: 0 };
+  const shift = moved(before, after);
+  kit.check(
+    `${name} · Switch to Full Send: nothing outside the picker moves as it closes on the yes`,
+    shift === "" && after.picker === null,
+    shift || "the picker closed; every box where it was"
+  );
+  kit.check(
+    `${name}: the page throws nothing through it`,
+    thrown.length === 0,
+    thrown.slice(0, 2).join(" | ")
+  );
+  await page.close();
+}
+
 /** Puts the transcript at its end, or halfway through what it holds. */
 async function place(page: Page, where: Leg["place"]): Promise<void> {
   await page.evaluate(
@@ -735,6 +1118,24 @@ const spec: Spec = {
         await leg(kit, base, at);
       } catch (error) {
         kit.check(`${at.key}: runs`, false, String(error).split("\n")[0]);
+      }
+    }
+    for (const engine of ["chromium", "webkit"] as const) {
+      for (const [view, width] of VIEW_AT) {
+        const key = `mode-picker-${engine}-${width}`;
+        if (only.length > 0 && !only.some((one) => key.includes(one))) {
+          continue;
+        }
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: one leg at a time
+          await modePicker(kit, base, engine, view, width);
+        } catch (error) {
+          kit.check(
+            `${key}: runs`,
+            false,
+            String(error).split("\n").slice(0, 3).join(" ")
+          );
+        }
       }
     }
   },

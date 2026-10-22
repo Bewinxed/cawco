@@ -51,7 +51,14 @@
  * A row an `unfold` opens or folds inside it (motion/fold `unfolding`) is
  * read at the end of its fold, open or gone, never at the frame the fold is
  * on, and the tween runs on that fold's clock: the edge and the row land
- * together, and the box is never held at a size the fold then leaves.
+ * together, and the box is never held at a size the fold then leaves. With
+ * `followUnfolds` the box starts no tween for it and is laid out at the
+ * row's size frame by frame, as it follows a `fold`: the row's run is the
+ * one motion. A floating surface takes it (the glide popover): a Svelte
+ * intro builds its keyframes a frame after the row mounts (its dummy run's
+ * end), and where frames came late (WebKit) the tween begun on the mount
+ * had landed before the row began to open, the edge at the row's full size
+ * over a row still closed.
  *
  * A `fold` (motion/fold) inside it is a height change no mutation
  * announces: while one runs the container starts no tween of its own and
@@ -170,6 +177,8 @@ function measure() {
 }
 
 export interface Morph {
+  /** An `unfold` inside is followed frame by frame, never tweened beside. */
+  followUnfolds?: boolean;
   ms?: number;
   /**
    * The attributes inside it that carry a state its size follows (on it, or
@@ -192,6 +201,7 @@ export function morph({
   ms,
   on = [],
   rows = false,
+  followUnfolds = false,
   still,
 }: Morph = {}) {
   return (node: HTMLElement) => {
@@ -259,6 +269,15 @@ export function morph({
       }
       return false;
     };
+    /** An `unfold` is moving a row inside (motion/fold `unfolding`). */
+    const unfoldsInside = () => {
+      for (const el of unfolding.keys()) {
+        if (el !== node && node.contains(el)) {
+          return true;
+        }
+      }
+      return false;
+    };
     /** A fold starting inside cancels the tween in flight. */
     const foldStarted = (el: HTMLElement) => {
       if (el !== node && node.contains(el)) {
@@ -309,7 +328,8 @@ export function morph({
           still?.() ||
           from.h === 0 ||
           to.h === 0 ||
-          foldsInside()
+          foldsInside() ||
+          (followUnfolds && unfoldsInside())
         ) {
           return;
         }
