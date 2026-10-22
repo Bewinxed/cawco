@@ -58,6 +58,11 @@
   {open}
   shouldScaleBackground={false}
 >
+  <!-- Its exit is the house's (--dur-exit on --ease-out), set on its closed
+       state in app.css by `data-ns-dialog`, never through `style`: a changed
+       style attribute is written whole, which wiped the transform vaul writes
+       on the node while a finger drags it, and a sheet swiped down jumped
+       back up before it slid out. -->
   <DrawerContent
     data-session-card
     data-ns-dialog
@@ -77,7 +82,7 @@
         card?.focus({ preventScroll: true });
       }
     }}
-    style={`--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))${open ? "" : "; animation-duration: var(--dur-exit); animation-timing-function: var(--ease-out)"}`}
+    style="--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))"
     title={form?.title() ?? "New session"}
     bind:ref={card}
   >

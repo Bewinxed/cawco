@@ -120,6 +120,16 @@
   [data-vaul-drawer][data-state="closed"] {
     animation-fill-mode: forwards;
   }
+  /* The New Session sheet leaves on the house's exit (The Fast Exit Rule)
+     rather than vaul's half second. Here, on its closed state, and never in
+     its `style`: a style attribute that changes as it closes is written
+     whole, which wiped the transform vaul writes on the sheet while a finger
+     drags it, so a sheet swiped down jumped back up before it slid out
+     (spawn/NewSessionDialog, probe parked-start). */
+  [data-vaul-drawer][data-ns-dialog][data-state="closed"] {
+    animation-duration: var(--dur-exit);
+    animation-timing-function: var(--ease-out);
+  }
   /* A closing drawer and its scrim let presses through to the page, as a
      closing dialog's and sheet's do (floating-presence `pressable`): vaul
      draws both through bits-ui with `pointer-events: auto` inline, which

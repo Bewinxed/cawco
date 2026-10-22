@@ -27,13 +27,23 @@
  * chip; the sheet's own Close mid-start runs the drawer's exit
  * (`getAnimations()` on the sheet) and parks the start as a row on the
  * phone's home page, running, breathing, no toast; a tap on the row
- * reopens the sheet at the same step; a 40-word prompt's row keeps its
+ * reopens the sheet at the same step; the sheet swiped down from its
+ * grabber past vaul's threshold (raw touch input) does the same as its
+ * Close: the drawer's exit, the running row, no toast, a tap back to the
+ * same step; a 40-word prompt's row keeps its
  * press and both its lines inside it; a refusal's words stand on the row
  * (RowFault) and Reopen brings the sheet back with them.
+ *
+ * And the Project popover on a fresh browser (no machine chosen) with a
+ * second machine in the fleet: every project on every machine where it has
+ * a checkout, one row each named "<machine> · <path>"; a pick sets both
+ * chips (the picks read from the tab's kept form); a machine chosen first
+ * narrows the list to its own.
  *
  *   bun scripts/probe-kit/run.ts web parked-start
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
+import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen } from "../../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../../kit";
@@ -60,10 +70,14 @@ const SPAWN_STAGE = /Starting…|Checking the folder…/;
 const STAGE = /…$/;
 /** A session's page. */
 const ON_SESSION = /\/session\//;
+/** A computed 2D transform's six numbers. */
+const MATRIX = /matrix\(([^)]+)\)/;
 /** The source session's tab. */
 const SOURCE_TAB = /Park source/;
 /** The source's turn the continuation waits on (the mock answers it slowly). */
 const SLOW = "PROBE-PARK slow turn";
+/** The fleet's second machine, for the Project popover's every-machine list. */
+const SECOND = "probe-park-b";
 
 /** What the page's socket and the continue route do to a start, set per leg. */
 interface Hold {
@@ -656,6 +670,156 @@ async function closeSheet(kit: Kit, page: Page, label: string) {
   });
 }
 
+/**
+ * The sheet swiped away mid-start, as a finger does it: a touch on its
+ * grabber drawn down past vaul's close threshold, a move a frame, then let
+ * go (raw touch input, as decision-pick drags). The drawer's exit runs on
+ * the sheet (read from the engine), and the sheet leaves.
+ */
+async function swipeSheet(kit: Kit, page: Page, label: string) {
+  const grab = await page.evaluate((sheet) => {
+    const card = document.querySelector<HTMLElement>(sheet);
+    const grabber = card?.querySelector('[data-slot="drawer-grabber"]');
+    if (!(card && grabber)) {
+      return null;
+    }
+    const at = grabber.getBoundingClientRect();
+    return {
+      x: at.left + at.width / 2,
+      y: at.top + at.height / 2,
+      height: card.getBoundingClientRect().height,
+    };
+  }, PHONE_FORM);
+  kit.check(`${label}: the sheet has its grabber to swipe`, grab !== null);
+  if (!grab) {
+    return;
+  }
+  // Every frame from the touch's start, read in the page itself: whether
+  // the sheet is drawn, its state, its running animations and transform,
+  // the body's lock; and each pointer event, as vaul hears them.
+  await page.evaluate((sheet) => {
+    const log: unknown[] = [];
+    (window as unknown as { swipeLog: unknown[] }).swipeLog = log;
+    const started = performance.now();
+    const now = () => Math.round(performance.now() - started);
+    const kind = (run: Animation): string => {
+      if (run instanceof CSSAnimation) {
+        return run.animationName;
+      }
+      if (run instanceof CSSTransition) {
+        return `transition:${run.transitionProperty}`;
+      }
+      return "waapi";
+    };
+    for (const type of [
+      "pointerdown",
+      "pointerup",
+      "pointercancel",
+      "touchend",
+      "touchcancel",
+    ]) {
+      window.addEventListener(
+        type,
+        () => {
+          log.push({ at: now(), event: type });
+        },
+        { capture: true }
+      );
+    }
+    let gone = 0;
+    const read = () => {
+      const card = document.querySelector<HTMLElement>(sheet);
+      log.push({
+        at: now(),
+        drawn: card !== null,
+        state: card?.dataset.state ?? null,
+        runs:
+          card
+            ?.getAnimations()
+            .filter((run) => run.playState === "running" || run.pending)
+            .map(kind) ?? [],
+        transform: card ? getComputedStyle(card).transform : null,
+        body: document.body.style.pointerEvents || null,
+        drawer: document.body.dataset.drawer ?? null,
+      });
+      gone = card ? 0 : gone + 1;
+      if (gone < 10 && performance.now() - started < 4000) {
+        requestAnimationFrame(read);
+      }
+    };
+    requestAnimationFrame(read);
+  }, PHONE_FORM);
+  const cdp = await page.context().newCDPSession(page);
+  const steps = 16;
+  const distance = grab.height * 0.6;
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: grab.x, y: grab.y }],
+  });
+  for (let step = 1; step <= steps; step += 1) {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: grab.x, y: grab.y + (distance * step) / steps }],
+    });
+    await page.waitForTimeout(16);
+  }
+  await page.evaluate(() => {
+    (window as unknown as { swipeLog: unknown[] }).swipeLog.push({
+      event: "probe: release",
+    });
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await page.waitForSelector(PHONE_FORM, {
+    state: "detached",
+    timeout: 15_000,
+  });
+  await page.waitForTimeout(400);
+  const log = (await page.evaluate(
+    () => (window as unknown as { swipeLog: unknown[] }).swipeLog
+  )) as {
+    drawn?: boolean;
+    event?: string;
+    runs?: string[];
+    state?: string | null;
+    transform?: string | null;
+  }[];
+  const exited = log.some(
+    (frame) =>
+      frame.drawn === true &&
+      frame.state === "closed" &&
+      (frame.runs?.length ?? 0) > 0
+  );
+  // The exit leaves from where the finger left the sheet: its first closed
+  // frame stands no higher than its last dragged one (no jump back up).
+  const lift = (frame: { transform?: string | null } | undefined): number => {
+    const parts = frame?.transform?.match(MATRIX)?.[1].split(",");
+    return parts ? Number(parts[5]) : 0;
+  };
+  const lastOpen = log.filter((frame) => frame.state === "open").at(-1);
+  const firstClosed = log.find((frame) => frame.state === "closed");
+  kit.check(
+    `${label}: the swiped sheet's exit leaves from where it was dragged to, not from the top (translateY ${lift(lastOpen)} → ${lift(firstClosed)})`,
+    lift(lastOpen) > 0 && lift(firstClosed) >= lift(lastOpen) - 1
+  );
+  kit.check(
+    `${label}: swiped down past its threshold mid-start, the sheet runs the drawer's exit (getAnimations, every frame from the touch)`,
+    exited,
+    JSON.stringify(
+      log.filter(
+        (frame, at) =>
+          frame.event !== undefined ||
+          at === 0 ||
+          JSON.stringify({ ...frame, at: 0 }) !==
+            JSON.stringify({ ...log[at - 1], at: 0 })
+      )
+    )
+  );
+  await cdp.detach();
+}
+
 /** Whether the visible parked rows stand on the phone's home page. */
 const onHomePage = (page: Page) =>
   page.evaluate((row) => {
@@ -790,6 +954,54 @@ async function phoneLegs(
     .first()
     .tap();
 
+  // The sheet swiped down mid-start: it parks the start as its Close does.
+  await openSpawnLink(page, spawnLink);
+  const swipedWords = "PROBE-PARK phone swiped away";
+  await page.locator(PROMPT()).click();
+  await page.keyboard.type(swipedWords);
+  await pickMode(page);
+  const beforeSwipe = new Set(instances());
+  hold.spawn = { ms: 8000, refuse: false };
+  await pressStart(page);
+  await swipeSheet(kit, page, `${label} (swipe)`);
+  await rowIn(page, "running", 10_000);
+  await settle(page, 200);
+  const [swipedRow] = await readRows(page);
+  kit.check(
+    `${label} (swipe): the start parks as a running row on the phone's home page, its stage, the Working glyph on the breath keyframes, no toast`,
+    (await onHomePage(page)) &&
+      swipedRow?.state === "running" &&
+      SPAWN_STAGE.test(swipedRow.doing) &&
+      swipedRow.breath.includes("breath") &&
+      swipedRow.title === swipedWords &&
+      swipedRow.toasts === 0,
+    JSON.stringify(swipedRow)
+  );
+  await tapRow(page);
+  await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
+  await settle(page, 300);
+  const swipedBack = await readForm(page);
+  kit.check(
+    `${label} (swipe): a tap on the row brings the sheet back at the same step: the same words, Start pending with its stage, no toast`,
+    swipedBack.open &&
+      swipedBack.prompt === swipedWords &&
+      swipedBack.busy &&
+      SPAWN_STAGE.test(swipedBack.startWords) &&
+      swipedBack.toasts === 0,
+    JSON.stringify(swipedBack)
+  );
+  await closeSheet(kit, page, `${label} (swipe, then Close)`);
+  await rowIn(page, "started", 60_000);
+  kit.check(
+    `${label} (swipe): the swiped start goes on to start its session on the hub`,
+    instances().some((id) => !beforeSwipe.has(id))
+  );
+  await page
+    .locator(`${ROW} [data-parked-dismiss]`)
+    .filter({ visible: true })
+    .first()
+    .tap();
+
   // 5. Overflow at 390: a 40-word prompt as the title.
   await openSpawnLink(page, spawnLink);
   const long = Array.from(
@@ -885,6 +1097,157 @@ async function phoneLegs(
   await page.waitForSelector(FORM, { state: "detached", timeout: 15_000 });
 }
 
+/** A project the spec made, on the machine it was made on. */
+interface Made {
+  dir: string;
+  id: string;
+  machineId: string;
+  name: string;
+}
+
+/** The Project popover's rows as drawn: project, machine, name, meta line. */
+const projectRows = (page: Page) =>
+  page.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        "#session-project-popover [data-project-id]"
+      ),
+    ]
+      .filter((one) => one.getClientRects().length > 0)
+      .map((one) => ({
+        project: one.dataset.projectId ?? "",
+        machine: one.dataset.machineId ?? "",
+        name:
+          one.querySelector('[data-slot="name"]')?.textContent?.trim() ?? "",
+        meta:
+          one.querySelector('[data-slot="meta"]')?.textContent?.trim() ?? "",
+      }))
+  );
+
+/** The form's picks as the tab keeps them (`cawco:new-session-form`). */
+const keptPicks = (page: Page) =>
+  page.evaluate(() => {
+    const kept = JSON.parse(
+      sessionStorage.getItem("cawco:new-session-form") ?? "null"
+    ) as { picks?: { machineIds: string[]; projectId?: string } } | null;
+    return kept?.picks ?? null;
+  });
+
+/** A chip's label, by the popover it controls. */
+const chipLabel = (page: Page, popover: string) =>
+  page.evaluate(
+    ({ form, controls }) =>
+      document
+        .querySelector(
+          `${form} [aria-controls="${controls}"] [data-slot="chip-label"]`
+        )
+        ?.textContent?.trim() ?? null,
+    { form: FORM, controls: popover }
+  );
+
+/**
+ * The Project popover with no machine chosen (the owner's pick): every
+ * project on every machine the hub knows where it has a checkout, one row
+ * each, its meta line naming the machine; a pick picks both; a machine
+ * chosen first narrows it to that machine's. A fresh browser, so nothing
+ * is remembered and nothing chosen without a press.
+ */
+async function projectLegs(
+  kit: Kit,
+  page: Page,
+  base: string,
+  alpha: Made,
+  beta: Made
+) {
+  FORM = DESK_FORM;
+  const label = "Project, no machine";
+  const openForm = async () => {
+    await page.locator(RAIL_START).filter({ visible: true }).first().click();
+    await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
+    await settle(page, 300);
+  };
+  const openProjects = async () => {
+    await page
+      .locator(`${FORM} [aria-controls="session-project-popover"]`)
+      .click();
+    await page.waitForSelector("#session-project-popover [data-project-id]", {
+      state: "visible",
+      timeout: 15_000,
+    });
+    await settle(page, 300);
+  };
+  await open(page, `${base}/session`, RAIL_START, 120_000);
+  await settle(page, 400);
+  await openForm();
+  kit.check(
+    `${label}: a fresh browser's form opens on no machine`,
+    ((await keptPicks(page))?.machineIds.length ?? 0) === 0,
+    JSON.stringify(await keptPicks(page))
+  );
+  await openProjects();
+  const every = await projectRows(page);
+  const rowOf = (made: Made) =>
+    every.find(
+      (one) => one.project === made.id && one.machine === made.machineId
+    );
+  const named = (made: Made) => {
+    const row = rowOf(made);
+    const [machine, path] = row?.meta.split(" · ") ?? [];
+    return row?.name === made.name && Boolean(machine) && path === made.dir;
+  };
+  kit.check(
+    `${label}: the popover lists every project on every machine where it has a checkout, each row's meta line "<machine> · <path>"`,
+    named(alpha) && named(beta),
+    JSON.stringify(every)
+  );
+  await page
+    .locator(
+      `#session-project-popover [data-project-id="${beta.id}"][data-machine-id="${beta.machineId}"]`
+    )
+    .click();
+  await page.waitForTimeout(400);
+  const picked = await keptPicks(page);
+  const projectChip = await chipLabel(page, "session-project-popover");
+  const machinesChip = await chipLabel(page, "session-machines-popover");
+  kit.check(
+    `${label}: picking a row picks its project and its machine: both chips read them`,
+    picked?.projectId === beta.id &&
+      picked.machineIds.length === 1 &&
+      picked.machineIds[0] === beta.machineId &&
+      projectChip === beta.name &&
+      machinesChip === rowOf(beta)?.meta.split(" · ")[0],
+    JSON.stringify({ picked, projectChip, machinesChip })
+  );
+  // Cancel drops the picks: the next form is a new one, on no machine.
+  await page
+    .locator(`${FORM} [data-ns-footer] button`, { hasText: "Cancel" })
+    .click();
+  await page.waitForSelector(FORM, { state: "detached", timeout: 15_000 });
+
+  await openForm();
+  await page
+    .locator(`${FORM} [aria-controls="session-machines-popover"]`)
+    .click();
+  const machineRow = page.locator(
+    `#session-machines-popover [data-machine-id="${alpha.machineId}"]`
+  );
+  await machineRow.waitFor({ state: "visible", timeout: 15_000 });
+  await machineRow.click();
+  await settle(page, 300);
+  await openProjects();
+  const narrowed = await projectRows(page);
+  kit.check(
+    `${label}: a machine chosen first narrows the list to its own projects, the meta line its path alone`,
+    narrowed.length > 0 &&
+      narrowed.every((one) => one.machine === alpha.machineId) &&
+      narrowed.some(
+        (one) => one.project === alpha.id && one.meta === alpha.dir
+      ) &&
+      !narrowed.some((one) => one.project === beta.id),
+    JSON.stringify(narrowed)
+  );
+}
+
 const respond = (seen: Seen): Reply =>
   seen.last.includes(SLOW)
     ? { everyMs: 250, words: Array.from({ length: 40 }, () => "slowly") }
@@ -945,6 +1308,28 @@ const spec: Spec = {
     await open(phone, `${base}/session`, "body", 120_000);
     await settle(phone, 400);
     await phoneLegs(kit, phone, phoneHold, instances, spawnLink);
+    // The Project popover with no machine chosen, two machines in the fleet.
+    await fleet.launchMachine(SECOND);
+    const made = async (name: string, machineId: string): Promise<Made> => {
+      const dir = join(fleet.sandbox, name.toLowerCase().replace(/\s+/g, "-"));
+      await Bun.$`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
+      const project = await fleet.api<{ id: string }>("/api/projects", {
+        name,
+        machineId,
+        cwd: dir,
+        caw: false,
+      });
+      return { dir, id: project.id, machineId, name };
+    };
+    const alpha = await made("Park alpha", MACHINE);
+    const beta = await made("Park beta", SECOND);
+    await projectLegs(
+      kit,
+      await kit.page("desk", { theme: "light" }),
+      base,
+      alpha,
+      beta
+    );
   },
 };
 

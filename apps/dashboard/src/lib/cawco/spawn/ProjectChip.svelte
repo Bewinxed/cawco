@@ -195,13 +195,17 @@
       </div>
     </div>
   {:else}
-    {#each projects as row, index (row.id)}
+    <!-- One row per project, or, with no machine chosen, per project and
+         machine where it has a checkout (its meta line names the machine). -->
+    {#each projects as row, index (`${row.id}:${row.machineId}`)}
       {@const on = row.id === projectId}
       <button
         data-slot="row"
         aria-pressed={on}
         class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
+        data-machine-id={row.machineId}
+        data-project-id={row.id}
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
         type="button"
@@ -214,7 +218,7 @@
           <span
             data-slot="meta"
             class="type-meta block truncate text-ink-subtle in-aria-pressed:text-selected-ink"
-            >{row.path}</span
+            >{row.machine ? `${row.machine} · ${row.path}` : row.path}</span
           >
         </span>
         {#if on}

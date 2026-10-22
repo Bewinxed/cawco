@@ -797,17 +797,36 @@
    * as the folder it is there: the first chosen machine that has one, its
    * primary place first.
    */
+  /**
+   * With no machine chosen yet, every project is offered on every machine
+   * the hub knows where it has a checkout, one row each, named for its
+   * machine: picking one picks both (`pickProject`). Nothing is chosen
+   * without a press.
+   */
+  /** A project offered where it has a checkout, and the machine named when every machine's are listed. */
+  interface Offered {
+    machine: string | undefined;
+    place: NonNullable<ReturnType<typeof checkoutOn>>;
+    row: (typeof cawco.projects)[number];
+  }
   const projectItems = $derived<ProjectItem[]>(
     cawco.projects
-      .flatMap((row) => {
+      .flatMap((row): Offered[] => {
+        if (machineIds.length === 0) {
+          return cawco.machines.flatMap((one) => {
+            const place = checkoutOn(row, one.machineId);
+            return place ? [{ row, place, machine: one.hostname }] : [];
+          });
+        }
         const place = machineIds
           .map((id) => checkoutOn(row, id))
           .find((found) => found !== undefined);
-        return place ? [{ row, place }] : [];
+        return place ? [{ row, place, machine: undefined }] : [];
       })
-      .map(({ row, place }, i) => ({
+      .map(({ row, place, machine: on }, i) => ({
         id: row.id,
         machineId: place.machineId,
+        ...(on ? { machine: on } : {}),
         name: row.name,
         path: place.path,
         hue: HUES[(i + 3) % 5],
@@ -1485,7 +1504,7 @@
         ...projectItems
           .filter((row) => hit(row.name))
           .map((row) => ({
-            key: `project:${row.id}`,
+            key: `project:${row.id}:${row.machineId}`,
             label: row.name,
             kind: "Project" as const,
             icon: Files,
