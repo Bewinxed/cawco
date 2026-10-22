@@ -15,7 +15,8 @@
  *    (`border-well`).
  * 3. The frame in view is said by its label row (`selected-bg`,
  *    `selected-ink`, 4.5:1); the inspector's story by one solid
- *    `focus-ring` ring that meets neither its label nor its status.
+ *    `border-button-outline` ring (never the focus ring, which is focus's
+ *    alone) that meets neither its label nor its status.
  * 4. A pressed ghost is `surface-pressed`, the current outline row
  *    `selected-bg` with `selected-ink`.
  * 5. The state chips are 30px at `radius-sm` with a 44px touch area under a
@@ -353,7 +354,12 @@ interface PageRead {
   } | null;
   pressed: [string, string];
   repeats: string[];
-  ring: { clear: boolean; style: string; color: [string, string] } | null;
+  ring: {
+    clear: boolean;
+    style: string;
+    color: [string, string];
+    focus: string;
+  } | null;
   row: { bg: [string, string]; ink: [string, string] } | null;
   sectionFile: {
     color: string;
@@ -445,8 +451,9 @@ async function readCanvas(page: Page): Promise<PageRead> {
         style: style.outlineStyle,
         color: [
           w.__rgb(style.outlineColor),
-          w.__token("--focus-ring", body, "color"),
+          w.__token("--border-button-outline", body, "color"),
         ],
+        focus: w.__token("--focus-ring", body, "color"),
       };
     }
     const chips = [...root.querySelectorAll<HTMLElement>(".chip")];
@@ -636,11 +643,12 @@ async function canvasLeg(
     JSON.stringify(read.current)
   );
   kit.check(
-    `3b: ${leg}: the inspector's story wears one solid focus-ring ring clear of its label and status`,
+    `3b: ${leg}: the inspector's story wears one solid border-button-outline ring, never the focus ring, clear of its label and status`,
     !!read.ring &&
       read.ring.clear &&
       read.ring.style === "solid" &&
-      same(read.ring.color),
+      same(read.ring.color) &&
+      read.ring.color[0] !== read.ring.focus,
     JSON.stringify(read.ring)
   );
   kit.check(

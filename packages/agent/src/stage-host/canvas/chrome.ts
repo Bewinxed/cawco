@@ -265,8 +265,8 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 /* The frame in view is said by its label row, in the selected pair. */
 .cawco-frame[data-cawco-current] > .cawco-frame-label { background: var(--selected-bg); }
 .cawco-frame[data-cawco-current] > .cawco-frame-label :is(.cawco-frame-words, .cawco-frame-small) { color: var(--selected-ink); }
-/* The inspector's story: one solid ring round its frames. */
-.cawco-frame[data-cawco-selected] > .cawco-frame-body { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+/* The inspector's story: one solid neutral edge round its frames (3:1); the focus ring is for focus alone. */
+.cawco-frame[data-cawco-selected] > .cawco-frame-body { outline: var(--focus-ring-width) solid var(--border-button-outline); outline-offset: var(--focus-ring-offset); }
 .cawco-frame[data-cawco-edited] .cawco-frame-small::after { content: " · edited"; }
 .cawco-frame-body { position: relative; min-inline-size: 24px; min-block-size: 16px; }
 .cawco-frame-status { font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
