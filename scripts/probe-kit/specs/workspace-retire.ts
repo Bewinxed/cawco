@@ -35,7 +35,7 @@
  *     the same session goes on there (same work item, same transcript): the
  *     handoff it is handed opens with the hub's line that the folder is a
  *     new clone cut again at that commit on main (core injected.ts
- *     `recutLine`; on 2026-10-20 X8 went on in a clone cut again believing
+ *     `movedLine`; on 2026-10-20 X8 went on in a clone cut again believing
  *     its install there, and its `tsc` failed with ENOENT), its shell reads
  *     that path and M's landed file. While that handoff, released after the
  *     cut under a new hand-off, is still pending, its record keeps it whole
@@ -91,6 +91,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { movedLine } from "../../../packages/core/src/injected";
 import { signal as signalPid } from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -134,9 +135,22 @@ const RECUT = "PROBE-RECUT-M";
 const RECUT_PWD = /RECUT-PWD=([^\s\\"]+)/;
 const RECUT_FILE = /RECUT-FILE:([^\n\\"]*)/;
 const RECUT_RAN = "RECUT-42";
-/** The hub's line that a folder is a clone cut again (core injected.ts `recutLine`), with the commit and branch it names. */
-const RECUT_LINE =
-  /Your workspace retired while this session slept, so this folder is a new clone, cut again at ([0-9a-f]{9}) on ([^\s]+?)\. Nothing git doesn't track came with it/;
+/** Stand-ins for the commit (9 characters, as the line cuts it) and the branch in {@link RECUT_LINE}'s template. */
+const AT_COMMIT = "COMMIT___";
+const ON_BRANCH = "BRANCH___";
+const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
+/**
+ * The hub's line that a folder is a clone cut again, with the commit and
+ * branch it names: core injected.ts `movedLine` itself, its words never
+ * copied here (a copy went stale when the line came to name the install to
+ * run, 1054b853b).
+ */
+const RECUT_LINE = new RegExp(
+  movedLine({ kind: "recut", commit: AT_COMMIT, branch: ON_BRANCH })
+    .replaceAll(REGEX_SPECIAL, "\\$&")
+    .replace(AT_COMMIT, "([0-9a-f]{9})")
+    .replace(ON_BRANCH, "([^\\s:]+?)")
+);
 /** The parent's handoff to Q once its stopped landing's workspace retired, and what Q's shell prints there. */
 const RECUT_Q = "PROBE-RECUT-Q";
 const Q_PWD = /Q-PWD=([^\s\\"]+)/;

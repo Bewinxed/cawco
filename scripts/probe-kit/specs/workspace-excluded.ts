@@ -14,16 +14,20 @@
  * its commit.
  *
  * (a) X also writes `design-X.html` and `harness-X/page.ts` and lists both
- *     only in its clone's `.git/info/exclude`. Its work lands, and its
- *     workspace is held, not retired: both stand, GET held says "1 excluded
+ *     only in its clone's `.git/info/exclude`. finish_item refuses it,
+ *     naming both (hub work-items.ts `leftoversIn`: scratch in the clone is
+ *     never left behind by a finished item), and X leaves the refusal
+ *     unanswered, so its item ends unfinished. Its workspace is held, not
+ *     retired: both stand, GET held says "1 commit on no remote, 1 excluded
  *     file, 1 excluded folder" and names them, the parent's delegate_list
  *     lists it under held with them, and POST archive answers 409 naming
  *     them, nothing deleted.
  * (b) Y also writes `node_modules/pkg/index.js` and `dist/out.js`, which the
  *     committed `.gitignore` covers. Its work lands and its workspace
  *     retires as ever: row archived, clone gone.
- * (c) X's excluded file and folder removed, POST archive on it answers 200:
- *     row archived, clone gone.
+ * (c) X's excluded file and folder removed, POST archive on it answers 409
+ *     naming its commit alone; with `discard: true`, 200: row archived,
+ *     clone gone.
  * (d) Z's TMPDIR holds a folder the hub knows as a project's checkout. Its
  *     work lands and its session sleeps, and its workspace stays active, a
  *     sweep naming that project; POST archive answers 409 naming it, even
@@ -96,7 +100,16 @@ const tool = (name: string, input: object): Reply => ({
 });
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
-const steps: Record<string, { finish?: boolean; searched?: boolean }> = {};
+/** finish_item's answer when the clone holds work in no commit (hub work-items.ts `leftoversIn`). */
+const NOT_FINISHED = "Not finished: your clone holds work that is in no commit";
+/** Where that answer lists the clone's own excludes. */
+const EXCLUDED_LIST =
+  "Kept out of git by the clone's own excludes (.git/info/exclude or an untracked .gitignore), not the repository's:";
+
+const steps: Record<
+  string,
+  { finish?: boolean; refused?: string; searched?: boolean }
+> = {};
 
 const respond = (request: Seen): Reply => {
   const tag = request.tools ? TAG.exec(request.all)?.[1] : undefined;
@@ -105,6 +118,11 @@ const respond = (request: Seen): Reply => {
   }
   steps[tag] ??= {};
   const step = steps[tag];
+  // finish_item's refusal, as the delegate read it: X never answers it, so its item ends unfinished.
+  const refusedAt = request.all.indexOf(NOT_FINISHED);
+  if (step.finish && refusedAt >= 0 && step.refused === undefined) {
+    step.refused = request.all.slice(refusedAt, refusedAt + 1200);
+  }
   if (!request.all.includes(`DONE-COMMIT-${tag}`)) {
     return tool("Bash", { command: commitCommand(tag), description: "Commit" });
   }
@@ -281,7 +299,7 @@ const spec: Spec = {
   },
 };
 
-/** (a) Excluded files hold a landed workspace, (b) what a committed `.gitignore` covers goes, (c) the archive goes once they are removed. */
+/** (a) finish_item refuses excluded scratch, which then holds the workspace its unfinished item leaves; (b) what a committed `.gitignore` covers goes; (c) once removed, only the commit holds it, and discard archives it. */
 const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const { check } = kit;
   const { fleet, parent, credential, workspaceOf, settled, archiveOver } =
@@ -291,13 +309,18 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const heldX = await settled(wx.id);
   const xFile = join(wx.path, X_FILE);
   const xFolder = join(wx.path, "harness-X", "page.ts");
+  const refusal = steps.X.refused ?? "";
+  const listed = refusal.slice(refusal.indexOf(EXCLUDED_LIST));
   check(
-    "(a) X's work lands, and its workspace is held, not retired: its excluded file and folder stand",
-    x.item.state === "done" &&
+    "(a) X's finish_item is refused, naming its excluded file and folder; X leaves it unanswered, its item ends unfinished, and its workspace is held, not retired: both stand",
+    refusal.includes(EXCLUDED_LIST) &&
+      listed.includes(X_FILE) &&
+      listed.includes(X_FOLDER) &&
+      x.item.state === "failed" &&
       heldX.state === "held" &&
       existsSync(xFile) &&
       existsSync(xFolder),
-    `${x.item.state} ${x.item.error ?? ""}; ${heldX.state}; ${X_FILE} ${existsSync(xFile) ? "stands" : "gone"}; harness-X/page.ts ${existsSync(xFolder) ? "stands" : "gone"}`
+    `${JSON.stringify(refusal.slice(0, 600))}; ${x.item.state} ${x.item.error ?? ""}; ${heldX.state}; ${X_FILE} ${existsSync(xFile) ? "stands" : "gone"}; harness-X/page.ts ${existsSync(xFolder) ? "stands" : "gone"}`
   );
   const words = await fleet
     .api<{ holds: string; excluded?: string[] }>(
@@ -305,13 +328,14 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     )
     .catch((error: unknown) => ({ holds: String(error), excluded: [] }));
   check(
-    '(a) GET held on X says "1 excluded file, 1 excluded folder" and names both',
-    words.holds === "1 excluded file, 1 excluded folder" &&
+    '(a) GET held on X says "1 commit on no remote, 1 excluded file, 1 excluded folder" and names both excluded paths',
+    words.holds ===
+      "1 commit on no remote, 1 excluded file, 1 excluded folder" &&
       JSON.stringify([...(words.excluded ?? [])].sort()) ===
         JSON.stringify([X_FILE, X_FOLDER]),
     JSON.stringify(words)
   );
-  const listed = await requestWithin(
+  const delegates = await requestWithin(
     300_000,
     `${fleet.base}/api/delegation/call/${parent}`,
     {
@@ -325,18 +349,20 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   );
   check(
     "(a) the parent's delegate_list lists X under held, naming its excluded paths",
-    listed.status === 200 &&
-      listed.text.includes(wx.id) &&
-      listed.text.includes("1 excluded file, 1 excluded folder") &&
-      listed.text.includes(X_FILE) &&
-      listed.text.includes(X_FOLDER),
-    `${listed.status} ${listed.text.slice(0, 1500)}`
+    delegates.status === 200 &&
+      delegates.text.includes(wx.id) &&
+      delegates.text.includes("1 excluded file, 1 excluded folder") &&
+      delegates.text.includes(X_FILE) &&
+      delegates.text.includes(X_FOLDER),
+    `${delegates.status} ${delegates.text.slice(0, 1500)}`
   );
   const refused = await archiveOver(wx.id);
   check(
-    "(a) POST archive on X answers 409 naming its excluded file and folder; nothing deleted",
+    "(a) POST archive on X answers 409 naming its commit, its excluded file and folder; nothing deleted",
     refused.status === 409 &&
-      refused.text.includes("holds 1 excluded file, 1 excluded folder (") &&
+      refused.text.includes(
+        "holds 1 commit on no remote, 1 excluded file, 1 excluded folder ("
+      ) &&
       refused.text.includes(X_FILE) &&
       refused.text.includes(X_FOLDER) &&
       refused.text.includes("nothing was deleted") &&
@@ -357,12 +383,21 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `${y.item.state} ${y.item.error ?? ""}; ${retiredY.state}; clone ${existsSync(wy.path) ? "stands" : "gone"}`
   );
 
-  // (c) once the excluded work is gone, the archive goes.
+  // (c) once the excluded work is gone, only X's commit holds it; discard archives it.
   await rm(xFile, { force: true });
   await rm(join(wx.path, "harness-X"), { recursive: true, force: true });
-  const archived = await archiveOver(wx.id);
+  const commitOnly = await archiveOver(wx.id);
   check(
-    "(c) X's excluded file and folder removed, POST archive answers 200: row archived, clone gone",
+    "(c) X's excluded file and folder removed, POST archive answers 409 naming its commit alone, the excluded paths no more",
+    commitOnly.status === 409 &&
+      commitOnly.text.includes("holds 1 commit on no remote (") &&
+      !commitOnly.text.includes(X_FILE) &&
+      workspaceOf(wx.id).state === "held",
+    `${commitOnly.status} ${commitOnly.text.slice(0, 600)}; ${workspaceOf(wx.id).state}`
+  );
+  const archived = await archiveOver(wx.id, { discard: true });
+  check(
+    "(c) POST archive with discard: true answers 200: row archived, clone gone",
     archived.status === 200 &&
       workspaceOf(wx.id).state === "archived" &&
       !existsSync(wx.path),
