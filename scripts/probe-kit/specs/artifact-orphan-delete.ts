@@ -37,7 +37,9 @@ const CREATE = "mcp__cawco__artifact_create";
 const FINISH = "mcp__cawco__finish_item";
 /** What finish_item answers a blocked finish (work-items.ts `finishItem`). */
 const BLOCKED = "The item failed as blocked";
-const ANSWERED_ID = /"id":"[0-9a-f-]{36}"/;
+/** artifact_create's answer in its words (hub presenters/artifacts.ts `artifactCreatedWords`): the page made, and its link. */
+const MADE_PAGE =
+  /Made orphan-page \(page [0-9a-f]{8}\)[\s\S]*?cawco:artifact\/[0-9a-f-]{36}/;
 
 /** The parent's refusal while its writer can still act (artifacts/service.ts `deletable`). */
 const STILL_ACTS = "that session can still act";
@@ -78,7 +80,7 @@ const child = (request: Seen): Reply => {
       blocked: { command: "probe", error: "the probe ends this item here" },
     });
   }
-  if (ANSWERED_ID.test(request.all)) {
+  if (MADE_PAGE.test(request.all)) {
     return useTool("Bash", {
       command: `echo left > orphan-probe.txt && git add orphan-probe.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Probe commit on no remote' && echo ${MADE}`,
       description: "Probe step",

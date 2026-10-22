@@ -677,10 +677,10 @@ try {
         `${error instanceof Error ? error.message : String(error)}; task_start ${made.has(`start ${task.id}`) ? `answered: ${answers[`start ${task.id}`] ?? "(no answer yet)"}` : "was never called"}`
       );
     });
-    // A report reads "[Work item <id> is …]": his request with it is its wake.
+    // A report reads "[Work item <handle> is …]": his request with it is its wake.
     const woke = await until(
       "Caw woken by its report",
-      () => cawRequests(before, `Work item ${item.id}`),
+      () => cawRequests(before, `Work item ${item.id.slice(0, 8)}`),
       (requests) => requests.length > 0,
       240_000
     );
@@ -721,7 +721,7 @@ try {
         180_000
       );
       await delay(10_000);
-      const woke = cawRequests(offAt, `Work item ${item.id}`);
+      const woke = cawRequests(offAt, `Work item ${item.id.slice(0, 8)}`);
       const noted = notes(project.id, `Attempt · ${task.id}`);
       check(
         "f: the dispatcher's attempt is his own; off asks, `finish` keeps it, it ends noted and wakes nobody",
@@ -751,7 +751,7 @@ try {
     );
     const woke = await until(
       "Caw woken by your attempt's report",
-      () => cawRequests(before, `Work item ${yourItem.id}`),
+      () => cawRequests(before, `Work item ${yourItem.id.slice(0, 8)}`),
       (requests) => requests.length > 0,
       240_000
     );
@@ -772,7 +772,7 @@ try {
     });
     const wokeToo = await until(
       "Caw woken by the dispatcher's attempt",
-      () => cawRequests(dispatchedAt, `Work item ${item.id}`),
+      () => cawRequests(dispatchedAt, `Work item ${item.id.slice(0, 8)}`),
       (requests) => requests.length > 0,
       240_000
     );
@@ -848,7 +848,7 @@ try {
         180_000
       );
       await delay(10_000);
-      const woke = cawRequests(offAt, `Work item ${item.id}`);
+      const woke = cawRequests(offAt, `Work item ${item.id.slice(0, 8)}`);
       const noted = notes(project.id, "Delegate · Probe delegate finish");
       check(
         "h: `finish` lets his own delegate complete; its end is noted, and he is not woken",
@@ -885,7 +885,7 @@ try {
     );
     const woke = await until(
       "Caw woken by its report",
-      () => cawRequests(offAt, `Work item ${item.id}`),
+      () => cawRequests(offAt, `Work item ${item.id.slice(0, 8)}`),
       (requests) => requests.length > 0,
       120_000
     );

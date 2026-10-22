@@ -283,9 +283,10 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
       s.instanceId
     );
   // S's own report names its workspace too (work-items.ts `reportLine`):
-  // the hold is the notice that names it.
+  // the hold is the notice that names it, by its handle as agents read it.
+  const handle = ws.id.slice(0, 8);
   const isHoldNotice = (row: { body: string | null; notice: number | null }) =>
-    row.notice === 1 && (row.body ?? "").includes(ws.id);
+    row.notice === 1 && (row.body ?? "").includes(`Workspace ${handle}`);
   const notice = await until(
     "the parent's notice of S's held workspace",
     reports,
@@ -314,11 +315,12 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
     place !== undefined && (place.held ?? null) === null,
     JSON.stringify(place)
   );
+  // Its words (hub presenters/sessions.ts `heldLine`): the workspace by its handle.
   const said = await scene.callAsParent("delegate_list", {});
   check(
     "(c) the parent's delegate_list lists it under held",
     said.status === 200 &&
-      said.text.includes(ws.id) &&
+      said.text.includes(`workspace ${handle} on`) &&
       said.text.includes("1 commit on no remote"),
     `${said.status} ${said.text.slice(0, 1200)}`
   );
@@ -483,13 +485,13 @@ interface Listed {
   startedAt: string;
 }
 
-/** delegate_list's answer (hub delegation-tree.ts `DelegateList`), as the parent's call answered it. */
+/** delegate_list's record (hub delegation-tree.ts `DelegateList`), as its `response_format: "detailed"` answers it. */
 interface Answer {
   delegates: Listed[];
   held: { workspaceId: string }[];
 }
 
-/** delegate_list's delegates and held workspaces, as the parent's call answered them, or what it answered instead. */
+/** delegate_list's delegates and held workspaces, from its detailed answer (the record as JSON, mcp-tool.ts), or what it answered instead. */
 const listed = (said: {
   status: number;
   text: string;
@@ -500,12 +502,24 @@ const listed = (said: {
   const result = JSON.parse(said.text) as {
     content?: { text?: string }[];
     isError?: boolean;
-    structuredContent?: Answer;
   };
-  return result.isError
-    ? { refused: result.content?.[0]?.text ?? "" }
-    : { ...result.structuredContent };
+  const words = result.content?.[0]?.text ?? "";
+  if (result.isError) {
+    return { refused: words };
+  }
+  try {
+    return JSON.parse(words) as Answer;
+  } catch {
+    return { refused: `not the record: ${words.slice(0, 600)}` };
+  }
 };
+
+/** delegate_list's record of a window, asked as the parent. */
+const windowOf = (scene: Scene, window: object) =>
+  scene.callAsParent("delegate_list", {
+    ...window,
+    response_format: "detailed",
+  });
 
 /** (e) delegate_list with a window answers the delegates live inside it, in start order, and its tree's workspaces held inside it. */
 const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
@@ -550,7 +564,7 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `H ${h.held.state}, R ${rHeld.state}, Z ${z.held.state}; Q ${qItem?.state}; P ${JSON.stringify(ps)} Q ${JSON.stringify(qs)} R ${JSON.stringify(rs)}`
   );
   const around = listed(
-    await scene.callAsParent("delegate_list", {
+    await windowOf(scene, {
       since: iso(qs?.created_at),
       before: iso(qs?.ended_at),
     })
@@ -578,11 +592,7 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     around.held !== undefined && around.held.length === 0,
     JSON.stringify(around.held)
   );
-  const after = listed(
-    await scene.callAsParent("delegate_list", {
-      since: iso(rs?.created_at),
-    })
-  );
+  const after = listed(await windowOf(scene, { since: iso(rs?.created_at) }));
   const afterIds = (after.delegates ?? []).map((one) => one.instanceId);
   check(
     "(e) a window from R's start answers P then R",
@@ -595,9 +605,7 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     JSON.stringify(afterHeld) === JSON.stringify([r.workspaceId]),
     `${JSON.stringify(afterHeld)}; H ${h.started.workspaceId} R ${r.workspaceId} Z ${z.started.workspaceId}`
   );
-  const loose = listed(
-    await scene.callAsParent("delegate_list", { since: "yesterday" })
-  );
+  const loose = listed(await windowOf(scene, { since: "yesterday" }));
   check(
     "(e) a bound that is no ISO time is refused, saying the form",
     (loose.refused ?? "").includes("ISO date or datetime"),

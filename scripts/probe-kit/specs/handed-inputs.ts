@@ -82,6 +82,9 @@ const PAGE_NAME = `probe-page-${RUN}`;
 const PREVIEW = `probe-preview-${RUN}`;
 const BOX = "probe-box";
 const LAN_CODE = /lan:\d+/;
+const LAN_DIRECT_CODE = /lan-direct:\d+/;
+/** artifact_browse's answer: the address its browser loads. */
+const BROWSE_ADDRESS = /Load https?:\/\/\S+ once in your browser tool/;
 const HUB_API_CODE = /hub-api:\d+/;
 
 /** The request's message `back` from its last, as sent: `1`, a tool call's result; `2`, the call. */
@@ -230,7 +233,12 @@ const leafB = (request: Seen): Reply => {
       command: [
         `url=$(grep -o '"url": *"[^"]*"' "$TMPDIR/inputs/artifact-${PREVIEW}.json" | tail -1 | sed 's/.*"url": *"//; s/"$//')`,
         `curl -sSL -c "$TMPDIR/jar" -b "$TMPDIR/jar" "$url"`,
-        `echo; echo "lan:$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://${LAN_ADDRESS}/)"`,
+        // srt's own NO_PROXY names the private ranges (sandbox-utils.js
+        // `generateProxyEnvVars`), so a plain curl dials the LAN directly,
+        // where the sandbox's network namespace has no route; a client that
+        // ignores NO_PROXY goes through the proxy, which refuses it.
+        `echo; echo "lan-direct:$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://${LAN_ADDRESS}/)"`,
+        `echo "lan:$(curl -s --noproxy '' -o /dev/null -w '%{http_code}' --max-time 15 http://${LAN_ADDRESS}/)"`,
         `echo "hub-api:$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 ${state.b.hubApi})"`,
       ].join("; "),
       description:
@@ -595,9 +603,9 @@ const previewReach = async (
     tried ? "B's curl answered without the page's words" : "no curl answer"
   );
   check(
-    "5: a private address that is not the hub's stays refused from inside B's workspace",
-    said5.includes("lan:403"),
-    said5.match(LAN_CODE)?.[0] ?? "no answer"
+    "5: a private address that is not the hub's stays refused from inside B's workspace: no route dialed direct, 403 through the proxy",
+    said5.includes("lan-direct:000") && said5.includes("lan:403"),
+    `${said5.match(LAN_DIRECT_CODE)?.[0] ?? "no direct answer"}; ${said5.match(LAN_CODE)?.[0] ?? "no proxied answer"}`
   );
   check(
     "5: the hub's own port that serves no preview stays refused from inside B's workspace",
@@ -618,8 +626,9 @@ const previewReach = async (
   ).catch(() => undefined);
   check(
     "5: B's artifact_browse of the preview, from inside its workspace, answers an address",
+    // Its words (hub presenters/artifacts.ts `artifactBrowsedWords`): the address to load.
     browsed !== undefined &&
-      messageBack(browsed.body, 1).includes("expiresAt") &&
+      BROWSE_ADDRESS.test(messageBack(browsed.body, 1)) &&
       !messageBack(browsed.body, 1).includes(
         "a workspace's boundary reaches public hosts only"
       ),

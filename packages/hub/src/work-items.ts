@@ -1223,17 +1223,17 @@ const FOLLOW_UP_STOPPED = "Its follow-up was stopped before it landed.";
 
 /** What anyone else's message to finished work is answered with. */
 const finishedText = (item: WorkItemRow): string =>
-  `${item.title} (${item.id}) is ${item.state}. Only the reader, the session that delegated it, or its project's lead can continue it.`;
+  `${item.title} (${handle(item.id)}) is ${item.state}. Only the reader, the session that delegated it, or its project's lead can continue it.`;
 
 /** What a message to finished work is answered with once a newer item holds its workspace. */
 const supersededText = (item: WorkItemRow, latest: WorkItemRow): string =>
-  `${item.title} (${item.id}) is ${item.state}, and workspace ${item.workspaceId} has moved on to ${latest.title} (${latest.id}, ${latest.state}). Message that one.`;
+  `${item.title} (${handle(item.id)}) is ${item.state}, and workspace ${handle(item.workspaceId)} has moved on to ${latest.title} (${handle(latest.id)}, ${latest.state}). Message that one.`;
 
 /** The line a parent's report carries about the item behind it. */
 const reportLine = (item: WorkItemRow): string =>
   LIVE.has(item.state)
-    ? `\n\n[Work item ${item.id} is ${item.state} in workspace ${item.workspaceId}.]`
-    : `\n\n[Work item ${item.id} is ${item.state} in workspace ${item.workspaceId}. A handoff to it continues this same session.]`;
+    ? `\n\n[Work item ${handle(item.id)} is ${item.state} in workspace ${handle(item.workspaceId)}.]`
+    : `\n\n[Work item ${handle(item.id)} is ${item.state} in workspace ${handle(item.workspaceId)}. A handoff to it continues this same session.]`;
 
 /** The first line with words on it. */
 const firstLine = (text: string | null): string =>
@@ -2781,7 +2781,7 @@ export const createWorkItems = ({
     }
     const [workspace] = db.workspacesNamed(item.workspaceId);
     if (workspace?.state !== "active") {
-      return `Its session was asleep with its work item open, and its workspace ${item.workspaceId} is ${workspace?.state ?? "gone"}: there is nowhere for it to carry on.`;
+      return `Its session was asleep with its work item open, and its workspace ${handle(item.workspaceId)} is ${workspace?.state ?? "gone"}: there is nowhere for it to carry on.`;
     }
     if (!row.sessionId) {
       return "Its session was asleep with its work item open, and it never began a conversation, so there is nothing to wake it into.";
@@ -5619,7 +5619,7 @@ export const createWorkItems = ({
     if (!LIVE.has(item.state)) {
       throw new WorkItemRefusal(
         409,
-        `${item.title} (${item.id}) is ${item.state}; finish_item finishes live work only.`
+        `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`
       );
     }
     if (item.landingSince) {
@@ -6407,14 +6407,14 @@ export const createWorkItems = ({
     const link = sessionUrl?.(item.instanceId);
     const what = item.taskId
       ? `an attempt at ${item.taskId}`
-      : `work item ${item.id}`;
+      : `work item ${handle(item.id)}`;
     const lines = gate.declared ? gateLines(gate) : NO_CHECKS;
     return [
       summary.trim(),
       ...(lines ? [`Landing gate, run by the CawCo hub:\n${lines}`] : []),
       link
         ? `This is ${what}; its report and transcript: ${link}`
-        : `This is ${what} (work item ${item.id}).`,
+        : `This is ${what} (work item ${handle(item.id)}).`,
     ].join("\n\n");
   };
 
@@ -7483,7 +7483,7 @@ export const createWorkItems = ({
       if (!LIVE.has(item.state) || item.landingSince) {
         throw new WorkItemRefusal(
           409,
-          `${item.title} (${item.id}) cannot wait while ${item.landingSince ? "its landing gate runs" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
+          `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "its landing gate runs" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
         );
       }
       const waitReason = reason.trim().replace(/\s+/g, " ");
@@ -7657,7 +7657,7 @@ export const createWorkItems = ({
         // A retired one is cut again for the send ({@link recutHold}).
         if (workspace?.state === "archived" && !recuttable(workspace)) {
           return {
-            reason: `${item.title} (${item.id}) is ${item.state}, and ${archivedWords(workspace)}`,
+            reason: `${item.title} (${handle(item.id)}) is ${item.state}, and ${archivedWords(workspace)}`,
             refusal: {
               kind: "workspace-archived",
               itemId: item.id,
@@ -8034,7 +8034,7 @@ export const createWorkItems = ({
       if (!workspace || workspace.state === "archived") {
         throw new WorkItemRefusal(
           409,
-          `${item.title} (${item.id}) is in workspace ${item.workspaceId}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`
+          `${item.title} (${handle(item.id)}) is in workspace ${handle(item.workspaceId)}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`
         );
       }
       await handIn(workspace, inputs, row);
