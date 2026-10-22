@@ -715,6 +715,8 @@ async function swipeSheet(kit: Kit, page: Page, label: string) {
       "pointerdown",
       "pointerup",
       "pointercancel",
+      "pointerout",
+      "lostpointercapture",
       "touchend",
       "touchcancel",
     ]) {
@@ -818,6 +820,103 @@ async function swipeSheet(kit: Kit, page: Page, label: string) {
     )
   );
   await cdp.detach();
+}
+
+/**
+ * A finger holding the sheet partway down while the visible area changes
+ * under it (the window shrinks, as the keyboard steps the visible area): the
+ * sheet stays where the finger holds it, its transform untouched, and its
+ * --visible-height follows the new area (ui/drawer hold-style). A slow drag
+ * from the grabber, held; the events the sheet hears are logged, so a
+ * `pointerout` that ends the drag early is named.
+ */
+async function holdThroughResize(kit: Kit, page: Page, label: string) {
+  // vaul takes no drag in the half second after a sheet opens
+  // (use-drawer-root `shouldDrag`, "Allow scrolling when animating").
+  await page.waitForTimeout(700);
+  // Held by its header row, as wide as the sheet, which the finger stays
+  // over as the sheet follows it: off the 6px grabber, the finger leaves it
+  // and vaul takes the `pointerout` as a release (the swipe leg's log).
+  const grab = await page.evaluate((sheet) => {
+    const header = document
+      .querySelector(sheet)
+      ?.querySelector('[data-slot="drawer-header"]');
+    if (!header) {
+      return null;
+    }
+    const at = header.getBoundingClientRect();
+    return { x: at.left + at.width * 0.4, y: at.top + 6 };
+  }, PHONE_FORM);
+  if (!grab) {
+    kit.check(`${label}: the sheet has its header to hold`, false);
+    return;
+  }
+  await page.evaluate(() => {
+    const heard: string[] = [];
+    (window as unknown as { heard: string[] }).heard = heard;
+    for (const type of [
+      "pointerout",
+      "lostpointercapture",
+      "pointercancel",
+      "pointerup",
+    ]) {
+      window.addEventListener(type, () => heard.push(type), {
+        capture: true,
+      });
+    }
+  });
+  /** The sheet's translateY, its --visible-height, and its state. */
+  const read = () =>
+    page.evaluate((sheet) => {
+      const card = document.querySelector<HTMLElement>(sheet);
+      const matrix = card ? getComputedStyle(card).transform : "none";
+      const parts = matrix.startsWith("matrix(")
+        ? matrix.slice(7, -1).split(",")
+        : [];
+      return {
+        y: parts.length === 6 ? Number(parts[5]) : 0,
+        visibleHeight: card?.style.getPropertyValue("--visible-height") ?? "",
+        state: card?.dataset.state ?? null,
+        heard: [...(window as unknown as { heard: string[] }).heard],
+      };
+    }, PHONE_FORM);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: grab.x, y: grab.y }],
+  });
+  for (let step = 1; step <= 12; step += 1) {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: grab.x, y: grab.y + step * 8 }],
+    });
+    await page.waitForTimeout(40);
+  }
+  await settle(page, 100);
+  const before = await read();
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.waitForTimeout(300);
+  const after = await read();
+  kit.check(
+    `${label}: held partway down, the sheet keeps its transform while the visible area changes under it, and its --visible-height follows (translateY ${before.y} → ${after.y}; --visible-height ${before.visibleHeight} → ${after.visibleHeight})`,
+    before.state === "open" &&
+      after.state === "open" &&
+      before.y > 40 &&
+      Math.abs(after.y - before.y) <= 1 &&
+      before.visibleHeight !== after.visibleHeight &&
+      after.visibleHeight === "700px",
+    JSON.stringify({ before, after })
+  );
+  kit.note(
+    `${label}: the events the sheet heard while the finger held it: ${JSON.stringify(after.heard)}`
+  );
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await cdp.detach();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page, 400);
 }
 
 /** Whether the visible parked rows stand on the phone's home page. */
@@ -1001,6 +1100,19 @@ async function phoneLegs(
     .filter({ visible: true })
     .first()
     .tap();
+
+  // The visible area changing under a finger holding the sheet.
+  await openSpawnLink(page, spawnLink);
+  await holdThroughResize(kit, page, `${label} (held through a resize)`);
+  await page
+    .locator(`${PHONE_FORM} button[aria-label="Close"]`)
+    .filter({ visible: true })
+    .first()
+    .tap();
+  await page.waitForSelector(PHONE_FORM, {
+    state: "detached",
+    timeout: 15_000,
+  });
 
   // 5. Overflow at 390: a 40-word prompt as the title.
   await openSpawnLink(page, spawnLink);

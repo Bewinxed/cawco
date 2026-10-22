@@ -12,6 +12,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { Drawer as Vaul } from "vaul-svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { holdStyle } from "#lib/components/ui/drawer/hold-style.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { cawco } from "../client.svelte";
@@ -401,6 +402,16 @@
       typeof at === "number" ? hostHeight * at : Number.parseFloat(at);
     return `${hostHeight - shown}px`;
   });
+  // Written on the sheet's node, never into its `style`: the host's height
+  // moves it, and a rewritten style attribute dropped the transform vaul
+  // writes while a finger drags the sheet (ui/drawer hold-style).
+  $effect(() => {
+    const node = drawer;
+    if (!node) {
+      return;
+    }
+    return holdStyle(node, { "--initial-transform": initial ?? null });
+  });
   $effect(() => {
     const request = cawco.previewRequests[instanceId];
     if (request !== undefined && placed) {
@@ -591,7 +602,6 @@
         event.preventDefault();
       }}
       onOpenAutoFocus={(event) => event.preventDefault()}
-      style={initial ? `--initial-transform:${initial}` : undefined}
       title="Beside the conversation"
       trapFocus={false}
       bind:ref={drawer}
