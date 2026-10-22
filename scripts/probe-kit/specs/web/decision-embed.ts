@@ -70,11 +70,12 @@
  * 10. No console error.
  * 11. An embed of a canvas of two states files (the ledger and the note)
  *    naming stories draws exactly those, from whichever file holds them,
- *    at 1440×900 light, on a page of its own: one from each file
- *    (`["January", "Pinned"]`) draws both frames, in that order, with no
- *    alert; one from the note alone (`["Pinned"]`) draws it with no alert,
- *    the ledger's section 0px tall; one neither file holds
- *    (`["Nowhere"]`) draws no frame and says so once, naming it, every
+ *    at 1440×900 and 390×844, light and dark, on a page of its own: one
+ *    from each file (`["January", "Pinned"]`) draws both frames, in that
+ *    order, with no alert; one from the note alone (`["Pinned"]`) draws it
+ *    with no alert, the ledger's section 0px tall; one neither file holds
+ *    (`["Nowhere"]`) draws no frame and says so once, naming it, the alert
+ *    seen inside the embed's width and the embed as tall as it, every
  *    section 0px tall. No section head is seen in any of them.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
@@ -403,6 +404,18 @@ function readNamed() {
     alerts: [...document.querySelectorAll("[role=alert]")].map(
       (one) => one.textContent?.trim() ?? ""
     ),
+    /** Each alert's box against the embed's own width: where it stands, seen and inside it. */
+    placed: [...document.querySelectorAll("[role=alert]")].map((one) => {
+      const r = one.getBoundingClientRect();
+      const round = (n: number) => Math.round(n * 10) / 10;
+      return {
+        left: round(r.left),
+        right: round(r.right),
+        h: round(r.height),
+        width: round(document.documentElement.getBoundingClientRect().width),
+        overflows: one.scrollWidth > one.clientWidth + 0.5,
+      };
+    }),
     sections: [...document.querySelectorAll<HTMLElement>(".cawco-section")].map(
       (section) => ({
         file: section.dataset.cawcoFile ?? "",
@@ -1266,81 +1279,99 @@ const spec: Spec = {
       }
 
       // 11. A canvas of two states files, embedded naming stories: each drawn from whichever file holds it.
-      const leg = "1440×900 light, named stories";
-      const page = await kit.page("desk", {
-        theme: "light",
-        init: [CAWCO_BRIDGE],
-      });
-      await page.goto(stage.pageUrl(NAMED_PAGE, "light"), {
-        waitUntil: "load",
-      });
-      const count = Object.keys(NAMED).length;
-      await page.waitForFunction(
-        ({ n, selector }) => document.querySelectorAll(selector).length === n,
-        { n: count, selector: EMBED_FRAME },
-        { timeout: 60_000 }
-      );
-      for (const handle of await page.$$(EMBED_FRAME)) {
-        await handle.scrollIntoViewIfNeeded();
-        const caption = await handle.evaluate(
-          (el) =>
-            el
-              .closest("figure")
-              ?.querySelector("[data-slot=media-caption]")
-              ?.textContent?.trim() ?? ""
-        );
-        const want = NAMED[caption] ?? { shows: [], missing: [] };
-        const frame = await handle.contentFrame();
-        // Every section loaded and every frame it draws said (drawn, failed or empty).
-        const ready = await frame
-          ?.waitForFunction(
-            ({ files, shows }) => {
-              const rest = [
-                ...document.querySelectorAll<HTMLElement>(
-                  '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status'
-                ),
-              ].map((one) => one.dataset.state ?? "");
-              return (
-                (window.__cawcoCanvas?.loaded().length ?? 0) === files &&
-                rest.length === shows &&
-                rest.every((one) => ["drawn", "failed", "empty"].includes(one))
+      for (const view of ["desk", "phone"] as const) {
+        for (const theme of THEMES) {
+          const leg = `${view === "desk" ? "1440×900" : "390×844"} ${theme}, named stories`;
+          const page = await kit.page(view, {
+            theme,
+            init: [CAWCO_BRIDGE],
+          });
+          await page.goto(stage.pageUrl(NAMED_PAGE, theme), {
+            waitUntil: "load",
+          });
+          const count = Object.keys(NAMED).length;
+          await page.waitForFunction(
+            ({ n, selector }) =>
+              document.querySelectorAll(selector).length === n,
+            { n: count, selector: EMBED_FRAME },
+            { timeout: 60_000 }
+          );
+          for (const handle of await page.$$(EMBED_FRAME)) {
+            await handle.scrollIntoViewIfNeeded();
+            const caption = await handle.evaluate(
+              (el) =>
+                el
+                  .closest("figure")
+                  ?.querySelector("[data-slot=media-caption]")
+                  ?.textContent?.trim() ?? ""
+            );
+            const want = NAMED[caption] ?? { shows: [], missing: [] };
+            const frame = await handle.contentFrame();
+            // Every section loaded and every frame it draws said (drawn, failed or empty).
+            const ready = await frame
+              ?.waitForFunction(
+                ({ files, shows }) => {
+                  const rest = [
+                    ...document.querySelectorAll<HTMLElement>(
+                      '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status'
+                    ),
+                  ].map((one) => one.dataset.state ?? "");
+                  return (
+                    (window.__cawcoCanvas?.loaded().length ?? 0) === files &&
+                    rest.length === shows &&
+                    rest.every((one) =>
+                      ["drawn", "failed", "empty"].includes(one)
+                    )
+                  );
+                },
+                { files: 2, shows: want.shows.length },
+                { timeout: 120_000, polling: 250 }
+              )
+              .then(
+                () => true,
+                () => false
               );
-            },
-            { files: 2, shows: want.shows.length },
-            { timeout: 120_000, polling: 250 }
-          )
-          .then(
-            () => true,
-            () => false
-          );
-        await settle(page, 600);
-        const read = await frame?.evaluate(readNamed);
-        if (!(ready && read)) {
-          kit.check(
-            `${leg}: “${caption}” loads both states files and draws ${want.shows.join(", ") || "nothing"}`,
-            false,
-            JSON.stringify(read ?? "no frame")
-          );
-          continue;
+            await settle(page, 600);
+            const read = await frame?.evaluate(readNamed);
+            if (!(ready && read)) {
+              kit.check(
+                `${leg}: “${caption}” loads both states files and draws ${want.shows.join(", ") || "nothing"}`,
+                false,
+                JSON.stringify(read ?? "no frame")
+              );
+              continue;
+            }
+            const drew = read.frames
+              .filter((one) => one.state === "drawn")
+              .map((one) => one.story);
+            const empty = read.sections.filter((one) => one.frames === 0);
+            const heads = read.sections.reduce((n, one) => n + one.heads, 0);
+            const said = read.alerts.filter((one) =>
+              want.missing.every((name) => one.includes(name))
+            );
+            // An alert is seen where the embed stands: a box of its own, inside the embed's width, its words wrapped in it, the embed as tall as it.
+            const tall = Math.round((await handle.boundingBox())?.height ?? 0);
+            const misplaced = read.placed.filter(
+              (one) =>
+                one.h <= 0 ||
+                one.left < -0.5 ||
+                one.right > one.width + 0.5 ||
+                one.overflows ||
+                tall + 0.5 < one.h
+            );
+            kit.check(
+              `${leg}: “${caption}” draws ${want.shows.join(", ") || "no frame"} from ${read.loaded.length} states files, ${want.missing.length ? `one alert naming ${want.missing.join(", ")}, inside the embed` : "no alert"}, every section holding nothing 0px tall, no section head seen (frames ${read.frames.map((one) => `${one.story} ${one.state}`).join(", ") || "none"}; alerts ${read.alerts.length}${read.alerts.length ? ` “${read.alerts.join("” “")}” at ${read.placed.map((one) => `${one.left}–${one.right} of ${one.width}px, ${one.h}px tall`).join(", ")}` : ""}; the embed ${tall}px tall; sections ${read.sections.map((one) => `${one.file.split("/").at(-1)} ${one.frames} frames ${one.h}px`).join(", ")})`,
+              drew.join() === want.shows.join() &&
+                read.frames.length === want.shows.length &&
+                read.alerts.length === want.missing.length &&
+                said.length === read.alerts.length &&
+                misplaced.length === 0 &&
+                empty.every((one) => one.h === 0) &&
+                heads === 0,
+              JSON.stringify(read)
+            );
+          }
         }
-        const drew = read.frames
-          .filter((one) => one.state === "drawn")
-          .map((one) => one.story);
-        const empty = read.sections.filter((one) => one.frames === 0);
-        const heads = read.sections.reduce((n, one) => n + one.heads, 0);
-        const said = read.alerts.filter((one) =>
-          want.missing.every((name) => one.includes(name))
-        );
-        kit.check(
-          `${leg}: “${caption}” draws ${want.shows.join(", ") || "no frame"} from ${read.loaded.length} states files, ${want.missing.length ? `one alert naming ${want.missing.join(", ")}` : "no alert"}, every section holding nothing 0px tall, no section head seen (frames ${read.frames.map((one) => `${one.story} ${one.state}`).join(", ") || "none"}; alerts ${read.alerts.length}${read.alerts.length ? ` “${read.alerts.join("” “")}”` : ""}; sections ${read.sections.map((one) => `${one.file.split("/").at(-1)} ${one.frames} frames ${one.h}px`).join(", ")})`,
-          drew.join() === want.shows.join() &&
-            read.frames.length === want.shows.length &&
-            read.alerts.length === want.missing.length &&
-            said.length === read.alerts.length &&
-            empty.every((one) => one.h === 0) &&
-            heads === 0,
-          JSON.stringify(read)
-        );
       }
     } finally {
       await stage.stop();
