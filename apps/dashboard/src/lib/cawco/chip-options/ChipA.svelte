@@ -26,12 +26,13 @@
     IconMinusCircle,
     IconPauseCircle,
     IconSuccess,
+    IconTodoBox,
+    IconTodoDone,
     IconWindow,
     IconWorkflow,
     IconWorking,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import IconTodoDone from "~icons/solar/check-square-bold-duotone";
   import { sessionSprite } from "../mark";
   import OsMark from "../OsMark.svelte";
   import PinMark from "../preview/PinMark.svelte";
@@ -41,7 +42,6 @@
   import ChipPeek from "./ChipPeek.svelte";
   import { type ChipSpec, nameOf, roleOf, stateOf } from "./kinds";
   import { chipOver } from "./shell";
-  import TodoBox from "./TodoBox.svelte";
 
   let { open = $bindable(false), ...chip }: ChipSpec & { open?: boolean } =
     $props();
@@ -172,7 +172,7 @@
           {#if state === "ticked"}
             <IconTodoDone class="{glyph} text-status-done-glyph" />
           {:else}
-            <TodoBox class={glyph} />
+            <IconTodoBox class={glyph} />
           {/if}
         {:else if chip.kind === "plan"}
           <TaskRing
