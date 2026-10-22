@@ -105,7 +105,7 @@
         .commit {
           color: var(--dim);
           font-size: 13px;
-          margin: 0 0 12px;
+          margin: 0 0 6px;
           overflow-wrap: anywhere;
 
           code {
@@ -327,13 +327,14 @@
       function surfaceCard(s) {
         const card = el("section", "surface");
         card.append(el("h2", "", `${s.label} (${s.entries.length})`));
-        const commit = el("p", "commit");
-        if (s.commit) {
-          commit.append("Changed by ", el("code", "", s.commit.sha.slice(0, 9)), ` ${s.commit.subject}`);
-        } else {
-          commit.textContent = "No commit named";
+        if (s.commits.length === 0) {
+          card.append(el("p", "commit", "No commit named"));
         }
-        card.append(commit);
+        for (const c of s.commits) {
+          const line = el("p", "commit");
+          line.append(el("code", "", c.sha.slice(0, 9)), ` ${c.subject} `, el("span", "states", `(${c.states.join(", ")})`));
+          card.append(line);
+        }
         for (const entry of s.entries) {
           card.append(entryRow(entry));
         }

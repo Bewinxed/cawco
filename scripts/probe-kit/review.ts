@@ -14,8 +14,9 @@
  * `approve-review.ts`, which reads the page's picks and moves the approved
  * surfaces' candidates over the approved set.
  *
- * Which commit on main made each change is the reviewer's finding, not the
- * run's: `<dir>/commits.json` (`{ "<spec>:<surface>": { "sha", "subject" } }`)
+ * Which commits on main made each change are the reviewer's finding, not the
+ * run's: `<dir>/commits.json` (`{ "<spec>:<surface>": [{ "sha", "subject",
+ * "states" }] }`, each commit with the states it changed)
  * names them, and the manifest carries each one. Written after the run,
  * `bun scripts/probe-kit/review.ts <dir>` writes the manifest again from the
  * run's `changed.json` and it, pictures untouched.
@@ -47,15 +48,18 @@ export interface ReviewEntry {
   size: string | null;
 }
 
-/** The commit on main that made a surface's change, as the reviewer found it. */
+/** A commit on main that changed a surface, as the reviewer found it: the states it changed. */
 export interface ReviewCommit {
   sha: string;
+  /** The surface's states it changed, as an entry names them less its pass ("rest", "row-menu"). */
+  states: string[];
   subject: string;
 }
 
 /** One surface's decision: approve every candidate under it, or reject them all. */
 export interface ReviewSurface {
-  commit: ReviewCommit | null;
+  /** Every commit that changed it, oldest first; empty where none is named yet. */
+  commits: ReviewCommit[];
   entries: ReviewEntry[];
   /** The page's `data-cawco-choice`: `<spec>:<surface>`. */
   id: string;
@@ -75,7 +79,7 @@ export interface ReviewManifest {
 /** The run's own record of what it wrote, for the manifest to be written again. */
 interface ReviewRecord {
   base: string;
-  surfaces: Omit<ReviewSurface, "commit">[];
+  surfaces: Omit<ReviewSurface, "commits">[];
 }
 
 /** "tab-strip" as words: "Tab strip". */
@@ -134,16 +138,19 @@ const head = (): string => {
 };
 
 /** `<dir>/commits.json`, by surface id; empty when the reviewer has written none. */
-async function commitsOf(at: string): Promise<Record<string, ReviewCommit>> {
+async function commitsOf(at: string): Promise<Record<string, ReviewCommit[]>> {
   const file = join(at, "commits.json");
   return existsSync(file)
-    ? (JSON.parse(await readFile(file, "utf8")) as Record<string, ReviewCommit>)
+    ? (JSON.parse(await readFile(file, "utf8")) as Record<
+        string,
+        ReviewCommit[]
+      >)
     : {};
 }
 
 /**
  * `<dir>/manifest.json` from the run's `changed.json` and the reviewer's
- * `commits.json`: every surface, with its commit where one is named.
+ * `commits.json`: every surface, with the commits named for it.
  */
 export async function writeManifest(dir: string): Promise<ReviewManifest> {
   const at = resolve(dir);
@@ -166,7 +173,7 @@ export async function writeManifest(dir: string): Promise<ReviewManifest> {
     base: record.base,
     surfaces: record.surfaces.map((s) => ({
       ...s,
-      commit: commits[s.id] ?? null,
+      commits: commits[s.id] ?? [],
     })),
   };
   await writeFile(
@@ -283,8 +290,8 @@ if (import.meta.main) {
     process.exit(2);
   }
   const manifest = await writeManifest(dir);
-  const named = manifest.surfaces.filter((s) => s.commit).length;
+  const named = manifest.surfaces.filter((s) => s.commits.length > 0).length;
   console.log(
-    `${join(dir, "manifest.json")}: ${manifest.surfaces.length} surface(s), ${named} with their commit`
+    `${join(dir, "manifest.json")}: ${manifest.surfaces.length} surface(s), ${named} with their commits`
   );
 }

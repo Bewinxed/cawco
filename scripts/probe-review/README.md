@@ -25,8 +25,9 @@ A capture that differs from its approved baseline FAILs the run. With
 A state with no approved baseline yet is a NOTE in the run and an entry on the
 page with no baseline to hold it to.
 
-Which commit on main made each surface's change is the reviewer's finding:
-write `<dir>/commits.json`, `{ "<spec>:<surface>": { "sha": "…", "subject": "…" } }`,
+Which commits on main made each surface's change are the reviewer's finding:
+write `<dir>/commits.json`,
+`{ "<spec>:<surface>": [{ "sha": "…", "subject": "…", "states": ["rest", …] }] }`,
 then `bun scripts/probe-kit/review.ts <dir>` writes the manifest again with them.
 
 The parent opens the folder with `artifact_create(kind: "preview", dir)`.
@@ -34,7 +35,7 @@ The parent opens the folder with `artifact_create(kind: "preview", dir)`.
 ## The page
 
 - **One section per surface** (the catalogue's surface, `surfaces/catalogue.ts`),
-  with the commit that changed it.
+  with every commit that changed it and the states each one changed.
 - **Each capture**: approved baseline, new capture, what changed. Hold the new
   capture to see the approved one in its place.
 - **One Approve or Reject per surface**: a `data-cawco-choice="<spec>:<surface>"`
@@ -67,7 +68,7 @@ before anything moves. `PROBE_BASELINES=<dir>` writes a scratch copy instead.
       "spec": "surfaces",
       "surface": "rail",
       "label": "Rail",
-      "commit": { "sha": "51a847eed…", "subject": "Stop jobs park on the project's rail row alone; …" },
+      "commits": [{ "sha": "51a847eed…", "subject": "Stop jobs park on the project's rail row alone; …", "states": ["rest"] }],
       "entries": [
         {
           "entry": "rail-rest-desk-light",
