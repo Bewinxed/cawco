@@ -4,7 +4,7 @@
  * evaluating its `inputs` export inside the sandbox worker.
  */
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import ts from "typescript";
 import { runtimeTree, standalone } from "./runtime";
 import { writeStateFileSync } from "./state-file";
@@ -112,6 +112,18 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
 };
 
 /**
+ * Where the standard library's declarations are read from: beside the
+ * compiler in the dev tree, the published copy in the binary
+ * (scripts/build-binary.ts `workflow/lib`). Both the default lib and every
+ * `/// <reference lib>` inside it resolve here: TypeScript reads the
+ * references from the host's `getDefaultLibLocation`, which on its own points
+ * beside the executing file, inside $bunfs in the binary.
+ */
+const LIB_LOCATION = standalone
+  ? join(runtimeTree("workflow"), "lib")
+  : dirname(ts.getDefaultLibFilePath(COMPILER_OPTIONS));
+
+/**
  * Typechecks a program in the sandbox's module context. Diagnostics come back
  * as Problems carrying the 1-based line so the caller can pin them onto nodes
  * through `compileWorkflow`'s line map.
@@ -130,12 +142,9 @@ export function typecheckProgram(program: string): Problem[] {
   cachedHost ??= ts.createCompilerHost(COMPILER_OPTIONS, true);
   const host: ts.CompilerHost = {
     ...cachedHost,
-    ...(standalone
-      ? {
-          getDefaultLibFileName: () =>
-            join(runtimeTree("workflow"), "lib", "lib.esnext.d.ts"),
-        }
-      : {}),
+    getDefaultLibLocation: () => LIB_LOCATION,
+    getDefaultLibFileName: (options) =>
+      join(LIB_LOCATION, ts.getDefaultLibFileName(options)),
     getSourceFile: (fileName, languageVersion, onError, shouldCreate) =>
       fileName === entry
         ? ts.createSourceFile(fileName, program, languageVersion, true)

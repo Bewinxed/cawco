@@ -48,10 +48,7 @@ export function packageDir(
     const manifest = join(path, "package.json");
     if (existsSync(manifest)) {
       const actual = JSON.parse(readFileSync(manifest, "utf8")).name;
-      if (
-        actual === name ||
-        (name === "typescript" && actual === "@typescript/typescript6")
-      ) {
+      if (actual === name) {
         return path;
       }
     }
@@ -122,7 +119,19 @@ export async function buildBinary(options: {
   const requirePi = createRequire(join(pi, "package.json"));
   const photon = packageDir("@silvia-odwyer/photon-node", requirePi);
   const zod = packageDir("zod", requireCore);
-  const typescript = packageDir("typescript", requireCore);
+  // The lib files beside the compiler the binary bundles, wherever its
+  // package keeps them: `typescript` is the @typescript/typescript6 shim,
+  // whose own lib/ holds no lib.*.d.ts (it re-exports @typescript/old).
+  const typescriptLib = dirname(
+    (
+      requireCore("typescript") as typeof import("typescript")
+    ).getDefaultLibFilePath({})
+  );
+  if (!existsSync(join(typescriptLib, "lib.es5.d.ts"))) {
+    throw new Error(
+      `No TypeScript lib files in ${typescriptLib}: workflow programs would typecheck without the standard library`
+    );
+  }
   const zodBundle = await bundled("Workflow zod", {
     entrypoints: [join(zod, "index.js")],
     target: "bun",
@@ -223,8 +232,8 @@ export async function buildBinary(options: {
       "dashboard/client"
     )),
     ["dashboard/handler.js", join(work, "dashboard-handler.js")],
-    ...(await filesUnder(join(typescript, "lib"), "workflow/lib")).filter(
-      ([name]) => name.endsWith(".d.ts")
+    ...(await filesUnder(typescriptLib, "workflow/lib")).filter(([name]) =>
+      name.endsWith(".d.ts")
     ),
     ...(await filesUnder(zod, "workflow/node_modules/zod")).filter(([name]) =>
       name.endsWith(".d.ts")

@@ -149,8 +149,11 @@ if (verb === "proof-stack") {
     throw new Error("Transcript worker failed");
   }
   console.log("transcript worker parsed two files");
+  // It leans on the standard library (Error, JSON, String, an array's
+  // push, Object.keys): a check missing the embedded lib files answers
+  // "Cannot find name 'Error'" for it.
   const program =
-    'import { z } from "zod"; export const inputs = z.object({ name:z.string() }); export default async function(w: Workflow<typeof inputs>) { await w.checkpoint("binary",w.inputs); return {name:w.inputs.name}; }';
+    'import { z } from "zod"; export const inputs = z.object({ name:z.string() }); export default async function(w: Workflow<typeof inputs>) { if (!w.inputs.name) { throw new Error("no name"); } const seen: string[] = []; seen.push(String(Object.keys(JSON.parse(JSON.stringify(w.inputs))).length)); await w.checkpoint("binary",w.inputs); return {name:w.inputs.name, seen}; }';
   const errors = typecheckProgram(program);
   if (errors.length) {
     throw new Error(JSON.stringify(errors));
