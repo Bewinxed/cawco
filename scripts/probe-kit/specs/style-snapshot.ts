@@ -8,7 +8,8 @@
  * dark; and the desk once with reduced motion), are what the baseline says.
  *
  *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b]              against the baselines
- *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] --approve    writes them
+ *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b]              writes them
+ *     --approve style-snapshot[:a,b]                                        (run.ts: a bare --approve writes none)
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage                    the coverage map
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage --styled-at=<rev>  of the files styled at <rev>
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage --surfaces=a        the element a difference line
