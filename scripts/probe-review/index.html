@@ -388,6 +388,11 @@
             "p",
             "",
             `${m.surfaces.length} surfaces, ${count} captures. Approve writes a surface's new captures as its baselines; Reject keeps the approved ones.`
+          ),
+          el(
+            "p",
+            "",
+            "Each surface's commits are those on main that touched a file its changed states render, in the stretch of history where they changed, first those that reach most of its states."
           )
         );
         main.append(head);
