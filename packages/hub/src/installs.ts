@@ -43,10 +43,10 @@ import {
   type InstallStep,
   type InstallsFrame,
   type InstallsRead,
+  JOIN_WAIT_STEP,
   type SshJoinJob,
   type SshJoinProblem,
   targetHost,
-  JOIN_WAIT_STEP,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
@@ -67,8 +67,8 @@ import {
   HUB_SAID,
   installCommand,
   KEY_STEP,
-  OFFER_STEP,
   LINE_BREAK,
+  OFFER_STEP,
   remoteCommand,
   STACK_LINE,
   sshPublicKey,
@@ -177,22 +177,22 @@ export interface FleetMachine {
 export interface InstallsDeps {
   /** Admits `machineId` when it waits to be admitted (hub-auth.ts): an install's code is the person's say-so. */
   readonly admit: (machineId: string) => void;
+  /** Says the installs changed, to every dashboard. */
+  readonly changed: (frame: InstallsFrame) => void;
+  readonly dbPath: string;
+  /** The fleet's machines now. */
+  readonly fleet: () => FleetMachine[];
   /**
    * Why the hub did not take the last register through SSH record `id`'s
    * forward, in words (server.ts `registerProven`), taken once; undefined
    * when it took it, or none came.
    */
   readonly heard: (id: string) => string | undefined;
+  readonly lifetime: HubLifetimeShape;
   /** The build the fleet is offered (binary-updates.ts), which an SSH add leaves its machine on; the words why there is none. */
   readonly offered: () => Promise<
     { channel: "stable" | "nightly"; version: string } | { refused: string }
   >;
-  /** Says the installs changed, to every dashboard. */
-  readonly changed: (frame: InstallsFrame) => void;
-  readonly dbPath: string;
-  /** The fleet's machines now. */
-  readonly fleet: () => FleetMachine[];
-  readonly lifetime: HubLifetimeShape;
   /** An install's outcome, for the person wherever they are (push.ts). */
   readonly outcome: (install: Install) => void;
   /** An outcome the person acted on: its push comes down. */
