@@ -34,8 +34,8 @@
  *
  * A plain Bun script, never a module of cawco, importing nothing of it but
  * core's dependency-free dir names (`claude-dirs.ts`), mount table
- * (`mount-table.ts`), nested-boundary words (`boundary-nesting.ts`) and
- * socat backlog (`socat.ts`),
+ * (`mount-table.ts`), nested-boundary words (`boundary-nesting.ts`), socat
+ * backlog (`socat.ts`) and hub preview origins (`hub-previews.ts`),
  * with safe git and state files, and the agent's own dependency-free proxy
  * relay (`proxy-relay.ts`): a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
@@ -67,6 +67,7 @@ import {
 } from "@cawco/core/boundary-nesting";
 import { projectClaudeRelative, TREE_STORE_DIR } from "@cawco/core/claude-dirs";
 import { isGitDirSync } from "@cawco/core/git-dir";
+import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { writeStateFileSync } from "@cawco/core/state-file";
@@ -307,6 +308,8 @@ const relay = await startProxyRelay({
   socket: relaySocket,
   upstream: { host: "127.0.0.1", port: srtPort },
   credential: `srt:${srtToken}`,
+  // The hub's own preview origins, dialed from here (proxy-relay.ts).
+  previews: process.env[HUB_PREVIEWS_ENV],
 });
 
 /**

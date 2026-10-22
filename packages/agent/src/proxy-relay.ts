@@ -37,6 +37,23 @@
  *   own network namespace, as srt puts its own bridges there, to that
  *   socket; then srt's proxy URLs pointed at it.
  *
+ * The one exception, the hub's own preview origins (core hub-previews.ts):
+ * srt refuses the owner's network, and the hub with it, so a preview a
+ * workspace is handed or asks `artifact_browse` for, on a hub the tailnet
+ * or the LAN alone reaches, could not be opened from inside. The agent keeps
+ * the origins the hub states in its register ack in a file of its own
+ * (agent hub-previews.ts), named to the relay by `previews`: a request head
+ * whose target is one of them (a CONNECT, or a plain HTTP request in
+ * absolute form) is dialed from the host, as the person's browser on the
+ * host reaches it, and every other goes to srt as before, which still
+ * refuses the LAN, the tailnet and the hub's other ports. What is reached so
+ * is a preview listener of the hub's, which lets in only a pass in host mode
+ * and is what every device on the owner's network reaches in port mode.
+ *
+ * The upstream is chosen at each request's head, the one before it left: an
+ * HTTP/1.1 client sends a request on a connection once the answer before it
+ * is read (no browser or curl pipelines), so the one before is done.
+ *
  * Whom it lets through: only what reaches the socket. Its dir is srt's temp
  * dir, owner-only (0700), under the runtime dir every other workspace's
  * policy read-denies, so no other workspace sees the path; inside the
@@ -45,12 +62,17 @@
  * the socket, as it reaches the token in any sandboxed process's
  * environment, and holds the host's whole network anyway.
  *
- * Dependency-free but for core's dependency-free socat backlog: the srt host
- * imports it (boundary-host.ts takes nothing of cawco's but dependency-free
- * modules).
+ * Dependency-free but for core's dependency-free socat backlog and hub
+ * preview origins: the srt host imports it (boundary-host.ts takes nothing of
+ * cawco's but dependency-free modules).
  */
-import { chmodSync, rmSync } from "node:fs";
+import { chmodSync, readFileSync, rmSync, statSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import {
+  type HubPreviewOrigins,
+  hubPreviewOriginsOf,
+  isHubPreview,
+} from "@cawco/core/hub-previews";
 import { SOCAT_BACKLOG } from "@cawco/core/socat";
 
 /** The relay's port inside a Linux workspace's sandbox, beside srt's 3128 (HTTP) and 1080 (SOCKS) there. */
@@ -138,6 +160,10 @@ const CHUNKED = /(?:^|,)\s*chunked\s*$/i;
 const DECIMAL = /^\d+$/;
 const HEX = /^[0-9a-f]+$/i;
 const PROXY_AUTHORIZATION = /^proxy-authorization\s*:/i;
+/** A request target in absolute form, as a client asks a proxy for a plain HTTP origin. */
+const ABSOLUTE_FORM = /^https?:\/\//i;
+/** A head's proxy-only fields, which a request dialed straight to its origin leaves out. */
+const PROXY_ONLY = /^proxy-(?:authorization|connection)\s*:/i;
 
 /** Where the relay stands in the client's stream of requests. */
 type Phase =
@@ -227,25 +253,6 @@ const withCredential = (
     "latin1"
   );
 
-/** A request's head, given the credential. */
-const headStep = (pending: Buffer, authorization: string): Step => {
-  const end = pending.indexOf(HEAD_END);
-  if (end < 0) {
-    return pending.length > MAX_HEAD
-      ? { refuse: "431 Request Header Fields Too Large" }
-      : WAIT;
-  }
-  const lines = linesOf(pending.subarray(0, end + 4));
-  const phase = afterHead(lines);
-  return phase
-    ? {
-        out: withCredential(lines, authorization),
-        phase,
-        rest: pending.subarray(end + 4),
-      }
-    : BAD_REQUEST;
-};
-
 /** Up to `phase.left` bytes of a body, as they are. */
 const bytesStep = (
   phase: Extract<Phase, { kind: "bytes" }>,
@@ -296,11 +303,12 @@ const afterSize = (line: string): Phase | undefined => {
     : { kind: "bytes", left: bytes + 2, after: "size" };
 };
 
-/** The next step from `phase` over `pending`. */
-const stepOf = (phase: Phase, pending: Buffer, authorization: string): Step => {
+/** The next step from `phase` (anything but a head) over `pending`. */
+const stepOf = (
+  phase: Exclude<Phase, { kind: "head" }>,
+  pending: Buffer
+): Step => {
   switch (phase.kind) {
-    case "head":
-      return headStep(pending, authorization);
     case "bytes":
       return bytesStep(phase, pending);
     case "size":
@@ -316,46 +324,229 @@ const stepOf = (phase: Phase, pending: Buffer, authorization: string): Step => {
   }
 };
 
-/** What the relay answers a request it cannot frame, before closing: srt never hears it. */
-const refusal = (status: string): Buffer =>
+/** What the relay answers, before closing, for a request srt never hears. */
+const refusal = (status: string, why = ""): Buffer =>
   Buffer.from(
-    `HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\nX-Proxy-Error: cawco-relay\r\n\r\n`,
+    `HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: ${Buffer.byteLength(why)}\r\nX-Proxy-Error: cawco-relay\r\n\r\n${why}`,
     "latin1"
   );
 
+const ESTABLISHED = Buffer.from(
+  "HTTP/1.1 200 Connection Established\r\n\r\n",
+  "latin1"
+);
+
+/** Where a request's head asks to go: a CONNECT's authority, or an absolute-form target's; none for origin form. */
+const targetOf = (
+  lines: readonly string[]
+):
+  | { connect: boolean; host: string; path: string; port: number }
+  | undefined => {
+  const [method = "", target = ""] = (lines[0] ?? "").split(" ");
+  const tunnel = method.toUpperCase() === "CONNECT";
+  const url = tunnel ? `http://${target}` : target;
+  if (!((tunnel || ABSOLUTE_FORM.test(target)) && URL.canParse(url))) {
+    return;
+  }
+  const parsed = new URL(url);
+  const port = Number(parsed.port) || (parsed.protocol === "https:" ? 443 : 80);
+  return {
+    connect: tunnel,
+    host: parsed.hostname,
+    path: `${parsed.pathname}${parsed.search}`,
+    port,
+  };
+};
+
+/** A head for its origin itself: the request line in origin form, its proxy-only fields gone. */
+const originHead = (lines: readonly string[], path: string): Buffer => {
+  const [method, , version] = (lines[0] ?? "").split(" ");
+  return Buffer.from(
+    `${[
+      `${method} ${path || "/"} ${version}`,
+      ...lines.slice(1).filter((line) => !PROXY_ONLY.test(line)),
+    ].join("\r\n")}\r\n\r\n`,
+    "latin1"
+  );
+};
+
 /**
- * One client connection, relayed to srt's proxy at `upstream`: each request
- * head given `authorization`, every other byte passed through in order, and
- * srt's answers piped back untouched.
+ * The hub's preview origins, read from `path` again whenever the agent
+ * writes it anew (agent hub-previews.ts); none when there is no file or it
+ * is not one.
+ */
+const previewOriginsAt = (path: string | undefined) => {
+  let read: { at: number; origins: HubPreviewOrigins | null } = {
+    at: -1,
+    origins: null,
+  };
+  return (): HubPreviewOrigins | null => {
+    if (!path) {
+      return null;
+    }
+    let at: number;
+    try {
+      at = statSync(path).mtimeMs;
+    } catch {
+      return null;
+    }
+    if (at !== read.at) {
+      let origins: HubPreviewOrigins | null = null;
+      try {
+        origins = hubPreviewOriginsOf(JSON.parse(readFileSync(path, "utf8")));
+      } catch {
+        origins = null;
+      }
+      read = { at, origins };
+    }
+    return read.origins;
+  };
+};
+
+/** Where one request goes: srt's proxy, with its credential, or one of the hub's preview origins, from here. */
+type Route = { kind: "srt" } | { host: string; kind: "hub"; port: number };
+
+/**
+ * One client connection: each request's head routed ({@link Route}), given
+ * srt's `authorization` when it goes to srt's proxy at `srt`, every other
+ * byte passed through in order, and each answer piped back untouched.
  */
 const relayOne = (
   client: Socket,
-  upstream: { host: string; port: number },
-  authorization: string
+  srt: { host: string; port: number },
+  authorization: string,
+  previews: () => HubPreviewOrigins | null
 ): void => {
-  const srt = connect({ ...upstream, allowHalfOpen: true });
+  let upstream: Socket | undefined;
+  let routed = "";
   let pending: Buffer = EMPTY;
   let phase: Phase = { kind: "head" };
   let refused = false;
-  srt.on("drain", () => client.resume());
+
+  const broken = (): void => {
+    client.destroy();
+    upstream?.destroy();
+  };
+
+  /** The upstream `route` names, the one before let go when it differs. */
+  const upstreamFor = (route: Route): Socket => {
+    const key = route.kind === "srt" ? "srt" : `${route.host}:${route.port}`;
+    if (upstream && key === routed) {
+      return upstream;
+    }
+    if (upstream) {
+      upstream.unpipe(client);
+      upstream.removeAllListeners();
+      upstream.on("error", () => undefined);
+      upstream.destroy();
+    }
+    const opened = connect({
+      ...(route.kind === "srt" ? srt : { host: route.host, port: route.port }),
+      allowHalfOpen: true,
+    });
+    opened.on("drain", () => client.resume());
+    opened.on("error", broken);
+    // Each direction ends on its own (both sockets half-open): a client
+    // that shuts its side after its request still reads the whole answer,
+    // and the last bytes (srt's 403 before it closes) are flushed first.
+    opened.pipe(client);
+    upstream = opened;
+    routed = key;
+    return opened;
+  };
+
+  const refuse = (status: string, why?: string): void => {
+    refused = true;
+    upstream?.destroy();
+    client.end(refusal(status, why));
+  };
+
+  const send = (to: Socket, bytes: Buffer): void => {
+    if (bytes.length > 0 && !to.write(bytes)) {
+      client.pause();
+    }
+  };
+
+  /** A CONNECT to one of the hub's preview origins: answered here once its socket is open, or refused naming why. */
+  const tunnelToHub = (to: Socket, host: string, port: number): void => {
+    to.off("error", broken);
+    to.once("error", (error: NodeJS.ErrnoException) => {
+      if (to.connecting) {
+        refuse(
+          "502 Bad Gateway",
+          `the hub's preview at ${host}:${port} did not answer from this machine (${error.code ?? error.message})`
+        );
+        return;
+      }
+      broken();
+    });
+    to.once("connect", () => {
+      to.on("error", broken);
+      client.write(ESTABLISHED);
+    });
+  };
+
+  /** A request's head, routed: the next phase, or false to wait for more. */
+  const head = (): boolean => {
+    const end = pending.indexOf(HEAD_END);
+    if (end < 0) {
+      if (pending.length > MAX_HEAD) {
+        refuse("431 Request Header Fields Too Large");
+      }
+      return false;
+    }
+    const lines = linesOf(pending.subarray(0, end + 4));
+    const next = afterHead(lines);
+    if (!next) {
+      refuse("400 Bad Request");
+      return false;
+    }
+    pending = pending.subarray(end + 4);
+    const target = targetOf(lines);
+    const origins = previews();
+    if (target && origins && isHubPreview(origins, target.host, target.port)) {
+      // A tunnel is a connection of its own: never one a plain request used.
+      if (target.connect) {
+        routed = "";
+      }
+      const to = upstreamFor({
+        kind: "hub",
+        host: target.host,
+        port: target.port,
+      });
+      if (target.connect) {
+        tunnelToHub(to, target.host, target.port);
+      } else {
+        send(to, originHead(lines, target.path));
+      }
+    } else {
+      send(upstreamFor({ kind: "srt" }), withCredential(lines, authorization));
+    }
+    phase = next;
+    return true;
+  };
+
+  /** What follows a head, passed to the upstream it went to: false to wait for more. */
+  const body = (): boolean => {
+    const step = stepOf(phase as Exclude<Phase, { kind: "head" }>, pending);
+    if ("wait" in step) {
+      return false;
+    }
+    if ("refuse" in step) {
+      refuse(step.refuse);
+      return false;
+    }
+    if (upstream) {
+      send(upstream, step.out);
+    }
+    ({ rest: pending, phase } = step);
+    return true;
+  };
 
   /** Takes what `pending` holds as far as the phase lets it go. */
   const take = (): void => {
-    for (;;) {
-      const step = stepOf(phase, pending, authorization);
-      if ("wait" in step) {
-        return;
-      }
-      if ("refuse" in step) {
-        refused = true;
-        srt.destroy();
-        client.end(refusal(step.refuse));
-        return;
-      }
-      if (step.out.length > 0 && !srt.write(step.out)) {
-        client.pause();
-      }
-      ({ rest: pending, phase } = step);
+    while (!refused && (phase.kind === "head" ? head() : body())) {
+      // Each step moved `pending` on: read the next.
     }
   };
 
@@ -366,38 +557,32 @@ const relayOne = (
     pending = pending.length > 0 ? Buffer.concat([pending, chunk]) : chunk;
     take();
   });
-  // Each direction ends on its own (both sockets half-open): a client that
-  // shuts its side after its request still reads srt's whole answer, and
-  // srt's last bytes (a 403 before it closes) are flushed before the
-  // client's side ends.
-  srt.pipe(client);
   client.on("end", () => {
     if (!refused) {
-      srt.end();
+      upstream?.end();
     }
   });
-  const broken = (): void => {
-    client.destroy();
-    srt.destroy();
-  };
   client.on("error", broken);
-  srt.on("error", broken);
 };
 
 /**
  * The relay's host half: listening on unix socket `socket` (owner-only, a
  * stale one replaced), each connection relayed to srt's proxy at `upstream`
- * with `credential` (`user:token`) on every request.
+ * with `credential` (`user:token`) on every request, but a request for one
+ * of the hub's preview origins, which the file at `previews` names (agent
+ * hub-previews.ts), dialed from here.
  */
 export const startProxyRelay = async (options: {
   credential: string;
+  previews?: string;
   socket: string;
   upstream: { host: string; port: number };
 }): Promise<Server> => {
   const authorization = `Basic ${Buffer.from(options.credential).toString("base64")}`;
+  const previews = previewOriginsAt(options.previews);
   rmSync(options.socket, { force: true });
   const server = createServer({ allowHalfOpen: true }, (client) =>
-    relayOne(client, options.upstream, authorization)
+    relayOne(client, options.upstream, authorization, previews)
   );
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

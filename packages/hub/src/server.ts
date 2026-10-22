@@ -381,6 +381,11 @@ import {
   initialHandover,
   presenceOf,
 } from "@cawco/core/handover";
+import {
+  type HubPreviewOrigins,
+  isHubPreview,
+  originsFor,
+} from "@cawco/core/hub-previews";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
@@ -1605,7 +1610,8 @@ const registerAck = (
   upstream: UpstreamRules,
   hostsHub: boolean,
   revokedCredentials: string[],
-  gitOrigins: string[]
+  gitOrigins: string[],
+  previewOrigins: HubPreviewOrigins
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1623,6 +1629,7 @@ const registerAck = (
     dashboardPorts: { hub: DASHBOARD_PORT, local: LOCAL_DASHBOARD_PORT },
     hostsHub,
     previewPorts: PREVIEW_PORTS,
+    previewOrigins,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
     instances,
@@ -11824,6 +11831,29 @@ export const createServer = (
     ),
   ];
   /**
+   * This hub's own preview origins (core hub-previews.ts,
+   * RegisterAckPayload.previewOrigins): every name it answers by
+   * ({@link hubOwnNames}) and the host its dashboard's links name, on its
+   * preview range, and host mode's domain. A workspace's relay dials these
+   * from its host, past the boundary's refusal of the owner's network.
+   */
+  /** The machines whose agent's last register said its workspaces' relays reach {@link hubPreviewOrigins}. */
+  const relayingPreviews = new Set<string>();
+  const hubPreviewOrigins = (): HubPreviewOrigins => ({
+    names: [
+      ...new Set(
+        [
+          ...hubOwnNames(),
+          new URL(dashboardUrl(registry)).hostname.replace(IPV6_BRACKETS, ""),
+        ]
+          .filter((name) => !name.includes("%"))
+          .map((name) => name.toLowerCase())
+      ),
+    ],
+    ports: PREVIEW_PORTS,
+    domain: previewListeners.domain(),
+  });
+  /**
    * The domain a page last reached CawCo through (every dashboard reads the
    * journey as it loads): the setup card recommends Set up with it.
    */
@@ -12592,20 +12622,35 @@ export const createServer = (
     },
     browse: (instance, row) => browseAt(instance, row),
     // A Linux workspace dials out through srt, which refuses the owner's own
-    // network and its machine's own addresses (core boundary-reach.ts); a
-    // Mac's Seatbelt boundary dials as its host does.
-    workspaceReach: (url, machineId) => {
+    // network and its machine's own addresses (core boundary-reach.ts),
+    // but for this hub's own preview origins, which its relay dials from the
+    // host when its agent says so (agent proxy-relay.ts); a Mac's Seatbelt
+    // boundary dials as its host does.
+    workspaceReach: async (url, machineId) => {
       const machine = db
         .listAgents()
         .find((agent) => agent.machineId === machineId);
-      return machine?.os.startsWith("linux")
-        ? workspaceReach(
-            url,
-            machine.machineCapabilities?.items.find(
-              (item) => item.id === "public-address"
-            )?.addresses ?? []
-          )
-        : Promise.resolve(null);
+      if (!machine?.os.startsWith("linux")) {
+        return null;
+      }
+      const at = new URL(url);
+      const port = Number(at.port) || (at.protocol === "https:" ? 443 : 80);
+      if (
+        relayingPreviews.has(machineId) &&
+        isHubPreview(
+          originsFor(hubPreviewOrigins(), await isHubMachine(machineId)),
+          at.hostname,
+          port
+        )
+      ) {
+        return null;
+      }
+      return await workspaceReach(
+        url,
+        machine.machineCapabilities?.items.find(
+          (item) => item.id === "public-address"
+        )?.addresses ?? []
+      );
     },
     previewAddress: (instanceId) =>
       onPreviewPort(() => previewListeners.address(instanceId)),
@@ -31328,6 +31373,16 @@ export const createServer = (
                 revivable.map((orphan) => orphan.row.id)
               );
               freshAccountReports(message.machineId);
+              // Whether this connection's workspaces reach the hub's preview
+              // origins through their relays (agent proxy-relay.ts).
+              if (
+                (message.payload as { relaysHubPreviews?: unknown } | null)
+                  ?.relaysHubPreviews === true
+              ) {
+                relayingPreviews.add(message.machineId);
+              } else {
+                relayingPreviews.delete(message.machineId);
+              }
               sendFrame(
                 ws,
                 registerAck(
@@ -31351,7 +31406,8 @@ export const createServer = (
                   // Which of the credentials its redaction store holds the
                   // hub has revoked since: those leave the store.
                   db.revokedAmong(credentialHashesOf(message.payload)),
-                  hubGitOrigins()
+                  hubGitOrigins(),
+                  hubPreviewOrigins()
                 )
               );
               // Behind its ack, which it waits for to take requests: what

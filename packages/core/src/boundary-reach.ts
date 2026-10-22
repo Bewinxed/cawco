@@ -2,8 +2,10 @@
  * What a Linux workspace's boundary dials out to, and what it never does: the
  * one statement of it, read by the boundary's srt settings (agent
  * boundary-policy.ts `srtSettings`) and by the hub before it hands a session
- * in a workspace an address to open (hub workspace-reach.ts), so no session
- * is handed a URL its boundary refuses.
+ * in a workspace an address to open, so no session is handed a URL its
+ * boundary refuses. The one exception is the hub's own preview origins,
+ * which each workspace's relay dials from the host (core hub-previews.ts,
+ * agent proxy-relay.ts): the hub asks this only of every other origin.
  */
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";

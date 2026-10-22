@@ -953,6 +953,9 @@ interface HostPattern {
   shape: RegExp;
 }
 
+/** The port a host pattern's name ends in (`HostPattern.after`), when it names one. */
+const PATTERN_PORT = /:(\d+)$/;
+
 /** One DNS label: what a `{session}` name's placeholder holds ({@link labelOf}). */
 const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -1690,6 +1693,19 @@ export function createPreviewListeners(
         patterns: [`*.${hostPattern.domain}`, hostPattern.domain],
         sample: sampleName(hostPattern),
       };
+    },
+
+    /**
+     * Host mode's preview domain and the port its pattern names (443 when it
+     * names none): with the preview range, where its names are served (core
+     * hub-previews.ts). Null in port mode, or while host mode doesn't stand.
+     */
+    domain(): { name: string; port: number } | null {
+      if (!hostPattern) {
+        return null;
+      }
+      const named = PATTERN_PORT.exec(hostPattern.after)?.[1];
+      return { name: hostPattern.domain, port: named ? Number(named) : 443 };
     },
 
     settings(): PreviewSettings {

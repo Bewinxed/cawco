@@ -110,6 +110,7 @@ import {
   type ListedWorkspace,
 } from "@cawco/core/handover";
 import { HEAVY_RUN_HELD_ENV } from "@cawco/core/heavy-run";
+import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import {
   currentEndpoint,
   currentKeeper,
@@ -206,6 +207,7 @@ import {
   guardedPushParameters,
   openGitDoor,
 } from "./hub-git";
+import { hubPreviewsPath } from "./hub-previews";
 import { type HeldProc, KeeperPool } from "./keepers";
 import { logRelay } from "./log-relay";
 import {
@@ -2926,6 +2928,9 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         TMPDIR: srtTmp,
         CLAUDE_CODE_TMPDIR: policy.scratch,
         CAWCO_WORKSPACE: id,
+        // The hub's preview origins, which the relay dials from here
+        // (proxy-relay.ts): a file of the agent's that no sandbox reads.
+        [HUB_PREVIEWS_ENV]: hubPreviewsPath(),
         PATH: SYSTEM_PATH,
         // A place is a person's own folder: srt resolves its own
         // mandatory names against the host's working directory and makes a

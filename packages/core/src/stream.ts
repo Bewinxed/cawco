@@ -16,6 +16,7 @@
  */
 
 import type { CarrySessionRequest } from "./harness";
+import type { HubPreviewOrigins } from "./hub-previews";
 
 /**
  * The dashboard wire's version, raised only when the wire breaks: when a
@@ -377,6 +378,13 @@ export interface RegisterAckPayload {
    */
   machineCredential: string;
   ok: true;
+  /**
+   * The hub's own preview origins (core hub-previews.ts): what a workspace's
+   * relay on this machine dials from the host, past the boundary's refusal of
+   * the owner's network. Absent from a hub from before it: no workspace then
+   * reaches one.
+   */
+  previewOrigins?: HubPreviewOrigins;
   /** The ports the hub's preview listeners take (hub config.ts `PREVIEW_PORTS`), served on the agent's loopback beside {@link dashboardPorts}. */
   previewPorts: { first: number; last: number };
   /**

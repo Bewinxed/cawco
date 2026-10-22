@@ -218,6 +218,7 @@ import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, stopCarrying } from "./hub-loopback";
+import { keepHubPreviews } from "./hub-previews";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
@@ -871,6 +872,13 @@ export interface RegisterPayload extends MachineIdentity {
    * ({@link keyProof}); absent before the person admitted the machine.
    */
   proof?: string;
+  /**
+   * This machine's workspaces reach the hub's own preview origins through
+   * their relays (proxy-relay.ts, hub-previews.ts), from the origins the ack
+   * names: the hub hands a workspace here a pass to one of them. Absent from
+   * an agent from before it, whose workspaces reach none.
+   */
+  relaysHubPreviews: true;
   /**
    * The sessions this machine could resume, so the rows the daemon no
    * longer carries settle as sleeping or as lost rather than all alike. Absent
@@ -1612,6 +1620,7 @@ const attach = (
       sessionAddresses: supervisor.sessionAddresses,
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
+      relaysHubPreviews: true,
       custody: snapshot.custody,
       harnessKinds: harnesses().map((adapter) => adapter.kind),
       credentialHashes: storedHashes(),
@@ -2707,6 +2716,16 @@ const attach = (
             previews: (envelope.payload as RegisterAckPayload).previewPorts,
           },
           (envelope.payload as RegisterAckPayload).hostsHub
+        );
+        // The hub's own preview origins, which this machine's workspaces
+        // reach through their relays from the host (hub-previews.ts).
+        keepHubPreviews(
+          (envelope.payload as RegisterAckPayload).previewOrigins,
+          (envelope.payload as RegisterAckPayload).hostsHub
+        ).catch((error: unknown) =>
+          console.warn(
+            `[agent] the hub's preview origins were not kept, so this machine's workspaces reach none: ${error instanceof Error ? error.message : String(error)}`
+          )
         );
         // What the hub no longer honours of what the register named leaves
         // the redaction store: it grants nothing, so nothing it shows leaks.

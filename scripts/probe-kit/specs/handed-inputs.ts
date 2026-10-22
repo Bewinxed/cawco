@@ -22,13 +22,14 @@
  *    page's HTML and its picks file, the pin's words and the reply, the
  *    canvas's scene with its rectangle and its PNG, the preview's pass, the
  *    picture's bytes, the text, the blob's bytes; B's brief names every one.
- * 5. The preview as B's workspace reaches it (core boundary-reach.ts, read
- *    here as the hub reads it for B's machine): an origin the boundary
- *    reaches lands with a pass, and B's curl of it from inside its
- *    workspace gets the folder's page; one it refuses (a Linux workspace
- *    and an origin on the owner's tailnet, as a scratch fleet's is) lands
- *    with no pass and why in its place, and B's `artifact_browse` of it is
- *    refused in the same words, never handed an address it cannot open.
+ * 5. The preview's pass opens from inside B's workspace on this fleet's
+ *    origin, the hub machine's tailnet name, which srt refuses for any other
+ *    host: B's relay dials the hub's own preview origins from the host
+ *    (agent proxy-relay.ts, core hub-previews.ts). B's curl of the pass gets
+ *    the folder's page, and B's `artifact_browse` of the preview answers an
+ *    address, not a refusal. A private address that is not the hub's
+ *    (192.168.255.254) and the hub's own port that is no preview's, on that
+ *    same tailnet name, are still refused (403).
  * 6. The parent's `handoff` tool, called with a `{ text, name }` input,
  *    lands it in B's inputs and names it; B finishes.
  * 7. OpenCode and pi: a parent on each calls `delegate` as that harness
@@ -43,7 +44,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
-import { workspaceReach } from "../../../packages/core/src/boundary-reach";
 import {
   MACHINE,
   MODEL,
@@ -81,6 +81,17 @@ const CANVAS = `probe-canvas-${RUN}`;
 const PAGE_NAME = `probe-page-${RUN}`;
 const PREVIEW = `probe-preview-${RUN}`;
 const BOX = "probe-box";
+const LAN_CODE = /lan:\d+/;
+const HUB_API_CODE = /hub-api:\d+/;
+
+/** The request's message `back` from its last, as sent: `1`, a tool call's result; `2`, the call. */
+const messageBack = (body: string, back: number): string => {
+  const parsed = JSON.parse(body) as { messages?: unknown[] };
+  return JSON.stringify(parsed.messages?.at(-back) ?? null);
+};
+
+/** A private address that is not the hub's: B's boundary still refuses it. */
+const LAN_ADDRESS = "192.168.255.254";
 const PIN_ID = crypto.randomUUID();
 const HANDOFF_FILE = "handoff-note.md";
 
@@ -136,6 +147,9 @@ interface Progress {
   a: { finished: boolean; made: boolean };
   b: {
     finished: boolean;
+    /** The hub's own port that serves no preview, on the pass's host: refused. */
+    hubApi: string;
+    opened: boolean;
     /** The preview's id, for B's artifact_browse of it. */
     preview: string;
     read: boolean;
@@ -147,7 +161,14 @@ interface Progress {
 /** Where each mocked session is. */
 const state: Progress = {
   a: { made: false, finished: false },
-  b: { read: false, tried: false, finished: false, preview: "" },
+  b: {
+    read: false,
+    opened: false,
+    tried: false,
+    finished: false,
+    preview: "",
+    hubApi: "",
+  },
   others: { opencode: otherLeg("opencode"), pi: otherLeg("pi") },
 };
 
@@ -188,9 +209,9 @@ const leafA = (request: Seen): Reply => {
 };
 
 /**
- * Leaf B: list its inputs and read the preview's file; open its pass when it
- * has one, else ask artifact_browse for it; work until the handoff's input
- * is named, then finish.
+ * Leaf B: list its inputs and read the preview's file; open its pass, and
+ * try a private address and the hub's own other port; ask artifact_browse
+ * for the preview; work until the handoff's input is named, then finish.
  */
 const leafB = (request: Seen): Reply => {
   if (state.b.finished) {
@@ -203,15 +224,20 @@ const leafB = (request: Seen): Reply => {
       description: "List the inputs and read the preview's",
     });
   }
+  if (!state.b.opened) {
+    state.b.opened = true;
+    return call("Bash", {
+      command: [
+        `url=$(grep -o '"url": *"[^"]*"' "$TMPDIR/inputs/artifact-${PREVIEW}.json" | tail -1 | sed 's/.*"url": *"//; s/"$//')`,
+        `curl -sSL -c "$TMPDIR/jar" -b "$TMPDIR/jar" "$url"`,
+        `echo; echo "lan:$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://${LAN_ADDRESS}/)"`,
+        `echo "hub-api:$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 ${state.b.hubApi})"`,
+      ].join("; "),
+      description:
+        "Open the preview's pass, and two addresses that stay refused",
+    });
+  }
   if (!state.b.tried) {
-    // The file as the tool result carries it, JSON in JSON: `"pass": {` escaped once.
-    if (request.body.includes(String.raw`\"pass\": {`)) {
-      state.b.tried = true;
-      return call("Bash", {
-        command: `url=$(grep -o '"url": *"[^"]*"' "$TMPDIR/inputs/artifact-${PREVIEW}.json" | tail -1 | sed 's/.*"url": *"//; s/"$//') && curl -sSL -c "$TMPDIR/jar" -b "$TMPDIR/jar" "$url"`,
-        description: "Open the preview's pass",
-      });
-    }
     const reply = found(request, BROWSE, { id: state.b.preview });
     state.b.tried = reply.tool?.name === BROWSE;
     return reply;
@@ -526,16 +552,14 @@ const landed = async (
 };
 
 /**
- * Step 5: with an origin B's workspace reaches (`unreached` null), the
- * preview lands with a pass and B's curl of it gets the folder's page; with
- * one it refuses, it lands with no pass and `unreached` in its place, and
- * B's artifact_browse of it is refused in the same words.
+ * Step 5: the preview lands with a pass; B's curl of it from inside its
+ * workspace gets the folder's page, its artifact_browse answers an address,
+ * and a private address and the hub's own other port stay refused (403).
  */
 const previewReach = async (
   { check }: Kit,
   fleet: KitFleet,
-  b: Started,
-  unreached: string | null
+  b: Started
 ): Promise<void> => {
   const landedFile = await readFile(
     join(b.workspaceTmp, "inputs", `artifact-${PREVIEW}.json`),
@@ -547,52 +571,59 @@ const previewReach = async (
   } catch {
     said = {};
   }
-  if (unreached === null) {
-    check(
-      "5: the preview's origin is one B's workspace reaches: it lands with a pass",
-      typeof said.pass?.url === "string",
-      landedFile.slice(0, 400) || "missing"
-    );
-    const opened = await until(
-      "B's curl of the preview's pass",
-      () =>
-        fleet.seen.find(
-          (one) =>
-            one.afterTool &&
-            one.all.includes(TAG_B) &&
-            one.body.includes(PREVIEW_TOKEN)
-        ),
-      Boolean,
-      120_000
-    ).catch(() => undefined);
-    check(
-      "5: the preview's pass, opened from inside B's workspace, serves the folder's page",
-      opened !== undefined,
-      opened ? "the page's words in B's curl" : "no curl answer with the page"
-    );
-    return;
-  }
   check(
-    "5: the preview's origin is one B's workspace refuses: it lands with no pass, and why in its place",
-    said.pass === null && (said.reach ?? "").startsWith(unreached),
+    "5: the preview lands with a pass, on the hub machine's tailnet origin",
+    typeof said.pass?.url === "string",
     said.reach ?? (landedFile.slice(0, 400) || "missing")
   );
-  const refused = await until(
+  const tried = await until(
+    "B's curls",
+    () =>
+      fleet.seen.find(
+        (one) =>
+          one.afterTool &&
+          one.all.includes(TAG_B) &&
+          one.body.includes("hub-api:")
+      ),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  const said5 = tried?.body ?? "";
+  check(
+    "5: the preview's pass, opened from inside B's workspace, serves the folder's page",
+    said5.includes(PREVIEW_TOKEN),
+    tried ? "B's curl answered without the page's words" : "no curl answer"
+  );
+  check(
+    "5: a private address that is not the hub's stays refused from inside B's workspace",
+    said5.includes("lan:403"),
+    said5.match(LAN_CODE)?.[0] ?? "no answer"
+  );
+  check(
+    "5: the hub's own port that serves no preview stays refused from inside B's workspace",
+    said5.includes("hub-api:403"),
+    said5.match(HUB_API_CODE)?.[0] ?? "no answer"
+  );
+  const browsed = await until(
     "B's artifact_browse of the preview, answered",
     () =>
       fleet.seen.find(
         (one) =>
           one.afterTool &&
           one.all.includes(TAG_B) &&
-          one.body.includes("a workspace's boundary reaches public hosts only")
+          messageBack(one.body, 2).includes(BROWSE)
       ),
     Boolean,
     120_000
   ).catch(() => undefined);
   check(
-    "5: B's artifact_browse of it is refused in the same words, not handed an address it cannot open",
-    refused !== undefined,
-    refused ? unreached : "no refusal in B's requests"
+    "5: B's artifact_browse of the preview, from inside its workspace, answers an address",
+    browsed !== undefined &&
+      messageBack(browsed.body, 1).includes("expiresAt") &&
+      !messageBack(browsed.body, 1).includes(
+        "a workspace's boundary reaches public hosts only"
+      ),
+    browsed ? messageBack(browsed.body, 1).slice(0, 300) : "no answer"
   );
 };
 
@@ -760,25 +791,13 @@ const spec: Spec = {
       })
     ).id;
     state.b.preview = previewId;
-    // What B's workspace reaches, read as the hub reads it for B's machine
-    // (this one): the parent, outside every workspace, is handed the address.
+    // The address the parent, outside every workspace, is handed.
     const { url: passUrl } = await fleet.api<{ url: string }>(
       `/api/instances/${parent}/artifacts/${previewId}/browse`,
       {}
     );
-    // The machine's own addresses, as its agent told the hub (`public-address`).
-    const capabilities = fleet.query<{ caps: string | null }>(
-      "SELECT machine_capabilities AS caps FROM agents WHERE machine_id = ?",
-      MACHINE
-    )[0]?.caps;
-    const own =
-      (
-        JSON.parse(capabilities ?? "null") as {
-          items: { addresses?: string[]; id: string }[];
-        } | null
-      )?.items.find((item) => item.id === "public-address")?.addresses ?? [];
-    const unreached =
-      process.platform === "linux" ? await workspaceReach(passUrl, own) : null;
+    // The hub's own port, which serves no preview, on the pass's host.
+    state.b.hubApi = `http://${new URL(passUrl).hostname}:${new URL(fleet.base).port}/`;
     await pinned(kit, fleet, parent, pageId);
     await sendPicture(fleet, parent);
 
@@ -828,7 +847,7 @@ const spec: Spec = {
     await landed(kit, b, a.workItemId);
 
     // 5. The preview as B's workspace reaches it.
-    await previewReach(kit, fleet, b, unreached);
+    await previewReach(kit, fleet, b);
 
     // 6. The parent's handoff tool takes a { text, name } input.
     const response = await fetch(
