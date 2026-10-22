@@ -147,9 +147,20 @@ export interface Person {
   readonly state: "here" | "away";
 }
 
-/** `GET /api/person` and the socket's `person` frame: the person, and the machines that can count toward it. */
+/** The socket's `person` frame, and `GET /api/person` beside its {@link PersonRead}: the person, and the machines that can count toward it. */
 export interface PersonView extends Person {
   readonly devices: readonly PresenceDevice[];
+}
+
+/**
+ * `GET /api/person`: the view, and the machine the asking browser is on, as
+ * the hub ties it by the address the request came from (hub
+ * notifications.ts `machineAt`); null when no one machine is. Each browser
+ * reads its own: the `person` frame, the same to every dashboard, never
+ * carries it.
+ */
+export interface PersonRead extends PersonView {
+  readonly thisMachine: string | null;
 }
 
 /** Hub-originated: the person and the machines that count, whole, on each change. */

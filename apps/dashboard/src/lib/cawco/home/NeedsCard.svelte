@@ -200,7 +200,7 @@
       case "desk":
         return item.done
           ? presenceWords.done(item.idle)
-          : presenceWords.lead(item.idle);
+          : presenceWords.lead(item);
       case "relay":
         return "";
       case "artifact":
@@ -1350,18 +1350,23 @@
       </div>
     {:else if item.kind === "desk" && !item.done}
       <!-- Skip and Allow as peers (The Peer Rule): Skip puts the row away in
-           this browser, the presence menu still offers it; Allow asks the
-           browser for both on one press. A refusal stands over them, with
-           where to change it. -->
+           this browser, the presence menu still offers it; Allow calls the
+           browser's own prompts on the press. A refusal stands over them,
+           naming each blocked setting and where to turn it on. -->
       <div
         data-slot="peers"
         class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-wrap justify-end gap-space-2 coarse:gap-space-4"
       >
         {#if person.refusal}
-          <ErrorText
-            message={person.refusal.message}
-            title={person.refusal.title}
-          />
+          <!-- Wrapped, never cut to one line: the setting's name and where
+               to turn it on are the whole point of it. -->
+          <p
+            data-slot="desk-refusal"
+            class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail-ink"
+            role="alert"
+          >
+            {person.refusal.title}. {person.refusal.message}
+          </p>
         {/if}
         <Button
           data-skip

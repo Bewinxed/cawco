@@ -21,10 +21,15 @@
  * - (machine) the agent reads its desktop from a headless KWin of the
  *   run's own (ext-idle-notify-v1): the hub hears it in use, then idle; the
  *   presence menu's opt-in turns it on.
- * - (onboarding) Chromium: Needs you's row for this browser, its notice,
- *   Allow granting Idle Detection and notifications, its tick; the tab's
- *   Idle Detection reaching the hub as the machine's word, locked included.
- *   WebKit: the notifications-only row, where it has notifications.
+ * - (onboarding) what this browser is asked for: Chromium's row names
+ *   "Your device use", Allow calls the browser's prompt on the press, its
+ *   tick, the tab's Idle Detection reaching the hub as the machine's word,
+ *   locked included; answered no, the row and the presence menu name the
+ *   setting and where to turn it on. WebKit, a Chromium page without
+ *   IdleDetector and Brave (its `navigator.brave`): no ask, no warning, no
+ *   row; WebKit with notifications to answer, those alone. A browser on the
+ *   computer whose agent reads its desktop: tied there by the hub, nothing
+ *   asked. The row at 390, 680 and 1440, asking and refused.
  * - (boxes) the presence dot and its menu at 390, 680 and 1440, Chromium
  *   and WebKit: the dot on the avatar's corner, the menu inside the screen,
  *   Appear away from the menu reaching the hub.
@@ -37,6 +42,7 @@
  * 10-minute hold, so the run takes about 20 minutes.
  *
  *   bun scripts/probe-kit/run.ts presence
+ *   bun scripts/probe-kit/run.ts presence --onboarding   (this browser's asks alone)
  */
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -66,6 +72,8 @@ import {
 import { atRest, type Phone, standInPhone } from "./turn-push";
 
 const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
+/** `--onboarding`: this browser's asks alone (onboarding, its boxes, machine, agent-here), a few minutes. */
+const ONBOARDING_ONLY = process.argv.includes("--onboarding");
 const TODO = "mcp__cawco__todo_write";
 const CODE_MODE = "execute";
 const LINE_ON =
@@ -291,11 +299,20 @@ const run = async (kit: Kit) => {
     await mkdir(cwd, { recursive: true });
     await writeFile(join(cwd, "README.md"), "presence probe\n");
 
+    if (ONBOARDING_ONLY) {
+      await onboardingLegs(kit, fleet);
+      await deskBoxLegs(kit, fleet);
+      await machineLeg(kit, fleet, Boolean(kwin));
+      await agentHereLeg(kit, fleet, Boolean(kwin));
+      return;
+    }
     await rollupLegs(kit, fleet);
     await lineLegs(kit, fleet, cwd);
     await onboardingLegs(kit, fleet);
+    await deskBoxLegs(kit, fleet);
     await boxLegs(kit, fleet);
     await machineLeg(kit, fleet, Boolean(kwin));
+    await agentHereLeg(kit, fleet, Boolean(kwin));
     await holdLegs(kit, fleet, phone, cwd);
     kit.note(`every push the phone took: ${phone.ids().join(", ")}`);
   } finally {
@@ -582,39 +599,167 @@ const openNeeds = async (
   await settle(page, 400);
 };
 
-/** (onboarding) Chromium's step and its Idle Detection; WebKit's notifications-only row. */
+/**
+ * In the page: every call to Idle Detection's requestPermission, and
+ * whether the press's user activation stood at it (a prompt needs it),
+ * before the browser answers.
+ */
+const recordIdleAsks = () => {
+  const page = window as unknown as {
+    IdleDetector?: { requestPermission: () => Promise<PermissionState> };
+    __idleAsks?: { active: boolean | null }[];
+  };
+  const Detector = page.IdleDetector;
+  if (!Detector) {
+    return;
+  }
+  const asked: { active: boolean | null }[] = [];
+  const answer = Detector.requestPermission.bind(Detector);
+  Object.defineProperty(Detector, "requestPermission", {
+    configurable: true,
+    value: () => {
+      asked.push({
+        active:
+          (navigator as Navigator & { userActivation?: { isActive: boolean } })
+            .userActivation?.isActive ?? null,
+      });
+      return answer();
+    },
+  });
+  page.__idleAsks = asked;
+};
+/** In the page: an engine without Idle Detection, as Safari and Firefox are. */
+const noIdleDetector = () => {
+  Reflect.deleteProperty(window, "IdleDetector");
+};
+/** In the page: Brave, as its `navigator.brave.isBrave()` says it. */
+const braveStandIn = () => {
+  Object.defineProperty(navigator, "brave", {
+    configurable: true,
+    value: { isBrave: () => Promise.resolve(true) },
+  });
+};
+
+/**
+ * The page's browser on a computer no agent reads: its requests carry a
+ * proxy's word that they came from an address no machine of the fleet
+ * holds (hub notifications.ts `machineAt` reads it first), as a browser on
+ * another computer reaching the hub through a proxy does. The scratch
+ * fleet's agent runs on this very computer, its desktop read from the
+ * headless KWin, so a page here is otherwise on the agent's machine.
+ */
+const ELSEWHERE = { "x-forwarded-for": "10.99.0.7" };
+
+/** The page's tie to its machine and the hub's word on that machine, read from the page. */
+const tieOf = (page: import("playwright-core").Page) =>
+  page.evaluate(async () => {
+    const read = (await (await fetch("/api/person")).json()) as {
+      devices: { id: string; state: string | null }[];
+      thisMachine: string | null;
+    };
+    return {
+      thisMachine: read.thisMachine,
+      device: read.devices.find((one) => one.id === read.thisMachine) ?? null,
+    };
+  });
+
+/** Idle Detection's permission for the page's origin, in its own context, as the browser would hold the person's answer. */
+const setIdle = async (
+  page: import("playwright-core").Page,
+  base: string,
+  setting: "granted" | "denied" | "prompt"
+) => {
+  const cdp = await page.context().newCDPSession(page);
+  const { targetInfo } = await cdp.send("Target.getTargetInfo");
+  await cdp.send("Browser.setPermission", {
+    origin: new URL(base).origin,
+    permission: { name: "idle-detection" },
+    setting,
+    browserContextId: targetInfo.browserContextId,
+  });
+  return cdp;
+};
+
+/** The presence menu's "This browser" lines: its set-up item and a blocked setting's words. */
+const menuLines = async (page: import("playwright-core").Page) => {
+  const trigger = page.locator("[data-presence]:visible").first();
+  if (!(await trigger.isVisible().catch(() => false))) {
+    await page
+      .getByRole("button", { name: "Open navigation" })
+      .first()
+      .click()
+      .catch(() => undefined);
+  }
+  await page.locator("[data-presence]:visible").first().click();
+  await page.waitForSelector('[data-slot="dropdown-menu-content"]', {
+    state: "visible",
+    timeout: 10_000,
+  });
+  await settle(page, 300);
+  const lines = {
+    setUp: await page.locator('[data-slot="set-up-browser"]').count(),
+    refusal: await page
+      .locator('[data-slot="presence-refusal"]')
+      .innerText()
+      .catch(() => ""),
+  };
+  await page.keyboard.press("Escape");
+  return lines;
+};
+
+/** Caw's panel opened, and the desk row's words once it settles; "" when it never shows. */
+const deskRow = async (
+  page: import("playwright-core").Page,
+  base: string,
+  wait = 10_000
+) => {
+  await openNeeds(page, base);
+  const row = page.locator(DESK_ROW);
+  const words = await row
+    .waitFor({ state: "visible", timeout: wait })
+    .then(() => row.innerText())
+    .catch(() => "");
+  return { row, words };
+};
+
+/**
+ * (onboarding) What this browser is asked for, by what it can grant and
+ * whether its computer's agent already reads it:
+ *
+ * - Chromium, Idle Detection at prompt: the row names "Your device use",
+ *   and Allow calls `IdleDetector.requestPermission()` in the press itself
+ *   (its user activation standing), the browser's prompt; the answer (yes,
+ *   driven over CDP) starts Idle Detection, which reaches the hub.
+ * - Chromium, the person answering no: the refusal names "Your device use"
+ *   and where to turn it on; the presence menu says the same.
+ * - Without Idle Detection (WebKit; a Chromium page with `IdleDetector`
+ *   deleted; Brave, whose `navigator.brave.isBrave()` says so, its
+ *   permission denied as Brave keeps it): no ask, no warning, no row.
+ */
 const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const base = await fleet.dashboard();
   const page = await kit.page("desk", {
     engine: "chromium",
-    init: [notificationStandIn],
+    init: [notificationStandIn, recordIdleAsks],
   });
-  await openNeeds(page, base);
-  const row = page.locator(DESK_ROW);
-  await row
-    .waitFor({ state: "visible", timeout: 20_000 })
-    .catch(() => undefined);
-  const asked = await row.innerText().catch(() => "");
+  await page.context().setExtraHTTPHeaders(ELSEWHERE);
+  const { row, words: asked } = await deskRow(page, base, 20_000);
+  const tie = await tieOf(page);
+  kit.note(`(onboarding) the page elsewhere: ${JSON.stringify(tie)}`);
   kit.check(
-    "(onboarding) Chromium: Needs you shows this browser's step, its notice and Skip and Allow",
+    "(onboarding) Chromium, Idle Detection at prompt: the row names “Your device use” and notifications, with Skip and Allow",
     asked.includes(presenceWords.title(true)) &&
-      asked.includes(presenceWords.lead(true)) &&
+      asked.includes(presenceWords.lead({ idle: true, notify: true })) &&
+      asked.includes(presenceWords.deviceUse) &&
       asked.includes(presenceWords.meta) &&
       (await row.getByRole("button", { name: "Allow" }).count()) === 1 &&
-      (await row.getByRole("button", { name: "Skip" }).count()) === 1,
+      (await row.getByRole("button", { name: "Skip" }).count()) === 1 &&
+      tie.thisMachine === null,
     asked
   );
-  // The person's yes to Idle Detection's prompt, as the browser takes it:
-  // granted to this page's own context (a grant with no context id goes to
-  // the default one). Notifications' yes is the stand-in's.
-  const { origin } = new URL(base);
-  const cdp = await page.context().newCDPSession(page);
-  const { targetInfo } = await cdp.send("Target.getTargetInfo");
-  await cdp.send("Browser.grantPermissions", {
-    origin,
-    permissions: ["idleDetection"],
-    browserContextId: targetInfo.browserContextId,
-  });
+  // The person's yes to the prompt, as the browser holds it: granted to
+  // this page's own context. Notifications' yes is the stand-in's.
+  const cdp = await setIdle(page, base, "granted");
   await cdp.send("Emulation.setIdleOverride", {
     isUserActive: true,
     isScreenUnlocked: true,
@@ -633,10 +778,17 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     (words) => words.includes(presenceWords.done(true)),
     15_000
   ).catch(() => "");
+  const prompts = await page.evaluate(
+    () =>
+      (window as unknown as { __idleAsks?: { active: boolean | null }[] })
+        .__idleAsks ?? []
+  );
   kit.check(
-    "(onboarding) Chromium: Allow grants both, and the row ticks",
-    ticked.includes(presenceWords.done(true)),
-    ticked
+    "(onboarding) Chromium: Allow calls IdleDetector.requestPermission() once, inside the press's user activation (the browser's prompt), and the row ticks",
+    prompts.length === 1 &&
+      prompts[0]?.active === true &&
+      ticked.includes(presenceWords.done(true)),
+    `asks ${JSON.stringify(prompts)}; row: ${ticked}`
   );
   const left = await until(
     "(onboarding) the row leaves",
@@ -693,29 +845,258 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   );
   await page.context().close();
 
-  const safari = await kit.page("desk", { engine: "webkit" });
-  await openNeeds(safari, base);
-  const notifies = await safari.evaluate(
-    () =>
-      typeof Notification !== "undefined" &&
-      Notification.permission === "default"
-  );
-  const safariRow = safari.locator(DESK_ROW);
-  const shown = await safariRow
-    .waitFor({ state: "visible", timeout: 10_000 })
-    .then(() => safariRow.innerText())
-    .catch(() => "");
+  // The person answers no to the prompt.
+  const denying = await kit.page("desk", {
+    engine: "chromium",
+    init: [notificationStandIn, recordIdleAsks],
+  });
+  await denying.context().setExtraHTTPHeaders(ELSEWHERE);
+  const denied = await deskRow(denying, base, 20_000);
+  await setIdle(denying, base, "denied");
+  await denied.row.getByRole("button", { name: "Allow" }).click();
+  const blockedTitle = presenceWords.blocked([presenceWords.deviceUse]);
+  const unblock = presenceWords.unblock("chromium", false);
+  const refused = await until(
+    "(onboarding) the refusal",
+    async () => {
+      try {
+        return await denied.row.innerText();
+      } catch {
+        return "";
+      }
+    },
+    (words) => words.includes(blockedTitle),
+    15_000
+  ).catch(() => "");
   kit.check(
-    notifies
-      ? "(onboarding) WebKit: no Idle Detection, so the row offers desktop notifications alone"
-      : "(onboarding) WebKit: no Idle Detection and no notifications, so no row",
-    notifies
-      ? shown.includes(presenceWords.title(false)) &&
-          shown.includes(presenceWords.lead(false))
-      : shown === "",
+    `(onboarding) Chromium, the prompt answered no: the row says “${blockedTitle}” and “${unblock}”`,
+    refused.includes(blockedTitle) && refused.includes(unblock),
+    refused
+  );
+  const deniedMenu = await menuLines(denying);
+  kit.check(
+    "(onboarding) Chromium, denied: the presence menu names the setting and where, and offers no set-up",
+    deniedMenu.refusal.includes(blockedTitle) &&
+      deniedMenu.refusal.includes(unblock) &&
+      deniedMenu.setUp === 0,
+    JSON.stringify(deniedMenu)
+  );
+  await denying.context().close();
+
+  // Engines that can't grant Idle Detection, notifications already granted.
+  const without: {
+    engine: Engine;
+    init: (() => void)[];
+    name: string;
+    deny?: boolean;
+  }[] = [
+    { name: "WebKit", engine: "webkit", init: [] },
+    {
+      name: "Chromium without IdleDetector",
+      engine: "chromium",
+      init: [noIdleDetector],
+    },
+    {
+      name: "Brave (navigator.brave, its permission denied)",
+      engine: "chromium",
+      init: [braveStandIn],
+      deny: true,
+    },
+  ];
+  for (const one of without) {
+    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
+    const quiet = await kit.page("desk", {
+      engine: one.engine,
+      init: [notificationsGranted, notificationStandIn, ...one.init],
+    });
+    await quiet.context().setExtraHTTPHeaders(ELSEWHERE);
+    if (one.deny) {
+      await setIdle(quiet, base, "denied");
+    }
+    const { words } = await deskRow(quiet, base, 8000);
+    const menu = await menuLines(quiet);
+    kit.check(
+      `(onboarding) ${one.name}: no Idle Detection to grant, so no row, no set-up and no warning`,
+      words === "" && menu.setUp === 0 && menu.refusal === "",
+      `row "${words}"; menu ${JSON.stringify(menu)}`
+    );
+    await quiet.context().close();
+  }
+
+  // WebKit with notifications still to answer: they alone are asked.
+  const safari = await kit.page("desk", {
+    engine: "webkit",
+    init: [notificationStandIn],
+  });
+  const { words: shown } = await deskRow(safari, base, 10_000);
+  kit.check(
+    "(onboarding) WebKit, notifications to answer: the row asks for notifications alone, naming no device use",
+    shown.includes(presenceWords.title(false)) &&
+      shown.includes(presenceWords.lead({ idle: false, notify: true })) &&
+      !shown.includes(presenceWords.deviceUse),
     shown || "no row"
   );
   await safari.context().close();
+};
+
+/**
+ * (onboarding) A browser on the computer whose agent reads its desktop:
+ * the hub ties it to that machine by the address it asks from, so Idle
+ * Detection adds nothing and is never asked for.
+ */
+const agentHereLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  kwin: boolean
+): Promise<void> => {
+  if (!kwin) {
+    kit.note(
+      "(onboarding) no kwin_wayland on this machine: no agent reads the desktop, so the agent-here leg is not run"
+    );
+    return;
+  }
+  const base = await fleet.dashboard();
+  const page = await kit.page("desk", {
+    engine: "chromium",
+    init: [notificationsGranted, notificationStandIn, recordIdleAsks],
+  });
+  const { words } = await deskRow(page, base, 8000);
+  const tie = await tieOf(page);
+  const menu = await menuLines(page);
+  kit.check(
+    "(onboarding) Chromium on the machine whose agent reads its desktop: the hub ties it there, and nothing is asked (no row, no set-up, no warning)",
+    tie.thisMachine === MACHINE &&
+      tie.device?.state !== null &&
+      tie.device !== null &&
+      words === "" &&
+      menu.setUp === 0 &&
+      menu.refusal === "",
+    `tie ${JSON.stringify(tie)}; row "${words}"; menu ${JSON.stringify(menu)}`
+  );
+  await page.context().close();
+};
+
+/**
+ * (onboarding boxes) The desk row at a width: inside the screen, never
+ * scrolling sideways, its words wrapping inside it, Skip and Allow (or a
+ * refusal's words) inside the row.
+ */
+const deskBoxes = async (
+  kit: Kit,
+  page: import("playwright-core").Page,
+  leg: string,
+  refused = false
+): Promise<void> => {
+  const boxes = await page.evaluate((selector) => {
+    const row = document.querySelector<HTMLElement>(selector);
+    if (!row) {
+      return null;
+    }
+    const box = (el: Element | null) => {
+      if (!el) {
+        return null;
+      }
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    };
+    const peers = row.querySelector('[data-slot="peers"]');
+    return {
+      viewport: innerWidth,
+      sideways: document.scrollingElement
+        ? document.scrollingElement.scrollWidth -
+          document.scrollingElement.clientWidth
+        : 0,
+      rowSideways: row.scrollWidth - row.clientWidth,
+      row: box(row),
+      peers: box(peers),
+      parts: [...(peers?.children ?? [])].map((child) => box(child)),
+      refusal: (() => {
+        const line = row.querySelector<HTMLElement>(
+          '[data-slot="desk-refusal"]'
+        );
+        return line
+          ? {
+              clipped: line.scrollWidth > line.clientWidth,
+              lines: Math.round(
+                line.getBoundingClientRect().height /
+                  Number.parseFloat(getComputedStyle(line).lineHeight)
+              ),
+              text: line.textContent?.trim() ?? "",
+            }
+          : null;
+      })(),
+    };
+  }, DESK_ROW);
+  const inside = (
+    part: { left: number; right: number } | null,
+    frame: { left: number; right: number }
+  ) =>
+    part !== null &&
+    part.left >= frame.left - 0.5 &&
+    part.right <= frame.right + 0.5;
+  kit.check(
+    `(onboarding boxes) ${leg}: the desk row stands inside the screen, nothing scrolls sideways, its buttons and words inside it${refused ? ", the refusal wrapped whole (never cut), naming where to turn it on" : ""}`,
+    Boolean(
+      boxes?.row &&
+      boxes.row.left >= 0 &&
+      boxes.row.right <= boxes.viewport + 0.5 &&
+      boxes.sideways <= 0 &&
+      boxes.rowSideways <= 0 &&
+      boxes.parts.length > 0 &&
+      boxes.parts.every((part) => boxes.row && inside(part, boxes.row)) &&
+      (!refused ||
+        (boxes.refusal !== null &&
+          !boxes.refusal.clipped &&
+          boxes.refusal.text.includes(
+            presenceWords.unblock("chromium", false)
+          )))
+    ),
+    JSON.stringify(boxes)
+  );
+};
+
+/** (onboarding boxes) The asking row and its refusal at 390, 680 and 1440, Chromium. */
+const deskBoxLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
+  const base = await fleet.dashboard();
+  for (const { name, view } of VIEWS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const page = await kit.page(view, {
+      engine: "chromium",
+      init: [notificationStandIn],
+    });
+    try {
+      await page.context().setExtraHTTPHeaders(ELSEWHERE);
+      const { row, words } = await deskRow(page, base, 20_000);
+      if (!words) {
+        kit.check(
+          `(onboarding boxes) chromium ${name}: the desk row shows`,
+          false,
+          "no row"
+        );
+        continue;
+      }
+      await deskBoxes(kit, page, `chromium ${name}, asking`);
+      await setIdle(page, base, "denied");
+      await row.getByRole("button", { name: "Allow" }).click();
+      await until(
+        "(onboarding boxes) the refusal",
+        async () => {
+          try {
+            return await row.innerText();
+          } catch {
+            return "";
+          }
+        },
+        (said) =>
+          said.includes(presenceWords.blocked([presenceWords.deviceUse])),
+        15_000
+      ).catch(() => "");
+      await settle(page, 300);
+      await deskBoxes(kit, page, `chromium ${name}, refused`, true);
+    } finally {
+      await page.context().close();
+    }
+  }
 };
 
 /** One view's reading of the dot and, opened, its menu. */

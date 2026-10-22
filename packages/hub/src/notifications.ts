@@ -46,6 +46,7 @@
  * app, which is why the clear goes every way at once.
  */
 import { createHash } from "node:crypto";
+import { networkInterfaces } from "node:os";
 import {
   AWAY_AFTER_MS,
   DEVICE_TTL_MS,
@@ -57,16 +58,20 @@ import {
   machineLabel,
   type NotificationsClearedFrame,
   type Person,
+  type PersonRead,
   type PersonView,
   PRESENCE_TTL_MS,
   type PresenceBeat,
   type PresenceClient,
   type PresenceDevice,
 } from "@cawco/core";
+import { plainAddress } from "@cawco/core/public-address";
 import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
+import { addressOf } from "./hub-auth";
 import type { HubLifetimeShape } from "./lifetime";
 import type { RegistryShape } from "./registry";
+import { askedFrom } from "./relay-journey";
 
 /** How often expired clients are swept, and the away clock read. */
 const SWEEP_MS = 10_000;
@@ -347,12 +352,28 @@ const personLine = (person: Rolled): string => {
 
 export interface NotificationsServices {
   readonly db: DbShape;
+  /** The hub's own machine id, once read; null before. */
+  readonly hubMachineId: () => string | null;
   readonly lifetime: HubLifetimeShape;
   readonly registry: RegistryShape;
 }
 
+/** 127.0.0.0/8 or ::1, as {@link plainAddress} leaves it. */
+const LOOPBACK_V4 = /^127\./;
+const isLoopback = (address: string): boolean =>
+  address === "::1" || LOOPBACK_V4.test(address);
+
+/** Every address the hub's own computer holds, on any interface. */
+const ownAddresses = (): Set<string> =>
+  new Set(
+    Object.values(networkInterfaces()).flatMap((faces) =>
+      (faces ?? []).map((face) => plainAddress(face.address))
+    )
+  );
+
 export const createNotifications = ({
   db,
+  hubMachineId,
   lifetime,
   registry,
 }: NotificationsServices) => {
@@ -647,6 +668,32 @@ export const createNotifications = ({
       return viewOf(told, Date.now());
     },
 
+    /**
+     * The machine a browser asking from `address` is on, or null when no
+     * one machine is. Loopback, or an address of the hub's own computer, is
+     * the hub's machine. Any other is the one machine whose agent's socket
+     * came from that address: a browser on a machine reaches the hub from
+     * the address its agent does, straight or through that agent's loopback
+     * dashboard (agent hub-loopback.ts). Two machines behind one address
+     * (one NAT) tie to neither. `address` is what a proxy in front says the
+     * browser asked from ({@link askedFrom}), so a page through Cloudflare
+     * ties to no machine.
+     */
+    machineAt(address: string | null): string | null {
+      if (!address) {
+        return null;
+      }
+      const plain = plainAddress(address);
+      if (isLoopback(plain) || ownAddresses().has(plain)) {
+        return hubMachineId();
+      }
+      const matched = registry.machineIds().filter((id) => {
+        const from = registry.address(id);
+        return from !== undefined && plainAddress(from) === plain;
+      });
+      return matched.length === 1 ? (matched[0] ?? null) : null;
+    },
+
     /** Appear away, on or off: kept on the hub until the person turns it off. */
     appearAway(on: boolean): PersonView {
       db.presence.setAppearAway(on, new Date());
@@ -840,7 +887,15 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
         return { ok: true };
       }
     )
-    .get("/api/person", () => notifications.view())
+    .get("/api/person", ({ request, server }): PersonRead => ({
+      ...notifications.view(),
+      thisMachine: notifications.machineAt(
+        askedFrom(
+          request.headers,
+          addressOf(server as Parameters<typeof addressOf>[0], request)
+        )
+      ),
+    }))
     .post(
       "/api/person/away",
       { body: t.Object({ on: t.Boolean() }) },

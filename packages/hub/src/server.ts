@@ -3051,7 +3051,13 @@ export const createServer = (
   // ledger of the ones that are over (notifications.ts): dropped when a
   // client had the session in front since it landed, cleared on every device
   // once it is over.
-  const notifications = createNotifications({ db, lifetime, registry });
+  const notifications = createNotifications({
+    db,
+    // Read when a browser asks which machine it is on, long after it is set.
+    hubMachineId: () => ownMachineIdRead ?? null,
+    lifetime,
+    registry,
+  });
   // Pushes to the iOS app when something newly needs you (push.ts).
   const push = createPush({
     // Still in Needs you, and not looked at since it was raised.

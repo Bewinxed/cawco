@@ -5282,8 +5282,8 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/PersonViewState`.
-    public enum PersonViewState: OpenEnum {
+    /// `#/components/schemas/PersonReadState`.
+    public enum PersonReadState: OpenEnum {
         case away
         case here
         /// A value this app does not know: a newer hub's.

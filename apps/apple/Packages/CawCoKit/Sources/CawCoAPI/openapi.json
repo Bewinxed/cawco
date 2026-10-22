@@ -7972,7 +7972,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PersonView"
+                  "$ref": "#/components/schemas/PersonRead"
                 }
               }
             }
@@ -41138,10 +41138,16 @@
           "status"
         ]
       },
-      "PersonView": {
-        "description": "`GET /api/person` and the socket's `person` frame: the person, and the machines that can count toward it.",
+      "PersonRead": {
+        "description": "`GET /api/person`: the view, and the machine the asking browser is on, as\nthe hub ties it by the address the request came from (hub\nnotifications.ts `machineAt`); null when no one machine is. Each browser\nreads its own: the `person` frame, the same to every dashboard, never\ncarries it.",
         "type": "object",
         "properties": {
+          "thisMachine": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "devices": {
             "type": "array",
             "items": {
@@ -41167,7 +41173,7 @@
             ]
           },
           "state": {
-            "$ref": "#/components/schemas/PersonViewState"
+            "$ref": "#/components/schemas/PersonReadState"
           }
         },
         "required": [
@@ -41175,7 +41181,8 @@
           "manual",
           "on",
           "since",
-          "state"
+          "state",
+          "thisMachine"
         ]
       },
       "PresenceDevice": {
@@ -41203,6 +41210,46 @@
           "counts",
           "id",
           "name"
+        ]
+      },
+      "PersonView": {
+        "description": "The socket's `person` frame, and `GET /api/person` beside its {@link PersonRead}: the person, and the machines that can count toward it.",
+        "type": "object",
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PresenceDevice"
+            }
+          },
+          "manual": {
+            "description": "The person turned Appear away on.",
+            "type": "boolean"
+          },
+          "on": {
+            "description": "The chat in front and read on a device in use, when here on one.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "since": {
+            "description": "Away: since their last input or the lock, epoch ms; null when here, or no device has ever said.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/PersonReadState"
+          }
+        },
+        "required": [
+          "devices",
+          "manual",
+          "on",
+          "since",
+          "state"
         ]
       },
       "ProjectOfferSummary": {
@@ -61967,7 +62014,7 @@
           "deny"
         ]
       },
-      "PersonViewState": {
+      "PersonReadState": {
         "type": "string",
         "enum": [
           "away",

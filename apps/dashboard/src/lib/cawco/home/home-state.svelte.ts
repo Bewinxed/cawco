@@ -65,7 +65,7 @@ import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
 import { notices } from "../notices.svelte";
-import { asksHere, person } from "../person.svelte";
+import { asksHere, deskAsks, person } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -412,16 +412,18 @@ export interface TailnetItem {
 /**
  * This browser telling CawCo when the person is at this computer (Chromium's
  * Idle Detection) and showing what needs them as a desktop notification
- * (presence.ts), while either is still to allow and the row wasn't put away
- * with Skip: its notice says what it shares and what changes, Allow asks the
- * browser for both. Once allowed the row ticks (`done`) for a moment, then
- * leaves. `idle`: this browser has Idle Detection.
+ * (presence.ts), while either is still to ask (person.svelte.ts `deskAsks`) and
+ * the row wasn't put away with Skip: its notice names the site settings it
+ * asks for and what changes, Allow asks the browser for them. Once allowed
+ * the row ticks (`done`) for a moment, then leaves. `idle` and `notify`:
+ * what it asks for.
  */
 export interface DeskItem {
   done: boolean;
   idle: boolean;
   key: string;
   kind: "desk";
+  notify: boolean;
   place: string;
   raisedAt: undefined;
   title: string;
@@ -1256,20 +1258,23 @@ class Home {
             },
           ]
         : [];
-    // This browser's presence: its step while something is still to allow, its tick a moment after.
-    const { permissions } = person;
+    // This browser's presence: its step while something is still to ask,
+    // its tick a moment after; a press's refusal stands on it until Skip.
+    // While a press stands, the row says what that press asked for.
+    const ask = person.asked ?? deskAsks();
     const desk: NeedsItem[] =
-      permissions &&
+      person.permissions &&
       (asksHere() ||
         person.ticked ||
-        (!person.skipped && person.refusal?.title === presenceWords.blocked))
+        (!person.skipped && person.refusal?.blocked))
         ? [
             {
               kind: "desk",
               key: "desk:this-browser",
-              idle: permissions.idle !== "unsupported",
+              idle: ask.idle,
+              notify: ask.notify,
               done: person.ticked,
-              title: presenceWords.title(permissions.idle !== "unsupported"),
+              title: presenceWords.title(ask.idle),
               place: "Onboarding",
               raisedAt: undefined,
             },

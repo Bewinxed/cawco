@@ -129,7 +129,7 @@ typeOverrides:
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
     PermissionUpdateDestination: OpenEnums.PermissionUpdateDestination
-    PersonViewState: OpenEnums.PersonViewState
+    PersonReadState: OpenEnums.PersonReadState
     PhoneDoneAction: OpenEnums.PhoneDoneAction
     PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy
     PinKind: OpenEnums.PinKind

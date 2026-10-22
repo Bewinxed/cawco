@@ -1107,6 +1107,7 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
   // clear (none happen) has nobody to broadcast to.
   const notifications = createNotifications({
     db,
+    hubMachineId: () => null,
     lifetime,
     registry: {
       broadcast: () => undefined,

@@ -12,9 +12,10 @@
    * The menu: the person's state on its first row; Appear away, the hub's
    * switch (agents go quiet and the phone gets pushes while it is on); the
    * machines whose desktop can count, each turned on by the person, with its
-   * state word; and, while this browser has something still to allow, Set up
-   * this browser. Nothing changes here before the hub says so: a refused
-   * switch says why under it.
+   * state word; and, while this browser has something still to ask for, Set
+   * up this browser. Nothing changes here before the hub says so: a refused
+   * switch says why under it. A site setting this browser blocks is named
+   * under it with where to turn it on.
    */
   import { presenceWords } from "@cawco/core";
   import { mergeProps } from "bits-ui";
@@ -25,10 +26,11 @@
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { cawco } from "./client.svelte";
-  import ErrorText from "./ErrorText.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
   import {
     allowHere,
+    blockedHere,
+    deskAsks,
     person,
     setAppearAway,
     setMachineCounts,
@@ -72,11 +74,12 @@
     }
     return presenceWords.away(clock(view.since));
   });
-  const setUp = $derived(
-    person.permissions !== null &&
-      (person.permissions.idle === "prompt" ||
-        person.permissions.notify === "default")
-  );
+  const setUp = $derived.by(() => {
+    const ask = deskAsks();
+    return ask.idle || ask.notify;
+  });
+  /** The last press's refusal, else what this browser blocks now. */
+  const refusal = $derived(person.refusal ?? blockedHere());
   const devices = $derived(view?.devices ?? []);
 </script>
 
@@ -175,14 +178,13 @@
         >
       </DropdownMenu.Group>
     {/if}
-    {#if person.refusal}
-      <DropdownMenu.Label kind="line">
-        <ErrorText
-          class="text-status-fail-ink"
-          message={person.refusal.message}
-          title={person.refusal.title}
-        />
-      </DropdownMenu.Label>
+    {#if refusal}
+      <!-- Wrapped whole: the setting's name and where to turn it on. -->
+      <DropdownMenu.Label data-slot="presence-refusal" kind="line" role="alert"
+        ><span class="text-status-fail-ink"
+          >{refusal.title}. {refusal.message}</span
+        ></DropdownMenu.Label
+      >
     {/if}
   </DropdownMenu.Content>
 </DropdownMenu.Root>

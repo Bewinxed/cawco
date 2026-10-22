@@ -10,8 +10,8 @@
  * - **The machine** (`machine`, `idleMs`): Chromium's Idle Detection, once
  *   the person allowed it for this browser (Needs you's onboarding row, the
  *   presence menu), says whether this computer is in use, idle or locked.
- *   Without it (Safari, Firefox, not allowed) the tab says only how long
- *   since the last key, pointer or scroll on this page.
+ *   Without it (Safari, Firefox, Brave, not allowed) the tab says only how
+ *   long since the last key, pointer or scroll on this page.
  *
  * Beside them, `alerts`: this tab may show desktop notifications, so the
  * hub can show what needs the person here instead of buzzing their phone
@@ -203,30 +203,72 @@ export function startPresence(): void {
 /** Whether this tab beats: for a check that the interval stands. */
 export const presenceBeating = (): boolean => beating !== undefined;
 
+/**
+ * Whose site settings the person changes a blocked permission in: Chromium's
+ * and Firefox's sit behind the icon left of the address, Safari's in its
+ * Settings › Websites. Chromium is told by `navigator.userAgentData`, which
+ * only Chromium has.
+ */
+export type SettingsPlace = "chromium" | "firefox" | "safari" | "other";
+
+const placeOf = (): SettingsPlace => {
+  if ("userAgentData" in navigator) {
+    return "chromium";
+  }
+  const agent = navigator.userAgent;
+  if (agent.includes("Firefox/")) {
+    return "firefox";
+  }
+  return agent.includes("Safari/") ? "safari" : "other";
+};
+
 /** What this browser lets the presence model use, as its permissions stand now. */
 export interface DeskPermissions {
-  /** Idle Detection: absent (Safari, Firefox, not a secure context), or its permission. */
+  /**
+   * Idle Detection: absent (Safari, Firefox, Brave, not a secure context),
+   * or its permission.
+   */
   readonly idle: PermissionState | "unsupported";
   /** Desktop notifications: absent, or their permission. */
   readonly notify: NotificationPermission | "unsupported";
+  /** Where a blocked one is turned back on. */
+  readonly place: SettingsPlace;
 }
+
+/**
+ * Brave, by the check Brave names for it (its wiki, "Detecting Brave (for
+ * Websites)": `navigator.brave.isBrave()`). Brave turns Idle Detection off
+ * (brave-core#7054) and hides its site setting (brave-browser#18409): its
+ * answer is no without a prompt, and there is no setting to change.
+ */
+const isBrave = async (): Promise<boolean> => {
+  const { brave } = navigator as Navigator & {
+    brave?: { isBrave?: () => Promise<boolean> };
+  };
+  try {
+    return (await brave?.isBrave?.()) === true;
+  } catch {
+    return false;
+  }
+};
 
 /** This browser's permissions for the presence model, read without asking. */
 export async function deskPermissions(): Promise<DeskPermissions> {
+  const place = placeOf();
   const notify =
     typeof Notification === "undefined" || !window.isSecureContext
       ? "unsupported"
       : Notification.permission;
-  if (!idleDetectorClass()) {
-    return { idle: "unsupported", notify };
+  if (!idleDetectorClass() || (await isBrave())) {
+    return { idle: "unsupported", notify, place };
   }
   try {
     const status = await navigator.permissions.query({
       name: "idle-detection" as PermissionName,
     });
-    return { idle: status.state, notify };
+    return { idle: status.state, notify, place };
   } catch {
-    return { idle: "prompt", notify };
+    return { idle: "prompt", notify, place };
   }
 }
 
@@ -258,22 +300,28 @@ async function detectIdle(): Promise<void> {
   report();
 }
 
+/** What a press asks this browser for. */
+export interface DeskAsk {
+  readonly idle: boolean;
+  readonly notify: boolean;
+}
+
 /**
- * Asks this browser, on the person's press, for what the presence model
- * uses: Idle Detection where it has one, then desktop notifications; each
- * asked only while it is still to answer. Starts Idle Detection once
- * allowed. Answers the permissions as they stand after.
+ * Asks this browser, on the person's press, for what `ask` names: each
+ * browser's own prompt is requested in the press itself, before anything
+ * is awaited, as a prompt needs the press's user activation and Chromium
+ * queues the second behind the first. Starts Idle Detection once allowed.
+ * Answers the permissions as they stand after.
  */
-export async function allowDesk(): Promise<DeskPermissions> {
+export function allowDesk(ask: DeskAsk): Promise<DeskPermissions> {
   const Detector = idleDetectorClass();
-  const before = await deskPermissions();
-  if (Detector && before.idle === "prompt") {
-    await Detector.requestPermission();
-  }
-  if (before.notify === "default") {
-    await Notification.requestPermission();
-  }
-  await detectIdle();
-  report(true);
-  return deskPermissions();
+  const asked = [
+    ask.idle && Detector ? Detector.requestPermission() : undefined,
+    ask.notify ? Notification.requestPermission() : undefined,
+  ];
+  return Promise.all(asked).then(async () => {
+    await detectIdle();
+    report(true);
+    return deskPermissions();
+  });
 }
