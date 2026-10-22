@@ -1798,11 +1798,13 @@
      magnifier over the window's corner). The window's edge fitted as a circle (R = 51.74px there), the handle's
      centreline as the midpoints of its ink's 50% crossings on 71 rays (worst residual 0.13px). Concentric with
      the corner (its centre within 0.017 R of the corner's); its stroke 0.112 R; the visible gap from the
-     window's edge to the ink 0.12–0.136 R (0.125 R taken), so its centreline 0.18 R in; its body 65.6° of the
-     circle on the diagonal (73.3° tip to tip with its round caps). Scaled to our radius for a fine pointer. */
-  --c-grip-gap: calc(var(--radius-panel) * 0.125);
+     window's edge to the ink 0.122 R where the arc meets the straight edges, 0.136 R on the diagonal (0.122 R taken: where it reads as distance from an edge), so its centreline 0.18 R in; its body 65.6° of the
+     circle on the diagonal (73.3° tip to tip with its round caps). Scaled to our radius for a fine pointer.
+     Apple's window has no hairline, so its gap runs from the window's edge; ours runs from where a person sees
+     our edge end, the inner side of the panel's 1px border (the second review's reading). */
+  --c-grip-gap: calc(var(--radius-panel) * 0.122);
   --c-grip-stroke: calc(var(--radius-panel) * 0.112);
-  --c-grip-inset: calc(var(--c-grip-gap) + var(--c-grip-stroke) / 2);
+  --c-grip-inset: calc(1px + var(--c-grip-gap) + var(--c-grip-stroke) / 2);
   /* Its rest length along the centreline: 65.6° (1.1449 rad) of the circle R − inset round. */
   --c-grip-len: calc((var(--radius-panel) - var(--c-grip-inset)) * 1.1449);
   /* Apple's handle is opaque near-black, rgb(24 24 24), on its window, 8.7:1 against it; white on a dark window
@@ -1926,7 +1928,10 @@ button { font: inherit; color: inherit; }
 /* ---- The tool: the house floating panel ---- */
 .tool { position: fixed; z-index: var(--layer-dock); color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-overlay); font: var(--type-label); font-weight: var(--weight-body); }
 .tool :focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.panel { inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2); }
+/* The panel stands a step over the dock, its neighbour on the same layer: the dock's long shadow falls under
+   the panel, never over its corner and its handle (round 28: it greyed the panel's bottom-start corner, the
+   width edge's run-out by a seventh at night). */
+.panel { z-index: calc(var(--layer-dock) + 1); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2); }
 /* One row over the graph: the components' tabs, then the graph's zoom and Hide at the trailing end. */
 /* It wraps (zoom and Hide to a line of their own, at the end) before the tabs would be cut. */
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
@@ -2077,29 +2082,36 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline
 @property --c-grip-len { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-run { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-bend { syntax: "<length>"; inherits: true; initial-value: 0px; }
-.resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; }
-.resize-handle path { --grip-p: 0; fill: var(--c-grip-ink-rest); transition: --grip-p var(--dur-exit) var(--ease-out), fill var(--dur-control) var(--ease-out); }
+/* The handle's ink is the svg's own colour: its path's fill is the radial gradient app.js keeps in it (stops
+   in currentColor), opaque round the corner and fading along the run-out. */
+.resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; color: var(--c-grip-ink-rest); transition: color var(--dur-control) var(--ease-out); }
+.resize-handle path { --grip-p: 0; transition: --grip-p var(--dur-exit) var(--ease-out); }
+.resize-handle stop { stop-color: currentColor; }
 /* The panel's at its border box's bottom-start corner, the dock's at the middle of its top edge. */
 #gripC { inset-inline-start: -1px; inset-block-end: -1px; }
 #gripD { inset-inline-start: 50%; inset-block-start: -1px; translate: -50% 0; }
 @media (hover: hover) {
-  .panel:has(.sash-w:hover, .sash-h:hover, .sash-c:hover) #gripC path,
-  .dock:has(.sash-d:hover) #gripD path { fill: var(--ink-strong); }
+  .panel:has(.sash-w:hover, .sash-h:hover, .sash-c:hover) #gripC,
+  .dock:has(.sash-d:hover) #gripD { color: var(--ink-strong); }
 }
 /* The demo's pointer (#demo, handle-demo.html) is the hover's own state. */
-.panel[data-pointing] #gripC path, .dock[data-pointing] #gripD path { fill: var(--ink-strong); }
+.panel[data-pointing] #gripC, .dock[data-pointing] #gripD { color: var(--ink-strong); }
+.panel:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC,
+.dock[data-resizing] #gripD { color: var(--ink-strong); }
 .panel:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC path,
-.dock[data-resizing] #gripD path { --grip-p: 1; fill: var(--ink-strong); transition: --grip-p var(--dur-reveal) var(--ease-out), fill var(--dur-control) var(--ease-out); }
+.dock[data-resizing] #gripD path { --grip-p: 1; transition: --grip-p var(--dur-reveal) var(--ease-out); }
 /* Focus from the keyboard holds the highlight in the focus ink, with no motion (keys move the edge, so
    nothing animates on a key). */
+.panel:has(.sash-w:focus-visible, .sash-h:focus-visible, .sash-c:focus-visible) #gripC,
+.dock:has(.sash-d:focus-visible) #gripD { color: var(--focus-ring); transition: none; }
 .panel:has(.sash-w:focus-visible, .sash-h:focus-visible, .sash-c:focus-visible) #gripC path,
-.dock:has(.sash-d:focus-visible) #gripD path { --grip-p: 1; fill: var(--focus-ring); transition: none; }
+.dock:has(.sash-d:focus-visible) #gripD path { --grip-p: 1; transition: none; }
 /* Stacked graphs have no corner (the r23 ruling): no rest mark; the width edge's highlight comes in with its
    drag or its focus. */
 html[data-graphs="stack"] #gripC { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
 html[data-graphs="stack"] .panel:is([data-resizing="w"], :has(.sash-w:focus-visible)) #gripC { opacity: 1; transition: opacity var(--dur-control) var(--ease-out); }
 /* Less motion: the shape changes at once, its ink still fades. */
-@media (prefers-reduced-motion: reduce) { .resize-handle path { transition: fill var(--dur-fade) var(--ease-out) !important; } }
+@media (prefers-reduced-motion: reduce) { .resize-handle { transition: color var(--dur-fade) var(--ease-out) !important; } .resize-handle path { transition: none !important; } }
 
 /* The split between stacked graphs lies inside the panel, off its outline: a line across the gap (top set
    by app.js), its ends tapered, shown while it is pointed at, held or focused. */
@@ -2505,7 +2517,7 @@ html[data-layout="sheet"] .show { writing-mode: vertical-rl; inset: 50% 0 auto a
       <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize panel" tabindex="0" data-edge="wh"></div>
       <!-- The resize handle (round 28): iPadOS 26's window handle, a short arc concentric with the panel's
            corner, at the corner that resizes it. One path; a drag morphs it into the tapered highlight. -->
-      <svg class="resize-handle" id="gripC" aria-hidden="true"><path/></svg>
+      <svg class="resize-handle" id="gripC" aria-hidden="true"><defs><radialGradient id="gripCInk" gradientUnits="userSpaceOnUse" cx="0" cy="0"></radialGradient></defs><path fill="url(#gripCInk)"/></svg>
       <!-- Two graphs stacked: the foot edge between them splits their heights. -->
       <div class="sash sash-s" id="sashS" role="separator" aria-orientation="horizontal" aria-label="Split the graphs' heights" tabindex="0" data-edge="s"></div>
       <span class="lit" data-arm="s" aria-hidden="true"></span>
@@ -2513,7 +2525,7 @@ html[data-layout="sheet"] .show { writing-mode: vertical-rl; inset: 50% 0 auto a
 
     <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The kept move">
       <div class="sash sash-d" id="sashD" role="separator" aria-orientation="horizontal" aria-label="Resize the dock's height" tabindex="0" data-edge="d"></div>
-      <svg class="resize-handle" id="gripD" aria-hidden="true"><path/></svg>
+      <svg class="resize-handle" id="gripD" aria-hidden="true"><defs><radialGradient id="gripDInk" gradientUnits="userSpaceOnUse" cx="0" cy="0"></radialGradient></defs><path fill="url(#gripDInk)"/></svg>
       <div class="dock-body" id="dockBody"></div>
     </section>
   </div>
@@ -7564,15 +7576,19 @@ function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); 
 // ---- The resize handle (round 28): iPadOS 26's window handle, one path per handle ----
 // One filled ribbon round a centreline: run-out A (GRIP_RUN points, from its tip in to the body), the body
 // (GRIP_BODY + 1 points), run-out B (GRIP_RUN points, out to its tip). Every frame is drawn exactly from one
-// number, its progress p (0 at rest, 1 held), so each frame is a true member of the family: no point ever
-// takes a short cut between two shapes.
-//   At rest (p = 0) the run-outs have no length: the body alone with round caps, Apple's arc.
-//   Held (p = 1) each run-out leaves the body's end along the corner's own circle, straightens along its edge,
-//   and bends out onto the border's hairline as it thins, ending on the hairline at nothing: one line that
-//   becomes the border, never a second line beside it.
+// number, its progress p (0 at rest, 1 held), so each frame is a true member of the family.
+//   At rest (p = 0) the run-outs have no length: the body alone with round caps, Apple's arc, inset.
+//   Held (p = 1) the stroke stands on the border itself: its outer edge on the panel's outer edge, the body
+//   round the border's own curve, each run-out along the border's hairline. Past the corner's curve the
+//   stroke's width over the hairline goes in its first quarter, and its ink fades to nothing along the run (one
+//   radial gradient centred on the corner, so both edges fade alike): the tapered highlight is the border
+//   lighting up, one line, never a second line beside it.
+//   Between, the body moves out as p grows and each run-out bends onto the border, its bend shortening to
+//   nothing as p reaches 1.
 // The clock: CSS transitions one registered number, --grip-p, out over --dur-reveal and back over --dur-exit;
-// paintGrip draws the path's `d` attribute from it (Safari and iPadOS draw nothing from the `d` CSS property).
-const GRIP_RUN = 48, GRIP_BODY = 16, GRIP_CAP = 8, GRIP_TIP = 6;
+// paintGrip draws the path's `d` attribute and its gradient from it (Safari and iPadOS draw nothing from the
+// `d` CSS property).
+const GRIP_RUN = 48, GRIP_BODY = 16, GRIP_CAP = 8, GRIP_STOPS = 16;
 function ribbon(C) {
   const A = [], B = [];
   for (const { x, y, tx, ty, w } of C) { const h = w / 2; A.push([x - ty * h, y + tx * h]); B.push([x + ty * h, y - tx * h]); }
@@ -7581,64 +7597,66 @@ function ribbon(C) {
   return [...A, ...cap(C[C.length - 1], 1), ...B.reverse(), ...cap(C[0], -1)];
 }
 // The measured handle (style.css, --c-grip-*), scaled to the panel's radius R: concentric with the corner, its
-// centreline d in from the edge, stroke w, its rest length `len` (fine pointers: the measured 65.6° of the
-// circle; a finger: Apple's own length, the quarter circle and a straight leg on along each edge). Held, each
-// run-out reaches L from the body's end, its bend onto the hairline B long; hc is the hairline's centre line.
+// centreline d in from the outer edge, stroke w, its rest length `len` (fine pointers: the measured 65.6° of
+// the circle; a finger: Apple's own length, the quarter circle and a straight leg on along each edge). Held,
+// each run-out reaches L from the body's end; B is its bend onto the border at the start of the drag; bw the
+// border's width.
 function gripGeo(tool) {
   const R = px("--radius-panel"), d = px("--c-grip-inset"), w = px("--c-grip-stroke"), len = px("--c-grip-len"), L = px("--c-grip-run"), B = px("--c-grip-bend"), r = R - d;
   const sweep = Math.min(len / r, Math.PI / 2), legs = Math.max(0, (len - r * sweep) / 2);
-  return { R, d, w, len, L, B, r, sweep, legs, hc: parseFloat(getComputedStyle(tool).borderLeftWidth) / 2 };
+  return { R, d, w, len, L, B, sweep, legs, bw: parseFloat(getComputedStyle(tool).borderLeftWidth) };
 }
 const smooth = (u) => { const t = Math.min(1, Math.max(0, u)); return t * t * (3 - 2 * t); };
-const dSmooth = (u) => (u <= 0 || u >= 1 ? 0 : 6 * u * (1 - u));
-// A run-out's width s along it from the body's end, at run length a (a0 at rest: a finger's straight legs,
-// else nothing): thinning from the body's end to its tip on a cube (under half the stroke a quarter of the way
-// out); its tip narrows to nothing over the first GRIP_TIP px of growth, so at rest (tip = the stroke) every
-// width is the full stroke and the round caps grow smoothly into the point.
-function gripWidth(g, s, a, a0) {
-  if (a <= 0) return g.w;
-  const tip = g.w * Math.max(0, 1 - (a - a0) / GRIP_TIP);
-  return tip + (g.w - tip) * (1 - s / a) ** 3;
-}
+// The run-out's width s along it: the full stroke over the rest mark (to `from`), then its width over the
+// border's goes down a smoothstep over a quarter of the run (no kink where it starts or ends), leaving the
+// hairline's own width.
+const gripWidth = (g, s, from) => (s <= from ? g.w : g.bw + (g.w - g.bw) * (1 - smooth((s - from) / (g.L / 4))));
+// A straight run-out's place across its edge, s along it from where it straightens: from the body's inset di
+// it bends over `bend` onto the border, its outer edge on the outer edge (centreline half its width in).
+const gripAcross = (g, s, di, bend, from) => di + (gripWidth(g, s, from) / 2 - di) * smooth(s / bend);
+// A centreline from a function of s: the direction each point travels, from its neighbours.
+function along(at, s, ds = 0.01) { const a = at(Math.max(0, s - ds)), b = at(s + ds), n = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / n, (b[1] - a[1]) / n]; }
 // The panel's handle in the corner's own frame: the outer corner at 0,0, x in from the width edge, -y up it.
 // The corner's circle is centred on (R, −R); t = π points at the width edge, π/2 at the foot. Run-out A goes up
-// the width edge; B is its mirror about the diagonal, along the foot. at(s) is where A stands s along it, and
-// the direction it travels there. The bend onto the hairline starts where the circle straightens (a finger's
-// rest legs lean into it), so every frame's tip stands no further in than the rest mark's own end.
+// the width edge; B is its mirror about the diagonal, along the foot.
 function cornerShape(g, p) {
-  const { R, r, d, w, L, B, sweep, legs, hc } = g, tA = (3 * Math.PI) / 4 + sweep / 2, sc = r * (Math.PI / 2 - sweep) / 2, bendAt = sc;
-  const at = (s) => {
-    if (s <= sc) { const t = tA + s / r; return [R + r * Math.cos(t), -R + r * Math.sin(t), -Math.sin(t), Math.cos(t)]; }
-    const x = d - (d - hc) * smooth((s - bendAt) / B), dx = (-(d - hc) * dSmooth((s - bendAt) / B)) / B, n = Math.hypot(dx, 1);
-    return [x, -R - (s - sc), dx / n, -1 / n];
-  };
+  const { R, d, w, L, B, sweep, legs } = g, di = d + (w / 2 - d) * p, ri = R - di, tA = (3 * Math.PI) / 4 + sweep / 2, sc = (ri * (Math.PI / 2 - sweep)) / 2, from = Math.max(sc, legs), bend = B * (1 - p) + 0.5;
+  // Where A stands s along it from the body's end: round the circle to the edge, then up it.
+  const at = (s) => (s <= sc ? [R + ri * Math.cos(tA + s / ri), -R + ri * Math.sin(tA + s / ri)] : [gripAcross(g, s - sc, di, bend, from - sc), -R - (s - sc)]);
   const a = legs + p * (L - legs), C = [];
-  for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y, tx, ty] = at(s); C.push({ x, y, tx: -tx, ty: -ty, w: gripWidth(g, s, a, legs) }); }
-  for (let j = 0; j <= GRIP_BODY; j++) { const t = tA - sweep * (j / GRIP_BODY); C.push({ x: R + r * Math.cos(t), y: -R + r * Math.sin(t), tx: Math.sin(t), ty: -Math.cos(t), w }); }
+  for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x, y, tx: -tx, ty: -ty, w: gripWidth(g, s, from) }); }
+  for (let j = 0; j <= GRIP_BODY; j++) { const t = tA - sweep * (j / GRIP_BODY); C.push({ x: R + ri * Math.cos(t), y: -R + ri * Math.sin(t), tx: Math.sin(t), ty: -Math.cos(t), w }); }
   // B is A mirrored about the diagonal: (x, y) → (−y, −x), and so its direction.
-  for (let i = 1; i <= GRIP_RUN; i++) { const s = (a * i) / GRIP_RUN, [x, y, tx, ty] = at(s); C.push({ x: -y, y: -x, tx: -ty, ty: -tx, w: gripWidth(g, s, a, legs) }); }
-  return ribbon(C);
+  for (let i = 1; i <= GRIP_RUN; i++) { const s = (a * i) / GRIP_RUN, [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x: -y, y: -x, tx: -ty, ty: -tx, w: gripWidth(g, s, from) }); }
+  // Its ink: opaque over the rest mark (the corner's curve and a finger's legs), fading to nothing at the tips.
+  const solid = R + Math.max(0, legs - sc) * (1 - p), reach = R + Math.max(0, a - sc);
+  return { pts: ribbon(C), solid, reach };
 }
 // The dock's: the same stroke straightened into a capsule `len` long, d down from its top edge and centred on
-// it; held, each end runs out along the edge and bends up onto the hairline the same way.
+// it; held, it stands on the top border and each end runs out along it the same way.
 function edgeShape(g, p) {
-  const { d, w, len, L, B, hc } = g, half = len / 2;
-  const at = (s) => { const y = d - (d - hc) * smooth(s / B), dy = (-(d - hc) * dSmooth(s / B)) / B, n = Math.hypot(1, dy); return [half + s, y, 1 / n, dy / n]; };
+  const { d, w, len, L, B } = g, half = len / 2, di = d + (w / 2 - d) * p, bend = B * (1 - p) + 0.5;
+  const at = (s) => [half + s, gripAcross(g, s, di, bend, 0)];
   const a = p * L, C = [];
-  for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y, tx, ty] = at(s); C.push({ x: -x, y, tx, ty: -ty, w: gripWidth(g, s, a, 0) }); }
-  for (let j = 0; j <= GRIP_BODY; j++) C.push({ x: -half + (2 * half * j) / GRIP_BODY, y: d, tx: 1, ty: 0, w });
-  for (let i = 1; i <= GRIP_RUN; i++) { const s = (a * i) / GRIP_RUN, [x, y, tx, ty] = at(s); C.push({ x, y, tx, ty, w: gripWidth(g, s, a, 0) }); }
-  return ribbon(C);
+  for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x: -x, y, tx, ty: -ty, w: gripWidth(g, s, 0) }); }
+  for (let j = 0; j <= GRIP_BODY; j++) C.push({ x: -half + (2 * half * j) / GRIP_BODY, y: di, tx: 1, ty: 0, w });
+  for (let i = 1; i <= GRIP_RUN; i++) { const s = (a * i) / GRIP_RUN, [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x, y, tx, ty, w: gripWidth(g, s, 0) }); }
+  return { pts: ribbon(C), solid: half, reach: half + a };
 }
-// Each handle's path: its shape, its geometry and the progress last painted.
+// Each handle's path: its shape, its geometry, its gradient and the progress last painted.
 const gripShapes = new Map();
 function paintGrip(path) {
   const s = gripShapes.get(path); if (!s) return;
   const p = Math.min(1, Math.max(0, parseFloat(getComputedStyle(path).getPropertyValue("--grip-p")) || 0));
   if (p === s.p) return;
   s.p = p;
-  const r3 = (n) => Math.round(n * 1000) / 1000;
-  path.setAttribute("d", "M " + s.shape(s.g, p).map(([x, y]) => r3(x) + " " + r3(y)).join(" L ") + " Z");
+  const r3 = (n) => Math.round(n * 1000) / 1000, { pts, solid, reach } = s.shape(s.g, p);
+  path.setAttribute("d", "M " + pts.map(([x, y]) => r3(x) + " " + r3(y)).join(" L ") + " Z");
+  // The gradient, centred on the handle's own origin (the corner; the dock edge's middle): opaque to `solid`,
+  // then down a smoothstep to nothing at `reach`, the run-out's tip.
+  const r = Math.max(reach, solid + 0.01), grad = s.grad;
+  grad.setAttribute("r", r3(r));
+  grad.querySelectorAll("stop").forEach((st, i) => { st.setAttribute("offset", r3((solid + ((r - solid) * i) / GRIP_STOPS) / r)); st.setAttribute("stop-opacity", r3(1 - smooth(i / GRIP_STOPS))); });
 }
 // Paints both; true when either moved.
 function paintGrips() { let moved = false; for (const [path, s] of gripShapes) { const p0 = s.p; paintGrip(path); moved ||= s.p !== p0; } return moved; }
@@ -7656,10 +7674,13 @@ for (const type of ["transitionrun", "focusin", "focusout", "pointerdown", "poin
 function drawGrips() {
   const c = $("gripC"), gc = gripGeo(panel), S = Math.ceil(gc.R + gc.L + gc.w + 2);
   c.setAttribute("width", S); c.setAttribute("height", S); c.setAttribute("viewBox", "0 " + -S + " " + S + " " + S);
-  gripShapes.set(c.querySelector("path"), { shape: cornerShape, g: gc, p: null });
   const g = $("gripD"), gd = gripGeo($("dock")), W = 2 * Math.ceil(gd.len / 2 + gd.L + gd.w), H = Math.ceil(gd.d + gd.w);
   g.setAttribute("width", W); g.setAttribute("height", H); g.setAttribute("viewBox", -W / 2 + " 0 " + W + " " + H);
-  gripShapes.set(g.querySelector("path"), { shape: edgeShape, g: gd, p: null });
+  for (const [svg, shape, geo] of [[c, cornerShape, gc], [g, edgeShape, gd]]) {
+    const grad = svg.querySelector("radialGradient");
+    if (!grad.children.length) for (let i = 0; i <= GRIP_STOPS; i++) grad.append(document.createElementNS("http://www.w3.org/2000/svg", "stop"));
+    gripShapes.set(svg.querySelector("path"), { shape, g: geo, grad, p: null });
+  }
   paintGrips();
 }
 drawGrips();
