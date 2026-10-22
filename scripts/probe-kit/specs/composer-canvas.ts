@@ -89,6 +89,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   pressIn,
   type Spec,
   settle,
@@ -2703,13 +2704,17 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
   /** This page's own canvas, once Draw has made it (the panel may show another the session docked). */
   let mine =
     '[data-slot="canvas-stage"]:is([data-standing], [data-slot="standing"]) iframe';
-  /** A tap on `selector`'s centre: Playwright's box of an element in a frame is already in the page's terms. */
+  /** A tap on `selector`'s centre: Playwright's box of an element in a frame is already in the page's terms; one in a frame, once nothing around the frame covers it (kit pressAt). */
   const tap = async (selector: string, within = page.mainFrame()) => {
     const at = await within.locator(selector).first().boundingBox();
     if (!at) {
       throw new Error(`nothing to tap at ${selector}`);
     }
-    await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
+    await pressAt(
+      within,
+      { x: at.x + at.width / 2, y: at.y + at.height / 2 },
+      { how: "tap" }
+    );
   };
   await tap("[data-att-btn]");
   await page.getByRole("menuitem", { name: "Draw" }).waitFor();

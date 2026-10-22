@@ -3449,13 +3449,24 @@ export const SURFACES: Surface[] = [
         ready: { shows: `${HOST_CARD("plan")} [data-slot=diagram] svg` },
       },
       {
-        // A dev server's preview past --dur-wait-grace with no answer: Caw and "Opening…".
+        // A dev server's preview past --dur-wait-grace with no answer: Caw and
+        // "Opening…". It stands until the ping's answer is given up on
+        // (core preview-reach.ts PROBE_ANSWER_MS, 10s), then the well says
+        // why it can't be reached; the walk's own time after an act (ACT_MS
+        // and `arrive`'s 11s) runs past that, so the frame the act leaves,
+        // once the line stands, is the one read.
         name: "wait",
         act: async (page) => {
           const { SILENT_ORIGIN } = await import("../decision-embeds");
           await neverAnswered(page, `${SILENT_ORIGIN}/**`, PING_PATH);
           await hostPage("wait")(page);
+          await page
+            .locator("[data-slot=media] p[role=status]", {
+              hasText: "Opening the preview launch-site…",
+            })
+            .waitFor();
         },
+        heldFrame: true,
         root: "body",
         inView: "[data-slot=media] p[role=status]",
         ready: {

@@ -497,6 +497,7 @@ const shutList = async (on: On) => {
  */
 const commentAt = async (
   on: On,
+  frame: Frame,
   x: number,
   y: number,
   words: string | null = "A comment, written."
@@ -505,7 +506,7 @@ const commentAt = async (
   // frame of its own process, which the browser routes input to by where
   // the pointer last stood.
   await on.page.mouse.move(x, y, { steps: 4 });
-  await on.page.mouse.click(x, y);
+  await pressFramePoint(frame, { x, y });
   const composer = on.page.locator(COMPOSE);
   const shown = await composer
     .waitFor({ timeout: 5000 })
@@ -537,13 +538,42 @@ const commentAt = async (
 
 /** Pin `number`'s pill pressed on the page: its thread opens beside it. */
 const openThread = async (on: On, frame: Frame, number: number) => {
-  const pill = await frame
+  const face = frame
     .locator(
       `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin="${number}"] [data-face]`
     )
-    .first()
-    .boundingBox({ timeout: 3000 })
-    .catch(() => null);
+    .first();
+  // The pin in view first, as a person scrolls to it, and only when it is
+  // not: a pin whose element the page has scrolled away stands hidden
+  // (preview-overlay pins.ts `placeAll`), and a pill the frame's view leaves
+  // out is pressed nowhere (kit pressAt says so). One in view stays put, so
+  // nothing scrolls under a press that needs none.
+  const inView = await face
+    .evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.top >= 0 && r.bottom <= innerHeight;
+    })
+    .catch(() => false);
+  if (!inView) {
+    const anchored = (
+      Object.values((await docOf(frame)).pins as Pins).find(
+        (pin) => (pin as { number?: number }).number === number
+      ) as { anchor?: { selector?: string } } | undefined
+    )?.anchor?.selector;
+    if (anchored) {
+      await frame
+        .evaluate(
+          (selector) =>
+            document
+              .querySelector(selector)
+              ?.scrollIntoView({ block: "center" }),
+          anchored
+        )
+        .catch(() => undefined);
+      await settle(on.page, 300);
+    }
+  }
+  const pill = await face.boundingBox({ timeout: 3000 }).catch(() => null);
   if (pill) {
     await on.page.mouse.move(
       pill.x + pill.width / 2,
@@ -552,10 +582,10 @@ const openThread = async (on: On, frame: Frame, number: number) => {
         steps: 2,
       }
     );
-    await on.page.mouse.click(
-      pill.x + pill.width / 2,
-      pill.y + pill.height / 2
-    );
+    await pressFramePoint(frame, {
+      x: pill.x + pill.width / 2,
+      y: pill.y + pill.height / 2,
+    });
   }
   const card = on.page.locator(
     `[data-slot="pin-card"][data-pin-card="${number}"]`
@@ -757,7 +787,7 @@ const commentChecks = async (on: On, frame: Frame) => {
   const b = await screenBox(on, frame, "#para");
   const pressAt = { x: b.x + b.w * 0.3, y: b.y + b.h / 2 };
   // The press alone: the composer opens beside a hollow pill, nothing written.
-  const opened = await commentAt(on, pressAt.x, pressAt.y, null);
+  const opened = await commentAt(on, frame, pressAt.x, pressAt.y, null);
   await settle(on.page, 400);
   const composer = on.page.locator(COMPOSE);
   const provisional = await frame
@@ -895,7 +925,7 @@ const commentChecks = async (on: On, frame: Frame) => {
   // In Interact a press on the page is the page's, and closes no thread: it closes by its Close or Esc.
   await openThread(on, frame, 1);
   const blank = await screenBox(on, frame, ".tall");
-  await on.page.mouse.click(blank.x + 30, blank.y + 30);
+  await pressFramePoint(frame, { x: blank.x + 30, y: blank.y + 30 });
   await settle(on.page, 300);
   const stays = (await card.count()) === 1;
   await card.getByRole("button", { name: "Close", exact: true }).click();
@@ -1608,7 +1638,10 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   );
   // The tap lands at #third's leading edge, clear of the card at the room's top-right and the panel.
   const b = await screenBox(on, frame, "#third");
-  await on.page.mouse.click(b.x + Math.min(24, b.w / 4), b.y + b.h / 2);
+  await pressFramePoint(frame, {
+    x: b.x + Math.min(24, b.w / 4),
+    y: b.y + b.h / 2,
+  });
   const placed = await until(
     "pin 1 placed again",
     anchorOf,
@@ -1991,7 +2024,13 @@ const frameChecks = async (on: On) => {
     );
 
     const before = Object.keys((await docOf(outer)).pins).length;
-    const press = await commentAt(on, at.x, at.y, "Run it on a schedule.");
+    const press = await commentAt(
+      on,
+      outer,
+      at.x,
+      at.y,
+      "Run it on a schedule."
+    );
     const pins = await until(
       "the inner button's pin in the doc",
       async () => (await docOf(outer)).pins,
@@ -2391,7 +2430,7 @@ const embedChecks = async (on: On) => {
     // A press on it opens the composer there: the button chosen, its line drawn.
     const before = Object.keys((await docOf(outer)).pins).length;
     const pictures = watchPictures(on.page);
-    await on.page.mouse.click(end.x, end.y);
+    await pressFramePoint(outer, end);
     const composer = on.page.locator(COMPOSE);
     const shown = await composer
       .waitFor({ timeout: 5000 })
@@ -2646,7 +2685,7 @@ const scaledFrameChecks = async (on: On) => {
     };
     await on.page.mouse.move(tap.x, tap.y, { steps: 4 });
     const before = Object.keys((await docOf(outer)).pins).length;
-    await commentAt(on, tap.x, tap.y, "This desk.");
+    await commentAt(on, outer, tap.x, tap.y, "This desk.");
     const pins = await until(
       "the scaled transcript's pin in the doc",
       async () => (await docOf(outer)).pins,
@@ -2715,7 +2754,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   /** A press on the page at the screen's `x`, `y` in Comment mode, written and commented: the new pin's number, and its composer as it opened. */
   const tapPin = async (x: number, y: number) => {
     const held = Object.keys(await numbersNow()).length;
-    const press = await commentAt(on, x, y, "Keep this pin.");
+    const press = await commentAt(on, frame, x, y, "Keep this pin.");
     const now = await until(
       "the tapped pin in the doc",
       numbersNow,
@@ -3004,6 +3043,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   const held = Object.keys((await docOf(frame)).pins).length;
   const card = await commentAt(
     on,
+    frame,
     pane.x + tap.x,
     pane.y + tap.y,
     "This card, not the first."
@@ -3292,8 +3332,17 @@ const dismissChecks = async (on: On) => {
       await comment.click();
       await pageInComment(frame, true);
     }
+    // The card in view each time, as a person scrolls to it: a reload or a
+    // mode switch leaves the page at its top, the card below the pane's foot,
+    // where a press reaches nothing (kit pressAt says so).
+    await frame.evaluate(() =>
+      document
+        .querySelector('.card[data-n="9"]')
+        ?.scrollIntoView({ block: "center" })
+    );
+    await settle(on.page, 150);
     const at = await pressAt();
-    return commentAt(on, at.x, at.y, null);
+    return commentAt(on, frame, at.x, at.y, null);
   };
   // Esc.
   await openComposer();
@@ -3388,8 +3437,15 @@ const dismissChecks = async (on: On) => {
     await openComposer();
     await openThread(on, frame, someone.number);
   }
+  // The composer goes over `--dur-control` (PinFloat's `out:fade`): it is
+  // counted once that fade has had its time, not in the frame the card came.
   const swapped = {
-    composer: await composer.count(),
+    composer: await until(
+      "the composer gone",
+      () => composer.count(),
+      (count) => count === 0,
+      3000
+    ).catch(() => composer.count()),
     thread: someone
       ? await on.page
           .locator(`[data-slot="pin-card"][data-pin-card="${someone.number}"]`)
@@ -3712,7 +3768,7 @@ const wordlessChecks = async (on: On) => {
     .click();
   await pageInComment(frame, true);
   const b = await screenBox(on, frame, "[data-insp-path]");
-  await commentAt(on, b.x + b.w / 2, b.y + b.h / 2, null);
+  await commentAt(on, frame, b.x + b.w / 2, b.y + b.h / 2, null);
   const chip = (
     await on.page
       .locator(`${COMPOSE} [data-slot="target-chip"] [data-slot="chip-label"]`)
@@ -4173,6 +4229,7 @@ const targetChecks = async (on: On) => {
   // kept and its label gone, as any target's.
   const rootComposer = await commentAt(
     on,
+    frame,
     ground.x + ground.w / 2,
     ground.y + 300,
     null
@@ -4202,7 +4259,7 @@ const targetChecks = async (on: On) => {
     5000
   ).catch(() => null);
 
-  const opened = await commentAt(on, b.x + b.w / 2, b.y + b.h / 2, null);
+  const opened = await commentAt(on, frame, b.x + b.w / 2, b.y + b.h / 2, null);
   await settle(on.page, 300);
   const chosen = await until(
     "the target chosen",
@@ -4338,7 +4395,7 @@ const targetChecks = async (on: On) => {
   // A bare element (no border, no background): the line stands c-target-gap (2px) outside, clear of its glyphs.
   await on.page.keyboard.press("Escape");
   const bare = await screenBox(on, frame, "#bare");
-  await commentAt(on, bare.x + 20, bare.y + bare.h / 2, null);
+  await commentAt(on, frame, bare.x + 20, bare.y + bare.h / 2, null);
   await until(
     "the bare element chosen",
     () => targetOf(frame),
@@ -4895,6 +4952,7 @@ const readSvgPicture = async (
     const before = new Set(Object.keys((await docOf(frame)).pins));
     await commentAt(
       on,
+      frame,
       (outer?.x ?? 0) + svg.x + IN_HULL.x,
       (outer?.y ?? 0) + svg.y + IN_HULL.y,
       "These edges."
@@ -5209,7 +5267,7 @@ const mintedIdChecks = async (on: On) => {
   await pageInComment(frame, true);
   const pressIn = async (selector: string, words: string) => {
     const b = await screenBox(on, frame, selector);
-    return commentAt(on, b.x + 24, b.y + b.h / 2, words);
+    return commentAt(on, frame, b.x + 24, b.y + b.h / 2, words);
   };
   const reactSaid = await pressIn('[id=":r1:"]', "Tighten this paragraph.");
   const radixSaid = await pressIn(
@@ -5304,10 +5362,16 @@ const keyOpenChecks = async (on: On) => {
   await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
   await pageInComment(frame, true);
   const one = await screenBox(on, frame, "#one");
-  await commentAt(on, one.x + 40, one.y + one.h / 2, "The first, written.");
+  await commentAt(
+    on,
+    frame,
+    one.x + 40,
+    one.y + one.h / 2,
+    "The first, written."
+  );
   // The second: Comment, and Esc at once, before the page's answer lands.
   const two = await screenBox(on, frame, "#two");
-  await commentAt(on, two.x + 40, two.y + two.h / 2, null);
+  await commentAt(on, frame, two.x + 40, two.y + two.h / 2, null);
   await on.page
     .locator(COMPOSE)
     .getByRole("combobox")
@@ -5472,7 +5536,13 @@ const insertChecks = async (on: On) => {
       return null;
     }
     const held = new Set(Object.keys((await docOf(frame)).pins));
-    await commentAt(on, pane.x + box.x, pane.y + box.y, `This is ${words}.`);
+    await commentAt(
+      on,
+      frame,
+      pane.x + box.x,
+      pane.y + box.y,
+      `This is ${words}.`
+    );
     const pins = await until(
       `the pin on "${words}"`,
       async () => (await docOf(frame)).pins,
@@ -5858,7 +5928,7 @@ const listChecks = async (on: On) => {
     );
   const pressOn = async (selector: string, fx = 0.4, fy = 0.5) => {
     const b = await screenBox(on, frame, selector);
-    return commentAt(on, b.x + b.w * fx, b.y + b.h * fy, null);
+    return commentAt(on, frame, b.x + b.w * fx, b.y + b.h * fy, null);
   };
   const submit = async (words: string) => {
     if (words) {
@@ -7530,6 +7600,7 @@ const draftChecks = async (on: On) => {
   const target = await boxIn(frame, "#target");
   await commentAt(
     on,
+    frame,
     pane.x + target.x + target.w * 0.3,
     pane.y + target.y + target.h / 2,
     null
@@ -7608,7 +7679,7 @@ const draftChecks = async (on: On) => {
     const x = pane.x + pill.face.x + pill.face.w / 2;
     const y = pane.y + pill.face.y + pill.face.h / 2;
     await on.page.mouse.move(x, y, { steps: 2 });
-    await on.page.mouse.click(x, y);
+    await pressFramePoint(holding, { x, y });
   };
   await pressPill(back);
   const again = await until(

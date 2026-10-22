@@ -72,6 +72,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   type Spec,
   settle,
 } from "../kit";
@@ -569,7 +570,7 @@ const writeComment = async (
   const x = b.x + b.w * across;
   const y = b.y + b.h / 2;
   await page.mouse.move(x, y, { steps: 4 });
-  await page.mouse.click(x, y);
+  await pressAt(frame, { x, y });
   const composer = page.locator('[data-slot="pin-composer"]');
   await composer.waitFor({ timeout: 15_000 });
   const composerAt = Date.now();

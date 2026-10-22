@@ -32,7 +32,7 @@
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
+import { COMPOSER, type Kit, open, pressAt, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -165,7 +165,7 @@ const hitAt = (page: Page, x: number, y: number) =>
 const tapIn = async (on: On, frame: Frame, selector: string, along = 0.5) => {
   const at = await pointOf(on.page, frame, selector, along);
   const hit = await hitAt(on.page, at.x, at.y);
-  await on.page.touchscreen.tap(at.x, at.y);
+  await pressAt(frame, at, { how: "tap" });
   await on.page.waitForTimeout(250);
   return hit;
 };

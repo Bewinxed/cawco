@@ -59,6 +59,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   type Spec,
   settle,
   type Theme,
@@ -448,7 +449,10 @@ const dropPin = async (page: Page): Promise<void> => {
     .locator('svg[data-cawco-pins] g[data-pin="1"]')
     .count();
   if (written === 0) {
-    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+    await pressAt(frame, {
+      x: box.x + box.width * 0.3,
+      y: box.y + box.height / 2,
+    });
     // The press opens the comment's composer; Comment writes the pin, and its pill opens its thread.
     const composer = page.locator('[data-slot="pin-composer"]');
     await composer.waitFor({ timeout: 5000 });
@@ -473,7 +477,10 @@ const dropPin = async (page: Page): Promise<void> => {
   if (!pill) {
     throw new Error("the new pin's pill has no box to press");
   }
-  await page.mouse.click(pill.x + pill.width / 2, pill.y + pill.height / 2);
+  await pressAt(frame, {
+    x: pill.x + pill.width / 2,
+    y: pill.y + pill.height / 2,
+  });
   await page
     .locator('[data-slot="pin-card"] [data-slot="entry"]')
     .first()

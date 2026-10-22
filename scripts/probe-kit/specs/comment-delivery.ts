@@ -64,7 +64,7 @@ import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { type Kit, open, pressAt, type Spec, settle } from "../kit";
 import {
   docOf,
   dragFromIcon,
@@ -364,9 +364,15 @@ const sendNow = async (page: Page, note = "") => {
  * writing nothing; `words` typed and Enter comment, the pin and its first
  * entry written at once. Whether the composer opened.
  */
-const commentAt = async (page: Page, x: number, y: number, words: string) => {
+const commentAt = async (
+  page: Page,
+  frame: Frame,
+  x: number,
+  y: number,
+  words: string
+) => {
   await page.mouse.move(x, y, { steps: 4 });
-  await page.mouse.click(x, y);
+  await pressAt(frame, { x, y });
   const composer = page.locator(COMPOSE);
   const opened = await composer
     .waitFor({ timeout: 5000 })
@@ -414,7 +420,7 @@ const writePins = async (on: On, frame: Frame): Promise<number[]> => {
       await Bun.sleep(Math.max(0, keptAt[i - 1] + 2000 - Date.now()));
     }
     const b = await screenBox(on, frame, `#${PARAS[i].id}`);
-    await commentAt(page, b.x + b.w * 0.3, b.y + b.h / 2, words);
+    await commentAt(page, frame, b.x + b.w * 0.3, b.y + b.h / 2, words);
     await until(
       `pin ${number}'s words in the doc`,
       () => docOf(frame),
@@ -444,7 +450,9 @@ const pinWith = async (
   await frame.locator(selector).scrollIntoViewIfNeeded();
   await settle(on.page, 300);
   const b = await screenBox(on, frame, selector);
-  if (!(await commentAt(on.page, b.x + b.w * 0.3, b.y + b.h / 2, words))) {
+  if (
+    !(await commentAt(on.page, frame, b.x + b.w * 0.3, b.y + b.h / 2, words))
+  ) {
     const pins = Object.values((await docOf(frame)).pins).map(
       (pin) => pin.number
     );
@@ -546,6 +554,7 @@ const wholePageChecks = async (on: On, frame: Frame) => {
   const c = await screenBox(on, frame, "#c");
   await commentAt(
     page,
+    frame,
     pageBox.x + pageBox.w * 0.95,
     c.y + c.h / 2,
     WHOLE_WORDS
@@ -692,7 +701,7 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   const b = await screenBox(on, frame, "#b");
   const tappedAt = Date.now();
   await page.mouse.move(b.x + b.w * 0.75, b.y + b.h / 2, { steps: 4 });
-  await page.mouse.click(b.x + b.w * 0.75, b.y + b.h / 2);
+  await pressAt(frame, { x: b.x + b.w * 0.75, y: b.y + b.h / 2 });
   const composer = page.locator(COMPOSE);
   const opened = await composer
     .waitFor({ timeout: 2000 })

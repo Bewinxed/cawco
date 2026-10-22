@@ -83,6 +83,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   pressIn,
   type Spec,
   settle,
@@ -992,11 +993,11 @@ const LOOP_MOVES = 81;
 
 /** A loop drawn by the mouse round `box` (the screen's px), outside it by 8px. */
 const loopRound = async (
-  page: Page,
+  frame: Frame,
   box: { height: number; width: number; x: number; y: number }
 ) => {
-  await page.mouse.move(box.x - 8, box.y - 8);
-  await page.mouse.down();
+  const page = frame.page();
+  await pressAt(frame, { x: box.x - 8, y: box.y - 8 }, { how: "down" });
   for (const [x, y] of [
     [box.x + box.width + 8, box.y - 8],
     [box.x + box.width + 8, box.y + box.height + 8],
@@ -1091,7 +1092,7 @@ const marks = async (on: On, frame: Frame) => {
   await settle(desk, 300);
   const box = await options.boundingBox();
   if (box) {
-    await loopRound(desk, box);
+    await loopRound(frame, box);
   }
   const inked = await until(
     "the ink group in the doc",
@@ -1282,8 +1283,7 @@ const drawOverEmbed = async (on: On, frame: Frame) => {
     from = to;
   }
   const [start] = corners as [[number, number]];
-  await desk.mouse.move(start[0], start[1]);
-  await desk.mouse.down();
+  await pressAt(frame, { x: start[0], y: start[1] }, { how: "down" });
   for (const [x, y] of sent) {
     await desk.mouse.move(x, y);
   }

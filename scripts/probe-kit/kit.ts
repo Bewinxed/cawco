@@ -574,11 +574,20 @@ const treeKey = async (): Promise<string> => {
   return hash.digest("hex");
 };
 
+/**
+ * adapter-node's half of the build (vite.config.ts `BUILD_OUT`), which a spec's
+ * publish step (apps/dashboard/scripts/publish-build.ts) consumes: it renames
+ * it to `build/`. A build whose `.build-next` was published is not whole, and
+ * a second run of that spec on the tree would find nothing to publish.
+ */
+const ADAPTER_OUTPUT = join(DASHBOARD, ".build-next");
+
+/** The checkout's build is this tree's, and whole: its stamp says `key` and adapter-node's output stands unpublished. */
 const stampSays = (key: string): Promise<boolean> =>
   Bun.file(OUTPUT_STAMP)
     .text()
     .then(
-      (stamp) => stamp === key,
+      (stamp) => stamp === key && existsSync(ADAPTER_OUTPUT),
       () => false
     );
 
@@ -1685,16 +1694,20 @@ export async function pressIn(
  * `page.mouse.click` takes them), a point inside `frame`, once nothing in
  * the pages around the frame stands over it: the press of a Comment or Draw
  * mode at a point, or of a canvas's shape, with {@link pressIn}'s check
- * ({@link coverOver}), failing the same way, naming the cover.
+ * ({@link coverOver}), failing the same way, naming the cover. `how` is the
+ * press: a mouse's click, a finger's tap, or a mouse's `down` alone, a
+ * drag's start, which the caller moves and lifts.
  */
 export async function pressAt(
   frame: Frame | FrameLocator,
   at: { x: number; y: number },
   {
     through = null,
+    how = "click",
   }: {
     /** A layer in a page around the frame that takes the press on purpose ({@link coverOver}). */
     through?: string | null;
+    how?: "click" | "tap" | "down";
   } = {}
 ): Promise<void> {
   const inner =
@@ -1709,7 +1722,15 @@ export async function pressAt(
     `the point (${Math.round(at.x)}, ${Math.round(at.y)}) in ${inner.url()}`,
     through
   );
-  await inner.page().mouse.click(at.x, at.y);
+  const page = inner.page();
+  if (how === "tap") {
+    await page.touchscreen.tap(at.x, at.y);
+  } else if (how === "down") {
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+  } else {
+    await page.mouse.click(at.x, at.y);
+  }
 }
 
 /**

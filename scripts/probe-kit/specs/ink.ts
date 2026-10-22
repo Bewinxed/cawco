@@ -146,14 +146,14 @@ const loopAround = (box: Rect, count: number, gap = 18): Pt[] => {
 };
 
 /** The browser's mouse drawing a loop round `box` (the screen's px) over `ms`, one move a frame; when it lifted, `Date.now()`. */
-export const mouseLoop = async (desk: Page, box: Rect, ms = 2000) => {
+export const mouseLoop = async (frame: Frame, box: Rect, ms = 2000) => {
+  const desk = frame.page();
   const points = loopAround(box, Math.round(ms / FRAME_MS));
   const [first] = points;
   if (!first) {
     return Date.now();
   }
-  await desk.mouse.move(first.x, first.y);
-  await desk.mouse.down();
+  await pressAt(frame, first, { how: "down" });
   for (const p of points.slice(1)) {
     // biome-ignore lint/performance/noAwaitInLoops: a stroke's moves, one a frame
     await desk.mouse.move(p.x, p.y);
@@ -492,8 +492,7 @@ export const dragFromIcon = async (
     return;
   }
   const a = (angle * Math.PI) / 180;
-  await on.page.mouse.move(at.x, at.y);
-  await on.page.mouse.down();
+  await pressAt(frame, at, { how: "down" });
   await on.page.mouse.move(at.x + r * Math.cos(a), at.y + r * Math.sin(a), {
     steps: 8,
   });
@@ -623,8 +622,8 @@ const strokeChecks = async (on: On, frame: Frame) => {
   const pen = await paths();
   // A mouse drag and a touch drag across the second paragraph.
   const b = await screenBox(on, frame, "#second");
-  await on.page.mouse.move(b.x + 10, b.y + b.h / 2);
-  await on.page.mouse.down();
+  // The touch drag starts where the mouse's did, a point pressAt found uncovered.
+  await pressAt(frame, { x: b.x + 10, y: b.y + b.h / 2 }, { how: "down" });
   await on.page.mouse.move(b.x + b.w - 10, b.y + b.h / 2, { steps: 10 });
   await on.page.mouse.up();
   await on.cdp.send("Input.dispatchTouchEvent", {
@@ -716,8 +715,7 @@ const menuChecks = async (on: On, frame: Frame) => {
   const at = await until("the icon", () => iconPoint(on, frame), Boolean, 5000);
   // Open by a drag that rests over the top sector, reading the menu before release.
   if (at) {
-    await on.page.mouse.move(at.x, at.y);
-    await on.page.mouse.down();
+    await pressAt(frame, at, { how: "down" });
     await on.page.mouse.move(at.x, at.y - 36, { steps: 6 });
     await on.page.waitForTimeout(200);
   }
@@ -1395,7 +1393,7 @@ const tracedLoop = async (
   let lifted = 0;
   const main = await traceMain(on.page, async () => {
     await mark("loop-down");
-    lifted = await mouseLoop(on.page, box);
+    lifted = await mouseLoop(frame, box);
     await mark("loop-up");
     // The picture goes once the marks pause (page.ts PICTURES_AFTER_MS).
     await until(

@@ -281,13 +281,15 @@ const DASHBOARD_SOCKET = "/ws/dashboard";
 /**
  * A state's failure as the walk says it: the error's first line, and for an
  * action that waited out its timeout, the last thing Playwright's call log
- * saw in its way (an element not visible, another taking the pointer).
+ * saw in its way (an element not visible, another taking the pointer): a
+ * retry's own lines ("retrying click action", "waiting 500ms") name nothing.
  */
+const RETRY_LINE = /^- (retrying .* action|waiting \d+ms)/;
 const saidOf = (error: unknown): string => {
   const lines = String(error).split("\n");
   const seen = lines
     .map((line) => line.trim())
-    .filter((line) => line.startsWith("- "))
+    .filter((line) => line.startsWith("- ") && !RETRY_LINE.test(line))
     .at(-1);
   return seen ? `${lines[0]} (${seen.slice(2)})` : (lines[0] ?? "");
 };
@@ -993,6 +995,12 @@ async function opened(
   scene: Scene
 ): Promise<void> {
   const route = (state.route ?? surface.route)(scene);
+  // Each state opens as a tab of its own: what a state before it left in
+  // this tab's storage (a TabDraft: config-skills/fetch's popover, open,
+  // reopened over config-skills/removed's row menu at a tablet's width) is
+  // that tab's work, not this state's. Cleared before the load, not by an
+  // init script: an act that reloads reads its own draft back.
+  await page.evaluate(() => sessionStorage.clear()).catch(() => undefined);
   // Loaded, not the kit's `open`: its ready step waits on the Shell's
   // first-render release, which the walk's paused clock runs only in
   // `pageReady` below.

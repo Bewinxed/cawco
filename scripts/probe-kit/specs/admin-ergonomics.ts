@@ -35,7 +35,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { type Kit, open, pressAt, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
 
 const PREVIEW = "probe-preview";
@@ -229,7 +229,7 @@ const run = async (kit: Kit) => {
   await page.keyboard.press("c");
   await settle(page, 300);
   const box = await screenBox(on, frame, "#p");
-  await page.mouse.click(box.x + box.w * 0.3, box.y + box.h / 2);
+  await pressAt(frame, { x: box.x + box.w * 0.3, y: box.y + box.h / 2 });
   // The press opens the comment's composer; Comment writes the pin with its words.
   const composer = page.locator('[data-slot="pin-composer"]');
   await composer.waitFor({ timeout: 5000 });

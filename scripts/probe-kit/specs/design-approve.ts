@@ -75,7 +75,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { type Kit, open, pressAt, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
 
 const WAIT = "mcp__cawco__wait_item";
@@ -675,7 +675,7 @@ const pinWith = async (
   await on.page.keyboard.press("c");
   await settle(on.page, 400);
   const b = await screenBox(on, frame, selector);
-  await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
+  await pressAt(frame, { x: b.x + b.w * 0.3, y: b.y + b.h / 2 });
   const composer = on.page.locator('[data-slot="pin-composer"]');
   await composer.waitFor({ timeout: 10_000 });
   await composer.getByRole("combobox").fill(words);

@@ -647,8 +647,11 @@ const imageChecks = async (on: OnCanvas) => {
   });
   // A press on the grid takes it away: one fade on opacity over --dur-exit,
   // held still as it is read.
-  await page.mouse.move(well.x + well.width * 0.6, well.y + well.height * 0.85);
-  await page.mouse.down();
+  await pressAt(
+    frame,
+    { x: well.x + well.width * 0.6, y: well.y + well.height * 0.85 },
+    { how: "down" }
+  );
   const leaving = await frame.evaluate(() => {
     const band = document.querySelector(".canvas-refusal");
     const runs = band?.getAnimations() ?? [];
@@ -966,8 +969,7 @@ const pressChecks = async (on: OnCanvas, id: string, hubId: string) => {
       );
     }
   });
-  await on.page.mouse.move(at.x, at.y);
-  await on.page.mouse.down();
+  await pressAt(frame, at, { how: "down" });
   await on.page.mouse.move(at.x + 60, at.y, { steps: 8 });
   await on.page.mouse.up();
   await settle(on.page, 300);
