@@ -54,8 +54,13 @@ for (const [id, entry] of Object.entries(state)) {
     continue;
   }
   const options = entry?.options ?? [];
-  if (options.length > 1 || !options.every((o) => o === "approve" || o === "reject")) {
-    problems.push(`${id}: picked ${JSON.stringify(options)}, not one of approve, reject`);
+  if (
+    options.length > 1 ||
+    !options.every((o) => o === "approve" || o === "reject")
+  ) {
+    problems.push(
+      `${id}: picked ${JSON.stringify(options)}, not one of approve, reject`
+    );
   }
 }
 if (problems.length > 0) {
@@ -63,8 +68,7 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-const picked = (id: string): string =>
-  state[id]?.options?.[0] ?? "no pick";
+const picked = (id: string): string => state[id]?.options?.[0] ?? "no pick";
 const approved = manifest.surfaces.filter((s) => picked(s.id) === "approve");
 // Every candidate is there before any moves: a half-moved surface is none of the two.
 const missing = approved.flatMap((s) =>
@@ -73,7 +77,9 @@ const missing = approved.flatMap((s) =>
     .filter((candidate) => !existsSync(join(dir, candidate)))
 );
 if (missing.length > 0) {
-  console.error(`nothing moved: candidates missing:\n  ${missing.join("\n  ")}`);
+  console.error(
+    `nothing moved: candidates missing:\n  ${missing.join("\n  ")}`
+  );
   process.exit(1);
 }
 
