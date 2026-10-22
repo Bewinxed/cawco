@@ -33,9 +33,13 @@ import {
   shows,
 } from "./suite";
 
-/** Every word Caw's head says of what needs you (NeedsCaw.svelte's label). */
+/**
+ * Every word Caw's head says of what needs you (NeedsCaw.svelte's label:
+ * the count, or `cawQuiet`). A word missing here is a head the locator never
+ * finds: every reading of it waits out its timeout and reads as no head.
+ */
 export const CAW_SAYS =
-  /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)/;
+  /^(Needs you, \d+|All caught up|Reading the fleet|Waiting for the hub)/;
 export const ZERO = "All caught up";
 /** Caw's head saying one thing needs you. */
 export const ONE_NEEDS = /^Needs you, 1(\D|$)/;
@@ -177,6 +181,11 @@ async function walk(leg: Leg): Promise<void> {
         (one) => one.said.startsWith(ZERO) || ZERO_NEEDS.test(one.said)
       );
       const timeline = [...new Set(heard.map((one) => one.said))].join(" → ");
+      // When the head first changed, on a pass as on a failure: the run's
+      // own reading of how soon the page knew the hub was gone.
+      console.log(
+        `  j1-check-in ${leg.id}: the hub stopped; Caw's head first changed at ${noticed === -1 ? "never" : `${heard[noticed]?.at}ms`}; said ${timeline}`
+      );
       expect(
         `within ${NOTICE_MS / 1000}s of the hub stopping, Caw's head stops claiming zero, and never claims it again while the hub is down`,
         noticed !== -1 &&
