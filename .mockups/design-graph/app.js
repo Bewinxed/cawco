@@ -1804,47 +1804,87 @@ function syncSashes() {
 }
 function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); mark(); for (const c of shownComps()) showKept(c.id); placeSplit(); if (tl) layoutDock(); sizeDockRoom(); if (pop) placePop(); }
 // ---- The resize handle (round 28): iPadOS 26's window handle, one path per handle ----
-// Every shape is a ribbon round a centreline: GRIP_N + 1 points down one side, a round cap, the same back up
-// the other side, a round cap, all straight segments. So each shape a handle takes is the same list of
-// points, and CSS interpolates `d` between them point for point, on one clock, turning back mid-way.
-const GRIP_N = 64, GRIP_CAP = 8;
-function ribbon(len, at, width) {
-  const A = [], B = [], r2 = (n) => Math.round(n * 100) / 100;
-  for (let i = 0; i <= GRIP_N; i++) { const [x, y, tx, ty] = at((len * i) / GRIP_N), h = width((len * i) / GRIP_N) / 2; A.push([x - ty * h, y + tx * h]); B.push([x + ty * h, y - tx * h]); }
-  // A cap: the half circle round the end, from one side to the other through the point the stroke runs on to.
-  const cap = (s, sign) => { const [x, y, tx, ty] = at(s), h = width(s) / 2, out = []; for (let k = 1; k <= GRIP_CAP; k++) { const f = (Math.PI * k) / (GRIP_CAP + 1), c = Math.cos(f), sn = Math.sin(f); out.push([x + sign * h * (-ty * c + tx * sn), y + sign * h * (tx * c + ty * sn)]); } return out; };
-  const pts = [...A, ...cap(len, 1), ...B.reverse(), ...cap(0, -1)];
-  return 'path("M ' + pts.map(([x, y]) => r2(x) + " " + r2(y)).join(" L ") + ' Z")';
+// Each handle has two shapes, its rest and its run, built from the same list of centreline points:
+//   run-out A (GRIP_RUN points, from its far tip in to the join), the body (GRIP_BODY + 1 points, join to join),
+//   run-out B (GRIP_RUN points, out from the join to its far tip).
+// At rest the run-out points are parked on the body's own curve, past the quarter turn (the measured sweep is a
+// little over 90°), so the rest shape is the arc alone with round caps. Run, they stand along the edge, the
+// stroke thinning to nothing at the tips. Every point keeps its index, the body's points never move, and a
+// run-out point travels along its own edge line: so the point-for-point interpolation between them is a true member
+// of the family at every frame (no corner cut), turning back mid-way.
+// The clock: CSS transitions one registered number, --grip-p (0 at rest, 1 run), out over --dur-reveal and back
+// over --dur-exit; paintGrip writes the path's `d` attribute from it, every point at rest + p × (run − rest).
+// (The `d` CSS property would interpolate the same way, but Safari and iPadOS draw nothing from it.)
+// The ribbon: side A (every centreline point offset half its width to one side), a round cap, side B back, a
+// round cap; all straight segments, the same count in every shape.
+const GRIP_RUN = 32, GRIP_BODY = 16, GRIP_CAP = 8;
+function ribbon(C) {
+  const A = [], B = [];
+  for (const { x, y, tx, ty, w } of C) { const h = w / 2; A.push([x - ty * h, y + tx * h]); B.push([x + ty * h, y - tx * h]); }
+  // A cap: the half circle round an end, from one side to the other through the point the stroke runs on to.
+  const cap = ({ x, y, tx, ty, w }, sign) => { const h = w / 2, out = []; for (let k = 1; k <= GRIP_CAP; k++) { const f = (Math.PI * k) / (GRIP_CAP + 1), c = Math.cos(f), sn = Math.sin(f); out.push([x + sign * h * (-ty * c + tx * sn), y + sign * h * (tx * c + ty * sn)]); } return out; };
+  return [...A, ...cap(C[C.length - 1], 1), ...B.reverse(), ...cap(C[0], -1)];
 }
-// The panel's handle, in the corner's own frame (its outer corner at 0,0, up the left edge is -y): `a` of
-// stroke run up the width edge and `b` along the foot, round the arc between. At rest both are 0 and the arc
-// is the measured sweep about the corner's diagonal; a run arm takes the arc on to that edge's tangent.
-function cornerShape(a, b) {
-  const R = px("--radius-panel"), d = px("--c-grip-inset"), r = R - d, w0 = px("--c-grip-stroke"), half = (px("--c-grip-sweep") * Math.PI) / 360;
-  const t0 = a > 0 ? Math.PI : (3 * Math.PI) / 4 + half, t1 = b > 0 ? Math.PI / 2 : (3 * Math.PI) / 4 - half, lc = r * (t0 - t1), len = a + lc + b;
-  const at = (s) => {
-    if (s < a) return [d, -R - a + s, 0, 1];
-    if (s <= a + lc) { const t = t0 - (s - a) / r; return [R + r * Math.cos(t), -R + r * Math.sin(t), Math.sin(t), -Math.cos(t)]; }
-    return [R + (s - a - lc), -d, 1, 0];
-  };
-  const taper = (u) => w0 * Math.cos((Math.PI / 2) * Math.min(1, Math.max(0, u)));
-  const width = (s) => (s < a ? taper((a - s) / a) : s <= a + lc ? w0 : taper((s - a - lc) / b));
-  return ribbon(len, at, width);
+// Each handle's path, its two shapes and the progress last painted.
+const gripShapes = new Map();
+function paintGrip(path) {
+  const s = gripShapes.get(path); if (!s) return;
+  const p = Math.min(1, Math.max(0, parseFloat(getComputedStyle(path).getPropertyValue("--grip-p")) || 0));
+  if (p === s.p) return;
+  s.p = p;
+  const r3 = (n) => Math.round(n * 1000) / 1000;
+  path.setAttribute("d", "M " + s.rest.map(([x, y], i) => r3(x + p * (s.run[i][0] - x)) + " " + r3(y + p * (s.run[i][1] - y))).join(" L ") + " Z");
 }
-// The dock's: the same stroke as a capsule the arc's length, centred on its top edge, `a` run out either way.
-function edgeShape(a) {
-  const R = px("--radius-panel"), d = px("--c-grip-inset"), w0 = px("--c-grip-stroke"), h0 = ((R - d) * px("--c-grip-sweep") * Math.PI) / 360;
-  const taper = (u) => w0 * Math.cos((Math.PI / 2) * Math.min(1, Math.max(0, u)));
-  return ribbon(2 * (a + h0), (s) => [-h0 - a + s, d, 1, 0], (s) => (s < a ? taper((a - s) / a) : s <= a + 2 * h0 ? w0 : taper((s - a - 2 * h0) / a)));
+// Paints both; true when either moved.
+function paintGrips() { let moved = false; for (const [path, s] of gripShapes) { const p0 = s.p; paintGrip(path); moved ||= s.p !== p0; } return moved; }
+// The painter runs while a handle's progress is moving, and one frame past, so the last frame painted is the
+// value the transition ends on.
+let gripLoop = 0;
+function runGrips() {
+  if (gripLoop) return;
+  const tick = () => { const moved = paintGrips(), running = [...gripShapes.keys()].some((p) => p.getAnimations().some((a) => a.transitionProperty === "--grip-p" && a.playState === "running")); gripLoop = running || moved ? requestAnimationFrame(tick) : 0; };
+  gripLoop = requestAnimationFrame(tick);
+}
+// What moves the progress: its transition starting (a drag, a let-go), a sash's focus, a key or a press.
+for (const type of ["transitionrun", "focusin", "focusout", "pointerdown", "pointerup", "keydown"]) addEventListener(type, runGrips, true);
+// The measured handle, scaled to the panel's radius R (style.css, --c-grip-*): its circle's centre pulled
+// `k` from the corner circle's centre toward the corner on both axes, radius r, stroke w, sweep σ. The run's
+// straight lines stand where the arc's quarter-turn ends meet them: e = R − k − r in from each edge.
+function gripGeo() {
+  const R = px("--radius-panel"), k = px("--c-grip-pull"), r = px("--c-grip-r"), w = px("--c-grip-stroke"), sweep = (px("--c-grip-sweep") * Math.PI) / 180, L = px("--c-grip-run");
+  return { R, k, r, w, L, e: R - k - r, over: (sweep - Math.PI / 2) / 2 };
+}
+// The stroke's width a fraction u of the way out along a run-out: full at the join, thinning to nothing at the
+// tip on a quarter cosine (its slope 0 at the join, so the width runs on from the body with no step).
+const gripTaper = (w, u) => w * Math.cos((Math.PI / 2) * u);
+// The panel's handle, in the corner's own frame: the outer corner at 0,0, x into the panel along the foot, -y up
+// the width edge. Its circle's centre O' = (R − k, −(R − k)); t = π points at the width edge, π/2 at the foot.
+function cornerShape(run) {
+  const { R, k, r, w, L, e, over } = gripGeo(), ox = R - k, oy = -(R - k), C = [];
+  const onArc = (t, wd) => ({ x: ox + r * Math.cos(t), y: oy + r * Math.sin(t), tx: Math.sin(t), ty: -Math.cos(t), w: wd });
+  for (let i = 0; i < GRIP_RUN; i++) { const u = 1 - i / GRIP_RUN; C.push(run ? { x: e, y: oy - u * L, tx: 0, ty: 1, w: gripTaper(w, u) } : onArc(Math.PI + over * u, w)); }
+  for (let j = 0; j <= GRIP_BODY; j++) C.push(onArc(Math.PI - (Math.PI / 2) * (j / GRIP_BODY), w));
+  for (let i = 1; i <= GRIP_RUN; i++) { const u = i / GRIP_RUN; C.push(run ? { x: ox + u * L, y: -e, tx: 1, ty: 0, w: gripTaper(w, u) } : onArc(Math.PI / 2 - over * u, w)); }
+  return ribbon(C);
+}
+// The dock's: the same stroke, straightened, on its top edge e in: a capsule the arc's length (the body the
+// arc's quarter turn, the parked run-outs its overshoot), centred on the edge, running out either way.
+function edgeShape(run) {
+  const { r, w, L, e, over } = gripGeo(), half = (r * Math.PI) / 4, C = [], at = (x, wd) => ({ x, y: e, tx: 1, ty: 0, w: wd });
+  for (let i = 0; i < GRIP_RUN; i++) { const u = 1 - i / GRIP_RUN; C.push(run ? at(-half - u * L, gripTaper(w, u)) : at(-half - r * over * u, w)); }
+  for (let j = 0; j <= GRIP_BODY; j++) C.push(at(-half + (2 * half * j) / GRIP_BODY, w));
+  for (let i = 1; i <= GRIP_RUN; i++) { const u = i / GRIP_RUN; C.push(run ? at(half + u * L, gripTaper(w, u)) : at(half + r * over * u, w)); }
+  return ribbon(C);
 }
 function drawGrips() {
-  const R = px("--radius-panel"), L = px("--c-grip-run"), d = px("--c-grip-inset"), w0 = px("--c-grip-stroke"), h0 = ((R - d) * px("--c-grip-sweep") * Math.PI) / 360;
-  const c = $("gripC"), S = Math.ceil(R + L + w0);
+  const { R, k, r, w, L, e } = gripGeo();
+  const c = $("gripC"), S = Math.ceil(R - k + L + w);
   c.setAttribute("width", S); c.setAttribute("height", S); c.setAttribute("viewBox", "0 " + -S + " " + S + " " + S);
-  c.style.setProperty("--grip-rest", cornerShape(0, 0)); c.style.setProperty("--grip-w", cornerShape(L, 0)); c.style.setProperty("--grip-h", cornerShape(0, L)); c.style.setProperty("--grip-wh", cornerShape(L, L));
-  const g = $("gripD"), W = Math.ceil(2 * (h0 + L) + w0), H = Math.ceil(d + w0);
+  gripShapes.set(c.querySelector("path"), { rest: cornerShape(false), run: cornerShape(true), p: null });
+  const g = $("gripD"), W = 2 * Math.ceil((r * Math.PI) / 4 + L + w), H = Math.ceil(e + w);
   g.setAttribute("width", W); g.setAttribute("height", H); g.setAttribute("viewBox", -W / 2 + " 0 " + W + " " + H);
-  g.style.setProperty("--grip-rest", edgeShape(0)); g.style.setProperty("--grip-run", edgeShape(L));
+  gripShapes.set(g.querySelector("path"), { rest: edgeShape(false), run: edgeShape(true), p: null });
+  paintGrips();
 }
 drawGrips();
 for (const sash of document.querySelectorAll(".sash")) {
@@ -2003,8 +2043,10 @@ if (demoOf) {
       if (which === "corner") { panel.dataset.resizing = rootEl.dataset.resizing = "wh"; tween(800, (e) => setSize(w0 + 40 * e, h0 + 30 * e)); }
       else { dock0 ??= d0(); $("dock").dataset.resizing = rootEl.dataset.resizing = "d"; tween(800, (e) => setDockH(dock0 + 40 * e)); }
     }],
-    ["release", 1400, () => { delete owner.dataset.resizing; delete rootEl.dataset.resizing; delete owner.dataset.pointing; }],
-    ["reset", 700, () => { if (which === "corner") tween(500, (e) => setSize(w0 + 40 * (1 - e), h0 + 30 * (1 - e))); else tween(500, (e) => setDockH(dock0 + 40 * (1 - e))); }],
+    // Let go with the pointer still on the grip: the highlight runs back into the handle, still bright.
+    ["release", 1400, () => { delete owner.dataset.resizing; delete rootEl.dataset.resizing; }],
+    // The pointer leaves; the handle settles to its rest ink as the size goes back for the next loop.
+    ["reset", 700, () => { delete owner.dataset.pointing; if (which === "corner") tween(500, (e) => setSize(w0 + 40 * (1 - e), h0 + 30 * (1 - e))); else tween(500, (e) => setDockH(dock0 + 40 * (1 - e))); }],
   ];
   let i = 0;
   const next = () => { if (!on) return; const [k, ms_, fn] = steps[i]; fn(); say(k); i = (i + 1) % steps.length; timer = setTimeout(next, ms_); };
