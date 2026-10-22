@@ -154,10 +154,7 @@ export const LongNamesNarrow = {
   parameters: { viewport: 320 },
 };
 
-/**
- * A project past its spend cap, as home-state lists it: words only, the
- * amounts left to the Usage page (DESIGN.md, The Spend Stays On Usage Rule).
- */
+/** A project past its spend cap, as home-state lists it. */
 export const Budget = {
   args: {
     item: {

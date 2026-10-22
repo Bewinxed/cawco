@@ -749,9 +749,6 @@ Logins moved into CawCo are one group: a head led by the group glyph (Solar duot
 The kit lives in `apps/dashboard/src/lib/components/ui`. Shared recipes are the `kit-*` classes in `app.css`'s components layer; everything else a component draws is the theme's utilities and variants on its own elements (`theme.css`, `variants.css`).
 
 **The Earned Count Rule.** A count on a control is drawn only above 0: a count of none says nothing. On the web and in the app alike, at 0 the count element is gone and the control's name drops it too. A figure whose 0 is itself the reading (a measurement, a share, a total the control reports rather than a number of things it opens) is not a count.
-
-**The Spend Stays On Usage Rule.** Spend never shows in a view. No cost, token spend or price figure appears anywhere in CawCo except the surfaces built for it: the Usage page (`/usage`, its parts in `lib/cawco/usage/`) and Configure › Spend (`/config/spend`). A session, a row, a card, a notice or a panel says what happened in words (a project reached its budget, Caw paused), never the amount.
-
 ### Buttons
 Buttons: shadcn/ui button and Base UI; prominence per Apple HIG.
 
@@ -994,6 +991,7 @@ The surface that set the language. It hangs from the trigger pressed, a popover 
 - **Do** give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size.
 - **Do** enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.
 - **Do** carry shared objects across a change, and reflow lists rather than letting rows jump.
+- **Do** take the house helper for each kind of motion: `morph()` for a size tween, `reflow()` for a list, `unfold` for a disclosure, `NsPopoverGroup` for a popover glide, `fluid-tabs` or the harness `Rail` for a tab switch (The House Helper Rule).
 - **Do** design each flow from the four questions of The Stay In Context Rule, sized to the decision: in place for a light one, the affected things named for a heavy one, and every result taken from the system's word.
 - **Do** keep work that outlives its surface through a reload and a dismissal: the surface back open at the same step, the work parked in one persistent place with live progress, one press back to it, and every failure said in the error formula with a way on (The Work Outlives Its Surface Rule).
 - **Do** open what asks or shows in the page, with the rest still live (The Open Page Rule). Draw facts that have a shape (The Show Don't Tell Rule), and give every empty state the start of Caw's work on it (The Empty Starts Work Rule).
@@ -1021,7 +1019,5 @@ The surface that set the language. It hangs from the trigger pressed, a popover 
 - **Don't** swap Solar for another icon set or for SF Symbols, or drop the duotone layer.
 - **Don't** use pill-shaped buttons; full rounding is for state pills, switches and dots.
 - **Don't** put a third control between Approve and Deny, or make one more salient than the other.
-- **Don't** show a cost, token spend or price figure outside the Usage page and Configure › Spend.
-- **Don't** write your own size tween, list reflow, disclosure fold, popover glide or tab switch; take the house helper (The House Helper Rule).
 - **Don't** show an empty state while data is loading, or claim zero while the hub connection is not live.
 - **Don't** use a `group-has-*` utility anywhere in the dashboard: one such rule in the sheet makes every element put into the page restyle the whole rail, 20ms and more, whether its group is on the page or not. Style from a state the component sets on itself or its group (`group-data-*`), or from a sibling. `grep -rn "group-has-" apps/dashboard/src` finds none.

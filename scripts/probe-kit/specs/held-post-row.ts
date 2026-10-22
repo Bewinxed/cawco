@@ -21,7 +21,7 @@
  *    asker ellipsizes (scrollWidth > clientWidth).
  * 3. Budget, a project past its daily cap: the row says "Reached its daily
  *    budget · Caw paused", and nothing in it is a currency sign or a money
- *    figure (DESIGN.md, The Spend Stays On Usage Rule).
+ *    figure.
  *
  *   bun scripts/probe-kit/run.ts held-post-row
  */
