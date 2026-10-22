@@ -23,7 +23,8 @@
  *
  * At 390, 680 and 1440, in Chromium and WebKit, scrolled to the end and
  * mid-history. `LAYERS_ONLY=<part>,…` runs only the legs whose key
- * (`chromium-390-11-end`, `webkit-1440-4-mid-history`) holds a part.
+ * (`chromium-390-11-end`, `webkit-1440-4-mid-history`) holds a part, and
+ * `LAYERS_SURFACES=<part>,…` only the surfaces whose name holds one.
  */
 import type { Page } from "playwright-core";
 import { Clock } from "../../anim";
@@ -117,10 +118,13 @@ interface Held {
 
 /** A clock over the surface's own runs: Chromium's Animation domain, or WebKit's Web Animations. */
 interface SurfaceClock {
-  catchRuns(action: () => Promise<unknown>, within: string): Promise<Held[]>;
-  oneClock(): string[];
-  release(): Promise<void>;
-  seek(fraction: number): Promise<void>;
+  catchRuns: (
+    action: () => Promise<unknown>,
+    within: string
+  ) => Promise<Held[]>;
+  oneClock: () => string[];
+  release: () => Promise<void>;
+  seek: (fraction: number) => Promise<void>;
 }
 
 /**
@@ -176,59 +180,60 @@ function waapiClock(page: Page): SurfaceClock {
   let held: Held[] = [];
   return {
     async catchRuns(action, within) {
-      await page.evaluate((sel) => {
-        const seen = new Set(window.kitRuns());
-        const clock = {
-          done: false,
-          held: [] as {
-            run: Animation;
-            end: number;
-            easing: string;
-            frame: number;
-          }[],
-        };
-        window.__layersClock = clock;
-        let frame = 0;
-        let after = 0;
-        const look = () => {
-          frame += 1;
-          for (const run of window.kitRuns()) {
-            if (seen.has(run)) {
-              continue;
-            }
-            seen.add(run);
+      await page.evaluate(
+        ([sel, colour]) => {
+          const seen = new Set(window.kitRuns());
+          const clock: NonNullable<Window["__layersClock"]> = {
+            done: false,
+            held: [],
+          };
+          window.__layersClock = clock;
+          const tint = new RegExp(colour);
+          /** Its end, when it is the surface's own motion; null to let it go. */
+          const endOf = (run: Animation): number | null => {
             const end = Number(run.effect?.getComputedTiming().endTime ?? 0);
             const target = (run.effect as KeyframeEffect | null)?.target;
             const property =
               run instanceof CSSTransition ? run.transitionProperty : "";
-            if (
-              !Number.isFinite(end) ||
-              end <= 0 ||
-              /(^|-)color$|^fill$|^stroke$/.test(property) ||
-              !window.kitInside(target, sel)
-            ) {
-              continue;
+            const own =
+              Number.isFinite(end) &&
+              end > 0 &&
+              !tint.test(property) &&
+              window.kitInside(target, sel);
+            return own ? end : null;
+          };
+          let frame = 0;
+          let after = 0;
+          const hold = () => {
+            for (const run of window
+              .kitRuns()
+              .filter((one) => !seen.has(one))) {
+              seen.add(run);
+              const end = endOf(run);
+              if (end !== null) {
+                run.pause();
+                const easing = String(run.effect?.getTiming().easing ?? "");
+                clock.held.push({ run, end, easing, frame });
+              }
             }
-            run.pause();
-            clock.held.push({
-              run,
-              end,
-              easing: String(run.effect?.getTiming().easing ?? ""),
-              frame,
-            });
-          }
-          after += clock.held.length > 0 ? 1 : 0;
-          if (after >= 2 || frame > 180) {
+          };
+          const look = () => {
+            frame += 1;
+            hold();
+            after += clock.held.length > 0 ? 1 : 0;
+            if (after < 2 && frame <= 180) {
+              requestAnimationFrame(look);
+              return;
+            }
             for (const one of clock.held) {
               one.run.currentTime = 0;
             }
             clock.done = true;
-            return;
-          }
+          };
           requestAnimationFrame(look);
-        };
-        requestAnimationFrame(look);
-      }, within);
+        },
+        [within, COLOUR.source] as const
+      );
       await action();
       await page.waitForFunction(() => window.__layersClock?.done === true, {
         timeout: 10_000,
@@ -296,6 +301,11 @@ interface Surface {
   open: (page: Page) => Promise<void>;
   /** Whether this leg has it to open; a reason when it does not. */
   present: (page: Page) => Promise<string | null>;
+  /**
+   * A motion staged on purpose, not one transition, and why: its runs are
+   * read and named, and not held to one clock.
+   */
+  staged?: string;
   /** What its own runs run on. */
   within: (page: Page) => Promise<string>;
 }
@@ -399,6 +409,8 @@ const SURFACES: Surface[] = [
     // it, and the view and its rows stay where they are.
     name: "parked ask",
     present: async () => null,
+    staged:
+      "the ask's grown shape is drawn frame by frame on requestAnimationFrame (transcript/grown.ts morphTo), with the card coming up partway and the pill's parts stepping aside on their own fade (DESIGN.md, Composer, The grown shape)",
     within: async () => '[data-slot="shell"]',
     open: (page) => parkAsk(page, true),
     close: (page) => parkAsk(page, false),
@@ -468,6 +480,8 @@ const SURFACES: Surface[] = [
     // the card: the card leaving (opened here) takes no room from under
     // them, and one parking again (closed here) moves nothing either.
     name: "ask leaving under a reader in its room",
+    staged:
+      "the ask's grown shape is drawn frame by frame on requestAnimationFrame (transcript/grown.ts morphTo), with the card coming up partway and the pill's parts stepping aside on their own fade (DESIGN.md, Composer, The grown shape)",
     async present(page) {
       const atEnd = await page.evaluate((log) => {
         const s = document.querySelector<HTMLElement>(log);
@@ -525,6 +539,74 @@ interface Leg {
   width: number;
 }
 
+/** The runs a clock held, in words: each kind, length and easing once. */
+const runsOf = (list: Held[]): string =>
+  [
+    ...new Set(
+      list.map((one) => `${one.name} ${Math.round(one.end)}ms ${one.easing}`)
+    ),
+  ].join(" + ");
+
+/**
+ * One surface on a leg's page: opened and closed on the held clock, the
+ * transcript read at each fraction against how it stood before. `thrown`
+ * is what the page threw or logged as an error meanwhile.
+ */
+async function measure(
+  kit: Kit,
+  page: Page,
+  clock: SurfaceClock,
+  surface: Surface,
+  what: string,
+  thrown: string[]
+): Promise<void> {
+  const before = await page.evaluate(reading, LOG);
+  if (!before) {
+    kit.check(`${what}: the transcript is there`, false);
+    return;
+  }
+  const within = await surface.within(page);
+  const opened = await clock.catchRuns(() => surface.open(page), within);
+  const openClock = clock.oneClock();
+  const openFaults = await through(page, clock, before);
+  const closed = await clock.catchRuns(() => surface.close(page), within);
+  const closeClock = clock.oneClock();
+  const closeFaults = await through(page, clock, before);
+  const faults = [
+    ...openFaults.map((one) => `open ${one}`),
+    ...closeFaults.map((one) => `close ${one}`),
+  ];
+  kit.check(
+    `${what}: the transcript's box, scrollTop and last row stand still through its open and its close (0, ¼, ½, ¾, 1, settled)`,
+    faults.length === 0,
+    faults.slice(0, 6).join("; ") || `last row ${before.last?.id ?? "none"}`
+  );
+  const said = `open ${runsOf(opened)}; close ${runsOf(closed)}`;
+  const clockFaults = [...openClock, ...closeClock];
+  if (surface.staged) {
+    kit.note(`${what}: staged, not one clock: ${surface.staged} (${said})`);
+  } else {
+    kit.check(
+      `${what}: its open and its close each run on one clock`,
+      clockFaults.length === 0,
+      clockFaults.slice(0, 4).join("; ") || said
+    );
+  }
+  kit.check(
+    `${what}: the page throws nothing through it`,
+    thrown.length === 0,
+    thrown.slice(0, 2).join(" | ")
+  );
+}
+
+/** The surfaces this run reads: every one, or those `LAYERS_SURFACES` names. */
+const surfacesRead = (): Surface[] => {
+  const parts = process.env.LAYERS_SURFACES?.split(",") ?? [];
+  return parts.length === 0
+    ? SURFACES
+    : SURFACES.filter((one) => parts.some((part) => one.name.includes(part)));
+};
+
 async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
   const name = `${at.engine} ${at.width} · ${at.count} delegates · ${at.place}`;
   const page = await kit.page(at.view, { engine: at.engine });
@@ -533,55 +615,32 @@ async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
   await settle(page, 800);
   const clock =
     at.engine === "chromium" ? await protocolClock(page) : waapiClock(page);
-  for (const surface of SURFACES) {
+  // What the page threw while a surface opened and closed: that surface's
+  // failure, quoted, never a transcript that silently went. Uncaught
+  // exceptions only: the bench has no hub, and the client's own reads of it
+  // (work items, delegate events) log their 503s whatever is open.
+  const thrown: string[] = [];
+  page.on("pageerror", (error) => {
+    thrown.push(String(error.stack ?? error).slice(0, 400));
+  });
+  for (const surface of surfacesRead()) {
     const what = `${name} · ${surface.name}`;
+    thrown.length = 0;
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one surface at a time, on one page
       await place(page, at.place);
       const absent = await surface.present(page);
       if (absent) {
         kit.note(`${what}: not here (${absent})`);
-        continue;
+      } else {
+        await measure(kit, page, clock, surface, what, thrown);
       }
-      const before = await page.evaluate(reading, LOG);
-      if (!before) {
-        kit.check(`${what}: the transcript is there`, false);
-        continue;
-      }
-      const within = await surface.within(page);
-      const opened = await clock.catchRuns(() => surface.open(page), within);
-      const openClock = clock.oneClock();
-      const openFaults = await through(page, clock, before);
-      const closed = await clock.catchRuns(() => surface.close(page), within);
-      const closeClock = clock.oneClock();
-      const closeFaults = await through(page, clock, before);
-      kit.check(
-        `${what}: the transcript's box, scrollTop and last row stand still through its open and its close (0, ¼, ½, ¾, 1, settled)`,
-        openFaults.length === 0 && closeFaults.length === 0,
-        [
-          ...openFaults.map((one) => `open ${one}`),
-          ...closeFaults.map((one) => `close ${one}`),
-        ]
-          .slice(0, 6)
-          .join("; ") || `last row ${before.last?.id ?? "none"}`
-      );
-      const runs = (list: Held[]) =>
-        [
-          ...new Set(
-            list.map(
-              (one) => `${one.name} ${Math.round(one.end)}ms ${one.easing}`
-            )
-          ),
-        ].join(" + ");
-      kit.check(
-        `${what}: its open and its close each run on one clock`,
-        openClock.length === 0 && closeClock.length === 0,
-        openClock.length || closeClock.length
-          ? [...openClock, ...closeClock].slice(0, 4).join("; ")
-          : `open ${runs(opened)}; close ${runs(closed)}`
-      );
     } catch (error) {
-      kit.check(`${what}: runs`, false, String(error).split("\n")[0]);
+      kit.check(
+        `${what}: runs`,
+        false,
+        [String(error).split("\n")[0], ...thrown.slice(0, 2)].join(" | ")
+      );
       await clock.release().catch(() => undefined);
       await page.keyboard.press("Escape").catch(() => undefined);
       await settle(page, 400).catch(() => undefined);
@@ -612,28 +671,34 @@ const VIEW_AT: [View, number][] = [
   ["desk", 1440],
 ];
 
+/** Every leg: engine × width × delegates × where the transcript stands. */
+const LEGS: (Leg & { key: string })[] = (["chromium", "webkit"] as const)
+  .flatMap((engine) =>
+    VIEW_AT.map(([view, width]) => ({ engine, view, width }))
+  )
+  .flatMap((at) => (["4", "11"] as const).map((count) => ({ ...at, count })))
+  .flatMap((at) =>
+    (["end", "mid-history"] as const).map((where) => ({
+      ...at,
+      place: where,
+      key: `${at.engine}-${at.width}-${at.count}-${where}`,
+    }))
+  );
+
 const spec: Spec = {
   name: "composer-layers",
   async run(kit) {
     const base = await kit.bench();
     const only = process.env.LAYERS_ONLY?.split(",") ?? [];
-    for (const engine of ["chromium", "webkit"] as const) {
-      for (const [view, width] of VIEW_AT) {
-        for (const count of ["4", "11"] as const) {
-          for (const where of ["end", "mid-history"] as const) {
-            const at = { engine, view, width, count, place: where };
-            const key = `${engine}-${width}-${count}-${where}`;
-            if (only.length > 0 && !only.some((one) => key.includes(one))) {
-              continue;
-            }
-            try {
-              // biome-ignore lint/performance/noAwaitInLoops: one leg at a time
-              await leg(kit, base, at);
-            } catch (error) {
-              kit.check(`${key}: runs`, false, String(error).split("\n")[0]);
-            }
-          }
-        }
+    const legs = LEGS.filter(
+      (at) => only.length === 0 || only.some((one) => at.key.includes(one))
+    );
+    for (const at of legs) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one leg at a time
+        await leg(kit, base, at);
+      } catch (error) {
+        kit.check(`${at.key}: runs`, false, String(error).split("\n")[0]);
       }
     }
   },

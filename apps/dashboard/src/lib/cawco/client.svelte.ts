@@ -1302,9 +1302,11 @@ const pageReads = new Map<
   { read: Promise<TranscriptOutcome>; cancel: () => void }
 >();
 
-// Lets the store be asserted from the console while developing.
+// Lets the store be asserted from the console while developing, and a
+// bench stand its conversation in as one the hub holds running
+// (`adoptInstances`, as a snapshot does).
 if (import.meta.env.DEV) {
-  devDebug({ state, inflight });
+  devDebug({ state, inflight, adoptInstances });
 }
 
 // HMR-persistent socket references, so a module reload never leaves an orphan.

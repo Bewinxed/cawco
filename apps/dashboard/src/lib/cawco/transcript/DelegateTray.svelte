@@ -40,6 +40,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconAsk,
@@ -50,7 +51,6 @@
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
-  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { stopWords } from "../accounts/switch.svelte";
   import {
     cawco,

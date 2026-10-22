@@ -139,9 +139,10 @@
 
 <!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on
      one transition, --dur-pop on the drawer curve, from the ring's corner)
-     and leaves by `popOut` back down into the row (--dur-exit). -->
+     and leaves by `popOut` back down into the row (--dur-exit), global: the
+     pane's `{#if}` that shuts it is outside this component, a snippet
+     render between. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: Esc anywhere inside the plan shuts it; every control in it is its own button or link -->
 <section
   data-slot="plan"
   aria-labelledby={titleId}
@@ -155,7 +156,7 @@
   style:--plan-foot="calc(100% + var(--space-2))"
   bind:this={section}
   {@attach room}
-  out:popOut={{ side: "top" }}
+  out:popOut|global={{ side: "top" }}
 >
   <header
     data-slot="plan-head"

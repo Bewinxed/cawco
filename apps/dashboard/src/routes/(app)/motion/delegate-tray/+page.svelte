@@ -11,7 +11,7 @@
    * In the reader's theme; `?case=` (4, 11, 1r, 1f, 3r2f, 5f, 7r13f,
    * 20r) seeds running and failed delegates instead of the twelve.
    */
-  import type { SessionPulse, WorkItemSummary } from "@cawco/core";
+  import type { InstanceRow, SessionPulse, WorkItemSummary } from "@cawco/core";
   import { onMount } from "svelte";
   import { blankSession } from "#lib/cawco/client.svelte.js";
   import type { HeldPlan } from "#lib/cawco/plan.js";
@@ -108,10 +108,26 @@
           workItems: Record<string, WorkItemSummary>;
           plans: Record<string, HeldPlan>;
         };
+        adoptInstances: (rows: InstanceRow[]) => void;
       };
     }
   ).__cawcoDebug;
 
+  // Running, as the hub would list it: an ask parked on it is the
+  // conversation's own (its composer grows into it over its transcript),
+  // never an ask standing alone with no session behind it.
+  debug.adoptInstances([
+    {
+      id: ID,
+      cwd: "/bench",
+      harness: "claude",
+      kind: "mainline",
+      launchDir: "known",
+      machineId: "bench",
+      sessionId: null,
+      status: "running",
+    },
+  ]);
   debug.state.pulses[ID] = {
     activity: "working",
     at: now,
@@ -237,6 +253,7 @@
     delete debug.state.sessions[ID];
     delete debug.state.plans[ID];
     delete debug.state.pulses[ID];
+    debug.adoptInstances([]);
   });
 </script>
 

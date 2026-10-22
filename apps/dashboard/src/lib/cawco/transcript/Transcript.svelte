@@ -2693,12 +2693,7 @@
       return;
     }
     lastTop = scroller.scrollTop;
-    // Held open under a reader who stood in it: it gives the room back as
-    // they scroll out of it, never under them.
-    if (heldRoom > 0) {
-      const into = scroller.scrollTop - tailTop(scroller);
-      heldRoom = into > parkedHeight ? into : 0;
-    }
+    giveRoomBack(scroller);
     // A far landing's scroll: what it left and the screen above follow.
     if (narrow) {
       catchUpRest();
@@ -2904,6 +2899,13 @@
       heldRoom = into > next ? into : 0;
     });
   });
+  /** A room held open under a reader gives itself back as they scroll out of it, never under them. */
+  function giveRoomBack(node: HTMLElement): void {
+    if (heldRoom > 0) {
+      const into = node.scrollTop - tailTop(node);
+      heldRoom = into > parkedHeight ? into : 0;
+    }
+  }
 
   /**
    * Pin the viewport to the bottom. Called from the list's own resize (see the
