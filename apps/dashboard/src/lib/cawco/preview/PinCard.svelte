@@ -532,6 +532,8 @@
     again={copyLink}
     data-copy-refused
     details={link}
+    end="var(--space-3)"
+    indent="var(--space-3)"
     reason={linkRefused ? copyRefused("Link") : null}
   />
   <!-- The reply takes the keyboard as the thread opens: ringed when a key opened it, quiet after a press (The One Target Rule). -->

@@ -1829,9 +1829,12 @@
             </div>
           </div>
           {@const fault = viewFaultOf(view.name)}
+          <!-- In the bar's own inset, under its words. -->
           <RowFault
             again={fault?.again}
             data-view-refusal={view.name}
+            end="var(--space-3)"
+            indent="var(--space-3)"
             reason={fault?.reason}
           />
         {:else}
@@ -1880,9 +1883,12 @@
             </span>
           </div>
           {@const fault = viewFaultOf(view.name)}
+          <!-- In the head's own inset, under its name. -->
           <RowFault
             again={fault?.again}
             data-view-refusal={view.name}
+            end="var(--space-1)"
+            indent="var(--space-1)"
             reason={fault?.reason}
           />
         {/if}

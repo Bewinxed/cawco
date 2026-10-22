@@ -177,6 +177,8 @@
       <RowFault
         again={() => loadCatalog(each.machineId)}
         data-catalog-left-out={each.machineId}
+        end="var(--space-3)"
+        indent="var(--space-3)"
         reason={each.words}
       />
     {/each}

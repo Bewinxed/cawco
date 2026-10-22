@@ -1449,6 +1449,24 @@ async function viewKeepLeg(
     kept.text.includes(refusal) && kept.again,
     JSON.stringify(kept)
   );
+  // Its words stand under the bar's words: one inset, read off the boxes.
+  const inset = await page.evaluate((sel) => {
+    const reason = document.querySelector(`${sel} [data-slot="reason"]`);
+    const bar = document
+      .querySelector(sel)
+      ?.previousElementSibling?.querySelector("span");
+    return reason && bar
+      ? {
+          reason: reason.getBoundingClientRect().left,
+          bar: bar.getBoundingClientRect().left,
+        }
+      : null;
+  }, line);
+  kit.check(
+    "view keep: the refusal's words start where the bar's words start",
+    inset !== null && Math.abs(inset.reason - inset.bar) <= 1,
+    JSON.stringify(inset)
+  );
   await page.unroute(keepRoute);
   await page.unroute(views);
 }

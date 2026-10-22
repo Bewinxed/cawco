@@ -279,8 +279,8 @@
     <RowFault
       again={readList}
       data-artifact-list-refused
-      indent="var(--space-2)"
-      end="var(--space-2)"
+      indent="calc(var(--spacing) * 2.5)"
+      end="calc(var(--spacing) * 2.5)"
       reason={refusals.reason(listKey)}
     />
     <div {@attach reflow()} {@attach keepFocus}>
@@ -369,8 +369,8 @@
           again={() => remove(artifact)}
           data-artifact-remove-refused={artifact.id}
           data-flip
-          indent="var(--space-2)"
-          end="var(--space-2)"
+          indent="calc(var(--spacing) * 2.5)"
+          end="calc(var(--spacing) * 2.5)"
           reason={refusals.reason(removeKey(artifact.id))}
         />
       {/each}

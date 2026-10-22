@@ -77,7 +77,7 @@
   again={copy}
   data-copy-refused
   details={text}
-  end="var(--space-2)"
-  indent="var(--space-2)"
+  end="calc(var(--spacing) * 2.5)"
+  indent="calc(var(--spacing) * 2.5)"
   reason={refusals.reason(key)}
 />
