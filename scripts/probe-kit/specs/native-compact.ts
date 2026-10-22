@@ -18,13 +18,20 @@
  *    before the summary would have finished; nothing is compacted; no
  *    summary request follows; the next send reads the whole conversation.
  * 2. Moved at its limit: A refuses the session's turn at its limit. The hub
- *    moves it whole to B (the same conversation, the same row) and its first
- *    steps there are its filing turn (it files its spec with todo_write),
- *    then Claude Code's `/compact` with the hub's focus. A person's word sent
- *    while it compacts is held at the hub, then read after. The move line
- *    says "compacting", then "compacted". The turn after reads Claude Code's
- *    summary and the Open items the hook built from the session's records,
- *    word for word, and not the conversation.
+ *    moves it whole to B (the same conversation, the same row). Its filing
+ *    send bounces: the agent reaches the hub through the kit's relay
+ *    (relay.ts), which holds the relaunch's spawn and passes the filing send
+ *    behind it, so the agent finds no process for it and hands it back, owed
+ *    to the session's next process; the spawn goes on once the hub has said
+ *    so (as on obelisk at 11:57:34 on 2026-10-22, where the new process
+ *    started 12 s after its filing send came back). With no interrupt, its
+ *    first steps on B are its filing turn (it files its spec with
+ *    todo_write), then Claude Code's `/compact` with the hub's focus. A
+ *    person's word sent while it compacts is held at the hub, then goes once
+ *    the hub says what was sent meanwhile goes, and reaches B after the
+ *    `/compact`. The move line says "compacting", then "compacted". The turn
+ *    after reads Claude Code's summary and the Open items the hook built
+ *    from the session's records, word for word, and not the conversation.
  *
  * Sizes are each request's body as Claude Code sent it, in characters and in
  * tokens at four characters a token: the mock has no tokenizer, and the
@@ -44,6 +51,7 @@ import {
 import { COMPACT_FOCUS } from "../../../packages/hub/src/open-items";
 import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
+import { type Relay, relay } from "../relay";
 
 const B = "acct-scratch-fleet-b";
 /** Each account's token, as its requests carry it. */
@@ -107,6 +115,52 @@ const state = {
   limitedUntil: 0,
   /** Where the filing turn's tool calls have got to. */
   filing: "none" as "none" | "searched" | "filed" | "done",
+};
+
+/**
+ * The relaunch's filing send bounced (leg 2): armed with a session's id, the
+ * relay holds the hub's next spawn of it and passes the send behind it.
+ */
+const bounce = {
+  /** The session whose next spawn is held, while armed. */
+  armedFor: undefined as string | undefined,
+  /** The held spawn, sent on to the agent. */
+  spawn: undefined as (() => void) | undefined,
+  /** The send that went to the agent while its spawn was held. */
+  filing: undefined as string | undefined,
+};
+
+/** What the hub says to the agent, through the relay: see {@link bounce}. */
+const toAgent = (
+  text: string,
+  send: (more: string) => void
+): string | undefined => {
+  const id = bounce.armedFor;
+  if (!id || text.length > 200_000 || !text.includes(id)) {
+    return text;
+  }
+  let frame: {
+    instanceId?: string;
+    payload?: { instanceId?: string; message?: { uuid?: string } };
+    verb?: string;
+  };
+  try {
+    frame = JSON.parse(text);
+  } catch {
+    return text;
+  }
+  if ((frame.instanceId ?? frame.payload?.instanceId) !== id) {
+    return text;
+  }
+  if (frame.verb === "spawn" && !bounce.spawn) {
+    bounce.spawn = () => send(text);
+    return undefined;
+  }
+  if (frame.verb === "send" && bounce.spawn && !bounce.filing) {
+    bounce.filing = frame.payload?.message?.uuid;
+    bounce.armedFor = undefined;
+  }
+  return text;
 };
 
 /** The todo_write tool as Claude Code names a CawCo MCP tool. */
@@ -243,8 +297,14 @@ const furnish = async (home: string, id: string, organization: string) => {
   await writeFile(join(dir, "settings.json"), JSON.stringify(compactHook));
 };
 
-/** The fleet stood up: both accounts signed in and read with room, the compact hook in every Claude settings layer. */
-const standUp = async (kit: Kit): Promise<KitFleet> => {
+/**
+ * The fleet stood up: both accounts signed in and read with room, the compact
+ * hook in every Claude settings layer, its agent through the relay
+ * ({@link toAgent}).
+ */
+const standUp = async (
+  kit: Kit
+): Promise<{ between: Relay; fleet: KitFleet }> => {
   const fleet = await kit.fleet(respond);
   await furnish(fleet.home, ACCOUNT, "Scratch Fleet");
   await furnish(fleet.home, B, "Other Organization");
@@ -264,7 +324,10 @@ const standUp = async (kit: Kit): Promise<KitFleet> => {
     B,
     Date.now()
   );
-  fleet.launch("agent");
+  const between = relay(fleet.base, { toApp: toAgent });
+  fleet.launch("agent", [], {
+    CAWCO_HUB_URL: `${between.url.replace("http", "ws")}/ws`,
+  });
   await fleet.agentUp();
   await fleet.accountSignedIn();
   await until(
@@ -284,7 +347,7 @@ const standUp = async (kit: Kit): Promise<KitFleet> => {
       Date.now()
     );
   }
-  return fleet;
+  return { between, fleet };
 };
 
 /** The probe's reads of the fleet: where a session runs, what the mock saw, what Claude Code wrote. */
@@ -462,6 +525,39 @@ const stoppedCompaction = async (
   return true;
 };
 
+/**
+ * Leg 2's filing send bounced: handed back by an agent with no process for
+ * it, owed at the hub ({@link bounce}); then the held spawn goes on.
+ */
+const filingBounces = async (
+  kit: Kit,
+  fleet: KitFleet,
+  id: string,
+  hubLog: Awaited<ReturnType<KitFleet["logMark"]>>,
+  name: string
+) => {
+  const filing = await until(
+    `${name}: the filing send passes the held spawn`,
+    () => bounce.filing,
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  const cameBack = `send ${filing} to ${id} came back: no process took it; owed to the session's next process`;
+  const backed = await until(
+    `${name}: the hub says the filing send came back`,
+    async () => (await hubLog.since()).includes(cameBack),
+    Boolean,
+    60_000
+  ).catch(() => false);
+  const bounced = filing ? fleet.sendRow(filing) : undefined;
+  kit.check(
+    `${name}: its filing send comes back from a machine with no process for it, owed at the hub`,
+    !!filing && backed && bounced?.state === "pending" && bounced.owed !== null,
+    `send ${filing}: ${backed ? "came back" : "never came back"}, state ${bounced?.state} owed ${bounced?.owed ? "yes" : "no"}`
+  );
+  bounce.spawn?.();
+};
+
 /** 2. Moved at its limit: whole to B, its open items filed, compacted there. */
 const movedAtLimit = async (
   kit: Kit,
@@ -473,6 +569,8 @@ const movedAtLimit = async (
   const { accountOf, compactions, compactStage, seenWhere, sessionOf } = look;
   const name = "moved at its limit";
   const sessionBefore = sessionOf(id);
+  const hubLog = await fleet.logMark("hub");
+  bounce.armedFor = id;
   state.limitedUntil = Date.now() + 4 * 60 * 60_000;
   const askedAt = Date.now();
   await fleet.send(id, "LIMIT-MARK carry on with the work");
@@ -487,6 +585,7 @@ const movedAtLimit = async (
     landed === B,
     `account ${landed}`
   );
+  await filingBounces(kit, fleet, id, hubLog, name);
   const onB = (one: Seen) =>
     one.at >= askedAt && one.auth.endsWith(TOKEN[B] as string) && one.tools;
   const firstOnB = await seenWhere(
@@ -585,6 +684,26 @@ const movedAtLimit = async (
     lateRead?.state === "read",
     `state ${lateRead?.state}`
   );
+  const said = await hubLog.since();
+  const goes = said
+    .split("\n")
+    .filter((line) => line.includes("What was sent to it meanwhile goes now"));
+  kit.check(
+    `${name}: the hub ends the compaction with no interrupt, and what was sent meanwhile goes`,
+    goes.length === 1 && !said.includes("was interrupted"),
+    goes.join(" | ") || "no such line"
+  );
+  const lateOnB = fleet.seen.find(
+    (one) =>
+      one.last.includes("LATE-WORD") && one.auth.endsWith(TOKEN[B] as string)
+  );
+  kit.check(
+    `${name}: the person's word reaches B after the /compact`,
+    !!lateOnB && summary !== undefined && lateOnB.at > summary.at,
+    lateOnB && summary
+      ? `${lateOnB.at - summary.at} ms after the summary request`
+      : "no such request"
+  );
   const sessionAfter = sessionOf(id);
   kit.check(
     `${name}: the same conversation, moved whole`,
@@ -612,20 +731,24 @@ const movedAtLimit = async (
 };
 
 const run = async (kit: Kit) => {
-  const fleet = await standUp(kit);
-  const look = looks(fleet);
-  const id = await fleet.spawn("claude", "Native compact probe");
-  const from = await until(
-    "placed on an account",
-    () => look.accountOf(id) ?? "",
-    (one) => one === ACCOUNT || one === B
-  );
-  if (!kit.check("the session starts on A", from === ACCOUNT, `on ${from}`)) {
-    return;
-  }
-  const before = await largeConversation(kit, fleet, look, id);
-  if (await stoppedCompaction(kit, fleet, look, id)) {
-    await movedAtLimit(kit, fleet, look, id, before);
+  const { between, fleet } = await standUp(kit);
+  try {
+    const look = looks(fleet);
+    const id = await fleet.spawn("claude", "Native compact probe");
+    const from = await until(
+      "placed on an account",
+      () => look.accountOf(id) ?? "",
+      (one) => one === ACCOUNT || one === B
+    );
+    if (!kit.check("the session starts on A", from === ACCOUNT, `on ${from}`)) {
+      return;
+    }
+    const before = await largeConversation(kit, fleet, look, id);
+    if (await stoppedCompaction(kit, fleet, look, id)) {
+      await movedAtLimit(kit, fleet, look, id, before);
+    }
+  } finally {
+    between.stop();
   }
 };
 

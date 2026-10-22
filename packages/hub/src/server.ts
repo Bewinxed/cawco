@@ -8608,12 +8608,16 @@ export const createServer = (
    * hold), where a turn would only be refused; or, moved, its compaction
    * there under way ({@link compactions}), whose steps go first and alone, so
    * Claude Code never joins anything into its `/compact`. The controller's
-   * own word at the reset is not held by its hold; nothing is held past a
-   * compaction but its steps, which go `ahead`.
+   * own word at the reset is not held by its hold; a compaction holds
+   * everything but its own steps, which go `ahead` and, handed back by a
+   * machine with no process for them, go to the session's next one
+   * ({@link releaseOne}). Held by their own compaction, they never went: a
+   * session moved at 11:57:34 on 2026-10-22 waited on its filing turn until
+   * an interrupt at 12:14:59 stopped it.
    */
   const heldAtLimit = (instanceId: string, origin: NeutralOrigin): boolean => {
     if (db.atLimit.compaction(instanceId)) {
-      return true;
+      return !(origin.kind === "system" && origin.name === COMPACTION_ORIGIN);
     }
     if (origin.kind === "system" && origin.name === LIMIT_ORIGIN) {
       return false;
@@ -24234,7 +24238,9 @@ export const createServer = (
   /**
    * Whether a compaction's current step has ended: its send read and no turn
    * of it open. A step never sent (a restart cut it) is sent now; one its
-   * session refused ends the compaction stopped.
+   * machine handed back, owed, goes to the session's process now if it has
+   * one ({@link releaseOne}, which keeps it for the next one otherwise); one
+   * its session refused ends the compaction stopped.
    */
   const stepEnded = (
     plan: LimitCompaction,
@@ -24245,6 +24251,10 @@ export const createServer = (
     const sent = db.sendRecord(uuid);
     if (!sent) {
       compactionSend(row, uuid, compactionStep(plan.stage));
+      return false;
+    }
+    if (sent.owed && sent.state === "pending") {
+      releaseOne(sent);
       return false;
     }
     if (sent.state === "failed") {
