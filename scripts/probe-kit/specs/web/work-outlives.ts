@@ -1142,14 +1142,17 @@ async function cawOffLeg(
     await textOf(page, tray)
   );
   await pick(kit, page, pass, page.locator(`${tray} [data-stop-cancel]`));
-  await settle(page, 500);
+  await until(
+    async () => (await textOf(page, parked)).includes(STOP_FAILED),
+    10_000
+  );
   const said = await textOf(page, parked);
   kit.check(
     "caw off: put away, the failure stands where it is parked in words, with Reopen",
     said.includes(STOP_FAILED) &&
       said.includes("Caw is off") &&
       said.includes("Reopen"),
-    said
+    `${said} ${JSON.stringify(await page.evaluate(stateRead))}`
   );
   // His settings closed (Escape at the desk; a phone's sheet by its own
   // Close): the failure stands on the project's row, one press away.
@@ -1165,7 +1168,10 @@ async function cawOffLeg(
   } else {
     await page.keyboard.press("Escape");
   }
-  await settle(page, 600);
+  await until(
+    async () => (await textOf(page, parked)).includes(STOP_FAILED),
+    10_000
+  );
   const row = await textOf(page, parked);
   kit.check(
     "caw off: his settings closed, the failure stands on the project's row, one place, with Reopen",
@@ -1308,6 +1314,7 @@ async function configDeleteLeg(
     JSON.stringify({ made, said })
   );
   await reload(page);
+  await until(async () => (await textOf(page, line)).includes(refusal), 15_000);
   const kept = await faultOf(page, line);
   kit.check(
     "config delete: a reload says the refusal under the row again, with Try again",
@@ -1326,6 +1333,20 @@ async function configDeleteLeg(
     "config delete: Try again deletes it, and the line goes with its row",
     deleted && (await page.locator(line).count()) === 0
   );
+}
+
+/**
+ * On a phone, Caw's panel is a sheet at the page's foot, over what it
+ * covers (CawFloat): put away by its own Close, as a person would.
+ */
+async function putCawAway(kit: Kit, page: Page, pass: Pass): Promise<void> {
+  const close = page.locator(
+    "[data-caw-float-sheet][data-state=open] [aria-label=Close]"
+  );
+  if (pass.phone && (await close.count()) > 0) {
+    await pick(kit, page, pass, close.first());
+    await settle(page, 500);
+  }
 }
 
 async function viewKeepLeg(
@@ -1367,6 +1388,7 @@ async function viewKeepLeg(
     { waitUntil: "domcontentloaded" }
   );
   await page.waitForSelector(SHELL, { timeout: 60_000 });
+  await putCawAway(kit, page, pass);
   await pick(
     kit,
     page,
@@ -1388,6 +1410,8 @@ async function viewKeepLeg(
     JSON.stringify(said)
   );
   await reload(page);
+  await putCawAway(kit, page, pass);
+  await until(async () => (await textOf(page, line)).includes(refusal), 15_000);
   const kept = await faultOf(page, line);
   kit.check(
     "view keep: a reload says the refused Keep under the bar again",
@@ -1705,13 +1729,17 @@ async function behindLeg(
   page: Page,
   base: string,
   instanceId: string,
-  socket: Socket
+  socket: Socket,
+  send: (id: string, text: string) => Promise<string>
 ) {
+  // A turn of its own, so the view holds rows whichever legs ran before.
+  await send(instanceId, "Say ok.");
   await page.goto(`${base}/session/${instanceId}`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForSelector(SHELL, { timeout: 60_000 });
-  await page.waitForSelector('[data-slot="pane"] [role=log]', {
+  // Rows held: a read refused over them leaves the view behind, not empty.
+  await page.waitForSelector('[data-slot="pane"] [role=log] [data-row]', {
     timeout: 60_000,
   });
   await page.route("**/api/instances/*/transcript*", (route) =>
@@ -1769,7 +1797,11 @@ async function behindLeg(
         box.behindOverflow <= 0 &&
         box.pOverflow <= 0 &&
         box.pageOverflow <= 0,
-      JSON.stringify({ box, said: await textOf(page, line) })
+      JSON.stringify({
+        box,
+        said: await textOf(page, line),
+        pane: await textOf(page, '[data-slot="pane"] [role=alert]'),
+      })
     );
   }
   await page.unroute("**/api/instances/*/transcript*");
@@ -1850,7 +1882,7 @@ const spec: Spec = {
         ["artifact menu", () => artifactMenuLeg(k, page, base, chat, pass, n)],
         ["catalogue", () => catalogueLeg(k, page, base, socket)],
         ["copy", () => copyLeg(k, page, base, chat)],
-        ["behind", () => behindLeg(k, page, base, chat, socket)],
+        ["behind", () => behindLeg(k, page, base, chat, socket, fleet.send)],
       ];
       // What the page threw, said with a leg that did not run to its end.
       const thrown: string[] = [];
