@@ -39,6 +39,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { ANSWER_MAX_CHARS } from "../../../packages/hub/src/find-tool";
+import { toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -175,48 +176,33 @@ const standUp = async (kit: Kit) => {
         ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
     return { id, credential };
   };
+  const door = (as: Session) => ({
+    base: fleet.base,
+    id: as.id,
+    credential: as.credential,
+  });
   /** One tool call through the hub's REST door, as `as`: its words, refused or not. */
-  const tool = async (as: Session, name: string, args: object) => {
-    const response = await fetch(`${fleet.base}/api/delegation/call/${as.id}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${as.credential}`,
-      },
-      body: JSON.stringify({ name, arguments: args }),
-    });
-    const raw = await response.text();
-    try {
-      const result = JSON.parse(raw) as {
-        content?: { text?: string }[];
-        isError?: boolean;
-      };
-      return {
-        refused: !response.ok || result.isError === true,
-        text: (result.content ?? []).map((block) => block.text ?? "").join(""),
-      };
-    } catch {
-      return { refused: true, text: `${response.status} ${raw}` };
-    }
-  };
+  const tool = (as: Session, name: string, args: Record<string, unknown>) =>
+    toolWords(door(as), name, args);
   /**
    * One `find` call, its answer read: the hub's record (`response_format:
    * "detailed"`, JSON) unless the call asks for the concise words, which
-   * are read as words.
+   * are read as words (scripts/lib/tool-call.ts; a record read that gets
+   * words throws).
    */
-  const find = async (as: Session, args: object): Promise<Called> => {
-    const called = await tool(as, "find", {
-      response_format: "detailed",
-      ...args,
-    });
-    if (called.refused) {
-      return { ...called, answer: {} };
+  const find = async (
+    as: Session,
+    args: Record<string, unknown>
+  ): Promise<Called> => {
+    const { response_format: asked, ...rest } = args;
+    if (asked === "concise") {
+      const words = await toolWords(door(as), "find", rest);
+      return { refused: words.refused, text: words.text, answer: {} };
     }
-    try {
-      return { ...called, answer: JSON.parse(called.text) as Answer };
-    } catch {
-      return { ...called, answer: {} };
-    }
+    const read = await toolRecord<Answer>(door(as), "find", rest);
+    return read.refused
+      ? { refused: true, text: read.text, answer: {} }
+      : { refused: false, text: read.text, answer: read.record };
   };
   /** `GET /api/find`, as the dashboard's Find asks it once typing settles. */
   const engine = async (q: string) =>

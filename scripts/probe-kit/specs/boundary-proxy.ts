@@ -103,10 +103,10 @@ const freePort = async (): Promise<number> => {
 /** `git ls-remote <url> HEAD`'s one line. */
 const COMMIT_HEAD = /^[0-9a-f]{40}\tHEAD$/;
 
-/** What `cawco tool <name>` answers, parsed. */
+/** The hub's record `cawco tool <name> --record` answers (core tool-answer.ts), parsed. */
 const tool = async <T>(name: string, input: object): Promise<T> =>
   JSON.parse(
-    await Bun.$`cawco tool ${name} ${JSON.stringify(input)}`.text()
+    await Bun.$`cawco tool ${name} --record ${JSON.stringify(input)}`.text()
   ) as T;
 
 /** `argv` run with `env`: its exit code, stdout and stderr. */

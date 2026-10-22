@@ -26,6 +26,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -115,35 +116,19 @@ const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
     .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
     ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
 
-/** A CawCo tool called as session `as`, through the door its MCP server and the CLI share. */
+/** A CawCo tool called as session `as`, through the door its MCP server and the CLI share: its words. */
 const callAs = async (
   fleet: KitFleet,
   as: string,
   name: string,
-  args: object
+  args: Record<string, unknown>
 ): Promise<{ isError: boolean; text: string }> => {
-  const response = await fetch(`${fleet.base}/api/delegation/call/${as}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${await credentialOf(fleet, as)}`,
-    },
-    body: JSON.stringify({ name, arguments: args }),
-  });
-  if (!response.ok) {
-    return {
-      isError: true,
-      text: `${response.status} ${await response.text()}`,
-    };
-  }
-  const result = (await response.json()) as {
-    content?: { text?: string }[];
-    isError?: boolean;
-  };
-  return {
-    isError: !!result.isError,
-    text: (result.content ?? []).map((block) => block.text ?? "").join("\n"),
-  };
+  const said = await toolWords(
+    { base: fleet.base, id: as, credential: await credentialOf(fleet, as) },
+    name,
+    args
+  );
+  return { isError: said.refused, text: said.text };
 };
 
 /** The child's page on the hub, by its name: its id and writer, or undefined once gone. */

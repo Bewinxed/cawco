@@ -40,6 +40,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -335,17 +336,10 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
         JSON.stringify([X_FILE, X_FOLDER]),
     JSON.stringify(words)
   );
-  const delegates = await requestWithin(
-    300_000,
-    `${fleet.base}/api/delegation/call/${parent}`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${credential}`,
-      },
-      body: JSON.stringify({ name: "delegate_list", arguments: {} }),
-    }
+  // Its words, as the parent's agent reads them (scripts/lib/tool-call.ts).
+  const delegates = await toolWords(
+    { base: fleet.base, id: parent, credential },
+    "delegate_list"
   );
   check(
     "(a) the parent's delegate_list lists X under held, naming its excluded paths",

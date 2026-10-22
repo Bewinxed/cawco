@@ -93,6 +93,7 @@ import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { movedLine } from "../../../packages/core/src/injected";
 import { signal as signalPid } from "../../../packages/core/src/signal";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -1375,7 +1376,7 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
   check(
     "(c) the parent's delegate_list lists K under held",
     said.status === 200 &&
-      said.text.includes(wk.id) &&
+      said.text.includes(`workspace ${wk.id.slice(0, 8)} on`) &&
       said.text.includes("1 commit on no remote"),
     `${said.status} ${said.text.slice(0, 1500)}`
   );
@@ -1525,20 +1526,14 @@ const spec: Spec = {
         );
         return { status: archived.status, text: archived.text };
       },
+      // Its words, as the parent's agent reads them (scripts/lib/tool-call.ts).
       callAsParent: async (name, args) => {
-        const called = await requestWithin(
-          300_000,
-          `${fleet.base}/api/delegation/call/${parent}`,
-          {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              Authorization: `Bearer ${credential}`,
-            },
-            body: JSON.stringify({ name, arguments: args }),
-          }
+        const said = await toolWords(
+          { base: fleet.base, id: parent, credential },
+          name,
+          args as Record<string, unknown>
         );
-        return { status: called.status, text: called.text };
+        return { status: said.status, text: said.text };
       },
     };
 

@@ -182,7 +182,8 @@ const on = async (args: RelayArgs): Promise<string[]> => {
           ? { timestamp_header: input.timestampHeader }
           : {}),
         ...(input.idPath ? { id_path: input.idPath } : {}),
-      })
+      }),
+      "record"
     );
     return createdLines(JSON.parse(said) as Created);
   }
@@ -258,7 +259,8 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
               args.hub,
               session,
               "relay_remove",
-              JSON.stringify({ id })
+              JSON.stringify({ id }),
+              "record"
             )
           ) as { github: string; relay: RelayView })
         : ((await call(args.hub, "DELETE", `/api/relays/${id}`)) as {
@@ -270,7 +272,7 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
     case "list": {
       const views = session
         ? (JSON.parse(
-            await callTool(args.hub, session, "relay_list", "{}")
+            await callTool(args.hub, session, "relay_list", "{}", "record")
           ) as RelayView[])
         : ((await call(
             args.hub,

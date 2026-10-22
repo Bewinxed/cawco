@@ -57,6 +57,7 @@ import { connect } from "node:net";
 import { join } from "node:path";
 import { type Bounded, Gone, readWithin } from "../packages/core/src/bounded";
 import { ensureDeps } from "./lib/deps";
+import { toolRecord } from "./lib/tool-call";
 import type { Reply } from "./scratch-fleet";
 
 // The dependencies first (lib/deps.ts): what needs them loads after.
@@ -871,34 +872,15 @@ try {
       projectId,
     });
     const credential = await credentialOf(session);
-    const door = async (args: object) => {
-      const read = await readWithin(180_000, async (signal) => {
-        const response = await fetch(
-          `${fleet.base}/api/delegation/call/${session}`,
-          {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${credential}`,
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({ name: "relay_create", arguments: args }),
-            signal,
-          }
-        );
-        return { status: response.status, text: await response.text() };
-      });
-      switch (read.kind) {
-        case "answered":
-          return read.value;
-        case "unanswered":
-          throw new Error(
-            `relay_create through the hub's door did not answer within ${read.after} ms (${read.reason})`
-          );
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
+    /** relay_create as the session, read as a program: its record (needs-owner is a field), or the refusal's words. */
+    const door = async (args: Record<string, unknown>) => {
+      const said = await toolRecord<unknown>(
+        { base: fleet.base, id: session, credential },
+        "relay_create",
+        args,
+        { timeoutMs: 180_000 }
+      );
+      return { status: said.status, text: said.text };
     };
     const asked = door({
       provider: "generic",

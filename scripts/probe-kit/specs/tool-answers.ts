@@ -32,6 +32,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -215,36 +216,22 @@ const standUp = async (kit: Kit) => {
         ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
     return { id, credential };
   };
-  /** One tool call through the hub's REST door, as `as`: its words, refused or not. */
+  /**
+   * One tool call through the hub's REST door, as `as`: what it answered,
+   * refused or not. The spec measures both forms of every tool, so the call
+   * names its `response_format` itself: the sentence tools have no record.
+   */
   const tool = async (
     as: Session,
     name: string,
     args: object
   ): Promise<Called> => {
-    const response = await fetch(`${fleet.base}/api/delegation/call/${as.id}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${as.credential}`,
-      },
-      body: JSON.stringify({ name, arguments: args }),
-    });
-    const raw = await response.text();
-    try {
-      const result = JSON.parse(raw) as {
-        content?: { text?: string; type?: string }[];
-        isError?: boolean;
-      };
-      return {
-        refused: !response.ok || result.isError === true,
-        text: (result.content ?? [])
-          .filter((block) => block.type === "text")
-          .map((block) => block.text ?? "")
-          .join(""),
-      };
-    } catch {
-      return { refused: true, text: `${response.status} ${raw}` };
-    }
+    const said = await toolWords(
+      { base: fleet.base, id: as.id, credential: as.credential },
+      name,
+      args as Record<string, unknown>
+    );
+    return { refused: said.refused, text: said.text };
   };
   return { fleet, project, cwd, session, tool };
 };

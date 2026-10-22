@@ -61,6 +61,7 @@ import { join, resolve } from "node:path";
 import { machinePath } from "../packages/core/src/machine-path";
 import { processStart } from "../packages/core/src/process-identity";
 import { identifiedPid, type Pid, signal } from "../packages/core/src/signal";
+import { toolWords } from "./lib/tool-call";
 
 /** A stand-in session's child, as its pid file names it: its pid and its start, so a kill reaches it only while it is still that process. */
 interface PidFile {
@@ -1190,42 +1191,17 @@ if (role === "sessiond") {
         },
       },
     });
-  /** One CawCo tool call as session `id`, with its own credential. */
+  /** One CawCo tool call as session `id`, with its own credential, through the MCP endpoint a harness takes: its words. */
   const tool = async (
     id: string,
     name: string,
     args: Record<string, unknown>
   ): Promise<{ text: string; isError: boolean }> => {
     const credential = await readFile(join(dir, `cred-${id}`), "utf8");
-    const response = await fetch(`${base}/mcp/cawco?instanceId=${id}`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${credential}`,
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name, arguments: args },
-      }),
+    const said = await toolWords({ base, id, credential }, name, args, {
+      via: "mcp",
     });
-    const raw = await response.text();
-    const data = raw.includes("data:")
-      ? raw
-          .split("\n")
-          .filter((line) => line.startsWith("data:"))
-          .map((line) => JSON.parse(line.slice(5)))
-          .find((message) => message.id === 1)
-      : JSON.parse(raw);
-    const result = data?.result ?? {};
-    return {
-      text: (result.content ?? [])
-        .map((block: { text?: string }) => block.text ?? "")
-        .join("\n"),
-      isError: !!result.isError || !!data?.error,
-    };
+    return { text: said.text, isError: said.refused };
   };
   const running = (id: string) =>
     until(

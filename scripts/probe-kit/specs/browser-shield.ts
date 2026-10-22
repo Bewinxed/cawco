@@ -51,6 +51,7 @@ import {
   type BrowserKey,
   SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
+import { toolWords } from "../../lib/tool-call";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -229,20 +230,15 @@ const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
 
 /** `browser_ask` called through the hub's tool door as session `id`: its answer's text. */
 const ask = (fleet: KitFleet, id: string, credential: string) =>
-  readWithin(10 * 60_000, async (signal) => {
-    const response = await fetch(`${fleet.base}/api/delegation/call/${id}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${credential}`,
-      },
-      body: JSON.stringify({
-        name: "browser_ask",
-        arguments: { reason: REASON, origin: ORIGIN },
-      }),
-      signal,
-    });
-    return `${response.status} ${await response.text()}`;
+  readWithin(10 * 60_000, async () => {
+    // The client's own bound past this read's: the read answers first.
+    const said = await toolWords(
+      { base: fleet.base, id, credential },
+      "browser_ask",
+      { reason: REASON, origin: ORIGIN },
+      { timeoutMs: 11 * 60_000 }
+    );
+    return `${said.status} ${said.text}`;
   });
 
 /** The browser ask parked for session `id`, as `/api/pending` lists it. */

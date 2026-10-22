@@ -56,9 +56,11 @@ Usage
                                             run cawco as per-user services
   cawco binary-install <hub|agent> ...    setup step of the install script; not run by hand
   cawco tools [--session <id>]            list the cawco tools that session's role has
-  cawco tool <name> [json|-] [--session <id>]
+  cawco tool <name> [json|-] [--record] [--session <id>]
                                           call one, under the same role checks as MCP;
-                                          - reads the JSON from stdin, for large arguments
+                                          - reads the JSON from stdin, for large arguments;
+                                          --record prints the hub's record as JSON, not
+                                          the words, and fails when the tool has none
                                           (session: --session or CAWCO_INSTANCE_ID;
                                           credential: CAWCO_SESSION_CREDENTIAL)
   cawco connections set-key <name> [--hub <url>]
@@ -190,6 +192,8 @@ interface Args {
   keeperOnly: boolean;
   /** `relay on`: the provider, its connection, and a generic relay's headers and id path. */
   provider?: string;
+  /** `tool --record`: the hub's record as JSON, a program's read, not the words. */
+  record: boolean;
   releaseHost?: string;
   /** Everything after the verb — the services `service` acts on. */
   rest: string[];
@@ -216,6 +220,7 @@ const parseArgs = (argv: string[]): Args => {
     rest: [],
     ask: false,
     keeperOnly: false,
+    record: false,
     resume: false,
     services: false,
     autoUpdate: false,
@@ -316,6 +321,9 @@ const parseArgs = (argv: string[]): Args => {
       case "--verbose":
       case "-v":
         args.verbose = true;
+        break;
+      case "--record":
+        args.record = true;
         break;
       case "--help":
       case "-h":
@@ -754,7 +762,15 @@ const runTool = async (args: Args): Promise<number> => {
   // `-` reads the arguments from stdin: one argv string stops at 128 KiB
   // (Linux's MAX_ARG_STRLEN), well under what a tool's arguments may weigh.
   const json = args.rest[0] === "-" ? await Bun.stdin.text() : args.rest[0];
-  console.log(await callTool(at, instanceId, args.action, json));
+  console.log(
+    await callTool(
+      at,
+      instanceId,
+      args.action,
+      json,
+      args.record ? "record" : "words"
+    )
+  );
   return 0;
 };
 

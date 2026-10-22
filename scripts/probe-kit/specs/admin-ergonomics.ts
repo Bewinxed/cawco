@@ -55,6 +55,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { toolRecord } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, pressAt, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
@@ -278,24 +279,20 @@ const run = async (kit: Kit) => {
           ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? ""
     );
 
-  /** One tool call through the hub's REST door, as the session: its status and its words. */
-  const call = async (name: string, args: object): Promise<string> => {
-    const response = await fetch(
-      `${fleet.base}/api/delegation/call/${session}`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${credential}`,
-        },
-        // The hub's record (mcp-tool.ts), which this spec reads.
-        body: JSON.stringify({
-          name,
-          arguments: { response_format: "detailed", ...args },
-        }),
-      }
-    );
-    return `${response.status} ${await response.text()}`;
+  const me = { base: fleet.base, id: session, credential };
+  /**
+   * One tool call through the hub's REST door, as the session, read as a
+   * program: the hub's record (core tool-answer.ts), its status first
+   * ("200 {…}"), or the refusal's words. A tool that answers words throws.
+   */
+  const recordCall = (name: string, args: Record<string, unknown>) =>
+    toolRecord<unknown>(me, name, args);
+  const call = async (
+    name: string,
+    args: Record<string, unknown>
+  ): Promise<string> => {
+    const said = await recordCall(name, args);
+    return `${said.status} ${said.text}`;
   };
   const pending = () => fleet.api<Ask[]>("/api/pending");
   const askOf = (tool: string, answered: Set<string>) =>
@@ -333,24 +330,30 @@ const run = async (kit: Kit) => {
     tool: string,
     args: object,
     allow: boolean
-  ): Promise<{ ask?: Ask; said: string }> => {
-    const said = call(tool, args);
+  ): Promise<{ ask?: Ask; record?: unknown; said: string }> => {
+    const asked = recordCall(tool, args as Record<string, unknown>);
     const ask = await askOf(tool, seen);
-    if (!ask) {
-      return { said: await said };
+    if (ask) {
+      seen.add(ask.requestId);
+      await answer(ask, allow);
     }
-    seen.add(ask.requestId);
-    await answer(ask, allow);
-    return { ask, said: await said };
+    const said = await asked;
+    return {
+      ask,
+      said: `${said.status} ${said.text}`,
+      ...(said.refused ? {} : { record: said.record }),
+    };
   };
   const status = async (waitingOnly = false): Promise<Status[]> => {
-    const said = await call(
+    const said = await toolRecord<Status[]>(
+      me,
       "artifact_list",
       waitingOnly ? { waiting: true } : {}
     );
-    const json = said.slice(said.indexOf(" ") + 1);
-    const result = JSON.parse(json) as { content: { text: string }[] };
-    return JSON.parse(result.content[0]?.text ?? "[]") as Status[];
+    if (said.refused) {
+      throw new Error(`artifact_list refused: ${said.text}`);
+    }
+    return said.record;
   };
 
   // ── 1. a preview, pinned ──────────────────────────────────────────────
@@ -445,20 +448,7 @@ const run = async (kit: Kit) => {
     true
   );
   const shownChange = second.ask?.payload.presentation?.changes[0];
-  const saved = (() => {
-    const at = second.said.indexOf("{");
-    try {
-      const result = JSON.parse(second.said.slice(at)) as {
-        content: { text: string }[];
-      };
-      return JSON.parse(result.content[0]?.text ?? "{}") as Record<
-        string,
-        unknown
-      >;
-    } catch {
-      return {};
-    }
-  })();
+  const saved = (second.record ?? {}) as Record<string, unknown>;
   kit.check(
     "3: a memory set's approval carries the changed lines only and +1 −1; approved, it answers a hash and the size, no content",
     first.said.startsWith("200") &&

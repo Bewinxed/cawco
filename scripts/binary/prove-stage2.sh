@@ -1510,6 +1510,7 @@ ssh_preview() {
   mapfile -t vars < <(session_env_on "$c" "$user" "$id")
   [[ " ${vars[*]} " == *" CAWCO_SESSION_CREDENTIAL="* ]] \
     || { echo "ASSERTION FAILED: the process of session $id on $name carries no credential: ${vars[*]%%=*}"; return 1; }
+  # tool answer: words (only that it answered, and what it said, for the log)
   as_added "$c" "$user" env "${vars[@]}" "$home/.local/bin/cawco" tool artifact_create \
     "{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the page and say whether it answers\",\"name\":\"sshadd-preview\",\"port\":$SSH_PREVIEW_PORT}" \
     > "$rigdir/ssh-preview-$name.open" 2>&1 \
@@ -2518,14 +2519,15 @@ ws_served_script() { ws_exec "printf '%s\n' '#!/bin/sh' $(printf %q "$WS_SERVED_
 ws_served_pid() { as_user "$joinerc" pgrep -o -f "^socat TCP-LISTEN:$WS_SERVED_PORT,"; }
 # The workspace's preview of its server, opened as the delegate opens one: its `artifact_create` tool, called from its
 # shell through the workspace's tool door (`cawco tool`, packages/cli/src/tools.ts), naming what serves the port. Its
-# answer is kept in $rigdir/ws-preview-open (its id closes it). The hub's preview port for it is read as the dashboard
-# learns it.
-ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
+# answer is kept in $rigdir/ws-preview-open: its record (`--record`, the hub's record as one line of JSON, core
+# tool-answer.ts), whose id closes it. The hub's preview port for it is read as the dashboard learns it.
+ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create --record '{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
 # The delegate removes that preview (artifact_delete): its server's last artifact, so the stage stops it.
 ws_preview_close() {
   local id
-  id=$(grep -oE '"id": *"[0-9a-f-]{36}"' "$rigdir/ws-preview-open" | head -n 1 | grep -oE '[0-9a-f-]{36}')
-  [[ -n $id ]] || { echo "the preview's create answered no id: $(cat "$rigdir/ws-preview-open")"; return 1; }
+  id=$(grep -E '^[{]' "$rigdir/ws-preview-open" | tail -n 1 | json '(d) => d.id')
+  [[ $id =~ ^[0-9a-f-]{36}$ ]] || { echo "the preview's create answered no record with an id: $(cat "$rigdir/ws-preview-open")"; return 1; }
+  # tool answer: words (it only has to succeed)
   ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_delete '{\"id\":\"$id\"}'"
 }
 ws_preview_port() { run_script "$hubc" /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$(cat "$rigdir/ws-delegate")"; }
@@ -2595,6 +2597,7 @@ ws_post() { as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' "http://127.0.0.1:
 # reminders (work-items.ts waitingTurn), as a real delegate holds an item open on a command it started. Each message the
 # session takes after the wait ended (a busy turn clears a wait at rest, work-items.ts turnState) declares it again.
 # Exported: each check runs in a shell of its own, which sees only what is exported.
+# tool answer: words (the transcript is matched for wait_item's own words)
 export WS_WAIT_LINE='cawco tool wait_item {"minutes":60,"reason":"the stage 2 proof holds this item open across an update"}'
 # Its standard input as one JSON string.
 json_string() { bun -e 'process.stdout.write(JSON.stringify(await Bun.stdin.text()))'; }

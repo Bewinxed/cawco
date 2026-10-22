@@ -44,8 +44,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readWithin } from "../../../packages/core/src/bounded";
 import { movedLine } from "../../../packages/core/src/injected";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
@@ -634,33 +634,13 @@ const run = async (kit: Kit) => {
           ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
       credentials.set(parent, credential);
     }
-    const read = await readWithin(300_000, async (signal) => {
-      const response = await fetch(
-        `${fleet.base}/api/delegation/call/${parent}`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            Authorization: `Bearer ${credential}`,
-          },
-          body: JSON.stringify({ name, arguments: args }),
-          signal,
-        }
-      );
-      return { status: response.status, text: await response.text() };
-    });
-    switch (read.kind) {
-      case "answered":
-        return read.value;
-      case "unanswered":
-        throw new Error(
-          `${name} as the parent did not answer within ${read.after} ms (${read.reason})`
-        );
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
-    }
+    const said = await toolWords(
+      { base: fleet.base, id: parent, credential },
+      name,
+      args as Record<string, unknown>,
+      { timeoutMs: 300_000 }
+    );
+    return { status: said.status, text: said.text };
   };
   await leg(kit, fleet, "N", callAsParent);
   await leg(kit, fleet, "L", callAsParent);

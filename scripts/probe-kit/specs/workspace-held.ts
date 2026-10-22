@@ -41,7 +41,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readWithin } from "../../../packages/core/src/bounded";
+import { type ToolRecord, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -217,7 +217,7 @@ interface Started {
 
 /** What the phases share. */
 interface Scene {
-  /** A tool of the parent's, called as the parent: its status and its answer's text. */
+  /** A tool of the parent's, called as the parent: its status and its words. */
   callAsParent: (
     name: string,
     args: object
@@ -229,6 +229,8 @@ interface Scene {
   fleet: Fleet;
   parentId: string;
   projectId: string;
+  /** delegate_list called as the parent, read as its record (scripts/lib/tool-call.ts). */
+  recordAsParent: (name: string, args: object) => Promise<ToolRecord<Answer>>;
   /** The project's repository, every delegate's cwd. */
   src: string;
   /** The workspace's row once its state is `state`, or as it stands when that does not come. */
@@ -485,41 +487,21 @@ interface Listed {
   startedAt: string;
 }
 
-/** delegate_list's record (hub delegation-tree.ts `DelegateList`), as its `response_format: "detailed"` answers it. */
+/** delegate_list's record (hub delegation-tree.ts `DelegateList`), as `toolRecord` reads it. */
 interface Answer {
   delegates: Listed[];
   held: { workspaceId: string }[];
 }
 
-/** delegate_list's delegates and held workspaces, from its detailed answer (the record as JSON, mcp-tool.ts), or what it answered instead. */
-const listed = (said: {
-  status: number;
-  text: string;
-}): Partial<Answer> & { refused?: string } => {
-  if (said.status !== 200) {
-    return { refused: `${said.status} ${said.text.slice(0, 600)}` };
-  }
-  const result = JSON.parse(said.text) as {
-    content?: { text?: string }[];
-    isError?: boolean;
-  };
-  const words = result.content?.[0]?.text ?? "";
-  if (result.isError) {
-    return { refused: words };
-  }
-  try {
-    return JSON.parse(words) as Answer;
-  } catch {
-    return { refused: `not the record: ${words.slice(0, 600)}` };
-  }
-};
+/** delegate_list's delegates and held workspaces, from its record, or the refusal's words. */
+const listed = (
+  said: ToolRecord<Answer>
+): Partial<Answer> & { refused?: string } =>
+  said.refused ? { refused: said.text } : said.record;
 
 /** delegate_list's record of a window, asked as the parent. */
 const windowOf = (scene: Scene, window: object) =>
-  scene.callAsParent("delegate_list", {
-    ...window,
-    response_format: "detailed",
-  });
+  scene.recordAsParent("delegate_list", window);
 
 /** (e) delegate_list with a window answers the delegates live inside it, in start order, and its tree's workspaces held inside it. */
 const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
@@ -709,26 +691,19 @@ const spec: Spec = {
           ITEM_MS
         ).catch(() => itemOf(started.workItemId)),
       callAsParent: async (name, args) => {
-        const called = await readWithin(300_000, async (signal) => {
-          const response = await fetch(
-            `${fleet.base}/api/delegation/call/${parent}`,
-            {
-              method: "POST",
-              signal,
-              headers: {
-                "content-type": "application/json",
-                Authorization: `Bearer ${credential}`,
-              },
-              body: JSON.stringify({ name, arguments: args }),
-            }
-          );
-          return { status: response.status, text: await response.text() };
-        });
-        if (called.kind !== "answered") {
-          throw new Error(`${name} did not answer within 300 s`);
-        }
-        return called.value;
+        const said = await toolWords(
+          { base: fleet.base, id: parent, credential },
+          name,
+          args as Record<string, unknown>
+        );
+        return { status: said.status, text: said.text };
       },
+      recordAsParent: (name, args) =>
+        toolRecord<Answer>(
+          { base: fleet.base, id: parent, credential },
+          name,
+          args as Record<string, unknown>
+        ),
     };
 
     const ws = await heldPhase(kit, scene);

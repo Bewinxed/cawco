@@ -44,6 +44,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
+import { toolWords } from "../../lib/tool-call";
 import {
   MACHINE,
   MODEL,
@@ -859,28 +860,23 @@ const spec: Spec = {
     await previewReach(kit, fleet, b);
 
     // 6. The parent's handoff tool takes a { text, name } input.
-    const response = await fetch(
-      `${fleet.base}/api/delegation/call/${parent}`,
+    const handed = await toolWords(
       {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          Authorization: `Bearer ${await credentialOf(fleet, parent)}`,
-        },
-        body: JSON.stringify({
-          name: "handoff",
-          arguments: {
-            target: b.instanceId,
-            message: `${TAG_B}: one more input.`,
-            inputs: [{ text: HANDOFF_TOKEN, name: HANDOFF_FILE }],
-          },
-        }),
+        base: fleet.base,
+        id: parent,
+        credential: await credentialOf(fleet, parent),
+      },
+      "handoff",
+      {
+        target: b.instanceId,
+        message: `${TAG_B}: one more input.`,
+        inputs: [{ text: HANDOFF_TOKEN, name: HANDOFF_FILE }],
       }
     );
     check(
       "6: the handoff tool takes a { text, name } input",
-      response.ok,
-      `${response.status} ${(await response.text()).slice(0, 300)}`
+      !handed.refused,
+      `${handed.status} ${handed.text.slice(0, 300)}`
     );
     const handedWords = await readFile(
       join(b.workspaceTmp, "inputs", HANDOFF_FILE),

@@ -48,17 +48,9 @@ import {
   SAFE_GIT_FLAGS,
 } from "../../../packages/core/src/safe-git";
 import { welcomed } from "../../lib/keeper-dial";
+import { toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
-
-/** A tool's detailed answer, the hub's record as JSON; empty when it answered words (a refusal). */
-const recordOf = (said: string): Record<string, unknown> => {
-  try {
-    return JSON.parse(said) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-};
 
 const AHEAD = "PROBE-FROMHELD-AHEAD";
 const AHEAD_MADE = "PROBE-FROMHELD-AHEAD-MADE";
@@ -132,48 +124,31 @@ const credentialOf = async (fleet: KitFleet, parent: string): Promise<string> =>
     .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
     ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
 
-/** A CawCo tool called as the parent, through the door its MCP server and the CLI share. */
+/** A CawCo tool called as the parent, through the door its MCP server and the CLI share: its words, or with `record` the hub's record. */
 const callAs = async (
   fleet: KitFleet,
   parent: string,
   name: string,
-  args: object
+  args: Record<string, unknown>,
+  form: "words" | "record" = "words"
 ): Promise<{
   isError: boolean;
   structured: Record<string, unknown>;
   text: string;
 }> => {
-  const response = await fetch(`${fleet.base}/api/delegation/call/${parent}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${await credentialOf(fleet, parent)}`,
-    },
-    // The hub's record of the answer (mcp-tool.ts), which this spec reads.
-    body: JSON.stringify({
-      name,
-      arguments: { response_format: "detailed", ...args },
-    }),
-  });
-  if (!response.ok) {
-    return {
-      isError: true,
-      structured: {},
-      text: `${response.status} ${await response.text()}`,
-    };
+  const session = {
+    base: fleet.base,
+    id: parent,
+    credential: await credentialOf(fleet, parent),
+  };
+  if (form === "words") {
+    const said = await toolWords(session, name, args);
+    return { isError: said.refused, structured: {}, text: said.text };
   }
-  const result = (await response.json()) as {
-    content?: { text?: string }[];
-    isError?: boolean;
-  };
-  const words = (result.content ?? [])
-    .map((block) => block.text ?? "")
-    .join("\n");
-  return {
-    isError: !!result.isError,
-    structured: recordOf(words),
-    text: words,
-  };
+  const said = await toolRecord<Record<string, unknown>>(session, name, args);
+  return said.refused
+    ? { isError: true, structured: {}, text: said.text }
+    : { isError: false, structured: said.record, text: said.text };
 };
 
 /** git on the host in `dir`, as safe-git.ts says; its stdout, trimmed. */
@@ -348,14 +323,20 @@ const cutPhase = async (
   const { head, source } = held;
   const { agent, stray } = revived;
   const watched = await fleet.logMark("agent");
-  const cut = await callAs(fleet, parent, "delegate", {
-    prompt: `${FROM}: finish the commit you start from.`,
-    title: "From held probe",
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    from: source.id,
-    lands: "none",
-  });
+  const cut = await callAs(
+    fleet,
+    parent,
+    "delegate",
+    {
+      prompt: `${FROM}: finish the commit you start from.`,
+      title: "From held probe",
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      from: source.id,
+      lands: "none",
+    },
+    "record"
+  );
   const cutId = String(cut.structured.workspaceId ?? "");
   // Two beats: the law is checked on each, after the quiet sweep.
   const watchedUntil = Date.now() + 2 * BEAT_MS + 15_000;
