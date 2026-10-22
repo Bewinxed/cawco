@@ -59,6 +59,7 @@ import {
   type ArtifactNeedsRead,
   noticePartWords,
   reasonLine,
+  unparked,
 } from "../../../packages/core/src/artifact-needs";
 import {
   CLAUDE_CONVERSATION_GONE,
@@ -307,10 +308,10 @@ const noticeOf = async (
   id: string
 ): Promise<ArtifactNeedNotice | undefined> =>
   (await lane(fleet)).notices.find((notice) => notice.artifactId === id);
-/** Its row line as the dashboard draws it, or null when it is not in Needs you. */
+/** Its row line as the dashboard draws it, or null when it is not in Needs you (none, or put away with Not now). */
 const lineOf = async (fleet: KitFleet, id: string): Promise<string | null> => {
   const need = await needOf(fleet, id);
-  return need ? reasonLine(need.pending) : null;
+  return need && !need.parked ? reasonLine(need.pending) : null;
 };
 /** Waits for artifact `id`'s line to read `line` (null: out of the lane); what it read last. */
 const lineIs = (
@@ -699,8 +700,10 @@ const supersededAndNotNow = async (at: At, session: string) => {
     `/api/instances/${session}/artifacts`
   );
   kit.check(
-    "rule 5, Not now: it leaves Needs you and its Files list still says it waits",
-    parked === null && files.find((one) => one.id === id)?.waiting === true,
+    "rule 5, Not now: it leaves Needs you (the lane carries it parked) and its Files list still says it waits",
+    parked === null &&
+      (await needOf(fleet, id))?.parked === true &&
+      files.find((one) => one.id === id)?.waiting === true,
     `line ${parked}; files ${JSON.stringify(files.find((one) => one.id === id))}`
   );
   await create(fleet, session, page(["layout", "tone", "density", "motion"]));
@@ -856,7 +859,9 @@ const countAndArcs = async (at: At) => {
   const { fleet, kit, base } = at;
   const page = await kit.page("desk");
   await open(page, `${base}/session`, "[data-needs-caw]");
-  const expected = (await lane(fleet)).needs.map((need) => need.artifactId);
+  const expected = unparked((await lane(fleet)).needs).map(
+    (need) => need.artifactId
+  );
   await cawPanel(page);
   const read = await until(
     "Caw's panel listing the lane's artifacts",
@@ -952,7 +957,7 @@ const rowBoxes = async (at: At, engine: Engine, view: View, label: string) => {
   const { kit, base, fleet } = at;
   const page = await kit.page(view, { engine });
   await open(page, `${base}/session`, "[data-needs-caw]");
-  const expected = (await lane(fleet)).needs.length;
+  const expected = unparked((await lane(fleet)).needs).length;
   await cawPanel(page);
   await until(
     "the artifact rows drawn",

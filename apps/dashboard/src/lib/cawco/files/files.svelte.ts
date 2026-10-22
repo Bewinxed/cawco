@@ -285,7 +285,12 @@ const waitingKey = (instanceId: string): string =>
   JSON.stringify([
     cawco.artifactNeeds
       .filter((need) => need.instanceId === instanceId)
-      .map((need) => [need.artifactId, need.raisedAt, need.pending]),
+      .map((need) => [
+        need.artifactId,
+        need.raisedAt,
+        need.parked,
+        need.pending,
+      ]),
     cawco.artifactNotices
       .filter((notice) => notice.instanceId === instanceId)
       .map((notice) => [notice.artifactId, notice.parts]),

@@ -50604,6 +50604,10 @@
             "description": "The notice id its Not now acknowledges (hub notices.ts): the item leaves\nthe lane until it is raised again, a revision or a new answer.",
             "type": "string"
           },
+          "parked": {
+            "description": "Put away with Not now at this raise or a later one: out of Needs you\n(its count, its rows, the push, the phone's list), still waiting in\nFiles with its dot. Carried so every screen hears it move.",
+            "type": "boolean"
+          },
           "pending": {
             "description": "Its reasons, strongest first; never empty.",
             "type": "array",
@@ -50641,6 +50645,7 @@
           "machineId",
           "name",
           "notNow",
+          "parked",
           "pending",
           "project",
           "raisedAt",

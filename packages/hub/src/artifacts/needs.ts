@@ -254,6 +254,7 @@ export const needOf = (
     stop,
     href: artifactStopHref(viewOf(row, facts), row.id, stop),
     notNow: notNowId(row.id, raisedAt),
+    parked: false,
     unsent: facts.unsent,
   };
 };

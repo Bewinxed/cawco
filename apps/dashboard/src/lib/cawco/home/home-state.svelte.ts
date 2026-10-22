@@ -1370,10 +1370,10 @@ class Home {
       }))
     );
     // The artifacts waiting on you, each under its session as an ask is;
-    // one put away with Not now (an acknowledged id, here at once) waits in
-    // Files until it is raised again.
+    // one put away with Not now (the hub's `parked`, and here at once its
+    // acknowledged id) waits in Files until it is raised again.
     const artifacts: NeedsItem[] = cawco.artifactNeeds
-      .filter((need) => !notices.seen.has(need.notNow))
+      .filter((need) => !(need.parked || notices.seen.has(need.notNow)))
       .map((need) => {
         const row = cawco.instanceIndex.byId.get(need.instanceId);
         const top = row ? topsIn(cawco.instanceIndex.byId)(row) : undefined;

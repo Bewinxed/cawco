@@ -7,7 +7,11 @@
  * update, a row, a plan, a turn, a session ending, an acknowledgement) asks
  * for one read a short quiet after it, so a burst of them is one frame.
  */
-import type { ArtifactNeedsFrame, ArtifactNeedsRead } from "@cawco/core";
+import {
+  type ArtifactNeedsFrame,
+  type ArtifactNeedsRead,
+  unparked,
+} from "@cawco/core";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
 
 /** How long after a move the lane is read: a Send's doc writes land as one. Our call. */
@@ -45,11 +49,12 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     if (words === said) {
       return current;
     }
-    const before = current.needs;
+    const before = unparked(current.needs);
+    const after = unparked(read.needs);
     current = read;
     said = words;
     for (const need of before) {
-      if (!read.needs.some((one) => one.artifactId === need.artifactId)) {
+      if (!after.some((one) => one.artifactId === need.artifactId)) {
         deps.left(need.artifactId);
       }
     }

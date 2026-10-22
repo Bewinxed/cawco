@@ -60,6 +60,12 @@ export interface ArtifactNeed {
    * the lane until it is raised again, a revision or a new answer.
    */
   notNow: string;
+  /**
+   * Put away with Not now at this raise or a later one: out of Needs you
+   * (its count, its rows, the push, the phone's list), still waiting in
+   * Files with its dot. Carried so every screen hears it move.
+   */
+  parked: boolean;
   /** Its reasons, strongest first; never empty. */
   pending: ArtifactReason[];
   /** The project it was made in; null outside one. */
@@ -100,6 +106,10 @@ export interface ArtifactNeedNotice {
   project: string | null;
   stop: ArtifactStop;
 }
+
+/** The items Needs you lists: those not put away with Not now. */
+export const unparked = (needs: readonly ArtifactNeed[]): ArtifactNeed[] =>
+  needs.filter((need) => !need.parked);
 
 /** Hub-originated: every artifact need and notice, whole, on each change. */
 export interface ArtifactNeedsFrame {

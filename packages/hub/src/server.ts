@@ -341,6 +341,7 @@ import {
   UPDATE_CAWCO,
   UPSTREAM_ORIGIN,
   undeliveredNotice,
+  unparked,
   unshownAskMessage,
   validateWorkflow,
   WIRE_PROTOCOL,
@@ -3017,11 +3018,9 @@ export const createServer = (
   const push = createPush({
     // Still in Needs you, and not looked at since it was raised.
     artifactWaiting: (id, raisedAt) =>
-      artifactLane
-        .now()
-        .needs.some(
-          (need) => need.artifactId === id && need.raisedAt === raisedAt
-        ) && !artifacts.lookedSince(id, raisedAt),
+      unparked(artifactLane.now().needs).some(
+        (need) => need.artifactId === id && need.raisedAt === raisedAt
+      ) && !artifacts.lookedSince(id, raisedAt),
     db,
     desk: (frame) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
@@ -33192,9 +33191,8 @@ export const createServer = (
                     db.noteTurnEnded(turnId, endedAt);
                     publishInstances(row.machineId);
                     artifacts.turnEnded(turnId, before, endedAt);
-                    artifactLeft = artifactLane
-                      .now()
-                      .needs.filter(
+                    artifactLeft = unparked(artifactLane.now().needs)
+                      .filter(
                         (need) =>
                           artifacts.askedIn(need.artifactId, turnId, before) &&
                           !cut

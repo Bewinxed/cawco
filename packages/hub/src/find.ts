@@ -47,6 +47,7 @@ import {
   type ThreadSummary,
   type TranscriptAnswer,
   type TranscriptQuery,
+  unparked,
   type WaitingAnswer,
   type WaitingItem,
 } from "@cawco/core";
@@ -1395,7 +1396,7 @@ const artifactsWaiting = (
         };
   };
   return [
-    ...lane.needs.map((need): WaitingItem => ({
+    ...unparked(lane.needs).map((need): WaitingItem => ({
       ...named(need.artifactId, need.instanceId, need.name),
       artifactKind: need.artifactKind,
       since: need.raisedAt,

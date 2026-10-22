@@ -4821,8 +4821,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   return {
     /**
-     * Needs you's artifacts (needs.ts): each waiting on the person, its Not
-     * now aside until it is raised again, oldest first; and each artifact's
+     * Needs you's artifacts (needs.ts): each waiting on the person, oldest
+     * first, one put away with Not now marked `parked` until it is raised
+     * again; and each artifact's
      * notice, its parts the person has not acknowledged, newest first.
      */
     needs: (): ArtifactNeedsRead => {
@@ -4836,8 +4837,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         const facts = { ...kept, asked: askOf(row, kept) };
         const sessions = sessionsOf(row, kept);
         const need = needOf(row, facts, sessions);
-        if (need && (parked.get(row.id) ?? -1) < need.raisedAt) {
-          needs.push(need);
+        if (need) {
+          needs.push({
+            ...need,
+            parked: (parked.get(row.id) ?? -1) >= need.raisedAt,
+          });
         }
         const notice = noticeOf(row, facts, sessions);
         const parts = notice?.parts.filter((part) => !seen.has(part.id));
