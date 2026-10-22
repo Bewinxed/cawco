@@ -8,7 +8,9 @@
  * dashboard then reads the socket closing as the update, not as a hub
  * that went away, until the deadline. The deadline is the update's trial
  * (UPDATE_TRIAL_MS): by then the new build answers, or the helper has
- * rolled back to the one before and that one does.
+ * rolled back to the one before and that one does. A hub never announces the
+ * build it is itself running: the update's own machine still reports
+ * installing when the new hub comes up, and that restart is already done.
  *
  * Taken back (`restart: null`) when the same machine says anything but
  * installing while this hub still runs: the install ended without
@@ -29,7 +31,8 @@ export interface HubRestarts {
 }
 
 export function hubRestarts(
-  broadcast: (frame: HubRestartFrame) => void
+  broadcast: (frame: HubRestartFrame) => void,
+  runningVersion: string
 ): HubRestarts {
   let announced: { until: number; version: string | null } | null = null;
   const frame = (): HubRestartFrame => ({
@@ -46,6 +49,9 @@ export function hubRestarts(
     frame: () => (announced ? frame() : null),
     note: (state) => {
       if (!state.hostsHub) {
+        return;
+      }
+      if (state.availableVersion === runningVersion) {
         return;
       }
       const installing = state.phase === "installing";

@@ -2847,12 +2847,14 @@ export const createServer = (
    * An update about to restart this hub, told to every dashboard before it
    * goes (hub-restart.ts): heard on its own machine's update state.
    */
-  const restarts = hubRestarts((payload) =>
-    registry.broadcast({
-      verb: "frames",
-      machineId: "hub",
-      payload,
-    } satisfies Envelope<FramePayload>)
+  const restarts = hubRestarts(
+    (payload) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload,
+      } satisfies Envelope<FramePayload>),
+    HUB_VERSION
   );
 
   /**

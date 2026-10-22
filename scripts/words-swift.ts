@@ -240,12 +240,6 @@ const HELPERS: Record<string, string> = {
     '        n < 10 && n >= 0 ? "0\\(n)" : "\\(n)"',
     "    }",
   ].join("\n"),
-  timeLeft: [
-    '    /// A wait in the unit a person reads it in: "45s" up to a minute, then "3 min", rounded up.',
-    "    public static func timeLeft(_ seconds: Int) -> String {",
-    '        seconds > 60 ? "\\((seconds + 59) / 60) min" : "\\(seconds)s"',
-    "    }",
-  ].join("\n"),
 };
 
 /**

@@ -127,9 +127,7 @@ final class StatusLineView: UIView {
             // Not the hub away: this app is not let onto its network. Open Settings is the fix.
             words.text = LocalNetwork.refusal
         case .updating:
-            let restart = hub.restart
-            let seconds = restart.map { max(0, Int($0.until.timeIntervalSinceNow.rounded(.up))) } ?? 0
-            words.text = Words.Connection.updating(version: restart?.version, seconds: seconds)
+            words.text = Words.Connection.updating(version: hub.restart?.version)
         case .updated:
             words.text = Words.Connection.updated(version: hub.updated?.version)
         case .unreachable:

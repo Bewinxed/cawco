@@ -47,7 +47,7 @@ const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** StatusLineView's DEBUG line: its words, then its action when it shows one. */
 const STATUS = /status line: (.*)\|(.*)$/;
 const UPDATING = new RegExp(
-  `^CawCo is updating to ${VERSION.replaceAll(".", "\\.")}\\b — the hub is back within \\d+(s| min)\\.$`
+  `^CawCo is updating to ${VERSION.replaceAll(".", "\\.")}\\b\\.$`
 );
 const UPDATED = `CawCo updated to ${VERSION}.`;
 const AWAY = /unreachable|retrying|reconnect/i;

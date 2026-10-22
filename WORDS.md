@@ -251,9 +251,8 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   on the machine, then Reconnect."**
 - Hub unreachable (connection band): **"Hub unreachable — retrying in 12s. Reconnect now."** (the
   countdown makes it determinate; the board holds its last good rows, so the false zero never renders)
-- Hub updating (connection band, the waiting tone): **"CawCo is updating to 1.4.2 — the hub is back
-  within 40s."** (the same shape as the outage's line; the deadline the hub gave makes it determinate,
-  nothing is pressed while it runs, and only past the deadline does the band say "Hub unreachable");
+- Hub updating (connection band, the waiting tone): **"CawCo is updating to 1.4.2."** (nothing is
+  pressed while it runs, and only past the deadline the hub gave does the band say "Hub unreachable");
   once it answers, **"CawCo updated to 1.4.2."** The app's status line says the same: both read core
   `words/connection.ts`
 - A project the hub didn't give (an error empty, where its board would be): **"The tasks, stages and

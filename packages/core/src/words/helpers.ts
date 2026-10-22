@@ -12,7 +12,3 @@ export const andList = (names: readonly string[]): string =>
 
 /** A whole number in two figures: 5 → "05". */
 export const pad2 = (n: number): string => String(n).padStart(2, "0");
-
-/** A wait in the unit a person reads it in: "45s" up to a minute, then "3 min", rounded up. */
-export const timeLeft = (seconds: number): string =>
-  seconds > 60 ? `${Math.ceil(seconds / 60)} min` : `${seconds}s`;

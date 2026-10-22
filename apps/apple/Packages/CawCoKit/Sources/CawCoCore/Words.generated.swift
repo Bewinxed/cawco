@@ -12,11 +12,6 @@ public enum Words {
         n < 10 && n >= 0 ? "0\(n)" : "\(n)"
     }
 
-    /// A wait in the unit a person reads it in: "45s" up to a minute, then "3 min", rounded up.
-    public static func timeLeft(_ seconds: Int) -> String {
-        seconds > 60 ? "\((seconds + 59) / 60) min" : "\(seconds)s"
-    }
-
     public enum Configure {
         // packages/core/src/words/configure.ts `configureWords`
         /// The place, as the sidebar and a page's title name it.
@@ -1382,9 +1377,9 @@ public enum Words {
 
     public enum Connection {
         // packages/core/src/words/connection.ts `connectionWords`
-        /// The hub restarts for the update to `version` (null when unnamed), back within `seconds`.
-        public static func updating(version: String?, seconds: Int) -> String {
-            "CawCo is updating\((version ?? "").count > 0 ? " to \(version ?? "")" : "") — the hub is back within \(Words.timeLeft(seconds))."
+        /// The hub restarts for the update to `version` (null when unnamed), named when it is.
+        public static func updating(version: String?) -> String {
+            "CawCo is updating\((version ?? "").count > 0 ? " to \(version ?? "")" : "")."
         }
 
         /// The hub answered again after the update it announced.
