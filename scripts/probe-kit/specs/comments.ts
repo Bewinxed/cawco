@@ -8142,7 +8142,16 @@ const pinSendChecks = async (on: On) => {
     name: "not-sent",
     html: SEND_PAGE,
   });
-  const goneId = gonePage.match(ANSWERED_ID)?.[1] ?? "";
+  // Its answer names the page by its handle alone while no dashboard shows the
+  // writer's panel: the hub's own record gives its whole id.
+  const goneId =
+    gonePage.match(ANSWERED_ID)?.[1] ??
+    on.fleet.query<{ id: string }>(
+      "SELECT id FROM artifacts WHERE instance_id = ? AND name = ?",
+      writer,
+      "not-sent"
+    )[0]?.id ??
+    "";
   const conversation = (gone: boolean) => {
     const db = new Database(on.fleet.env.CAWCO_DB_PATH as string);
     try {
