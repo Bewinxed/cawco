@@ -15,11 +15,13 @@
      magnifier over the window's corner). The window's edge fitted as a circle (R = 51.74px there), the handle's
      centreline as the midpoints of its ink's 50% crossings on 71 rays (worst residual 0.13px). Concentric with
      the corner (its centre within 0.017 R of the corner's); its stroke 0.112 R; the visible gap from the
-     window's edge to the ink 0.12–0.136 R (0.125 R taken), so its centreline 0.18 R in; its body 65.6° of the
-     circle on the diagonal (73.3° tip to tip with its round caps). Scaled to our radius for a fine pointer. */
-  --c-grip-gap: calc(var(--radius-panel) * 0.125);
+     window's edge to the ink 0.122 R where the arc meets the straight edges, 0.136 R on the diagonal (0.122 R taken: where it reads as distance from an edge), so its centreline 0.18 R in; its body 65.6° of the
+     circle on the diagonal (73.3° tip to tip with its round caps). Scaled to our radius for a fine pointer.
+     Apple's window has no hairline, so its gap runs from the window's edge; ours runs from where a person sees
+     our edge end, the inner side of the panel's 1px border (the second review's reading). */
+  --c-grip-gap: calc(var(--radius-panel) * 0.122);
   --c-grip-stroke: calc(var(--radius-panel) * 0.112);
-  --c-grip-inset: calc(var(--c-grip-gap) + var(--c-grip-stroke) / 2);
+  --c-grip-inset: calc(1px + var(--c-grip-gap) + var(--c-grip-stroke) / 2);
   /* Its rest length along the centreline: 65.6° (1.1449 rad) of the circle R − inset round. */
   --c-grip-len: calc((var(--radius-panel) - var(--c-grip-inset)) * 1.1449);
   /* Apple's handle is opaque near-black, rgb(24 24 24), on its window, 8.7:1 against it; white on a dark window
@@ -143,7 +145,10 @@ button { font: inherit; color: inherit; }
 /* ---- The tool: the house floating panel ---- */
 .tool { position: fixed; z-index: var(--layer-dock); color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-overlay); font: var(--type-label); font-weight: var(--weight-body); }
 .tool :focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.panel { inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2); }
+/* The panel stands a step over the dock, its neighbour on the same layer: the dock's long shadow falls under
+   the panel, never over its corner and its handle (round 28: it greyed the panel's bottom-start corner, the
+   width edge's run-out by a seventh at night). */
+.panel { z-index: calc(var(--layer-dock) + 1); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2); }
 /* One row over the graph: the components' tabs, then the graph's zoom and Hide at the trailing end. */
 /* It wraps (zoom and Hide to a line of their own, at the end) before the tabs would be cut. */
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
@@ -294,29 +299,36 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline
 @property --c-grip-len { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-run { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-bend { syntax: "<length>"; inherits: true; initial-value: 0px; }
-.resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; }
-.resize-handle path { --grip-p: 0; fill: var(--c-grip-ink-rest); transition: --grip-p var(--dur-exit) var(--ease-out), fill var(--dur-control) var(--ease-out); }
+/* The handle's ink is the svg's own colour: its path's fill is the radial gradient app.js keeps in it (stops
+   in currentColor), opaque round the corner and fading along the run-out. */
+.resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; color: var(--c-grip-ink-rest); transition: color var(--dur-control) var(--ease-out); }
+.resize-handle path { --grip-p: 0; transition: --grip-p var(--dur-exit) var(--ease-out); }
+.resize-handle stop { stop-color: currentColor; }
 /* The panel's at its border box's bottom-start corner, the dock's at the middle of its top edge. */
 #gripC { inset-inline-start: -1px; inset-block-end: -1px; }
 #gripD { inset-inline-start: 50%; inset-block-start: -1px; translate: -50% 0; }
 @media (hover: hover) {
-  .panel:has(.sash-w:hover, .sash-h:hover, .sash-c:hover) #gripC path,
-  .dock:has(.sash-d:hover) #gripD path { fill: var(--ink-strong); }
+  .panel:has(.sash-w:hover, .sash-h:hover, .sash-c:hover) #gripC,
+  .dock:has(.sash-d:hover) #gripD { color: var(--ink-strong); }
 }
 /* The demo's pointer (#demo, handle-demo.html) is the hover's own state. */
-.panel[data-pointing] #gripC path, .dock[data-pointing] #gripD path { fill: var(--ink-strong); }
+.panel[data-pointing] #gripC, .dock[data-pointing] #gripD { color: var(--ink-strong); }
+.panel:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC,
+.dock[data-resizing] #gripD { color: var(--ink-strong); }
 .panel:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC path,
-.dock[data-resizing] #gripD path { --grip-p: 1; fill: var(--ink-strong); transition: --grip-p var(--dur-reveal) var(--ease-out), fill var(--dur-control) var(--ease-out); }
+.dock[data-resizing] #gripD path { --grip-p: 1; transition: --grip-p var(--dur-reveal) var(--ease-out); }
 /* Focus from the keyboard holds the highlight in the focus ink, with no motion (keys move the edge, so
    nothing animates on a key). */
+.panel:has(.sash-w:focus-visible, .sash-h:focus-visible, .sash-c:focus-visible) #gripC,
+.dock:has(.sash-d:focus-visible) #gripD { color: var(--focus-ring); transition: none; }
 .panel:has(.sash-w:focus-visible, .sash-h:focus-visible, .sash-c:focus-visible) #gripC path,
-.dock:has(.sash-d:focus-visible) #gripD path { --grip-p: 1; fill: var(--focus-ring); transition: none; }
+.dock:has(.sash-d:focus-visible) #gripD path { --grip-p: 1; transition: none; }
 /* Stacked graphs have no corner (the r23 ruling): no rest mark; the width edge's highlight comes in with its
    drag or its focus. */
 html[data-graphs="stack"] #gripC { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
 html[data-graphs="stack"] .panel:is([data-resizing="w"], :has(.sash-w:focus-visible)) #gripC { opacity: 1; transition: opacity var(--dur-control) var(--ease-out); }
 /* Less motion: the shape changes at once, its ink still fades. */
-@media (prefers-reduced-motion: reduce) { .resize-handle path { transition: fill var(--dur-fade) var(--ease-out) !important; } }
+@media (prefers-reduced-motion: reduce) { .resize-handle { transition: color var(--dur-fade) var(--ease-out) !important; } .resize-handle path { transition: none !important; } }
 
 /* The split between stacked graphs lies inside the panel, off its outline: a line across the gap (top set
    by app.js), its ends tapered, shown while it is pointed at, held or focused. */
