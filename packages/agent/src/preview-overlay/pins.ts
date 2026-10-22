@@ -56,7 +56,7 @@ import { clipOf, rectOf } from "./frames";
 import { newId } from "./id";
 import { fitToPage } from "./ink";
 import { motionOk } from "./motion";
-import type { InkChrome } from "./radial";
+import { durationMs, type InkChrome } from "./radial";
 import {
   bandsAt,
   bringInto,
@@ -491,28 +491,51 @@ export function startPins(deps: PinsDeps): Pins {
     return moves;
   };
 
-  /** The tokens a pill is painted with, read once per draw: a token is the page's style, read there and then. */
-  const paintOf = () => ({
-    action: chrome.token("--action-solid"),
-    onAction: chrome.token("--on-action"),
-    raised: chrome.token("--surface-raised"),
-    recessed: chrome.token("--surface-fill-strong"),
-    muted: chrome.token("--ink-muted"),
-    focus: chrome.token("--focus-ring"),
-    shadow: chrome.token("--shadow-tint"),
-    dot: chrome.token("--status-live-glyph"),
-    attn: chrome.token("--status-attn-glyph"),
-    font: chrome.token("--type-caps", "font"),
-    height: Number.parseFloat(chrome.token("--c-pin", "width")) || 20,
-    deck: Number.parseFloat(chrome.token("--deck-step", "width")) || 1.25,
-    gap: Number.parseFloat(chrome.token("--space-1", "width")) || 4,
-    inset: Number.parseFloat(chrome.token("--space-2", "width")) || 8,
-    dotSize: Number.parseFloat(chrome.token("--status-dot-size", "width")) || 6,
-    dotCut: Number.parseFloat(chrome.token("--status-dot-cut", "width")) || 1.5,
-    loop: chrome.ms("--dur-loop"),
-    control: chrome.ms("--dur-control"),
-    ease: chrome.token("--ease-out", "transition-timing-function"),
-  });
+  /** The tokens a pill is painted with, read once per draw in one style pass: a token is the page's style, read there and then. */
+  const paintOf = () => {
+    const read = chrome.tokens({
+      action: ["--action-solid"],
+      onAction: ["--on-action"],
+      raised: ["--surface-raised"],
+      recessed: ["--surface-fill-strong"],
+      muted: ["--ink-muted"],
+      focus: ["--focus-ring"],
+      shadow: ["--shadow-tint"],
+      dot: ["--status-live-glyph"],
+      attn: ["--status-attn-glyph"],
+      font: ["--type-caps", "font"],
+      height: ["--c-pin", "width"],
+      deck: ["--deck-step", "width"],
+      gap: ["--space-1", "width"],
+      inset: ["--space-2", "width"],
+      dotSize: ["--status-dot-size", "width"],
+      dotCut: ["--status-dot-cut", "width"],
+      loop: ["--dur-loop", "transition-duration"],
+      control: ["--dur-control", "transition-duration"],
+      ease: ["--ease-out", "transition-timing-function"],
+    });
+    return {
+      action: read.action,
+      onAction: read.onAction,
+      raised: read.raised,
+      recessed: read.recessed,
+      muted: read.muted,
+      focus: read.focus,
+      shadow: read.shadow,
+      dot: read.dot,
+      attn: read.attn,
+      font: read.font,
+      height: Number.parseFloat(read.height) || 20,
+      deck: Number.parseFloat(read.deck) || 1.25,
+      gap: Number.parseFloat(read.gap) || 4,
+      inset: Number.parseFloat(read.inset) || 8,
+      dotSize: Number.parseFloat(read.dotSize) || 6,
+      dotCut: Number.parseFloat(read.dotCut) || 1.5,
+      loop: durationMs(read.loop),
+      control: durationMs(read.control),
+      ease: read.ease,
+    };
+  };
   type Paint = ReturnType<typeof paintOf>;
 
   /** The figures' width in the pill's face, px. */
@@ -936,10 +959,16 @@ export function startPins(deps: PinsDeps): Pins {
       return;
     }
     const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
-    fitToPage(layer, all.length > 0 || !!drafted);
-    const paint = paintOf();
-    const gone = placeAll(all, paint);
-    drawDraft(paint);
+    const drawing = all.length > 0 || !!drafted;
+    fitToPage(layer, drawing);
+    // The paint is read off the page's style, which forces its style and
+    // layout there and then: a page with no pins is not made to pay for it.
+    let gone: Pin[] = [];
+    if (drawing) {
+      const paint = paintOf();
+      gone = placeAll(all, paint);
+      drawDraft(paint);
+    }
     if (settled()) {
       settle(reanchor(all), gone);
     }
