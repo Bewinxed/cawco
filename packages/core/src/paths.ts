@@ -1132,11 +1132,18 @@ export const workspaceCacheEnv = (): Record<string, string> => {
     // node-gyp's headers. Its default is env-paths' cache dir (bin/node-gyp.js:
     // `prog.devDir = envPaths('node-gyp', { suffix: '' }).cache`): on Linux
     // `$XDG_CACHE_HOME/node-gyp`, on macOS `~/Library/Caches/node-gyp`, a host
-    // cache, whatever XDG_CACHE_HOME says. It takes its options from
-    // `npm_package_config_node_gyp_<key>` too (lib/node-gyp.js: "This is the
-    // preferred way to set options for node-gyp since npm v11"), and npm
-    // passes it through (run-script make-spawn-args.js: `...process.env`);
-    // `npm_config_devdir` npm 11 warns of ("Unknown env config") and will drop.
+    // cache, whatever XDG_CACHE_HOME says, and outside the boundary. node-gyp
+    // reads its options from two env prefixes (lib/node-gyp.js), and each
+    // package manager forwards only one of them to an install script:
+    // - `npm_config_<key>`: `bun install` passes inherited `npm_config_*` to a
+    //   dependency's install script and drops every inherited `npm_package_*`
+    //   (it fills those from the package being installed), so this is the one
+    //   a native dependency's node-gyp sees under bun (socket-activation on a
+    //   Node with no prebuilt). npm 11 warns of it ("Unknown env config").
+    // - `npm_package_config_node_gyp_<key>`: "the preferred way to set options
+    //   for node-gyp since npm v11", which npm passes through (run-script
+    //   make-spawn-args.js: `...process.env`) and keeps once it drops the other.
+    npm_config_devdir: join(cache, "node-gyp"),
     npm_package_config_node_gyp_devdir: join(cache, "node-gyp"),
     XDG_CACHE_HOME: join(cache, "xdg"),
     XDG_RUNTIME_DIR: workspaceRuntimeDir(),
