@@ -70,7 +70,26 @@ function install() {
     }
     return out;
   };
-  K.controls = () => [...document.querySelectorAll("button, input, [role=button], [role=tab], .bead, .badge")].filter((el) => K.vis(el) && !el.closest(".tip")).map((el) => ({ el, r: el.getBoundingClientRect(), kind: "control" }));
+  K.controls = () => [...document.querySelectorAll("button, input, [role=button], [role=tab], .badge")].filter((el) => K.vis(el) && !el.closest(".tip")).map((el) => ({ el, r: el.getBoundingClientRect(), kind: "control" }));
+  // The resize handle's path read back from its computed `d` (round 28): app.js draws it as a ribbon, side A
+  // (N + 1 points), a cap, side B back (N + 1), a cap. So the centreline, the width at every sample, a circle
+  // fitted to the centreline (page px), its sweep and the whole shape's extent come straight off the points.
+  K.grip = (svg) => {
+    const path = svg.querySelector("path"), m = path.getScreenCTM(), d = getComputedStyle(path).d;
+    const nums = (d.match(/-?\d*\.?\d+(e-?\d+)?/g) || []).map(Number), P = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) { const q = new DOMPoint(nums[i], nums[i + 1]).matrixTransform(m); P.push([q.x, q.y]); }
+    const total = P.length, N = (total - 2 * 8) / 2 - 1, A = P.slice(0, N + 1), B = P.slice(N + 1 + 8, 2 * N + 2 + 8).reverse();
+    const mid = A.map((a, i) => [(a[0] + B[i][0]) / 2, (a[1] + B[i][1]) / 2]), w = A.map((a, i) => Math.hypot(a[0] - B[i][0], a[1] - B[i][1]));
+    // Kåsa's fit: x² + y² + Dx + Ey + F = 0, least squares over the centreline.
+    let sxx = 0, sxy = 0, syy = 0, sx = 0, sy = 0, sxz = 0, syz = 0, sz = 0; const n = mid.length;
+    for (const [x, y] of mid) { const z = x * x + y * y; sxx += x * x; sxy += x * y; syy += y * y; sx += x; sy += y; sxz += x * z; syz += y * z; sz += z; }
+    const M = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]], v = [-sxz, -syz, -sz], det = (a) => a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+    const D0 = det(M), col = (k) => M.map((row, r) => row.map((c, j) => (j === k ? v[r] : c))), Dx = det(col(0)) / D0, Ey = det(col(1)) / D0, F = det(col(2)) / D0;
+    const cx = -Dx / 2, cy = -Ey / 2, r = Math.sqrt(cx * cx + cy * cy - F), ang = (p) => Math.atan2(p[1] - cy, p[0] - cx);
+    let sweep = Math.abs(ang(mid[n - 1]) - ang(mid[0])) * 180 / Math.PI; if (sweep > 180) sweep = 360 - sweep;
+    const xs = P.map((p) => p[0]), ys = P.map((p) => p[1]), len = mid.reduce((s, p, i) => (i ? s + Math.hypot(p[0] - mid[i - 1][0], p[1] - mid[i - 1][1]) : 0), 0);
+    return { points: total, cx, cy, r, sweep, len, w0: w[0], wN: w[n - 1], wMid: w[Math.floor(n / 2)], wMax: Math.max(...w), ends: [mid[0], mid[n - 1]], box: { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) }, fill: K.rgba(getComputedStyle(path).fill), shown: K.vis(svg) };
+  };
   K.compact = () => document.documentElement.dataset.layout !== "desk";
   // The graphs and pages on screen: one each below the line, every component's from it.
   K.graphs = () => [...document.querySelectorAll(".graph")].filter((g) => K.vis(g));
@@ -103,7 +122,7 @@ function install() {
     const out = [];
     for (const el of document.querySelectorAll("#page *, .panel *, .dock *, .pop *, .menu *, .show, #sheetHead *")) {
       // The corner L's stroke box is its 12px legs plus the clipped-away stroke on its other two sides.
-      if (!K.vis(el) || el.closest("svg") || el.matches(".zoomer, .world, .region, .regionBody, .t-tabs-pill, .t-text-soft, .t-text-soft *, .lit, .bead")) continue;
+      if (!K.vis(el) || el.closest("svg") || el.matches(".zoomer, .world, .region, .regionBody, .t-tabs-pill, .t-text-soft, .t-text-soft *, .lit, .resize-handle")) continue;
       const cs = getComputedStyle(el);
       if (cs.display === "inline" || cs.position === "absolute" && el.matches(".bar, .ghost, .tail, .tie, .playhead, .snap, .tick, .end-area")) continue;
       if (el.tagName === "INPUT") { if (el.type !== "range" && el.scrollWidth > el.clientWidth + 1) out.push("input " + (el.dataset.f || "") + " cuts its value"); continue; }
@@ -278,7 +297,7 @@ function install() {
   };
   // r24 B4: no grip mark (a pill, the corner's L) or the corner's square crosses a text box.
   K.gripsOverText = () => {
-    const marks = [...document.querySelectorAll(".bead, .sash-c")].filter((e) => K.vis(e)).map((e) => ({ n: e.className.split(" ").pop() || e.id, b: e.getBoundingClientRect() }));
+    const marks = [...document.querySelectorAll(".resize-handle path, .sash-c")].filter((e) => K.vis(e)).map((e) => ({ n: e.id || e.closest(".resize-handle").id, b: e.getBoundingClientRect() }));
     const out = [];
     for (const it of K.textItems()) { const r = K.clipTo(it.el, it.r); for (const m of marks) if (Math.min(m.b.right, r.right) - Math.max(m.b.left, r.left) > 0.5 && Math.min(m.b.bottom, r.bottom) - Math.max(m.b.top, r.top) > 0.5) out.push(m.n + " over \"" + it.el.textContent.trim().slice(0, 20) + "\""); }
     return [...new Set(out)];
@@ -386,6 +405,7 @@ const browser = await chromium.launch({ executablePath: CHROME });
 for (const view of views) await runView(view);
 for (const view of compactViews) await runClass(view);
 await runReduced();
+await runTwoX("light"); await runTwoX("dark");
 grepCheck();
 await browser.close();
 console.log("\n" + passes + " passed, " + fails + " failed");
@@ -485,10 +505,9 @@ async function runView(view) {
     const K = __k, out = [];
     const add = (name, ink, ...bgs) => { for (const [bn, bg] of bgs) out.push({ name: name + " on " + bn, r: Math.round(K.ratio(K.over(ink, bg), bg) * 100) / 100 }); };
     const panel = document.getElementById("panel"), body = K.rgba(getComputedStyle(document.body).backgroundColor), raised = K.bgOf(panel);
-    // Round 27's handle: the arc at rest (border-row-outline), the bead's edge, the light's darker side.
-    add("handle at rest (border-row-outline)", K.tokenColor("--border-row-outline"), ["panel", raised], ["page", body]);
-    add("lit edge, hovered", K.tokenColor("--ink-muted"), ["panel", raised], ["page", body]);
-    add("lit edge, held", K.tokenColor("--ink-muted"), ["panel", raised], ["page", body]);
+    // Round 28's handle: the arc at rest (Apple's 8.7:1), under the pointer and held (the strong ink).
+    add("handle at rest", K.tokenColor("--c-grip-ink-rest"), ["panel", raised]);
+    add("handle pointed at, held", K.tokenColor("--ink-strong"), ["panel", raised]);
     const bar = document.querySelector(".bar"), dockBg = K.bgOf(document.getElementById("dock"));
     if (bar) {
       const edge = getComputedStyle(bar).boxShadow.match(/^(.*?\))\s/);
@@ -552,10 +571,10 @@ async function runView(view) {
         }
       };
       const panel = document.getElementById("panel");
-      // The lit arm is the panel's outline re-stroked: its box out from the border box by half its extra width,
-      // its radius the panel's plus that gap (round 27).
-      const pb = panel.getBoundingClientRect(), litEl = panel.querySelector('.lit[data-arm="w"]'), lb = litEl && litEl.getBoundingClientRect(), la = litEl && getComputedStyle(litEl);
-      if (litEl && la.display !== "none" && K.vis(panel)) out.push({ name: "lit edge ⊃ panel", R: parseFloat(la.borderTopLeftRadius), r: K.radius(panel), gap: Math.round((pb.left - lb.left) * 100) / 100, even: true, pass: Math.abs(parseFloat(la.borderTopLeftRadius) - (K.radius(panel) + (pb.left - lb.left))) <= 0.5 });
+      // The handle's arc in the panel's corner (round 28): its centreline circle shares the corner's centre, its
+      // radius the panel's less its inset.
+      const pb = panel.getBoundingClientRect(), gc = document.getElementById("gripC");
+      if (gc && K.vis(panel) && K.vis(gc) && !panel.dataset.resizing) { const g = K.grip(gc), R = parseFloat(getComputedStyle(panel).borderBottomLeftRadius), off = Math.hypot(g.cx - (pb.left + R), g.cy - (pb.bottom - R)); out.push({ name: "panel ⊃ handle arc", R, r: Math.round(g.r * 100) / 100, gap: Math.round((R - g.r) * 100) / 100, even: true, pass: off <= 0.5 }); }
       for (const n of document.querySelectorAll(".node")) pair("region ⊃ node", n.closest(".region"), n);
       for (const b of document.querySelectorAll(".zoom .icon-btn")) pair("zoom group ⊃ button", b.closest(".zoom"), b);
       for (const t of document.querySelectorAll(".t-tabs")) pair("tabs track ⊃ pill", t, t.querySelector(".t-tabs-pill"));
@@ -569,7 +588,7 @@ async function runView(view) {
   };
   await conc("at rest");
 
-  // ---- 3. Resize (round 27): the hit bands, then each handle design read on the engine ----
+  // ---- 3. Resize (round 28): the hit bands, then iPadOS 26's handle read on the engine ----
   const grips = await ev(() => {
     const K = __k, panel = document.getElementById("panel"), p = panel.getBoundingClientRect(), rel = (el) => { if (!K.vis(el)) return null; const b = el.getBoundingClientRect(); return { x: Math.round((b.left - p.left) * 100) / 100, y: Math.round((b.top - p.top) * 100) / 100, r: Math.round((p.right - b.right) * 100) / 100, b: Math.round((p.bottom - b.bottom) * 100) / 100, w: Math.round(b.width * 100) / 100, h: Math.round(b.height * 100) / 100 }; };
     const cs = getComputedStyle(panel), padL = parseFloat(cs.paddingLeft) + 1, padB = parseFloat(cs.paddingBottom) + 1;
@@ -581,18 +600,54 @@ async function runView(view) {
   if (G.sashW) ok(V, "3 width band: " + band + "px straddling the edge, stopping short of the curves, never over content", Math.abs(G.sashW.w - band) < 0.01 && (G.coarse ? Math.abs(G.sashW.x + 22 - 0.5) < 0.01 : G.sashW.x === -4 && G.sashW.x + G.sashW.w <= G.panel.padL) && G.sashW.y >= 16, JSON.stringify(G.sashW));
   if (G.sashH) ok(V, "3 foot band: " + band + "px straddling the foot, never over content", Math.abs(G.sashH.h - band) < 0.01 && (G.coarse ? Math.abs(G.sashH.b + 22 - 0.5) < 0.01 : G.sashH.b === -4 && G.sashH.b + G.sashH.h <= G.panel.padB) && G.sashH.x >= 16, JSON.stringify(G.sashH));
   if (G.sashC) ok(V, "3 corner square: " + (G.coarse ? "44" : "20") + "px from " + (G.coarse ? "the corner, straddling" : "4px outside"), G.coarse ? G.sashC.w === 44 : G.sashC.w === 20 && G.sashC.h === 20 && G.sashC.x === -4 && G.sashC.b === -4, JSON.stringify(G.sashC));
-  ok(V, "3 the old marks are gone: no edge pill on the panel or the dock, no corner L, no ::after arm", await ev(() => !document.querySelector(".panel .edge-pill, .dock .edge-pill, .corner-l") && getComputedStyle(document.getElementById("panel"), "::after").content === "none" && document.querySelectorAll('.lit[data-arm]').length === 4));
-  const brandInks = await ev(() => ["--brand-solid", "--brand-ink", "--brand-ink-strong", "--brand-wash", "--action-solid", "--action-hover", "--coral-9", "--coral-10", "--coral-11", "--selected-bg"].map((n) => __k.tokenColor(n).slice(0, 3).join(",")));
-  // In-page: a lit arm's and a bead's state, and a transition paused and sought through its clock (WAAPI, the
-  // page's own animation timeline), read at its start, its delay's end, half way and its end.
-  const handleRead = () => ev(() => {
-    const P = document.getElementById("panel"), q = (s) => P.querySelector(s), K = __k, cs = getComputedStyle(P);
-    const st = (el) => { const c = getComputedStyle(el); const sh = c.boxShadow.match(/^(.*?\))/); return { op: c.opacity, run: c.getPropertyValue("--run").trim(), lw: c.getPropertyValue("--lw").trim(), win: c.getPropertyValue("--win").trim(), at: c.getPropertyValue("--at").trim(), ink: K.rgba(sh ? sh[1] : "transparent").slice(0, 3).join(",") }; };
-    const bw = q('.bead[data-arm="w"]'), bc = bw && getComputedStyle(bw);
-    return { w: st(q('.lit[data-arm="w"]')), h: st(q('.lit[data-arm="h"]')), bead: bw && K.vis(bw) && +bc.opacity > 0 ? { w: Math.round(bw.getBoundingClientRect().width * 100) / 100, op: bc.opacity, scale: bc.scale, bg: K.rgba(bc.backgroundColor).slice(0, 3).join(","), glyph: getComputedStyle(bw.querySelector("svg")).opacity } : null, borderStart: K.rgba(cs.borderLeftColor).slice(0, 3).join(","), borderTop: K.rgba(cs.borderTopColor).slice(0, 3).join(","), outline: K.tokenColor("--border-row-outline").slice(0, 3).join(","), control: K.tokenColor("--border-control").slice(0, 3).join(","), muted: K.tokenColor("--ink-muted").slice(0, 3).join(",") };
+  ok(V, "3 the old marks are gone: no edge pill, corner L, bead or lit edge arm, no handle switch; one handle on the panel and one on the dock", await ev(() => !document.querySelector(".panel .edge-pill, .dock .edge-pill, .corner-l, .bead") && !document.documentElement.hasAttribute("data-handle") && getComputedStyle(document.getElementById("panel"), "::after").content === "none" && [...document.querySelectorAll(".lit[data-arm]")].every((l) => l.dataset.arm === "s") && document.querySelectorAll("#panel > .resize-handle, #dock > .resize-handle").length === 2));
+  // No thick solid border on the panels (the owner: "you're using solid thick borders"): every border and every
+  // inset ring on the panel, the dock and all they hold at most 1px.
+  const thick = await ev(() => {
+    const out = [], nm = (el) => el.id || (typeof el.className === "string" ? el.className : el.getAttribute("class")) || el.tagName;
+    for (const el of document.querySelectorAll("#panel, #panel *, #dock, #dock *")) {
+      const cs = getComputedStyle(el);
+      for (const s of ["Top", "Right", "Bottom", "Left"]) if (cs["border" + s + "Style"] !== "none" && parseFloat(cs["border" + s + "Width"]) > 1) out.push(nm(el) + " border-" + s.toLowerCase() + " " + cs["border" + s + "Width"]);
+      for (const sh of cs.boxShadow.split(/,(?![^(]*\))/)) if (/inset/.test(sh)) { const n = sh.replace(/[a-z-]+\([^)]*\)/g, "").match(/-?[\d.]+px/g) || []; if (n.length >= 4 && parseFloat(n[3]) > 1) out.push(nm(el) + " inset ring " + n[3]); }
+    }
+    return out;
   });
-  // Armed before the hover or press: the transition is paused the moment it is created (transitionrun), so no
-  // machine is too slow to catch it mid-way; then it is sought through its clock and let go.
+  ok(V, "3 no element on the panel or the dock draws a border or an inset ring wider than 1px", thick.length === 0, thick.slice(0, 6).join(", "));
+  // The handle (round 28): iPadOS 26's, measured on Apple's picture against its window's corner radius R.
+  const MEAS = { inset: 0.198, stroke: 0.111, sweep: 72.8, contrast: 8.7 };
+  const inkIs = (a, b) => a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) <= 1);
+  const gripAt = (id) => ev((id) => {
+    const svg = document.getElementById(id), T = svg.closest(".tool"), b = T.getBoundingClientRect(), cs = getComputedStyle(T), g = __k.grip(svg), raised = __k.bgOf(T);
+    return { ...g, tool: { left: b.left, right: b.right, top: b.top, bottom: b.bottom, mid: b.left + b.width / 2 }, R: parseFloat(id === "gripC" ? cs.borderBottomLeftRadius : cs.borderTopLeftRadius), op: getComputedStyle(svg).opacity, ratio: Math.round(__k.ratio(g.fill, raised) * 100) / 100, rest: __k.tokenColor("--c-grip-ink-rest"), strong: __k.tokenColor("--ink-strong"), focus: __k.tokenColor("--focus-ring"), run: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--c-grip-run")), resizing: T.dataset.resizing || "" };
+  }, id);
+  // Its extent from its own corner: how far up the width edge and along the foot the ink reaches (the dock's:
+  // how far either way from the middle of its top edge), and how far in from the edge its stroke stands.
+  const reach = (g) => (g.tool && g.R ? { up: r2(g.tool.bottom - g.box.top), right: r2(g.box.right - g.tool.left), half: r2((g.box.right - g.box.left) / 2), mid: r2((g.box.right + g.box.left) / 2 - g.tool.mid) } : {});
+  const stackPanel = view.multi === "stack";
+  await page.mouse.move(5, 5); await settle(450);
+  const g0 = await gripAt("gripC");
+  const Rp = g0.R, want = { r: Rp * (1 - MEAS.inset), w: Rp * MEAS.stroke, len: Rp * (1 - MEAS.inset) * MEAS.sweep * Math.PI / 180 };
+  const diag = (g) => { const a = g.ends.map((e) => Math.atan2(e[1] - g.cy, e[0] - g.cx) * 180 / Math.PI); return r2((a[0] + a[1]) / 2); };
+  if (stackPanel) ok(V, "3 stacked graphs: no corner, so no handle at rest (the width edge carries no mark of its own)", g0.op === "0", "opacity " + g0.op);
+  else {
+    const off = Math.hypot(g0.cx - (g0.tool.left + Rp), g0.cy - (g0.tool.bottom - Rp));
+    ok(V, "3 handle at rest: an arc concentric with the panel's resizing corner, its centre within 0.5px of the corner radius's, its radius the panel's " + Rp + "px less the measured 0.198 R (" + r2(want.r) + "px)", g0.shown && off <= 0.5 && Math.abs(g0.r - want.r) <= 0.1, JSON.stringify({ centre: [r2(g0.cx), r2(g0.cy)], corner: [r2(g0.tool.left + Rp), r2(g0.tool.bottom - Rp)], off: r2(off), r: r2(g0.r) }));
+    ok(V, "3 handle at rest: the measured stroke (0.111 R = " + r2(want.w) + "px) the arc's whole length, round caps, sweeping the measured 72.8° centred on the corner's diagonal (135°)", Math.abs(g0.wMid - want.w) <= 0.05 && Math.abs(g0.w0 - want.w) <= 0.05 && Math.abs(g0.wN - want.w) <= 0.05 && Math.abs(g0.wMax - want.w) <= 0.05 && Math.abs(g0.sweep - MEAS.sweep) <= 0.5 && Math.abs(diag(g0) - 135) <= 0.5, JSON.stringify({ w: [r2(g0.w0), r2(g0.wMid), r2(g0.wN)], sweep: r2(g0.sweep), diagonal: diag(g0), points: g0.points }));
+    ok(V, "3 handle at rest: Apple's contrast, " + MEAS.contrast + ":1 on the raised surface (the strong ink mixed into it)", inkIs(g0.fill, g0.rest) && Math.abs(g0.ratio - MEAS.contrast) <= 0.3, g0.ratio + ":1");
+  }
+  const dockOn = await ev(() => __k.vis(document.getElementById("gripD")));
+  if (dockOn) {
+    const d0 = await gripAt("gripD"), dr = reach(d0);
+    ok(V, "3 the dock's handle at rest: the same stroke as a capsule the arc's length (" + r2(want.len) + "px), " + r2(Rp * MEAS.inset) + "px in from its top edge, centred on it, in the same ink", Math.abs(d0.len - want.len) <= 0.1 && Math.abs(d0.wMid - want.w) <= 0.05 && Math.abs(d0.w0 - want.w) <= 0.05 && Math.abs(d0.ends[0][1] - (d0.tool.top + Rp * MEAS.inset)) <= 0.1 && Math.abs(dr.mid) <= 0.5 && inkIs(d0.fill, d0.rest), JSON.stringify({ len: r2(d0.len), w: r2(d0.wMid), y: r2(d0.ends[0][1] - d0.tool.top), mid: dr.mid }));
+  }
+  // The captures frame the corner and the dock's edge at 1:1, room left for the drag's run-out.
+  const cornerClip = async () => { const b = await ev(() => { const r = document.getElementById("panel").getBoundingClientRect(), x = Math.max(0, Math.floor(r.left - 64)), y = Math.max(0, Math.floor(r.bottom - 200)); return { x, y, w: Math.min(innerWidth - x, 320), h: Math.min(innerHeight - y, 240) }; }); return { x: b.x, y: b.y, width: b.w, height: b.h }; };
+  const dockClip = async () => { const b = await ev(() => { const r = document.getElementById("dock").getBoundingClientRect(), x = Math.max(0, Math.floor(r.left + r.width / 2 - 160)), y = Math.max(0, Math.floor(r.top - 70)); return { x, y, w: Math.min(innerWidth - x, 320), h: Math.min(innerHeight - y, 140) }; }); return { x: b.x, y: b.y, width: b.w, height: b.h }; };
+  const shot = async (name, clip) => page.screenshot({ path: join(CAPS, V + "-handle-" + name + ".jpg"), type: "jpeg", quality: 92, clip });
+  if (!stackPanel && G.sashC) await shot("corner-rest", await cornerClip());
+  if (dockOn) await shot("dock-rest", await dockClip());
+  // Armed before the press: the transition is paused the moment it is created (transitionrun), then sought
+  // through its clock at 0, ¼, ½, ¾ and 1, the shape read at each, and let go.
   const arm = (sel, prop) => ev(([sel, prop]) => {
     window.__held = null;
     const el = document.querySelector(sel);
@@ -600,89 +655,95 @@ async function runView(view) {
     document.addEventListener("transitionrun", on, true);
     window.__unarm = () => document.removeEventListener("transitionrun", on, true);
   }, [sel, prop]);
-  const scrub = (sel, prop, reads) => ev(async ([sel, prop, reads]) => {
-    const el = document.querySelector(sel);
+  const gripScrub = (id) => ev(async (id) => {
+    const svg = document.getElementById(id), path = svg.querySelector("path"), T = svg.closest(".tool"), q = (n) => Math.round(n * 100) / 100;
     for (let i = 0; i < 20 && !window.__held; i++) await new Promise((r) => requestAnimationFrame(r));
     if (window.__unarm) window.__unarm();
-    const a = window.__held || (el && el.getAnimations().find((x) => x.transitionProperty === prop));
+    const a = window.__held || path.getAnimations().find((x) => x.transitionProperty === "d");
     window.__held = null;
     if (!a) return null;
     a.pause();
-    const tm = a.effect.getTiming(), total = tm.delay + tm.duration, out = [];
-    for (const t of [0, tm.delay, tm.delay + tm.duration / 2, total]) { a.currentTime = t; out.push([Math.round(t), ...reads.map((p) => getComputedStyle(el).getPropertyValue(p).trim())]); }
+    const tm = a.effect.getTiming(), out = [];
+    for (const f of [0, 0.25, 0.5, 0.75, 1]) { a.currentTime = tm.delay + f * tm.duration; const b = T.getBoundingClientRect(), g = __k.grip(svg); out.push({ f, up: q(b.bottom - g.box.top), right: q(g.box.right - b.left), half: q((g.box.right - g.box.left) / 2), ends: [q(g.w0), q(g.wN)], wMax: q(g.wMax), points: g.points }); }
     a.play();
-    return { delay: tm.delay, dur: tm.duration, out };
-  }, [sel, prop, reads]);
-  const hoverable = !touch;
-  const capClip = async () => { const b = await ev(() => { const r = document.getElementById("panel").getBoundingClientRect(); return { x: Math.max(0, r.left - 30), y: Math.max(0, r.bottom - 220), w: 260, h: 240 }; }); return { x: b.x, y: b.y, width: b.w, height: b.h }; };
-  if (G.sashW) for (const handle of ["arc", "light", "bead"]) {
-    await ev((h) => { document.documentElement.dataset.handle = h; }, handle);
-    await page.mouse.move(5, 5); await settle(450);
-    const rest = await handleRead();
-    await page.screenshot({ path: join(CAPS, V + "-handle-" + handle + "-rest.jpg"), type: "jpeg", quality: 92, clip: await capClip() });
-    const lw0 = G.coarse && view.input === "touch" ? "4px" : "3px";
-    if (handle === "arc") ok(V, "3 arc at rest: a short thick arc round the corner on each arm (--run 8px, --lw " + lw0 + "), in border-row-outline, no bead", rest.w.op === "1" && rest.w.run === "8px" && rest.w.lw === lw0 && rest.h.run === "8px" && rest.w.ink === rest.outline && !rest.bead && !brandInks.includes(rest.w.ink), JSON.stringify({ w: rest.w, h: rest.h }));
-    if (handle === "light") ok(V, "3 light at rest: nothing drawn; the resizable start side a step darker (border-row-outline) than the fixed top (border-control)", rest.w.op === "0" && rest.h.op === "0" && rest.borderStart === rest.outline && rest.borderTop === rest.control && !rest.bead, JSON.stringify({ w: rest.w.op, start: rest.borderStart, top: rest.borderTop }));
-    if (handle === "bead") ok(V, "3 bead at rest: a " + (G.coarse ? "24px knob (a finger's drawn target)" : "10px bead") + " on the raised surface, no lit arm", rest.w.op === "0" && !!rest.bead && Math.abs(rest.bead.w - (G.coarse ? 24 : 10)) <= 0.5, JSON.stringify(rest.bead));
-    const c = await center("#sashW");
-    if (hoverable) {
-      await arm('.panel ' + (handle === "bead" ? '.bead[data-arm="w"]' : '.lit[data-arm="w"]'), handle === "arc" ? "--run" : handle === "light" ? "opacity" : "width");
-      await page.mouse.move(c.x, c.y);
-      if (handle === "arc") {
-        const s = await scrub('.panel .lit[data-arm="w"]', "--run", ["--run", "--lw"]);
-        ok(V, "3 arc hover (scrubbed): --run holds 8px through the --dur-pop delay, then runs to 16px while --lw thins to 1.5px", !!s && s.delay === 260 && s.out[0][1] === "8px" && s.out[1][1] === "8px" && s.out[3][1] === "16px", JSON.stringify(s));
-      } else if (handle === "light") {
-        const s = await scrub('.panel .lit[data-arm="w"]', "opacity", ["opacity", "--at", "--win"]);
-        const want = await ev((y) => Math.round(Math.min(Math.max(y - document.getElementById("panel").getBoundingClientRect().top, 32), document.getElementById("panel").getBoundingClientRect().height - 32)), c.y);
-        ok(V, "3 light hover (scrubbed): the taper's opacity 0 through the --dur-pop delay, 1 at its end; it stands at the pointer (--at " + want + "px), its window a taper (--win 0px)", !!s && s.delay === 260 && +s.out[0][1] === 0 && +s.out[1][1] === 0 && +s.out[3][1] === 1 && Math.abs(parseFloat(s.out[3][2]) - want) <= 1.5 && s.out[3][3] === "0px", JSON.stringify(s));
-      } else {
-        // Chromium names a logical property's transition by its physical longhand.
-        const s = await scrub('.panel .bead[data-arm="w"]', "width", ["inline-size"]);
-        await settle(300);
-        const on = await handleRead();
-        if (G.coarse) ok(V, "3 bead hover under a finger-capable pointer: it is the 24px knob already, its arrow showing (nothing to grow)", !s && !!on.bead && Math.abs(on.bead.w - 24) <= 0.5 && on.bead.glyph === "1", JSON.stringify({ s, bead: on.bead }));
-        else ok(V, "3 bead hover (scrubbed): it grows from 10px to the 24px knob at once, its arrow showing", !!s && s.delay === 0 && parseFloat(s.out[0][1]) <= 10.5 && parseFloat(s.out[3][1]) === 24 && !!on.bead && on.bead.glyph === "1", JSON.stringify({ s, bead: on.bead }));
-      }
-      await settle(450);
-      await page.screenshot({ path: join(CAPS, V + "-handle-" + handle + "-hover.jpg"), type: "jpeg", quality: 92, clip: await capClip() });
-    }
-    // The press: the rest mark (or the light, or the knob) becomes the whole tapered arm.
-    const prop = handle === "arc" ? "--run" : "--win";
-    await page.mouse.move(c.x, c.y); await settle(450);
-    await arm('.panel .lit[data-arm="w"]', prop);
-    await page.mouse.down(); await page.mouse.move(c.x - 12, c.y, { steps: 2 });
-    const d = await scrub('.panel .lit[data-arm="w"]', prop, [prop, "opacity"]);
-    await settle(300);
-    const held = await handleRead();
-    await page.screenshot({ path: join(CAPS, V + "-handle-" + handle + "-drag.jpg"), type: "jpeg", quality: 92, clip: await capClip() });
-    await page.mouse.up();
-    if (handle === "arc") ok(V, "3 arc drag (scrubbed): the arc runs on to the whole arm (--run to 100%) at once, on the arm's ink, ink-muted", (!d || d.out[3][1] === "100%") && held.w.run === "100%" && held.w.lw === "1.5px" && held.w.ink === held.muted, JSON.stringify({ d, held: held.w }));
-    else ok(V, "3 " + handle + " drag (scrubbed): the window opens from where it stood to the whole arm (--win to 100%), lit in ink-muted" + (handle === "bead" ? ", the knob gone into it (opacity 0)" : ""), !!d && d.out[3][1] === "100%" && held.w.op === "1" && held.w.win === "100%" && held.w.ink === held.muted && (handle !== "bead" || !held.bead), JSON.stringify({ d, held: held.w, bead: held.bead }));
-    await page.mouse.move(5, 5); await settle(500);
-    const back = await handleRead();
-    ok(V, "3 " + handle + " released: back to its rest form", handle === "arc" ? back.w.run === "8px" : handle === "light" ? back.w.op === "0" : !!back.bead && Math.abs(back.bead.w - (G.coarse ? 24 : 10)) <= 0.5, JSON.stringify({ w: back.w, bead: back.bead }));
+    return { delay: tm.delay, dur: tm.duration, easing: tm.easing, clocks: path.getAnimations().length, out };
+  }, id);
+  const tok = await ev(() => { const s = getComputedStyle(document.documentElement), t = (n) => s.getPropertyValue(n).trim(); return { reveal: parseFloat(t("--dur-reveal")), exit: parseFloat(t("--dur-exit")), control: parseFloat(t("--dur-control")), easeOut: t("--ease-out") }; });
+  const L = g0.run, runTo = Rp + L;
+  const rest0 = reach(g0);
+  // Pointing at an edge or the corner: the resize cursor, and the handle brightens to the strong ink.
+  if (!touch && !stackPanel) for (const [sashId, cur] of [["sashW", "ew-resize"], ["sashH", "ns-resize"], ["sashC", "nesw-resize"]]) {
+    if (!(await page.locator("#" + sashId).isVisible())) continue;
+    const c = await center("#" + sashId);
+    await page.mouse.move(c.x, c.y); await settle(tok.control + 200);
+    const at = await ev(([id, x, y]) => ({ hover: document.getElementById(id).matches(":hover"), cursor: getComputedStyle(document.elementFromPoint(x, y)).cursor, moving: document.querySelector("#gripC path").getAnimations().filter((a) => a.playState === "running").length }), [sashId, c.x, c.y]);
+    const g = await gripAt("gripC");
+    if (sashId === "sashC") await shot("corner-hover", await cornerClip());
+    ok(V, "3 pointing at " + sashId + ": the " + cur + " cursor, and the handle brightens from its rest ink to the strong ink, nothing still moving, its shape the rest arc", at.hover && at.cursor === cur && at.moving === 0 && inkIs(g.fill, g.strong) && !inkIs(g.rest, g.strong) && Math.abs(reach(g).up - rest0.up) <= 0.1, JSON.stringify({ at, fill: g.fill.slice(0, 3), up: reach(g).up }));
+    await page.mouse.move(5, 5); await settle(tok.control + 100);
   }
-  await ev(() => { document.documentElement.dataset.handle = "arc"; });
+  // The drag (pin 26): from the corner, the arc's stroke runs out along both edges, thinning to nothing at its
+  // ends, one path on one clock (--dur-reveal, --ease-out); let go, it runs back over --dur-exit.
+  if (G.sashC && !stackPanel) {
+    const c = await center("#sashC");
+    await page.mouse.move(c.x, c.y); await settle(300);
+    await arm("#gripC path", "d");
+    await page.mouse.down(); await page.mouse.move(c.x - 12, c.y + 9, { steps: 2 });
+    const s = await gripScrub("gripC");
+    const mono = s && s.out.every((o, i) => !i || (o.up >= s.out[i - 1].up - 0.01 && o.right >= s.out[i - 1].right - 0.01));
+    ok(V, "3 corner drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms, --ease-out); the arc's stroke runs out up the width edge and along the foot to " + runTo + "px from the corner, growing at every step, thinning to nothing at both ends, never wider than the arc", !!s && s.clocks <= 2 && s.dur === tok.reveal && s.delay === 0 && mono && Math.abs(s.out[0].up - rest0.up) <= 0.5 && Math.abs(s.out[4].up - runTo) <= 1 && Math.abs(s.out[4].right - runTo) <= 1 && s.out[4].ends.every((w) => w <= 0.05) && s.out.every((o) => o.wMax <= want.w + 0.05 && o.points === g0.points) && s.out[2].up > s.out[0].up + 20, JSON.stringify(s && s.out.map((o) => [o.f, o.up, o.right, o.ends, o.wMax])) + " " + JSON.stringify(s && { dur: s.dur, easing: s.easing, clocks: s.clocks }));
+    await settle(tok.reveal + 100);
+    const held = await gripAt("gripC"), hr = reach(held);
+    await shot("corner-drag", await cornerClip());
+    ok(V, "3 corner held: the whole highlight in the strong ink, " + runTo + "px up and along from the corner", held.resizing === "wh" && inkIs(held.fill, held.strong) && Math.abs(hr.up - runTo) <= 1 && Math.abs(hr.right - runTo) <= 1, JSON.stringify({ hr, fill: held.fill.slice(0, 3) }));
+    await arm("#gripC path", "d");
+    await page.mouse.up();
+    const back = await gripScrub("gripC");
+    await page.mouse.move(5, 5); await settle(tok.reveal + 200);
+    const g1 = await gripAt("gripC");
+    ok(V, "3 corner let go: it runs back into the arc on one clock over --dur-exit (" + tok.exit + "ms), from the highlight to the rest arc", !!back && back.dur === tok.exit && Math.abs(back.out[0].up - runTo) <= 1 && Math.abs(back.out[4].up - rest0.up) <= 0.5 && Math.abs(reach(g1).up - rest0.up) <= 0.5 && inkIs(g1.fill, g1.rest), JSON.stringify(back && back.out.map((o) => [o.f, o.up, o.right])));
+  }
+  // The dock's handle does the same along its top edge.
+  if (dockOn && (await page.locator("#sashD").isVisible())) {
+    const d0 = await gripAt("gripD"), c = await center("#sashD");
+    await page.mouse.move(c.x, c.y); await settle(300);
+    if (!touch) { const dh = await gripAt("gripD"); await shot("dock-hover", await dockClip()); ok(V, "3 pointing at the dock's edge: its handle brightens to the strong ink", inkIs(dh.fill, dh.strong), JSON.stringify(dh.fill.slice(0, 3))); }
+    await arm("#gripD path", "d");
+    await page.mouse.down(); await page.mouse.move(c.x, c.y - 12, { steps: 2 });
+    const s = await gripScrub("gripD"), half = want.len / 2 + L;
+    const mono = s && s.out.every((o, i) => !i || o.half >= s.out[i - 1].half - 0.01);
+    ok(V, "3 dock drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms); its stroke runs out either way along the top edge to " + r2(half) + "px from the middle, growing at every step, thinning to nothing at both ends", !!s && s.dur === tok.reveal && mono && Math.abs(s.out[4].half - half) <= 1 && s.out[4].ends.every((w) => w <= 0.05) && s.out.every((o) => o.wMax <= want.w + 0.05) && Math.abs(s.out[0].half - reach(d0).half) <= 0.5, JSON.stringify(s && s.out.map((o) => [o.f, o.half, o.ends, o.wMax])));
+    await settle(tok.reveal + 100);
+    await shot("dock-drag", await dockClip());
+    await page.mouse.up(); await page.mouse.move(5, 5); await settle(tok.reveal + 200);
+    const d1 = await gripAt("gripD");
+    ok(V, "3 dock let go: back to its capsule", Math.abs(reach(d1).half - reach(d0).half) <= 0.5 && inkIs(d1.fill, d1.rest), JSON.stringify(reach(d1)));
+  }
   await load();
-  // Keys: the APG window splitter.
+  // Keys: the APG window splitter. Focus holds the edge's highlight in the focus ink, with no motion.
   for (const [sashId, key, measure, sign] of [["sashW", "ArrowLeft", "#panel", "w"], ["sashH", "ArrowDown", ".gsec[data-current] .graph", "h"]]) {
     if (!(await page.locator("#" + sashId).isVisible())) continue;
     const size = () => ev(([s, m]) => { const b = document.querySelector(s).getBoundingClientRect(); return m === "w" ? b.width : b.height; }, [measure, sign]);
     await ev((id) => document.getElementById(id).focus(), sashId);
+    await page.keyboard.press("Shift"); await settle(100);
     const s0 = await size(); await page.keyboard.press(key); const s1 = await size(); await page.keyboard.press("Shift+" + key); const s2 = await size();
     const held = await ev(() => document.getElementById("panel").dataset.resizing || "");
-    ok(V, "3 " + sashId + ": a key steps the edge 8px, 32px with Shift, and lights it as held", r2(s1 - s0) === 8 && r2(s2 - s1) === 32 && !!held, s0 + " → " + s1 + " → " + s2 + ", data-resizing=" + held);
+    const gf = await gripAt("gripC"), fr = reach(gf), moving = await ev(() => document.querySelector("#gripC path").getAnimations().filter((a) => a.transitionProperty === "d").length);
+    ok(V, "3 " + sashId + ": a key steps the edge 8px, 32px with Shift, held as it moves; its focus draws the edge's highlight in the focus ink at once (no `d` transition)", r2(s1 - s0) === 8 && r2(s2 - s1) === 32 && !!held && inkIs(gf.fill, gf.focus) && moving === 0 && (sign === "w" ? Math.abs(fr.up - runTo) <= 1 : Math.abs(fr.right - runTo) <= 1), s0 + " → " + s1 + " → " + s2 + ", data-resizing=" + held + ", reach " + JSON.stringify(fr));
+    await ev(() => document.activeElement.blur());
     await settle(300);
   }
-  // A drag holds its cursor on the document, and lights its arm in ink-muted.
-  for (const [sashId, want, dx, dy, arm] of [["sashW", "ew-resize", -60, 0, "w"], ["sashH", "ns-resize", 0, 60, "h"], ["sashC", "nesw-resize", -40, 40, "w"]]) {
+  // A drag holds its cursor on the document and runs the highlight out along the edges it moves.
+  for (const [sashId, want_, dx, dy] of [["sashW", "ew-resize", -60, 0], ["sashH", "ns-resize", 0, 60], ["sashC", "nesw-resize", -40, 40]]) {
     if (!(await page.locator("#" + sashId).isVisible())) continue;
     const c = await center("#" + sashId);
     await page.mouse.move(c.x, c.y); await page.mouse.down(); await page.mouse.move(c.x + dx * 3, c.y + dy * 3, { steps: 5 });
-    await page.waitForTimeout(200);
-    const cur = await ev(([x, y, arm]) => { const l = document.querySelector('.panel .lit[data-arm="' + arm + '"]'), cs = getComputedStyle(l), sh = cs.boxShadow.match(/^(.*?\))/); return { html: getComputedStyle(document.documentElement).cursor, under: getComputedStyle(document.elementFromPoint(x, y) || document.body).cursor, panel: document.getElementById("panel").dataset.resizing, lit: cs.opacity, run: cs.getPropertyValue("--run").trim(), ink: __k.rgba(sh ? sh[1] : "transparent").slice(0, 3).join(","), muted: __k.tokenColor("--ink-muted").slice(0, 3).join(",") }; }, [c.x + dx * 3, c.y + dy * 3, arm]);
+    await page.waitForTimeout(tok.reveal + 100);
+    const cur = await ev(([x, y]) => ({ html: getComputedStyle(document.documentElement).cursor, under: getComputedStyle(document.elementFromPoint(x, y) || document.body).cursor, panel: document.getElementById("panel").dataset.resizing }), [c.x + dx * 3, c.y + dy * 3]);
+    const g = await gripAt("gripC"), r = reach(g);
     await page.mouse.up();
-    ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want + "), the arm lit whole in ink-muted", cur.html === want && cur.under === want && cur.lit === "1" && cur.run === "100%" && cur.ink === cur.muted, JSON.stringify(cur));
+    const arms = sashId === "sashW" ? Math.abs(r.up - runTo) <= 1 && r.right < Rp + 2 : sashId === "sashH" ? Math.abs(r.right - runTo) <= 1 && r.up < Rp + 2 : Math.abs(r.up - runTo) <= 1 && Math.abs(r.right - runTo) <= 1;
+    ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want_ + "), and the handle runs out " + (sashId === "sashW" ? "up the width edge alone" : sashId === "sashH" ? "along the foot alone" : "along both") + ", in the strong ink", cur.html === want_ && cur.under === want_ && arms && inkIs(g.fill, g.strong) && g.op === "1", JSON.stringify({ cur, r, op: g.op }));
     await settle(300);
   }
   // ---- Round 27: pins 27, 28 and 30, read on the engine ----
@@ -755,7 +816,9 @@ async function runView(view) {
       await ev(() => document.getElementById("sashW").focus()); await page.keyboard.press("ArrowLeft"); await page.keyboard.press("ArrowLeft"); await settle(300);
       const dr = await ev(() => ({ panel: __k.box(document.getElementById("panel")), page: __k.box(document.getElementById("page")), pages: document.querySelectorAll(".stage-wrap").length && [...document.querySelectorAll(".stage-wrap")].map((e) => Math.round(e.getBoundingClientRect().top)) }));
       ok(V, "9 a dragged panel keeps its trailing edge; the pages shift by the drag (16px) and stay in one row", near(dr.panel.r, geo.panel.r) && near(dr.panel.w, geo.panel.w + 16) && near(dr.page.l, geo.page.l - 16) && new Set(dr.pages).size === 1, JSON.stringify({ before: [geo.page.l, geo.panel.l, geo.panel.r], after: [dr.page.l, dr.panel.l, dr.panel.r], tops: dr.pages }));
-      if (view.multi === "stack") ok(V, "9 the stacked panel's grips are the width edge and the split edge: no corner (r24 call 3)", await ev(() => !__k.vis(document.getElementById("sashC")) && !__k.vis(document.querySelector('.bead[data-arm="wh"]')) && __k.vis(document.getElementById("sashW")) && __k.vis(document.getElementById("sashS"))));
+      // Off the width edge's focus (which draws its highlight), the stacked panel shows no corner mark at rest.
+      if (view.multi === "stack") { await ev(() => document.activeElement.blur()); await settle(300); }
+      if (view.multi === "stack") ok(V, "9 the stacked panel's grips are the width edge and the split edge: no corner and no corner mark at rest (r24 call 3)", await ev(() => !__k.vis(document.getElementById("sashC")) && !__k.vis(document.getElementById("gripC")) && __k.vis(document.getElementById("sashW")) && __k.vis(document.getElementById("sashS"))));
       await load();
     }
     const wantW = view.multi === "row" ? 896 : view.multi ? 448 : view.screen === "wide" || view.screen === "ultrawide" ? 800 : 448;
@@ -831,10 +894,10 @@ async function runView(view) {
     await page.screenshot({ path: join(CAPS, V + "-dock-floor-edited.jpg"), type: "jpeg", quality: 82 });
     await ev(() => document.querySelector('.bar[data-key="label"]').focus()); await page.keyboard.press("Control+z"); await settle(300);
     if (view.screen === "tablet-landscape") {
-      const t = await ev(() => ({ corner: __k.vis(document.getElementById("sashC")), L: getComputedStyle(document.querySelector('.lit[data-arm="w"]')).opacity === "1", lit: getComputedStyle(document.querySelector('.lit[data-arm="w"]')).display, bands: ["sashW", "sashH", "sashD"].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return Math.round(id === "sashW" ? b.width : b.height); }) }));
-      if (view.input === "touch") ok(V, "9 touch: 44px bands on the width edge, the graph's foot and the dock's top; no corner; the arc drawn at the touch stroke", t.bands.every((x) => x === 44) && !t.corner && t.L, JSON.stringify(t));
-      else {
-        ok(V, "9 trackpad: the corner and the arc come back, the bands stay 44px", t.bands.every((x) => x === 44) && t.corner && t.L && t.lit !== "none", JSON.stringify(t));
+      const t = await ev(() => ({ corner: __k.vis(document.getElementById("sashC")), handle: __k.vis(document.getElementById("gripC")) && __k.vis(document.getElementById("gripD")), bands: ["sashW", "sashH", "sashD", "sashC"].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return Math.round(id === "sashW" ? b.width : b.height); }) }));
+      // Round 28: the corner is a finger's grip too, its handle drawn (iPadOS's is a finger's first).
+      ok(V, "9 " + (view.input === "touch" ? "touch" : "trackpad") + ": 44px bands on the width edge, the graph's foot and the dock's top, the 44px corner, the handles drawn", t.bands.every((x) => x === 44) && t.corner && t.handle, JSON.stringify(t));
+      if (view.input !== "touch") {
         await page.mouse.move(5, 5); await settle(200);
         const z = await center("#zoomIn"); await page.mouse.move(z.x, z.y); await settle(700);
         const tip = await ev(() => ({ on: document.getElementById("tip").hasAttribute("data-on"), text: document.getElementById("tip").textContent }));
@@ -1158,7 +1221,7 @@ async function runClass(view) {
   await graphOpen(V, ev, "the view it opens on");
   const wantZoom = !["phone-portrait", "phone-landscape"].includes(view.screen);
   ok(V, "9 zoom buttons " + (wantZoom ? "shown (tablet up, or a mouse)" : "gone: a phone pinches"), (await ev(() => __k.vis(document.querySelector(".zoom")))) === wantZoom);
-  ok(V, "9 no grips on a compact screen: no sash, no corner, no Hide in the panel's toolbar", await ev(() => [...document.querySelectorAll(".sash, .lit, .bead, #hide")].every((e) => !__k.vis(e))));
+  ok(V, "9 no grips on a compact screen: no sash, no corner, no Hide in the panel's toolbar", await ev(() => [...document.querySelectorAll(".sash, .lit, .resize-handle, #hide")].every((e) => !__k.vis(e))));
 
   // ---- The sweep: each face, each stop ----
   const stops = view.layout === "drawer" ? ["peek", "full", "head"] : [null];
@@ -1358,14 +1421,19 @@ async function runReduced() {
   await page.waitForTimeout(400);
   const gone = await ev(() => !document.querySelector(".pop"));
   ok(V, "the popover fades only, opening and closing", !!open && open.length > 0 && open.every((p) => p === "opacity") && !!close && close.length > 0 && close.every((p) => p === "opacity") && gone, "open " + JSON.stringify(open) + ", close " + JSON.stringify(close) + ", gone " + gone);
-  // The lit edge: opacity alone; the marks only change colour; nothing on the panel travels.
-  const c = await page.locator("#sashW").boundingBox();
+  // Round 28: pointing at the corner and dragging it, the handle's ink fades and its shape changes at once
+  // (no `d` transition); nothing on the panel travels.
+  const handleAnims = () => ev(() => document.getAnimations().map((a) => { const t = a.effect.target, h = t && t.closest && t.closest(".resize-handle, .panel"); return { target: h ? h.id || "panel" : "", prop: a.transitionProperty || "keyframes" }; }).filter((a) => a.target));
+  const c = await page.locator("#sashC").boundingBox();
   await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
   await page.waitForTimeout(40);
-  const lit = await ev(() => document.getAnimations().map((a) => ({ target: (a.effect.target && (a.effect.target.id || a.effect.target.className)) + (a.effect.pseudoElement || ""), prop: a.transitionProperty || "keyframes" })).filter((a) => /panel|lit|bead/.test(a.target)));
-  await page.waitForTimeout(500);
-  // Round 27: the arm's own lengths and ink change (--run, --lw, box-shadow), and nothing on the panel moves.
-  ok(V, "the arm changes only its own lengths, ink and opacity, and nothing on the panel moves", lit.length > 0 && lit.every((a) => ["opacity", "background-color", "box-shadow", "--run", "--lw", "--win", "--at"].includes(a.prop)), JSON.stringify(lit));
+  const pointed = await handleAnims();
+  await page.waitForTimeout(400);
+  await page.mouse.down(); await page.mouse.move(c.x + c.width / 2 - 20, c.y + c.height / 2 + 15, { steps: 2 });
+  await page.waitForTimeout(20);
+  const held = await handleAnims(), up = await ev(() => { const b = document.getElementById("panel").getBoundingClientRect(), g = __k.grip(document.getElementById("gripC")); return Math.round(b.bottom - g.box.top); });
+  await page.mouse.up(); await page.waitForTimeout(300);
+  ok(V, "the handle only changes its ink: pointed at and held, no `d` transition, its highlight there at once (" + up + "px up the edge), nothing on the panel moving", pointed.length > 0 && [...pointed, ...held].every((a) => ["fill", "opacity", "background-color", "box-shadow"].includes(a.prop)) && up >= 130, JSON.stringify({ pointed, held }));
   await page.mouse.move(40, 40); await page.waitForTimeout(300);
   // A key's step lands at once: the panel's width and a bar's start, with nothing animating them.
   await ev(() => document.getElementById("sashW").focus());
@@ -1390,6 +1458,28 @@ async function runReduced() {
   const ran = mid.filter((t) => t !== null);
   ok(V, "the replay still runs under reduced motion", ran.length >= 2 && ran.every((t, i) => !i || t >= ran[i - 1]) && ran.some((t) => t > 0 && t < total) && end.time === null, "playhead at " + JSON.stringify(mid) + " of " + total + " ms, then " + JSON.stringify(end));
   ok(V, "no page errors", errors.length === 0, errors.join(" | "));
+  await ctx.close();
+}
+
+// The handle's corner at 2× (round 28): rest, the pointer on the corner, and held mid-drag, at 1440 by day
+// and at night, each crop 184 × 180 CSS px round the corner (368 × 360 device px), room for the run-out.
+async function runTwoX(scheme) {
+  const V = "1440-" + scheme + "-2x";
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
+  const ev = (fn, arg) => page.evaluate(fn, arg);
+  await page.goto(URL_); await page.waitForTimeout(700); await ev(install);
+  const clip = async () => { const b = await ev(() => { const r = document.getElementById("panel").getBoundingClientRect(); return { x: Math.floor(r.left - 24), y: Math.floor(r.bottom - 156) }; }); return { x: b.x, y: b.y, width: 184, height: 180 }; };
+  const shot = async (name) => page.screenshot({ path: join(CAPS, V + "-corner-" + name + ".png"), clip: await clip() });
+  const dpr = await ev(() => devicePixelRatio);
+  await page.mouse.move(5, 5); await page.waitForTimeout(400); await shot("rest");
+  const c = await page.locator("#sashC").boundingBox(), x = c.x + c.width / 2, y = c.y + c.height / 2;
+  await page.mouse.move(x, y); await page.waitForTimeout(400); await shot("hover");
+  await page.mouse.down(); await page.mouse.move(x - 12, y + 9, { steps: 2 }); await page.waitForTimeout(500); await shot("drag");
+  const held = await ev(() => document.getElementById("panel").dataset.resizing);
+  await page.mouse.up();
+  ok(V, "the corner captured at 2× (rest, pointed at, held)", dpr === 2 && held === "wh" && errors.length === 0, "devicePixelRatio " + dpr + ", held " + held + (errors.length ? ", errors " + errors.join(" | ") : ""));
   await ctx.close();
 }
 
