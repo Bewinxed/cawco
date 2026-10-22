@@ -86,6 +86,7 @@
   } from "../activity";
   import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
+  import { frameObserver } from "../frame-observer";
   import CawFace from "../home/CawFace.svelte";
   import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
@@ -283,7 +284,24 @@
   let morphing = $state(false);
   /** Which way the card moved between tabs: 1 rightward, -1 leftward. */
   let detailDir = $state<1 | -1>(1);
+  /**
+   * The card's content height, which the morph box glides to: read as it
+   * mounts, and a change in the next frame (frameObserver). Written inside
+   * the delivery (`bind:offsetHeight`), the morph's height resized the card,
+   * its layer and its tab, boxes the delivery had passed, and WebKit reported
+   * "ResizeObserver loop completed with undelivered notifications" as a mode
+   * switch changed the card's content.
+   */
   let detailsHeight = $state(0);
+  const measureDetails: Attachment<HTMLElement> = (node) => {
+    const read = () => {
+      detailsHeight = node.offsetHeight;
+    };
+    read();
+    const sized = frameObserver(read);
+    sized.observe(node);
+    return () => sized.disconnect();
+  };
   let restoreFocus = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   /**
@@ -1867,7 +1885,7 @@
         <div
           data-slot="details-measure"
           class="flex max-h-inherit w-full flex-col"
-          bind:offsetHeight={detailsHeight}
+          {@attach measureDetails}
         >
           {#if detailTab}
             <SessionDetails

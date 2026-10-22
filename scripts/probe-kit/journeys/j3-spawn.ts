@@ -1,7 +1,7 @@
 /**
  * J3, spawn a session against a project (JOURNEY.md Flow 4): from the
- * fleet board, through the new-session dialog with the project chosen in
- * it, to `session/[id]` streaming;
+ * fleet board, through the new-session dialog with the machine, the project
+ * and the permission mode chosen in it, to `session/[id]` streaming;
  * then the session's permission mode changed from its session card, and the
  * machine's harness process proven to run under the new mode.
  *
@@ -42,6 +42,7 @@ const SPAWN = "JOURNEY-SPAWN";
 const START = /^Start/;
 /** The fleet board's ways into the New Session dialog: the tab strip's and the rail's. */
 const NEW_SESSION = /^(New session|Start session)$/;
+const MACHINES_CHIP = /^Machines:/;
 const PROJECT_CHIP = /^Project:/;
 const SESSION_TABS = "Open sessions in this group";
 const MODE_FLAG = "--permission-mode";
@@ -173,6 +174,31 @@ async function walk(leg: Leg): Promise<void> {
     () => shows(dialog, "the New Session dialog")
   );
 
+  // The form opens on the machine the person last started a session on, or
+  // on none until they choose one (no machine is guessed); a fresh fleet's
+  // browser has started none. A project is offered on the chosen machines
+  // where it has a checkout, so the machine comes first, as the person picks it.
+  const agents =
+    await fleet.api<{ hostname: string; machineId: string }[]>("/api/agents");
+  const hostname =
+    agents.find((row) => row.machineId === MACHINE)?.hostname ?? MACHINE;
+  const machines = dialog.getByRole("button", { name: MACHINES_CHIP });
+  await leg.step(
+    "Choose the machine",
+    async () => {
+      await machines.click();
+      await page
+        .getByRole("button", { name: new RegExp(`^${literal(hostname)}`) })
+        .click();
+      await machines.click();
+    },
+    () =>
+      shows(
+        dialog.getByRole("button", { name: `Machines: ${hostname}` }),
+        `the machine chosen, “Machines: ${hostname}”`
+      )
+  );
+
   const chip = dialog.getByRole("button", { name: PROJECT_CHIP });
   await leg.step(
     "Choose the project",
@@ -193,37 +219,49 @@ async function walk(leg: Leg): Promise<void> {
       )
   );
 
+  const promptField = dialog
+    .getByRole("combobox")
+    .or(dialog.getByRole("textbox"))
+    .first();
   await leg.step(
     "Write what the session should do",
     async () => {
-      const field = dialog
-        .getByRole("combobox")
-        .or(dialog.getByRole("textbox"))
-        .first();
-      await field.click();
+      await promptField.click();
       await page.keyboard.type(prompt);
     },
     () =>
       eventually(
-        "Start session can be pressed",
-        () => dialog.getByRole("button", { name: START }).first().isEnabled(),
-        Boolean
+        "the first prompt holds the words",
+        () =>
+          promptField.evaluate((el) =>
+            el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement
+              ? el.value
+              : (el.textContent ?? "")
+          ),
+        (words) => words.includes(prompt)
       )
   );
 
   // Asked first: the mode a session runs in until it is trusted, and one
   // Full Send cannot be switched to without starting the process again.
+  // Start waits for the person's pick: no mode is guessed for them.
   await leg.step(
     "Choose to be asked before tools run",
     async () => {
       await dialog.getByRole("button", { name: PERMISSION_MODE }).click();
       await page.getByRole("radio", { name: ASK_FIRST }).click();
     },
-    () =>
-      shows(
+    async () => {
+      await shows(
         dialog.getByRole("button", { name: IN_ASK_FIRST }),
         "the session's mode as Ask first"
-      )
+      );
+      await eventually(
+        "Start session can be pressed",
+        () => dialog.getByRole("button", { name: START }).first().isEnabled(),
+        Boolean
+      );
+    }
   );
 
   await leg.step(
