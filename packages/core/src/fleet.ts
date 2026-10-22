@@ -321,11 +321,10 @@ export interface FleetSkillMeta extends FleetPlacement, FleetVersioned {
 /**
  * What sync carries per enabled skill: the resolved content, by hash.
  *
- * `files` is ABSENT when the machine's last report said it already holds this
- * exact hash — the config is pushed on every fleet change, to every machine, so
- * sending megabytes a machine already has is the same bytes over and over for
- * a write it will not make. Absent means "you have it", never "it is gone": a
- * payload the fleet stopped carrying is not in the list at all.
+ * `files` travel with the item; a delta carries an item only when its hash
+ * moved for that machine (hub fleet-sync.ts), so bytes a machine acknowledged
+ * are not sent again. A payload the fleet stopped carrying is not in the list
+ * at all.
  */
 export interface FleetSkillPayload extends FleetPlacement {
   files?: SkillFile[];
@@ -353,7 +352,7 @@ export interface FleetSkillPayload extends FleetPlacement {
 export interface FleetPluginPayload {
   /** Decoded size of the resolved files, for the dashboard to show. */
   bytes: number;
-  /** Absent when the machine already holds this hash — see {@link FleetSkillPayload}. */
+  /** See {@link FleetSkillPayload}; dropped by the agent for a plugin its disk holds at this hash. */
   files?: SkillFile[];
   hash: string;
   /** Which fleet marketplace it came from — the key `FleetPlugin.id` names. */
