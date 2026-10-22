@@ -48,6 +48,12 @@
  * 11. An add over SSH (the kit's SSH target, whose CawCo is the build the
  *     hub offers, so the installer joins again) runs its harnesses step,
  *     updates Claude Code, and joins ready.
+ * 12. A fresh machine with no Claude Code whose installer finds no route to
+ *     claude.ai (the nightly at cf911c631, stage 2: a root box under
+ *     systemd, its add ended failed after it joined): the add ends joined,
+ *     its last line says why in curl's own words, the machine's tool cell
+ *     holds that failure, and the joined outcome shows Claude Code's block
+ *     with Retry and why.
  *
  *   bun scripts/probe-kit/run.ts claude-update
  */
@@ -86,6 +92,8 @@ const BREW = "Claude is up to date!";
 const BLOCK = "[data-slot=harness-block]";
 const SIGN_IN = /^Sign in/;
 const CODE_IN = /code=([A-Z0-9]+)/;
+const WINDOW = "[data-connect-window]";
+const NO_ROUTE = "curl: (6) Could not resolve host: claude.ai";
 const SSH_USER = "deploy";
 
 /**
@@ -423,6 +431,7 @@ const spec: Spec = {
     await commandAddLeg(run);
     await lostAddLeg(run, ssh.hubEnv);
     await sshAddLeg(run, ssh);
+    await noRouteAddLeg(run);
   },
 };
 
@@ -1006,6 +1015,106 @@ exit 0
     `${ended instanceof Error ? ended.message : `${ended.state} ${JSON.stringify(ended.steps.map((one) => one.step))} ${JSON.stringify(ended.problem)}`}; output: ${JSON.stringify(output.lines.slice(-10))}`
   );
   ssh.stop();
+}
+
+/**
+ * 12: a fresh machine with no Claude Code, whose installer finds no route to
+ * claude.ai. The agent starts again on a PATH with no `claude` anywhere on
+ * it and a `curl` that answers claude.ai as a machine with no route does
+ * (the real curl for anything else); everything else is the product's.
+ */
+async function noRouteAddLeg(run: Run): Promise<void> {
+  const { base, check, fleet, page } = run;
+  const dir = join(fleet.sandbox, "no-route-bin");
+  await mkdir(dir, { recursive: true });
+  const realCurl = Bun.which("curl") ?? "/usr/bin/curl";
+  await writeFile(
+    join(dir, "curl"),
+    `#!/bin/sh
+case "$*" in
+  *claude.ai*) echo "${NO_ROUTE}" >&2; exit 6 ;;
+esac
+exec "${realCurl}" "$@"
+`,
+    { mode: 0o755 }
+  );
+  await rm(run.claude, { force: true });
+  const hasClaude = (folder: string) =>
+    Bun.which("claude", { PATH: folder }) !== null;
+  const path = [
+    dir,
+    ...(fleet.env.PATH ?? "")
+      .split(":")
+      .filter((folder) => folder && !hasClaude(folder)),
+  ].join(":");
+  await fleet.stop("agent");
+  fleet.launch("agent", [], { PATH: path });
+  await fleet.agentUp();
+  await reportReads(
+    fleet,
+    "claude",
+    (report) => report?.refused === "not-installed",
+    "the machine's Claude report: not installed"
+  );
+  const started = await fleet.api<{ install: Install & { command: string } }>(
+    "/api/installs",
+    { route: "command", address: fleet.base }
+  );
+  const code = CODE_IN.exec(started.install.command)?.[1] ?? "";
+  await fetch(`${fleet.base}/install.sh?code=${code}`).then((r) => r.text());
+  await fetch(`${fleet.base}/api/agents/${encodeURIComponent(MACHINE)}`, {
+    headers: { "x-cawco-install-code": code },
+  });
+  const ended = await until(
+    "the add's end",
+    () => installOf(fleet, started.install.id),
+    (one) => one.state !== "running",
+    180_000
+  );
+  const output = await fleet.api<{ lines: string[] }>(
+    `/api/installs/${started.install.id}/output`
+  );
+  const last = output.lines.at(-1) ?? "";
+  const tool = (await row(fleet))?.tools?.claude;
+  check(
+    "12. a fresh machine whose Claude Code installer finds no route to claude.ai still joins, its last line saying why in curl's words",
+    ended.state === "joined" &&
+      ended.problem === null &&
+      ended.steps.at(-1)?.step === "harnesses" &&
+      last.includes("Claude Code didn't install on") &&
+      last.includes(NO_ROUTE) &&
+      last.includes("is in the fleet"),
+    `${ended.state} ${JSON.stringify(ended.problem)} ${JSON.stringify(ended.steps.map((one) => one.step))}; last line: ${last}`
+  );
+  check(
+    "12. the machine's tool cell holds the install's failure in curl's words",
+    tool?.state === "failed" &&
+      tool.version === undefined &&
+      (tool.detail ?? "").includes(NO_ROUTE),
+    JSON.stringify(tool)
+  );
+  await open(page, `${base}/?install=${started.install.id}`, WINDOW);
+  const outcome = await page
+    .waitForFunction(
+      ([win, block]) =>
+        document.querySelector(`${win} [data-outcome=joined] ${block}`) !==
+        null,
+      [WINDOW, BLOCK] as const,
+      { timeout: 30_000 }
+    )
+    .then(() => blockOn(page))
+    .catch(async () => ({ missing: await pageSaid(page) }));
+  check(
+    "12. the joined outcome shows Claude Code's block: why, and Retry with the install's failure",
+    outcome !== null &&
+      !("missing" in outcome) &&
+      outcome.harness === "claude" &&
+      outcome.phase === "failed" &&
+      outcome.press === "Retry" &&
+      outcome.why.startsWith("Claude Code isn't installed on") &&
+      outcome.error.includes(NO_ROUTE),
+    JSON.stringify(outcome)
+  );
 }
 
 export default spec;

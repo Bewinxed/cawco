@@ -6,8 +6,8 @@
  */
 
 import { existsSync, realpathSync } from "node:fs";
-import { realpath, stat } from "node:fs/promises";
-import { platform } from "node:os";
+import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type {
   ToolFootprint,
@@ -624,13 +624,48 @@ const runMethod = async (
 ): Promise<{ ok: boolean; said: string }> => {
   const command = commandOf(method, version);
   console.info(`[tools] ${spec.name}: ${method.label}: ${command}`);
-  const ran = await Bun.$`${{ raw: command }}`.quiet().nothrow().env(toolEnv());
+  // A folder of its own, for the installer script a method downloads before
+  // it runs it (core ToolInstallMethod `command`), gone with the run.
+  const dir = await mkdtemp(join(tmpdir(), "cawco-install-"));
+  const ran = await Bun.$`${{ raw: command }}`
+    .cwd(dir)
+    .quiet()
+    .nothrow()
+    .env(toolEnv())
+    .finally(() => rm(dir, { recursive: true, force: true }));
   const out = tail(Bun.stripANSI(ran.stdout.toString()));
   const err = tail(Bun.stripANSI(ran.stderr.toString()));
   if (ran.exitCode === 0) {
     return { ok: true, said: out || err };
   }
   return { ok: false, said: err || out || `exited ${ran.exitCode}` };
+};
+
+/**
+ * Why an install that ran left no copy CawCo runs, in the method's own
+ * words: one that ran clean and left a copy CawCo doesn't run (what the
+ * probe found, what the method said, and how to go on); one that ran clean
+ * and left none (what it said, if anything); or one that failed (what it
+ * said).
+ */
+const failedWords = (
+  spec: ToolSpec,
+  method: ToolInstallMethod,
+  ran: { ok: boolean; said: string },
+  probed: ToolStatus,
+  version: string | undefined
+): string => {
+  if (!ran.ok) {
+    return ran.said;
+  }
+  const said = ran.said ? oneLine(ran.said) : "";
+  if (probed.version) {
+    const wants = spec.minVersion
+      ? `${spec.minVersion} or newer`
+      : (version ?? spec.exactVersion);
+    return `${method.label} finished, and ${spec.bin} still says ${probed.version}; CawCo runs ${spec.name} ${wants}.${said ? ` ${method.label} said: ${said}.` : ""} Update it on the machine the way it was installed, then Retry.`;
+  }
+  return `${method.label} finished without leaving ${spec.bin} anywhere${said ? `. It said: ${said}` : ""}`;
 };
 
 /**
@@ -668,20 +703,10 @@ const install = async (
   if (probed.state === "installed") {
     return remember({ ...probed, method: method.label });
   }
-  // It ran clean and left a copy CawCo still does not run: what the probe
-  // found, then what the method said of itself.
-  const left =
-    ran.ok && probed.version
-      ? `${method.label} finished, and ${spec.bin} still says ${probed.version}; CawCo runs ${spec.name} ${spec.minVersion ? `${spec.minVersion} or newer` : (version ?? spec.exactVersion)}.${ran.said ? ` ${method.label} said: ${oneLine(ran.said)}.` : ""} Update it on the machine the way it was installed, then Retry.`
-      : undefined;
   return remember({
     id: spec.id,
     state: "failed",
-    detail:
-      left ??
-      (ran.ok
-        ? `${method.label} finished without leaving ${spec.bin} anywhere`
-        : ran.said),
+    detail: failedWords(spec, method, ran, probed, version),
     method: method.label,
     at: Date.now(),
   });

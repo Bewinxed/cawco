@@ -197,6 +197,13 @@ export const olderThan = (version: string, than: string): boolean => {
  * docs on 2026-08-06 — when an entry drifts from what an installer really
  * does, fix the entry and note the drift in NEW.md.
  */
+// Each method's command runs through the Bun shell in a folder of its own
+// (agent tools.ts `runMethod`). An installer script is downloaded to a file
+// there and then run, never piped from `curl` into a shell: the Bun shell
+// has no `pipefail` (`set` is not one of its builtins), so a pipe whose
+// download failed exits 0 from the empty script, and curl's words were the
+// only sign of it (a fresh machine with no route to claude.ai, stage 2 of
+// the nightly at cf911c631).
 export const TOOL_CATALOG: ToolSpec[] = [
   {
     id: "claude",
@@ -229,9 +236,10 @@ export const TOOL_CATALOG: ToolSpec[] = [
         label: "curl script",
         platforms: ["linux", "darwin"],
         needs: "curl",
-        command: "curl -fsSL https://claude.ai/install.sh | bash",
+        command:
+          "curl -fsSL https://claude.ai/install.sh -o claude-install.sh && bash claude-install.sh",
         pinnedCommand:
-          "curl -fsSL https://claude.ai/install.sh | bash -s {version}",
+          "curl -fsSL https://claude.ai/install.sh -o claude-install.sh && bash claude-install.sh {version}",
       },
     ],
   },
@@ -308,9 +316,9 @@ export const TOOL_CATALOG: ToolSpec[] = [
         needs: "curl",
         footprint: { kind: "dir", path: "~/.opencode/bin" },
         command:
-          "curl -fsSL https://opencode.ai/v2/install | bash -s -- --version {version} --no-modify-path",
+          "curl -fsSL https://opencode.ai/v2/install -o opencode-install.sh && bash opencode-install.sh --version {version} --no-modify-path",
         pinnedCommand:
-          "curl -fsSL https://opencode.ai/v2/install | bash -s -- --version {version} --no-modify-path",
+          "curl -fsSL https://opencode.ai/v2/install -o opencode-install.sh && bash opencode-install.sh --version {version} --no-modify-path",
       },
     ],
   },
@@ -343,7 +351,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
         label: "curl script",
         platforms: ["linux", "darwin"],
         needs: "curl",
-        command: "curl -fsSL https://pi.dev/install.sh | sh",
+        command:
+          "curl -fsSL https://pi.dev/install.sh -o pi-install.sh && sh pi-install.sh",
       },
     ],
   },
@@ -366,7 +375,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
       {
         label: "curl script",
         platforms: ["linux", "darwin"],
-        command: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+        command:
+          "curl -fsSL https://antigravity.google/cli/install.sh -o agy-install.sh && bash agy-install.sh",
       },
       {
         label: "winget",

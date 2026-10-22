@@ -49,7 +49,7 @@ import {
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence } from "../convergence";
 import { machineFaults } from "../fleet-faults";
-import { harnessBlocksOf, harnessWords } from "../harness-block.svelte";
+import { harnessWords, machineBlocksOf } from "../harness-block.svelte";
 import { hubAuth } from "../hub-auth.svelte";
 import {
   catalogTitle,
@@ -857,11 +857,8 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   }
   // A harness CLI refused here: nothing of it starts on the machine until it
   // is brought up, from its block or Configure → CLI tools. Each one said:
-  // one never hides another. Claude Code is every machine's, so its absence
-  // is said; an OpenCode or pi the person never put on is not a fault.
-  const blocked = harnessBlocksOf(machine).filter(
-    (block) => block.harness === "claude" || block.kind === "version"
-  );
+  // one never hides another.
+  const blocked = machineBlocksOf(machine);
   if (blocked.length > 0) {
     return blocked.map(harnessWords.row).join(" · ");
   }

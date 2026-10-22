@@ -116,6 +116,17 @@ export function harnessBlockOf(
 export const harnessBlocksOf = (machine: Machine): HarnessBlock[] =>
   HARNESSES.flatMap((harness) => harnessBlockOf(machine, harness) ?? []);
 
+/**
+ * The blocks a machine's own surfaces say (its row on the rail, a joined
+ * add's outcome): Claude Code's, which every machine runs, so its absence
+ * is said; an OpenCode or pi only when it is there at a version CawCo
+ * doesn't run, since one the person never put on is not a fault.
+ */
+export const machineBlocksOf = (machine: Machine): HarnessBlock[] =>
+  harnessBlocksOf(machine).filter(
+    (block) => block.harness === "claude" || block.kind === "version"
+  );
+
 /** Where the fix stands, off the hub's cell: an attempt's failure carries no version (agent tools.ts `install`). */
 const fixOf = (spec: ToolSpec, tool: ToolStatus | undefined): HarnessFix => {
   if (tool?.state === "installing") {

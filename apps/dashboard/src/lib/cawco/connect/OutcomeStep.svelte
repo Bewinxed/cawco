@@ -14,7 +14,9 @@
    * - **Joined**: the machine in the fleet, then its presence as the fleet
    *   says it, with the name it lists it by, and Open on the same line: a
    *   line shorter than Lost by more than a rung of the height ladder, as
-   *   Lost turns into it on its own.
+   *   Lost turns into it on its own. A harness its harnesses step could not
+   *   bring up stands under it as its block, with its press and why
+   *   (HarnessBlock): the machine is in, and that is its one thing to do.
    *
    * Retry keeps every detail; a password sign-in asks for its password
    * again, which was used once and forgotten.
@@ -23,6 +25,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
+  import HarnessBlock from "../HarnessBlock.svelte";
+  import { machineBlocksOf } from "../harness-block.svelte";
   import { failureWords } from "../hub-read";
   import { dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { connect } from "./installs.svelte";
@@ -54,6 +58,8 @@
   const machine = $derived(
     cawco.machines.find((one) => one.machineId === install.machineId)
   );
+  /** What its harnesses step could not bring up, standing on the machine. */
+  const blocks = $derived(machine ? machineBlocksOf(machine) : []);
   const inFleet = $derived(
     cawco.machines.some(
       (one) =>
@@ -143,6 +149,15 @@
         variant="default">Open {name}</Button
       >
     </div>
+    {#if machine}
+      {#each blocks as block (block.harness)}
+        <HarnessBlock
+          {block}
+          machineId={machine.machineId}
+          online={machine.status === "online"}
+        />
+      {/each}
+    {/if}
   {:else}
     {#if install.state === "lost"}
       <div class="mark-line flex items-start gap-space-2">

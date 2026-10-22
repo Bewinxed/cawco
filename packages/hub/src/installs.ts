@@ -205,13 +205,13 @@ export interface InstallsDeps {
    * the machine what it has, and runs the catalog's install of Claude Code
    * when it is missing or too old, and of OpenCode and pi when they are
    * there at a version CawCo doesn't run (server.ts). Each line it says goes
-   * into the install's output; it answers whether they all run now, and the
-   * machine's words.
+   * into the install's output; it answers what runs there now, or what
+   * could not be brought up and why, in the machine's words.
    */
   readonly readyHarnesses: (
     machineId: string,
     say: (line: string) => void
-  ) => Promise<{ ok: boolean; said: string }>;
+  ) => Promise<string>;
   /** An outcome the person acted on: its push comes down. */
   readonly settled: (id: string) => void;
   readonly tunnels: SshTunnels;
@@ -495,43 +495,35 @@ export const createInstalls = (deps: InstallsDeps) => {
 
   /**
    * The machine is listed online: its harness CLIs are brought to versions
-   * CawCo runs (`readyHarnesses`), and only then is the install joined. A
-   * machine one of them could not be brought up on fails at this step in the
-   * machine's words; it is in the fleet all the same. Asked again while it
-   * runs, it answers the same work.
+   * CawCo runs (`readyHarnesses`), and then the install is joined, whatever
+   * that met. The machine is in the fleet from the moment it is listed, so
+   * nothing about a harness fails the add: one that could not be brought up
+   * is said as the step's last line, in the machine's words, and stands on
+   * the machine as its harness block with its fix (dashboard HarnessBlock,
+   * on the outcome, the machine's row and Configure → CLI tools). Asked again
+   * while it runs, it answers the same work. Only called once the add knows
+   * its machine.
    */
-  const ready = (entry: Kept): Promise<void> => {
+  const ready = (entry: Kept, machineId: string): Promise<void> => {
     const { install } = entry;
     const running = readying.get(install.id);
     if (running !== undefined) {
       return running;
     }
-    const { machineId } = install;
     mark(entry, "harnesses");
     const say = (line: string) => take(entry, `${INSTALL_STEP_PREFIX}${line}`);
-    const work = (
-      machineId
-        ? deps.readyHarnesses(machineId, say)
-        : Promise.resolve({
-            ok: false,
-            said: "The hub doesn't know which machine joined, so its Claude Code, OpenCode and pi weren't checked.",
-          })
-    )
-      .then(({ ok, said }) => {
+    const work = deps
+      .readyHarnesses(machineId, say)
+      .catch(
+        (error: Error) =>
+          `The machine's Claude Code, OpenCode and pi weren't checked: ${error.message}`
+      )
+      .then((said) => {
         if (install.state !== "running") {
           return;
         }
-        if (ok) {
-          say(said);
-          end(entry, "joined");
-        } else {
-          end(entry, "failed", { kind: "step", said });
-        }
-      })
-      .catch((error: Error) => {
-        if (install.state === "running") {
-          end(entry, "failed", { kind: "step", said: error.message });
-        }
+        say(said);
+        end(entry, "joined");
       })
       .finally(() => {
         readying.delete(install.id);
@@ -759,7 +751,7 @@ export const createInstalls = (deps: InstallsDeps) => {
         await Bun.sleep(500);
       }
       if (machineOf(install.machineId)?.online) {
-        await Promise.race([ready(entry), run.halt]);
+        await Promise.race([ready(entry, install.machineId), run.halt]);
         return;
       }
     }
@@ -908,12 +900,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     if (run.stopped) {
       return;
     }
-    // Joined, or in the fleet with a Claude Code it couldn't bring up: the
-    // machine's forward stays either way.
-    if (
-      install.machineId &&
-      (install.state === "joined" || install.problemStep === "harnesses")
-    ) {
+    if (install.state === "joined" && install.machineId) {
       deps.tunnels.joined(tunnel.id, install.machineId);
     } else if (tunnel.fresh) {
       deps.tunnels.abandon(tunnel.id);
@@ -1172,7 +1159,10 @@ export const createInstalls = (deps: InstallsDeps) => {
     console.log(
       `[installs] ${install.id}: lost, and ${found.hostname} is online: its harnesses step runs`
     );
-    detach(ready(entry), "lost machine install's harnesses step");
+    detach(
+      ready(entry, found.machineId),
+      "lost machine install's harnesses step"
+    );
   };
 
   /** Looks at the fleet for each install that waits on it. */
@@ -1191,7 +1181,10 @@ export const createInstalls = (deps: InstallsDeps) => {
         !readying.has(install.id)
       ) {
         install.hostname = machine.hostname;
-        detach(ready(entry), "machine install's harnesses step");
+        detach(
+          ready(entry, machine.machineId),
+          "machine install's harnesses step"
+        );
       }
     }
   });

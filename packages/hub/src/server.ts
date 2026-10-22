@@ -18052,20 +18052,21 @@ export const createServer = (
    * older than core's `CLAUDE_VERSION_FLOOR`; OpenCode and pi, which a
    * machine runs only when its person put them there, updated when they are
    * there at a version CawCo doesn't run. So it joins able to start sessions
-   * and sign accounts in. Answers whether they all run there now, in words;
-   * `say` takes each step's line.
+   * and sign accounts in. Answers what runs there now, and what could not be
+   * brought up and why, in words; `say` takes each step's line.
    */
   const readyHarnesses = async (
     machineId: string,
     say: (line: string) => void
-  ): Promise<{ ok: boolean; said: string }> => {
+  ): Promise<string> => {
     const name = machineName(machineId);
-    const fix =
-      "It is in the fleet: bring it up from its row in Configure → CLI tools.";
+    // The machine is in the fleet whatever this meets (installs.ts `ready`):
+    // what could not be brought up stands on it with its press.
+    const fix = `${name} is in the fleet: each stands on its row in Configure → CLI tools, with Retry.`;
     say(`asking ${name} which Claude Code, OpenCode and pi it has`);
     const tools = await toolsOn(machineId);
     if ("said" in tools) {
-      return { ok: false, said: `${tools.said} ${fix}` };
+      return `${tools.said} ${fix}`;
     }
     const runs: string[] = [];
     const failed: string[] = [];
@@ -18078,13 +18079,11 @@ export const createServer = (
         failed.push(brought.failed);
       }
     }
+    const ran = runs.length > 0 ? `${runs.join(", ")} on ${name}.` : "";
     if (failed.length > 0) {
-      return { ok: false, said: `${failed.join(" ")} ${fix}` };
+      return [ran, ...failed, fix].filter(Boolean).join(" ");
     }
-    return {
-      ok: true,
-      said: `${runs.length > 0 ? runs.join(", ") : "Nothing to bring up"} on ${name}.`,
-    };
+    return ran || `Nothing to bring up on ${name}.`;
   };
 
   /** Each harness, in the order a machine's are brought up: Claude Code first, which every machine runs. */

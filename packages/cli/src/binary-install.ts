@@ -4,8 +4,9 @@
  * this registers it with the service manager, brings the machine up, and tells
  * the person what is missing and offers to install it.
  */
-import { rm } from "node:fs/promises";
-import { platform } from "node:os";
+import { mkdtemp, rm } from "node:fs/promises";
+import { platform, tmpdir } from "node:os";
+import { join } from "node:path";
 import { probeCapabilities } from "@cawco/agent/capabilities";
 import { CAWCO_ENV, INSTALL_JOINED, INSTALL_STEP_PREFIX } from "@cawco/core";
 import {
@@ -112,10 +113,16 @@ async function offerTools(ask: boolean): Promise<boolean> {
       if (!(await runAllowed(item.id))) {
         continue;
       }
+      // A folder of its own, for the installer script the command downloads
+      // before it runs it (core ToolInstallMethod `command`), gone after.
+      const dir = await mkdtemp(join(tmpdir(), "cawco-install-"));
       const child = Bun.spawn(["/bin/sh", "-c", command], {
+        cwd: dir,
         stdio: ["inherit", "inherit", "inherit"],
       });
-      if ((await child.exited) === 0) {
+      const exited = await child.exited;
+      await rm(dir, { recursive: true, force: true });
+      if (exited === 0) {
         installed = true;
       } else {
         console.error(
