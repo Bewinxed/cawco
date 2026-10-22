@@ -834,12 +834,7 @@ const EFFORT_CHIP = '[data-slot="details-card"] button[aria-label^="Effort"]';
  * the picker's (motion/morph), never a jump, and nothing outside it moves.
  * The surface closes again after.
  */
-async function glide(
-  kit: Kit,
-  page: Page,
-  clock: SurfaceClock,
-  name: string
-): Promise<void> {
+async function glide(kit: Kit, page: Page, name: string): Promise<void> {
   if (!(await visible(page, EFFORT_CHIP))) {
     kit.check(`${name} · glide: the card has its effort chip`, false, "none");
     return;
@@ -849,25 +844,21 @@ async function glide(
   await settle(page, 600);
   const read = () => page.evaluate(stage, [LOG, "[data-ns-pop]"] as const);
   const before = await read();
-  const runs = await clock.catchRuns(
+  const motion = await readMotion(
+    page,
     () => page.locator(PICKER_CHIP).click(),
-    "[data-ns-pop]"
+    "[data-ns-pop]",
+    { fractions: FRACTIONS, read }
   );
-  const heights: number[] = [];
-  const faults: string[] = [];
-  for (const f of FRACTIONS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one point of the clock at a time
-    await clock.seek(f);
-    const now = await page.evaluate(stage, [LOG, "[data-ns-pop]"] as const);
-    heights.push(now.picker?.height ?? Number.NaN);
-    const shift = moved(before, now);
-    if (shift) {
-      faults.push(`${f * 100}%: ${shift}`);
-    }
-  }
-  await clock.release();
   await settle(page, 500);
-  const after = await page.evaluate(stage, [LOG, PICKER] as const);
+  const after = await read();
+  const heights = motion.at.map(
+    ({ value }) => value.picker?.height ?? Number.NaN
+  );
+  const faults = motion.at.flatMap(({ fraction, value }) => {
+    const shift = moved(before, value);
+    return shift ? [`${fraction * 100}%: ${shift}`] : [];
+  });
   const from = before.picker?.height ?? Number.NaN;
   const to = after.picker?.height ?? Number.NaN;
   const [h0, , h50, , h100] = heights;
@@ -880,7 +871,7 @@ async function glide(
   kit.check(
     `${name} · glide from the effort chip to the mode chip: the surface's height tweens from the one to the other (between them at ½), never a jump`,
     tweened,
-    `${from.toFixed(1)} → ${heights.map((one) => one.toFixed(1)).join(", ")} → ${to.toFixed(1)}; ${runsOf(runs)}`
+    `${from.toFixed(1)} → ${heights.map((one) => one.toFixed(1)).join(", ")} → ${to.toFixed(1)}; ${runsOf(surfaceRuns(motion.runs))} (read by ${motion.by})`
   );
   kit.check(
     `${name} · glide: nothing outside the surface moves (0, ¼, ½, ¾, 1)`,
@@ -927,9 +918,7 @@ async function modePicker(
     return;
   }
   await place(page, "end");
-  const clock =
-    engine === "chromium" ? await protocolClock(page) : waapiClock(page);
-  await glide(kit, page, clock, name);
+  await glide(kit, page, name);
   await page.locator(PICKER_CHIP).click();
   await page.waitForSelector(`${PICKER} [data-perm="fullSend"]`);
   await settle(page, 600);
@@ -943,15 +932,17 @@ async function modePicker(
 
   /** One step on the held clock: its runs, what moved at each fraction and settled. */
   const step = async (what: string, action: () => Promise<unknown>) => {
-    const runs = await clock.catchRuns(action, PICKER);
-    const oneClock = clock.oneClock();
+    const motion = await readMotion(page, action, PICKER, {
+      fractions: FRACTIONS,
+      read,
+    });
+    const runs = surfaceRuns(motion.runs);
+    const clockFaults =
+      runs.length === 0 ? ["no run started in the picker"] : oneClock(runs);
     const faults: string[] = [];
     const heights: string[] = [];
     const edges: string[] = [];
-    for (const f of FRACTIONS) {
-      // biome-ignore lint/performance/noAwaitInLoops: one point of the clock at a time
-      await clock.seek(f);
-      const now = await read();
+    for (const { fraction: f, value: now } of motion.at) {
       heights.push(`${f * 100}% ${now.picker?.height.toFixed(1)}`);
       // At its cap it scrolls inside itself; under it, its edge stands
       // where it stood at rest from its last row.
@@ -959,13 +950,13 @@ async function modePicker(
         now.picker !== null &&
         now.cap !== null &&
         now.picker.height >= now.cap - 0.5;
-      const held =
+      const kept =
         capped ||
         (now.tail !== null &&
           before.tail !== null &&
           Math.abs(now.tail - before.tail) <= 0.5);
       edges.push(
-        `${f * 100}% ${capped ? "at its cap" : now.tail?.toFixed(2)}${held ? "" : " ✗"}`
+        `${f * 100}% ${capped ? "at its cap" : now.tail?.toFixed(2)}${kept ? "" : " ✗"}`
       );
       const fault = [moved(before, now), pickerHeld(before, now)]
         .filter(Boolean)
@@ -974,7 +965,6 @@ async function modePicker(
         faults.push(`${f * 100}%: ${fault}`);
       }
     }
-    await clock.release();
     await settle(page, 500);
     const settled = await read();
     const fault = [moved(before, settled), pickerHeld(before, settled)]
@@ -991,8 +981,9 @@ async function modePicker(
     );
     kit.check(
       `${name} · ${what}: the picker's height runs on one clock`,
-      oneClock.length === 0,
-      oneClock.slice(0, 4).join("; ") || runsOf(runs)
+      clockFaults.length === 0,
+      clockFaults.slice(0, 4).join("; ") ||
+        `${runsOf(runs)} (read by ${motion.by})`
     );
     kit.check(
       `${name} · ${what}: the picker's edge moves with the row it opens or folds, never clipping it or leaving room under it (under its cap its last row stands from its edge as at rest, ±0.5px, at 0, ¼, ½, ¾, 1)`,
