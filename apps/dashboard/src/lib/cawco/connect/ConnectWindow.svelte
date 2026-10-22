@@ -484,7 +484,11 @@
         : "[data-autofocus], input:not([type=hidden]), button[data-route], [data-slot=body] button"
     );
     connect.backFromOutput = false;
-    first?.focus({ preventScroll: true });
+    // This lands a frame after the window does: focus the person has moved
+    // into it meanwhile stays where they put it, and so does what they type.
+    if (!node.contains(document.activeElement)) {
+      first?.focus({ preventScroll: true });
+    }
   }
 
   /** The window keeps its place as its height changes, and as the page moves. */

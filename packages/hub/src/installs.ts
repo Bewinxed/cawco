@@ -30,6 +30,7 @@ import { dirname, join as joinPath } from "node:path";
 import {
   checkStep,
   currentStep,
+  type DraftStamp,
   INSTALL_CHECKS,
   INSTALL_GRACE_MS,
   INSTALL_JOINED,
@@ -37,6 +38,7 @@ import {
   type Install,
   type InstallCheck,
   type InstallDraft,
+  type InstallDraftEdit,
   type InstallOutput,
   type InstallProblem,
   type InstallSignIn,
@@ -96,6 +98,17 @@ const STOP_GRACE_MS = 3000;
 const LOOK_MS = 1000;
 /** How often a running install's record is written while only its output changes. Our choice. */
 const WRITE_MS = 2000;
+/** How many pages' last draft edits the hub remembers: more tabs than one person keeps open. Our choice. */
+const STAMPED_PAGES = 64;
+/** The draft before anything is typed into it. */
+const EMPTY_DRAFT: InstallDraft = {
+  route: null,
+  target: "",
+  port: "",
+  signIn: "key",
+  address: null,
+  code: null,
+};
 /** A carriage return a pty-less session can still send. */
 const CARRIAGE_RETURN = /\r$/;
 /** A one-time code's letters: no 0/O or 1/I/L to misread. */
@@ -379,6 +392,28 @@ export const createInstalls = (deps: InstallsDeps) => {
   const kept = new Map<string, Kept>();
   let draft: InstallDraft | null = null;
   let dirty = false;
+  /** Each page's last edit of the draft taken, by its `seq` (DraftStamp). */
+  const stamps = new Map<string, number>();
+
+  /**
+   * Whether a page's edit stamped `stamp` comes after every one of that
+   * page's taken so far; if so it is the page's last now. The pages
+   * remembered are the latest few: a page reloaded is a new one.
+   */
+  const inOrder = (stamp: DraftStamp): boolean => {
+    if (stamp.seq <= (stamps.get(stamp.page) ?? 0)) {
+      return false;
+    }
+    stamps.delete(stamp.page);
+    stamps.set(stamp.page, stamp.seq);
+    for (const page of stamps.keys()) {
+      if (stamps.size <= STAMPED_PAGES) {
+        break;
+      }
+      stamps.delete(page);
+    }
+    return true;
+  };
 
   /** Every install's record, written whole. */
   const write = (): void => {
@@ -399,7 +434,14 @@ export const createInstalls = (deps: InstallsDeps) => {
     }
   };
 
+  /**
+   * The count of changes (InstallsRead `rev`), from the clock at the hub's
+   * start, so a restarted hub's run past the last one's.
+   */
+  let rev = Date.now();
+
   const read = (): InstallsRead => ({
+    rev,
     draft,
     installs: [...kept.values()]
       .map(({ install }) => install)
@@ -408,6 +450,7 @@ export const createInstalls = (deps: InstallsDeps) => {
 
   /** Something changed: every dashboard hears it, and the record follows (at once, or soon for output alone). */
   const changed = (now = true): void => {
+    rev += 1;
     deps.changed({ kind: "installs", ...read() });
     if (now) {
       write();
@@ -1005,12 +1048,28 @@ export const createInstalls = (deps: InstallsDeps) => {
         install.port === port
     );
 
+  /**
+   * A start made from the draft the window shows (its `stamp`): the draft
+   * is used up, and that page's edits stamped before the start are passed
+   * over. Any other start (a retry, a shipped app's add) leaves the
+   * person's draft as it is.
+   */
+  const useDraft = (stamp: DraftStamp | undefined): void => {
+    if (!stamp) {
+      return;
+    }
+    inOrder(stamp);
+    draft = null;
+  };
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every refusal before anything starts, each in its own words
   function startSsh(body: {
     target: string;
     port?: number;
     signIn: InstallSignIn;
     password?: string;
+    /** Started from the draft the window shows (InstallStart `stamp`). */
+    stamp?: DraftStamp;
   }): InstallStarted | Refused<422> {
     const target = body.target.trim();
     if (!TARGET.test(target)) {
@@ -1068,7 +1127,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       run: null,
     };
     kept.set(install.id, entry);
-    draft = null;
+    useDraft(body.stamp);
     console.log(
       `[installs] ${install.id}: over SSH to ${target}${port === null ? "" : `:${port}`}, signing in ${body.signIn === "password" ? "with a password, once" : "with the hub's key"}`
     );
@@ -1081,7 +1140,10 @@ export const createInstalls = (deps: InstallsDeps) => {
   const commandLine = (address: string, code: string): string =>
     `curl -fsSL ${address}/install.sh?code=${code} | sh`;
 
-  const startCommand = (address: string): InstallStarted | Refused => {
+  const startCommand = (
+    address: string,
+    stamp?: DraftStamp
+  ): InstallStarted | Refused => {
     if (!HUB_ADDRESS.test(address)) {
       return {
         status: 422,
@@ -1089,8 +1151,9 @@ export const createInstalls = (deps: InstallsDeps) => {
           "That address is not one of the hub's. Pick one of the addresses listed.",
       };
     }
-    // The line the window showed carries the draft's code: that is the code that starts working now.
-    const code = draft?.code ?? newCode();
+    // From the draft, the line the window showed carries the draft's code:
+    // that is the code that starts working now. A retry has a code of its own.
+    const code = stamp ? (draft?.code ?? newCode()) : newCode();
     const copied = [...kept.values()].find((one) => one.code === code);
     if (copied) {
       return { install: copied.install, existing: true };
@@ -1112,7 +1175,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       run: null,
     };
     kept.set(install.id, entry);
-    draft = null;
+    useDraft(stamp);
     mark(entry, "run");
     console.log(
       `[installs] ${install.id}: by a command at ${address}, listening for its code`
@@ -1373,12 +1436,23 @@ export const createInstalls = (deps: InstallsDeps) => {
       const entry = kept.get(id);
       return entry ? { lines: entry.lines } : undefined;
     },
-    /** The draft the person is filling in, kept as they type; never a password. */
-    setDraft(next: InstallDraft | null): void {
+    /**
+     * The draft the person is filling in, kept as they type; never a
+     * password. An edit carries only the fields typed since its page's last
+     * save, merged over what the draft holds; one out of its page's order
+     * changes nothing.
+     */
+    editDraft(edit: InstallDraftEdit): void {
+      if (!inOrder(edit.stamp)) {
+        return;
+      }
+      const next: InstallDraft = {
+        ...(draft ?? EMPTY_DRAFT),
+        ...edit.draft,
+      };
       // The command route's code is the hub's: minted once, kept while the draft stands.
-      const code =
-        draft?.code ?? (next?.route === "command" ? newCode() : null);
-      draft = next ? { ...next, code } : null;
+      next.code = draft?.code ?? (next.route === "command" ? newCode() : null);
+      draft = next;
       changed();
     },
     /** The installer was fetched with `code`: whether the code is live, and step one is done. */

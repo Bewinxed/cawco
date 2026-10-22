@@ -35,6 +35,7 @@ import { connect } from "node:net";
 import { homedir, hostname, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  DRAFT_LIMITS,
   INSTALL_STEP_PREFIX,
   type InstallSignIn,
   type JoinAddress,
@@ -633,12 +634,21 @@ const SIGN_IN = t.Union([
   t.Literal("by-hand"),
 ]);
 
-const DRAFT = t.Object({
-  route: t.Union([t.Literal("ssh"), t.Literal("command"), t.Null()]),
-  target: t.String({ maxLength: 500 }),
-  port: t.String({ maxLength: 10 }),
-  signIn: SIGN_IN,
-  address: t.Union([t.String({ maxLength: 500 }), t.Null()]),
+/** The draft's fields an edit may carry (core InstallDraftEdit), each as long as the window's field takes. */
+const DRAFT_FIELDS = t.Partial(
+  t.Object({
+    route: t.Union([t.Literal("ssh"), t.Literal("command"), t.Null()]),
+    target: t.String({ maxLength: DRAFT_LIMITS.target }),
+    port: t.String({ maxLength: DRAFT_LIMITS.port }),
+    signIn: SIGN_IN,
+    address: t.Union([t.String({ maxLength: DRAFT_LIMITS.address }), t.Null()]),
+  })
+);
+
+/** Which page made a draft edit, and its place in that page's order (core DraftStamp). */
+const STAMP = t.Object({
+  page: t.String({ minLength: 1, maxLength: 100 }),
+  seq: t.Integer({ minimum: 1 }),
 });
 
 /**
@@ -702,11 +712,11 @@ export const joinRoutes = ({
       hubHostname: hostname(),
     }))
     .get("/api/installs", () => installs.read())
-    .put(
+    .patch(
       "/api/installs/draft",
-      { body: t.Union([DRAFT, t.Null()]) },
+      { body: t.Object({ stamp: STAMP, draft: DRAFT_FIELDS }) },
       ({ body }) => {
-        installs.setDraft(body);
+        installs.editDraft(body);
         return installs.read();
       }
     )
@@ -716,14 +726,16 @@ export const joinRoutes = ({
         body: t.Union([
           t.Object({
             route: t.Literal("ssh"),
-            target: t.String({ maxLength: 500 }),
+            target: t.String({ maxLength: DRAFT_LIMITS.target }),
             port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
             signIn: SIGN_IN,
             password: t.Optional(t.String({ maxLength: 4096 })),
+            stamp: t.Optional(STAMP),
           }),
           t.Object({
             route: t.Literal("command"),
-            address: t.String({ maxLength: 500 }),
+            address: t.String({ maxLength: DRAFT_LIMITS.address }),
+            stamp: t.Optional(STAMP),
           }),
         ]),
       },
@@ -735,8 +747,9 @@ export const joinRoutes = ({
                 port: body.port,
                 signIn: body.signIn as InstallSignIn,
                 password: body.password,
+                stamp: body.stamp,
               })
-            : installs.startCommand(body.address);
+            : installs.startCommand(body.address, body.stamp);
         return "status" in started
           ? status(started.status, started.message)
           : started;

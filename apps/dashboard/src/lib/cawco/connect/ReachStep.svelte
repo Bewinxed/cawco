@@ -19,8 +19,12 @@
    * The route chip switches routes in place: the panes cross-fade inside
    * the body's resize, and nothing typed is lost (the draft is the hub's).
    */
-  import type { InstallRoute, InstallSignIn } from "@cawco/core";
-  import { tick } from "svelte";
+  import {
+    DRAFT_LIMITS,
+    type InstallRoute,
+    type InstallSignIn,
+  } from "@cawco/core";
+  import { flushSync } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import { IconChevronDown } from "#lib/icons.js";
@@ -91,10 +95,9 @@
   let refused = $state("");
 
   function edit(patch: Partial<typeof connect.fields>) {
-    connect.fields = { ...connect.fields, ...patch };
     said = "";
     refused = "";
-    connect.saveDraft();
+    connect.edit(patch);
   }
 
   /** The field shakes once on a refusal; with less motion it only says why. */
@@ -244,7 +247,7 @@
   /** The draft has a code once the hub has kept the route: ask it to. */
   $effect(() => {
     if (route === "command" && connect.known && !code) {
-      connect.saveDraft(true);
+      connect.edit({ route: "command" }, true);
     }
   });
 
@@ -356,6 +359,7 @@
                 aria-invalid={said ? "true" : undefined}
                 class="h-c-input-h min-w-0 flex-1 rounded-md border border-border-control bg-surface-raised px-space-3 font-mono type-body text-ink-strong shadow-xs outline-none transition-control placeholder:text-ink-subtle focus-inset aria-invalid:border-error-9"
                 placeholder="deploy@build-01.example.net"
+                maxlength={DRAFT_LIMITS.target}
                 value={connect.fields.target}
                 oninput={(event) => edit({ target: event.currentTarget.value })}
                 onkeydown={(event) => {
@@ -376,6 +380,7 @@
                     autocomplete="off"
                     class="num col-start-1 row-start-1 h-c-input-h w-full min-w-0 rounded-md border border-border-control bg-surface-raised px-space-2 text-center type-body text-ink-strong shadow-xs outline-none transition-control placeholder:text-ink-subtle focus-inset"
                     placeholder="22"
+                    maxlength={DRAFT_LIMITS.port}
                     value={connect.fields.port}
                     oninput={(event) =>
                       edit({ port: event.currentTarget.value })}
@@ -389,9 +394,14 @@
                     data-slot="port"
                     aria-label="Port 22. Change the port"
                     class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-c-input-h w-full items-center justify-center gap-space-1 rounded-md border border-border-control bg-surface-raised type-body text-ink-strong shadow-xs transition-control hover:bg-surface-hover"
-                    onclick={async () => {
-                      portOpen = true;
-                      await tick();
+                    onclick={() => {
+                      // Its field takes focus in this press's own task. A
+                      // frame later (`tick`, in async mode) it would take
+                      // focus from wherever the person went in that frame,
+                      // and what they typed next would land in the port.
+                      flushSync(() => {
+                        portOpen = true;
+                      });
                       portField?.focus();
                     }}
                   >

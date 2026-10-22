@@ -11,13 +11,24 @@
  * so a reload opens it again at the same step with the same details. The
  * password typed for a sign-in is this page's alone and goes with a reload;
  * the window says so.
+ *
+ * The draft travels as edits, never as a copy laid over the hub's: each
+ * save carries only the fields typed since the last, stamped with this
+ * page's order (core DraftStamp), one save at a time, outliving the page
+ * (`keepalive`). What the hub says comes back in its order (`rev`), over the
+ * socket and in answers alike, and an edit typed here stands over the hub's
+ * draft until the hub has kept it, so nothing typed is lost to a save in
+ * flight, an answer that arrives late, or a reload.
  */
 import {
   currentStep,
+  type DraftStamp,
   type Install,
   type InstallDraft,
+  type InstallDraftEdit,
   type InstallRoute,
   type InstallSignIn,
+  type InstallStart,
   type InstallStarted,
   type InstallsFrame,
   type InstallsRead,
@@ -26,6 +37,7 @@ import {
 import { MediaQuery } from "svelte/reactivity";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
+import { currentClientId } from "../client-id";
 import { failureWords, hubRefusal } from "../hub-read";
 
 /** The URL's word for the window: an install's id, or the draft's. */
@@ -60,11 +72,23 @@ const EMPTY_DRAFT: DraftFields = {
 
 /** How long the draft waits after a keystroke before the hub keeps it. Our choice. */
 const DRAFT_SAVE_MS = 400;
+/** A save the hub didn't keep goes again after this, then twice as long each time up to the most. Our choice, as the fleet's read does. */
+const RETRY_FIRST_MS = 1000;
+const RETRY_MOST_MS = 10_000;
+
+/** The fields an edit may carry: what the hub's draft holds, but its code. */
+const fieldsOf = (draft: InstallDraft): DraftFields => ({
+  route: draft.route,
+  target: draft.target,
+  port: draft.port,
+  signIn: draft.signIn,
+  address: draft.address,
+});
 
 class Connect {
   /** Every install the hub keeps, oldest first. */
   installs = $state<Install[]>([]);
-  /** The hub's draft, as it last said it. */
+  /** The hub's draft, as the window shows it: as the hub last said it, but while a start from it is under way. */
   hubDraft = $state<InstallDraft | null>(null);
   /** Whether the hub has answered this page once. */
   known = $state(false);
@@ -89,7 +113,7 @@ class Connect {
     anchor: HTMLElement | null;
     from: ConnectFrom;
   } | null = null;
-  /** The draft as typed here. */
+  /** The draft as the window shows it: the hub's, under every edit typed here it hasn't kept yet. */
   fields = $state<DraftFields>({ ...EMPTY_DRAFT });
   /**
    * The sign-in password, typed in this page only: never sent but with the
@@ -102,7 +126,24 @@ class Connect {
   join = $state<JoinInfo | null>(null);
   joinFailed = $state<string | null>(null);
 
+  /** The hub's `rev` of what this page shows: anything older is passed over. */
+  #rev = 0;
+  /** The hub's draft as it last said it. */
+  #draftNow: InstallDraft | null = null;
+  /**
+   * A start from the draft is under way: the window shows the draft it
+   * started from, its line and code with it, until it stands on the install
+   * (the hub has used the draft up meanwhile).
+   */
+  #starting = false;
+  /** Edits typed here, not yet sent. */
+  #unsaved: Partial<DraftFields> = {};
+  /** The edits of the save the hub hasn't answered: one at a time, so they land in the order typed. */
+  #sending: Partial<DraftFields> | null = null;
+  /** This page's count of its draft edits and the starts made from the draft (DraftStamp `seq`). */
+  #seq = 0;
   #saveTimer: ReturnType<typeof setTimeout> | undefined;
+  #saveRetryMs = RETRY_FIRST_MS;
   #readRetry: ReturnType<typeof setTimeout> | undefined;
 
   /** The install the window stands on, as the hub has it now. */
@@ -124,27 +165,51 @@ class Connect {
     return this.installs.filter((one) => one.state !== "joined");
   }
 
-  /** The hub's frame, or its answer to a read: the installs and the draft, whole. */
-  take(read: InstallsRead): void {
-    this.installs = read.installs;
-    this.hubDraft = read.draft;
-    this.known = true;
-    // A draft another device changed reads here too, unless this page is typing in it.
-    if (!(this.open && this.id === null && this.#saveTimer)) {
-      this.fields = read.draft
-        ? {
-            route: read.draft.route,
-            target: read.draft.target,
-            port: read.draft.port,
-            signIn: read.draft.signIn,
-            address: read.draft.address,
-          }
-        : { ...EMPTY_DRAFT };
+  /**
+   * The hub's frame, or its answer to a request: the installs and the draft,
+   * whole, unless it is older than what this page shows already (`rev`).
+   * Whether it was taken.
+   */
+  take(read: InstallsRead): boolean {
+    if (read.rev < this.#rev) {
+      return false;
     }
+    this.#rev = read.rev;
+    this.installs = read.installs;
+    this.#draftNow = read.draft;
+    this.known = true;
+    this.#show();
     // The window's install left the hub (removed elsewhere): the window has nothing to stand on.
     if (this.open && this.id && !this.install) {
       this.close();
     }
+    return true;
+  }
+
+  /**
+   * The hub was reached on a new socket: its next read is taken whatever its
+   * `rev`, since a restarted hub counts from its own start.
+   */
+  reconnected(): Promise<void> {
+    this.#rev = 0;
+    return this.load();
+  }
+
+  /**
+   * The draft the window shows: another device's edits read here as they
+   * reach the hub, under this page's own until the hub has kept them.
+   */
+  #show(): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: start() sets it across its awaits; the rule reads only the field's initial value
+    if (this.#starting) {
+      return;
+    }
+    this.hubDraft = this.#draftNow;
+    this.fields = {
+      ...(this.#draftNow ? fieldsOf(this.#draftNow) : EMPTY_DRAFT),
+      ...this.#sending,
+      ...this.#unsaved,
+    };
   }
 
   /**
@@ -246,8 +311,7 @@ class Connect {
     this.output = false;
     this.passwordLost = false;
     if (route && this.fields.route !== route) {
-      this.fields = { ...this.fields, route };
-      this.saveDraft(true);
+      this.edit({ route }, true);
     }
     this.open = true;
     this.#writeUrl();
@@ -309,38 +373,77 @@ class Connect {
     this.#writeUrl();
   }
 
-  /** The draft as typed now, kept by the hub soon (or at once). */
-  saveDraft(now = false): void {
+  /** An edit typed here: the window shows it at once, and the hub keeps it soon (or now). */
+  edit(patch: Partial<DraftFields>, now = false): void {
+    this.#unsaved = { ...this.#unsaved, ...patch };
+    this.fields = { ...this.fields, ...patch };
     clearTimeout(this.#saveTimer);
-    const send = () => {
-      this.#saveTimer = undefined;
-      this.#putDraft()
-        .then(async (response) => {
-          if (response.ok) {
-            this.take((await response.json()) as InstallsRead);
-          }
-        })
-        .catch(() => undefined);
-    };
     if (now) {
-      send();
+      this.#save();
     } else {
-      this.#saveTimer = setTimeout(send, DRAFT_SAVE_MS);
+      this.#saveTimer = setTimeout(() => this.#save(), DRAFT_SAVE_MS);
     }
   }
 
   /**
-   * The page is going (a reload, the tab closed): a draft save still waiting
-   * goes now, since its timer never runs after the page has gone, and nothing
-   * typed is lost.
+   * The edits not yet sent go to the hub, one save at a time, so they land
+   * in the order typed; the next goes as this one is answered. A save the
+   * hub didn't keep (it was down, or refused it) leaves its edits standing
+   * here, under any typed since, and goes again a second later, then twice
+   * as long each time up to ten.
    */
-  flushDraft(): void {
-    if (this.#saveTimer === undefined) {
-      return;
-    }
+  #save(): void {
     clearTimeout(this.#saveTimer);
     this.#saveTimer = undefined;
-    this.#putDraft().catch(() => undefined);
+    if (this.#sending || Object.keys(this.#unsaved).length === 0) {
+      return;
+    }
+    const sending = this.#unsaved;
+    this.#unsaved = {};
+    this.#sending = sending;
+    this.#send(sending)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw await hubRefusal(response);
+        }
+        const read = (await response.json()) as InstallsRead;
+        this.#sending = null;
+        this.#saveRetryMs = RETRY_FIRST_MS;
+        // An answer older than a frame already taken still ends the save.
+        if (!this.take(read)) {
+          this.#show();
+        }
+        this.#save();
+      })
+      .catch(() => {
+        this.#unsaved = { ...sending, ...this.#unsaved };
+        this.#sending = null;
+        this.#saveTimer = setTimeout(() => this.#save(), this.#saveRetryMs);
+        this.#saveRetryMs = Math.min(this.#saveRetryMs * 2, RETRY_MOST_MS);
+      });
+  }
+
+  /**
+   * The page is going (a reload, the tab closed): every edit not yet kept
+   * goes now, since no timer runs after the page has gone. A save still
+   * unanswered goes on too; landing after this one, it changes nothing (its
+   * stamp is older). Should the page stay after all (the back/forward
+   * cache), its edits go again as usual.
+   */
+  flushDraft(): void {
+    clearTimeout(this.#saveTimer);
+    this.#saveTimer = undefined;
+    if (Object.keys(this.#unsaved).length === 0) {
+      return;
+    }
+    this.#send({ ...this.#sending, ...this.#unsaved }).catch(() => undefined);
+    this.#saveTimer = setTimeout(() => this.#save(), DRAFT_SAVE_MS);
+  }
+
+  /** The next stamp in this page's order of edits and starts. */
+  #stamp(): DraftStamp {
+    this.#seq += 1;
+    return { page: currentClientId(), seq: this.#seq };
   }
 
   /**
@@ -348,20 +451,19 @@ class Connect {
    * page goes is otherwise cancelled with it (Fetch, "terminate a fetch
    * group"), and what it carried never reaches the hub.
    */
-  #putDraft(): Promise<Response> {
-    const draft: InstallDraft = { ...this.fields };
+  #send(draft: Partial<DraftFields>): Promise<Response> {
+    const edit: InstallDraftEdit = { stamp: this.#stamp(), draft };
     return fetch("/api/installs/draft", {
-      method: "PUT",
+      method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(draft),
+      body: JSON.stringify(edit),
       keepalive: true,
     });
   }
 
   /** Back to Route: the draft forgets its route, nothing else. */
   chooseRoute(route: InstallRoute | null): void {
-    this.fields = { ...this.fields, route };
-    this.saveDraft(true);
+    this.edit({ route }, true);
   }
 
   /** The SSH install of a running add for the same machine and port, if one runs. */
@@ -380,31 +482,44 @@ class Connect {
    * after `hold` ms where the step that started it has something to say
    * first (Copy command's "Copied · Listening for it…"). The install is in
    * the band at once. Throws the hub's refusal.
+   *
+   * It uses the draft up (its stamp): the edits typed here before it are
+   * done with, and one of them still on its way changes nothing once it
+   * lands. An install already running for that machine opens instead, and
+   * the draft stays.
    */
-  async start(
-    body: Record<string, unknown>,
-    hold = 0
-  ): Promise<InstallStarted> {
-    const response = await fetch("/api/installs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      throw await hubRefusal(response);
+  async start(body: InstallStart, hold = 0): Promise<InstallStarted> {
+    this.#starting = true;
+    try {
+      const response = await fetch("/api/installs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, stamp: this.#stamp() }),
+      });
+      if (!response.ok) {
+        throw await hubRefusal(response);
+      }
+      const started = (await response.json()) as InstallStarted;
+      if (!started.existing) {
+        clearTimeout(this.#saveTimer);
+        this.#saveTimer = undefined;
+        this.#unsaved = {};
+      }
+      this.#adopt(started.install);
+      this.password = "";
+      this.passwordLost = false;
+      if (hold > 0) {
+        await new Promise((done) => setTimeout(done, hold));
+      }
+      if (this.open && this.id === null) {
+        this.id = started.install.id;
+        this.#writeUrl();
+      }
+      return started;
+    } finally {
+      this.#starting = false;
+      this.#show();
     }
-    const started = (await response.json()) as InstallStarted;
-    this.#adopt(started.install);
-    this.password = "";
-    this.passwordLost = false;
-    if (hold > 0) {
-      await new Promise((done) => setTimeout(done, hold));
-    }
-    if (this.open && this.id === null) {
-      this.id = started.install.id;
-      this.#writeUrl();
-    }
-    return started;
   }
 
   /** An install the hub just answered with, ahead of its frame. */
@@ -480,7 +595,7 @@ export function takeInstallsFrame(frame: InstallsFrame): void {
  * draft save that outlived a reload, an install a hub restart lost).
  */
 export function readInstalls(): Promise<void> {
-  return connect.load();
+  return connect.reconnected();
 }
 
 /** A running install's step line, as the band and the window's head say it. */

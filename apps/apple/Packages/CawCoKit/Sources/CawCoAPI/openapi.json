@@ -17162,6 +17162,24 @@
                       "password": {
                         "maxLength": 4096,
                         "type": "string"
+                      },
+                      "stamp": {
+                        "type": "object",
+                        "properties": {
+                          "page": {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          },
+                          "seq": {
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "page",
+                          "seq"
+                        ]
                       }
                     },
                     "required": [
@@ -17180,6 +17198,24 @@
                       "address": {
                         "maxLength": 500,
                         "type": "string"
+                      },
+                      "stamp": {
+                        "type": "object",
+                        "properties": {
+                          "page": {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          },
+                          "seq": {
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "page",
+                          "seq"
+                        ]
                       }
                     },
                     "required": [
@@ -17233,67 +17269,85 @@
       }
     },
     "/api/installs/draft": {
-      "put": {
+      "patch": {
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": [
-                  "object",
-                  "null"
-                ],
+                "type": "object",
                 "properties": {
-                  "route": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "const": "ssh"
+                  "stamp": {
+                    "type": "object",
+                    "properties": {
+                      "page": {
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "type": "string"
                       },
-                      {
-                        "type": "string",
-                        "const": "command"
+                      "seq": {
+                        "minimum": 1,
+                        "type": "integer"
                       }
+                    },
+                    "required": [
+                      "page",
+                      "seq"
                     ]
                   },
-                  "target": {
-                    "maxLength": 500,
-                    "type": "string"
-                  },
-                  "port": {
-                    "maxLength": 10,
-                    "type": "string"
-                  },
-                  "signIn": {
-                    "type": "string",
-                    "enum": [
-                      "key",
-                      "password",
-                      "by-hand"
-                    ]
-                  },
-                  "address": {
-                    "maxLength": 500,
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                  "draft": {
+                    "type": "object",
+                    "properties": {
+                      "route": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "ssh"
+                          },
+                          {
+                            "type": "string",
+                            "const": "command"
+                          }
+                        ]
+                      },
+                      "target": {
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      "port": {
+                        "maxLength": 10,
+                        "type": "string"
+                      },
+                      "signIn": {
+                        "type": "string",
+                        "enum": [
+                          "key",
+                          "password",
+                          "by-hand"
+                        ]
+                      },
+                      "address": {
+                        "maxLength": 500,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
                   }
                 },
                 "required": [
-                  "target",
-                  "port",
-                  "signIn",
-                  "address"
+                  "stamp",
+                  "draft"
                 ]
               }
             }
           }
         },
-        "operationId": "putApiInstallsDraft",
+        "operationId": "patchApiInstallsDraft",
         "responses": {
           "200": {
-            "description": "putApiInstallsDraft 200",
+            "description": "patchApiInstallsDraft 200",
             "content": {
               "application/json": {
                 "schema": {
@@ -17303,7 +17357,7 @@
             }
           },
           "422": {
-            "description": "putApiInstallsDraft 422",
+            "description": "patchApiInstallsDraft 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -44992,10 +45046,15 @@
             "items": {
               "$ref": "#/components/schemas/Install"
             }
+          },
+          "rev": {
+            "description": "The hub's count of changes to the installs and the draft, from the\nclock at its start so a restarted hub's run past its last's: a read or\nframe older than one already taken is passed over, whichever way each\ntravelled (the socket's frames, a request's answer).",
+            "type": "number"
           }
         },
         "required": [
-          "installs"
+          "installs",
+          "rev"
         ]
       },
       "InstallDraft": {
@@ -60181,11 +60240,16 @@
             "items": {
               "$ref": "#/components/schemas/Install"
             }
+          },
+          "rev": {
+            "description": "The hub's count of changes to the installs and the draft, from the\nclock at its start so a restarted hub's run past its last's: a read or\nframe older than one already taken is passed over, whichever way each\ntravelled (the socket's frames, a request's answer).",
+            "type": "number"
           }
         },
         "required": [
           "installs",
-          "kind"
+          "kind",
+          "rev"
         ]
       },
       "ProjectStopFrame": {

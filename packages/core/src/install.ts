@@ -203,10 +203,45 @@ export interface InstallDraft {
   target: string;
 }
 
+/**
+ * How long each of the draft's typed words may run: the hub keeps no
+ * longer, and the window's fields take no more, so nothing a person can
+ * type is a draft the hub refuses.
+ */
+export const DRAFT_LIMITS = { target: 500, port: 10, address: 500 } as const;
+
+/**
+ * Which page made an edit of the draft, and its place among that page's
+ * edits (`seq`, counting up from 1): the hub keeps one page's edits in the
+ * order it made them, so a save that arrives after its page's later one,
+ * or after the start that used the draft up, changes nothing.
+ */
+export interface DraftStamp {
+  /** The tab's id for this load of the page (a reload is a new page). */
+  page: string;
+  seq: number;
+}
+
+/**
+ * `PATCH /api/installs/draft`: the fields typed since the page's last save,
+ * merged into the draft (a field nobody typed in keeps what it holds).
+ */
+export interface InstallDraftEdit {
+  draft: Partial<Omit<InstallDraft, "code">>;
+  stamp: DraftStamp;
+}
+
 /** `GET /api/installs`, and the `installs` frame every change sends. */
 export interface InstallsRead {
   draft: InstallDraft | null;
   installs: Install[];
+  /**
+   * The hub's count of changes to the installs and the draft, from the
+   * clock at its start so a restarted hub's run past its last's: a read or
+   * frame older than one already taken is passed over, whichever way each
+   * travelled (the socket's frames, a request's answer).
+   */
+  rev: number;
 }
 
 /** The frame the hub sends every dashboard when an install or the draft changes. */
@@ -214,7 +249,10 @@ export interface InstallsFrame extends InstallsRead {
   kind: "installs";
 }
 
-/** `POST /api/installs`. */
+/**
+ * `POST /api/installs`. `stamp`: started from the draft the window shows,
+ * which it uses up; that page's edits stamped before it are passed over.
+ */
 export type InstallStart =
   | {
       route: "ssh";
@@ -223,8 +261,9 @@ export type InstallStart =
       signIn: InstallSignIn;
       /** Only for `signIn: "password"`: one sign-in, then forgotten. */
       password?: string;
+      stamp?: DraftStamp;
     }
-  | { route: "command"; address: string };
+  | { route: "command"; address: string; stamp?: DraftStamp };
 
 /** What `POST /api/installs` answers: the install, and whether it was one already running for that machine. */
 export interface InstallStarted {

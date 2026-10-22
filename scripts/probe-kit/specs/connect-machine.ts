@@ -169,7 +169,32 @@ async function settled(
 
 const installs = (fleet: KitFleet) => fleet.api<InstallsRead>("/api/installs");
 
-/** The hub's draft, set as Reach would leave it. */
+/** This spec's own place in the hub's order of draft edits (core DraftStamp): another device's. */
+let probeSeq = Date.now();
+
+/** An edit of the hub's draft from another device: the fields named, merged over what it holds. */
+const editDraft = (
+  fleet: KitFleet,
+  draft: Partial<{
+    route: "ssh" | "command" | null;
+    target: string;
+    port: string;
+    signIn: "key" | "password" | "by-hand";
+    address: string | null;
+  }>
+) => {
+  probeSeq += 1;
+  return fetch(`${fleet.base}/api/installs/draft`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      stamp: { page: "probe-kit", seq: probeSeq },
+      draft,
+    }),
+  });
+};
+
+/** The hub's draft, set whole as Reach would leave it. */
 const setDraft = (
   fleet: KitFleet,
   draft: {
@@ -179,16 +204,12 @@ const setDraft = (
     signIn?: "key" | "password" | "by-hand";
   }
 ) =>
-  fetch(`${fleet.base}/api/installs/draft`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      route: draft.route,
-      target: draft.target ?? "",
-      port: draft.port ?? "",
-      signIn: draft.signIn ?? "key",
-      address: null,
-    }),
+  editDraft(fleet, {
+    route: draft.route,
+    target: draft.target ?? "",
+    port: draft.port ?? "",
+    signIn: draft.signIn ?? "key",
+    address: null,
   });
 
 /** Every install the hub keeps goes, running ones stopped first. */
@@ -566,9 +587,54 @@ async function walk(
   note("reach-key", await settled(page, "reach", "Sign in"));
 
   // B: password, then a reload: the field comes back empty and says why.
+  // Every draft save the page sends, and how each ended: a failure says
+  // what the hub was sent, and what it answered.
+  const saves: string[] = [];
+  const since = Date.now();
+  const saveOf = (request: Request) =>
+    request.url().endsWith("/api/installs/draft") &&
+    request.method() === "PATCH";
+  const sent = (request: Request) => {
+    if (saveOf(request)) {
+      const edit = JSON.parse(request.postData() ?? "{}") as {
+        draft?: unknown;
+      };
+      saves.push(`+${Date.now() - since}ms sent ${JSON.stringify(edit.draft)}`);
+    }
+  };
+  const ended = async (request: Request) => {
+    if (!saveOf(request)) {
+      return;
+    }
+    const at = Date.now() - since;
+    const failed = request.failure()?.errorText;
+    const response = failed ? null : await request.response();
+    saves.push(`+${at}ms ${failed ?? `answered ${response?.status()}`}`);
+  };
+  page.on("request", sent);
+  page.on("requestfinished", ended);
+  page.on("requestfailed", ended);
   await choose(page, "Sign in", "with a password, once");
   const password = await settled(page, "reach", "Sign in");
   note("reach-password", password);
+  // A press on Port takes its field focus in the press's own task: focus
+  // moved straight on stays where it was moved. (A frame later, the port
+  // took it back, and what was typed next landed in the port.)
+  const portFocus = await page.evaluate(async (win) => {
+    document
+      .querySelector<HTMLButtonElement>(`${win} button[data-slot=port]`)
+      ?.click();
+    const pressed = document.activeElement?.id ?? "";
+    document.querySelector<HTMLInputElement>("#connect-target")?.focus();
+    await new Promise((done) => setTimeout(done, 150));
+    return { pressed, after: document.activeElement?.id ?? "" };
+  }, WINDOW);
+  kit.check(
+    `${leg}: a press on Port focuses its field at once, and focus moved on straight after stays where it was moved`,
+    portFocus.pressed === "connect-port" &&
+      portFocus.after === "connect-target",
+    JSON.stringify(portFocus)
+  );
   if (view === "phone") {
     await openPort(page);
     const sizes = await fieldSizes(page);
@@ -579,30 +645,6 @@ async function walk(
       JSON.stringify(sizes)
     );
   }
-  // Every draft save the page sends, and how each ended: a failure says
-  // whether the typing was sent, and whether the reload cancelled it.
-  const saves: string[] = [];
-  const typedAt = Date.now();
-  const saveOf = (request: Request) =>
-    request.url().endsWith("/api/installs/draft") && request.method() === "PUT";
-  const sent = (request: Request) => {
-    if (saveOf(request)) {
-      const body = JSON.parse(request.postData() ?? "{}") as {
-        target?: string;
-      };
-      saves.push(`+${Date.now() - typedAt}ms sent "${body.target}"`);
-    }
-  };
-  const ended = (request: Request) => {
-    if (saveOf(request)) {
-      saves.push(
-        `+${Date.now() - typedAt}ms ${request.failure()?.errorText ?? "answered"}`
-      );
-    }
-  };
-  page.on("request", sent);
-  page.on("requestfinished", ended);
-  page.on("requestfailed", ended);
   await page.fill("#connect-target", options.target);
   await page.fill("#connect-password", "typed-and-forgotten");
   await page.waitForTimeout(700);
@@ -611,8 +653,8 @@ async function walk(
   const keptBefore = (await installs(fleet)).draft;
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#connect-password", { timeout: 30_000 });
-  // The save the reload overtook lands when it lands; the hub's frame brings
-  // it to the window then, so the field is waited for, as below.
+  // A save the reload overtook lands when it lands, and the hub's frame
+  // brings it to the window then: the field is waited for, as below.
   await page
     .waitForFunction(
       (value) =>
@@ -667,6 +709,42 @@ async function walk(
     restored && keptFast === typed,
     `field ${await page.inputValue("#connect-target")}; the hub's draft ${keptFast}`
   );
+  // Typed here while another device changes the port: each save carries
+  // only the fields typed, so the hub keeps both and the window shows both.
+  const mine = "merge@127.0.0.1";
+  await page.fill("#connect-target", mine);
+  await editDraft(fleet, { port: "2222" });
+  const merged = await until(
+    "the hub keeping both edits",
+    () => installs(fleet),
+    (now) => now.draft?.target === mine && now.draft?.port === "2222",
+    10_000
+  ).catch(() => null);
+  const shown = await page
+    .waitForFunction(
+      (want) =>
+        (document.querySelector("#connect-target") as HTMLInputElement | null)
+          ?.value === want.target &&
+        (document.querySelector("#connect-port") as HTMLInputElement | null)
+          ?.value === want.port,
+      { target: mine, port: "2222" },
+      { timeout: 5000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  const draftNow = (await installs(fleet)).draft;
+  kit.check(
+    `${leg}: typed here while another device edits the port, the hub keeps both and the window shows both`,
+    merged !== null && shown,
+    `hub ${JSON.stringify(draftNow)}; field ${await page.inputValue("#connect-target")}, port ${await page
+      .locator("#connect-port")
+      .inputValue()
+      .catch(() => "(no field)")}`
+  );
+  await editDraft(fleet, { port: "" });
+  await page.waitForFunction(() => !document.querySelector("#connect-port"), {
+    timeout: 10_000,
+  });
 
   // B: the key put there by hand.
   await choose(page, "Sign in", "I'll put the key there myself");

@@ -356,14 +356,17 @@ async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
   const page = await kit.page("desk");
   // Add machine's window on Reach, over SSH, signing in with a password once.
   await fetch(`${fleet.base}/api/installs/draft`, {
-    method: "PUT",
+    method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      route: "ssh",
-      target: "",
-      port: "",
-      signIn: "password",
-      address: null,
+      stamp: { page: "probe-kit", seq: 1 },
+      draft: {
+        route: "ssh",
+        target: "",
+        port: "",
+        signIn: "password",
+        address: null,
+      },
     }),
   });
   await open(
