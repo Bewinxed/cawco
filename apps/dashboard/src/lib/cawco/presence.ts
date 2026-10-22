@@ -133,7 +133,8 @@ const report = (beat = false, leaving = false): void => {
   const now = Date.now();
   const active = !leaving && reading();
   const machine = machineNow();
-  const alerts = notificationsAllowed();
+  // A tab going away shows nothing more: it is never the desk tab again.
+  const alerts = !leaving && notificationsAllowed();
   const state = `${front}|${active}|${machine}|${alerts}`;
   if (beat || state !== told) {
     told = state;

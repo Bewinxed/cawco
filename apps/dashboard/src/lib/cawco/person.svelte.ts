@@ -180,8 +180,9 @@ export const asksHere = (): boolean => {
 
 /**
  * A desk alert for this tab: shown as a desktop notification while this
- * browser allows them, the hub's words as they are; a click brings the tab
- * forward at the session it is about.
+ * browser allows them and the person is not on this tab (visible and
+ * focused, its Needs you already shows it), the hub's words as they are; a
+ * click brings the tab forward at the session it is about.
  */
 export function showDeskAlert(
   frame: DeskAlertFrame,
@@ -190,7 +191,8 @@ export function showDeskAlert(
   if (
     frame.to !== presenceClientId() ||
     typeof Notification === "undefined" ||
-    Notification.permission !== "granted"
+    Notification.permission !== "granted" ||
+    (document.visibilityState === "visible" && document.hasFocus())
   ) {
     return;
   }

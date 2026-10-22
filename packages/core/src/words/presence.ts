@@ -31,11 +31,9 @@ export const presenceWords = {
   setUp: "Set up this browser",
   /** The trigger's name, with the dot's word after it. */
   you: (state: string) => `You · ${state}`,
-  /** The onboarding row: its title, by what this browser can do. */
+  /** The onboarding row's title, a noun true before and after, by what this browser can do. */
   title: (idle: boolean) =>
-    idle
-      ? "Tell CawCo when you're at this computer"
-      : "Show what needs you on this computer",
+    idle ? "Your presence at this computer" : "Desk alerts in this browser",
   /** The row's notice: what it shares, and what changes for the person. */
   lead: (idle: boolean) =>
     idle
