@@ -3,15 +3,22 @@
  * 5): the agent's own `relay.start` (agent browser/relay.ts) run here, as the
  * daemon runs it for the hub, with a secret this spec makes (or `--secret`),
  * and then checked from outside it the way a viewer reaches it. One topology
- * on every runtime: coturn on the runtime's media network at .2, its one
- * listener (UDP and TCP 443) published on every address, its relay range
- * never published; every relayed stream relay to relay inside it.
+ * on every runtime: coturn on the runtime's media network at .2, its plain
+ * listener (UDP and TCP 3478) and with a certificate its TLS one (TCP 5349)
+ * published on every address, its relay range never published; every
+ * relayed stream relay to relay inside it.
  *
+ * 0. no low-ports step: `relay.runtime` asks nothing of an engine on the
+ *    machine itself, rootless included, and the start leaves
+ *    `ip_unprivileged_port_start` as it found it (Linux), with no sysctl;
+ *    coturn's process runs as an unprivileged user (uid not 0, read in its
+ *    container) and holds UDP and TCP 3478 (and TCP 5349 with a name) in its
+ *    own network namespace;
  * 1. coturn's arguments carry `--relay-ip=<.2>` and `--external-ip=P/<.2>`,
  *    no `--server-relay` and no `--allowed-peer-ip`; it stands on the media
- *    network at .2 (an address fixed at create: run fact 3), only 443 is
- *    published, and its log says `Whitelisting external-ip private part:
- *    <.2>`;
+ *    network at .2 (an address fixed at create: run fact 3), only 3478 (and
+ *    5349 with a name) is published, and its log says `Whitelisting
+ *    external-ip private part: <.2>`;
  * 2. a permission with a minted credential is refused 403 to this machine's
  *    LAN addresses, the media network's gateway, its tailnet addresses,
  *    another fleet machine's LAN and tailnet address (`--peer`, else stand-ins
@@ -29,27 +36,27 @@
  *    source), and no denial of its sessions in coturn's log;
  * 4. no port of the relay range is bound on this machine, and a STUN binding
  *    to P:<first of the range> is unanswered;
- * 5. a STUN binding answered on UDP and TCP 443 (and TLS with a name) through
- *    the hub's own health check; 401 for a lapsed username; 442 for a TCP
- *    relay allocation (`no-tcp-relay`); with `--hostname` the certificate
- *    issued and TLS on 443 with the Let's Encrypt chain;
+ * 5. a STUN binding answered on UDP and TCP 3478 (and TLS on 5349 with a
+ *    name) through the hub's own health check; 401 for a lapsed username; 442
+ *    for a TCP relay allocation (`no-tcp-relay`); with `--hostname` the
+ *    certificate issued by DNS (`--cloudflare-token`) and TLS on 5349 with the
+ *    Let's Encrypt chain;
+ * 6. a viewer with `iceTransportPolicy: "relay"` connects through it: two
+ *    RTCPeerConnections in a headless Chromium, each given the relay's URLs
+ *    and a credential of its own, open a data channel and pass a message;
+ *    getStats' selected pair is relay to relay, both relayed addresses P;
  * - Stop relay keeps the certificate volume; Remove relay takes the container
  *   and then the volume, so nothing of the relay stays.
  *
+ * Without `--hostname`, TLS on 5349 is checked after Remove against coturn
+ * started by this spec on the relay's own arguments and ports, at .3 of the
+ * media network, with a self-signed certificate this spec makes with openssl
+ * for `relay.cawco-probe.test`, bind-mounted where coturn's arguments read a
+ * Let's Encrypt one; and `--no-tls` is checked to start no TLS listener (no
+ * "cannot start TLS" warning, 5349 not answering).
+ *
  * It runs only where the machine has no relay yet (no `cawco-relay`
  * container, no `cawco-relay-certs` volume): its Remove would delete them.
- *
- * On a rootless runtime whose `ip_unprivileged_port_start` is above the
- * lowest port the relay needs (obelisk: rootless Podman, 1024), the start
- * fails with the sysctl sentence and no container is made; the rest is then
- * run against coturn started by this spec on the relay's own arguments and
- * seat, at .3 of the media network (so a relay's .2 is never taken), its
- * listener (443 inside) published on a stand-in port free at run time, and
- * says so on each line. There TLS on the plain listener is checked with a
- * self-signed certificate this spec makes with openssl for
- * `relay.cawco-probe.test`, bind-mounted where coturn's arguments read a
- * Let's Encrypt one, and `--no-tls` is checked to start no TLS listener (no
- * "cannot start TLS" warning).
  *
  * With `--hold <s>` the relay stays live that long after the checks, before
  * Stop and Remove, so `browser-stream --relay-address <P> --relay-secret <S>`
@@ -60,7 +67,7 @@
  * runtime's socket), on the machine named, with the address a viewer reaches
  * it at (its public address; a LAN address stands in for it):
  *
- *   bun scripts/probe-kit/run.ts browser-relay --machine <name> --address <a> [--hostname <dns name>] [--peer <a>]… [--secret <s>] [--hold <s>]
+ *   bun scripts/probe-kit/run.ts browser-relay --machine <name> --address <a> [--hostname <dns name> --cloudflare-token <t>] [--peer <a>]… [--secret <s>] [--hold <s>]
  */
 import { randomBytes } from "node:crypto";
 import { createSocket } from "node:dgram";
@@ -73,15 +80,13 @@ import { connect, getPublicIP } from "turn-server";
 import type { RelaySeat } from "../../../packages/agent/src/browser/relay";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
 import { browserPorts } from "../../../packages/core/src/browser";
-import type {
-  RelayFailure,
-  RelayStartArgs,
-} from "../../../packages/core/src/stream-relay";
+import type { RelayStartArgs } from "../../../packages/core/src/stream-relay";
 import {
   isStreamRelayPort,
-  RELAY_FAILURES,
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
+  STREAM_RELAY_TLS_PORT,
+  streamRelayUrls,
 } from "../../../packages/core/src/stream-relay";
 import { END_SIGNALS, signalEnding, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -90,7 +95,7 @@ type Relay = typeof import("../../../packages/agent/src/browser/relay");
 type Docker = Runtime["docker"];
 type Container = ReturnType<Docker["getContainer"]>;
 
-/** This spec's own coturn, where 443 is refused. */
+/** This spec's own coturn, for TLS without a name, once the relay is removed. */
 const PROBE_CONTAINER = "cawco-relay-probe";
 /** turnutils_uclient's container. */
 const UCLIENT_CONTAINER = "cawco-relay-uclient";
@@ -105,9 +110,16 @@ const UCLIENT_MS = 60_000;
 const PRIVATE_PEER = "10.0.0.5";
 /** The name the stand-in's self-signed certificate is for. */
 const PROBE_NAME = "relay.cawco-probe.test";
-/** The fix the relay's refusal names: the value set live and kept over a reboot, in one line. */
-const SYSCTL =
-  /^sudo sh -c 'sysctl -w net\.ipv4\.ip_unprivileged_port_start=(443|80) && echo net\.ipv4\.ip_unprivileged_port_start=\1 > \/etc\/sysctl\.d\/90-cawco-relay\.conf'$/;
+/** The proc file a rootless engine's floor for binding ports is read from, Linux only: read before and after the start, never written. */
+const UNPRIVILEGED = "/proc/sys/net/ipv4/ip_unprivileged_port_start";
+/** How long a viewer's two relay-only peer connections have to connect. */
+const VIEWER_MS = 20_000;
+/** The Uid line of /proc/<pid>/status: real uid first. */
+const UID_LINE = /^Uid:\s+(\d+)/m;
+/** The markers between the socket tables the coturn check reads. */
+const TABLE_MARK = /^@(?:udp|tcp)$/m;
+/** Words of the low ports gone: a sysctl, the floor, port 80 or 443. */
+const LOW_PORT_WORDS = /sysctl|unprivileged|\b(?:80|443)\b/;
 /** coturn's words when it starts no TLS listener for want of a certificate. */
 const NO_TLS_WARNING = /cannot start TLS/i;
 /** coturn's line at start for the private side of `--external-ip` (mainrelay.c). */
@@ -366,10 +378,9 @@ const bindPort = (
   });
 
 /**
- * Where a coturn of a probe's is published instead of 443, where 443 is
- * refused or held: a port free on TCP and UDP at run time, outside the hub's
- * preview ports and the relay's own; `tries` more ports are asked for when
- * one is not.
+ * A port free on TCP and UDP at run time, outside the hub's preview ports and
+ * the relay's own, for a probe's coturn beside a relay that holds 3478 or a
+ * stand-in server's HTTP; `tries` more ports are asked for when one is not.
  */
 export const freeStandIn = async (tries = 20): Promise<number | undefined> => {
   if (tries === 0) {
@@ -466,7 +477,7 @@ const issuerOn = (host: string, port: number, tls: TlsTo): Promise<string> =>
 /* The checks against a listener                                        */
 /* ------------------------------------------------------------------ */
 
-/** A coturn to check: where a viewer reaches it, its seat, its container. */
+/** A coturn to check: where a viewer reaches it, its seat, its container. Its listeners are the relay's own ports, 3478 and with TLS 5349. */
 interface Listener {
   /** coturn's container, whose log every check reads. */
   container: Container;
@@ -476,12 +487,13 @@ interface Listener {
   media: string;
   /** The media network's name and gateway. */
   network: { name: string; gateway: string };
-  /** The listener's port on the machine: 443, or a stand-in. */
-  port: number;
   tls?: TlsTo & { host: string };
-  /** Said after every line: why the port is not 443, where it is not. */
+  /** Said after every line: whose coturn it is, where it is not the relay's. */
   where: string;
 }
+
+const PLAIN = STREAM_RELAY_PORT;
+const SECURE = STREAM_RELAY_TLS_PORT;
 
 /** coturn's lines since `since` (s epoch). */
 const coturnLines = async (
@@ -569,12 +581,17 @@ const seatChecks = async (
       !cmd.includes("--server-relay") &&
       !cmd.some((arg) => arg.startsWith("--allowed-peer-ip")) &&
       published.join() ===
-        `${STREAM_RELAY_PORT}/tcp,${STREAM_RELAY_PORT}/udp` &&
-      Object.values(
+        [
+          `${PLAIN}/tcp`,
+          `${PLAIN}/udp`,
+          ...(on.tls ? [`${SECURE}/tcp`] : []),
+        ].join() &&
+      Object.entries(
         bindings as Record<string, { HostIp?: string; HostPort?: string }[]>
       ).every(
-        (one) =>
-          one?.[0]?.HostIp === "0.0.0.0" && one[0].HostPort === String(on.port)
+        ([inside, one]) =>
+          one?.[0]?.HostIp === "0.0.0.0" &&
+          one[0].HostPort === inside.split("/")[0]
       ) &&
       !!whitelisted?.includes(on.media),
     JSON.stringify({ cmd, at, bindings })
@@ -651,7 +668,7 @@ const permissionChecks = async (
   on: Listener
 ): Promise<void> => {
   const fresh = await minted(args, "permissions");
-  const url = `turn:${on.host}:${on.port}?transport=udp`;
+  const url = `turn:${on.host}:${PLAIN}?transport=udp`;
   const since = Math.floor(Date.now() / 1000) - 1;
   const asked = await Promise.all(
     (await refusedPeers(on, args.address)).map(async (peer) => ({
@@ -818,14 +835,14 @@ const relayToRelay = async (
       who: "uclient-media",
       from: `${on.network.name}, against coturn's ${on.media}`,
       server: on.media,
-      port: STREAM_RELAY_PORT,
+      port: PLAIN,
       network: on.network.name,
     },
     {
       who: "uclient-published",
       from: `the runtime's default network, against P ${args.address} through the published listener`,
       server: args.address,
-      port: on.port,
+      port: PLAIN,
     },
   ];
   const expected = UCLIENT_MESSAGES * UCLIENT_SESSIONS;
@@ -929,12 +946,12 @@ const udpChecks = async (
 ): Promise<void> => {
   const fresh = await minted(args);
   const lapsed = await minted(args, "lapsed", Date.now() - 2 * 60 * 60_000);
-  const url = `turn:${on.host}:${on.port}?transport=udp`;
-  const stun = await binding(`stun:${on.host}:${on.port}?transport=udp`);
+  const url = `turn:${on.host}:${PLAIN}?transport=udp`;
+  const stun = await binding(`stun:${on.host}:${PLAIN}?transport=udp`);
   const udp = await turn(url, fresh);
   const expired = await turn(url, lapsed);
   kit.check(
-    `5 · UDP on the listener: STUN binding on udp ${on.port} ${stun}; allocation with a minted credential relayed ${udp.relayed ?? `nothing (${udp.error ?? udp.allocateCode})`}, as P${on.where}`,
+    `5 · UDP on the listener: STUN binding on udp ${PLAIN} ${stun}; allocation with a minted credential relayed ${udp.relayed ?? `nothing (${udp.error ?? udp.allocateCode})`}, as P${on.where}`,
     stun.startsWith("up") &&
       udp.allocated &&
       udp.relayed?.split(":")[0] === args.address,
@@ -947,18 +964,18 @@ const udpChecks = async (
   );
 };
 
-/** Assertion 5's TCP part: plain TCP on the listener, TLS on it with a certificate, and a TCP relay refused 442. */
+/** Assertion 5's TCP part: plain TCP on 3478, TLS on 5349 with a certificate, and a TCP relay refused 442. */
 const streamChecks = async (
   kit: Kit,
   args: RelayStartArgs,
   on: Listener
 ): Promise<void> => {
   const fresh = await minted(args);
-  const plainStun = await binding(`stun:${on.host}:${on.port}?transport=tcp`);
-  const plain = await turn(`turn:${on.host}:${on.port}?transport=tcp`, fresh);
+  const plainStun = await binding(`stun:${on.host}:${PLAIN}?transport=tcp`);
+  const plain = await turn(`turn:${on.host}:${PLAIN}?transport=tcp`, fresh);
   const plainUp = plainStun.startsWith("up") && plain.allocated;
   const tcpRelay = await turn(
-    `turn:${on.host}:${on.port}?transport=tcp`,
+    `turn:${on.host}:${PLAIN}?transport=tcp`,
     fresh,
     undefined,
     undefined,
@@ -970,32 +987,108 @@ const streamChecks = async (
     JSON.stringify(tcpRelay)
   );
   if (!on.tls) {
+    const noTls = await issuerOn(on.host, SECURE, { servername: PROBE_NAME });
     kit.check(
-      `5 · plain TCP on the listener: STUN binding on tcp ${on.port} ${plainStun}; allocation relayed ${plain.relayed ?? `nothing (${plain.error ?? plain.allocateCode})`}${on.where}`,
-      plainUp,
-      JSON.stringify({ plainStun, plain })
+      `5 · plain TCP on the listener: STUN binding on tcp ${PLAIN} ${plainStun}; allocation relayed ${plain.relayed ?? `nothing (${plain.error ?? plain.allocateCode})`}; with no certificate nothing answers TLS on ${SECURE} (${noTls})${on.where}`,
+      plainUp &&
+        !noTls.startsWith("verified") &&
+        !noTls.startsWith("unverified"),
+      JSON.stringify({ plainStun, plain, noTls })
     );
     return;
   }
   const { tls } = on;
-  const handshake = await issuerOn(on.tls.host, on.port, tls);
+  const handshake = await issuerOn(on.tls.host, SECURE, tls);
   const tlsStun = await binding(
-    `stuns:${tls.host}:${on.port}?transport=tcp`,
+    `stuns:${tls.host}:${SECURE}?transport=tcp`,
     tls
   );
   const secure = await turn(
-    `turns:${tls.host}:${on.port}?transport=tcp`,
+    `turns:${tls.host}:${SECURE}?transport=tcp`,
     fresh,
     undefined,
     tls
   );
   kit.check(
-    `5 · TLS on the plain listener: handshake on tcp ${on.port} for ${tls.servername} ${handshake}; stuns binding ${tlsStun}; turns allocation relayed ${secure.relayed ?? `nothing (${secure.error ?? secure.allocateCode})`}; plain TCP on the same port: binding ${plainStun}, allocation relayed ${plain.relayed ?? `nothing (${plain.error ?? plain.allocateCode})`}${on.where}`,
+    `5 · TLS on its own listener: handshake on tcp ${SECURE} for ${tls.servername} ${handshake}; stuns binding ${tlsStun}; turns allocation relayed ${secure.relayed ?? `nothing (${secure.error ?? secure.allocateCode})`}; plain TCP on ${PLAIN}: binding ${plainStun}, allocation relayed ${plain.relayed ?? `nothing (${plain.error ?? plain.allocateCode})`}${on.where}`,
     handshake.startsWith("verified") &&
       tlsStun.startsWith("up") &&
       secure.allocated &&
       plainUp,
     JSON.stringify({ handshake, tlsStun, secure, plainStun, plain })
+  );
+};
+
+/** `cmd` run to its end in `container`: what it said, stdout and stderr in order (the Engine API's multiplexed stream, as relay.ts `logsOf` reads it). */
+const execIn = async (container: Container, cmd: string[]): Promise<string> => {
+  const exec = await container.exec({
+    Cmd: cmd,
+    AttachStdout: true,
+    AttachStderr: true,
+  });
+  const stream = await exec.start({});
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk as Buffer);
+  }
+  const raw = Buffer.concat(chunks);
+  const parts: string[] = [];
+  let at = 0;
+  while (at + 8 <= raw.length) {
+    const size = raw.readUInt32BE(at + 4);
+    parts.push(raw.subarray(at + 8, at + 8 + size).toString("utf8"));
+    at += 8 + size;
+  }
+  return at === 0 ? raw.toString("utf8") : parts.join("");
+};
+
+/** The local ports of /proc/net/{udp,tcp}{,6} lines: every UDP socket bound, every TCP one listening (state 0A). */
+const portsIn = (table: string, tcp: boolean): Set<number> =>
+  new Set(
+    table
+      .split("\n")
+      .map((line) => line.trim().split(FIELDS))
+      .filter(
+        ([slot, local, , state]) =>
+          slot?.endsWith(":") &&
+          local?.includes(":") &&
+          (!tcp || state === "0A")
+      )
+      .map(([, local]) => Number.parseInt(local?.split(":")[1] ?? "", 16))
+  );
+
+/**
+ * Assertion 0's coturn part: its process (pid 1 of its container) runs as an
+ * unprivileged user, and its own network namespace holds UDP and TCP 3478
+ * (and TCP 5349 with TLS), each above 1024.
+ */
+const unprivilegedChecks = async (kit: Kit, on: Listener): Promise<void> => {
+  const out = await execIn(on.container, [
+    "sh",
+    "-c",
+    "grep '^Uid:' /proc/1/status; echo @udp; cat /proc/net/udp /proc/net/udp6; echo @tcp; cat /proc/net/tcp /proc/net/tcp6",
+  ]).catch((error: unknown) => `exec failed: ${String(error)}`);
+  const uid = Number(UID_LINE.exec(out)?.[1] ?? Number.NaN);
+  const [, udpTable = "", tcpTable = ""] = out.split(TABLE_MARK);
+  const udp = portsIn(udpTable, false);
+  const tcp = portsIn(tcpTable, true);
+  const wanted = [
+    `udp ${PLAIN}`,
+    `tcp ${PLAIN}`,
+    ...(on.tls ? [`tcp ${SECURE}`] : []),
+  ];
+  const held = wanted.filter((one) => {
+    const [proto, port] = one.split(" ");
+    return (proto === "udp" ? udp : tcp).has(Number(port));
+  });
+  kit.check(
+    `0 · coturn runs as uid ${uid} (not root) and holds ${held.join(", ") || "nothing"} of ${wanted.join(", ")} in its own namespace, every one above 1024${on.where}`,
+    Number.isFinite(uid) &&
+      uid !== 0 &&
+      held.length === wanted.length &&
+      PLAIN > 1024 &&
+      SECURE > 1024,
+    out.slice(0, 2000)
   );
 };
 
@@ -1007,6 +1100,7 @@ const listenerChecks = async (
   args: RelayStartArgs,
   on: Listener
 ): Promise<void> => {
+  await unprivilegedChecks(kit, on);
   await seatChecks(kit, docker, on, args.address);
   await permissionChecks(kit, args, on);
   await relayToRelay(kit, relay, docker, args, on);
@@ -1024,36 +1118,275 @@ const mediaOf = async (docker: Docker) => {
 };
 
 /* ------------------------------------------------------------------ */
-/* The relay's own start, where 443 may be bound                        */
+/* A viewer, relay only                                                 */
 /* ------------------------------------------------------------------ */
 
-/** The relay's own start, its ports through the hub's health check, every listener check, TLS with a name. */
+/** What the page's two relay-only peer connections found. */
+interface ViewerRead {
+  candidates: string[];
+  echoed?: string;
+  error?: string;
+  errors: string[];
+  pair?: {
+    local?: string;
+    localAddress?: string;
+    remote?: string;
+    remoteAddress?: string;
+  };
+  states: string[];
+}
+
+/**
+ * In the page: two RTCPeerConnections with `iceTransportPolicy: "relay"`,
+ * each given `servers` with a credential of its own, signalled to each
+ * other in the page; one opens a data channel and sends a word, the other
+ * sends it back. Answers the word that came back and the selected pair's
+ * candidate types and addresses, or why not within `ms`.
+ */
+const viewerInPage = (args: {
+  servers: { urls: string[]; username: string; credential: string }[];
+  ms: number;
+}): Promise<ViewerRead> =>
+  new Promise((resolve) => {
+    const read: ViewerRead = { candidates: [], errors: [], states: [] };
+    const [one, two] = args.servers.map(
+      (server) =>
+        new RTCPeerConnection({
+          iceServers: [server],
+          iceTransportPolicy: "relay",
+        })
+    ) as [RTCPeerConnection, RTCPeerConnection];
+    let settled = false;
+    const done = (error?: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (error) {
+        read.error = error;
+      }
+      one.close();
+      two.close();
+      resolve(read);
+    };
+    const timer = setTimeout(
+      () => done(`not connected within ${args.ms / 1000} s`),
+      args.ms
+    );
+    for (const [pc, other, name] of [
+      [one, two, "one"],
+      [two, one, "two"],
+    ] as const) {
+      pc.onicecandidate = (found) => {
+        if (found.candidate) {
+          read.candidates.push(`${name} ${found.candidate.candidate}`);
+          other.addIceCandidate(found.candidate).catch(() => undefined);
+        }
+      };
+      pc.onicecandidateerror = (refused) =>
+        read.errors.push(
+          `${name} ${refused.url}: ${refused.errorCode} ${refused.errorText}`
+        );
+      pc.onconnectionstatechange = () =>
+        read.states.push(`${name} ${pc.connectionState}`);
+    }
+    two.ondatachannel = (event) => {
+      event.channel.onmessage = (message) =>
+        event.channel.send(String(message.data));
+    };
+    const channel = one.createDataChannel("probe");
+    channel.onopen = () => channel.send("through the relay");
+    channel.onmessage = async (message) => {
+      read.echoed = String(message.data);
+      const stats = await one.getStats();
+      let pairId: string | undefined;
+      for (const entry of stats.values()) {
+        if (entry.type === "transport" && entry.selectedCandidatePairId) {
+          pairId = entry.selectedCandidatePairId;
+        }
+      }
+      const pair = pairId ? stats.get(pairId) : undefined;
+      const local = pair ? stats.get(pair.localCandidateId) : undefined;
+      const remote = pair ? stats.get(pair.remoteCandidateId) : undefined;
+      read.pair = {
+        local: local?.candidateType,
+        localAddress: local?.address,
+        remote: remote?.candidateType,
+        remoteAddress: remote?.address,
+      };
+      clearTimeout(timer);
+      done();
+    };
+    (async () => {
+      await one.setLocalDescription(await one.createOffer());
+      await two.setRemoteDescription(
+        one.localDescription as RTCSessionDescriptionInit
+      );
+      await two.setLocalDescription(await two.createAnswer());
+      await one.setRemoteDescription(
+        two.localDescription as RTCSessionDescriptionInit
+      );
+    })().catch((error: unknown) => done(String(error)));
+  });
+
+/**
+ * Assertion 6: a viewer with `iceTransportPolicy: "relay"` connects through
+ * the relay: its URLs as the hub mints them (`urls`), each peer connection
+ * with a credential of its own; the word sent comes back, and the selected
+ * pair is relay to relay, both relayed addresses P.
+ */
+const viewerChecks = async (
+  kit: Kit,
+  args: RelayStartArgs,
+  urls: string[],
+  label: string
+): Promise<void> => {
+  const servers = await Promise.all(
+    ["viewer-one", "viewer-two"].map(async (who) => {
+      const fresh = await minted(args, who);
+      return { urls, username: fresh.username, credential: fresh.credential };
+    })
+  );
+  const page = await kit.page("desk");
+  await page.goto("about:blank");
+  const read = await page.evaluate(viewerInPage, { servers, ms: VIEWER_MS });
+  kit.check(
+    `6 · a viewer with iceTransportPolicy "relay" through ${label} (${urls.join(", ")}): ${read.echoed ? `"${read.echoed}" came back` : `no word back (${read.error})`}; selected pair ${read.pair?.local} ${read.pair?.localAddress} → ${read.pair?.remote} ${read.pair?.remoteAddress}`,
+    read.echoed === "through the relay" &&
+      read.pair?.local === "relay" &&
+      read.pair.remote === "relay" &&
+      read.pair.localAddress === args.address &&
+      read.pair.remoteAddress === args.address,
+    JSON.stringify(read).slice(0, 4000)
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* The relay's own start                                                */
+/* ------------------------------------------------------------------ */
+
+/** `ip_unprivileged_port_start` as the kernel has it now; null off Linux. */
+const unprivilegedStart = (): Promise<string | null> =>
+  platform() === "linux"
+    ? readFile(UNPRIVILEGED, "utf8").then(
+        (text) => text.trim(),
+        () => null
+      )
+    : Promise.resolve(null);
+
+/**
+ * Assertion 0's start part: `relay.runtime` asks nothing of an engine on the
+ * machine itself (rootless included: no low-ports step exists), and the
+ * kernel's floor for unprivileged ports is the same after the start as
+ * before it. Answers whether the start may go on (a VM's forwarder short of
+ * UDP is the one need left; the run ends there until it is switched).
+ */
+const noLowPorts = async (
+  kit: Kit,
+  relay: Relay,
+  runtime: Runtime,
+  machine: string
+): Promise<boolean> => {
+  const read = await relay.relayRuntimeRead();
+  kit.check(
+    `0 · relay.runtime on ${runtime.kind}${runtime.rootless ? " rootless" : ""}${runtime.ownNetwork ? " on the machine itself" : " in a VM"}: ${read.stepApplies ? "the runtime step applies (its forwarder)" : "no runtime step"}, need ${read.need ? `"${read.need.why}"` : "none"}; nothing in it names a low port or a sysctl`,
+    (runtime.ownNetwork ? !read.stepApplies && read.need === null : true) &&
+      !LOW_PORT_WORDS.test(JSON.stringify(read)),
+    JSON.stringify(read)
+  );
+  if (read.need) {
+    kit.check(
+      `the runtime's forwarder needs switching first: run \`${read.need.command}\` on ${machine}, then this spec again`,
+      false,
+      read.need.why
+    );
+    return false;
+  }
+  return true;
+};
+
+/**
+ * A name's certificate, its own command (the journey's certificate step), by
+ * DNS at Cloudflare with `--cloudflare-token`: answers whether the start may
+ * go on (no name, or the certificate issued).
+ */
+const certifyFirst = async (
+  kit: Kit,
+  relay: Relay,
+  args: RelayStartArgs
+): Promise<boolean> => {
+  if (!args.hostname) {
+    return true;
+  }
+  const token = flag("cloudflare-token");
+  if (!(
+    kit.check(
+      `--hostname ${args.hostname} comes with --cloudflare-token: the certificate is issued only by DNS`,
+      !!token
+    ) && token
+  )) {
+    return false;
+  }
+  const certified = await relay.certifyRelay({
+    hostname: args.hostname,
+    cloudflareToken: token,
+  });
+  return kit.check(
+    `relay.certify for ${args.hostname} by DNS at Cloudflare: a certificate ending ${new Date(certified.expiresAt).toISOString()}`,
+    certified.expiresAt > Date.now(),
+    JSON.stringify(certified)
+  );
+};
+
+/** Assertion 6 against the live relay: its URLs as minted, and with a name TLS on 5349 alone. */
+const viewerLegs = async (
+  kit: Kit,
+  args: RelayStartArgs,
+  name: string | null
+): Promise<void> => {
+  const urls = streamRelayUrls(args.address, name);
+  await viewerChecks(kit, args, urls, "the relay's URLs as the hub mints them");
+  if (name) {
+    // TLS alone: the way through a network that passes only encrypted traffic.
+    await viewerChecks(
+      kit,
+      args,
+      urls.filter((url) => url.startsWith("turns:")),
+      `TLS on ${SECURE} alone`
+    );
+  }
+};
+
+/** The relay's own start, its ports through the hub's health check, every listener check, TLS with a name, a relay-only viewer. */
 const relayLegs = async (
   kit: Kit,
   relay: Relay,
   runtime: Runtime,
   args: RelayStartArgs
 ): Promise<void> => {
-  // A name's certificate first, its own command (the journey's certificate
-  // step), over HTTP on port 80; then the start, on the certificate.
-  if (args.hostname) {
-    const certified = await relay.certifyRelay({ hostname: args.hostname });
-    kit.check(
-      `relay.certify for ${args.hostname} over HTTP: a certificate ending ${new Date(certified.expiresAt).toISOString()}`,
-      certified.expiresAt > Date.now(),
-      JSON.stringify(certified)
-    );
+  if (!(await certifyFirst(kit, relay, args))) {
+    return;
   }
+  const floorBefore = await unprivilegedStart();
   const frame = await relay.startRelay(args);
+  const floorAfter = await unprivilegedStart();
   const container = runtime.docker.getContainer(relay.RELAY_CONTAINER);
   const inspected = await container.inspect().catch(() => undefined);
   kit.check(
-    `${relay.RELAY_IMAGE} pulled; container ${relay.RELAY_CONTAINER} ${frame.state}${frame.why ? ` (${frame.why})` : ""}; its frame's reach: LAN ${frame.reach?.lan.join(", ") || "none"}, tailnet ${frame.reach?.tailnet.join(", ") || "none"}`,
+    `${relay.RELAY_IMAGE} pulled; container ${relay.RELAY_CONTAINER} ${frame.state}${frame.why ? ` (${frame.why})` : ""}, ports ${JSON.stringify(frame.ports)}; its frame's reach: LAN ${frame.reach?.lan.join(", ") || "none"}, tailnet ${frame.reach?.tailnet.join(", ") || "none"}`,
     frame.state === "live" &&
+      frame.ports.udp &&
+      frame.ports.tcp &&
+      frame.ports.tls === !!args.hostname &&
       inspected?.State.Running === true &&
       inspected.Config.Image === relay.RELAY_IMAGE &&
       !!frame.reach,
     JSON.stringify(frame)
+  );
+  kit.check(
+    `0 · the start left ip_unprivileged_port_start as it found it (${floorBefore ?? "not Linux"} before, ${floorAfter ?? "not Linux"} after): no low-ports step, no sysctl`,
+    floorBefore === floorAfter,
+    JSON.stringify({ floorBefore, floorAfter })
   );
   if (!inspected) {
     return;
@@ -1072,20 +1405,18 @@ const relayLegs = async (
     host: bracketed(args.address),
     media: media.relayMediaAddress(network),
     network: { name: network.name, gateway: media.gatewayAddress(network) },
-    port: STREAM_RELAY_PORT,
     where: "",
     ...(name ? { tls: { host: name, servername: name } } : {}),
   });
   if (name) {
-    const issuer = await issuerOn(name, STREAM_RELAY_PORT, {
-      servername: name,
-    });
+    const issuer = await issuerOn(name, SECURE, { servername: name });
     kit.check(
-      `with --hostname ${name}: certificate issued, ${frame.ports.tls ? "tls stands" : "no tls"}; turns:${name}:443 ${issuer}`,
+      `with --hostname ${name}: certificate issued by DNS, ${frame.ports.tls ? "tls stands" : "no tls"}; turns:${name}:${SECURE} ${issuer}`,
       frame.ports.tls && issuer.startsWith("verified by Let's Encrypt"),
       JSON.stringify(frame.ports)
     );
   }
+  await viewerLegs(kit, args, name);
   const hold = Number(flag("hold") ?? 0);
   if (hold > 0) {
     kit.note(
@@ -1096,7 +1427,7 @@ const relayLegs = async (
 };
 
 /* ------------------------------------------------------------------ */
-/* coturn started by this spec on a stand-in port, where 443 is refused */
+/* TLS without a name: coturn of this spec's, a self-signed certificate */
 /* ------------------------------------------------------------------ */
 
 /** A self-signed certificate for {@link PROBE_NAME}, laid out as the relay's volume lays out Let's Encrypt's: its folder, and the certificate's text. */
@@ -1146,7 +1477,8 @@ const selfSigned = async (): Promise<{ dir: string; cert: string }> => {
 /**
  * A coturn of a probe's, made as the relay makes its own (agent relay.ts):
  * the relay's arguments for `seat`, on the media network at `seat.media`, its
- * listener (443 inside) published on `port`, the certificate folder at
+ * listeners published as the relay's are (3478, and 5349 when `certified`)
+ * or on stand-ins (`port`, `tlsPort`), the certificate folder at
  * /etc/letsencrypt when given; once it answers a STUN binding on `address`.
  */
 export const startProbeCoturn = async (
@@ -1158,6 +1490,7 @@ export const startProbeCoturn = async (
     seat: RelaySeat;
     network: string;
     port: number;
+    tlsPort?: number;
     certs?: string;
     extra?: string[];
   }
@@ -1169,7 +1502,10 @@ export const startProbeCoturn = async (
     .getContainer(probe.name)
     .remove({ force: true })
     .catch(() => undefined);
-  const published = relay.listenerPublished(probe.port);
+  const published = relay.listenerPublished(probe.certified, {
+    plain: probe.port,
+    tls: probe.tlsPort ?? SECURE,
+  });
   const placed = onMediaNetwork(probe.network, probe.seat.media);
   const container = await docker.createContainer({
     name: probe.name,
@@ -1203,68 +1539,19 @@ export const startProbeCoturn = async (
 };
 
 /**
- * Where the runtime may not bind 443: the relay's start refused with the
- * sysctl sentence before any container, then coturn on the relay's own
- * arguments at .3 of the media network, its listener published on a stand-in
- * {@link freeStandIn} picks: once with a certificate (every check) and once
- * with `--no-tls`.
+ * Without a name, once the relay is removed: coturn on the relay's own
+ * arguments and ports at .3 of the media network, once with a self-signed
+ * certificate (every listener check, TLS on 5349 included) and once with
+ * `--no-tls` (no TLS listener, no warning).
  */
-const refusedLegs = async (
+const tlsLegs = async (
   kit: Kit,
   relay: Relay,
   runtime: Runtime,
-  args: RelayStartArgs,
-  refusal: RelayFailure
+  args: RelayStartArgs
 ): Promise<void> => {
-  const start = await readFile(
-    "/proc/sys/net/ipv4/ip_unprivileged_port_start",
-    "utf8"
-  );
-  // With a name, the first command that binds below the start is the
-  // certificate's over HTTP (port 80); without, the start's (443).
-  const first = (): Promise<unknown> =>
-    args.hostname
-      ? relay.certifyRelay({ hostname: args.hostname })
-      : relay.startRelay(args);
-  const thrown = await first().then(
-    () => ({ said: "started", command: undefined }),
-    (error: unknown) => ({
-      said: said(error),
-      command: error instanceof relay.RelayFailed ? error.command : undefined,
-    })
-  );
-  const made = await runtime.docker
-    .getContainer(relay.RELAY_CONTAINER)
-    .inspect()
-    .then(
-      () => true,
-      () => false
-    );
-  kit.check(
-    `rootless with ip_unprivileged_port_start=${start.trim()}: failed with the sysctl sentence, its one-line command beside it, no container started ("${thrown.said}"; command "${thrown.command}")`,
-    thrown.said === refusal.why &&
-      thrown.command === refusal.command &&
-      SYSCTL.test(thrown.command ?? "") &&
-      !made,
-    `container ${relay.RELAY_CONTAINER} ${made ? "exists" : "absent"}`
-  );
-  const standIn = await freeStandIn();
-  if (
-    !kit.check(
-      `a stand-in for 443 free on UDP and TCP, outside the hub's preview ports and the relay's: ${standIn ?? "none found"}`,
-      standIn !== undefined
-    ) ||
-    standIn === undefined
-  ) {
-    return;
-  }
-  const where = ` (443 refused here: coturn started by this spec with the relay's arguments at .${PROBE_HOST} of the media network, its listener published on ${standIn})`;
+  const where = ` (coturn started by this spec with the relay's arguments at .${PROBE_HOST} of the media network, on the relay's own ports, a self-signed certificate for ${PROBE_NAME})`;
   const { docker } = runtime;
-  const { pullImage } =
-    await import("../../../packages/agent/src/browser/image");
-  await pullImage(docker, relay.RELAY_IMAGE, (step) =>
-    kit.note(`${relay.RELAY_IMAGE}: ${step.done}/${step.total} layers`)
-  );
   const { media, network } = await mediaOf(docker);
   const seat = {
     ...(await relay.relaySeat(docker, args.address)),
@@ -1280,7 +1567,7 @@ const refusedLegs = async (
       certified: true,
       seat,
       network: network.name,
-      port: standIn,
+      port: PLAIN,
       certs: dir,
       // Each request processed, by user: the relay-to-relay runs then name
       // which of uclient's control requests reached coturn.
@@ -1289,7 +1576,7 @@ const refusedLegs = async (
     try {
       if (
         kit.check(
-          `coturn with a certificate answers on udp ${standIn}: ${withCert.bound}${where}`,
+          `coturn with a certificate answers on udp ${PLAIN}: ${withCert.bound}${where}`,
           withCert.bound.startsWith("up"),
           (await coturnLines(withCert.container, 0)).slice(-30).join("\n")
         )
@@ -1302,7 +1589,6 @@ const refusedLegs = async (
             name: network.name,
             gateway: media.gatewayAddress(network),
           },
-          port: standIn,
           where,
           tls: { host, servername: PROBE_NAME, ca: cert },
         });
@@ -1317,18 +1603,20 @@ const refusedLegs = async (
       certified: false,
       seat,
       network: network.name,
-      port: standIn,
+      port: PLAIN,
     });
     try {
       const log = (await coturnLines(plain.container, 0)).join("\n");
       const running = (await plain.container.inspect()).State.Running === true;
-      const tcp = await binding(`stun:${host}:${standIn}?transport=tcp`);
+      const tcp = await binding(`stun:${host}:${PLAIN}?transport=tcp`);
+      const tls = await issuerOn(host, SECURE, { servername: PROBE_NAME });
       const warned = NO_TLS_WARNING.test(log);
       kit.check(
-        `--no-tls: coturn ${running ? "running" : "not running"}, udp ${standIn} ${plain.bound}, tcp ${standIn} ${tcp}, ${warned ? "a" : "no"} "cannot start TLS" warning in its log${where}`,
+        `--no-tls: coturn ${running ? "running" : "not running"}, udp ${PLAIN} ${plain.bound}, tcp ${PLAIN} ${tcp}, tcp ${SECURE} ${tls}, ${warned ? "a" : "no"} "cannot start TLS" warning in its log${where}`,
         running &&
           plain.bound.startsWith("up") &&
           tcp.startsWith("up") &&
+          tls.startsWith("refused") &&
           !warned,
         log.slice(-2000)
       );
@@ -1361,8 +1649,8 @@ const relayLeft = async (
 /**
  * Stop, then Remove: Stop keeps the certificate volume (when one was made),
  * Remove takes the container and then the volume. Where no certificate was
- * issued (no `--hostname`, or 443 refused), the volume is made empty first so
- * Remove has one to take.
+ * issued (no `--hostname`), the volume is made empty first so Remove has one
+ * to take.
  */
 const removeLegs = async (
   kit: Kit,
@@ -1456,34 +1744,14 @@ const relaySpec = async (kit: Kit): Promise<void> => {
   }
   made.volume(relay.CERTS_VOLUME);
   try {
-    // A name's certificate is issued over HTTP, on port 80.
-    const lowest = name ? 80 : 443;
-    const { need } = await relay.relayRuntimeRead(lowest);
-    if (need?.kind === "low-ports") {
-      await refusedLegs(
-        kit,
-        relay,
-        runtime,
-        args,
-        RELAY_FAILURES.lowPort(machineHostname(), lowest)
-      );
-    } else if (need) {
-      // A VM runtime short of a setting: the start refuses with its command,
-      // no container made, and the run ends there until it is changed.
-      const thrown = await relay.startRelay(args).then(
-        () => "started",
-        (error: unknown) => said(error)
-      );
-      kit.check(
-        `the runtime needs a setting first (${need.kind}): run \`${need.command}\` on ${machine}, then this spec again ("${thrown}")`,
-        false,
-        need.why
-      );
-    } else {
+    if (await noLowPorts(kit, relay, runtime, machine)) {
       await relayLegs(kit, relay, runtime, args);
       certified = !!name;
     }
     await removeLegs(kit, relay, runtime, certified);
+    if (!name) {
+      await tlsLegs(kit, relay, runtime, args);
+    }
   } finally {
     await relay.removeRelay().catch(() => undefined);
     await made.end();

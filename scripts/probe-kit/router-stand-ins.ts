@@ -39,7 +39,7 @@ const ACTIONS_V2 = [
  * `mode.refuse` refuses every mapping (718), `mode.cap` every one past that
  * many (728), and `mode.permanentOnly` every finite lease (725,
  * OnlyPermanentLeasesSupported). Every action asked is kept in `actions`
- * (`AddPortMapping UDP 443 3600`), and every document fetched in `fetched`.
+ * (`AddPortMapping UDP 3478 3600`), and every document fetched in `fetched`.
  */
 export const upnpGatewayStandIn = (publicAddress: string) => {
   const mode = {
@@ -237,7 +237,7 @@ const NAT_PMP_PORT = 5351;
  * nothing, `mode.refuse` every mapping Not Authorized (2), `mode.cap` every
  * one past that many Out of Resources (4). A request of another version
  * (PCP's 2) is answered Unsupported Version (1), as §3.5 has a NAT-PMP
- * server do. Each request is kept in `asked` (`map UDP 443 3600`).
+ * server do. Each request is kept in `asked` (`map UDP 3478 3600`).
  */
 export const natPmpStandIn = (
   publicAddress: string

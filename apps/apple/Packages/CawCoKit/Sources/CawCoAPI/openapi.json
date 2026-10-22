@@ -1365,6 +1365,24 @@
                     "properties": {
                       "act": {
                         "type": "string",
+                        "const": "token"
+                      },
+                      "token": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "act",
+                      "token"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
                         "const": "pick"
                       },
                       "machineId": {
@@ -35397,7 +35415,7 @@
         ]
       },
       "RelayStep": {
-        "description": "One step on the path, by what it is and where it stands. A step that does\nnot apply to this machine is not in the list (the router on a machine with\na public interface, the low ports on a root runtime, the certificate with\nno name).",
+        "description": "One step on the path, by what it is and where it stands. A step that does\nnot apply to this machine is not in the list (the router on a machine with\na public interface, the runtime where its engine runs on the machine\nitself, the certificate with no name).",
         "anyOf": [
           {
             "type": "object",
@@ -35498,10 +35516,6 @@
               },
               "how": {
                 "$ref": "#/components/schemas/RelayStepHow"
-              },
-              "http": {
-                "description": "TCP 80 is forwarded too: the certificate is issued and renewed over HTTP.",
-                "type": "boolean"
               }
             },
             "required": [
@@ -35527,25 +35541,12 @@
                 ],
                 "type": "string"
               },
-              "lowest": {
-                "description": "The lowest port the relay will ever bind: 443, or 80 with a certificate over HTTP.",
-                "enum": [
-                  443,
-                  80
-                ],
-                "type": "number"
-              },
               "need": {
                 "$ref": "#/components/schemas/RelayRuntimeNeed",
-                "description": "`needs` only: the setting to change, as the machine's runtime read it."
-              },
-              "network": {
-                "$ref": "#/components/schemas/RelayStepNetwork",
-                "description": "How the relay meets the network there; read before the step stands, absent while checking."
+                "description": "`needs` only: the forwarder to switch, as the machine's runtime read it."
               }
             },
             "required": [
-              "lowest",
               "state",
               "step"
             ]
@@ -35560,12 +35561,18 @@
                 ]
               },
               "state": {
+                "description": "`needs`: no Cloudflare token reaches the name's zone yet, and the step asks for one.",
                 "enum": [
                   "done",
                   "failed",
+                  "needs",
                   "running",
                   "waiting"
                 ],
+                "type": "string"
+              },
+              "tokenWhy": {
+                "description": "Cloudflare refused the token pasted here: its words, under the token field.",
                 "type": "string"
               },
               "why": {
@@ -35650,7 +35657,7 @@
                 "type": "boolean"
               },
               "ports": {
-                "description": "The ports that answered it, \"udp 443, tcp 443, tls\".",
+                "description": "The ports that answered it, \"udp 3478, tcp 3478, tls 5349\".",
                 "type": "string"
               },
               "refused": {
@@ -35699,16 +35706,12 @@
         ]
       },
       "RelayRuntimeNeed": {
-        "description": "A setting the runtime must change before the relay can run there, with the sentence and the command that change it.",
+        "description": "A VM's port forwarder that carries less than UDP and TCP (Colima's ssh\none carries TCP alone), with the sentence and the command that switch it\nto one that carries both. Every port the relay takes is above 1024, so no\nruntime, rootless or in a VM, must be let bind it.",
         "type": "object",
         "properties": {
           "command": {
             "description": "The fix, one line for a terminal.",
             "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/RelayRuntimeNeedKind",
-            "description": "`low-ports`: a rootless engine on Linux, below `ip_unprivileged_port_start`;\n`forwarder`: a VM's port forwarder that carries less than UDP and TCP;\n`rootful`: a VM's rootless engine, which can't publish a port under 1024."
           },
           "why": {
             "description": "What is short and how to change it, in the error formula's words.",
@@ -35717,7 +35720,6 @@
         },
         "required": [
           "command",
-          "kind",
           "why"
         ]
       },
@@ -35818,9 +35820,9 @@
         "description": "One port the hub's health check asks, by its chip's words.",
         "type": "string",
         "enum": [
-          "tcp 443",
-          "tls",
-          "udp 443"
+          "tcp 3478",
+          "tls 5349",
+          "udp 3478"
         ]
       },
       "StreamRelayState": {
@@ -60975,24 +60977,24 @@
         ]
       },
       "RelayPorts": {
-        "description": "What the relay's machine has bound: its listener on UDP and TCP 443, and whether a certificate stands for TLS on it.",
+        "description": "What the relay's machine has bound: its plain listener on UDP and TCP 3478, and its TLS listener on TCP 5349 while a certificate stands.",
         "type": "object",
         "properties": {
-          "tcp443": {
+          "tcp": {
             "type": "boolean"
           },
           "tls": {
-            "description": "A certificate stands and TCP 443 is bound: the listener answers TLS.",
+            "description": "A certificate stands and TCP 5349 is bound: the TLS listener answers.",
             "type": "boolean"
           },
-          "udp443": {
+          "udp": {
             "type": "boolean"
           }
         },
         "required": [
-          "tcp443",
+          "tcp",
           "tls",
-          "udp443"
+          "udp"
         ]
       },
       "RelayReach": {
@@ -62043,14 +62045,6 @@
           "back"
         ]
       },
-      "RelayRuntimeNeedKind": {
-        "type": "string",
-        "enum": [
-          "forwarder",
-          "low-ports",
-          "rootful"
-        ]
-      },
       "RelayStepFinding": {
         "type": "string",
         "enum": [
@@ -62064,13 +62058,6 @@
         "enum": [
           "NAT-PMP",
           "UPnP"
-        ]
-      },
-      "RelayStepNetwork": {
-        "type": "string",
-        "enum": [
-          "host",
-          "published"
         ]
       },
       "RoutineMadeEventBy": {

@@ -11,7 +11,11 @@
  *   note, the record to copy and its controls, Later; on the phone the
  *   record's "(DNS only, no proxy)" on one line, and Copy record taking the
  *   record exactly as it reads;
- * - the summary, live with tcp 443 down: its badge in attn, a chip per port,
+ * - the certificate step with no Cloudflare token: its words say the
+ *   certificate comes through Cloudflare's DNS and never a port of the
+ *   machine, the token field, Use this token and Skip the name; nothing
+ *   names port 80; Use this token posts the `token` act with what was typed;
+ * - the summary, live with tcp 3478 down: its badge in attn, a chip per port,
  *   the down port's error under the chips, the certificate's end and who
  *   proved it, Check again; Stop relay and the destructive Remove relay
  *   `--space-4` apart, and Remove asking in place under them;
@@ -20,7 +24,8 @@
  * - keyboard focus on Set up and on Remove relay, each ring drawn whole.
  *
  * Nothing in any state scrolls sideways. Every relay failure is checked for
- * the error formula's order. A capture of each state and width goes to
+ * the error formula's order, and no failure nor step word names port 80,
+ * 443, a sysctl or `ip_unprivileged_port_start`. A capture of each state and width goes to
  * `.probe/stream-relay-step/` for the review item to read.
  *
  *   bun scripts/probe-kit/run.ts web stream-relay-step
@@ -53,7 +58,7 @@ const NAME = "turn.example.com";
 const machine = { name: "relay", address: "198.18.4.20", lan: "192.168.1.20" };
 
 const LONG_ERROR =
-  "STUN timeout: no answer from 198.18.4.20:443 within 3000 ms over tcp (connect ECONNREFUSED)";
+  "STUN timeout: no answer from 198.18.4.20:3478 within 3000 ms over tcp (connect ECONNREFUSED)";
 
 const closed: RelayJourneyView = {
   open: false,
@@ -70,7 +75,14 @@ const standing: RelayStep[] = [
   { step: "machine", state: "done" },
   { step: "name", state: "needs", name: NAME, finding: "unresolved" },
   { step: "router", state: "needs" },
-  { step: "runtime", state: "needs", lowest: 443 },
+  {
+    step: "runtime",
+    state: "needs",
+    need: {
+      why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 3478: switch it to its forwarder that carries both.",
+      command: "colima stop && colima start --port-forwarder grpc",
+    },
+  },
   { step: "certificate", state: "waiting" },
   { step: "start", state: "waiting" },
   { step: "prove", state: "waiting" },
@@ -89,9 +101,9 @@ const live: RelaySummary = {
   name: NAME,
   endsAt: Date.UTC(2027, 0, 17, 10),
   ports: [
-    { name: "udp 443", up: true },
-    { name: "tcp 443", up: false, error: LONG_ERROR },
-    { name: "tls", up: true },
+    { name: "udp 3478", up: true },
+    { name: "tcp 3478", up: false, error: LONG_ERROR },
+    { name: "tls 5349", up: true },
   ],
   proven: { device: "CawCo on iPhone", at: Date.UTC(2026, 9, 19, 12, 2) },
   state: "live",
@@ -99,11 +111,24 @@ const live: RelaySummary = {
   whyCommand: null,
 };
 
-/** Every port answering, with no name: udp and tcp 443, no TLS. */
+/** Every port answering, with no name: udp and tcp 3478, no TLS. */
 const PLAIN_PORTS: RelaySummary["ports"] = [
-  { name: "udp 443", up: true },
-  { name: "tcp 443", up: true },
+  { name: "udp 3478", up: true },
+  { name: "tcp 3478", up: true },
 ];
+
+/** The name pointed by hand, so no token came with it: the certificate step asks for one. */
+const tokenAsked: RelayJourneyView = {
+  ...journeying,
+  steps: [
+    { step: "machine", state: "done" },
+    { step: "name", state: "done", name: NAME },
+    { step: "router", state: "done", how: "UPnP" },
+    { step: "certificate", state: "needs" },
+    { step: "start", state: "waiting" },
+    { step: "prove", state: "waiting" },
+  ],
+};
 
 const finished = (summary: RelaySummary): RelayJourneyView => ({
   ...journeying,
@@ -120,27 +145,36 @@ const finished = (summary: RelaySummary): RelayJourneyView => ({
       state: "done",
       device: "CawCo on iPhone",
       at: Date.UTC(2026, 9, 19, 12, 2),
-      ports: "udp 443, tcp 443, tls",
+      ports: "udp 3478, tcp 3478, tls 5349",
     },
   ],
   summary,
   urls: [],
 });
 
-/** The page's one read answered with `journey` through `domain`; an act answered with the same. */
+/** Every act a page posted, by page, as the mock received it. */
+const posted = new WeakMap<Page, unknown[]>();
+
+/** The page's one read answered with `journey` through `domain`; an act answered with the same, its body kept ({@link posted}). */
 const mock = async (
   page: Page,
   journey: RelayJourneyView,
   domain: string | null = DOMAIN
 ): Promise<void> => {
   const answer: RelayAnswer = { domain, journey };
-  await page.route("**/api/stream-relay**", (route) =>
-    route.fulfill({
+  const acts: unknown[] = [];
+  posted.set(page, acts);
+  await page.route("**/api/stream-relay**", (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      acts.push(request.postDataJSON());
+    }
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(answer),
-    })
-  );
+    });
+  });
 };
 
 /** How far the page scrolls sideways (0 when it does not), the section's own too. */
@@ -339,6 +373,64 @@ const journeyLeg = async (
   await capture(page, `journey-name-${leg.name}`);
 };
 
+/** No port 80, 443, sysctl or unprivileged-port floor in the words a person reads. */
+const OLD_PORTS = /\b(?:80|443)\b|sysctl|ip_unprivileged_port_start/;
+
+/**
+ * The certificate step with no token: its words, the token field, Use this
+ * token and Skip the name; nothing in it names port 80; Use this token posts
+ * the `token` act with the token typed.
+ */
+const certificateLeg = async (
+  kit: Kit,
+  base: string,
+  leg: (typeof LEGS)[number]
+) => {
+  const page = await look(kit, base, leg, tokenAsked, "[data-relay-journey]");
+  const read = await page.evaluate(() => {
+    const opened = document.querySelector(
+      "[data-stream-relay] [data-relay-journey] li[data-open]"
+    );
+    return {
+      open: opened?.getAttribute("data-step"),
+      words: opened?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      field: opened?.querySelector("[data-relay-token]") !== null,
+      buttons: [...(opened?.querySelectorAll("button") ?? [])].map((button) =>
+        button.textContent?.trim()
+      ),
+    };
+  });
+  const scroll = await sideways(page);
+  kit.check(
+    `${leg.name} the certificate step with no token: open, "${words.certificateToken(NAME).slice(0, 60)}…", the token field, ${words.useToken} and ${words.skipName}; no port 80 in its words; nothing sideways`,
+    read.open === "certificate" &&
+      read.words.includes(words.certificateToken(NAME)) &&
+      read.field &&
+      // A button's text carries its hidden pending words after its label.
+      read.buttons.some((label) => label?.startsWith(words.useToken)) &&
+      read.buttons.includes(words.skipName) &&
+      !OLD_PORTS.test(read.words) &&
+      scroll.page <= 0,
+    JSON.stringify({ read, scroll })
+  );
+  const token = "cf-probe-token-0123456789";
+  await page.locator("[data-stream-relay] [data-relay-token]").fill(token);
+  await page
+    .locator("[data-stream-relay]")
+    .getByRole("button", { name: words.useToken })
+    .click();
+  await settle(page, 300);
+  const acts = posted.get(page) ?? [];
+  kit.check(
+    `${leg.name} Use this token posts the token act with what was typed: ${JSON.stringify(acts)}`,
+    acts.some(
+      (act) => JSON.stringify(act) === JSON.stringify({ act: "token", token })
+    ),
+    JSON.stringify(acts)
+  );
+  await capture(page, `certificate-token-${leg.name}`);
+};
+
 const summaryLeg = async (
   kit: Kit,
   base: string,
@@ -374,12 +466,12 @@ const summaryLeg = async (
     checkAgain: document.querySelector("[data-relay-check-again]") !== null,
   }));
   kit.check(
-    `${leg.name} the summary, live with tcp 443 down: "${read.badge}" in attn, "${read.line}", chips ${read.chips.join(", ")}, the error under them, "${read.proven}", Check again`,
+    `${leg.name} the summary, live with tcp 3478 down: "${read.badge}" in attn, "${read.line}", chips ${read.chips.join(", ")}, the error under them, "${read.proven}", Check again`,
     read.badge === words.portDown &&
       read.badgeClass.includes("status-attn") &&
       read.line === `${machine.address} · ${NAME}` &&
       JSON.stringify(read.chips) ===
-        JSON.stringify(["udp 443 up", "tcp 443 down", "tls up"]) &&
+        JSON.stringify(["udp 3478 up", "tcp 3478 down", "tls 5349 up"]) &&
       read.errorUnder &&
       read.proven?.startsWith(words.certificateEnds(live.endsAt as number)) ===
         true &&
@@ -721,50 +813,37 @@ const focus = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
 
 /** A relay failure's first clause: what happened, up to its first colon or its first parenthesis. */
 const HAPPENED =
-  /^(?:The stream relay(?:'s certificate[^:]*?)? (?:could not start|was not renewed)[^:]*:|Let's Encrypt did not issue a certificate for \S+ \(|The certificate for \S+ was not issued:|certbot did not finish within \d+ s\.)/;
+  /^(?:The stream relay(?:'s certificate[^:]*?)? (?:could not start|was not renewed)[^:]*:|Let's Encrypt did not issue a certificate for \S+ \(|certbot did not finish within \d+ s\.)/;
 /** The verb its fix opens with. */
 const FIX =
   /\b(?:Run|Install|Free|Give|Point|Check|Start|Try|Pick|Issue|Add)\b/;
 
-/** Every relay failure, on sample values: what happened first, then the fix; a command it names sits in its sentence; no backtick, no 3478 or 5349. */
+/** Every relay failure, on sample values: what happened first, then the fix; a command it names sits in its sentence; no backtick, and no port 80, 443 or sysctl in it or in any step's words. */
 const failures = (kit: Kit): void => {
   const samples = {
     runtimeNeed: RELAY_FAILURES.runtimeNeed("relay", {
-      kind: "forwarder",
-      why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443: switch it to its forwarder that carries both.",
+      why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 3478: switch it to its forwarder that carries both.",
       command: "colima stop && colima start --port-forwarder grpc",
     }),
-    unforwarded: RELAY_FAILURES.unforwarded("relay", ["UDP 443"], 20),
+    unforwarded: RELAY_FAILURES.unforwarded("relay", ["UDP 3478"], 20),
     noRuntime: RELAY_FAILURES.noRuntime("relay", "sudo apt install podman"),
     notDnsName: RELAY_FAILURES.notDnsName("relay", "relay_example"),
-    lowPort: RELAY_FAILURES.lowPort("relay", 443),
-    held: RELAY_FAILURES.held("relay", ["TCP 443 is held by caddy (pid 917)"]),
+    held: RELAY_FAILURES.held("relay", [
+      "TCP 3478 is held by turnserver (pid 917)",
+    ]),
     noCertificate: RELAY_FAILURES.noCertificate("relay", NAME),
     coturnExited: RELAY_FAILURES.coturnExited(
       "relay",
       "1",
-      "bind: Permission denied"
+      "bind: Address in use"
     ),
-    coturnUnbound: RELAY_FAILURES.coturnUnbound("relay", ["TCP 443"], 20),
-    certificateHttp: RELAY_FAILURES.certificateHttp(
-      NAME,
-      "Detail: DNS problem: NXDOMAIN looking up A"
-    ),
+    coturnUnbound: RELAY_FAILURES.coturnUnbound("relay", ["TCP 5349"], 20),
     certificateDns: RELAY_FAILURES.certificateDns(
       NAME,
       "DNS problem: NXDOMAIN looking up TXT"
     ),
-    certificatePort80: RELAY_FAILURES.certificatePort80(
-      NAME,
-      "TCP 80 is held by nginx (pid 12)"
-    ),
-    certbotSlow: RELAY_FAILURES.certbotSlow(180, true),
+    certbotSlow: RELAY_FAILURES.certbotSlow(180),
     renewNone: RELAY_FAILURES.renewNone("relay"),
-    renewPort80: RELAY_FAILURES.renewPort80(
-      "relay",
-      NAME,
-      "TCP 80 is held by nginx (pid 12)"
-    ),
     renewRefused: RELAY_FAILURES.renewRefused(
       "relay",
       NAME,
@@ -789,18 +868,27 @@ const failures = (kit: Kit): void => {
       read.filter((row) => !(row.ordered && row.command) || row.backtick)
     )
   );
-  const sysctl = samples.lowPort.command ?? "";
-  const all = JSON.stringify({ samples });
+  const forwards = words.forwards(machine.lan);
+  const said = [
+    ...Object.values(samples).map((failure) => failure.why),
+    words.none,
+    words.nameSkipped,
+    words.nameWhy(NAME),
+    words.nameWhyNone,
+    words.noName,
+    words.certificateToken(NAME),
+    words.runtime,
+    words.runtimeDone,
+    words.startDone(machine.name, true),
+    forwards,
+  ];
+  const old = said.filter((line) => OLD_PORTS.test(line));
   kit.check(
-    `the sysctl fix is one line that sets the value live and keeps it over a reboot ("${sysctl}"), the low-ports step says the same; no failure names 3478 or 5349`,
-    sysctl ===
-      "sudo sh -c 'sysctl -w net.ipv4.ip_unprivileged_port_start=443 && echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-cawco-relay.conf'" &&
-      words.runtimeCommand({ step: "runtime", state: "needs", lowest: 443 }) ===
-        sysctl &&
-      words.runtimeCommand({ step: "runtime", state: "needs", lowest: 80 }) ===
-        sysctl.replaceAll("=443", "=80") &&
-      !(all.includes("3478") || all.includes("5349")),
-    JSON.stringify({ sysctl })
+    `the router's forwards are "${forwards}"; the certificate step says "${words.certificateToken(NAME)}"; no failure or step word names port 80, 443, a sysctl or ip_unprivileged_port_start (${old.length} do)`,
+    forwards === `UDP 3478 · TCP 3478 · TCP 5349 → ${machine.lan}` &&
+      words.certificateToken(NAME).includes("Cloudflare") &&
+      old.length === 0,
+    JSON.stringify(old)
   );
 };
 
@@ -813,6 +901,7 @@ const spec: Spec = {
       // biome-ignore lint/performance/noAwaitInLoops: one width at a time, each state on its own page
       await before(kit, base, leg);
       await journeyLeg(kit, base, leg);
+      await certificateLeg(kit, base, leg);
       await summaryLeg(kit, base, leg);
       await otherStates(kit, base, leg);
       await dark(kit, base, leg);

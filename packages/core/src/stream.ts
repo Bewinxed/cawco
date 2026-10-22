@@ -113,12 +113,19 @@ import type { TailnetServing } from "./tailnet-https";
  * 23: an install's problem may be `penalized` (core install.ts
  *    `InstallProblem`): the machine's sshd turns the hub away for now. A
  *    page built for 22 has no words for it, so it reloads first.
+ * 24: the stream relay listens on TURN's own ports, 3478 and 5349, and its
+ *    certificate comes only by DNS at Cloudflare: its frame's `ports` says
+ *    `udp`, `tcp` and `tls`; its chips are `udp 3478`, `tcp 3478` and
+ *    `tls 5349`; the runtime step carries no `lowest` nor `network` and its
+ *    need no `kind`; the router step no `http`; the certificate step may be
+ *    `needs` with `tokenWhy`, answered by the `token` act. A page built for
+ *    23 would draw the 443 chips and the low ports, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 23;
+export const WIRE_PROTOCOL = 24;
 
 /**
  * What a session's stream carries: the changes each frame made to its

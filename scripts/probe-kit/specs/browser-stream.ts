@@ -13,7 +13,7 @@
  *   (the hub swapped its own in);
  * - 6 · neko's own ICE servers are exactly what agent relay-urls.ts composes
  *   for this machine (on the relay's machine `turn:<coturn's media
- *   address>:443?transport=udp` alone), with the credential minted for
+ *   address>:3478?transport=udp` alone), with the credential minted for
  *   `browser:<key>`, then the fleet's STUN server, nothing of Google's; and
  *   coturn's log shows neko's allocation from its slot's address (.10 + s)
  *   on the media network;
@@ -42,12 +42,13 @@
  *
  * The relay is this spec's own coturn, made as the agent makes the relay
  * (agent relay.ts): its image and arguments, a secret made here, on the
- * runtime's media network at the relay's own address (.2), its listener (443
- * inside) published on a stand-in port picked as browser-relay.ts picks one.
+ * runtime's media network at the relay's own address (.2), its listener (3478
+ * inside) published on a stand-in port picked as browser-relay.ts picks one,
+ * so it never meets a relay or TURN server that holds 3478 on this machine.
  * So it runs only where this runtime has no relay (no `cawco-relay`). The hub
  * is given a relay record for it under this fleet's own machine, with this
  * machine's LAN address as P and its reach, state `stopped`: the hub mints
- * from it and never starts, stops or probes it. The record's URLs name 443,
+ * from it and never starts, stops or probes it. The record's URLs name 3478,
  * so a viewer's page points them at the stand-in before its peer connection
  * reads them. The fleet's STUN server is a stand-in (relay-journey.ts
  * `stunStandIn`) on every address of this machine, answering its LAN address,
@@ -59,7 +60,7 @@
  * --hold <s>`. Then this spec starts no coturn, the record names a machine
  * that is not this one (P = R, its LAN reach R), this machine's browser is
  * given the other-machine URL list by the agent itself, and legs 6–8 run
- * against that relay on 443 (6 without coturn's log, which stays there); leg
+ * against that relay on 3478 (6 without coturn's log, which stays there); leg
  * 9's stand-in is not run.
  *
  * Run on the host, outside every workspace boundary (a boundary hides the
@@ -475,7 +476,7 @@ interface RelayAt {
   machineId: string;
   /** coturn's address on the media network, on this machine's runtime. */
   media: string;
-  /** The listener's port as a viewer reaches it: a stand-in, or 443. */
+  /** The listener's port as a viewer reaches it: a stand-in, or 3478. */
   port: number;
   /** The relay's machine's LAN addresses, as the record's reach says them. */
   reachLan: string[];
@@ -608,7 +609,7 @@ const ownCoturnRun = async (kit: Kit, here: Here): Promise<void> => {
   const standIn = await freeStandIn();
   if (
     !kit.check(
-      `a stand-in for 443 free on UDP and TCP, outside the hub's preview ports and the relay's: ${standIn ?? "none found"}`,
+      `a stand-in for 3478 free on UDP and TCP, outside the hub's preview ports and the relay's: ${standIn ?? "none found"}`,
       standIn !== undefined
     ) ||
     standIn === undefined
@@ -616,7 +617,7 @@ const ownCoturnRun = async (kit: Kit, here: Here): Promise<void> => {
     return;
   }
   const secret = randomBytes(32).toString("base64url");
-  const where = ` (this spec's coturn at ${relayMedia} on ${network.name}, P ${address}, its listener published on ${standIn}, a stand-in for 443${runtime.ownNetwork ? "" : ` through ${runtime.endpoint}`})`;
+  const where = ` (this spec's coturn at ${relayMedia} on ${network.name}, P ${address}, its listener published on ${standIn}, a stand-in for 3478${runtime.ownNetwork ? "" : ` through ${runtime.endpoint}`})`;
   const { pullImage } =
     await import("../../../packages/agent/src/browser/image");
   await pullImage(runtime.docker, relay.RELAY_IMAGE, (step) =>
@@ -1276,7 +1277,7 @@ const otherMachineLeg = async (
   // can use to connect to the host", podman-run(1) --add-host), not the
   // LAN address itself, which a rootless Podman's pasta copies into the
   // container ("IPv4 and IPv6 addresses and routes ... are copied from the
-  // host"). Each URL still comes in through the published listener, 443
+  // host"). Each URL still comes in through the published listener, 3478
   // read as its stand-in. Another fleet machine names the LAN address as
   // composed; this leg checks that order below.
   // Each once, as relay-urls.ts gives them: the LAN and the public URL name
@@ -1369,7 +1370,7 @@ const otherMachineLeg = async (
       to: relay.port,
     });
     kit.note(
-      `9 · the stand-in neko at ${address} on ${network.name} (${network.subnet}), given ${JSON.stringify(urls)} (relay-urls.ts for another machine: ${JSON.stringify(composed)}, 443 read as the stand-in ${relay.port}, this machine named as ${HOST_ALIAS}, the runtime's host-gateway)`
+      `9 · the stand-in neko at ${address} on ${network.name} (${network.subnet}), given ${JSON.stringify(urls)} (relay-urls.ts for another machine: ${JSON.stringify(composed)}, 3478 read as the stand-in ${relay.port}, this machine named as ${HOST_ALIAS}, the runtime's host-gateway)`
     );
     const repeated = composed.filter((url, at) => composed.indexOf(url) !== at);
     kit.check(

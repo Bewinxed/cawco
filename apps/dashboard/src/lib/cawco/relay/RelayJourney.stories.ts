@@ -39,7 +39,7 @@ const path = (
       { step: "machine", state: "done" },
       { step: "name", state: "checking", name, askedAt: Date.now() - 4000 },
       { step: "router", state: "waiting" },
-      { step: "runtime", state: "checking", lowest: 443 },
+      { step: "runtime", state: "checking" },
       { step: "certificate", state: "waiting" },
       { step: "start", state: "waiting" },
       { step: "prove", state: "waiting" },
@@ -49,7 +49,7 @@ const path = (
 const ticked = {
   name: { step: "name", state: "done", name },
   router: { step: "router", state: "done", how: "UPnP" },
-  runtime: { step: "runtime", state: "done", lowest: 443 },
+  runtime: { step: "runtime", state: "done" },
   certificate: { step: "certificate", state: "done", endsAt: ENDS },
   start: { step: "start", state: "done" },
 } satisfies Partial<Record<RelayStep["step"], RelayStep>>;
@@ -58,9 +58,9 @@ const proven: RelaySummary = {
   machine,
   name,
   ports: [
-    { name: "udp 443", up: true },
-    { name: "tcp 443", up: true },
-    { name: "tls", up: true },
+    { name: "udp 3478", up: true },
+    { name: "tcp 3478", up: true },
+    { name: "tls 5349", up: true },
   ],
   endsAt: ENDS,
   proven: { device: "CawCo on iPhone", at: PROVEN },
@@ -121,7 +121,7 @@ export const PickMachinePhone = {
 };
 
 const checking = { steps: path({}) };
-/** A · Checking: just started through the domain; obelisk ticked, the name and the low ports being checked. */
+/** A · Checking: just started through the domain; obelisk ticked, the name and the runtime being checked. */
 export const Checking = { args: checking, parameters: { viewport: 1440 } };
 /** A · Checking, in Caw's panel or on a phone. */
 export const CheckingPhone = { args: checking, parameters: { viewport: 390 } };
@@ -129,10 +129,10 @@ export const CheckingPhone = { args: checking, parameters: { viewport: 390 } };
 const needsYou = {
   steps: path({
     name: { step: "name", state: "needs", name, finding: "unresolved" },
-    runtime: { step: "runtime", state: "needs", lowest: 443 },
+    certificate: { step: "certificate", state: "needs" },
   }),
 };
-/** B · Needs you: the name doesn't resolve yet and the low ports need the command; the name, first, is the one open. */
+/** B · Needs you: the name doesn't resolve yet and the certificate needs a token; the name, first, is the one open. */
 export const NeedsYou = { args: needsYou, parameters: { viewport: 1440 } };
 /** B · Needs you as Caw's Needs you row, with its onboarding meta line. */
 export const NeedsYouPhone = {
@@ -174,16 +174,43 @@ export const TokenRefusedPhone = {
   parameters: { viewport: 390 },
 };
 
-const lowPorts = {
+const certificateToken = {
   steps: path({
     name: ticked.name,
-    runtime: { step: "runtime", state: "needs", lowest: 443 },
+    router: ticked.router,
+    runtime: ticked.runtime,
+    certificate: { step: "certificate", state: "needs" },
   }),
 };
-/** B · The name ticked; the low ports stand: the command to run once on obelisk. */
-export const LowPorts = { args: lowPorts, parameters: { viewport: 1440 } };
-/** B · The low ports, on a phone: the command clamped to two lines, Copy command takes it whole. */
-export const LowPortsPhone = { args: lowPorts, parameters: { viewport: 390 } };
+/** B · The name pointed by hand: the certificate is issued only through Cloudflare's DNS, so its step asks for the token, Skip the name beside it. */
+export const CertificateToken = {
+  args: certificateToken,
+  parameters: { viewport: 1440 },
+};
+/** B · The certificate's token, on a phone. */
+export const CertificateTokenPhone = {
+  args: certificateToken,
+  parameters: { viewport: 390 },
+};
+
+const certificateTokenRefused = {
+  steps: path({
+    name: ticked.name,
+    router: ticked.router,
+    runtime: ticked.runtime,
+    certificate: {
+      step: "certificate",
+      state: "needs",
+      tokenWhy:
+        "Cloudflare has no zone bewinxed.com this token can reach. Make one from the Edit zone DNS template for bewinxed.com, then paste it again.",
+    },
+  }),
+};
+/** B · The certificate's token refused: Cloudflare's words under the field. */
+export const CertificateTokenRefused = {
+  args: certificateTokenRefused,
+  parameters: { viewport: 1440 },
+};
 
 const forwarder = {
   steps: path({
@@ -191,11 +218,8 @@ const forwarder = {
     runtime: {
       step: "runtime",
       state: "needs",
-      lowest: 443,
-      network: "published",
       need: {
-        kind: "forwarder",
-        why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443: switch it to its forwarder that carries both.",
+        why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 3478: switch it to its forwarder that carries both.",
         command: "colima stop && colima start --port-forwarder grpc",
       },
     },
@@ -253,7 +277,7 @@ const nameSkipped = {
     start: { step: "start", state: "running", progress: "Pulling 3 of 7" },
   }).filter((step) => step.step !== "certificate"),
 };
-/** B″ · The name skipped: no certificate step, the relay plain on 443, pulling. */
+/** B″ · The name skipped: no certificate step, the relay plain on 3478, pulling. */
 export const NameSkipped = {
   args: nameSkipped,
   parameters: { viewport: 1440 },
@@ -293,7 +317,7 @@ const provenInside = {
       step: "prove",
       state: "inside",
       device: "Chrome on Linux",
-      ports: "udp 443, tcp 443, tls",
+      ports: "udp 3478, tcp 3478, tls 5349",
     },
   }),
 };
@@ -348,7 +372,7 @@ const noName = {
     ports: proven.ports.slice(0, 2),
   },
 };
-/** F · Settings › Browsers with no name: plain on 443, and Add a name. */
+/** F · Settings › Browsers with no name: plain on 3478, and Add a name. */
 export const NoName = { args: noName, parameters: { viewport: 1440 } };
 /** F · No name, on a phone. */
 export const NoNamePhone = { args: noName, parameters: { viewport: 390 } };
@@ -382,8 +406,8 @@ export const LongNamesPhone = {
         tokenWhy:
           "Cloudflare has no zone northwind-logistics.co.uk this token can reach. Make one from the Edit zone DNS template for northwind-logistics.co.uk, then paste it again.",
       },
-      router: { step: "router", state: "refused", http: true },
-      runtime: { step: "runtime", state: "needs", lowest: 80 },
+      router: { step: "router", state: "refused" },
+      certificate: { step: "certificate", state: "needs" },
     }),
   },
   parameters: { viewport: 390 },

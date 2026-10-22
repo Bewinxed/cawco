@@ -13,11 +13,12 @@
  * router maps it to, by STUN), has the certificate issued, and calls
  * {@link StreamRelay.setup} with all of it.
  *
- * - **Health**: every 60 s one STUN binding request per transport on the
- *   relay's one port, 443: UDP, TCP, and TLS while a certificate stands; each
- *   answered within 3 s is up, with the request's error kept otherwise.
+ * - **Health**: every 60 s one STUN binding request per listener: UDP and
+ *   TCP on 3478, and TLS on 5349 while a certificate stands; each answered
+ *   within 3 s is up, with the request's error kept otherwise.
  * - **Renewal** (`stream-relay-renew`): with a DNS name, `relay.renew` once a
- *   day, and certbot renews only when the certificate is due. A fixed 60 days
+ *   day by DNS with the person's Cloudflare token, and certbot renews only
+ *   when the certificate is due. A fixed 60 days
  *   would not hold: Let's Encrypt moves to 64-day certificates on 2027-02-10
  *   and 45-day ones on 2028-02-16, and says "renewing at a hardcoded interval
  *   of 60 days will no longer be sufficient"
@@ -43,10 +44,12 @@ import {
   type RelayPortHealth,
   type RelayPortName,
   type RelayReach,
+  type RelayRenewArgs,
   type RelayRenewed,
   type RelayStartArgs,
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
+  STREAM_RELAY_TLS_PORT,
   STREAM_RELAY_WORDS,
   streamRelayUrls,
 } from "@cawco/core/stream-relay";
@@ -129,7 +132,7 @@ export interface StreamRelayDeps {
   call: RelayCall;
   /** The record changed: the journey's view follows. */
   changed: () => void;
-  /** The person's Cloudflare token, for a renewal by DNS; null without one. */
+  /** The person's Cloudflare token, for the renewal by DNS; null without one. */
   cloudflareToken: () => string | null;
   db: StreamRelayDb;
   /** The hub's lifetime: the health and renewal timers run on it. */
@@ -208,7 +211,7 @@ const bind = (url: string): Promise<{ up: boolean; error?: string }> =>
     }
   });
 
-/** The relay's listener asked once on each transport, all at once: UDP, TCP, and TLS with a name. */
+/** The relay's listeners asked once each, all at once: UDP and TCP 3478, and TLS on 5349 with a name. */
 export const probeRelay = (
   address: string,
   tlsName: string | null
@@ -216,14 +219,14 @@ export const probeRelay = (
   const host = address.includes(":") ? `[${address}]` : address;
   const on = STREAM_RELAY_PORT;
   const ports: [RelayPortName, string][] = [
-    ["udp 443", `stun:${host}:${on}?transport=udp`],
-    ["tcp 443", `stun:${host}:${on}?transport=tcp`],
+    ["udp 3478", `stun:${host}:${on}?transport=udp`],
+    ["tcp 3478", `stun:${host}:${on}?transport=tcp`],
     ...(tlsName
       ? [
-          ["tls", `stuns:${tlsName}:${on}?transport=tcp`] as [
-            RelayPortName,
-            string,
-          ],
+          [
+            "tls 5349",
+            `stuns:${tlsName}:${STREAM_RELAY_TLS_PORT}?transport=tcp`,
+          ] as [RelayPortName, string],
         ]
       : []),
   ];
@@ -393,10 +396,19 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return;
     }
     const token = deps.cloudflareToken();
+    if (!token) {
+      // The certificate is renewed only by DNS: the journey's certificate
+      // step asks for the token, and the one standing serves until it ends.
+      console.warn(
+        `[stream-relay] stream-relay-renew: no Cloudflare token for ${relay.hostname}, so its certificate is not renewed until the journey has one`
+      );
+      return;
+    }
+    const args: RelayRenewArgs = { cloudflareToken: token };
     const read = await call(
       relay.machineId,
       RELAY_RENEW,
-      [token ? { cloudflareToken: token } : {}],
+      [args],
       RENEW_CALL_MS
     );
     const done = answered<RelayRenewed>(

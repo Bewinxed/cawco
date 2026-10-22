@@ -15,13 +15,16 @@ import { getDomain } from "tldts";
 import { CAWCO_ENV, readEnv } from "./index";
 
 /**
- * The ports the relay takes. It listens on one, 443 (`listening-port`), plain
- * UDP and TCP always, and TLS on the same listener once a certificate stands
- * (turnserver.conf: "TLS & DTLS sessions can connect to the 'plain' TCP & UDP
- * port(s), too"). coturn opens the rest itself on one listening IP: the alt
- * UDP side on 444, and with a certificate its TLS listener on 5349 and 5350,
- * never forwarded and never minted. No preview, on the hub or on any agent,
- * ever takes one of these (hub preview.ts, agent hub-loopback.ts).
+ * The ports the relay takes: TURN's own, every one above 1024, so no machine
+ * lets it bind anything first (no root, no sysctl, on any OS). coturn's
+ * defaults are the IANA ones (turnserver.conf, github.com/coturn/coturn
+ * examples/etc/turnserver.conf: "TURN listener port for UDP and TCP
+ * (Default: 3478)", "TURN listener port for TLS (Default: 5349)"): plain UDP
+ * and TCP on 3478 always, and TLS on 5349 once a certificate stands. coturn
+ * opens the alt sides itself on one listening IP ("listening port plus
+ * one": 3479, and 5350 with a certificate), never forwarded and never minted.
+ * No preview, on the hub or on any agent, ever takes one of these (hub
+ * preview.ts, agent hub-loopback.ts).
  *
  * Its allocations relay through the UDP range, inside coturn's own container
  * alone: the range is never published nor forwarded. Every relayed stream is
@@ -30,16 +33,16 @@ import { CAWCO_ENV, readEnv } from "./index";
  * allocations, about 40 relayed streams at once.
  */
 export const STREAM_RELAY_PORTS = {
-  udp: [443, 444],
-  tcp: [443, 5349, 5350],
+  udp: [3478, 3479],
+  tcp: [3478, 3479, 5349, 5350],
   relayRange: [24_000, 24_248],
 } as const;
 
-/** The one port the relay listens on and its URLs name, UDP and TCP, plain and TLS. */
-export const STREAM_RELAY_PORT = 443;
+/** The relay's plain listener, UDP and TCP (coturn's `listening-port`). */
+export const STREAM_RELAY_PORT = 3478;
 
-/** The port a certificate over HTTP is issued and renewed on (certbot standalone). */
-export const RELAY_HTTP_PORT = 80;
+/** The relay's TLS listener, TCP, once a certificate stands (coturn's `tls-listening-port`). */
+export const STREAM_RELAY_TLS_PORT = 5349;
 
 /** The relay's UDP relay range, as `relay.start` carries it. */
 export type RelayRange = readonly [first: number, last: number];
@@ -72,12 +75,12 @@ export const stunServer = (): string =>
 export type StreamRelayState =
   "pulling" | "starting" | "live" | "stopped" | "failed";
 
-/** What the relay's machine has bound: its listener on UDP and TCP 443, and whether a certificate stands for TLS on it. */
+/** What the relay's machine has bound: its plain listener on UDP and TCP 3478, and its TLS listener on TCP 5349 while a certificate stands. */
 export interface RelayPorts {
-  tcp443: boolean;
-  /** A certificate stands and TCP 443 is bound: the listener answers TLS. */
+  tcp: boolean;
+  /** A certificate stands and TCP 5349 is bound: the TLS listener answers. */
   tls: boolean;
-  udp443: boolean;
+  udp: boolean;
 }
 
 /** Daemon-originated: the stream relay on this machine, whole, on each change. */
@@ -115,7 +118,7 @@ export const RELAY_START = "relay.start";
 export interface RelayStartArgs {
   /** The address the relay is reached at, as its URLs name it: coturn reports it for every allocation. */
   address: string;
-  /** A DNS name pointing at the machine whose certificate stands ({@link RELAY_CERTIFY}): TLS answers on 443. */
+  /** A DNS name pointing at the machine whose certificate stands ({@link RELAY_CERTIFY}): TLS answers on 5349. */
   hostname?: string;
   relayRange: RelayRange;
   /** The shared secret coturn checks each credential against (`static-auth-secret`). */
@@ -124,13 +127,14 @@ export interface RelayStartArgs {
 
 /**
  * Hub → daemon: issue the relay's certificate for `hostname` (kept, when one
- * stands and is not due): by DNS at Cloudflare with the person's token, else
- * over HTTP on port 80. Answers {@link RelayCertified}.
+ * stands and is not due), by DNS at Cloudflare with the person's token: the
+ * one way it is issued, so no port is opened for it. Answers
+ * {@link RelayCertified}.
  */
 export const RELAY_CERTIFY = "relay.certify";
 export interface RelayCertifyArgs {
-  /** The person's Cloudflare API token (Zone · DNS · Edit): the DNS challenge, no port 80. */
-  cloudflareToken?: string;
+  /** The person's Cloudflare API token (Zone · DNS · Edit on the name's zone): the DNS challenge. */
+  cloudflareToken: string;
   hostname: string;
 }
 export interface RelayCertified {
@@ -144,8 +148,11 @@ export const RELAY_STOP = "relay.stop";
 /** Hub → daemon: the relay gone from the machine: its container, then its certificate volume, then its router mappings (Remove relay, or the relay moved elsewhere). */
 export const RELAY_REMOVE = "relay.remove";
 
-/** Hub → daemon: renew the relay's certificate when its issuer says it is due, and restart coturn on a new one. Carries {@link RelayCertifyArgs}' token when it was issued by DNS. */
+/** Hub → daemon: renew the relay's certificate when its issuer says it is due, by DNS with the person's token, and restart coturn on a new one. */
 export const RELAY_RENEW = "relay.renew";
+export interface RelayRenewArgs {
+  cloudflareToken: string;
+}
 
 /** What `relay.renew` did: renewed (coturn restarted on the new certificate), or kept the one standing. */
 export interface RelayRenewed {
@@ -162,25 +169,14 @@ export interface RelayRenewed {
 export const RELAY_RUNTIME = "relay.runtime";
 
 /**
- * Where the runtime's engine runs, for the journey's runtime step's words:
- * `host`, on the machine itself (a native engine on Linux), whose rootless
- * form must be let bind 443; `published`, in a VM (every Mac runtime; Colima
- * or Docker Desktop on Linux), whose port forwarder must carry UDP and TCP.
- * The relay runs alike on both: its container on the media network, its
- * listener published on every address of the machine.
+ * A VM's port forwarder that carries less than UDP and TCP (Colima's ssh
+ * one carries TCP alone), with the sentence and the command that switch it
+ * to one that carries both. Every port the relay takes is above 1024, so no
+ * runtime, rootless or in a VM, must be let bind it.
  */
-export type RelayNetwork = "host" | "published";
-
-/** A setting the runtime must change before the relay can run there, with the sentence and the command that change it. */
 export interface RelayRuntimeNeed {
   /** The fix, one line for a terminal. */
   command: string;
-  /**
-   * `low-ports`: a rootless engine on Linux, below `ip_unprivileged_port_start`;
-   * `forwarder`: a VM's port forwarder that carries less than UDP and TCP;
-   * `rootful`: a VM's rootless engine, which can't publish a port under 1024.
-   */
-  kind: "low-ports" | "forwarder" | "rootful";
   /** What is short and how to change it, in the error formula's words. */
   why: string;
 }
@@ -188,8 +184,7 @@ export interface RelayRuntimeNeed {
 export interface RelayRuntimeRead {
   /** What must change first; null when the runtime carries the relay as it is. */
   need: RelayRuntimeNeed | null;
-  network: RelayNetwork;
-  /** The runtime has a setting the relay depends on (a rootless engine on Linux, or any VM's): the journey's runtime step applies. */
+  /** The engine runs in a VM, whose forwarder carries the relay's ports: the journey's runtime step applies. */
   stepApplies: boolean;
 }
 
@@ -200,15 +195,13 @@ export interface RelayRuntimeRead {
  */
 export const RELAY_MAP = "relay.map";
 export interface RelayMapArgs {
-  /** TCP 80 too: the certificate is issued and renewed over HTTP. */
-  http: boolean;
   /** The machine's address on the router's network, the forwards' target. */
   lan: string;
 }
 export interface RelayMapped {
   /** How the router answered: UPnP or NAT-PMP; null when neither did. */
   how: RelayMapHow | null;
-  /** UDP and TCP 443 (and TCP 80 with `http`) mapped. */
+  /** UDP and TCP 3478 and TCP 5349 mapped. */
   listener: boolean;
   /** The whole UDP relay range mapped; false when the router capped its table. */
   range: boolean;
@@ -228,9 +221,9 @@ export interface RelayProveArgs {
 }
 
 /**
- * The relay's ICE server URLs, every one on 443: TURN over UDP and TCP, and
- * with a DNS name TURN over TLS. A browser whose runtime forwards only TCP,
- * or nothing, gathers relay candidates from the TCP and TLS URLs alone
+ * The relay's ICE server URLs: TURN over UDP and TCP on 3478, and with a DNS
+ * name TURN over TLS on 5349. A browser whose runtime forwards only TCP, or
+ * nothing, gathers relay candidates from the TCP and TLS URLs alone
  * (pion/ice `relayNetworkTypesForURL`), so each form is listed.
  */
 export const streamRelayUrls = (
@@ -242,20 +235,20 @@ export const streamRelayUrls = (
     `turn:${host}:${STREAM_RELAY_PORT}?transport=udp`,
     `turn:${host}:${STREAM_RELAY_PORT}?transport=tcp`,
     ...(hostname
-      ? [`turns:${hostname}:${STREAM_RELAY_PORT}?transport=tcp`]
+      ? [`turns:${hostname}:${STREAM_RELAY_TLS_PORT}?transport=tcp`]
       : []),
   ];
 };
 
 /** One port the hub's health check asks, by its chip's words. */
-export type RelayPortName = "udp 443" | "tcp 443" | "tls";
+export type RelayPortName = "udp 3478" | "tcp 3478" | "tls 5349";
 
-/** A relay URL's chip words: `turns:` is TLS, else its transport on 443. */
+/** A relay URL's chip words: `turns:` is TLS on 5349, else its transport on 3478. */
 export const portNameOf = (url: string): RelayPortName => {
   if (url.startsWith("turns:")) {
-    return "tls";
+    return "tls 5349";
   }
-  return url.includes("transport=tcp") ? "tcp 443" : "udp 443";
+  return url.includes("transport=tcp") ? "tcp 3478" : "udp 3478";
 };
 
 /** One port's answer to the hub's STUN binding request. */
@@ -302,8 +295,8 @@ export type NameFinding = "unresolved" | "proxied" | "elsewhere";
 /**
  * One step on the path, by what it is and where it stands. A step that does
  * not apply to this machine is not in the list (the router on a machine with
- * a public interface, the low ports on a root runtime, the certificate with
- * no name).
+ * a public interface, the runtime where its engine runs on the machine
+ * itself, the certificate with no name).
  */
 export type RelayStep =
   | {
@@ -333,22 +326,19 @@ export type RelayStep =
        */
       state: "waiting" | "needs" | "asking" | "refused" | "by-hand" | "done";
       how?: RelayMapHow;
-      /** TCP 80 is forwarded too: the certificate is issued and renewed over HTTP. */
-      http?: boolean;
     }
   | {
       step: "runtime";
       state: "waiting" | "checking" | "needs" | "done";
-      /** The lowest port the relay will ever bind: 443, or 80 with a certificate over HTTP. */
-      lowest: 443 | 80;
-      /** `needs` only: the setting to change, as the machine's runtime read it. */
+      /** `needs` only: the forwarder to switch, as the machine's runtime read it. */
       need?: RelayRuntimeNeed;
-      /** How the relay meets the network there; read before the step stands, absent while checking. */
-      network?: RelayNetwork;
     }
   | {
       step: "certificate";
-      state: "waiting" | "running" | "failed" | "done";
+      /** `needs`: no Cloudflare token reaches the name's zone yet, and the step asks for one. */
+      state: "waiting" | "needs" | "running" | "failed" | "done";
+      /** Cloudflare refused the token pasted here: its words, under the token field. */
+      tokenWhy?: string;
       /** Its failure, in the error formula's words. */
       why?: string;
       /** When the certificate ends (ms epoch). */
@@ -373,7 +363,7 @@ export type RelayStep =
       at?: number;
       /** The device that failed it was outside the relay's network. */
       outside?: boolean;
-      /** The ports that answered it, "udp 443, tcp 443, tls". */
+      /** The ports that answered it, "udp 3478, tcp 3478, tls 5349". */
       ports?: string;
       /** It failed by a refused credential (a 401), not by no answer. */
       refused?: boolean;
@@ -427,6 +417,8 @@ export type RelayAct =
         | "remove";
     }
   | { act: "add-record"; token: string }
+  /** The certificate step's token: checked against the name's zone and kept sealed. */
+  | { act: "token"; token: string }
   | { act: "pick"; machineId: string }
   | { act: "name"; name: string };
 
@@ -513,7 +505,7 @@ export const RELAY_DNS_NAME =
 
 /** The ports the relay answers on, by whether a name stands: its chips' and its tick's words. */
 export const portsWords = (named: boolean): string =>
-  named ? "udp 443, tcp 443, tls" : "udp 443, tcp 443";
+  named ? "udp 3478, tcp 3478, tls 5349" : "udp 3478, tcp 3478";
 
 /** "17 Jan": a certificate's end, in this screen's zone. */
 export const relayDay = (at: number): string =>
@@ -531,9 +523,9 @@ export const relayWhen = (at: number, now = Date.now()): string => {
   return same ? `today ${time}` : `${relayDay(at)}, ${time}`;
 };
 
-/** The forwards to make on a router, as one line to copy: the listener, and TCP 80 for a certificate over HTTP. */
-const forwardsOf = (lan: string, http: boolean): string =>
-  `UDP 443 · TCP 443${http ? " · TCP 80" : ""} → ${lan}`;
+/** The forwards to make on a router, as one line to copy: the plain listener and the TLS one. */
+const forwardsOf = (lan: string): string =>
+  `UDP ${STREAM_RELAY_PORT} · TCP ${STREAM_RELAY_PORT} · TCP ${STREAM_RELAY_TLS_PORT} → ${lan}`;
 
 /* ------------------------------------------------------------------ */
 /* Failures                                                             */
@@ -552,12 +544,6 @@ const notRenewed = (machine: string, name: string): string =>
 const renewNext =
   "The hub asks again tomorrow, and the certificate standing serves until it ends.";
 
-/** The one-line fix for the low ports: the value set live and kept over a reboot. */
-export const lowPortsCommand = (port: number): string => {
-  const setting = `net.ipv4.ip_unprivileged_port_start=${port}`;
-  return `sudo sh -c 'sysctl -w ${setting} && echo ${setting} > /etc/sysctl.d/90-cawco-relay.conf'`;
-};
-
 /**
  * Every failure the relay's machine reports, in WORDS.md's error formula:
  * what happened, why, how to fix it, what happens next. The agent throws
@@ -565,7 +551,7 @@ export const lowPortsCommand = (port: number): string => {
  * `command` in code type.
  */
 export const RELAY_FAILURES = {
-  /** The runtime's own setting short (the journey's runtime step names it first). */
+  /** The VM's forwarder short (the journey's runtime step names it first). */
   runtimeNeed: (machine: string, need: RelayRuntimeNeed): RelayFailure => ({
     why: `${couldNotStart(machine)} ${need.why} Run ${need.command} there once, then start the stream relay again.`,
     command: need.command,
@@ -585,13 +571,6 @@ export const RELAY_FAILURES = {
   notDnsName: (machine: string, name: string): RelayFailure => ({
     why: `${couldNotStart(machine)} ${name} is not a DNS name. Give a name like turn.example.com, or skip the name, then start the stream relay again.`,
   }),
-  lowPort: (machine: string, port: number): RelayFailure => {
-    const command = lowPortsCommand(port);
-    return {
-      why: `${couldNotStart(machine)} port ${port} is below the range this machine lets a rootless container runtime bind. Run ${command} there once (it holds a reboot), or use a root container runtime, then start the stream relay again.`,
-      command,
-    };
-  },
   held: (machine: string, held: readonly string[]): RelayFailure => ({
     why: `${couldNotStart(machine)} ${held.join("; ")}, and the stream relay listens there. Free ${held.length === 1 ? "it" : "them"}, then start the stream relay again.`,
   }),
@@ -613,30 +592,21 @@ export const RELAY_FAILURES = {
     why: `${couldNotStart(machine)} coturn did not bind ${ports.join(", ")} within ${seconds} s. Check that nothing else holds ${ports.length === 1 ? "it" : "them"}, then start the stream relay again.`,
   }),
   /** The certificate step's own failures: what Let's Encrypt or certbot said, and the step's verb, Retry. */
-  certificateHttp: (name: string, said: string): RelayFailure => ({
-    why: `Let's Encrypt did not issue a certificate for ${name} (${said}). Point ${name} at this machine and let TCP 80 reach it, then Retry.`,
-  }),
   certificateDns: (name: string, said: string): RelayFailure => ({
     why: `Let's Encrypt did not issue a certificate for ${name} (${said}). Check the token can edit ${zoneOf(name) ?? name}'s DNS, then Retry.`,
   }),
-  certificatePort80: (name: string, held: string): RelayFailure => ({
-    why: `The certificate for ${name} was not issued: ${held}, and it is issued over port 80. Free it, then Retry.`,
-  }),
-  certbotSlow: (seconds: number, dns: boolean): RelayFailure => ({
-    why: `certbot did not finish within ${seconds} s. ${dns ? "Check the token can edit the zone's DNS" : "Check that TCP 80 reaches this machine"}, then Retry.`,
+  certbotSlow: (seconds: number): RelayFailure => ({
+    why: `certbot did not finish within ${seconds} s. Check the token can edit the zone's DNS, then Retry.`,
   }),
   renewNone: (machine: string): RelayFailure => ({
     why: `The stream relay's certificate on ${machine} was not renewed: it has no certificate there. Add a name in Settings › Browsers to have one issued.`,
-  }),
-  renewPort80: (machine: string, name: string, held: string): RelayFailure => ({
-    why: `${notRenewed(machine, name)} ${held}, and renewal runs over port 80. Free it. ${renewNext}`,
   }),
   renewRefused: (
     machine: string,
     name: string,
     said: string
   ): RelayFailure => ({
-    why: `${notRenewed(machine, name)} Let's Encrypt refused (${said}). Check that ${name} points at this machine and port 80 reaches it, or that the token can still edit its zone's DNS. ${renewNext}`,
+    why: `${notRenewed(machine, name)} Let's Encrypt refused (${said}). Check that the Cloudflare token can still edit ${zoneOf(name) ?? name}'s DNS. ${renewNext}`,
   }),
 } as const;
 
@@ -666,14 +636,14 @@ export const STREAM_RELAY_WORDS = {
   machine: "Pick the machine",
   machineDone: (machine: RelayMachine) =>
     `Runs on ${machine.name} · ${machine.address}${machine.lan ? ", behind a router" : ""}`,
-  none: "No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 on your router to a machine here, then come back.",
+  none: `No machine of yours is reached from the internet yet. Add one (a small server at a host works), or forward UDP and TCP ${STREAM_RELAY_PORT} and TCP ${STREAM_RELAY_TLS_PORT} on your router to a machine here, then come back.`,
   runHere: "Run the stream relay here",
   behindRouter: "behind a router",
   offline: "offline",
 
   name: "Point a name at it (optional)",
   nameDone: (name: string) => `${name} points at it`,
-  nameSkipped: "No name · plain on 443",
+  nameSkipped: `No name · plain on ${STREAM_RELAY_PORT}`,
   nameChecking: (name: string, seconds?: number) =>
     seconds === undefined
       ? `Checking ${name}…`
@@ -686,10 +656,9 @@ export const STREAM_RELAY_WORDS = {
     `${name} points at ${answers}, not ${machine.name}'s ${machine.address}. Change its A record. It ticks once it answers with ${machine.address}.`,
   /** What a name gives, and what skipping it gives up: the step's one line beside Skip. */
   nameWhy: (name: string) =>
-    `${name} lets the stream relay answer over TLS on 443, which networks that allow only real HTTPS need. Without the name it still answers plain on 443.`,
+    `${name} lets the stream relay answer over TLS on ${STREAM_RELAY_TLS_PORT} too, for networks that pass only encrypted traffic. Its certificate comes through Cloudflare's DNS, so ${zoneOf(name) ?? name} must be on Cloudflare. Without the name it answers plain on ${STREAM_RELAY_PORT}.`,
   /** The same line with no name known yet (reached by IP or the tailnet). */
-  nameWhyNone:
-    "A name pointing at this machine lets the stream relay answer over TLS on 443, which networks that allow only real HTTPS need. Without one it answers plain on 443, which reaches most networks.",
+  nameWhyNone: `A name pointing at this machine lets the stream relay answer over TLS on ${STREAM_RELAY_TLS_PORT} too, for networks that pass only encrypted traffic; its certificate comes through Cloudflare's DNS, so the name's zone must be on Cloudflare. Without one it answers plain on ${STREAM_RELAY_PORT}, which reaches most networks.`,
   nameLabel: "DNS name",
   namePlaceholder: "turn.example.com",
   useName: "Use this name",
@@ -733,30 +702,23 @@ export const STREAM_RELAY_WORDS = {
   routerByHand: (proveAt: number) =>
     `Forwarded by hand · proven in step ${proveAt}`,
 
-  /** The runtime step's label while it stands: what the runtime must let the relay do. */
-  runtime: (step: RuntimeStep) => {
-    if (step.need?.kind === "rootful") {
-      return "Run the container runtime as root";
-    }
-    if (step.network === "published" || step.need?.kind === "forwarder") {
-      return "Let the container runtime forward UDP and TCP";
-    }
-    return step.lowest === 80
-      ? "Let the container runtime bind 80 and 443"
-      : "Let the container runtime bind 443";
-  },
-  /** Above the step's command: what the runtime is short of (a VM's), then how the command runs. */
+  /** The runtime step's label while it stands: its VM's forwarder must carry UDP as well as TCP. */
+  runtime: "Let the container runtime forward UDP and TCP",
+  /** Above the step's command: what the forwarder is short of, then how the command runs. */
   runtimeNote: (step: RuntimeStep, machine: string) =>
-    `${step.need && step.need.kind !== "low-ports" ? `${step.need.why} ` : ""}Run it once in a terminal on ${machine}. It holds a reboot and ticks here by itself.`,
-  runtimeCommand: (step: RuntimeStep) =>
-    step.need?.command ?? lowPortsCommand(step.lowest),
+    `${step.need ? `${step.need.why} ` : ""}Run it once in a terminal on ${machine}. It holds a reboot and ticks here by itself.`,
+  runtimeCommand: (step: RuntimeStep) => step.need?.command ?? "",
   commandLabel: "The command",
-  runtimeDone: (step: RuntimeStep) =>
-    step.network === "published"
-      ? "The container runtime forwards UDP and TCP"
-      : "Low ports allowed for the runtime",
+  runtimeDone: "The container runtime forwards UDP and TCP",
 
   certificate: "Issue the certificate",
+  /** The certificate step with no token: how it is issued, what the token needs, and the way out. */
+  certificateToken: (name: string) => {
+    const zone = zoneOf(name) ?? name;
+    return `The certificate for ${name} is issued through Cloudflare's DNS, never over a port of this machine, so it needs ${zone} on Cloudflare and a Cloudflare API token that can edit its DNS. Paste one, or skip the name to run plain on ${STREAM_RELAY_PORT}.`;
+  },
+  useToken: "Use this token",
+  checkingToken: "Checking…",
   certificateRunning: (name: string) => `Asking Let's Encrypt for ${name}…`,
   certificateDone: (name: string, endsAt: number) =>
     `Certificate for ${name} · ends ${relayDay(endsAt)}`,
@@ -821,8 +783,7 @@ export const STREAM_RELAY_WORDS = {
     `Proven from outside by ${device}, ${relayWhen(at)}`,
   notProven: "Not yet proven from outside · Open this on a phone off Wi‑Fi",
   addName: "Add a name",
-  noName:
-    "No name · plain on 443. A name lets it answer over TLS on 443 too, which networks that allow only real HTTPS need.",
+  noName: `No name · plain on ${STREAM_RELAY_PORT}. A name on Cloudflare lets it answer over TLS on ${STREAM_RELAY_TLS_PORT} too, for networks that pass only encrypted traffic.`,
   portsLabel: "Each port's answer",
   live: "Live",
   portDown: "Live, a port is down",

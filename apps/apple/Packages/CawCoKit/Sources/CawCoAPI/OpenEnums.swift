@@ -6114,26 +6114,26 @@ public enum OpenEnums {
 
     /// `#/components/schemas/RelayPortName`.
     public enum RelayPortName: OpenEnum {
-        case tcp443
-        case tls
-        case udp443
+        case tcp3478
+        case tls5349
+        case udp3478
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
-            case "tcp 443": self = .tcp443
-            case "tls": self = .tls
-            case "udp 443": self = .udp443
+            case "tcp 3478": self = .tcp3478
+            case "tls 5349": self = .tls5349
+            case "udp 3478": self = .udp3478
             default: self = .unrecognized(rawValue)
             }
         }
 
         public var rawValue: String {
             switch self {
-            case .tcp443: "tcp 443"
-            case .tls: "tls"
-            case .udp443: "udp 443"
+            case .tcp3478: "tcp 3478"
+            case .tls5349: "tls 5349"
+            case .udp3478: "udp 3478"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -6142,7 +6142,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.tcp443, .tls, .udp443]
+        public static let allCases: [Self] = [.tcp3478, .tls5349, .udp3478]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -6184,47 +6184,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.generic, .github, .stripe]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/RelayRuntimeNeedKind`.
-    public enum RelayRuntimeNeedKind: OpenEnum {
-        case forwarder
-        case lowPorts
-        case rootful
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "forwarder": self = .forwarder
-            case "low-ports": self = .lowPorts
-            case "rootful": self = .rootful
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .forwarder: "forwarder"
-            case .lowPorts: "low-ports"
-            case .rootful: "rootful"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.forwarder, .lowPorts, .rootful]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -6348,44 +6307,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.natPmp, .uPnP]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/RelayStepNetwork`.
-    public enum RelayStepNetwork: OpenEnum {
-        case host
-        case published
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "host": self = .host
-            case "published": self = .published
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .host: "host"
-            case .published: "published"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.host, .published]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

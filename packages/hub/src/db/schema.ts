@@ -4109,8 +4109,10 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
   /** What the router answered "Open the ports" with; null before it was asked. */
   router: text("router").$type<"mapped" | "refused">(),
   routerHow: text("router_how").$type<"UPnP" | "NAT-PMP">(),
-  /** The machine's runtime may bind the relay's lowest port, as last read. */
-  lowPorts: integer("low_ports", { mode: "boolean" }).notNull().default(false),
+  /** The machine's runtime carries the relay's ports as it is (a VM's forwarder carries UDP and TCP), as last read. */
+  runtimeHolds: integer("runtime_holds", { mode: "boolean" })
+    .notNull()
+    .default(false),
   /** The name the certificate stands for, and when it ends. */
   certificateName: text("certificate_name"),
   certificateEndsAt: timestamp("certificate_ends_at"),

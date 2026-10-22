@@ -19,9 +19,8 @@
  *   (`x-forwarded-host`, `x-forwarded-proto`, `cf-ray`, `cf-connecting-ip`).
  *
  * The relay's public address is 1.1.1.1 throughout: Cloudflare's public
- * resolver, which takes stray traffic on 443, so the hub's minute health
- * check, once the relay reads live, reaches no machine of anyone's network
- * it should not.
+ * resolver, so the hub's minute health check on 3478, once the relay reads
+ * live, reaches no machine of anyone's network it should not.
  *
  * Legs, in the design's order:
  * 0. the setup card: two options, Set up recommended through a domain, and
@@ -31,15 +30,16 @@
  * 2. the name: suggested from the domain, checked (doesn't resolve,
  *    proxied, points elsewhere), Cloudflare refusing a token, then adding the
  *    record DNS only and ticking;
- * 3. the router: an IGD v1 router capping its table (443 mapped, which is all
- *    the relay needs: the step ticks), one refusing on UPnP and NAT-PMP (the
- *    forwards, UDP and TCP 443 alone), one with NAT-PMP alone, an IGD v1 one
- *    taking only permanent leases, and an IGD v2 one, each taking back what
- *    the one before held;
+ * 3. the router: an IGD v1 router capping its table (UDP and TCP 3478 and
+ *    TCP 5349 mapped, which is all the relay needs: the step ticks), one
+ *    refusing on UPnP and NAT-PMP (the forwards, those three alone, never
+ *    TCP 80), one with NAT-PMP alone, an IGD v1 one taking only permanent
+ *    leases, and an IGD v2 one, each taking back what the one before held;
  * 4–6. no container runtime under the scratch agent (its `DOCKER_HOST` names a
- *    socket nothing answers on yet, on every machine): the low ports not drawn,
- *    the certificate failing with that sentence and Retry, the name skipped
- *    and the start failing with it and Start again;
+ *    socket nothing answers on yet, on every machine): no runtime step, the
+ *    certificate (by DNS, with the token Let CawCo add it kept) failing with
+ *    that sentence and Retry, the name skipped and the start failing with it
+ *    and Start again;
  * 7. the proof: the relay read live, this screen inside (its STUN answer the
  *    relay's own address), refused (a 401), then outside by its request's
  *    address; the summary;
@@ -48,7 +48,10 @@
  * journey; then a runtime in a VM: Colima (runtime-stand-in.ts's engine at
  * its profile's socket in the sandbox's own Colima home), the relay
  * published through it, its ssh forwarder asked to be grpc in the runtime
- * step, and the step ticking by itself once its running settings say grpc.
+ * step, and the step ticking by itself once its running settings say grpc;
+ * and last a name pointed by hand with no token: the certificate step asks
+ * for the Cloudflare token in its words, nothing maps or names TCP 80, and a
+ * refused token's words stand under its field.
  *
  * Where this machine has a private interface (the host), the agent's own
  * STUN read makes the machine behind a router; inside a workspace boundary,
@@ -99,6 +102,8 @@ const ELSEWHERE = "203.0.113.9";
 const NAME_MS = 45_000;
 /** Colima's switch to its forwarder that carries UDP, as the agent names it for the default profile (media-forwarding.ts). */
 const COLIMA_GRPC = "colima stop && colima start --port-forwarder grpc";
+/** Port 80 named anywhere in a step's words: the certificate never uses it. */
+const PORT_80 = /\b80\b/;
 /** The lease the agent asks each mapping for, in seconds (relay-router.ts). */
 const LEASE_S = 3600;
 
@@ -790,7 +795,7 @@ const run = async (kit: Kit): Promise<void> => {
       JSON.stringify({ calls: cloudflare.asked })
     );
 
-    // 3 · The router: v1 capping its table, refusing on UPnP and NAT-PMP, NAT-PMP alone, v1 taking only permanent leases, then v2. The relay needs UDP and TCP 443 alone (its relay range stays inside its container).
+    // 3 · The router: v1 capping its table, refusing on UPnP and NAT-PMP, NAT-PMP alone, v1 taking only permanent leases, then v2. The relay needs UDP and TCP 3478 and TCP 5349 alone (its relay range stays inside its container).
     gateway.mode.version = 1;
     gateway.mode.cap = 10;
     const routerAsk = await stepSays(page, "router", words.routerAsk);
@@ -808,14 +813,14 @@ const run = async (kit: Kit): Promise<void> => {
     );
     const listener = [...gateway.table.keys()].sort();
     kit.check(
-      `3 · an IGD v1 router capping its table: "${routerAsk?.slice(0, 60)}…" asked only on Open the ports; it opened UDP and TCP 443 (${listener.join(", ")}, to ${routerLan}), which is all the relay needs, and the step ticks "${words.routerDone("UPnP")}"`,
+      `3 · an IGD v1 router capping its table: "${routerAsk?.slice(0, 60)}…" asked only on Open the ports; it opened UDP and TCP 3478 and TCP 5349 (${listener.join(", ")}, to ${routerLan}), which is all the relay needs, and the step ticks "${words.routerDone("UPnP")}"`,
       routerAsk?.includes(words.routerAsk) === true &&
         stepOf(capped, "router")?.how === "UPnP" &&
-        listener.join() === "tcp:443,udp:443" &&
+        listener.join() === "tcp:3478,tcp:5349,udp:3478" &&
         [...gateway.table.values()].every(
           (one) => one.client === routerLan && one.lease === LEASE_S
         ) &&
-        gateway.actions[0] === `AddPortMapping UDP 443 ${LEASE_S}` &&
+        gateway.actions[0] === `AddPortMapping UDP 3478 ${LEASE_S}` &&
         cappedWords?.includes(words.routerDone("UPnP")) === true,
       JSON.stringify({
         cappedWords,
@@ -828,15 +833,15 @@ const run = async (kit: Kit): Promise<void> => {
     await act(fleet, { act: "open-ports" });
     const refused = await journeyOf(fleet);
     const refusedWords = await stepSays(page, "router", words.routerRefused);
-    const forwardsLine = words.forwards(routerLan, false);
+    const forwardsLine = words.forwards(routerLan);
     kit.check(
-      `3 · a router refusing every mapping on UPnP and NAT-PMP alike (the ports held before taken back, ${gateway.table.size} left): the forwards to make by hand, UDP and TCP 443 alone, "${forwardsLine}"`,
+      `3 · a router refusing every mapping on UPnP and NAT-PMP alike (the ports held before taken back, ${gateway.table.size} left): the forwards to make by hand, UDP and TCP 3478 and TCP 5349 alone, "${forwardsLine}"`,
       stepOf(refused, "router")?.state === "refused" &&
         gateway.table.size === 0 &&
         natPmp.table.size === 0 &&
-        natPmp.asked.includes(`map UDP 443 ${LEASE_S}`) &&
+        natPmp.asked.includes(`map UDP 3478 ${LEASE_S}`) &&
         refusedWords?.includes(words.routerRefused) === true &&
-        forwardsLine === `UDP 443 · TCP 443 → ${routerLan}` &&
+        forwardsLine === `UDP 3478 · TCP 3478 · TCP 5349 → ${routerLan}` &&
         refusedWords.includes(forwardsLine),
       String(refusedWords)
     );
@@ -854,11 +859,12 @@ const run = async (kit: Kit): Promise<void> => {
     );
     const natPmpSize = natPmp.table.size;
     kit.check(
-      `3 · a router with UPnP off and NAT-PMP on: NAT-PMP mapped UDP and TCP 443, each leased ${LEASE_S} s (asked first ${JSON.stringify(natPmp.asked.slice(0, 3))}); the step ticks "${words.routerDone("NAT-PMP")}"`,
+      `3 · a router with UPnP off and NAT-PMP on: NAT-PMP mapped UDP and TCP 3478 and TCP 5349, each leased ${LEASE_S} s (asked first ${JSON.stringify(natPmp.asked.slice(0, 3))}); the step ticks "${words.routerDone("NAT-PMP")}"`,
       stepOf(byNatPmp, "router")?.state === "done" &&
         stepOf(byNatPmp, "router")?.how === "NAT-PMP" &&
-        natPmp.table.has("tcp:443") &&
-        natPmp.table.has("udp:443") &&
+        natPmp.table.has("tcp:3478") &&
+        natPmp.table.has("udp:3478") &&
+        natPmp.table.has("tcp:5349") &&
         [...natPmp.table.values()].every((one) => one.lease === LEASE_S) &&
         gateway.table.size === 0 &&
         natPmpWords?.includes(words.routerDone("NAT-PMP")) === true,
@@ -877,15 +883,16 @@ const run = async (kit: Kit): Promise<void> => {
     ];
     const permanentSize = gateway.table.size;
     kit.check(
-      `3 · an IGD v1 router taking only permanent leases: NAT-PMP's ${natPmpSize} mappings taken back first (${natPmp.table.size} left), then each port asked again for a permanent lease on its 725 (${gateway.actions.slice(0, 2).join(", ")}), UDP and TCP 443 among the ${permanentSize} held, all with lease ${leases.join()}`,
+      `3 · an IGD v1 router taking only permanent leases: NAT-PMP's ${natPmpSize} mappings taken back first (${natPmp.table.size} left), then each port asked again for a permanent lease on its 725 (${gateway.actions.slice(0, 2).join(", ")}), UDP and TCP 3478 and TCP 5349 among the ${permanentSize} held, all with lease ${leases.join()}`,
       stepOf(permanent, "router")?.state === "done" &&
         stepOf(permanent, "router")?.how === "UPnP" &&
         natPmp.table.size === 0 &&
-        gateway.table.has("tcp:443") &&
-        gateway.table.has("udp:443") &&
+        gateway.table.has("tcp:3478") &&
+        gateway.table.has("udp:3478") &&
+        gateway.table.has("tcp:5349") &&
         leases.join() === "0" &&
-        gateway.actions[0] === `AddPortMapping UDP 443 ${LEASE_S}` &&
-        gateway.actions[1] === "AddPortMapping UDP 443 0",
+        gateway.actions[0] === `AddPortMapping UDP 3478 ${LEASE_S}` &&
+        gateway.actions[1] === "AddPortMapping UDP 3478 0",
       JSON.stringify({ size: gateway.table.size, leases })
     );
     gateway.mode.permanentOnly = false;
@@ -898,13 +905,16 @@ const run = async (kit: Kit): Promise<void> => {
     ).length;
     const adds = gateway.actions.filter((one) => one.startsWith("Add"));
     kit.check(
-      `3 · an IGD v2 router: the permanent ones taken back (${takenBack} deletes), then AddPortMapping, so each port is the relay's own and not one AddAnyPortMapping picks, for UDP and TCP 443, leased ${LEASE_S} s; the step ticks "${words.routerDone("UPnP")}"`,
+      `3 · an IGD v2 router: the permanent ones taken back (${takenBack} deletes), then AddPortMapping, so each port is the relay's own and not one AddAnyPortMapping picks, for UDP and TCP 3478 and TCP 5349, leased ${LEASE_S} s; the step ticks "${words.routerDone("UPnP")}"`,
       stepOf(mapped, "router")?.state === "done" &&
-        gateway.table.has("tcp:443") &&
-        gateway.table.has("udp:443") &&
+        gateway.table.has("tcp:3478") &&
+        gateway.table.has("udp:3478") &&
+        gateway.table.has("tcp:5349") &&
+        !gateway.table.has("tcp:80") &&
         takenBack === permanentSize &&
-        adds.includes(`AddPortMapping UDP 443 ${LEASE_S}`) &&
-        adds.includes(`AddPortMapping TCP 443 ${LEASE_S}`) &&
+        adds.includes(`AddPortMapping UDP 3478 ${LEASE_S}`) &&
+        adds.includes(`AddPortMapping TCP 3478 ${LEASE_S}`) &&
+        adds.includes(`AddPortMapping TCP 5349 ${LEASE_S}`) &&
         adds.every(
           (one) =>
             one.startsWith("AddPortMapping ") && one.endsWith(` ${LEASE_S}`)
@@ -915,7 +925,7 @@ const run = async (kit: Kit): Promise<void> => {
       })
     );
 
-    // 4–5 · No container runtime under the scratch agent: no low-ports step, and the certificate fails with that sentence.
+    // 4–5 · No container runtime under the scratch agent: no runtime step, and the certificate fails with that sentence.
     const certificate = await journeyUntil(
       fleet,
       "the certificate's issue answered",
@@ -925,7 +935,7 @@ const run = async (kit: Kit): Promise<void> => {
     const certWhy = stepOf(certificate, "certificate")?.why ?? "";
     const noRuntime = NO_RUNTIME;
     kit.check(
-      `4 · the scratch agent has no container runtime: the low-ports step is not drawn (steps ${certificate.journey.steps.map((one) => one.step).join(", ")}); 5 · the certificate failed with its sentence: "${certWhy.slice(0, 120)}…"`,
+      `4 · the scratch agent has no container runtime: no runtime step is drawn (steps ${certificate.journey.steps.map((one) => one.step).join(", ")}); 5 · the certificate failed with its sentence: "${certWhy.slice(0, 120)}…"`,
       stepOf(certificate, "runtime") === undefined && noRuntime.test(certWhy),
       certWhy
     );
@@ -983,7 +993,7 @@ const run = async (kit: Kit): Promise<void> => {
     // 7 · The proof: the relay read live (the agent's live frame, as the hub stores it).
     await fakeAs(page, { mode: "answer", seenAs: PUBLIC });
     fleet.write(
-      `UPDATE stream_relay SET state = 'live', why = NULL, why_command = NULL, ports = '{"udp443":true,"tcp443":true,"tls":false}', health = '[{"port":"udp 443","up":true},{"port":"tcp 443","up":true}]'`
+      `UPDATE stream_relay SET state = 'live', why = NULL, why_command = NULL, ports = '{"udp":true,"tcp":true,"tls":false}', health = '[{"port":"udp 3478","up":true},{"port":"tcp 3478","up":true}]'`
     );
     const inside = await journeyUntil(
       fleet,
@@ -1133,11 +1143,9 @@ const run = async (kit: Kit): Promise<void> => {
         ? await stepSays(page, "runtime", COLIMA_GRPC)
         : null;
       kit.check(
-        `Colima (a stand-in engine at its profile's socket, its running settings portForwarder: ssh): the relay is published (${asked?.network}), and the runtime step asks "${asked ? words.runtime(asked) : ""}": "${asked?.need?.why}", the command \`${asked?.need?.command}\``,
-        asked?.network === "published" &&
-          asked.need?.kind === "forwarder" &&
-          asked.need.command === COLIMA_GRPC &&
-          askWords?.includes(words.runtime(asked)) === true &&
+        `Colima (a stand-in engine at its profile's socket, its running settings portForwarder: ssh): the runtime step asks "${words.runtime}": "${asked?.need?.why}", the command \`${asked?.need?.command}\``,
+        asked?.need?.command === COLIMA_GRPC &&
+          askWords?.includes(words.runtime) === true &&
           askWords.includes(asked.need.why) &&
           askWords.includes(COLIMA_GRPC),
         JSON.stringify({ asked, askWords, engine: engine.asked.slice(0, 4) })
@@ -1151,13 +1159,63 @@ const run = async (kit: Kit): Promise<void> => {
       );
       const holds = stepOf(forwarding, "runtime");
       const holdsWords = holds
-        ? await stepSays(page, "runtime", words.runtimeDone(holds))
+        ? await stepSays(page, "runtime", words.runtimeDone)
         : null;
       kit.check(
         `once Colima's running settings say grpc, the step ticks by itself: "${holdsWords}"`,
-        holds?.network === "published" &&
-          holdsWords?.includes(words.runtimeDone(holds)) === true,
+        holdsWords?.includes(words.runtimeDone) === true,
         JSON.stringify({ holds, holdsWords })
+      );
+
+      // A name pointed by hand, so no token came with it: the certificate
+      // is issued only by DNS at Cloudflare, so its step asks for the token;
+      // nothing names or maps TCP 80. A refused token's words stand under
+      // its field (a good one would start certbot on the stand-in engine).
+      names.set(NAME, [PUBLIC]);
+      await act(fleet, { act: "add-name" });
+      await act(fleet, { act: "name", name: NAME });
+      const tokenAsked = await journeyUntil(
+        fleet,
+        "the certificate step asking for the token",
+        (answer) => stepOf(answer, "certificate")?.state === "needs",
+        NAME_MS
+      );
+      const tokenWords = await stepSays(
+        page,
+        "certificate",
+        words.certificateToken(NAME)
+      );
+      const tokenKept = fleet.query<{ token: string | null }>(
+        "SELECT cloudflare_token AS token FROM stream_relay_journey"
+      )[0]?.token;
+      kit.check(
+        `the name pointed by hand, no token kept (${tokenKept === null ? "none" : "one"}): the certificate step asks for it, "${tokenWords?.slice(0, 140)}…", with ${words.useToken} and ${words.skipName}; nothing names port 80, and the router holds no TCP 80 (${[...gateway.table.keys()].filter((key) => !key.startsWith("udp:2")).join(", ")})`,
+        stepOf(tokenAsked, "name")?.state === "done" &&
+          tokenKept === null &&
+          tokenWords?.includes(words.certificateToken(NAME)) === true &&
+          tokenWords.includes(words.useToken) &&
+          tokenWords.includes(words.skipName) &&
+          !PORT_80.test(tokenWords) &&
+          !gateway.table.has("tcp:80"),
+        JSON.stringify({ step: stepOf(tokenAsked, "certificate"), tokenWords })
+      );
+      await settings(page).locator("[data-relay-token]").fill(BAD_TOKEN);
+      await settings(page)
+        .getByRole("button", { name: words.useToken })
+        .click();
+      const refusedToken = await journeyUntil(
+        fleet,
+        "the certificate step's token refused",
+        (answer) => stepOf(answer, "certificate")?.tokenWhy !== undefined,
+        30_000
+      );
+      const certTokenWhy = stepOf(refusedToken, "certificate")?.tokenWhy;
+      kit.check(
+        `a token Cloudflare refuses stands under the certificate step's field: "${certTokenWhy}", and the step still asks`,
+        certTokenWhy ===
+          words.tokenRefused(ZONE, "Invalid API Token, code 1000") &&
+          stepOf(refusedToken, "certificate")?.state === "needs",
+        JSON.stringify(stepOf(refusedToken, "certificate"))
       );
     } finally {
       engine.server.stop(true);

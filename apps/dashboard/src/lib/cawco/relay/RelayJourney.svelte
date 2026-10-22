@@ -164,7 +164,7 @@
     )
   );
 
-  /** A step's note and control: none for one whose spinner says all it has (the low ports, checked). */
+  /** A step's note and control: none for one whose spinner says all it has (the runtime, checked). */
   const hasBody = (step: RelayStep): boolean =>
     !(step.step === "runtime" && step.state === "checking");
 
@@ -225,7 +225,7 @@
       case "router":
         return words.routerDone(step.how);
       case "runtime":
-        return words.runtimeDone(step);
+        return words.runtimeDone;
       case "certificate":
         return words.certificateDone(relayName, step.endsAt ?? Date.now());
       case "start":
@@ -255,7 +255,7 @@
           ? words.routerByHand(proveAt)
           : words.router;
       case "runtime":
-        return words.runtime(step);
+        return words.runtime;
       case "certificate":
         return words.certificate;
       case "start":
@@ -578,25 +578,7 @@
     </div>
     {#if step.state !== "checking" && zone && tokenOpen}
       <div class="flex min-w-0 flex-col gap-space-2" in:unfold out:unfold>
-        <Field
-          hint={words.tokenHint(zone)}
-          id="relay-token"
-          label={words.tokenLabel}
-        >
-          <Input
-            autocapitalize="off"
-            autocomplete="off"
-            class="w-full"
-            data-relay-token
-            id="relay-token"
-            spellcheck={false}
-            type="password"
-            bind:value={token}
-          />
-        </Field>
-        {#if step.tokenWhy}
-          <p class={FAIL} data-relay-token-why>{step.tokenWhy}</p>
-        {/if}
+        {@render tokenField(zone, step.tokenWhy)}
         <div class={CONTROLS}>
           <Button
             disabled={token.trim() === "" || pending !== null}
@@ -612,6 +594,27 @@
   {/if}
 {/snippet}
 
+<!-- The Cloudflare token's field: the name step's Let CawCo add it and the
+     certificate step's ask share it (one step's body shows at a time), with
+     Cloudflare's refusal of the last one under it. -->
+{#snippet tokenField(zone: string, why: string | undefined)}
+  <Field hint={words.tokenHint(zone)} id="relay-token" label={words.tokenLabel}>
+    <Input
+      autocapitalize="off"
+      autocomplete="off"
+      class="w-full"
+      data-relay-token
+      id="relay-token"
+      spellcheck={false}
+      type="password"
+      bind:value={token}
+    />
+  </Field>
+  {#if why}
+    <p class={FAIL} data-relay-token-why>{why}</p>
+  {/if}
+{/snippet}
+
 {#snippet stepBody(step: RelayStep)}
   {#if step.step === "machine"}
     {@render machineBody(step)}
@@ -622,10 +625,7 @@
       <p class={NOTE}>{words.routerRefused}</p>
       {@render copyable(
         words.forwardsLabel,
-        words.forwards(
-          machineNow.lan ?? machineNow.address,
-          step.http ?? false
-        ),
+        words.forwards(machineNow.lan ?? machineNow.address),
         words.copyForwards,
         false
       )}
@@ -652,7 +652,30 @@
       true
     )}
   {:else if step.step === "certificate"}
-    {#if step.state === "failed"}
+    {#if step.state === "needs"}
+      <!-- No token reaches the name's zone: the certificate is issued only
+           through Cloudflare's DNS, so the step asks for one, or the name
+           goes and the relay runs plain. -->
+      <p class={NOTE}>{words.certificateToken(relayName)}</p>
+      {@render tokenField(zone ?? relayName, step.tokenWhy)}
+      <div class={CONTROLS}>
+        <Button
+          disabled={token.trim() === "" || pending !== null}
+          label={words.useToken}
+          onclick={() => run({ act: "token", token: token.trim() })}
+          pending={pending === "token"}
+          pendingLabel={words.checkingToken}
+          size="sm"
+        />
+        <Button
+          disabled={pending !== null}
+          label={words.skipName}
+          onclick={() => act("skip-name")}
+          size="sm"
+          variant="secondary"
+        />
+      </div>
+    {:else if step.state === "failed"}
       <p class={FAIL}>{step.why}</p>
       <div class={CONTROLS}>
         <Button

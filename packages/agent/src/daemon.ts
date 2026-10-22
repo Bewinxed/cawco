@@ -337,10 +337,9 @@ const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
   if (!(
     given &&
     typeof given.hostname === "string" &&
-    (given.cloudflareToken === undefined ||
-      typeof given.cloudflareToken === "string")
+    typeof given.cloudflareToken === "string"
   )) {
-    throw new Error("relay.certify takes a hostname and, for DNS, a token.");
+    throw new Error("relay.certify takes a hostname and a Cloudflare token.");
   }
   return given as RelayCertifyArgs;
 };
@@ -348,12 +347,8 @@ const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
 /** A `relay.map`'s address on the router's network, or a refusal saying what came. */
 const relayMapOf = (args: unknown): RelayMapArgs => {
   const given = args as Partial<RelayMapArgs> | null;
-  if (!(
-    given &&
-    typeof given.lan === "string" &&
-    typeof given.http === "boolean"
-  )) {
-    throw new Error("relay.map takes the machine's router address and http.");
+  if (!(given && typeof given.lan === "string")) {
+    throw new Error("relay.map takes the machine's router address.");
   }
   return given as RelayMapArgs;
 };
@@ -3491,19 +3486,17 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(RELAY_RENEW, (args) => {
       const token = (args as { cloudflareToken?: unknown } | null)
         ?.cloudflareToken;
-      return renewRelay(
-        typeof token === "string" ? { cloudflareToken: token } : {}
-      );
+      if (typeof token !== "string") {
+        throw new Error("relay.renew takes the Cloudflare token.");
+      }
+      return renewRelay({ cloudflareToken: token });
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
     // runtime read, the router asked, and a binding from here through it.
     supervisor.registerDaemonFunction(RELAY_CERTIFY, (args) =>
       certifyRelay(relayCertifyOf(args))
     );
-    supervisor.registerDaemonFunction(RELAY_RUNTIME, (args) => {
-      const lowest = (args as { lowest?: unknown } | null)?.lowest;
-      return relayRuntimeRead(typeof lowest === "number" ? lowest : 443);
-    });
+    supervisor.registerDaemonFunction(RELAY_RUNTIME, () => relayRuntimeRead());
     supervisor.registerDaemonFunction(RELAY_MAP, (args) =>
       mapRelayPorts(relayMapOf(args))
     );

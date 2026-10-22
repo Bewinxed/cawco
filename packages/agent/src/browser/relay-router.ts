@@ -1,8 +1,8 @@
 /**
  * The stream relay's ports opened on this machine's router (the journey's
  * router step, core stream-relay.ts `relay.map`), asked only once the person
- * pressed "Open the ports": UDP and TCP 443 (and TCP 80 for a certificate
- * over HTTP), then the UDP relay range port by port. A router whose table
+ * pressed "Open the ports": UDP and TCP 3478 and TCP 5349 (TURN over TLS),
+ * then the UDP relay range port by port. A router whose table
  * caps the range keeps the listener mapped and the range is a forward by
  * hand. `relay.remove` takes every mapping back.
  *
@@ -32,12 +32,12 @@ import { type MapPortOptions, pmpNat } from "@achingbrain/nat-port-mapper";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import {
-  RELAY_HTTP_PORT,
   type RelayMapArgs,
   type RelayMapHow,
   type RelayMapped,
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
+  STREAM_RELAY_TLS_PORT,
 } from "@cawco/core/stream-relay";
 import { Client } from "@runonflux/nat-upnp";
 import { gateway4async } from "default-gateway";
@@ -98,7 +98,7 @@ const portOf = (key: string): [number, Protocol] => {
  * library renews one here: nat-upnp has no renewal, and nat-port-mapper's
  * (`autoRefresh`) sends its own unmap's delete again without end (904 times
  * in a second against the stand-in) and keys its timers by port alone, so
- * UDP and TCP 443 share one.
+ * UDP and TCP 3478 share one.
  */
 const holding = (client: PortClient): PortGateway => {
   const held = new Set<string>();
@@ -311,15 +311,12 @@ const waysFor = (lan: string): Way[] => {
   ];
 };
 
-/** The listener (and port 80 with `http`): every mapping answered, or none kept. */
-const mapListener = async (
-  gateway: PortGateway,
-  http: boolean
-): Promise<boolean> => {
+/** The listeners, UDP and TCP 3478 and TCP 5349: every mapping answered, or none kept. */
+const mapListener = async (gateway: PortGateway): Promise<boolean> => {
   const wanted: [number, Protocol][] = [
     [STREAM_RELAY_PORT, "udp"],
     [STREAM_RELAY_PORT, "tcp"],
-    ...(http ? [[RELAY_HTTP_PORT, "tcp"] as [number, "tcp"]] : []),
+    [STREAM_RELAY_TLS_PORT, "tcp"],
   ];
   for (const [port, protocol] of wanted) {
     // biome-ignore lint/performance/noAwaitInLoops: a router's table takes one mapping at a time.
@@ -373,14 +370,16 @@ export const mapRelayPorts = async (
       continue;
     }
     const gateway = holding(client);
-    if (!(await mapListener(gateway, args.http))) {
-      tried.push(`${how}: the router refused UDP and TCP ${STREAM_RELAY_PORT}`);
+    if (!(await mapListener(gateway))) {
+      tried.push(
+        `${how}: the router refused UDP and TCP ${STREAM_RELAY_PORT} or TCP ${STREAM_RELAY_TLS_PORT}`
+      );
       continue;
     }
     mapped = { gateway, how };
     const range = await mapRange(gateway);
     console.info(
-      `[relay] the router opened UDP and TCP ${STREAM_RELAY_PORT}${args.http ? ` and TCP ${RELAY_HTTP_PORT}` : ""} to ${args.lan} by ${how}${range ? ", and the relay range" : "; it capped the relay range"}`
+      `[relay] the router opened UDP and TCP ${STREAM_RELAY_PORT} and TCP ${STREAM_RELAY_TLS_PORT} to ${args.lan} by ${how}${range ? ", and the relay range" : "; it capped the relay range"}`
     );
     return { how, listener: true, range };
   }
