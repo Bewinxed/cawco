@@ -14,13 +14,21 @@ import { pageProgram, type SeedPage } from "../../decisions-preview/seed";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import { say } from "./mock";
-import { type Data, eventually, type Journey, type Leg, shows } from "./suite";
+import {
+  type Data,
+  eventually,
+  gone,
+  type Journey,
+  type Leg,
+  shows,
+} from "./suite";
 
 const SHAPE = "What shape is the plan?";
 const TRIAL = "How long is the trial?";
 const PER_MACHINE = "Per machine";
 const A_MONTH = "A month";
 const PICKS = /picked/;
+const CAW_SHEET = /^Caw, lead of /;
 
 interface Seeded {
   projectId: string;
@@ -107,10 +115,16 @@ async function walk(leg: Leg): Promise<void> {
   const decision = () =>
     fleet.api<DecisionRead>(`/api/projects/${projectId}/decisions/${name}`);
   const frame = page.getByTitle(`Decision page: ${title}`).contentFrame();
+  // A project whose board is empty opens Caw's panel (CawLead.arrive); on a
+  // phone it is a sheet over the page's foot, which a person puts away to
+  // read the page. Beside the page (tablet, desk) it covers none of it.
+  const sheet = page.getByRole("dialog", { name: CAW_SHEET });
+  // A card answered by one pick is a radiogroup named by its question, each
+  // option a radio named by its label (ui/option-group).
   const option = (question: string, label: string) =>
     frame
-      .getByRole("group", { name: question })
-      .getByRole("button", { name: new RegExp(`^${label}`) });
+      .getByRole("radiogroup", { name: question })
+      .getByRole("radio", { name: label, exact: true });
 
   await leg.step(
     "Open the project's decisions",
@@ -133,9 +147,15 @@ async function walk(leg: Leg): Promise<void> {
         .getByRole("link", { name: new RegExp(title.slice(0, 40)) })
         .first()
         .click();
+      if (leg.size === "phone") {
+        await sheet.getByRole("button", { name: "Close" }).click();
+      }
       at = page.url();
     },
-    () => shows(option(SHAPE, PER_MACHINE), "the page's cards, live", 60_000)
+    async () => {
+      await gone(sheet, "Caw's sheet over the page");
+      await shows(option(SHAPE, PER_MACHINE), "the page's cards, live", 60_000);
+    }
   );
 
   await leg.step(

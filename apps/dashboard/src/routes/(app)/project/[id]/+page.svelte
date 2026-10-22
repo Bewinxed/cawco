@@ -1468,6 +1468,10 @@
    * the phone's comes after the view's in Tailwind's order at equal weight,
    * where `view-board:pb-0` (0,2,0) outweighed
    * `max-phone:in-data-caw-open:…` (0,1,0) and the sheet covered the foot.
+   * A view that fills its pane on a phone stands at `--pane-min`, a
+   * border-box height the sheet's room counts toward, so that room is added
+   * to it: without it the room alone met the minimum and a decision page's
+   * frame stood 0px tall.
    */
   const paneFoot = $derived([
     PANE_FOOT[reading ? "board" : paneView] ?? "pb-space-6",
@@ -2221,7 +2225,7 @@
       paneFoot,
     ]}
     data-view={reading ? "board" : paneView}
-    style:--pane-min="50cqb"
+    style:--pane-min={docked ? "calc(50cqb + var(--c-sheet-max-h))" : "50cqb"}
   >
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the
