@@ -51,6 +51,9 @@ const TARGET = "cawco:embed-target";
 /** The page asks where anchors stand; answered, and told again as they move, as {@link FOUND}. */
 const FIND = "cawco:embed-find";
 const FOUND = "cawco:embed-found";
+/** The page asks a picture of a box of the embed's viewport (a pin's crop); answered as {@link PICTURED}. */
+const PICTURE = "cawco:embed-picture";
+const PICTURED = "cawco:embed-pictured";
 
 /** The attribute a frame showing an artifact carries (decisions host Preview.svelte): its id. */
 export const EMBED_ARTIFACT = "data-cawco-artifact";
@@ -120,6 +123,14 @@ export interface EmbeddedDeps {
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
   /** Whether a node is the overlay's own: its changes move nothing the page asked of. */
   own: (node: Node) => boolean;
+  /**
+   * The embed's picture of `box`, its viewport's px, as a mark's picture is
+   * drawn (picture.ts `cropPicture`); `failed` hears what of it was not drawn.
+   */
+  picture: (
+    box: Box,
+    failed: (message: string) => void
+  ) => Promise<string | null>;
   read: (el: Element) => Remote;
 }
 
@@ -208,18 +219,40 @@ export function answerEmbedder(deps: EmbeddedDeps): void {
     return found;
   };
 
+  /** The picture the parent asked as `seq` of `box`, answered with what failed in drawing it. */
+  const drawFor = async (seq: unknown, box: unknown) => {
+    const asked = box as Partial<Box> | null;
+    const sides = [asked?.x, asked?.y, asked?.w, asked?.h];
+    if (!sides.every((n) => typeof n === "number" && Number.isFinite(n))) {
+      say({ type: PICTURED, seq, png: null, errors: ["No box to draw."] });
+      return;
+    }
+    const errors: string[] = [];
+    const png = await deps
+      .picture(asked as Box, (message) => errors.push(message))
+      .catch((error: unknown) => {
+        errors.push(error instanceof Error ? error.message : String(error));
+        return null;
+      });
+    say({ type: PICTURED, seq, png, errors });
+  };
+
   addEventListener("message", (event) => {
     if (event.source !== window.parent) {
       return;
     }
     const said = event.data as {
       anchors?: unknown;
+      box?: unknown;
       seq?: unknown;
       type?: unknown;
       x?: unknown;
       y?: unknown;
     } | null;
-    if (said?.type === AT) {
+    if (said?.type === PICTURE) {
+      askedFrom(event.origin);
+      drawFor(said.seq, said.box);
+    } else if (said?.type === AT) {
       askedFrom(event.origin);
       const answer = answerAt(Number(said.x), Number(said.y));
       say({ type: TARGET, seq: said.seq, target: answer });
@@ -312,6 +345,16 @@ export interface Embeds {
   find: (anchor: PageAnchor) => Standing | null;
   /** Each frame's stand-ins laid over its content box again. */
   fit: () => void;
+  /**
+   * The picture of `box` (the page's px) round stand-in `el`, drawn by its
+   * embed's own overlay, which alone can draw what the frame shows; null
+   * when its embed draws none, or its document went before it answered.
+   */
+  picture: (
+    el: Element,
+    box: Box,
+    failed: (message: string) => void
+  ) => Promise<string | null>;
   /** What the embed read of a stand-in; null for any other element. */
   read: (el: Element) => StandIn | null;
 }
@@ -332,6 +375,8 @@ interface Entry {
 
 interface Bridge {
   asking: Map<number, (el: Element | null) => void>;
+  /** Pictures asked and not yet answered, by their ask. */
+  drawing: Map<number, (png: string | null) => void>;
   entries: Map<string, Entry>;
   /** Whether a find is about to go: the asks of one draw go as one. */
   flushing: boolean;
@@ -498,6 +543,14 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     }
   };
 
+  /** The pictures a frame owes, answered with none: its document went, and its asks with it. */
+  const dropDrawing = (bridge: Bridge) => {
+    for (const drawn of bridge.drawing.values()) {
+      drawn(null);
+    }
+    bridge.drawing.clear();
+  };
+
   /** A frame's overlay says it is there (its first load, or a load since): every anchor asked of it is asked again. */
   const came = (frame: FrameElement, origin: string) => {
     let bridge = bridges.get(frame);
@@ -507,6 +560,7 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
         ask(null);
       }
       bridge.asking.clear();
+      dropDrawing(bridge);
     } else {
       const wrapper = frame.ownerDocument.createElement("div");
       wrapper.setAttribute(STAND_INS, "");
@@ -515,6 +569,7 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
         "position:absolute;left:0;top:0;width:0;height:0;margin:0;padding:0;border:0;overflow:hidden;pointer-events:none;visibility:hidden";
       bridge = {
         asking: new Map(),
+        drawing: new Map(),
         entries: new Map(),
         flushing: false,
         frame,
@@ -548,6 +603,30 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     answer(entry.el ?? bridge.frame);
   };
 
+  /** What failed in drawing a picture asked of an embed, by its ask: told where the page tells its own. */
+  const failures = new Map<number, (message: string) => void>();
+
+  /** The embed's picture for the ask `asked`, with what failed in drawing it. */
+  const drew = (
+    bridge: Bridge,
+    asked: number,
+    png: unknown,
+    errors: unknown
+  ) => {
+    const drawn = bridge.drawing.get(asked);
+    if (!drawn) {
+      return;
+    }
+    bridge.drawing.delete(asked);
+    const failed = failures.get(asked);
+    failures.delete(asked);
+    for (const message of Array.isArray(errors) ? errors.slice(0, 4) : []) {
+      failed?.(String(message).slice(0, 300));
+    }
+    // Base64 PNG, as picture.ts `cropPicture` answers it.
+    drawn(typeof png === "string" && png.length > 0 ? png : null);
+  };
+
   /** Where the embed found anchors asked of it, now or since: each stand-in placed again, the page told once when any moved. */
   const foundIn = (bridge: Bridge, found: unknown) => {
     const answers =
@@ -568,13 +647,20 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
 
   addEventListener("message", (event) => {
     const said = event.data as {
+      errors?: unknown;
       found?: unknown;
+      png?: unknown;
       seq?: unknown;
       target?: unknown;
       type?: unknown;
     } | null;
     const type = said?.type;
-    if (type !== EMBEDDED && type !== TARGET && type !== FOUND) {
+    if (
+      type !== EMBEDDED &&
+      type !== TARGET &&
+      type !== FOUND &&
+      type !== PICTURED
+    ) {
       return;
     }
     const frame = frameOf(event.source);
@@ -589,7 +675,9 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     if (!bridge || event.origin !== bridge.origin) {
       return;
     }
-    if (type === TARGET) {
+    if (type === PICTURED) {
+      drew(bridge, Number(said?.seq), said?.png, said?.errors);
+    } else if (type === TARGET) {
       targeted(bridge, Number(said?.seq), said?.target);
     } else {
       foundIn(bridge, said?.found);
@@ -703,11 +791,39 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     fit: () => {
       for (const [frame, bridge] of bridges) {
         if (!laid(bridge)) {
+          dropDrawing(bridge);
           bridges.delete(frame);
         }
       }
     },
     read,
+    picture: (el, box, failed) => {
+      const held = standIns.get(el);
+      const remote = held?.entry.remote;
+      if (!(held && remote)) {
+        return Promise.resolve(null);
+      }
+      const { bridge } = held;
+      // The box as the embed's viewport has it: from the stand-in, which
+      // stands where the embed last said its element does.
+      const r = rectOf(el);
+      const sx = remote.box.w > 0 && r.width > 0 ? r.width / remote.box.w : 1;
+      const sy = remote.box.h > 0 && r.height > 0 ? r.height / remote.box.h : 1;
+      seq += 1;
+      const mine = seq;
+      failures.set(mine, failed);
+      post(bridge, {
+        type: PICTURE,
+        seq: mine,
+        box: {
+          x: remote.box.x + (box.x - (r.x + scrollX)) / sx,
+          y: remote.box.y + (box.y - (r.y + scrollY)) / sy,
+          w: box.w / sx,
+          h: box.h / sy,
+        },
+      });
+      return new Promise((resolve) => bridge.drawing.set(mine, resolve));
+    },
     anchorOf: (el) => {
       const held = read(el);
       if (!held) {

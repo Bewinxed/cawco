@@ -1642,9 +1642,21 @@ async function thumbnail(): Promise<{
 /** The page's root's tag in Comment mode: the word the design and the commenting page use. */
 const WHOLE_PAGE = "Whole page";
 
+/** The most of an element's words its hover label quotes, characters. Our call: a button's or a heading's whole, a paragraph's start. */
+const LABEL_WORDS = 40;
+
+/** Whether `el` draws words of its own: a text node of its own that says something, not only its children's. */
+const drawsWords = (el: Element): boolean =>
+  [...el.childNodes].some(
+    (node) => node.nodeType === Node.TEXT_NODE && !!node.textContent?.trim()
+  );
+
 /**
- * What the hover label says of `el` (the page's root: {@link WHOLE_PAGE}): its tag, id, first class and dev
- * source; a frame of another origin, which cannot be read into, by its origin.
+ * What the hover label says of `el` (the page's root: {@link WHOLE_PAGE}):
+ * a canvas's story frame by its story ("Story On"); else its tag, id, first
+ * class, its own words when it draws some (two buttons one line writes read
+ * apart), and dev source; a frame of another origin, which cannot be read
+ * into, by its origin.
  */
 function labelOf(el: Element): string {
   const standIn = embeds.read(el);
@@ -1655,12 +1667,20 @@ function labelOf(el: Element): string {
   if (el === doc.body || el === doc.documentElement) {
     return WHOLE_PAGE;
   }
+  const story = el.getAttribute("data-cawco-story");
+  if (story) {
+    return `Story ${story}`;
+  }
   const named = `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${el.classList[0]}` : ""}`;
   if (isFrame(el) && !frameDocument(el)) {
     return `${named} — ${frameOrigin(el)}`;
   }
+  const words = drawsWords(el) ? wordsOf(el) : "";
+  const quoted = words
+    ? ` "${words.length > LABEL_WORDS ? `${words.slice(0, LABEL_WORDS - 1).trimEnd()}…` : words}"`
+    : "";
   const source = sourceOf(el);
-  return `${named}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
+  return `${named}${quoted}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
 }
 
 /** The element under the pointer in Comment mode, drawn at rest unless a chosen one stands ({@link paint}); none clears it. */
@@ -2161,12 +2181,23 @@ window.addEventListener(
 const shots = new Map<string, { look: string; png: Promise<string | null> }>();
 
 /** Mark `id`'s picture, cropped to `box`; the one already drawn while its `look` is the same. */
-function shot(id: string, look: string, box: Box): Promise<string | null> {
+function shot(
+  id: string,
+  look: string,
+  box: Box,
+  el: Element | null = null
+): Promise<string | null> {
   const had = shots.get(id);
   if (had?.look === look) {
     return had.png;
   }
-  const png = cropPicture(box, (message) => post("cawco:error", { message }));
+  const undrawn = (message: string) => post("cawco:error", { message });
+  // A mark on an embed of another origin is drawn there, by its own overlay:
+  // this page cannot draw what a frame of another origin shows.
+  const png =
+    el && embeds.read(el)
+      ? embeds.picture(el, box, undrawn)
+      : cropPicture(box, undrawn);
   shots.set(id, { look, png });
   return png;
 }
@@ -2186,7 +2217,7 @@ function pinPicture(id: string): Promise<string | null> {
   if (pin?.ink) {
     return groupPicture(pin.ink);
   }
-  return crop ? shot(id, crop.look, crop.box) : Promise.resolve(null);
+  return crop ? shot(id, crop.look, crop.box, crop.el) : Promise.resolve(null);
 }
 
 /**
@@ -2563,6 +2594,12 @@ answerEmbedder({
         ? (node as Element)
         : node.parentElement
     )?.closest(OVERLAY_OWN),
+  // The box as this page's viewport has it, drawn from its page.
+  picture: (box, undrawn) =>
+    cropPicture(
+      { x: box.x + scrollX, y: box.y + scrollY, w: box.w, h: box.h },
+      undrawn
+    ),
   read: remoteOf,
 });
 

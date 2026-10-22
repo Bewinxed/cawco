@@ -125,9 +125,10 @@ export interface Pins {
   cover: (boxes: Box[]) => void;
   /**
    * Where pin `id`'s picture is cropped, the page's px, and what it shows
-   * (its look: a new one is drawn again); null when it is not on the page.
+   * (its look: a new one is drawn again), and the element it is cropped
+   * round when it stands on one; null when it is not on the page.
    */
-  cropOf: (id: string) => { box: Box; look: string } | null;
+  cropOf: (id: string) => { box: Box; el: Element | null; look: string } | null;
   /** The comment being written stands here (its hollow pill, no number yet), or none. */
   draft: (target: DraftTarget | null) => void;
   /** Pins drawn again where their elements stand now. */
@@ -996,12 +997,16 @@ export function startPins(deps: PinsDeps): Pins {
       if (pin.ink) {
         const box = deps.groupBox(pin.ink);
         return box
-          ? { box: padded(box), look: `ink:${pin.ink}:${JSON.stringify(box)}` }
+          ? {
+              box: padded(box),
+              el: null,
+              look: `ink:${pin.ink}:${JSON.stringify(box)}`,
+            }
           : null;
       }
       if (where.page) {
         const box = viewport();
-        return { box, look: `page:${JSON.stringify(box)}` };
+        return { box, el: null, look: `page:${JSON.stringify(box)}` };
       }
       if (!where.el) {
         return null;
@@ -1009,6 +1014,7 @@ export function startPins(deps: PinsDeps): Pins {
       const box = roundPoint(pageBox(where.el), where.at);
       return {
         box: padded(box),
+        el: where.el,
         look: `pin:${JSON.stringify(box)}`,
       };
     },

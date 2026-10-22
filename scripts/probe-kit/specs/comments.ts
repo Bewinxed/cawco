@@ -143,14 +143,18 @@
  * stupi canvas it selects the whole page"), on a decision page whose card
  * shows a Preview of a two-story canvas on an origin of its own (the hub's
  * embed origin, the overlay running in it):
- * l. Moved across the Preview, the target never names the whole page;
- *    resting on each story's button washes that button, the target's box
- *    the button's mapped into the page (±1px), at rest with its label; a
- *    press opens the composer with the button chosen (its 1px line, no
- *    label); the comment's pin stores the canvas's id, the story, the
- *    button's source and a selector that finds it in the canvas, and its
- *    pill's tail stands on the point pressed (±2px); comment_read of the
- *    page answers it with the canvas's id, the story and the button.
+ * l. Moved across the Preview, the target never names the whole page, and
+ *    a story's frame reads by its story ("Story On"); resting on each
+ *    story's button washes that button, the target's box the button's
+ *    mapped into the page (±1px), at rest, its label the button's own words
+ *    and line, so the two read apart; a press opens the composer with the
+ *    button chosen (its 1px line, no label); the comment's pin stores the
+ *    canvas's id, the story, the button's source and a selector that finds
+ *    it in the canvas, and its pill's tail stands on the point pressed
+ *    (±2px); its picture, drawn by the embed's own overlay, holds the
+ *    button (not one colour inside its box, its most-drawn colour the
+ *    button's computed face); comment_read of the page answers it with the
+ *    canvas's id, the story and the button.
  *
  * And the owner's pins (2026-10-21: "this line is too tihck and too
  * prominent, why is it so thick?", "why use such thick and solid lines?"),
@@ -2083,6 +2087,49 @@ keep = Option("keep", "Keep it", "It says its state in words.", true, [], "One m
 redo = Option("redo", "Redraw it", "A new look.", false, [], "Another round.")
 live = Preview("${canvas}", "The toggle, off and on")`;
 
+/** A pin's crop round its element, px each side (agent preview-overlay pins.ts `CROP_PAD`). */
+const PIN_CROP_PAD = 24;
+/** The channels of a computed `rgb()` or `rgba()` colour. */
+const RGB_PARTS = /\d+(?:\.\d+)?/g;
+
+/**
+ * What a pin's picture (base64 PNG) draws inside its element's box `box`,
+ * the crop standing {@link PIN_CROP_PAD} round it: how many colours (each
+ * channel to 8 levels a step), the most-drawn one and its share, read 2px
+ * in from the box's edge so its border is left out.
+ */
+const elementInPicture = (png: string, box: { h: number; w: number }) => {
+  const picture = PNG.sync.read(Buffer.from(png, "base64"));
+  const scale = picture.width / (box.w + 2 * PIN_CROP_PAD);
+  const x0 = Math.ceil((PIN_CROP_PAD + 2) * scale);
+  const x1 = Math.floor((PIN_CROP_PAD + box.w - 2) * scale);
+  const y0 = Math.ceil((PIN_CROP_PAD + 2) * scale);
+  const y1 = Math.min(
+    picture.height,
+    Math.floor((PIN_CROP_PAD + box.h - 2) * scale)
+  );
+  const counts = new Map<string, { n: number; rgb: number[] }>();
+  let all = 0;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      const at = (y * picture.width + x) * 4;
+      const rgb = [0, 1, 2].map((c) => picture.data[at + c] ?? 0);
+      const key = rgb.map((c) => Math.floor(c / 8)).join(",");
+      const had = counts.get(key);
+      counts.set(key, { n: (had?.n ?? 0) + 1, rgb: had?.rgb ?? rgb });
+      all += 1;
+    }
+  }
+  const [most] = [...counts.values()].sort((a, b) => b.n - a.n);
+  return {
+    w: picture.width,
+    h: picture.height,
+    colours: counts.size,
+    most: most?.rgb ?? [],
+    share: most && all > 0 ? Math.round((most.n / all) * 100) / 100 : 0,
+  };
+};
+
 /** The On story, as comment_read writes a pin's sheet. */
 const STORY_ON = /"story":\s*"On"/;
 
@@ -2106,6 +2153,40 @@ const embedTarget = (frame: Frame) =>
       label: label && !label.hidden ? (label.textContent ?? "") : null,
     };
   });
+
+/**
+ * (l) A pin's picture on an embed of another origin, as the hub keeps it
+ * for the delivery: drawn by the embed's own overlay, the button in it,
+ * never a blank frame.
+ */
+const embedPictureCheck = async (
+  on: On,
+  embed: Frame,
+  pictures: ReturnType<typeof watchPictures>,
+  pinId: string,
+  onButton: { h: number; w: number; x: number; y: number }
+) => {
+  const pictured = await until(
+    "the pin's picture at the hub",
+    () => pictures.posted.find((one) => one.mark === pinId),
+    Boolean,
+    10_000
+  ).catch(() => undefined);
+  pictures.stop();
+  const face = await embed
+    .getByRole("button", { name: "Turn off" })
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  const drawn = pictured ? elementInPicture(pictured.png, onButton) : null;
+  const want = (face.match(RGB_PARTS) ?? []).map(Number);
+  on.kit.check(
+    "l: the pin's picture reaches the hub drawn by the embed: inside the button's box it is not one colour (its words on its face), and its most-drawn colour is the button's face as the embed computes it (±8 a channel)",
+    !!drawn &&
+      drawn.colours > 1 &&
+      want.length >= 3 &&
+      drawn.most.every((channel, i) => Math.abs(channel - want[i]) <= 8),
+    `picture ${pictured ? `${drawn?.w}×${drawn?.h}` : "none posted"}; inside the button ${JSON.stringify(drawn && { colours: drawn.colours, most: drawn.most, share: drawn.share })}; the face computed ${face}`
+  );
+};
 
 /**
  * (l) The owner's report (2026-10-22, on a decision page whose cards draw
@@ -2224,8 +2305,13 @@ const embedChecks = async (on: On) => {
       labels.push((await embedTarget(outer))?.label ?? "(none)");
     }
     on.kit.check(
-      `l: in Comment mode, moving across a canvas Preview of another origin never names the whole page (${STEPS + 1} steps read)`,
-      !labels.includes("Whole page"),
+      `l: in Comment mode, moving across a canvas Preview of another origin never names the whole page, and a story's frame reads by its story ("Story Off", "Story On"), never by its section (${STEPS + 1} steps read)`,
+      !(
+        labels.includes("Whole page") ||
+        labels.some((one) => one.startsWith("section"))
+      ) &&
+        labels.includes("Story Off") &&
+        labels.includes("Story On"),
       labels.join(" | ")
     );
 
@@ -2245,22 +2331,21 @@ const embedChecks = async (on: On) => {
     };
     const washes = (
       now: Awaited<ReturnType<typeof embedTarget>>,
-      box: typeof off
-    ) =>
-      !!now &&
-      near(now.box, box, 1) &&
-      now.rest &&
-      (now.label ?? "").startsWith("button");
+      box: typeof off,
+      label: string
+    ) => !!now && near(now.box, box, 1) && now.rest && now.label === label;
     const onOff = await restOn(off);
     const onOn = await restOn(onButton);
     on.kit.check(
-      "l: resting on the Off story's button, then the On story's, inside the Preview washes each button: the target's box is the button's box mapped into the page (±1px), at rest (no line), its label naming the button",
-      washes(onOff, off) && washes(onOn, onButton),
+      `l: resting on the Off story's button, then the On story's, inside the Preview washes each button: the target's box is the button's box mapped into the page (±1px), at rest (no line), its label naming the button by its own words and line (button "Turn on" — src/Toggle.svelte:9, button "Turn off" — …), so the two read apart`,
+      washes(onOff, off, 'button "Turn on" — src/Toggle.svelte:9') &&
+        washes(onOn, onButton, 'button "Turn off" — src/Toggle.svelte:9'),
       `Off ${JSON.stringify(onOff)} vs ${JSON.stringify(off)}; On ${JSON.stringify(onOn)} vs ${JSON.stringify(onButton)}`
     );
 
     // A press on it opens the composer there: the button chosen, its line drawn.
     const before = Object.keys((await docOf(outer)).pins).length;
+    const pictures = watchPictures(on.page);
     await on.page.mouse.click(end.x, end.y);
     const composer = on.page.locator(COMPOSE);
     const shown = await composer
@@ -2342,6 +2427,8 @@ const embedChecks = async (on: On) => {
         Math.abs(disc.y - (end.y - pane.y)) <= 2,
       `tail ${JSON.stringify(disc)}; pressed ${JSON.stringify({ x: end.x - pane.x, y: end.y - pane.y })}`
     );
+
+    await embedPictureCheck(on, embed, pictures, pin.id, onButton);
 
     await paneMode(on, outer, "V");
     const read = await on.call(READ, { artifact: pageId, filter: "all" });
