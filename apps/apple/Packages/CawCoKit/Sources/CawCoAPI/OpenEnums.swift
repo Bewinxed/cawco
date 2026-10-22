@@ -3441,6 +3441,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/HeldReasonBy`.
+    public enum HeldReasonBy: OpenEnum {
+        case project
+        case task
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "project": self = .project
+            case "task": self = .task
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .project: "project"
+            case .task: "task"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.project, .task]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/HomeCredentialKind`.
     public enum HomeCredentialKind: OpenEnum {
         case apiKey
@@ -6889,62 +6927,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/SkipReason`.
-    public enum SkipReason: OpenEnum {
-        case allowed
-        case backup
-        case benched
-        case limit
-        case reserve
-        case room
-        case signin
-        case unread
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "allowed": self = .allowed
-            case "backup": self = .backup
-            case "benched": self = .benched
-            case "limit": self = .limit
-            case "reserve": self = .reserve
-            case "room": self = .room
-            case "signin": self = .signin
-            case "unread": self = .unread
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .allowed: "allowed"
-            case .backup: "backup"
-            case .benched: "benched"
-            case .limit: "limit"
-            case .reserve: "reserve"
-            case .room: "room"
-            case .signin: "signin"
-            case .unread: "unread"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.allowed, .backup, .benched, .limit, .reserve, .room, .signin, .unread]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/SlashCommandKind`.
     public enum SlashCommandKind: OpenEnum {
         case builtin
@@ -8297,6 +8279,7 @@ public enum OpenEnums {
     /// `#/components/schemas/WaitReason`.
     public enum WaitReason: OpenEnum {
         case fork
+        case free
         case full
         case off
         case room
@@ -8308,6 +8291,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "fork": self = .fork
+            case "free": self = .free
             case "full": self = .full
             case "off": self = .off
             case "room": self = .room
@@ -8320,6 +8304,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .fork: "fork"
+            case .free: "free"
             case .full: "full"
             case .off: "off"
             case .room: "room"
@@ -8333,7 +8318,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.fork, .full, .off, .room, .soon, .work]
+        public static let allCases: [Self] = [.fork, .free, .full, .off, .room, .soon, .work]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -28,7 +28,7 @@
  *   longer (the hub's `[admission]` line says it goes).
  * - warm: as move, but its brief's answer wrote a 1-hour cache, so its
  *   cache is measured to outlast A's reset 2 minutes on (hub at-limit.ts
- *   `decideAtLimit`): waiting costs nothing and a move would re-read it
+ *   `decideStop`): waiting costs nothing and a move would re-read it
  *   cold, so it waits on A though the policy waits for no reset and B has
  *   room. Its chip says it continues at A's reset and names no move; at
  *   that reset it carries on on A, never on B, and its item runs to done.
@@ -51,13 +51,14 @@
  *   new one; its page opens the live session.
  *
  * - carry: A refuses it while its brief's command runs in the background,
- *   which no resume on another account brings back. Stopped at its limit,
- *   it runs no turn, so the command keeps it nowhere (hub server.ts
- *   `moveRowsToAccount` with `stopped`): within {@link MOVE_WITHIN_MS} of
- *   A's refusal it runs on B, before the command would have ended, and its
- *   first request there carries the hub's word of what the move ended. Its
- *   chip never says it waits for work in flight, and says nothing once it
- *   runs on B.
+ *   which no resume on another account brings back. A delegate's work, no
+ *   person waiting on it, so its move to B waits for that command, up to the
+ *   cap from when it was first held (hub at-limit.ts `moveTo`, server.ts
+ *   `moveRowsToAccount` with `laterSince`): its chip says it moves to B when
+ *   its work in flight ends, and nothing runs on B. The command ends
+ *   {@link COMMAND_S} seconds in; its notice's turn on A is refused, and
+ *   within {@link MOVE_WITHIN_MS} of that it runs on B, the command's output
+ *   with it, and its chip says nothing once it runs there.
  *
  *   bun scripts/probe-kit/run.ts limit-stall
  */
@@ -88,7 +89,7 @@ const LIMIT_MS: Record<Leg, number> = {
   warm: 120_000,
   full: 75_000,
   continued: 150_000,
-  // Far past the move: B takes it at once.
+  // Far past the command's end: B takes it once that ends.
   carry: 40 * 60_000,
 };
 /** How long past A's reset the continued leg watches for its old session. */
@@ -176,12 +177,10 @@ const briefOf = (leg: Leg) => `PROBE-CHILD-${leg}`;
 const memoryOf = (leg: Leg) => `PROBE-MEMORY-${leg}`;
 /** The person's message to the full leg's delegate while it is stopped. */
 const NOTE = "PROBE-NOTE-while-stopped";
-/** How long the carry leg's background command runs: far past its move. */
-const COMMAND_S: Partial<Record<Leg, number>> = { carry: 600 };
+/** How long the carry leg's background command runs: its move waits for it. */
+const COMMAND_S: Partial<Record<Leg, number>> = { carry: 90 };
 /** What the carry leg's background command says as it ends. */
 const COMMAND_DONE = "PROBE-CARRY-command-done";
-/** What the hub tells a session whose move ended its background work (server.ts `endedByMoveWords`). */
-const ENDED = "You were moved to another account.";
 /** The warm leg's brief answer's cache: written for an hour (the mock's `cache` is 1h). */
 const WARM_CACHE = { read: 0, write: 30_000 };
 const HOUR = 3_600_000;
@@ -651,7 +650,7 @@ const moveLeg = async (
 /**
  * A delegate whose cache was measured written for an hour, A refusing it
  * with its reset 2 minutes on and B measured with room: the reset comes
- * before its cache lapses, so it waits on A (at-limit.ts `decideAtLimit`,
+ * before its cache lapses, so it waits on A (at-limit.ts `decideStop`,
  * "soon") though the policy waits for no reset. Its chip says it continues
  * at that reset and names no move; past it, it carries on on A, never on B.
  */
@@ -669,8 +668,8 @@ const warmLeg = async (
     (one) => !!one?.stalled?.includes("continues at"),
     60_000
   ).catch(() => look.chip(instance));
-  const [hold] = fleet.query<{ carry: string | null; until: number | null }>(
-    "SELECT carry, until FROM limit_holds WHERE instance_id = ?",
+  const [hold] = fleet.query<{ until: number | null }>(
+    "SELECT until FROM limit_holds WHERE instance_id = ?",
     instance
   );
   const [cache] = fleet.query<{
@@ -687,7 +686,6 @@ const warmLeg = async (
     lapses > reset &&
       Date.now() < reset &&
       Math.abs(holdUntil - reset) <= 2000 &&
-      !hold?.carry &&
       !!chip?.stalled?.startsWith("Stopped at Probe’s limit") &&
       chip.stalled.includes(`continues at ${clockOf(reset)}`) &&
       !chip.stalled.includes("moves to"),
@@ -1171,11 +1169,11 @@ const clockOf = (at: number): string =>
 
 /**
  * A delegate refused at A's limit with a command running in the background:
- * stopped, it runs no turn, so the command keeps it nowhere. It runs on B
- * within {@link MOVE_WITHIN_MS} of A's refusal, long before the command
- * ends, its first request there carrying the hub's word of what the move
- * ended; its chip never says it waits for work in flight, and says nothing
- * once it runs on B.
+ * no person waits on it, so its move to B waits for that command, its chip
+ * saying so, and nothing runs on B while it runs. Once it ends, the turn its
+ * notice starts is refused on A, and it runs on B within
+ * {@link MOVE_WITHIN_MS} of that, the command's output with it; its chip
+ * says nothing once it runs there.
  */
 const carryLeg = async (
   kit: Kit,
@@ -1197,29 +1195,30 @@ const carryLeg = async (
         .find((one) => onAccount(one, B));
     },
     Boolean,
-    MOVE_WITHIN_MS + 60_000
+    (COMMAND_S.carry ?? 0) * 1000 + MOVE_WITHIN_MS + 120_000
   ).catch(() => undefined);
-  const ended = fleet.seen.some(
+  const ended = fleet.seen.find(
     (one) =>
       one.all.includes(briefOf("carry")) && one.all.includes(COMMAND_DONE)
   );
   kit.check(
-    `carry: stopped at A's limit with its command running, it runs on B within ${MOVE_WITHIN_MS / 1000} s of A's refusal, the command still running, and its chip never says it waits for work in flight`,
+    "carry: stopped at A's limit with its command running, its move to B waits for that command, its chip saying so, and nothing runs on B before the command ends",
     !!onB &&
-      onB.at - refusedAt <= MOVE_WITHIN_MS &&
-      !ended &&
-      !chips.some((one) => one.includes("work in flight")),
-    `${onB ? `first request on B ${onB.at - refusedAt} ms after A's refusal` : "nothing on B"}; the command ended already: ${ended}; chips ${JSON.stringify([...new Set(chips)])}; account ${look.accountOf(instance)}`
+      !!ended &&
+      onB.at >= ended.at &&
+      chips.some((one) =>
+        one.includes("moves to Probe B when its work in flight ends")
+      ),
+    `${onB ? `first request on B ${onB.at - refusedAt} ms after A's refusal` : "nothing on B"}; the command's end first seen ${ended ? `${ended.at - refusedAt} ms after` : "never"}; chips ${JSON.stringify([...new Set(chips)])}; account ${look.accountOf(instance)}`
   );
-  const told = await until(
-    "carry: told on B what the move ended",
-    () =>
-      look
-        .childSeen("carry", refusedAt)
-        .find((one) => onAccount(one, B) && one.all.includes(ENDED)),
-    Boolean,
-    60_000
-  ).catch(() => undefined);
+  kit.check(
+    `carry: once its command ended, it runs on B within ${MOVE_WITHIN_MS / 1000} s, the command's output with it`,
+    !!onB &&
+      !!ended &&
+      onB.at - ended.at <= MOVE_WITHIN_MS &&
+      onB.all.includes(COMMAND_DONE),
+    `${onB && ended ? `${onB.at - ended.at} ms after the command's end` : "never"}`
+  );
   const after = await until(
     "carry: its chip says nothing once it moved",
     () => look.chip(instance),
@@ -1227,9 +1226,9 @@ const carryLeg = async (
     60_000
   ).catch(() => look.chip(instance));
   kit.check(
-    "carry: on B it reads what the move ended, and its chip no longer says it is stopped",
-    !!told && !after?.stalled,
-    `${told ? `told ${told.at - refusedAt} ms after A's refusal` : "never told on B"}; chip ${JSON.stringify(after?.stalled ?? null)}, state ${after?.state}`
+    "carry: on B its chip no longer says it is stopped",
+    !after?.stalled,
+    `chip ${JSON.stringify(after?.stalled ?? null)}, state ${after?.state}`
   );
 };
 

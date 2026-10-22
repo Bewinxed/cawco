@@ -1,28 +1,26 @@
 /**
- * A session a person started, stopped at its account's limit, is never left
- * there quietly while another account can take it (hub at-limit.ts,
+ * A session stopped at its account's limit is never left there quietly
+ * while another account can take it (hub at-limit.ts `decideStop`,
  * admission.ts, server.ts `moveByHand`; dashboard switch.svelte.ts). On a
  * scratch fleet (real hub, agent and sessiond; the real Claude Code CLI
  * against the mock model) with three Claude accounts, every model request
  * saying which one it ran on: Probe (A) and Probe C in one organization,
  * Probe B in another. B's 5-hour window reads 72%, priced at $2.56 a
- * percent from its own history: room, above the old fixed 50% admission
- * ceiling that called such an account full (2026-10-22 10:16, "No other
- * account has room for it" beside marketing@ at 72%). C reads 99%, priced
- * at $0.50 a percent: room, too little for any move's next-turn allowance.
+ * percent from its own history: room (2026-10-22 10:16, "No other account
+ * has room for it" beside marketing@ at 72%). C reads 99%, priced at $0.30
+ * a percent: a move's next-turn allowance alone takes more than its 1%.
  *
  * - move (2026-10-22 11:39, case A): A refuses the session's first turn.
- *   Placement weighs C first (A's organization, its cache carries), which
- *   admission refuses; the same decision moves the session to B within
- *   {@link MOVE_WITHIN_MS}, its cache cold, so waiting for A's reset would
- *   re-read it cold too. C never runs it, and nothing says no other account
- *   has room.
+ *   One decision moves it to B within {@link MOVE_WITHIN_MS}: C, of A's
+ *   organization, has too little left for the move, and its cache is cold,
+ *   so waiting for A's reset would re-read it cold too. C never runs it,
+ *   and nothing says no other account has room.
  * - full: B is spent until 2 minutes on, A refuses until 4 minutes on, and
  *   the session's cache is cold (the mock writes none): the wait for A
- *   outlives its cache, so it waits for B, the account with room soonest.
- *   Its row and transcript line name B and when, and the line says why each
- *   other account didn't take it (C's room too small, B at its limit); at
- *   B's reset it runs on B.
+ *   outlives its cache, so it waits for B, the account back soonest. Its
+ *   row and transcript line name B and when, and the line says why each
+ *   other account didn't take it (C's 1% too little for its move, B at its
+ *   limit until its reset); at B's reset it runs on B.
  * - held (case B): B is spent, so A's refusal holds the session, a command
  *   of its running in the background. B frees, and a person's message to the
  *   held session moves it to B at once, the command ended by the move: it
@@ -35,6 +33,15 @@
  *   inside the filing turn and starts again only after it ended; reading
  *   that end off the machine, it runs the `/compact`, and the message goes,
  *   with no interrupt.
+ * - later (the design's leg 11, a driven session): an orchestrator's child,
+ *   its last turn sent by its parent, refused at A's limit with a command
+ *   running in the background. No person waits on it, so its move to B waits
+ *   for that command: it is held, its chip and line say it moves to B when
+ *   that work ends (or carries on at A's reset, which comes before the cap
+ *   from when it was first held), and nothing runs on B. The hub stops, its hold's start is set back past the cap (as if
+ *   the hub had been down that long), and the hub starts again: the cap
+ *   counts from that stored start, so the first look moves it to B, ending
+ *   the command, and it is told so there.
  * - pick: moving at the limit is switched off, and the session holds a
  *   background command when A refuses it. Its row, its head (tab and card)
  *   and its transcript line show the stop as an error, in the failure ink,
@@ -76,18 +83,20 @@ const B_USED_PCT = 72;
 const B_USD_PER_PCT = 2.56;
 /** C's 5-hour window as read, and the dollars a percent of it costs. */
 const C_USED_PCT = 99;
-const C_USD_PER_PCT = 0.5;
+const C_USD_PER_PCT = 0.3;
 /** A session moved off its limit runs on B within this of A's refusal. */
 const MOVE_WITHIN_MS = 30_000;
+/** A hold is looked at again within this: the controller's recheck, and a minute for the session to start there. */
+const RECHECK_WITHIN_MS = 6 * 60_000;
 
-const LEGS = ["move", "full", "held", "compact", "pick"] as const;
+const LEGS = ["move", "full", "held", "compact", "later", "pick"] as const;
 type Leg = (typeof LEGS)[number];
 /** Only `leg`'s session's words carry this. */
 const markOf = (leg: Leg) => `PROBE-LIMIT-${leg}`;
 /** A leg's first answer, which a later request carrying it has. */
 const memoryOf = (leg: Leg) => `PROBE-MEMORY-${leg}`;
 /** The legs whose first turn leaves a command running in the background. */
-const COMMAND_LEGS: readonly Leg[] = ["held", "pick"];
+const COMMAND_LEGS: readonly Leg[] = ["held", "later", "pick"];
 /** What marks the hub's filing turn: its filing prompt (open-items.ts `filingPrompt`). */
 const FILING = "file everything still open";
 /** What marks the summary request of the hub's `/compact`: its focus. */
@@ -103,6 +112,7 @@ const limited: Record<Leg, number> = {
   full: 0,
   held: 0,
   compact: 0,
+  later: 0,
   pick: 0,
 };
 let bFullUntil = 0;
@@ -441,7 +451,7 @@ const moveLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     onAccount(one, C)
   );
   kit.check(
-    `move: refused on A, it moves to B (read at ${B_USED_PCT}%) by itself within ${MOVE_WITHIN_MS / 1000} s, in the decision that weighed C first and found its room too small, and nothing says no other account has room`,
+    `move: refused on A, it moves to B (read at ${B_USED_PCT}%) by itself within ${MOVE_WITHIN_MS / 1000} s, in one decision that tried nothing else, its line saying both sides' costs, and nothing says no other account has room`,
     !!refused &&
       !!onB &&
       onB.at - refused <= MOVE_WITHIN_MS &&
@@ -449,9 +459,10 @@ const moveLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
       rowAccount(fleet, id) === B &&
       lines.some((one) => one.metadata?.accountMove?.kind === "moved") &&
       log.some((line) =>
-        line.includes(`isn't moved to ${NAME[C]}, though it has room`)
+        line.includes(`moves from ${NAME[A]} to ${NAME[B]}: moving re-reads`)
       ) &&
       log.some((line) => line.includes("would re-read it cold too")) &&
+      !log.some((line) => line.includes("couldn't move to")) &&
       !log.some((line) => line.includes("No other account has room")),
     `${onB && refused ? `first request on B ${onB.at - refused} ms after A's refusal` : "nothing on B"}; account ${rowAccount(fleet, id)}; lines ${JSON.stringify(lines.map((one) => one.content))}; log ${JSON.stringify(log.filter((line) => line.includes("[at-limit]")).slice(-4))}`
   );
@@ -485,10 +496,12 @@ const fullLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     `row ${JSON.stringify(row?.stalled ?? null)}; line ${JSON.stringify(line?.content ?? null)}; B resets at ${clockOf(bFullUntil)}, A at ${clockOf(limited.full)}`
   );
   kit.check(
-    "full: its line says why each other account didn't take it, never that none has room: C has room too small for its re-read, B is at its limit until its reset",
-    detail.includes(`${NAME[C]} has 1% left`) &&
+    "full: its line says why each other account didn't take it, never that none has room: C's 1% is too little for its move, B is at its limit until its reset, and it moves to B then",
+    detail.startsWith("No account can take it now") &&
+      detail.includes(`${NAME[C]} 1% left, its move takes`) &&
+      detail.includes(`${NAME[B]} at its limit until ${clockOf(bFullUntil)}`) &&
       detail.includes(
-        `${NAME[B]} is at its limit until ${clockOf(bFullUntil)}`
+        `it moves to ${NAME[B]} at ${clockOf(bFullUntil)}, before ${NAME[A]} resets`
       ) &&
       !detail.includes("No other account has room"),
     JSON.stringify(detail)
@@ -659,6 +672,140 @@ const compactLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   );
 };
 
+/** A message to `id` from its parent session `parent`, as a parent's send carries it. */
+const peerSend = async (
+  fleet: KitFleet,
+  id: string,
+  parent: string,
+  words: string
+): Promise<string> => {
+  const uuid = crypto.randomUUID();
+  await fleet.post({
+    type: "command",
+    commandId: crypto.randomUUID(),
+    kind: "send",
+    machineId: MACHINE,
+    sessionId: id,
+    payload: {
+      instanceId: id,
+      message: {
+        type: "user",
+        uuid,
+        message: { role: "user", content: words },
+        parent_tool_use_id: null,
+        origin: { kind: "peer", fromSession: parent, name: "Limit parent" },
+      },
+    },
+  });
+  return uuid;
+};
+
+/** The restart bound a move waits for work held for later (core binary-updates.ts `RESTART_WAIT_CAP_MS`). */
+const CAP_MS = 30 * MINUTE;
+
+/**
+ * Leg 11, a driven session: an orchestrator's child, refused at A's limit
+ * on a turn its parent sent, a command of its running in the background.
+ * Its move to B waits for that command; across a hub restart the cap counts
+ * from its hold's stored start, so once that start is past the cap the
+ * first look moves it, ending the command.
+ */
+const laterLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
+  const parent = await fleet.spawn("claude", "Limit parent", fleet.repo, {
+    account: A,
+  });
+  const id = await fleet.spawn("claude", "Limit later", fleet.repo, {
+    account: A,
+  });
+  fleet.write(
+    "UPDATE instances SET parent_instance_id = ? WHERE id = ?",
+    parent,
+    id
+  );
+  await peerSend(fleet, id, parent, `${markOf("later")}: start`);
+  await until(
+    "later: its first turn answered, the command left running",
+    () =>
+      worked.has("later") && fleet.instance(id)?.turn_open_at === null ? 1 : 0,
+    Boolean,
+    120_000
+  );
+  limited.later = Date.now() + 4 * MINUTE;
+  await peerSend(fleet, id, parent, `${markOf("later")}: and the next thing`);
+  const held = await until(
+    "later: its move waits for its command",
+    () => boardRow(fleet, id),
+    (one) => !!one?.stalled?.words.includes("work in flight"),
+    120_000
+  ).catch(() => boardRow(fleet, id));
+  const since =
+    fleet.query<{ created_at: number }>(
+      "SELECT created_at FROM limit_holds WHERE instance_id = ?",
+      id
+    )[0]?.created_at ?? 0;
+  // A while for anything that would move it now to show.
+  await Bun.sleep(15_000);
+  const early = seenOf(fleet, "later", refusedAt.later ?? 0).filter((one) =>
+    onAccount(one, B)
+  );
+  const waits = (await accountLines(fleet, id)).find(
+    (one) =>
+      one.metadata?.accountMove?.kind === "unmoved" &&
+      one.metadata.accountMove.waits === true
+  );
+  // A resets before the cap from its hold's start, so the chip names that
+  // reset: it carries on there then, unless the command ends first.
+  const first =
+    limited.later < since + CAP_MS
+      ? `or continues at ${clockOf(limited.later)}`
+      : `by ${clockOf(since + CAP_MS)}`;
+  kit.check(
+    "later: no person waits on it, so its move to B waits for its command: held, its chip saying it moves to B when that work ends, or what comes first of A's reset and the cap from when it was first held, its line saying it can't move yet, and nothing runs on B",
+    !!held?.stalled?.words.includes(
+      `moves to ${NAME[B]} when its work in flight ends`
+    ) &&
+      !!held.stalled.words.includes(first) &&
+      !!waits?.content.startsWith(
+        `Can't move from ${NAME[A]} to ${NAME[B]} yet`
+      ) &&
+      early.length === 0 &&
+      rowAccount(fleet, id) === A,
+    `chip ${JSON.stringify(held?.stalled ?? null)}; held since ${since ? clockOf(since) : "never"}; line ${JSON.stringify(waits?.content ?? null)}; requests on B ${early.length}; account ${rowAccount(fleet, id)}`
+  );
+  // The hub goes down; its hold's stored start is set back past the cap,
+  // as if it had stayed down that long.
+  await fleet.stop("hub");
+  fleet.write(
+    "UPDATE limit_holds SET created_at = ? WHERE instance_id = ?",
+    Date.now() - CAP_MS - MINUTE,
+    id
+  );
+  const restartedAt = Date.now();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const onB = await until(
+    "later: after the restart it runs on B, told what the move ended",
+    () =>
+      seenOf(fleet, "later", restartedAt).find(
+        (one) => onAccount(one, B) && one.all.includes(ENDED)
+      ),
+    Boolean,
+    RECHECK_WITHIN_MS
+  ).catch(() => undefined);
+  const moved = (await accountLines(fleet, id)).findLast(
+    (one) => one.metadata?.accountMove?.kind === "moved"
+  );
+  kit.check(
+    "later: started again with its hold's start past the cap, the hub's first look moves it to B, ending the command: it is told so there, and its line says the move ended it",
+    !!onB &&
+      rowAccount(fleet, id) === B &&
+      !!moved?.content.includes(
+        "a command was running and was ended by the move"
+      ),
+    `${onB ? `told on B ${onB.at - restartedAt} ms after the restart` : "never told on B"}; account ${rowAccount(fleet, id)}; line ${JSON.stringify(moved?.content ?? null)}`
+  );
+};
+
 const CARD = "[data-session-details-popover]";
 
 /** Opens session `id`'s page and its card, from a hover on its tab. */
@@ -725,7 +872,9 @@ const stopShown = (page: Page, id: string) =>
         head: glyph(
           document.querySelector(`${card} [data-slot="session-status"]`)
         ),
-        card: read(document.querySelector(`${card} [data-slot="failure"]`)),
+        // The card's failure line: its words, which carry the ink, beside
+        // its Try again (SessionDetails.svelte `feedback`).
+        card: read(document.querySelector(`${card} [data-slot="failure"] p`)),
         transcript: read(words),
         line: read(words?.closest(".group\\/move")?.querySelector("button")),
         chip:
@@ -921,6 +1070,8 @@ const run = async (kit: Kit) => {
   await compactLeg(kit, fleet);
   await route(fleet, true);
   await aFreeAfter("compact");
+  await laterLeg(kit, fleet);
+  await aFreeAfter("later");
   await pickLeg(kit, fleet);
 };
 

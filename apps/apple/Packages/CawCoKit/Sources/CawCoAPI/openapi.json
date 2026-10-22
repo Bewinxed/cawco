@@ -49487,6 +49487,22 @@
                       "pct",
                       "window"
                     ]
+                  },
+                  "ended": {
+                    "description": "What the move ended with its old process: work it held for later (its\nbackground tasks, its one-time wake-ups), which no resume on another\naccount brings back. The session is told on arrival what ended.",
+                    "type": "object",
+                    "properties": {
+                      "tasks": {
+                        "type": "number"
+                      },
+                      "wakeups": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "tasks",
+                      "wakeups"
+                    ]
                   }
                 },
                 "required": [
@@ -49516,11 +49532,11 @@
                     "$ref": "#/components/schemas/NamedAccount",
                     "description": "Another account that frees before `account` resets: it moves there\nat `until`. Absent: `until` is `account`'s own reset."
                   },
-                  "skipped": {
-                    "description": "With `why` `full` or `room`: every other account of its provider and\nwhy it didn't take it: what a person reads, so a line never says no\naccount has room beside one that has.",
+                  "accounts": {
+                    "description": "Every other account of its provider and why it didn't take it, or\nthat it could ({@link HeldAccount}): what a person reads, so a line\nnever says no account has room beside one that has. Absent on lines\nstored before holds named them.",
                     "type": "array",
                     "items": {
-                      "$ref": "#/components/schemas/SkippedAccount"
+                      "$ref": "#/components/schemas/HeldAccount"
                     }
                   },
                   "until": {
@@ -49702,7 +49718,7 @@
                     "type": "string"
                   },
                   "waits": {
-                    "description": "Never set now: a move at a limit no longer waits for work held for\nlater. Kept on the wire only for the TestFlight builds 20261015.3 to\n20261018, which read it (packages/hub/scripts/wire-compat.ts); it\ngoes in the change that expires them.",
+                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up), and no person waits on it: the move goes when that\nwork ends, or once it has been held {@link RESTART_WAIT_CAP_MS},\nending it.",
                     "const": true,
                     "type": "boolean"
                   }
@@ -50215,49 +50231,223 @@
           "violet"
         ]
       },
-      "SkippedAccount": {
-        "description": "Another account and why it didn't take a held session ({@link SkipReason}).",
+      "HeldAccount": {
+        "description": "Another account and why it didn't take a held session, or that it could ({@link HeldReason}).",
         "type": "object",
         "properties": {
           "account": {
             "$ref": "#/components/schemas/NamedAccount"
           },
-          "leftPct": {
-            "description": "With `room`: what its 5-hour window has left, percent.",
+          "backAt": {
+            "description": "When it takes sessions again, epoch ms, when a reading says (benched, at its limit, past its reserve).",
             "type": "number"
           },
-          "until": {
-            "description": "When it takes sessions again, epoch ms, when a reading says.",
-            "type": "number"
-          },
-          "why": {
-            "$ref": "#/components/schemas/SkipReason"
+          "reason": {
+            "$ref": "#/components/schemas/HeldReason"
           }
         },
         "required": [
           "account",
-          "why"
+          "reason"
         ]
       },
-      "SkipReason": {
-        "description": "Why another account didn't take a session held at its limit: at its own\nlimit (`limit`), benched (`benched`), past its reserve (`reserve`), not one\nthe session's project or task allows (`allowed`), kept out of the pinned\nstrategy's backups (`backup`), its limits never read (`unread`), not\nsigned in on the session's machine (`signin`), or with room the hub's\nadmission keeps for moves too small for its re-read (`room`).",
-        "type": "string",
-        "enum": [
-          "allowed",
-          "backup",
-          "benched",
-          "limit",
-          "reserve",
-          "room",
-          "signin",
-          "unread"
+      "HeldReason": {
+        "description": "Why another account didn't take a session held at its limit, or, for one\nthat could, that it could (`fits`). In order of the hub's rules: not signed\nin on its machine, not one its project or task allows, benched, past its\nreserve, its limits never read, at its own limit, kept out of the pinned\nstrategy's backups, a move already landing there while its window isn't\nmeasured in dollars (`alone`), too little left for this move (`room`:\nwhat it has left and what the move takes, percent of its window), or\nrunning out within the wait the policy allows with it (`runsOut`).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "signin"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "allowed"
+                ]
+              },
+              "by": {
+                "$ref": "#/components/schemas/HeldReasonBy"
+              }
+            },
+            "required": [
+              "by",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "benched"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "reserve"
+                ]
+              },
+              "pct": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "pct"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "unread"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "limit"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "backup"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "alone"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "room"
+                ]
+              },
+              "leftPct": {
+                "type": "number"
+              },
+              "movePct": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "leftPct",
+              "movePct"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "runsOut"
+                ]
+              },
+              "at": {
+                "type": "number"
+              },
+              "leftPct": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "kind",
+              "leftPct"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "fits"
+                ]
+              },
+              "carries": {
+                "type": "boolean"
+              },
+              "leftPct": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "carries",
+              "kind",
+              "leftPct"
+            ]
+          }
         ]
       },
       "WaitReason": {
-        "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, an account\nhas room but re-reading this session's context there would take more of\nit than the hub gives moves (`room`, the account named), the reset comes\nsooner than re-reading its context elsewhere is worth. `work` is history\nonly: lines a hub stored while a delegate's work could be set to carry on\nafter its own account's reset, never moved, still read.",
+        "description": "Why a session at its account's limit waits rather than moving: it is a\nfork (it reads its origin's cache, on its origin's account), moving is\nswitched off, no account can take it now (`full`), its own account resets\nwithin the wait the policy allows (`soon`), or its prompt cache lasts past\nthat reset, so waiting costs nothing where a move re-reads it cold\n(`free`). `room` and `work` are history only: lines a hub stored when\nadmission kept a share of each account's room from moves, and while a\ndelegate's work could be set to carry on after its own account's reset;\nnever written now, still read.",
         "type": "string",
         "enum": [
           "fork",
+          "free",
           "full",
           "off",
           "room",
@@ -54739,7 +54929,7 @@
         ]
       },
       "AtLimit": {
-        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move whole to an account known to have room (the hub's\n`decideAtLimit`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), also files its open items and is compacted by\nClaude Code's own `/compact` as its first steps there, before anything it\nis owed. A live work item's session is answered so whoever started its\nrefused turn, the hub's own word to it included; every other word of the\nhub's a limit refused is left until a person or the session's parent\nwrites.",
+        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move whole to another account that can take it (the hub's\n`decideStop`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), also files its open items and is compacted by\nClaude Code's own `/compact` as its first steps there, before anything it\nis owed. A live work item's session is answered so whoever started its\nrefused turn, the hub's own word to it included; every other word of the\nhub's a limit refused is left until a person or the session's parent\nwrites.",
         "type": "object",
         "properties": {
           "delegateWork": {
@@ -57644,6 +57834,22 @@
                       "pct",
                       "window"
                     ]
+                  },
+                  "ended": {
+                    "description": "What the move ended with its old process: work it held for later (its\nbackground tasks, its one-time wake-ups), which no resume on another\naccount brings back. The session is told on arrival what ended.",
+                    "type": "object",
+                    "properties": {
+                      "tasks": {
+                        "type": "number"
+                      },
+                      "wakeups": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "tasks",
+                      "wakeups"
+                    ]
                   }
                 },
                 "required": [
@@ -57673,11 +57879,11 @@
                     "$ref": "#/components/schemas/NamedAccount",
                     "description": "Another account that frees before `account` resets: it moves there\nat `until`. Absent: `until` is `account`'s own reset."
                   },
-                  "skipped": {
-                    "description": "With `why` `full` or `room`: every other account of its provider and\nwhy it didn't take it: what a person reads, so a line never says no\naccount has room beside one that has.",
+                  "accounts": {
+                    "description": "Every other account of its provider and why it didn't take it, or\nthat it could ({@link HeldAccount}): what a person reads, so a line\nnever says no account has room beside one that has. Absent on lines\nstored before holds named them.",
                     "type": "array",
                     "items": {
-                      "$ref": "#/components/schemas/SkippedAccount"
+                      "$ref": "#/components/schemas/HeldAccount"
                     }
                   },
                   "until": {
@@ -57859,7 +58065,7 @@
                     "type": "string"
                   },
                   "waits": {
-                    "description": "Never set now: a move at a limit no longer waits for work held for\nlater. Kept on the wire only for the TestFlight builds 20261015.3 to\n20261018, which read it (packages/hub/scripts/wire-compat.ts); it\ngoes in the change that expires them.",
+                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up), and no person waits on it: the move goes when that\nwork ends, or once it has been held {@link RESTART_WAIT_CAP_MS},\nending it.",
                     "const": true,
                     "type": "boolean"
                   }
@@ -61900,6 +62106,13 @@
         "enum": [
           "not-installed",
           "version"
+        ]
+      },
+      "HeldReasonBy": {
+        "type": "string",
+        "enum": [
+          "project",
+          "task"
         ]
       },
       "HomeCredentialKind": {

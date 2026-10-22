@@ -1991,6 +1991,7 @@ export class SessionSupervisor {
         outcomes[request.instanceId] = {
           state: "failed",
           error: "another move is copying its conversation right now",
+          clash: true,
         };
         return false;
       }

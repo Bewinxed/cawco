@@ -1845,7 +1845,12 @@ export type CarrySessionOutcome =
    * task, a one-time wake-up), which a request with `endLater` ends.
    */
   | { state: "live"; why: string; later?: true }
-  | { state: "failed"; error: string };
+  /**
+   * Nothing moved. `clash`: another carry of the same conversation was
+   * copying it at that moment, which passes; nothing says the target's dir
+   * is at fault.
+   */
+  | { state: "failed"; error: string; clash?: true };
 
 /**
  * Machine control (arg: {@link CarrySessionRequest}[]): carries each Claude

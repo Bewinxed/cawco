@@ -89,6 +89,7 @@ typeOverrides:
     HarnessKind: OpenEnums.HarnessKind
     HarnessNoteKind: OpenEnums.HarnessNoteKind
     HarnessReportRefused: OpenEnums.HarnessReportRefused
+    HeldReasonBy: OpenEnums.HeldReasonBy
     HomeCredentialKind: OpenEnums.HomeCredentialKind
     HomeStore: OpenEnums.HomeStore
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
@@ -166,7 +167,6 @@ typeOverrides:
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState
-    SkipReason: OpenEnums.SkipReason
     SlashCommandKind: OpenEnums.SlashCommandKind
     SshJoinJobState: OpenEnums.SshJoinJobState
     StageHooksBy: OpenEnums.StageHooksBy

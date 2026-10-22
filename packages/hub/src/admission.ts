@@ -1,21 +1,21 @@
-import { type Account, accountNameAmong, costForUsage } from "@cawco/core";
+import { accountNameAmong, costForUsage } from "@cawco/core";
 import type { LimitRow } from "./at-limit";
 import type { DbShape } from "./db";
 import { usdPerPercent } from "./forecast";
 import { SESSION_WINDOW_MS } from "./placement";
 
 /**
- * Admission by room: every move of a session onto another account (a held
- * session at a limit, a rebalance, a cold wake) is charged against one
- * ledger per target account, so a reset never takes the whole herd at once.
- * Each session is charged its projected re-read (its context written into
- * the target's cold cache, or read from it when the cache carries) plus an
- * allowance for its next real turn, in dollars, against the target's 5-hour
- * window measured in dollars per percent from that account's own history
- * (forecast.ts `usdPerPercent`). A move goes only while everything already
- * admitted plus this one takes no more than {@link ADMIT_SHARE} of the room
- * the window has left; the rest try the next account with room, or wait for
- * their own account's reset.
+ * The ledger every move of a session onto another account (a held session
+ * at a limit, a rebalance, a cold wake) is charged against, one per target
+ * account, so each decision sees the moves admitted before it and a reset
+ * never takes the whole herd at once. Each session is charged its projected
+ * re-read (its context written into the target's cold cache, or read from it
+ * when its warm cache carries) plus an allowance for its next real turn, in
+ * dollars, against the target's 5-hour window measured in dollars per
+ * percent from that account's own history (forecast.ts `usdPerPercent`).
+ * What a target has left after a move ({@link roomAfterPct}) is the one
+ * figure a decision reads of it here: at-limit.ts `decideStop` weighs it
+ * with everything else it knows, and nothing here refuses a move.
  *
  * The target's measured state is its reading plus the spend `turn_usage`
  * recorded there since that reading (a Claude turn that reached the model
@@ -40,27 +40,12 @@ import { SESSION_WINDOW_MS } from "./placement";
  */
 export const NEXT_TURN_ALLOWANCE_USD = 0.42;
 
-/**
- * The share of a target's room (what its 5-hour window has left: 100% less
- * its reading and the spend recorded since) the admitted sessions' re-reads
- * and allowances may take: half, leaving the other half for their work. On
- * a fresh window that is the half of it the herd rule was set from: on
- * 2026-10-20 the fleet's work spent $136.87 in 43 turns on c6b14b4e in 19
- * minutes (05:20–05:39Z), about 53% of a window measured at $2.56 a percent
- * (e8b553ef: $58.79 took it to 23%, 06:10–06:14Z). Of the room left, never
- * of the whole window: a ceiling at 50% of the window called an account at
- * 72% full, and a session waited 3h 44m on its own reset beside it
- * (2026-10-22 10:16, "past the 50% admission ceiling"). The share is this
- * session's call from those rows.
- */
-export const ADMIT_SHARE = 0.5;
-
 /** How far back an account's dollars per percent is measured: a weekly window and a day, as the forecast reads. */
 const LOOKBACK_MS = 8 * 24 * 3_600_000;
 /** How long one account's measured dollars per percent is kept between reads. */
 const PER_PCT_FOR_MS = 60_000;
 
-/** What moving `row` onto an account costs, in dollars: its re-read and its next turn. */
+/** What moving a session onto an account costs, in dollars: its re-read and its next turn. */
 export interface Projected {
   allowanceUsd: number;
   /** Null when its model has no listed price. */
@@ -68,24 +53,29 @@ export interface Projected {
   tokens: number;
 }
 
-/** One admission's answer: whether it fits, and the numbers a journal line says. */
-export interface Verdict {
-  /** The most of the target's 5-hour window, percent, its reading and the admitted moves may reach. */
-  ceilingPct: number;
-  /** What the target's 5-hour window has left, percent: 100 less its reading and the spend recorded since (when priced). */
-  leftPct: number;
-  ok: boolean;
-  /** The target's 5-hour window already admitted, percent; null when unmeasured. */
+/**
+ * What the ledger holds of one target account now, each a percent of its
+ * 5-hour window: the spend recorded since its reading (`spentPct`), the
+ * moves admitted there and not landed yet (`pendingPct`, `pendingMoves` of
+ * them). Null where a percent is unmeasured (`usdPerPct` null) or a spend
+ * unpriced.
+ */
+export interface Ledger {
+  pendingMoves: number;
   pendingPct: number | null;
-  /** Dollars per percent of the target's 5-hour window; null when unmeasured. */
-  perPct: number | null;
+  spentPct: number | null;
+  usdPerPct: number | null;
+}
+
+/** One move's figures on its target, for a journal line and the wake path: the ledger, and what the move takes and leaves. */
+export interface Figures extends Ledger {
+  /** What this move takes of the target's 5-hour window, percent; null when unmeasured or unpriced. */
+  movePct: number | null;
   projected: Projected;
-  /** What this session takes of the target's window, percent; null when unmeasured or unpriced. */
-  thisPct: number | null;
+  /** What the target's 5-hour window has left after it ({@link roomAfterPct}). */
+  roomAfter: number;
   /** The target's 5-hour window read now, percent. */
   usedPct: number;
-  /** The verdict in words, for the journal: both sides' costs. */
-  words: string;
 }
 
 interface Charge {
@@ -101,39 +91,75 @@ interface Charge {
 export const usdWords = (usd: number | null): string =>
   usd === null ? "an unpriced amount" : `$${usd.toFixed(2)}`;
 
-/** "1,003k tokens". */
-const kWords = (tokens: number): string =>
-  `${Math.round(tokens / 1000).toLocaleString("en")}k tokens`;
+/**
+ * The context a move re-reads: the last request's prompt (uncached input,
+ * cache reads and writes of one request), capped at the model's window, as
+ * no request sends more. One never reported, or reported past the window (a
+ * turn's sum of requests), is priced at the window. With no window known it
+ * is the context as reported, none when never reported.
+ */
+export const pricedTokens = (
+  context: number | null,
+  window: number | null
+): number => {
+  if (window === null) {
+    return context ?? 0;
+  }
+  return Math.min(context ?? window, window);
+};
 
 /**
- * `row`'s projected re-read on another account: its context, the last size
- * its harness reported (after a compaction, the summary's), written into a
- * cold cache at its lifetime's write price, or read from a cache that
- * carries; plus {@link NEXT_TURN_ALLOWANCE_USD}. The context comes from the
- * row, not `turn_usage`: a turn's row sums every request of the turn, so a
- * turn of 30 tool calls reads 30 contexts there.
+ * A session's re-read of `tokens` on another account: read from a cache
+ * that carries (one organization, its cache still warm: at-limit.ts
+ * `cacheCarries`), else written into a cold cache at its lifetime's write
+ * price; plus {@link NEXT_TURN_ALLOWANCE_USD}. Pure: the listed rates of `now`.
  */
 export const projectedMove = (
-  row: Pick<LimitRow, "cacheTtl" | "contextTokens" | "model">,
+  session: { cacheTtl: string | null; model: string | null },
+  tokens: number,
   carries: boolean,
   now: number
 ): Projected => {
-  const tokens = row.contextTokens ?? 0;
   const read = { input: 0, output: 0, reasoning: 0 };
   const usage = carries
     ? { ...read, cacheCreation: 0, cacheRead: tokens }
     : {
         ...read,
         cacheCreation: tokens,
-        cacheCreation1h: row.cacheTtl === "1h" ? tokens : 0,
+        cacheCreation1h: session.cacheTtl === "1h" ? tokens : 0,
         cacheRead: 0,
       };
   let reReadUsd: number | null = 0;
   if (tokens > 0) {
-    reReadUsd = row.model ? costForUsage(row.model, usage, now) : null;
+    reReadUsd = session.model ? costForUsage(session.model, usage, now) : null;
   }
   return { tokens, reReadUsd, allowanceUsd: NEXT_TURN_ALLOWANCE_USD };
 };
+
+/** What a move takes of a window measured at `usdPerPct`, percent; null when unmeasured or unpriced. */
+export const movePctOf = (
+  projected: Projected,
+  usdPerPct: number | null
+): number | null =>
+  projected.reReadUsd === null || usdPerPct === null || usdPerPct <= 0
+    ? null
+    : (projected.reReadUsd + projected.allowanceUsd) / usdPerPct;
+
+/**
+ * What a window read at `usedPct` has left once the spend recorded since its
+ * reading, the moves admitted there and this one have landed, percent: what
+ * goes unmeasured counts nothing.
+ */
+export const roomAfterPct = (
+  usedPct: number,
+  ledger: Pick<Ledger, "pendingPct" | "spentPct">,
+  movePct: number | null
+): number =>
+  100 -
+  (usedPct +
+    (ledger.spentPct ?? 0) +
+    (ledger.pendingPct ?? 0) +
+    (movePct ?? 0));
 
 /** The 5-hour window of `accountId`'s reading, open at `now`. */
 const sessionWindow = (db: DbShape, accountId: string, now: number) => {
@@ -148,28 +174,6 @@ const sessionWindow = (db: DbShape, accountId: string, now: number) => {
     percent: open ? window.percent : 0,
     resetsAt: open ? window.resetsAt : null,
   };
-};
-
-/** Why a session is admitted only alone, in a journal line's words. */
-const aloneWords = (
-  named: string,
-  standing: number,
-  unmeasured: boolean,
-  unpriced: boolean,
-  spentUnpriced: boolean
-): string => {
-  const why = [
-    ...(unmeasured ? [`${named}'s window isn't measured in dollars yet`] : []),
-    ...(unpriced ? ["its model has no listed price"] : []),
-    ...(spentUnpriced
-      ? [`a turn on ${named} since its reading has no price`]
-      : []),
-  ].join(" and ");
-  const now =
-    standing === 0
-      ? "nothing else is admitted there now"
-      : `${standing} admitted session${standing === 1 ? " is" : "s are"} still landing there`;
-  return `${why || "its cost isn't known"}, so it is admitted only alone, and ${now}`;
 };
 
 export const createAdmission = (db: DbShape) => {
@@ -280,87 +284,77 @@ export const createAdmission = (db: DbShape) => {
   };
 
   /**
-   * Whether `row` fits onto `target` now: its projected cost, with every
-   * charge standing there, keeps `target`'s 5-hour window under the
-   * ceiling. An account whose window is not measured yet, or a session
-   * whose model is unpriced, is admitted only alone: with no other charge
-   * standing there.
+   * What the ledger holds of `accountId` now for a move of `instanceId`
+   * ({@link Ledger}): the charges of every other session standing there, and
+   * the spend recorded since its reading, each over what a percent of its
+   * 5-hour window costs. A charge unpriced, or a spend, makes its percent
+   * null; so does a window not measured in dollars yet.
    */
-  const check = (
-    row: LimitRow,
-    target: Account,
-    carries: boolean,
+  const ledger = (
+    accountId: string,
+    instanceId: string,
     now: number
-  ): Verdict => {
+  ): Ledger => {
     prune(now);
-    const projected = projectedMove(row, carries, now);
-    const window = sessionWindow(db, target.id, now);
-    const perPct = perPctOf(target.id, now);
+    const usdPerPct = perPctOf(accountId, now);
     const standing = [...charges.values()].filter(
-      (one) => one.accountId === target.id && one.instanceId !== row.id
+      (one) => one.accountId === accountId && one.instanceId !== instanceId
     );
-    const named = accountNameAmong(target, db.accounts.list());
-    const cost =
-      projected.reReadUsd === null
-        ? null
-        : projected.reReadUsd + projected.allowanceUsd;
     const pendingUsd = standing.some((one) => one.usd === null)
       ? null
       : standing.reduce((sum, one) => sum + (one.usd ?? 0), 0);
-    const spentUsd = spentSince(target.id, window, now);
-    const reRead = `re-reading ${kWords(projected.tokens)} ${carries ? "from its carried cache" : "into a cold cache"} costs ${usdWords(projected.reReadUsd)}, plus ${usdWords(projected.allowanceUsd)} for its next turn`;
-    const base = {
-      ceilingPct: window.percent + (100 - window.percent) * ADMIT_SHARE,
-      leftPct: Math.max(0, 100 - window.percent),
-      perPct,
-      projected,
-      usedPct: window.percent,
-    };
-    if (
-      perPct === null ||
-      perPct <= 0 ||
-      cost === null ||
-      pendingUsd === null ||
-      spentUsd === null
-    ) {
-      return {
-        ...base,
-        ok: standing.length === 0,
-        pendingPct: null,
-        thisPct: null,
-        words: `${reRead}; ${aloneWords(named, standing.length, perPct === null, cost === null, spentUsd === null)}`,
-      };
-    }
-    const thisPct = cost / perPct;
-    const pendingPct = pendingUsd / perPct;
-    const spentPct = spentUsd / perPct;
-    const read = window.percent + spentPct;
-    const ceilingPct = read + Math.max(0, 100 - read) * ADMIT_SHARE;
-    const after = read + pendingPct + thisPct;
-    const ok = after <= ceilingPct;
+    const spentUsd = spentSince(
+      accountId,
+      sessionWindow(db, accountId, now),
+      now
+    );
+    const measured = usdPerPct !== null && usdPerPct > 0;
     return {
-      ...base,
-      ceilingPct,
-      leftPct: Math.max(0, 100 - read),
-      ok,
-      pendingPct,
-      thisPct,
-      words: `${reRead}, ≈${thisPct.toFixed(1)}% of ${named}'s 5-hour window at $${perPct.toFixed(2)} a percent; ${named} reads ${Math.round(window.percent)}%, ${spentPct.toFixed(1)}% recorded since that reading and ${pendingPct.toFixed(1)}% already admitted, so this takes it to ${after.toFixed(1)}%, ${ok ? "under" : "past"} its admission ceiling of ${ceilingPct.toFixed(1)}% (half the room it has left goes to moves)`,
+      usdPerPct: measured ? usdPerPct : null,
+      pendingMoves: standing.length,
+      pendingPct:
+        measured && pendingUsd !== null ? pendingUsd / usdPerPct : null,
+      spentPct: measured && spentUsd !== null ? spentUsd / usdPerPct : null,
+    };
+  };
+
+  /**
+   * A move of `session` onto `targetId` priced as `projected`: the ledger
+   * there, what the move takes of its 5-hour window and what that window has
+   * left after it ({@link roomAfterPct}). Read by the wake path (server.ts
+   * `replaceAtWake`); a limit's and a rebalance's moves read the same figures
+   * through their decision (at-limit.ts `decideStop`).
+   */
+  const check = (
+    instanceId: string,
+    targetId: string,
+    projected: Projected,
+    now: number
+  ): Figures => {
+    const held = ledger(targetId, instanceId, now);
+    const usedPct = sessionWindow(db, targetId, now).percent;
+    const movePct = movePctOf(projected, held.usdPerPct);
+    return {
+      ...held,
+      projected,
+      usedPct,
+      movePct,
+      roomAfter: roomAfterPct(usedPct, held, movePct),
     };
   };
 
   return {
     check,
-    /** Charges `row`'s move onto `target` as `verdict` priced it. */
-    charge(row: LimitRow, target: Account, verdict: Verdict): void {
+    ledger,
+    /** Charges `instanceId`'s move onto `accountId` at `usd` (its re-read and next turn; null when unpriced). */
+    charge(instanceId: string, accountId: string, usd: number | null): void {
       const now = Date.now();
-      const { reReadUsd, allowanceUsd } = verdict.projected;
-      charges.set(row.id, {
-        accountId: target.id,
-        instanceId: row.id,
+      charges.set(instanceId, {
+        accountId,
+        instanceId,
         at: now,
-        resetsAt: sessionWindow(db, target.id, now).resetsAt,
-        usd: reReadUsd === null ? null : reReadUsd + allowanceUsd,
+        resetsAt: sessionWindow(db, accountId, now).resetsAt,
+        usd,
       });
     },
     /** A move that did not go: its charge goes with it. */

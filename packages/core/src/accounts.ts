@@ -15,6 +15,7 @@
  * Browser-safe: types and pure functions only.
  */
 
+import { RESTART_WAIT_CAP_MS } from "./binary-updates";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
 
@@ -315,8 +316,8 @@ export interface StrategyChoice {
 
 /**
  * What a running session does when its account hits its limit: wait for the
- * reset, or move whole to an account known to have room (the hub's
- * `decideAtLimit`). `waitMinutes`: a reset this close is waited for.
+ * reset, or move whole to another account that can take it (the hub's
+ * `decideStop`). `waitMinutes`: a reset this close is waited for.
  * `moveWholeUnderK`: a context under this many thousand tokens moves whole
  * and goes on; one of this many or more, moved to another organization
  * (whose cache it can't read), also files its open items and is compacted by
@@ -1097,43 +1098,48 @@ export const namedAccount = (
 });
 
 /**
- * Why a session at its account's limit waits for the reset rather than
- * moving: it is a fork (it reads its origin's cache, on its origin's
- * account), moving is switched off, no other account has room, an account
- * has room but re-reading this session's context there would take more of
- * it than the hub gives moves (`room`, the account named), the reset comes
- * sooner than re-reading its context elsewhere is worth. `work` is history
- * only: lines a hub stored while a delegate's work could be set to carry on
- * after its own account's reset, never moved, still read.
+ * Why a session at its account's limit waits rather than moving: it is a
+ * fork (it reads its origin's cache, on its origin's account), moving is
+ * switched off, no account can take it now (`full`), its own account resets
+ * within the wait the policy allows (`soon`), or its prompt cache lasts past
+ * that reset, so waiting costs nothing where a move re-reads it cold
+ * (`free`). `room` and `work` are history only: lines a hub stored when
+ * admission kept a share of each account's room from moves, and while a
+ * delegate's work could be set to carry on after its own account's reset;
+ * never written now, still read.
  */
-export type WaitReason = "fork" | "off" | "full" | "room" | "soon" | "work";
+export type WaitReason =
+  "fork" | "off" | "full" | "free" | "room" | "soon" | "work";
 
 /**
- * Why another account didn't take a session held at its limit: at its own
- * limit (`limit`), benched (`benched`), past its reserve (`reserve`), not one
- * the session's project or task allows (`allowed`), kept out of the pinned
- * strategy's backups (`backup`), its limits never read (`unread`), not
- * signed in on the session's machine (`signin`), or with room the hub's
- * admission keeps for moves too small for its re-read (`room`).
+ * Why another account didn't take a session held at its limit, or, for one
+ * that could, that it could (`fits`). In order of the hub's rules: not signed
+ * in on its machine, not one its project or task allows, benched, past its
+ * reserve, its limits never read, at its own limit, kept out of the pinned
+ * strategy's backups, a move already landing there while its window isn't
+ * measured in dollars (`alone`), too little left for this move (`room`:
+ * what it has left and what the move takes, percent of its window), or
+ * running out within the wait the policy allows with it (`runsOut`).
  */
-export type SkipReason =
-  | "allowed"
-  | "backup"
-  | "benched"
-  | "limit"
-  | "reserve"
-  | "room"
-  | "signin"
-  | "unread";
+export type HeldReason =
+  | { kind: "signin" }
+  | { kind: "allowed"; by: "project" | "task" }
+  | { kind: "benched" }
+  | { kind: "reserve"; pct: number }
+  | { kind: "unread" }
+  | { kind: "limit" }
+  | { kind: "backup" }
+  | { kind: "alone" }
+  | { kind: "room"; leftPct: number; movePct: number }
+  | { kind: "runsOut"; at: number; leftPct: number }
+  | { kind: "fits"; carries: boolean; leftPct: number };
 
-/** Another account and why it didn't take a held session ({@link SkipReason}). */
-export interface SkippedAccount {
+/** Another account and why it didn't take a held session, or that it could ({@link HeldReason}). */
+export interface HeldAccount {
   account: NamedAccount;
-  /** With `room`: what its 5-hour window has left, percent. */
-  leftPct?: number;
-  /** When it takes sessions again, epoch ms, when a reading says. */
-  until?: number;
-  why: SkipReason;
+  /** When it takes sessions again, epoch ms, when a reading says (benched, at its limit, past its reserve). */
+  backAt?: number;
+  reason: HeldReason;
 }
 
 /**
@@ -1189,6 +1195,12 @@ export type AccountMove =
         | { kind: "refused" };
       /** What the re-read cost on `to`: a percent of its window; absent when unpriced. */
       cost?: { pct: number; window: string };
+      /**
+       * What the move ended with its old process: work it held for later (its
+       * background tasks, its one-time wake-ups), which no resume on another
+       * account brings back. The session is told on arrival what ended.
+       */
+      ended?: { tasks: number; wakeups: number };
     }
   | {
       kind: "waiting";
@@ -1200,11 +1212,12 @@ export type AccountMove =
        */
       frees?: NamedAccount;
       /**
-       * With `why` `full` or `room`: every other account of its provider and
-       * why it didn't take it: what a person reads, so a line never says no
-       * account has room beside one that has.
+       * Every other account of its provider and why it didn't take it, or
+       * that it could ({@link HeldAccount}): what a person reads, so a line
+       * never says no account has room beside one that has. Absent on lines
+       * stored before holds named them.
        */
-      skipped?: SkippedAccount[];
+      accounts?: HeldAccount[];
       /** The earliest moment an account takes it again, epoch ms: the line counts down to it. */
       until: number;
       why: WaitReason;
@@ -1293,10 +1306,10 @@ export type AccountMove =
       /** What the hub got from the step that failed. */
       reason: string;
       /**
-       * Never set now: a move at a limit no longer waits for work held for
-       * later. Kept on the wire only for the TestFlight builds 20261015.3 to
-       * 20261018, which read it (packages/hub/scripts/wire-compat.ts); it
-       * goes in the change that expires them.
+       * Only work its process holds for later kept it (a background task, a
+       * one-time wake-up), and no person waits on it: the move goes when that
+       * work ends, or once it has been held {@link RESTART_WAIT_CAP_MS},
+       * ending it.
        */
       waits?: true;
     };
@@ -1363,10 +1376,13 @@ export const tokenWords = (tokens: number | null): string =>
     ? "its whole context"
     : `${Math.round(tokens / 1000).toLocaleString("en")}k tokens`;
 
+/** Why a held session waits, by its reason, for a line that names no accounts (stored before holds named them). */
 const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
   fork: () => "A fork stays on the account its origin's cache is on",
   off: () => "Moving to another account at the limit is switched off",
   full: () => "No other account has room for it",
+  free: (tokens) =>
+    `Its cache lasts past the reset, so waiting costs nothing · moving would re-read ${tokens} cold`,
   room: (tokens) =>
     `Another account has room, but re-reading ${tokens} there would take more than half of what it has left`,
   soon: (tokens) =>
@@ -1374,52 +1390,75 @@ const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
   work: () => "Its work item carries on here after the reset",
 };
 
-/** One other account and why it didn't take the session: "B is past its reserve". */
-const skippedWords = (one: SkippedAccount, tokens: string): string => {
+/** "37% left": what an account has left, percent, rounded down to the whole one. */
+const leftWords = (pct: number): string =>
+  `${Math.max(0, Math.floor(pct))}% left`;
+
+/** One other account and why it didn't take the session, or that it could: "design@ 1% left, runs out by 11:52". */
+export const heldAccountWords = (one: HeldAccount): string => {
   const { name } = one.account;
   const until =
-    one.until === undefined ? "" : ` until ${clockWords(one.until)}`;
-  switch (one.why) {
-    case "limit":
-      return `${name} is at its limit${until}`;
-    case "benched":
-      return `${name} is benched${until}`;
-    case "reserve":
-      return `${name} is past its reserve${until}`;
-    case "allowed":
-      return `${name} isn't one its project or task allows`;
-    case "backup":
-      return `${name} is never a backup`;
-    case "unread":
-      return `${name}'s limits haven't been read`;
+    one.backAt === undefined ? "" : ` until ${clockWords(one.backAt)}`;
+  const { reason } = one;
+  switch (reason.kind) {
     case "signin":
-      return `${name} isn't signed in on its machine`;
+      return `${name} not signed in here`;
+    case "allowed":
+      return `${name} not allowed by this ${reason.by}`;
+    case "benched":
+      return `${name} benched${until}`;
+    case "reserve":
+      return `${name} past its ${reason.pct}% reserve`;
+    case "unread":
+      return `${name} limits unread`;
+    case "limit":
+      return `${name} at its limit${until}`;
+    case "backup":
+      return `${name} never a backup`;
+    case "alone":
+      return `${name} takes one move at a time until its window is measured, and one is landing there`;
     case "room":
-      return `${name} has ${Math.round(one.leftPct ?? 0)}% left, but re-reading ${tokens} there would take more than half of it`;
+      return `${name} ${leftWords(reason.leftPct)}, its move takes ${Math.max(1, Math.ceil(reason.movePct))}%`;
+    case "runsOut":
+      return `${name} ${leftWords(reason.leftPct)}, runs out by ${clockWords(reason.at)}`;
+    case "fits":
+      return `${name} could take it, ${leftWords(reason.leftPct)}${reason.carries ? ", its cache carrying" : ""}`;
   }
 };
 
 /**
- * Why a held session waits, under its line: the account that frees first
- * and takes it, then each other account and why it didn't take it, so it
- * never reads "no account has room" beside one that has; a line with no
- * list (a reason of its own, or stored before lines named them) its reason.
+ * Why a held session waits, under its line, at `now`: its reason, in the
+ * words of each (no account can take it; its cache lasts past the reset; the
+ * reset is near), then every other account and why it didn't take it, or
+ * that it could, and the account that frees first and takes it before its
+ * own resets. A line with no list (stored before holds named them) says its
+ * reason alone.
  */
 const waitingDetail = (
-  move: Extract<AccountMove, { kind: "waiting" }>
+  move: Extract<AccountMove, { kind: "waiting" }>,
+  now: number
 ): string => {
   const tokens = tokenWords(move.tokens);
   const then = move.frees
-    ? `It moves to ${move.frees.name} when that resets, before ${move.account.name} does`
+    ? `it moves to ${move.frees.name} at ${clockWords(move.until)}, before ${move.account.name} resets`
     : "";
-  if (!move.skipped) {
-    return then || WAIT_WHY[move.why](tokens);
+  if (!move.accounts) {
+    return [WAIT_WHY[move.why](tokens), ...(then ? [then] : [])].join(" · ");
   }
-  const why =
-    move.skipped.length === 0
-      ? "No other account is signed in for it"
-      : move.skipped.map((one) => skippedWords(one, tokens)).join(" · ");
-  return then ? `${then} · ${why}` : why;
+  const left = move.until - now;
+  let lead = WAIT_WHY[move.why](tokens);
+  if (move.why === "full") {
+    lead = "No account can take it now";
+  } else if (move.why === "soon") {
+    lead = `${move.account.name} resets${left > 0 ? ` in ${spanWords(left)}` : ""}, sooner than re-reading ${tokens} elsewhere is worth`;
+  }
+  return [
+    lead,
+    ...(move.accounts.length === 0
+      ? ["no other account is signed in for it"]
+      : move.accounts.map(heldAccountWords)),
+    ...(then ? [then] : []),
+  ].join(" · ");
 };
 
 /** A stop (Caw off) in words at `now`: it counts down to its account's reset, then asks for a message. */
@@ -1471,10 +1510,31 @@ const movedWords = (
       detail: `${move.from.name} was forecast to run out at ${clockWords(move.because.runsOutAt)}`,
     };
   }
+  const ended = move.ended ? endedWorkWords(move.ended) : "";
   if (move.asked) {
-    return { line, detail: `Moved here from ${move.from.name}, as asked` };
+    return {
+      line: `${line}${ended}`,
+      detail: `Moved here from ${move.from.name}, as asked`,
+    };
   }
-  return { line, detail: limitHitWords(move, now) };
+  return { line: `${line}${ended}`, detail: limitHitWords(move, now) };
+};
+
+/**
+ * What a move ended, after its line: " · a command was running and was ended
+ * by the move; run it again if its result matters". Nothing when it ended
+ * nothing.
+ */
+const endedWorkWords = (ended: { tasks: number; wakeups: number }): string => {
+  if (ended.tasks === 1) {
+    return " · a command was running and was ended by the move; run it again if its result matters";
+  }
+  if (ended.tasks > 1) {
+    return ` · ${ended.tasks} commands were running and were ended by the move; run them again if their results matter`;
+  }
+  return ended.wakeups > 0
+    ? ` · ${ended.wakeups === 1 ? "a wake-up it had scheduled was" : `${ended.wakeups} wake-ups it had scheduled were`} ended by the move`
+    : "";
 };
 
 /** Whose limit sent it and when that resets: "A hit its 5-hour limit · resets in 3h 10m". */
@@ -1549,7 +1609,7 @@ export const accountMoveWords = (
           left > 0
             ? `Waiting for ${next.name} to reset · ${spanWords(left)}`
             : `Continued on ${next.name}`,
-        detail: waitingDetail(move),
+        detail: waitingDetail(move, now),
       };
     }
     case "stopped":
@@ -1576,7 +1636,7 @@ const unmovedWords = (
   move: Extract<AccountMove, { kind: "unmoved" }>
 ): string => {
   if (move.action === "move") {
-    return `Couldn't move${move.from ? ` from ${move.from.name}` : ""}${move.to ? ` to ${move.to.name}` : ""}`;
+    return `${move.waits ? "Can't move" : "Couldn't move"}${move.from ? ` from ${move.from.name}` : ""}${move.to ? ` to ${move.to.name}` : ""}${move.waits ? " yet" : ""}`;
   }
   return `Couldn't continue${move.to ? ` on ${move.to.name}` : ""}`;
 };
@@ -1613,6 +1673,9 @@ const unmovedNext = (
     return "It goes on in the conversation it has";
   }
   const from = move.from.name;
+  if (move.waits) {
+    return `It moves${move.to ? ` to ${move.to.name}` : ""} when that work ends, or once it has been held ${RESTART_WAIT_CAP_MS / 60_000} minutes: then the move ends it, and the session is told there what ended`;
+  }
   return move.signedOut
     ? `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} once ${from} is signed in again in Configure → Accounts`
     : `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} when ${from} resets`;

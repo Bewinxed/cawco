@@ -336,6 +336,7 @@ import {
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
+  tokenWords,
   toolSpec,
   transcriptUserText,
   UPDATE_CAWCO,
@@ -452,7 +453,12 @@ import {
 import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
 import { adminTools, isAdminWrite } from "./admin-tools";
-import { createAdmission } from "./admission";
+import {
+  createAdmission,
+  pricedTokens,
+  projectedMove,
+  usdWords,
+} from "./admission";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
@@ -482,6 +488,8 @@ import {
   createAskPresenter,
 } from "./ask-presentation";
 import {
+  type AccountsRead,
+  accountsRead,
   cacheCarries,
   createAtLimit,
   type Kept,
@@ -704,8 +712,6 @@ import {
 } from "./pending";
 import { createPlaceRepos } from "./place-repo";
 import {
-  skips as limitSkipsOf,
-  nextFree,
   noAccountRefusal,
   type PlacementInput,
   place as placeAccount,
@@ -9743,10 +9749,14 @@ export const createServer = (
    * limit's owed move carried at a look or at the refusal
    * (`takeUpOwedMove`), and the at-limit controller's own move (at the
    * refusal, at a look a held message or a reconnect asks for, at a reset:
-   * its `move` port). A running session's move waits for that work instead,
-   * up to the restart bound ({@link waitForLater}). A row with no
-   * conversation yet, or of another harness, has nothing of Claude's to
-   * carry. Answers the rows that moved, and why each other did not.
+   * its `move` port). A stopped session no person waits on, its hold's start
+   * `laterSince` given, waits for that work instead, until it has been held
+   * the restart bound (core `waitedOut`), from that start across a hub
+   * restart too: the controller's looks carry it then. A running session's
+   * move waits for that work instead, up to the restart bound
+   * ({@link waitForLater}). A row with no conversation yet, or of another
+   * harness, has nothing of Claude's to carry. Answers the rows that moved,
+   * what each move ended, and why each other did not.
    */
   const moveRowsToAccount = async (
     machineId: string,
@@ -9757,8 +9767,16 @@ export const createServer = (
     }[],
     accountId: string | null,
     stop = false,
-    stopped?: "limit" | "signin"
-  ): Promise<{ kept: Map<string, Kept>; moved: string[] }> => {
+    stopped?: "limit" | "signin",
+    laterSince?: number
+  ): Promise<{
+    ended: Map<string, MoveEnded>;
+    kept: Map<string, Kept>;
+    moved: string[];
+  }> => {
+    const endsLater =
+      stopped !== undefined &&
+      (laterSince === undefined || waitedOut(laterSince));
     const requests: CarrySessionRequest[] = rows.flatMap((row) =>
       row.harness === "claude" && row.sessionId
         ? [
@@ -9767,7 +9785,7 @@ export const createServer = (
               sessionId: row.sessionId,
               accountId,
               ...(stop ? { stop: true } : {}),
-              ...(stop && (stopped !== undefined || endLaterNow.has(row.id))
+              ...(stop && (endsLater || endLaterNow.has(row.id))
                 ? { endLater: true as const }
                 : {}),
             },
@@ -9778,6 +9796,7 @@ export const createServer = (
     // Each caller says what became of a row left where it was, and what
     // happens next: only it knows.
     const kept = new Map<string, Kept>();
+    const ended = new Map<string, MoveEnded>();
     const moved: string[] = [];
     for (const row of rows) {
       const outcome = outcomes.get(row.id);
@@ -9786,7 +9805,8 @@ export const createServer = (
         : undefined;
       if (why) {
         kept.set(row.id, why);
-        if (why.later) {
+        // A stopped session's wait is its hold's (at-limit.ts `moveTo`).
+        if (why.later && stopped === undefined) {
           waitForLater(row.id);
         }
         continue;
@@ -9795,11 +9815,12 @@ export const createServer = (
       laterWaits.delete(row.id);
       if (outcome?.state === "carried" && outcome.ended) {
         db.moveEndings.put(row.id, outcome.ended);
+        ended.set(row.id, outcome.ended);
       }
       db.patchInstance(row.id, { accountId });
       moved.push(row.id);
     }
-    return { moved, kept };
+    return { moved, kept, ended };
   };
 
   /**
@@ -9979,8 +10000,12 @@ export const createServer = (
       : {
           running: false,
           // The machine's own copy into the new account's dir failed, not the
-          // call to it: another account may take it.
-          ...("machine" in outcome ? {} : { target: true as const }),
+          // call to it, nor another carry of the same conversation (a clash,
+          // which passes: the same target is tried at the next look): another
+          // account may take it.
+          ...("machine" in outcome || outcome.clash
+            ? {}
+            : { target: true as const }),
           why: `copying its conversation on ${machineName(machineId)} failed: ${outcome.error}`,
         };
   };
@@ -20357,7 +20382,11 @@ export const createServer = (
           asked: true,
           from: namedAccount(from, accounts),
           to: namedAccount(account, accounts),
-          sameOrganization: cacheCarries(from, account),
+          sameOrganization: cacheCarries(
+            from,
+            account,
+            cacheExpiry(row) !== null
+          ),
           tokens: row.contextTokens,
           window: null,
           resetsAt: null,
@@ -25487,29 +25516,15 @@ export const createServer = (
   };
 
   /**
-   * Who would carry a running session off `accountId`: placement for the
-   * kind of session it is, on its machine, within its project's and task's
-   * lists and its type's preference, never `accountId`, and only an account
-   * with room; among the accounts `among` admits, when it is given.
-   */
-  const limitTarget = (
-    row: ReturnType<typeof db.getInstancesByIds>[number],
-    accountId: string,
-    among?: (account: Account) => boolean
-  ): string | null => replaceRow(row, accountId, accountId, among);
-
-  /**
    * Where placement puts a session that runs on `accountId` now, for the
    * kind of session it is, on its machine, within its project's and task's
-   * lists and its type's preference, its own burn in the carry test:
-   * never `exclude` when one is named (then only an account with room), and
-   * only one `among` admits when it is given.
+   * lists and its type's preference, its own burn in the carry test: it
+   * moves only to an account that lasts to its reset with it, and stays when
+   * none does (placement.ts `current`).
    */
   const replaceRow = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
-    accountId: string,
-    exclude?: string,
-    among: (account: Account) => boolean = () => true
+    accountId: string
   ): string | null => {
     // The provider of the account it is on: it moves only among that
     // provider's accounts signed in for its harness on its machine.
@@ -25523,7 +25538,7 @@ export const createServer = (
     const placed = placeAccount({
       accounts: db.accounts
         .list()
-        .filter((account) => account.provider === provider && among(account)),
+        .filter((account) => account.provider === provider),
       signins: db.accounts.signins(),
       readings: db.accounts.readings(),
       bench: db.accounts.bench(),
@@ -25539,7 +25554,7 @@ export const createServer = (
           sessionBurn(forecast.turns.get(accountId) ?? [], row.id, now),
         row.id
       ),
-      ...(exclude ? { exclude } : { current: accountId }),
+      current: accountId,
       now,
     });
     return placed.ok ? placed.accountId : null;
@@ -25587,6 +25602,51 @@ export const createServer = (
   };
 
   /**
+   * When `row`'s prompt cache lapses on its account, as measured (its last
+   * request and the TTL its cache was written with); null when it is cold
+   * already, or no lifetime was measured. Only a measured lifetime says a
+   * cache outlives a reset or carries a move: a session that never wrote a
+   * cache would wait up to an hour with nothing to keep.
+   */
+  const cacheExpiry = (
+    row: ReturnType<typeof db.getInstancesByIds>[number]
+  ): number | null => {
+    if (row.cacheCold) {
+      return null;
+    }
+    const expires = promptCacheExpiresAt(row);
+    return expires !== null && expires > Date.now() ? expires : null;
+  };
+
+  /** What a cold wake's move re-reads on `toName`, as its line says it. */
+  const wakeReReadWords = (
+    figures: ReturnType<typeof admission.check>,
+    tokens: number,
+    toName: string
+  ): string =>
+    `re-reading ${tokenWords(tokens)} cold costs ${usdWords(figures.projected.reReadUsd)}, ${figures.movePct === null ? `and ${toName}'s window isn't measured in dollars yet` : `≈${figures.movePct.toFixed(1)}% of ${toName}'s 5-hour window, leaving it ${Math.round(figures.roomAfter)}%`}`;
+
+  /**
+   * Why a cold wake's move to `toName` doesn't go, in words; undefined when
+   * it does. Unmeasured, the target takes one move at a time; measured, only
+   * one that leaves it room.
+   */
+  const wakeKept = (
+    figures: ReturnType<typeof admission.check>,
+    toName: string,
+    reRead: string
+  ): string | undefined => {
+    if (figures.movePct === null) {
+      return figures.pendingMoves > 0
+        ? `another move is still landing on ${toName}`
+        : undefined;
+    }
+    return figures.roomAfter <= 0
+      ? `${reRead}, more than it has left`
+      : undefined;
+  };
+
+  /**
    * A Claude session woken for a send with its cache cold is re-placed
    * first, by its kind's strategy: its first request re-reads its whole
    * context wherever it runs, so moving it costs nothing extra (fleet
@@ -25630,21 +25690,30 @@ export const createServer = (
     }
     const accounts = db.accounts.list();
     const toName = accountNameAmong(to, accounts);
-    const verdict = admission.check(
-      row,
-      to,
-      cacheCarries(from, to),
-      Date.now()
+    const now = Date.now();
+    const tokens = pricedTokens(row.contextTokens, contextWindowNow(row));
+    const figures = admission.check(
+      row.id,
+      to.id,
+      projectedMove(row, tokens, false, now),
+      now
     );
-    if (!verdict.ok) {
+    const reRead = wakeReReadWords(figures, tokens, toName);
+    const kept = wakeKept(figures, toName, reRead);
+    if (kept) {
       console.info(
-        `[rebalance] ${sessionName(row)} wakes on ${accountNameAmong(from, accounts)}, not moved to ${toName}: its prompt cache is cold, so it re-reads its context wherever it wakes, but ${verdict.words}.`
+        `[rebalance] ${sessionName(row)} wakes on ${accountNameAmong(from, accounts)}, not moved to ${toName}: its prompt cache is cold, so it re-reads its context wherever it wakes, but ${kept}.`
       );
       return;
     }
-    admission.charge(row, to, verdict);
+    const { reReadUsd, allowanceUsd } = figures.projected;
+    admission.charge(
+      row.id,
+      to.id,
+      reReadUsd === null ? null : reReadUsd + allowanceUsd
+    );
     console.info(
-      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now; ${verdict.words}. Its conversation is copied there before it starts.`
+      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now; ${reRead}. Its conversation is copied there before it starts.`
     );
     owedMoves.set(row.id, {
       to: to.id,
@@ -25652,8 +25721,8 @@ export const createServer = (
         kind: "moved",
         from: namedAccount(from, accounts),
         to: namedAccount(to, accounts),
-        sameOrganization: cacheCarries(from, to),
-        tokens: row.contextTokens,
+        sameOrganization: false,
+        tokens,
         window: null,
         resetsAt: null,
         because: { kind: "cold", wake: true },
@@ -25673,53 +25742,47 @@ export const createServer = (
    */
   const SIGNIN_PROVEN_MS = 8 * 60 * 60_000;
 
-  /** What placement reads to carry `row` off `accountId` (placement.ts `nextFree`, `skips`); none for an account of no provider. */
-  const carryInput = (
-    row: ReturnType<typeof db.getInstancesByIds>[number],
-    accountId: string
-  ) => {
-    const provider = db.accounts.get(accountId)?.provider;
-    if (!provider) {
-      return;
+  /**
+   * The tokens one request to `row`'s model may send, as the fleet knows it
+   * now: claude's from the turns the hub has seen (its catalog has none;
+   * no model named is Claude Code's own default, which its machine's
+   * account's catalog resolves). Null for any other harness here, and when
+   * unknown: never a guess.
+   */
+  const contextWindowNow = (
+    row: ReturnType<typeof db.getInstancesByIds>[number]
+  ): number | null => {
+    if (row.harness !== "claude") {
+      return null;
     }
-    return {
-      accounts: db.accounts
-        .list()
-        .filter((account) => account.provider === provider),
-      signins: db.accounts.signins(),
-      readings: db.accounts.readings(),
-      bench: db.accounts.bench(),
-      routing: db.accounts.routing(provider),
-      machineId: row.machineId,
-      machineName: machineName(row.machineId),
-      ...(row.model ? { model: row.model } : {}),
-      ...rowAsks(row),
-      exclude: accountId,
-      now: Date.now(),
-    };
+    const accountId = row.accountId ?? machineAccount(db, row.machineId);
+    const id =
+      row.model ??
+      db.accounts
+        .catalogs()
+        .find((one) => one.accountId === accountId)
+        ?.models.find((one) => one.value === "default")?.resolvedModel;
+    return (id ? db.claudeContextWindows()[id] : undefined) ?? null;
   };
 
   /**
-   * The other account that takes `row` again soonest, and when (placement
-   * `nextFree`): among those it may run on on its machine, read and at
-   * their limit now.
+   * Every other account of `leaving`'s provider as a decision for `row`
+   * reads it (at-limit.ts `decideStop`): placement's rows (placement.ts
+   * `accountRows`) with the burn already arriving on each, the ledger's
+   * figures (admission.ts), and whether a turn on `row`'s machine proved its
+   * sign-in lately; `row`'s own burn, its kind's strategy, its model's window.
    */
-  const limitNextFree = (
+  const limitRows = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
-    accountId: string
-  ): { accountId: string; at: number } | undefined => {
-    const input = carryInput(row, accountId);
-    return input ? nextFree(input) : undefined;
-  };
-
-  /** Each other account and why a carry of `row` off `accountId` would not take it (placement `skips`). */
-  const limitSkips = (
-    row: ReturnType<typeof db.getInstancesByIds>[number],
-    accountId: string
-  ) => {
-    const input = carryInput(row, accountId);
-    return input ? limitSkipsOf(input) : [];
-  };
+    leaving: string
+  ): AccountsRead =>
+    accountsRead(db, admission, row, leaving, {
+      asks: rowAsks(row),
+      machineName: machineName(row.machineId),
+      owed: owedTargets(),
+      provenSince: Date.now() - SIGNIN_PROVEN_MS,
+      window: contextWindowNow(row),
+    });
 
   /**
    * A session the at-limit controller moved, its conversation now in its new
@@ -25755,22 +25818,10 @@ export const createServer = (
     db,
     lifetime,
     accountOf: (row) => row.accountId ?? undefined,
-    target: limitTarget,
-    nextFree: limitNextFree,
-    proven: (row) =>
-      db.turnUsage.accountsUsedOn(row.machineId, Date.now() - SIGNIN_PROVEN_MS),
+    accountRows: limitRows,
     idle: sessionIdle,
-    warm: cacheWarm,
     admission,
-    // Only a measured lifetime (its last request and the TTL its cache was
-    // written with) says a cache outlives a reset. Its last turn plus the
-    // longest lifetime is when expiry is proven, not that it is warm: a
-    // session that never wrote a cache would wait up to an hour with
-    // nothing to keep.
-    cacheExpiresAt: (row) => {
-      const expires = promptCacheExpiresAt(row);
-      return expires !== null && expires > Date.now() ? expires : null;
-    },
+    cacheExpiresAt: cacheExpiry,
     // A question or permission of its pending, or a top-level session a
     // person wrote to last.
     waitedOn: (row) =>
@@ -25789,13 +25840,15 @@ export const createServer = (
       );
       publishUsage();
     },
-    move: async (row, accountId, stopped, compact) => {
+    move: async (row, accountId, stopped, compact, laterSince) => {
       if (!(registry.agent(row.machineId) && row.sessionId)) {
         return {
-          running: false,
-          why: row.sessionId
-            ? `${machineName(row.machineId)} is not connected.`
-            : "it has no conversation to copy yet",
+          kept: {
+            running: false,
+            why: row.sessionId
+              ? `${machineName(row.machineId)} is not connected.`
+              : "it has no conversation to copy yet",
+          },
         };
       }
       // Its process ends at rest and its data goes into the account's dir,
@@ -25803,25 +25856,29 @@ export const createServer = (
       // One that did not move stays on its account, held until its reset;
       // a process the carry ended there is asleep, woken at that reset.
       transcripts.noteRelaunch(row.id);
-      // A stopped session's move ends what it holds for later; a rebalance's
-      // of a running one waits for it.
-      const { kept } = await moveRowsToAccount(
+      // A stopped session's move ends what it holds for later, unless no
+      // person waits on it: then it waits for that work up to the cap from
+      // `laterSince`. A rebalance's of a running one waits for it.
+      const { kept, ended } = await moveRowsToAccount(
         row.machineId,
         [row],
         accountId,
         true,
-        stopped || undefined
+        stopped || undefined,
+        laterSince
       );
       const why = kept.get(row.id);
       if (why) {
-        return why;
+        return { kept: why };
       }
       const agent = registry.agent(row.machineId);
       const [now] = db.getInstancesByIds([row.id]);
       if (!(agent && now?.sessionId)) {
         return {
-          running: false,
-          why: `${machineName(row.machineId)} is not connected.`,
+          kept: {
+            running: false,
+            why: `${machineName(row.machineId)} is not connected.`,
+          },
         };
       }
       relaunchMoved(
@@ -25830,6 +25887,8 @@ export const createServer = (
         stopped,
         compact
       );
+      const what = ended.get(row.id);
+      return what ? { ended: what } : {};
     },
     resume: carryOn,
     // Rebalance's move of a session mid-turn waits for its turn's end, as a
@@ -25846,7 +25905,6 @@ export const createServer = (
     // finished work takes it from nobody is moved whole, never compacted.
     compactable: (row) =>
       !inputRefusal(row.id, { kind: "system", name: COMPACTION_ORIGIN }),
-    skipped: limitSkips,
     handMove: (row) => {
       const owed = owedMoves.get(row.id);
       return owed?.byHand && owed.to !== undefined && owed.to !== row.accountId
@@ -25923,7 +25981,7 @@ export const createServer = (
       stays = "its turn had already done work, so it was not run again";
     } else if (refusalMoved.has(itemId)) {
       stays = "it was already moved once for this item";
-    } else if (limitTarget(row, from.id) === null) {
+    } else if (atLimit.credentialMoveTo(row.id) === undefined) {
       stays = `no other account it may run on is signed in on ${machineName(row.machineId)} with room for it`;
     }
     if (!stays) {
@@ -25946,7 +26004,7 @@ export const createServer = (
   const oweRefusedMove = (instanceId: string, accountId: string): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     const from = db.accounts.get(accountId);
-    const toId = row && from ? limitTarget(row, from.id) : null;
+    const toId = row && from ? atLimit.credentialMoveTo(row.id) : undefined;
     const to = toId ? db.accounts.get(toId) : undefined;
     if (!(row && from && to) || row.accountId !== from.id) {
       return;
@@ -25958,7 +26016,7 @@ export const createServer = (
         kind: "moved",
         from: namedAccount(from, accounts),
         to: namedAccount(to, accounts),
-        sameOrganization: cacheCarries(from, to),
+        sameOrganization: cacheCarries(from, to, cacheExpiry(row) !== null),
         tokens: row.contextTokens,
         window: null,
         resetsAt: null,

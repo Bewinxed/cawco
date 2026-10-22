@@ -121,9 +121,12 @@ import type { TailnetServing } from "./tailnet-https";
  *    `needs` with `tokenWhy`, answered by the `token` act. A page built for
  *    23 would draw the 443 chips and the low ports, so it reloads first.
  * 25: an account line's wait at a limit names every other account and why
- *    it didn't take the session (`AccountMove` waiting `skipped`) where it
- *    named the one with room admission kept it off (`room`). A page built
- *    for 24 would read the reason from `room`, gone, so it reloads first.
+ *    it didn't take the session, or that it could (`AccountMove` waiting
+ *    `accounts`, core `HeldReason`), where it named the one with room
+ *    admission kept it off (`room`); a wait may be `free` (its cache
+ *    outlasts the reset); a move line may say what it ended (`ended`). A
+ *    page built for 24 would read the reason from `room`, gone, so it
+ *    reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries

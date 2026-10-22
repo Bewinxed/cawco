@@ -8,7 +8,10 @@ export interface LimitHold {
   /** The account at its limit. */
   accountId: string;
   instanceId: string;
-  /** Since when it is held, epoch ms; read only, a put keeps the first. */
+  /**
+   * Since when it is held, epoch ms: a put keeps the first, unless it names
+   * one (a hold put again after a move that didn't go keeps its start).
+   */
   since?: number;
   /** When it goes on: the earliest moment an account takes it again; null when none was named. */
   until: number | null;
@@ -102,10 +105,11 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .get();
     return row ? toHold(row) : undefined;
   },
-  putHold: ({ instanceId, accountId, until }) => {
+  putHold: ({ instanceId, accountId, until, since }) => {
     const values = {
       accountId,
       until: until === null ? null : new Date(until),
+      ...(since === undefined ? {} : { createdAt: new Date(since) }),
     };
     db.insert(limitHolds)
       .values({ instanceId, ...values })
