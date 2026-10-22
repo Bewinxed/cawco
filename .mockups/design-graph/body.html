@@ -35,7 +35,7 @@
       <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize panel" tabindex="0" data-edge="wh"></div>
       <!-- The resize handle (round 28): iPadOS 26's window handle, a short arc concentric with the panel's
            corner, at the corner that resizes it. One path; a drag morphs it into the tapered highlight. -->
-      <svg class="resize-handle" id="gripC" aria-hidden="true"><path/></svg>
+      <svg class="resize-handle" id="gripC" aria-hidden="true"><defs><radialGradient id="gripCInk" gradientUnits="userSpaceOnUse" cx="0" cy="0"></radialGradient></defs><path fill="url(#gripCInk)"/></svg>
       <!-- Two graphs stacked: the foot edge between them splits their heights. -->
       <div class="sash sash-s" id="sashS" role="separator" aria-orientation="horizontal" aria-label="Split the graphs' heights" tabindex="0" data-edge="s"></div>
       <span class="lit" data-arm="s" aria-hidden="true"></span>
@@ -43,7 +43,7 @@
 
     <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The kept move">
       <div class="sash sash-d" id="sashD" role="separator" aria-orientation="horizontal" aria-label="Resize the dock's height" tabindex="0" data-edge="d"></div>
-      <svg class="resize-handle" id="gripD" aria-hidden="true"><path/></svg>
+      <svg class="resize-handle" id="gripD" aria-hidden="true"><defs><radialGradient id="gripDInk" gradientUnits="userSpaceOnUse" cx="0" cy="0"></radialGradient></defs><path fill="url(#gripDInk)"/></svg>
       <div class="dock-body" id="dockBody"></div>
     </section>
   </div>
