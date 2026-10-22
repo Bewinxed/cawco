@@ -211,10 +211,120 @@ Pi Durable runs its own agent loop. It does not drive Claude Code or OpenCode as
 
 **Claude Code's own workflows:** no source compares them. The closest is the third-party stackness table on durability of cloud sessions, quoted in section 7.
 
-## 11. Sources I could not read or read only in part
+## 11. Spec deep read: tasks, ownership, abort, tools, storage, outside waits
+
+SPEC section numbers below, from `packages/durable/docs/spec.md` at pi commit `db774055e3ec` (2026-10-22). Sections 5 and 7 were read whole, plus 2 (records, `HarnessOptions`, public surface), 4, 6 (first half), 10, 10.1 and 13. Unread parts are in section 12.
+
+### 11.1 What a task's checkpoint holds
+
+- A task is `TaskRecord { id, conversationId, kind, version, input, owner?, background, abortRequested, abortReason?, abandonOnRestart?, startedAt?, endedAt?, restarts?, state, memos? }` (SPEC 5.1). `state.checkpoint` is the task's own typed state `S`, and every `S` has a `phase` string; the phases map is "exhaustive and phase-narrowed".
+- Quote (5.1): "each durable checkpoint is a full replacement". `runtime.commit()` "replaces the task's state in the same commit, so the checkpoint or outcome is atomic with the callback's entries, documents, and child tasks".
+- State machine: `pending | running | waiting (checkpoint, on, policy) | sleeping (checkpoint, until) | completing (outcome) | terminal (outcome)`. Outcomes: `completed | failed | aborted | orphaned | faulted`.
+- Memos are separate from the checkpoint (5.2): "small first-writer-wins values stored in the live task envelope ... Memos survive checkpoints and disappear in the terminal replacement. Bulk progress belongs in a document."
+- Progress is enforced (5.1, rule 6): a phase that returns without changing the checkpoint is a fault: "Checkpoint unchanged: write terminal `faulted` because no durable progress was made."
+- The terminal record "is the durable result receipt" (5.3): it can carry a small `result` or an entry ID; the checkpoint and memos are dropped; documents scoped to the task are retired.
+- Effect sandwich (5.2): "Reopening in an intent phase means the effect may have happened. The phase handler retries safely, polls an external handle, or records interruption."
+- Versioning (5.4): a task definition has `version` and an optional `migrate(input, checkpoint, fromVersion)`. A missing, too-old or failing definition leaves the task "blocked" (`missing_task`, `task_too_old`, `migration_failed`), never terminalized. "The Harness never terminalizes a task merely because registry code is missing or incompatible."
+- Crash-loop guard (5.4): `restarts` counts crash cut-offs; at `settings.restartLimit` (default 5) the task is parked until `retryTask(id)`.
+
+### 11.2 How abort and cancellation propagate
+
+- Protocol (5.4): "commit abortRequested / signal and join active run invocation / wait until ordinary owned work is no longer live / start a fresh abort invocation / abort handler commits terminal outcome".
+- Direction (5.5): "**Abort flows down**": a live owner's cancellation intent (its abort mark, or a held non-`completed` outcome) marks its ordinary owned work. "**Abort order is bottom-up.** An abort invocation of a task starts only once its ordinary owned work is no longer live, so an abort handler sees final outcomes below it."
+- Finish rule (5.5): "**Owned work does not outlive its owner's finish.**" A task that commits terminal while owned work is live is stored as `completing` and becomes `terminal` only when that work has drained. "A terminal receipt guarantees that the task's ordinary owned work drained; background work below it may continue." (5.4)
+- The abort handler decides the outcome (5.1 example): "The abort handler decides the outcome; returning without one faults the task." An abort handler cannot sleep, cannot return `waiting` and cannot create owned children (5.5, 5.6).
+- A task whose code is missing is settled `orphaned`, not `aborted` (5.4): "`aborted` means the task's own abort handler ran and decided the outcome, while `orphaned` means no task code ran, so external effects the task started may remain uncleaned."
+- Who can abort what (2.2 and 5.4):
+  - `Harness.abortTask(id)` returns `"marked" | "terminal"` and "does not await terminal settlement"; `waitForTask()` observes the receipt.
+  - `Conversation.abort()` "withdraws queued input submissions, marks non-background tasks selected by ordinary ownership traversal ... Passive writes and background subtrees survive." `{ background: true }` crosses background boundaries.
+  - Cancelling a Context only cancels the wait: "Cancelling one caller's `Context` only cancels that call or wait; it does not durably abort shared work".
+  - Cancelled conversations under the cascade have their queued inputs set `unanswered` with reason `aborted`; queued writes stay. The cascade "starts below the cancelled task, so that task's own conversation keeps its queue."
+  - `close()` is not an abort: "Close writes no task outcome; it writes the tasks it stopped back as `pending`". "A host that must durably cancel everything aborts each live task that `inspect()` lists."
+- `failFast` joins (5.5): the first task in `on` that ends or is held non-`completed` gives every other live task in `on` an abort mark; the waiting task itself "resumes once all of `on` is terminal and reads their outcomes with `runtime.outcomes()`".
+- Restart abandonment (5.4): a task created with `abandonOnRestart` gets an abort mark with `abortReason: "restart"` when a later process starts scheduling. Tools that are not replay-safe get this automatically for their nested calls and child tasks.
+- Limits stated in the spec: "forced termination of non-cooperative extension code inside one process" is a non-goal (13). "A tool that ignores its abort signal keeps the session busy until it returns" is the same limit stated on Cloudflare's page (CF, Limitations).
+
+### 11.3 Who owns a child conversation
+
+- Types (2): `ConversationOwnership = { kind: "ownerless" } | { kind: "task", taskId }`. A `ConversationRecord` has `parent? { conversationId, at }` for history and `owner? { conversationId, taskId }` for ownership.
+- Quote (2): "Conversation history parenting and task ownership are separate: `parent` controls inherited entries and historical documents. `owner` records task attribution and connects scopes for subtree abort and idle traversal. It is not an access-control capability."
+- Ownership is explicit and immutable. "Creation always supplies `ConversationOwnership` explicitly." (2). "Owner edges are immutable." (5.5). "Host callers must choose ownerless or task ownership; neither the Harness nor a conversation handle infers ownership from call context." (2.2)
+- A tool creates a child in its commit (7.3): "One transaction creates or forks the child; the owner edge is its durable record, so a replay-safe rerun finds the child with `scanConversations({ ownerTaskId })` before creating one."
+- A new task-owned child starts as a copy of the owner's stored agent (2.2): "A new task-owned conversation gets a copy of the stored `pi.agent` of the owner task's conversation, every field, `instructions` included. A later change to the owner does not reach the child." A new ownerless conversation gets `{}`.
+- The owner must be live (5.5): "`createTask` with task ownership and `createConversation` with task ownership reject an owner that is `completing`, `terminal`, or abort-marked".
+- Conversations outlive their owners (5.5): "Conversations stay usable after their owner finished: new runs started there, for example to interrogate a finished subagent, are ordinary work of that conversation ... and not part of any finish." "A terminal owner never cascades."
+- Foreground pattern: the child is owned by the tool call's own task, so aborting the call aborts the child (7.3).
+- Background pattern (7.3): a background conversation-owned "anchor" task `A` is created that "completes at once"; the child conversation `C` is owned by `A`. "Its record keeps `background`, so the parent's ordinary abort and idle traversal stop at it, while `Conversation.abort(context, { background: true })` still reaches `C`'s work through it, and `Harness.waitForIdle()` does not wait for it."
+- Idle is judged by traversal (2.2): "Harness idle applies the same traversal from every ownerless conversation root". "Conversation idle means no live non-background task selected from that conversation."
+- Usage: "A tool that runs an owned conversation must not report that conversation's spend again: the child's own `pi.usage` already counts it" (7.3).
+
+### 11.4 How a host supplies tools and storage
+
+**Tools** (SPEC 7.1, 7.3):
+
+- Tools come only through an application-owned registry of extensions, "process-local, may outlive a Harness, and is not persisted". An extension bundles `tools`, `sections`, `hooks`, `wraps` and `tasks`; `registry.install(extension)` installs or replaces by name "in one publication".
+- The Harness reads the registry through `RegistryReader<Tool> { snapshot(), subscribe() }`, which `HarnessOptions.registry` takes (2.2). A host can supply its own reader instead of `createRegistry()`, but "a host `RegistryReader` whose `snapshot()` throws" fails the Session (10.1).
+- Conversations store names only: "It stores only what someone chose for the conversation: extension and tool names, never code" (2.2).
+- A tool is `defineTool({ name, description, parameters (TypeBox), replay?: "safe" | "unsafe", executionMode?, structuredOutputSchema?, callers?, outputLimits?, execute(args, api, context) })`. Omitted `replay` is `unsafe`. `execute` gets `api` with `commit`, `memo`, `createTask`, `waitForTask`, `conversation`, `executeTool`, `env`, `output`, `details`, `now`.
+- Execution environment (2.2): `HarnessOptions.env(target { conversationId, cwd, read }, context)` builds a conversation's environment at each use. An application keeping "more than a directory per conversation keeps that in its own document and reads it through `target.read`" (the spec's example picks a container per conversation).
+- Replay on reopen (7.3): "a tool reruns only when both its stored intent policy and the current declaration ... say `safe`. A current `unsafe` declaration may veto a stored-safe replay".
+- Models come from the host too: `HarnessOptions.models` is the pi-ai `Models` object, or a function returning the current one (2.2).
+- Hosts can also add their own durable tasks (`extension.tasks`), hooks on the built-in tasks (`beforeRequest`, `afterResponse`, `onYield`, `afterTools`, `beforeTool`, `afterTool`, `beforeCompact`) and application documents (`defineDoc`, `conversationCreated` hook).
+
+**Storage** (SPEC 10, 4, 10.1):
+
+- A backend implements `Storage`: `commit(writes[], context) → Seq` (atomic), `mintId()`, scan and lookup methods for conversations, entries, tasks, submissions and documents, and `close()`. Writes are typed records plus `document.create | copy | change | retire`.
+- Contract details: "Each backend still makes one admitted batch atomic." "Allocate from the one global numeric namespace, above every ID minted or stored before, also across reopen". The Session owns the mutation line, "so storage implementations do not add a second caller-facing commit mutex".
+- Failure rule (10.1): "**A storage error ends the Session.** ... Neither the Session nor the Harness retries anything: a Storage retries its own transient failures inside the method."
+- Conformance (10): "The semantic conformance suite covers memory, SQLite, and JSONL." A host runs it against its own backend with `registerStorageConformance` (README).
+- Single writer (2.2, 7.5): "Old and new Harness instances must never own the same Session concurrently: open the new one after the old one's `close()` resolved".
+- `Session.commit(tx => ...)` is public: a host app can write entries, documents, tasks and submissions through the same atomic commit path (4).
+
+### 11.5 Can a step wait on something outside pi other than by a `submit()`?
+
+The spec settles the model as follows. A task waits on time or on other tasks; neither is an external event. External input reaches a running process through submissions, document writes and host-created tasks. No primitive resolves a parked task from outside.
+
+What a parked task can wait on:
+
+- `waiting`: "a task in `on`" being terminal. Tasks the waiting task does not own need `policy: "allSettled"` (5.5). `on` can name any live or finished task.
+- `sleeping`: the clock reaching `until` (5.6). "A sleep cannot be woken early except by an abort."
+- Only tasks change their own state: 5.1, "`Tx` has no task replacement operation. A task changes only its own state, through its runtime." "Other code stops a task with `abortTask()` and reads its result with `waitForTask()`." There is no "complete this task from outside", no signal and no external resume token.
+
+What a running invocation can do (holds the process, rerun from the top after a crash):
+
+- Await any promise in a phase handler or a tool's `execute()`: "External model, process, tool, network, and human effects run outside [the mutation line]." (4). A tool that blocks on a person is a replay-unsafe, or replay-safe-with-memo, tool. For a decision it must keep stable across a rerun, "Random values, timestamps, mutable document/configuration reads, or other derived inputs that must remain stable are first captured in a durable memo, checkpoint, or task input." (7.3)
+- Observe documents. `TaskRuntime`, `ToolExecutionApi` and `Session` all extend `DocumentObserver` (`documentState`, `snapshot`), and a hook or tool can read committed documents. The spec lists "observe documents for which it has a token/reference" among what a tool may do (7.3). Watches acquired through the runtime "stop when the invocation ends" (5.1).
+- A host can therefore write an external pick or event into a document (or an entry, or a new task) with `harness.commit()`, and a task invocation that is alive and observing it sees it. A task that has ended its phase `sleeping` or `waiting` has no invocation and is not woken by that write. **[inference from 5.1, 5.6]**
+
+What an outside system can do to reach a Harness (2.2, 6):
+
+- `Conversation.submit({ type: "input" | "write", ... })`: an input starts or joins a run (`steer`, follow-up, `reject`); a write appends an entry without asking the model. Both are idempotent by `requestId`.
+- `Harness.commit()` to write documents, create tasks, append entries.
+- `Harness.abortTask()` and `Conversation.abort()` as cancellation signals.
+- `wake()` plus `resume()` after the host's own alarm fires; this is the host's job for any process that can be evicted (5.6).
+
+Consequence for a "wait for a person's pick on a page, or another system's event" step. **[inference]**
+
+- Durable and process-free: a task that sleeps and re-checks a document on each wake, or a host-side dispatcher that creates a new task or submits an input when the event arrives.
+- Process-held: a tool or phase that awaits a promise or a document watch while the process lives.
+- Not provided: an engine-level "park until signal X" that holds no process and wakes on an outside call.
+
+### 11.6 The two packages named pi-durable-subagents (kept explicit)
+
+| | `pi-durable-subagents` (npm, 1.2.0) | `@xian0x5a/pi-durable-subagents` |
+| --- | --- | --- |
+| Source | https://github.com/purboo/pi-durable-subagents, https://pi.dev/packages/pi-durable-subagents | https://pi.dev/packages/@xian0x5a/pi-durable-subagents, https://github.com/xian0x5a/pi-durable-subagents |
+| Description | "Subagents for pi that never lose work and never do it twice. Crash-safe workflows, automatic recovery, and a live view just like the main agent." | "Durable Pi agents that collaborate asynchronously under explicit Owner and Spawner supervision." |
+| Built on `@earendil-works/pi-durable`? | No. Its README and `package.json` do not mention it. It runs its own orchestrator and journals with real `pi` subprocesses ("real subagent pi processes"). | Not established. Its pi.dev excerpt says "Pi transcripts are the durable authority for identity, Messages, Requests, Deliveries, and committed results" and "Scheduling queues, Holds, live Run state ... are volatile". Pi 0.99.0 or newer. I did not read its README whole. |
+| Waiting for a person | Its README table row for a long wait reads: "It releases its model slot and memory, then resumes exactly once when you answer." | `ask_user` in the TUI blocks one free-form answer; headless runs escalate to a supervisor instead. |
+| Author | purboo | xian0x5a |
+
+Neither is from Earendil. Neither is `pi-agents`, which is a third package (mavam) and the only one of the three documented to run on `@earendil-works/pi-durable` ("Agents run inside your Pi process on pi-durable", docs/architecture.md).
+
+## 12. Sources I could not read or read only in part
 
 - `https://cdn.jsdelivr.net/npm/pi-agents@0.38.0/docs/{usage,graphs,messaging,architecture}.md`, the links on the pi.dev page. All four returned `Target returned 404 Not Found` ("Couldn't find the requested file /docs/usage.md in pi-agents."). I read the same files from `raw.githubusercontent.com/mavam/pi-agents/main/docs/`. I did not read `profiles.md`, `configuration.md`, `hooks.md` or `design.md` of pi-agents.
-- SPEC (`docs/spec.md`, 303,145 characters): not read whole. I read the section headings, the title block, 5.6 (Sleeping), 6 (Submissions, first half) and 13 (Non-goals), and grepped for harness, approval and stability terms. A shell hook blocked my reading of CRW's saved copy (`Blocked: memory and fleet config are written through CawCo's tools, never by editing files under ~/.claude ...`), so I read a shallow `git clone` of `earendil-works/pi` at `db774055e3ec` in scratch instead.
+- SPEC (`docs/spec.md`, 303,145 characters), updated in the second pass: read whole were sections 5 (Tasks, 5.1 to 5.6) and 7 (Extensions, hooks, tools, system prompt, reload, code mode), plus section 2 (records, 2.1, 2.2 except lines 520 to 670 of the file, the `Conversation` interface), 4, 6 (first half), 10, 10.1 and 13. Not read: 3 (Documents), 6 (second half), 8 (built-in tasks), 9 (document observation and views), 11 (backends), 12 (API footguns), the `Conversation` interface block in 2.2. A shell hook blocked my reading of CRW's saved copy (`Blocked: memory and fleet config are written through CawCo's tools, never by editing files under ~/.claude ...`), so I read a shallow `git clone` of `earendil-works/pi` at `db774055e3ec` in scratch instead.
 - The README was read whole (68,793 characters, in slices).
 - `test/examples/*` and `packages/coding-agent/src/experimental/{durable,vacation}`: only the header of example 23 read. Claims about examples come from the README's example table and prose.
 - `https://www.npmjs.com/package/pi-durable-subagents`: CRW returned 105,430 characters, which I did not slice. I used the pi.dev search excerpt and the cloned repo's `README.md` instead; I read the install, comparison, table and "Not supported" parts and did not read all ~1,300 lines of it.
