@@ -77,12 +77,7 @@ const nodeLines = (
     ...(node.cacheWarm ? ["cache warm"] : ["cache cold"]),
     // Its plan by its link, which the person's dashboard draws as its chip.
     ...(node.plan
-      ? [
-          planLink(
-            node.instanceId,
-            `plan ${node.plan.done}/${node.plan.total}`
-          ),
-        ]
+      ? [planLink(node.instanceId, `plan ${node.plan.done}/${node.plan.total}`)]
       : []),
     ...(node.queued > 0 ? [`${count(node.queued, "message")} unread`] : []),
     ...(node.paused ? [node.paused] : []),

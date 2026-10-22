@@ -47,7 +47,9 @@ const titleOf = (
   title: string,
   max: number
 ): string =>
-  links.project ? taskLink(links.project, id, cut(title, max)) : quote(title, max);
+  links.project
+    ? taskLink(links.project, id, cut(title, max))
+    : quote(title, max);
 
 /** A stage as a model reads it: `draft (active, runs writer)`. */
 const stageWords = ({ name, kind, hooks }: StagesView["stages"][number]) => {
