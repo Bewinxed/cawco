@@ -41,6 +41,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { heldSkills, skillDrift, skillRecords } from "../fleet";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
+import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
 import { toolGate } from "../tools";
 import {
@@ -489,7 +490,10 @@ const piFleetMcp = async (
   for (const key of placed) {
     report[key] = { state: "applied" };
   }
-  return { ...report, ...(await piMcpList(taken)) };
+  return {
+    ...report,
+    ...(await readSettledOnce("pi", taken, piMcpList)),
+  };
 };
 
 /** Read-only SDK metadata plus the machine's pi profile; both processes use it. */

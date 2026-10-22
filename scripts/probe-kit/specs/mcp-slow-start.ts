@@ -135,25 +135,31 @@ const run = async (kit: Kit): Promise<void> => {
   const lines = (text: string, mark: string) =>
     text.split("\n").filter((line) => line.includes(mark));
   // The machine's start-up sync, on its whole harness set (OpenCode's
-  // among them), is taken before the PUT's is counted.
+  // among them), is applied before the PUT's is counted: the agent took it,
+  // and the hub keeps it applied with OpenCode's reading in its report.
   await until(
-    "the machine took the start-up sync the hub sent it",
+    "the machine applied the start-up sync the hub sent it",
     async () => {
-      const hub = await fleet.logs("hub");
+      const [stored] = fleet.query<{
+        fleet: string | null;
+        fleet_sync: string | null;
+      }>("SELECT fleet, fleet_sync FROM agents");
       return {
-        opencode: lines(hub, "[fleet] sync → ").some((line) =>
-          line.includes("opencode")
-        ),
-        sent: lines(hub, "[fleet] sync → ").length,
+        report: stored?.fleet ? (JSON.parse(stored.fleet) as Row) : undefined,
+        outcome: stored?.fleet_sync
+          ? (JSON.parse(stored.fleet_sync) as { state?: string })
+          : undefined,
         took: lines(await fleet.logs("agent"), "[fleet] sync from the hub")
           .length,
       };
     },
-    ({ opencode, sent, took }) => opencode && took >= sent,
+    ({ report, outcome, took }) =>
+      took >= 1 &&
+      outcome?.state === "applied" &&
+      report?.mcpByHarness?.opencode !== undefined,
     120_000
   ).catch(() => undefined);
   const agentMark = await fleet.logMark("agent");
-  const hubMark = await fleet.logMark("hub");
   const put = await fetch(`${fleet.base}/api/fleet/mcp/${SERVER}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -330,17 +336,16 @@ const run = async (kit: Kit): Promise<void> => {
     JSON.stringify({ handover, failedAt })
   );
 
-  // One fleet change, one sync to the machine: what the hub sent, why, and
-  // what the agent took, from the PUT to rest.
-  const hubSyncs = lines(await hubMark.since(), "[fleet] sync → ");
+  // One fleet change, one sync to the machine: what the agent took, from
+  // the PUT to rest.
   const agentSyncs = lines(
     await agentMark.since(),
     "[fleet] sync from the hub"
   );
   kit.check(
-    `the PUT sent the machine one fleet sync (hub ${hubSyncs.length}, agent ${agentSyncs.length})`,
-    hubSyncs.length === 1 && agentSyncs.length === 1,
-    JSON.stringify({ hubSyncs, agentSyncs })
+    `the PUT sent the machine one fleet sync (the agent took ${agentSyncs.length})`,
+    agentSyncs.length === 1,
+    JSON.stringify({ agentSyncs })
   );
 
   const hubLog = await fleet.logs("hub");

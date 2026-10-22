@@ -25292,6 +25292,65 @@
         }
       }
     },
+    "/api/fleet/items/retry": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "machineId",
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiFleetItemsRetry",
+        "responses": {
+          "200": {
+            "description": "postApiFleetItemsRetry 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFleetItemsRetry200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiFleetItemsRetry 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFleetItemsRetry 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects": {
       "get": {
         "operationId": "getApiProjects",
@@ -31006,6 +31065,17 @@
           "ok"
         ]
       },
+      "postApiFleetItemsRetry200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "getApiProjects200": {
         "type": "array",
         "items": {
@@ -33427,6 +33497,9 @@
             "$ref": "#/components/schemas/FleetReportFrame"
           },
           {
+            "$ref": "#/components/schemas/FleetConvergeFrame"
+          },
+          {
             "$ref": "#/components/schemas/PreviewFrame"
           },
           {
@@ -33585,6 +33658,7 @@
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "fleet_report": "#/components/schemas/FleetReportFrame",
+            "fleet_converge": "#/components/schemas/FleetConvergeFrame",
             "preview": "#/components/schemas/PreviewFrame",
             "frame": "#/components/schemas/MessageFrame",
             "send": "#/components/schemas/SendFrame",
@@ -47425,9 +47499,122 @@
             "$ref": "#/components/schemas/FleetSyncReport",
             "description": "Last-known fleet-config sync report (NEW.md §11)."
           },
-          "fleetSyncFault": {
-            "description": "Why the fleet sync the hub sent this machine's connection did not land,\nin one sentence: the hub could not send it, or the machine refused or\nfailed it. Absent once one lands, and while none has failed.",
-            "type": "string"
+          "fleetItems": {
+            "type": "object",
+            "description": "Each fleet item as the machine's harnesses converge it (core fleet.ts\n`FleetConvergeFrame`), by item id. Absent until the machine has said."
+          },
+          "fleetSync": {
+            "description": "What became of the last fleet sync the hub sent it: sent, applied,\nfailed in the machine's words, or unanswered. Absent until the hub has\nsent it one.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "sent"
+                    ]
+                  },
+                  "rev": {
+                    "type": "number"
+                  },
+                  "sentAt": {
+                    "type": "number"
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rev",
+                  "sentAt",
+                  "state",
+                  "why"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "acked"
+                    ]
+                  },
+                  "rev": {
+                    "type": "number"
+                  },
+                  "sentAt": {
+                    "type": "number"
+                  },
+                  "at": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "at",
+                  "rev",
+                  "sentAt",
+                  "state"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "nacked"
+                    ]
+                  },
+                  "rev": {
+                    "type": "number"
+                  },
+                  "sentAt": {
+                    "type": "number"
+                  },
+                  "at": {
+                    "type": "number"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "at",
+                  "error",
+                  "rev",
+                  "sentAt",
+                  "state"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "unacked"
+                    ]
+                  },
+                  "rev": {
+                    "type": "number"
+                  },
+                  "sentAt": {
+                    "type": "number"
+                  },
+                  "at": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "at",
+                  "rev",
+                  "sentAt",
+                  "state"
+                ]
+              }
+            ]
           },
           "harnesses": {
             "description": "What each installed harness can do, as the daemon reported at register.",
@@ -47818,7 +48005,7 @@
             "type": "number"
           },
           "have": {
-            "description": "What this machine holds on its disk once the sync is done, by hash — the\ncontent-carrying rows only, hashed as the hub hashes them. It tells the\nhub whose content moved, so running sessions reload. Which bytes a sync\nleaves out is never decided from it: the hub reads the disk again\n({@link READ_FLEET_HOLDINGS}) just before every sync.",
+            "description": "What this machine holds on its disk once the sync is done, by hash — the\ncontent-carrying rows only, hashed as the hub hashes them. It tells the\nhub whose content moved, so running sessions reload.",
             "type": "object",
             "properties": {
               "skills": {
@@ -58572,6 +58759,70 @@
         "required": [
           "kind",
           "report"
+        ]
+      },
+      "FleetConvergeFrame": {
+        "description": "The machine's word on items as they move, sent unasked.",
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FleetItemStatus"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fleet_converge"
+            ]
+          },
+          "rev": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "kind",
+          "rev"
+        ]
+      },
+      "FleetItemStatus": {
+        "description": "One item's converge, as the machine reports it ({@link FleetConvergeFrame}) and the hub keeps it (`agents.fleet_items`).",
+        "type": "object",
+        "properties": {
+          "error": {
+            "description": "What failed, in the machine's words.",
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ms": {
+            "description": "How long its converge took.",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FleetConvergeState"
+          }
+        },
+        "required": [
+          "hash",
+          "id",
+          "state"
+        ]
+      },
+      "FleetConvergeState": {
+        "description": "Where one item stands as the machine's harnesses converge it.",
+        "type": "string",
+        "enum": [
+          "failed",
+          "ok",
+          "pending",
+          "running"
         ]
       },
       "RejectedFrame": {

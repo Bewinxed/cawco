@@ -74,6 +74,7 @@ typeOverrides:
     FindField: OpenEnums.FindField
     FindLiveState: OpenEnums.FindLiveState
     FleetChoicesUpstream: OpenEnums.FleetChoicesUpstream
+    FleetConvergeState: OpenEnums.FleetConvergeState
     FleetFaultCause: OpenEnums.FleetFaultCause
     FleetMcpServerMode: OpenEnums.FleetMcpServerMode
     FleetMcpServerState: OpenEnums.FleetMcpServerState

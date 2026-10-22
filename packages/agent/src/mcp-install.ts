@@ -20,11 +20,14 @@
  * with npm into a dir of its own ({@link installed}), and every harness
  * launches the package's bin from there with node (mcp-launcher.ts). A row's
  * version that is not exact (`latest`, a range) is read from the registry at
- * the sync, never at a session's start. A dir no row names any more retires
+ * the sync, never at a session's start. Every npm call is bounded
+ * ({@link NPM_VIEW_MS}, {@link NPM_INSTALL_MS}): a registry that does not
+ * answer fails its row in words, and the sync goes on. A dir no row names any more retires
  * once no session that could launch from it is left ({@link retireInstalls}).
  */
 import { mkdir, readdir, readlink, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
 import { fleetMcpInstallsDir } from "@cawco/core/paths";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -154,6 +157,54 @@ const npmSaid = (stderr: string, exitCode: number): string =>
         !line.startsWith("A complete log of this run")
     ) ?? `npm exited ${exitCode} and said nothing`;
 
+/**
+ * How long a registry read may take: npm retries a refused or dropped
+ * connection twice, 10 s and then 60 s apart (its `fetch-retries`,
+ * `fetch-retry-mintimeout`, `fetch-retry-maxtimeout` defaults), so a machine
+ * with no route to its registry would hold the sync, and every row after it,
+ * for minutes.
+ */
+const NPM_VIEW_MS = 30_000;
+/** How long one package's install may take, a large one over a slow link among them. */
+const NPM_INSTALL_MS = 180_000;
+
+/** What one npm run said, or that it was stopped at its bound. */
+type NpmRan =
+  { exitCode: number; stderr: string; stdout: string } | { timedOut: number };
+
+/** `npm …args` with `ms` to finish: stopped at the bound, and said so, rather than waited on. */
+const npmWithin = async (
+  ms: number,
+  command: string[],
+  options: { cwd?: string; env: Record<string, string | undefined> }
+): Promise<NpmRan> => {
+  const read = await readWithin(ms, async (signal) => {
+    const child = Bun.spawn(command, {
+      ...(options.cwd ? { cwd: options.cwd } : {}),
+      env: options.env,
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    return { exitCode, stdout, stderr };
+  });
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      return { timedOut: ms };
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
 /** The exact version `spec` of `name` is now: as written when it is one, else the registry's answer, the highest when it names several. */
 const exactVersion = async (
   npm: string,
@@ -163,15 +214,20 @@ const exactVersion = async (
   if (EXACT.test(run.spec)) {
     return run.spec;
   }
-  const asked =
-    await Bun.$`${npm} view ${`${run.name}@${run.spec}`} version --json`
-      .quiet()
-      .nothrow()
-      .env(env);
-  if (asked.exitCode !== 0) {
-    return { failed: npmSaid(asked.stderr.toString(), asked.exitCode) };
+  const asked = await npmWithin(
+    NPM_VIEW_MS,
+    [npm, "view", `${run.name}@${run.spec}`, "version", "--json"],
+    { env }
+  );
+  if ("timedOut" in asked) {
+    return {
+      failed: `npm view ${run.name}@${run.spec} timed out after ${asked.timedOut / 1000} s: the registry did not answer`,
+    };
   }
-  const said = JSON.parse(asked.stdout.toString().trim() || "null") as
+  if (asked.exitCode !== 0) {
+    return { failed: npmSaid(asked.stderr, asked.exitCode) };
+  }
+  const said = JSON.parse(asked.stdout.trim() || "null") as
     string | string[] | null;
   const version = Array.isArray(said) ? said.at(-1) : said;
   return typeof version === "string"
@@ -265,15 +321,27 @@ const install = async (
   );
   await mkdir(staging, { recursive: true });
   const startedAt = Date.now();
-  const ran =
-    await Bun.$`${npm} install --prefix ${staging} --no-audit --no-fund --save-exact ${`${run.name}@${version}`}`
-      .cwd(root)
-      .quiet()
-      .nothrow()
-      .env(env);
+  const ran = await npmWithin(
+    NPM_INSTALL_MS,
+    [
+      npm,
+      "install",
+      "--prefix",
+      staging,
+      "--no-audit",
+      "--no-fund",
+      "--save-exact",
+      `${run.name}@${version}`,
+    ],
+    { cwd: root, env }
+  );
+  if ("timedOut" in ran) {
+    await rm(staging, { recursive: true, force: true });
+    return `npm install ${run.name}@${version} timed out after ${ran.timedOut / 1000} s`;
+  }
   if (ran.exitCode !== 0) {
     await rm(staging, { recursive: true, force: true });
-    return npmSaid(ran.stderr.toString(), ran.exitCode);
+    return npmSaid(ran.stderr, ran.exitCode);
   }
   try {
     await rename(staging, dir);

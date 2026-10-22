@@ -19,11 +19,14 @@ export const runtimeCommit =
  * register and in `/health`, and carried by a release's manifest. Epoch 2: a
  * launch asks the hub for its credential and account as it starts (the
  * `launch` verb); an epoch-1 agent reads them off the spawn, which no longer
- * carries them. A hub sends a launch only to an agent whose range holds its
- * own, and a joined machine installs only a build whose range overlaps its
- * hub's.
+ * carries them. Epoch 3: the fleet's config travels as acknowledged deltas
+ * (core fleet.ts `FLEET_DELTA`), the register's answer carrying the policy
+ * and the machine online only once it has written it (READY); an epoch-2
+ * agent knows no delta. A hub sends a launch only to an agent whose range
+ * holds its own, and a joined machine installs only a build whose range
+ * overlaps its hub's.
  */
-export const protocolRange = { min: 2, max: 2 } as const;
+export const protocolRange = { min: 3, max: 3 } as const;
 export const runtimeDataDir = () =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),

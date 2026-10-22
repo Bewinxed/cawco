@@ -288,8 +288,8 @@ interface Row {
 
 /** The agent's line for each location a fleet MCP status read booted and let go (opencode.ts `#releaseDirectory`). */
 const EVICTED = "location evicted by fleet MCP status";
-/** What the hub's log says before a sync's reason. */
-const SYNC_PREFIX = /^.*\[fleet\] sync → [^:]*: /;
+/** What the hub's log says before a welcome's count and reason (hub fleet-sync.ts). */
+const SYNC_PREFIX = /^.*\[fleet\] welcome rev \d+ sent → /;
 /** The wait 8ca774966 put on every fleet sync, which only the start-up's first may have. */
 const HELD_MS = 1500;
 /** A fleet sync the agent took, and how many servers it carried. */
@@ -452,22 +452,20 @@ const waitsForSignIn = async (
 };
 
 /**
- * The agent's start, up to the first fleet change: one sync, held until
- * every harness its register named had reported (hub server.ts
- * `awaitHarnesses`), and one read of the fleet's servers for it.
+ * The agent's start, up to the first fleet change: one welcome (hub
+ * fleet-sync.ts), converged on every harness the agent has, and one read
+ * of the fleet's servers for it.
  */
 const startedOnce = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const syncs = (await fleet.logs("hub"))
     .split("\n")
-    .filter((line) => line.includes("[fleet] sync → "));
+    .filter((line) => SYNC_PREFIX.test(line));
   const evicted = (await fleet.logs("agent"))
     .split("\n")
     .filter((line) => line.includes(EVICTED)).length;
   kit.check(
     `the agent's start-up got ${syncs.length} fleet sync(s) before the first fleet change, on ${HARNESSES.join(", ")}, and its location was evicted by fleet MCP status ${evicted} time(s): ${syncs[0]?.replace(SYNC_PREFIX, "")}`,
-    syncs.length === 1 &&
-      HARNESSES.every((h) => syncs[0]?.includes(h) === true) &&
-      evicted <= 1,
+    syncs.length === 1 && evicted <= 1,
     syncs.join("\n")
   );
 };

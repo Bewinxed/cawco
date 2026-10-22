@@ -73,6 +73,7 @@
     "./no-huge-pages": "./src/no-huge-pages.ts",
     "./state-file": "./src/state-file.ts",
     "./workspace-policy": "./src/workspace-policy.ts",
+    "./fleet-items": "./src/fleet-items.ts",
     "./workspace-judge": "./src/workspace-judge.ts",
     "./upstream-guard": "./src/upstream-guard.ts",
     "./upstream-post": "./src/upstream-post.ts",

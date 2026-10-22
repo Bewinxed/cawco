@@ -110,12 +110,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    `url` (the name with the dashboard's port) or `absent`: no `needs` state,
  *    no `command`, and no `local.name` frame, since the hub binds no port of
  *    its own for the name. A page built for 21 reloads first.
+ * 23: a machine's row says its fleet as `fleetSync` (the last delta's
+ *    answer: sent, acked, nacked in the machine's words, unacked) and
+ *    `fleetItems` (each item's converge), where it said `fleetSyncFault`.
+ *    A page built for 22 reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 22;
+export const WIRE_PROTOCOL = 23;
 
 /**
  * What a session's stream carries: the changes each frame made to its

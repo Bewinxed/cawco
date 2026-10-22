@@ -1449,7 +1449,7 @@ fleet_denials_known() { [[ "$(as_added "$1" "$2" sh -c 'cat "$1" 2> /dev/null ||
 # 2026-10-22, recorded none, so their agents took themselves for not the machine's own and refused every sync. The
 # fleet's sidecar in its Claude dir (~/.claude/cawco-fleet.json, agent denied-tools.ts), which every spawn reads before
 # it starts anything, holds the fleet's deniedTools; its agent says it synced from the hub and never that it refused a
-# sync; and the hub's row says no sync that did not land (`fleetSyncFault`).
+# sync; and the hub's row has its last delta acknowledged (`fleetSync`, hub fleet-sync.ts).
 ssh_fleet_synced() {
   local c=$1 name=$2 user=$3 home=$5 sidecar="$5/.claude/cawco-fleet.json" joined reached journal fault
   joined=$(as_added "$c" "$user" sh -c 'cat "$1" 2> /dev/null || true' sh "$home/.config/cawco/config.json" | json 'd => d.hubUrl ?? ""')
@@ -1466,13 +1466,13 @@ ssh_fleet_synced() {
   if grep -qE "not this machine's agent|sync from the hub refused" <<< "$journal"; then
     echo "ASSERTION FAILED: $name's agent refused the hub's fleet sync"; grep -E "not this machine's agent|sync from the hub refused" <<< "$journal" | tail -n 5; return 1
   fi
-  fault=$(hub_api "/api/agents/$(cat "$rigdir/ssh-id-$name")" | json 'd => d.fleetSyncFault ?? ""')
-  [[ -z $fault ]] || { echo "ASSERTION FAILED: the hub says $name's fleet sync did not land: $fault"; return 1; }
+  fault=$(hub_api "/api/agents/$(cat "$rigdir/ssh-id-$name")" | json 'd => d.fleetSync?.state === "acked" ? "" : JSON.stringify(d.fleetSync ?? null)')
+  [[ -z $fault ]] || { echo "ASSERTION FAILED: the hub's row has $name's last delta not acknowledged: $fault"; return 1; }
   echo "$name's agent: $(grep -F "[fleet] sync from the hub" <<< "$journal" | tail -n 1)"
 }
 # The session asked for a second after the add said done (ssh_start_after) runs: the hub took the start, and its row
-# reads running within 90 s (a machine yet to hear the fleet's denials holds a spawn up to 30 s for its first sync,
-# agent denied-tools.ts FIRST_SYNC_WAIT_MS, then refuses it).
+# reads running within 90 s (the hub marks a machine online only once its welcome, which carries the fleet's denials,
+# is acknowledged: hub fleet-sync.ts).
 ssh_session_ran() {
   local c=$1 name=$2 user=$3 id="sshadd-$2-1"
   [[ -s "$rigdir/ssh-start-$name.txt" ]] || { echo "ASSERTION FAILED: the add's check asked for no session on $name"; return 1; }
@@ -3255,8 +3255,8 @@ rig_capped() {
 # internal (the setup looks at the npm registry from the machine and is refused). The machine is signed in before it
 # joins, as a person's machine with Claude Code is. A session asked for 5 s after the machine is online runs, and
 # within 120 s of its join the machine's row shows its first sync's outcome: a report the sync made after the join,
-# naming each of the fleet's servers and its plugin with a state, or the hub's sentence that it did not land
-# (`fleetSyncFault`).
+# naming each of the fleet's servers and its plugin with a state, or the machine's refusal of the hub's delta, or the
+# hub's word that it went unacknowledged (`fleetSync`, hub fleet-sync.ts).
 export SLOW_MCP="proof-everything proof-memory" SLOW_PLUGIN=commit-commands@claude-plugins-official
 # The fleet's rows before anyone joins: each server run as `npx -y <package>`, as the fleet's catalog adds one, and a
 # plugin of Claude Code's own marketplace, saved through the hub's API as the dashboard saves them.
@@ -3309,12 +3309,13 @@ slow_fleet_join_starts() {
     return 1
   }
 }
-# What the machine's row says of its sync: `fault <the hub's sentence>` when one did not land, else
+# What the machine's row says of its sync: `fault <state> <its words>` when its last delta was refused or went
+# unacknowledged, else
 # `<at> <server>:<state>... <plugin>:<state>` from its report, empty while it has neither.
 slow_fleet_report() {
-  hub_api /api/agents | json "d => { const a = d.find(r => r.hostname === 'joiner'); if (a?.fleetSyncFault) return 'fault ' + a.fleetSyncFault; const f = a?.fleet; if (!f) return ''; return [f.at, ...'$SLOW_MCP'.split(' ').map(n => n + ':' + (f.mcp?.[n]?.state ?? 'none')), '$SLOW_PLUGIN:' + (f.plugins?.['$SLOW_PLUGIN']?.state ?? 'none')].join(' '); }"
+  hub_api /api/agents | json "d => { const a = d.find(r => r.hostname === 'joiner'); const s = a?.fleetSync; if (s?.state === 'nacked' || s?.state === 'unacked') return 'fault ' + s.state + ' ' + (s.error ?? ''); const f = a?.fleet; if (!f) return ''; return [f.at, ...'$SLOW_MCP'.split(' ').map(n => n + ':' + (f.mcp?.[n]?.state ?? 'none')), '$SLOW_PLUGIN:' + (f.plugins?.['$SLOW_PLUGIN']?.state ?? 'none')].join(' '); }"
 }
-# A sync's outcome on the row: the hub's sentence that it did not land, or a report made after the join naming every row.
+# A sync's outcome on the row: its delta refused or unacknowledged, or a report made after the join naming every row.
 slow_fleet_said() {
   [[ $1 == "fault "* ]] && return 0
   [[ -n $1 && $1 != *":none"* ]] && (( ${1%% *} >= $2 ))

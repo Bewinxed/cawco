@@ -12,6 +12,7 @@ import type {
   FleetAgent,
   FleetConfig,
   FleetHook,
+  FleetItemStatus,
   FleetMarketplace,
   FleetMcpConfig,
   FleetMcpServer,
@@ -19,6 +20,7 @@ import type {
   FleetRefresh,
   FleetScope,
   FleetSkillMeta,
+  FleetSyncOutcome,
   FleetSyncReport,
   FleetVersioned,
   FleetWatchNotice,
@@ -1225,6 +1227,8 @@ export interface DbShape {
     raw: string
   ) => MachinePath | MachinePathRefused;
   readonly markAgentOffline: (machineId: string) => void;
+  /** The machine answered its welcome (hub fleet-sync.ts): it is online. */
+  readonly markAgentReady: (machineId: string) => void;
   /**
    * Every row back to `offline`, for the one moment it is unconditionally true:
    * hub startup. The `status` column only ever goes to `offline` from the socket
@@ -2054,6 +2058,16 @@ export interface DbShape {
   ) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
+  /** Each fleet item as the machine converges it (hub fleet-sync.ts), by item id. */
+  readonly setAgentFleetItems: (
+    machineId: string,
+    items: Record<string, FleetItemStatus>
+  ) => void;
+  /** What became of the last delta the hub sent the machine (hub fleet-sync.ts). */
+  readonly setAgentFleetSync: (
+    machineId: string,
+    outcome: FleetSyncOutcome
+  ) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
   /** Stores the document and the hash the machines compare against. */
   readonly setFleetMemory: (content: string) => {
@@ -2458,6 +2472,12 @@ export interface DbShape {
     build?: BuildInfo;
     /** The machine's home folder, absolute; absent from a daemon that does not say it. */
     home?: string;
+    /**
+     * Online at once: a seed, or an agent of an older contract. One that
+     * speaks this hub's is online once it answers its welcome
+     * ({@link markAgentReady}); until then it reads offline.
+     */
+    online?: boolean;
   }) => void;
   /** The fleet's upstream answer (schema `upstreamSettings`): null while nobody has answered. */
   readonly upstreamPosts: () => UpstreamPosts | null;
@@ -5000,15 +5020,24 @@ const make = async (path: string): Promise<DbShape> => {
             .run();
         }
       }),
-    upsertAgent: ({ machineId, hostname, os, auth, build, home }) => {
+    upsertAgent: ({
+      machineId,
+      hostname,
+      os,
+      auth,
+      build,
+      home,
+      online = true,
+    }) => {
       const lastSeenAt = new Date();
+      const status = online ? "online" : "offline";
       db.insert(agents)
         .values({
           machineId,
           hostname,
           os,
           ...(auth ? { auth } : {}),
-          status: "online",
+          status,
           lastSeenAt,
           build,
           home,
@@ -5019,7 +5048,7 @@ const make = async (path: string): Promise<DbShape> => {
             hostname,
             os,
             ...(auth ? { auth } : {}),
-            status: "online",
+            status,
             lastSeenAt,
             ...(build ? { build } : {}),
             ...(home ? { home } : {}),
@@ -5029,6 +5058,12 @@ const make = async (path: string): Promise<DbShape> => {
       // A removed machine whose agent starts again is on the fleet again.
       db.delete(removedMachines)
         .where(eq(removedMachines.machineId, machineId))
+        .run();
+    },
+    markAgentReady: (machineId) => {
+      db.update(agents)
+        .set({ status: "online", lastSeenAt: new Date() })
+        .where(eq(agents.machineId, machineId))
         .run();
     },
     setAgentCapabilities: (machineId, machineCapabilities) => {
@@ -5044,9 +5079,11 @@ const make = async (path: string): Promise<DbShape> => {
         .where(and(eq(agents.machineId, machineId), ne(agents.auth, auth)))
         .returning({ machineId: agents.machineId })
         .all().length > 0,
+    // A beat says the machine is there, not that it is ready: only its
+    // register (an older contract) or its welcome's answer puts it online.
     touchAgent: (machineId) => {
       db.update(agents)
-        .set({ status: "online", lastSeenAt: new Date() })
+        .set({ lastSeenAt: new Date() })
         .where(eq(agents.machineId, machineId))
         .run();
     },
@@ -7059,6 +7096,18 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
+    setAgentFleetItems: (machineId, items) => {
+      db.update(agents)
+        .set({ fleetItems: items })
+        .where(eq(agents.machineId, machineId))
+        .run();
+    },
+    setAgentFleetSync: (machineId, outcome) => {
+      db.update(agents)
+        .set({ fleetSync: outcome })
+        .where(eq(agents.machineId, machineId))
+        .run();
+    },
     // A pause moved while it lasts keeps what it stopped already, and adds
     // what it stopped this time.
     setMachinePause: (machineId, until, stopped) => {
@@ -7099,12 +7148,15 @@ const make = async (path: string): Promise<DbShape> => {
           .map(
             ({
               fleet,
+              fleetSync,
+              fleetItems,
               build,
               home,
               machineCapabilities,
               pausedUntil,
               pauseStopped,
               ...agent
+              // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
             }) => {
               const harnesses = reports.get(agent.machineId);
               return {
@@ -7114,6 +7166,8 @@ const make = async (path: string): Promise<DbShape> => {
                 pauseStopped:
                   (pauseStopped && stoppedWords(pauseStopped)) || null,
                 ...(fleet ? { fleet } : {}),
+                ...(fleetSync ? { fleetSync } : {}),
+                ...(fleetItems ? { fleetItems } : {}),
                 ...(build ? { build } : {}),
                 ...(harnesses ? { harnesses } : {}),
                 ...(home ? { home } : {}),

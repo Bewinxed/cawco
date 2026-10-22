@@ -853,11 +853,16 @@ export interface AgentRow {
    */
   fleet?: FleetSyncReport;
   /**
-   * Why the fleet sync the hub sent this machine's connection did not land,
-   * in one sentence: the hub could not send it, or the machine refused or
-   * failed it. Absent once one lands, and while none has failed.
+   * Each fleet item as the machine's harnesses converge it (core fleet.ts
+   * `FleetConvergeFrame`), by item id. Absent until the machine has said.
    */
-  fleetSyncFault?: string;
+  fleetItems?: Record<string, import("./fleet").FleetItemStatus>;
+  /**
+   * What became of the last fleet sync the hub sent it: sent, applied,
+   * failed in the machine's words, or unanswered. Absent until the hub has
+   * sent it one.
+   */
+  fleetSync?: import("./fleet").FleetSyncOutcome;
   /** What each installed harness can do, as the daemon reported at register. */
   harnesses?: import("./harness").HarnessReport[];
   /** The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has. */
@@ -1675,6 +1680,7 @@ export const SERVER_STOPPED_MID_TURN =
 export type FramePayload =
   | import("./frames").FleetMcpFrame
   | import("./frames").FleetReportFrame
+  | import("./fleet").FleetConvergeFrame
   | import("./frames").PreviewFrame
   | import("./frames").MessageFrame
   | import("./frames").SendFrame

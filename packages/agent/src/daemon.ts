@@ -8,6 +8,7 @@ import type {
   AuthState,
   BuildInfo,
   Envelope,
+  FleetHeld,
   HeartbeatAckPayload,
   HeartbeatPayload,
   LaunchAsk,
@@ -225,7 +226,7 @@ import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
-import { isMachineAgent } from "./machine-agent";
+import { holdHubLink, isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
 import {
@@ -848,6 +849,12 @@ export interface RegisterPayload extends MachineIdentity {
   credentialHashes: string[];
   /** Custody is not attachment: these still need a handle before being listed live. */
   custody: SessionCustody;
+  /**
+   * What this agent holds of the fleet (core fleet.ts `FleetHeld`): the
+   * hub's welcome carries only what differs. Absent from an agent that has
+   * held nothing since it started.
+   */
+  fleetHeld?: FleetHeld;
   /**
    * The id this machine last registered as with this hub, when its id has
    * moved since (it follows the hostname, core machine-id.ts): the hub moves
@@ -1594,6 +1601,9 @@ const attach = (
     // proofs name (hub-proof.ts).
     setConnectedHub(challenge.hubId);
     yield* Effect.promise(() => recordJoinedHub(url, challenge.hubId));
+    // This process holds the machine's hub link: it is the machine's agent
+    // (machine-agent.ts).
+    holdHubLink();
     supervisor.resetStopSequence();
     process.env[CAWCO_ENV.hubUrl] = url;
     const { catalog } = yield* Effect.promise(() => reading);
@@ -1619,6 +1629,7 @@ const attach = (
       ...keyProof(challenge, identity.machineId),
       ...(formerMachineId ? { formerMachineId } : {}),
       ...(machineAgent ? { accountStores: accountStoreIds() } : {}),
+      ...(supervisor.fleetHeld() ? { fleetHeld: supervisor.fleetHeld() } : {}),
       sessionAddresses: supervisor.sessionAddresses,
       instances: supervisor.instanceIds,
       previews: servingPreviews(),

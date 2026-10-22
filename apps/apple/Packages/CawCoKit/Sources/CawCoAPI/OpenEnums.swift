@@ -2784,6 +2784,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/FleetConvergeState`.
+    public enum FleetConvergeState: OpenEnum {
+        case failed
+        case ok
+        case pending
+        case running
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "failed": self = .failed
+            case "ok": self = .ok
+            case "pending": self = .pending
+            case "running": self = .running
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .failed: "failed"
+            case .ok: "ok"
+            case .pending: "pending"
+            case .running: "running"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.failed, .ok, .pending, .running]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/FleetFaultCause`.
     public enum FleetFaultCause: OpenEnum {
         case absent
