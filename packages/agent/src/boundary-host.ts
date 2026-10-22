@@ -4,7 +4,8 @@
  * @anthropic-ai/sandbox-runtime (srt) in library mode: `SandboxManager` is a
  * module-level singleton, one config and one proxy per process, so each
  * workspace has its own process. It starts srt's proxy with the workspace's
- * settings and the ask callback below, wraps the workspace's runner (the
+ * settings and the ask callback below, and the relay in front of it that
+ * presents srt's token for every client (proxy-relay.ts), wraps the workspace's runner (the
  * script RUNNER names, handed to bash inline) and runs it: every command of
  * the workspace then runs inside that one sandbox, handed in over FIFO.
  *
@@ -34,7 +35,8 @@
  * A plain Bun script, never a module of cawco, importing nothing of it but
  * core's dependency-free dir names (`claude-dirs.ts`), mount table
  * (`mount-table.ts`) and nested-boundary words (`boundary-nesting.ts`),
- * with safe git and state files: a binary install runs
+ * with safe git and state files, and the agent's own dependency-free proxy
+ * relay (`proxy-relay.ts`): a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
  * runs it on bun.
  */
@@ -68,6 +70,11 @@ import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
+import {
+  RELAY_SOCKET_ENV,
+  RELAY_SOCKET_NAME,
+  startProxyRelay,
+} from "./proxy-relay";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
@@ -276,6 +283,30 @@ if (goneAtStart) {
 // scratch dir (`CAWCO_SANDBOX_CWD`); a clone's are stood in for (standIn).
 process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
 await SandboxManager.initialize(settings, ask);
+
+/**
+ * The relay in front of srt's proxy (proxy-relay.ts): it presents srt's
+ * token for every request, so a client that drops the URL's credential
+ * (Chromium) gets out as every other does. Its socket is in srt's own temp
+ * dir (this process's `TMPDIR`), which the sandbox binds back as it binds
+ * srt's bridge sockets there. With no proxy of srt's to relay to, no sandbox
+ * starts: its commands would have no way out.
+ */
+const relaySocket = join(process.env.TMPDIR ?? "", RELAY_SOCKET_NAME);
+const srtPort = SandboxManager.getProxyPort();
+const srtToken = SandboxManager.getProxyAuthToken();
+if (!(process.env.TMPDIR && srtPort && srtToken)) {
+  console.log(
+    `cawco: srt started no proxy of its own to relay to (TMPDIR ${process.env.TMPDIR ?? "unset"}, port ${srtPort ?? "none"}, ${srtToken ? "a" : "no"} token), so the workspace's sandbox has no way out and its boundary closes`
+  );
+  await SandboxManager.reset();
+  process.exit(1);
+}
+const relay = await startProxyRelay({
+  socket: relaySocket,
+  upstream: { host: "127.0.0.1", port: srtPort },
+  credential: `srt:${srtToken}`,
+});
 
 /**
  * A mount point an earlier sandbox left on the host, by srt's own test
@@ -597,6 +628,8 @@ const inherited = [
 ];
 const runnerEnv = {
   PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
+  // The relay's socket, which the runner bridges into the sandbox (proxy-relay.ts `RELAY_STEP`).
+  [RELAY_SOCKET_ENV]: relaySocket,
   ...Object.fromEntries(
     inherited.flatMap((name) => {
       const value = process.env[name];
@@ -794,6 +827,8 @@ const finish = (end: { status: number } | { gone: string }): Promise<never> => {
     current?.proc.kill("SIGKILL");
     rmSync(placeFile, { force: true });
     rmSync(guardedFile, { force: true });
+    relay.close();
+    rmSync(relaySocket, { force: true });
     await SandboxManager.reset();
     if ("gone" in end) {
       refuseGone(end.gone);

@@ -31,6 +31,12 @@
  * - `bun install --frozen-lockfile` in the clone finishes;
  * - `git commit` in the clone finishes, and the commit is in the clone's log
  *   on the host;
+ * - the boundary's `HTTPS_PROXY` and `ALL_PROXY` name the srt host's relay
+ *   with no credential (agent proxy-relay.ts), and curl from that URL, which
+ *   presents none, reaches example.com: what a Chromium started there needs
+ *   (before the relay srt's URLs carried its token as userinfo, which
+ *   Chromium drops, and its pages were refused 407; the workspace spec
+ *   `boundary-proxy` drives the Chromium itself);
  * - `bunx --bun` runs a package's `#!/usr/bin/env node` bin under Bun, as on
  *   the host: it reads `process.versions.bun`, and imports `bun:sqlite` as a
  *   SvelteKit vite.config does (before the fix Bun could not make its node
@@ -43,6 +49,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
+import { RELAY_URL } from "../../../packages/agent/src/proxy-relay";
 import { isAlive, signal } from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -98,6 +105,7 @@ const COMMAND = [
   `echo kept > ${CLONE_FILE}; echo ${apart("CLONE-WRITE:")}$?`,
   `bun install --frozen-lockfile > "$TMPDIR/install.log" 2>&1; echo ${apart("INSTALLED:")}$?; tail -n 3 "$TMPDIR/install.log"`,
   `git add ${CLONE_FILE} && git commit -qm '${COMMIT_SUBJECT}' 2>&1; echo ${apart("COMMITTED:")}$?`,
+  `echo ${apart("HTTPS_PROXY-IS:")}"$HTTPS_PROXY" ${apart("ALL_PROXY-IS:")}"$ALL_PROXY"; echo ${apart("PROXY-CURL:")}"$(curl -sS -o /dev/null -w '%{http_code}' https://example.com/ 2>&1 | tr ' ' _)"`,
   BUNX,
   `echo ${apart(END)}`,
 ].join("\n");
@@ -177,6 +185,18 @@ const makeRepo = async (fleet: Fleet): Promise<string> => {
 /** What the command said after `marker`, up to the end of its word. */
 const after = (said: string, marker: string): string | undefined =>
   new RegExp(`${marker}(\\S*)`).exec(said)?.[1];
+
+/** The boundary's proxy URLs name its relay with no credential, and a client presenting none gets out through it. */
+const checkRelay = (kit: Kit, said: string): void => {
+  const proxyAt = after(said, "HTTPS_PROXY-IS:");
+  const allProxyAt = after(said, "ALL_PROXY-IS:");
+  const proxyCurl = after(said, "PROXY-CURL:");
+  kit.check(
+    `the boundary's proxy URLs name its relay with no credential (${RELAY_URL}), and a client that presents none (curl, from that URL) reaches example.com over CONNECT: 200`,
+    proxyAt === RELAY_URL && allProxyAt === RELAY_URL && proxyCurl === "200",
+    JSON.stringify({ proxyAt, allProxyAt, proxyCurl })
+  );
+};
 
 /** The command's output, from its first marker on. */
 const outputOf = (said: string): string =>
@@ -366,6 +386,7 @@ const run = async (kit: Kit) => {
     after(said, "COMMITTED:") === "0" && subject === COMMIT_SUBJECT,
     `exit ${after(said, "COMMITTED:")}; the clone's last commit on the host: ${JSON.stringify(subject)}`
   );
+  checkRelay(kit, said);
   checkBackgroundRead(kit, said, home, started.workspaceId);
   const runtime = after(said, "BUNX-RUNTIME:");
   kit.check(

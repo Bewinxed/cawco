@@ -12,8 +12,9 @@
  *   the read-denied home dir, `/tmp` and `/run` among them, fails at once
  *   with EROFS: `srtSettings` in boundary-policy.ts), sees and signals only
  *   the workspace's processes (its own pid namespace), and reaches the
- *   network only through srt's proxy: any public host, none of the owner's
- *   machines. Every host socket is out of sight.
+ *   network only through srt's proxy, by way of the srt host's relay, which
+ *   presents srt's token for every client (proxy-relay.ts): any public
+ *   host, none of the owner's machines. Every host socket is out of sight.
  * - macOS: one `sandbox-exec` runner per workspace, under a Seatbelt profile
  *   written from the same policy: the home dir read-denied but for what the
  *   policy reads back, writes only where it writes. Seatbelt keeps its
@@ -215,6 +216,7 @@ import {
   judgeProcId,
   parseProcId,
 } from "./proc-id";
+import { RELAY_STEP } from "./proxy-relay";
 import type { SessiondClient } from "./sessiond-client";
 import {
   hasLeftDirs,
@@ -2390,14 +2392,18 @@ const behindGate = async <T>(
  * KILL 4 s later, from inside, where the pid it wrote names it (on Linux the
  * executor, outside the sandbox's pid namespace, cannot). The FIFO is opened
  * read-only (it lies where a command cannot write) and reopened after each
- * writer closes it. Linux: srt's own plumbing for the sandbox (its proxy, the
- * proxy credential git presents) is read once as the runner starts and set
- * again over each request's environment, which the executor writes on the
- * host, so no caller's environment can drop it. Yarn 2 and later read no
+ * writer closes it. Linux: the runner first bridges the srt host's proxy
+ * relay into the sandbox and points srt's proxy URLs at it, with no
+ * credential (proxy-relay.ts `RELAY_STEP`), so every client gets out the
+ * same way, a Chromium that drops a proxy URL's userinfo among them. srt's
+ * own plumbing for the sandbox (its proxy, now the relay's address) is read
+ * once as the runner starts and set again over each request's environment,
+ * which the executor writes on the host, so no caller's environment can
+ * drop it. Yarn 2 and later read no
  * `HTTPS_PROXY`, only their own `httpsProxy` and `httpProxy` settings, so
  * each install went direct and failed ("YN0001: Error
  * [ERR_SOCKET_CLOSED_BEFORE_CONNECTION]: Socket closed before the connection
- * was established", 2026-10-18): the runner gives them srt's proxy as
+ * was established", 2026-10-18): the runner gives them that proxy as
  * `YARN_HTTPS_PROXY` and `YARN_HTTP_PROXY` ("most settings can also be
  * defined through environment variables … `YARN_CACHE_FOLDER` will set the
  * cache folder", yarnpkg.com/configuration/yarnrc). They override a
@@ -2502,6 +2508,7 @@ const LAUNCH = [
  * never saying why.
  */
 const RUNNER = `fifo=$1
+${RELAY_STEP}
 [ -n "\${HTTPS_PROXY:-}" ] && export YARN_HTTPS_PROXY=$HTTPS_PROXY
 [ -n "\${HTTP_PROXY:-}" ] && export YARN_HTTP_PROXY=$HTTP_PROXY
 CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|YARN_HTTPS?_PROXY|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
@@ -2694,10 +2701,10 @@ const hostScript = (): string =>
 
 /**
  * What the host script runs, for the form: a change to it is a change of
- * form. A build's script bundles srt; a checkout's imports it, so srt's
- * module that writes the sandbox's mounts (each read-deny tmpfs among them,
- * which the bwrap it runs makes read-only, {@link bwrapLauncherOf}) is read
- * beside it.
+ * form. A build's script bundles srt and the proxy relay; a checkout's
+ * imports them, so the relay (proxy-relay.ts) and srt's module that writes
+ * the sandbox's mounts (each read-deny tmpfs among them, which the bwrap it
+ * runs makes read-only, {@link bwrapLauncherOf}) are read beside it.
  */
 const readHostText = async (host: string): Promise<string> => {
   if (standalone) {
@@ -2707,9 +2714,11 @@ const readHostText = async (host: string): Promise<string> => {
     Bun.resolveSync("@anthropic-ai/sandbox-runtime", dirname(host))
   );
   const texts = await Promise.all(
-    [host, join(srt, "sandbox", "linux-sandbox-utils.js")].map((file) =>
-      Bun.file(file).text()
-    )
+    [
+      host,
+      join(dirname(host), "proxy-relay.ts"),
+      join(srt, "sandbox", "linux-sandbox-utils.js"),
+    ].map((file) => Bun.file(file).text())
   );
   return texts.join("\0");
 };
