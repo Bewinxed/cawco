@@ -18,8 +18,8 @@ site/art/
 site/src/assets/
 site/wrangler.jsonc
 site/scripts/deploy.mjs
-# Backlot's review page, copied as it stands there (scripts/probe-review/README.md).
-scripts/probe-review/index.html
+# Review folders as scripts/probe-kit/review.ts writes them (its JSON, its copy of the page, pictures).
+scripts/probe-review/runs/
 # Pages copied byte for byte from the owner's sessions: a spec reads them as he saw them.
 scripts/probe-kit/fixtures/
 
