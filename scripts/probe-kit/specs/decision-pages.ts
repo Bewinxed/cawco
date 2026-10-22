@@ -1770,12 +1770,14 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
   // The page's media are still loading in: the tap waits for the layout to stand still.
   await settle(shown, 800);
   await pressIn(frame, "#decision-stack [data-change] >> nth=0");
+  // Read once it has unfolded: mid-unfold its options are still fading in
+  // (a read at 70px of a card folded at 68 showed svelte alone).
   const opened = await until(
     `${theme}: the stack card open again`,
     () => foldOf(frame, "stack"),
-    (fold) => !fold.decided && fold.body,
+    (fold) => !fold.decided && fold.body && fold.options.length === 2,
     10_000
-  ).catch(() => null);
+  ).catch(() => foldOf(frame, "stack"));
   const after = (await on.read()).state.stack;
   kit.check(
     `(g) ${theme}: a card loads folded; Change opens it, both options showing, astro still marked, Continue standing, focus on astro`,
