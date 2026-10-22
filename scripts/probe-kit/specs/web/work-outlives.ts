@@ -1696,7 +1696,45 @@ async function catalogueLeg(
   );
 }
 
-async function copyLeg(kit: Kit, page: Page, base: string, instanceId: string) {
+/**
+ * The session tab's menu opened as the pass's hand opens it: a right click
+ * at the desk; a finger's long press on a phone, which the page hears as a
+ * `contextmenu` at the press. Asked once more if the menu is not up.
+ */
+async function openTabMenu(
+  page: Page,
+  pass: Pass,
+  item: ReturnType<Page["locator"]>
+): Promise<void> {
+  const tab = page.locator(SESSION_TAB).first();
+  await tab.waitFor({ state: "visible", timeout: 30_000 });
+  await settle(page, 300);
+  for (let tries = 0; tries < 2; tries += 1) {
+    if (pass.phone) {
+      // biome-ignore lint/performance/noAwaitInLoops: once more only if the menu is not up
+      const box = await tab.boundingBox();
+      await tab.dispatchEvent("contextmenu", {
+        bubbles: true,
+        clientX: (box?.x ?? 0) + (box?.width ?? 0) / 2,
+        clientY: (box?.y ?? 0) + (box?.height ?? 0) / 2,
+      });
+    } else {
+      await tab.click({ button: "right" });
+    }
+    if (await until(() => item.isVisible(), 5000)) {
+      return;
+    }
+  }
+  await item.waitFor({ state: "visible", timeout: 5000 });
+}
+
+async function copyLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  instanceId: string,
+  pass: Pass
+) {
   await page.goto(`${base}/session/${instanceId}`, {
     waitUntil: "domcontentloaded",
   });
@@ -1713,11 +1751,8 @@ async function copyLeg(kit: Kit, page: Page, base: string, instanceId: string) {
       });
     }
   });
-  const tab = page.locator(SESSION_TAB).first();
-  await tab.waitFor({ state: "visible", timeout: 30_000 });
-  await tab.click({ button: "right" });
   const item = page.getByRole("menuitem", { name: "Copy link" }).first();
-  await item.waitFor({ state: "visible", timeout: 10_000 });
+  await openTabMenu(page, pass, item);
   await item.click();
   const line = "[data-copy-refused]";
   await until(
@@ -1737,13 +1772,7 @@ async function copyLeg(kit: Kit, page: Page, base: string, instanceId: string) {
   await page.keyboard.press("Escape");
   // Its menu opened again after a reload says it again under the item.
   await reload(page);
-  const again = page.locator(SESSION_TAB).first();
-  await again.waitFor({ state: "visible", timeout: 30_000 });
-  await again.click({ button: "right" });
-  await page
-    .getByRole("menuitem", { name: "Copy link" })
-    .first()
-    .waitFor({ state: "visible", timeout: 10_000 });
+  await openTabMenu(page, pass, item);
   const kept = await faultOf(page, line);
   kit.check(
     "copy: after a reload, the menu opened again says the refused copy under the item",
@@ -1912,7 +1941,7 @@ const spec: Spec = {
         ],
         ["artifact menu", () => artifactMenuLeg(k, page, base, chat, pass, n)],
         ["catalogue", () => catalogueLeg(k, page, base, socket)],
-        ["copy", () => copyLeg(k, page, base, chat)],
+        ["copy", () => copyLeg(k, page, base, chat, pass)],
         ["behind", () => behindLeg(k, page, base, chat, socket, fleet.send)],
       ];
       // What the page threw, said with a leg that did not run to its end.
