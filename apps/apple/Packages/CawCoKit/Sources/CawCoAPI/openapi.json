@@ -17433,26 +17433,6 @@
               }
             }
           },
-          "404": {
-            "description": "postApiMachinesSsh 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiMachinesSsh 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
           "422": {
             "description": "postApiMachinesSsh 422",
             "content": {

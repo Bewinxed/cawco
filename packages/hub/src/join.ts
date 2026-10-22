@@ -837,8 +837,15 @@ export const joinRoutes = ({
             }
           );
         }
+        // The add just started is one of the hub's installs: its answer is the
+        // job, as it always was, and no status the shipped apps don't know.
         const job = installs.job(started.install.id);
-        return job ?? status(404, "No SSH add with that id on this hub.");
+        if (!job) {
+          throw new Error(
+            `The SSH add of ${started.install.target} that just started is missing from the hub's installs.`
+          );
+        }
+        return job;
       }
     )
     .get("/api/machines/ssh/:id", ({ params, status }) => {
