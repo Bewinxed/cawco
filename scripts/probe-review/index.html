@@ -114,6 +114,16 @@
           }
         }
 
+        .more {
+          margin-block-end: 12px;
+
+          summary {
+            color: var(--accent);
+            font-size: 13px;
+            min-block-size: 32px;
+          }
+        }
+
         .entry {
           border-block-start: 1px solid var(--line);
           padding-block: 12px;
@@ -330,10 +340,24 @@
         if (s.commits.length === 0) {
           card.append(el("p", "commit", "No commit named"));
         }
-        for (const c of s.commits) {
-          const line = el("p", "commit");
-          line.append(el("code", "", c.sha.slice(0, 9)), ` ${c.subject} `, el("span", "states", `(${c.states.join(", ")})`));
-          card.append(line);
+        // The commits that reach most of its changed states first; past the
+        // first few, the rest fold under one line.
+        const line = (c) => {
+          const p = el("p", "commit");
+          p.append(el("code", "", c.sha.slice(0, 9)), ` ${c.subject} `, el("span", "states", `(${c.states.join(", ")})`));
+          return p;
+        };
+        const SHOWN = 6;
+        for (const c of s.commits.slice(0, SHOWN)) {
+          card.append(line(c));
+        }
+        if (s.commits.length > SHOWN) {
+          const more = el("details", "more");
+          more.append(el("summary", "", `${s.commits.length - SHOWN} more commits on its files`));
+          for (const c of s.commits.slice(SHOWN)) {
+            more.append(line(c));
+          }
+          card.append(more);
         }
         for (const entry of s.entries) {
           card.append(entryRow(entry));
