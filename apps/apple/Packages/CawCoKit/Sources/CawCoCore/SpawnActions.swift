@@ -65,6 +65,9 @@ extension HubConnection {
                                         summariseInputTokens: sized.summariseInputTokens, openingTokens: sized.openingTokens)
         case let .unprocessableContent(refused):
             throw ControlError(message: try await Self.text(refused.body))
+        // The source's machine is away: the hub names it, in its words.
+        case let .serviceUnavailable(refused):
+            throw ControlError(message: try await Self.text(try refused.body.plainText))
         case let .undocumented(statusCode, payload):
             throw ControlError(message: try await Self.text(payload.body, or: "The hub answered \(statusCode)."))
         }
@@ -83,6 +86,9 @@ extension HubConnection {
             throw ControlError(message: try await Self.text(try refused.body.plainText))
         case let .unprocessableContent(refused):
             throw ControlError(message: try await Self.text(refused.body))
+        // The source's machine is away: the hub names it, in its words.
+        case let .serviceUnavailable(refused):
+            throw ControlError(message: try await Self.text(try refused.body.plainText))
         case let .undocumented(statusCode, payload):
             throw ControlError(message: try await Self.text(payload.body, or: "The hub answered \(statusCode)."))
         }

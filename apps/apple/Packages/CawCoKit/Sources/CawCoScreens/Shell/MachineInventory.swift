@@ -249,9 +249,9 @@ final class MachineInventoryView: UIStackView {
     private static func status(_ response: Operations.PostApiAgentsByMachineIdInspect.Output) -> Int {
         switch response {
         case .ok: 200
-        case .notFound: 404
         case .unprocessableContent: 422
         case .internalServerError: 500
+        case .serviceUnavailable: 503
         case .gatewayTimeout: 504
         case let .undocumented(code, _): code
         }

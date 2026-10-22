@@ -1324,25 +1324,29 @@ const askerWords = (by: ContinuationAsker): string => {
 const UNDELIVERED_ORIGIN = "undelivered";
 /** The words a continuation stopped by its Cancel ends with. */
 const CONTINUATION_CANCELLED = "the continuation was cancelled";
-/** What a request a machine was answering gets when its socket closes. */
 /**
  * What a request to a machine gets when its own deadline passes with the
  * machine away: held for it all that time, and sent again each time it came
  * back (server.ts `resendHeld`), it never answered. A machine that is there
- * at the deadline and silent is unanswered instead.
+ * at the deadline and silent is unanswered instead. True of a write only: a
+ * read runs nothing, and is answered as its machine being away (`asRead`).
  */
 const MACHINE_DISCONNECTED =
   "The machine was away when this request's deadline passed: the hub held the request and sent it again each time the machine came back, and no answer came in time, so whether it ran is not known. Check what it does before asking again.";
 
 /**
- * A step that could not finish because its machine went away. Not a failure:
- * the continuation waits, and the machine's next register carries it on.
+ * A step or a read that could not finish because its machine went away. Not
+ * a failure: a continuation waits, and the machine's next register carries it
+ * on; a route answers it as the machine away (`awayStatus`: 503 naming it),
+ * which a reader reads again once the machine is back.
  */
 class MachineAway extends Error {
+  readonly machineId: string;
   /** `words`: the hub's `machineFault`, the machine by its name. */
-  constructor(words: string) {
+  constructor(machineId: string, words: string) {
     super(words);
     this.name = "MachineAway";
+    this.machineId = machineId;
   }
 }
 interface ContinueOutcome {
@@ -2427,10 +2431,20 @@ const peekMemoryFile = (result: unknown): MachineMemory => {
   return { content, hash, docs: read };
 };
 
+/** A read off a machine refused, as the status its route answers with. */
+interface ReadRefused {
+  code: 500 | 503 | 504;
+  ok: false;
+  said: string;
+}
+
 /** A read of a machine's memory, or the status the route should answer with. */
-type MemoryRead =
-  | { ok: true; copy: MachineMemory }
-  | { ok: false; code: 404 | 500 | 504; said: string };
+type MemoryRead = { ok: true; copy: MachineMemory } | ReadRefused;
+
+/** A route's `set`, on which a read whose machine is away names it (`awayStatus`). */
+interface RouteSet {
+  headers: Record<string, string | number | string[]>;
+}
 
 /**
  * What an `init` frame announces: the SDK session, which is what lets a
@@ -3830,22 +3844,31 @@ export const createServer = (
       ? machineFaultWords(machineCalled(machineId, agents), fault, words)
       : machineFaultWords(undefined, "unknown", words);
   };
+  /** `machineId` away, as a step or a read that cannot finish without it throws it. */
+  const awayError = (machineId: string): MachineAway =>
+    new MachineAway(machineId, machineFault(machineId, "offline"));
   /** {@link machineFault} for an ask the machine did not answer: not connected, or silent. */
   const unansweredFault = (machineId: string, answer: Unanswered): string =>
     machineFault(machineId, answer.reason === "dead" ? "offline" : "silent");
-  /** An ask the machine left unanswered as an HTTP answer: 404 not connected, 504 silent. */
-  const unansweredStatus = (
-    machineId: string,
-    answer: Unanswered
-  ): { code: 404 | 504; said: string } =>
-    answer.reason === "dead"
-      ? { code: 404, said: machineFault(machineId, "offline") }
-      : { code: 504, said: machineFault(machineId, "silent") };
   /** "<machine> did not answer within N s" (or is not connected), for an ask it left unanswered. */
   const silentWords = (machineId: string, answer: Unanswered): string =>
     answer.reason === "dead"
       ? `${machineName(machineId)} is not connected`
       : `${machineName(machineId)} did not answer within ${Math.round(answer.after / 1000)} s`;
+  /**
+   * A read its machine left unanswered, as the read throws it: not connected
+   * (or away past its deadline, `asRead`) is {@link awayError}, which a route
+   * answers 503 naming the machine and a continuation waits out; silent, a
+   * plain error, `what` (the read, in words) followed by {@link silentWords}.
+   */
+  const unansweredError = (
+    machineId: string,
+    answer: Unanswered,
+    what: string
+  ): Error =>
+    answer.reason === "dead"
+      ? awayError(machineId)
+      : new Error(`${what}: ${silentWords(machineId, answer)}`);
   /** A session as a sentence names it. */
   const sessionName = (row: {
     derivedTitle?: string | null;
@@ -3990,7 +4013,7 @@ export const createServer = (
     if (!asksPiDefault(payload)) {
       return payload;
     }
-    const answer = await callAgent(
+    const answer = await readAgent(
       machineId,
       CONTROL_PI_DEFAULT_MODEL,
       [payload.cwd],
@@ -4486,7 +4509,7 @@ export const createServer = (
    * account's catalog fault, when it could not be read.
    */
   const probeAccount: AccountProber = async (machineId, account) => {
-    const answer = await callAgent(
+    const answer = await readAgent(
       machineId,
       CONTROL_PROBE_ACCOUNT,
       [account],
@@ -5414,7 +5437,7 @@ export const createServer = (
     if (!row?.sessionId) {
       return new Map();
     }
-    const answer = await callAgent(
+    const answer = await readAgent(
       row.machineId,
       CONTROL_GET_SESSION_MESSAGES,
       [row.sessionId, { dir: row.cwd || undefined, tail: STORED_TAIL }],
@@ -9260,6 +9283,29 @@ export const createServer = (
   };
 
   /**
+   * A read's answer: one held past its deadline with its machine still away
+   * (MACHINE_DISCONNECTED) is its machine not connected, unanswered "dead",
+   * as a read asked of a machine already gone is, so the read's own words
+   * for an offline machine say it and its route answers {@link awayStatus}.
+   * A read runs nothing, so "whether it ran is not known" is never its to
+   * say; a write keeps those words, which are true of it.
+   *
+   * Why: a dashboard's transcript read asked as the hub came back, its
+   * machine 18 s behind it, toasted that sentence (j1-check-in, 2026-10-22).
+   */
+  const asRead = (answer: Bounded<ControlResult>): Bounded<ControlResult> =>
+    answer.kind === "answered" &&
+    !answer.value.ok &&
+    answer.value.error === MACHINE_DISCONNECTED
+      ? { kind: "unanswered", reason: "dead", after: 0 }
+      : answer;
+
+  /** {@link callAgent} for a method that only reads: its answer {@link asRead}. */
+  const readAgent = async (
+    ...ask: Parameters<typeof callAgent>
+  ): Promise<Bounded<ControlResult>> => asRead(await callAgent(...ask));
+
+  /**
    * Sends something a machine answers under `requestId`, and waits for that
    * answer, until `timeoutMs`. `send` sends it and gives the frame it sent:
    * the one sent again, under the same id, if the link drops before the
@@ -9769,7 +9815,7 @@ export const createServer = (
       // biome-ignore lint/performance/noAwaitInLoops: bounded batches keep the machine's other control requests serviceable.
       await Promise.all(
         rows.slice(at, at + 8).map(async (row) => {
-          const answer = await callAgent(
+          const answer = await readAgent(
             machineId,
             CONTROL_GET_SESSION_INFO,
             [row.sessionId],
@@ -9975,14 +10021,14 @@ export const createServer = (
     const machine = machineName(machineId);
     const asked =
       store === "claude"
-        ? await callAgent(
+        ? await readAgent(
             machineId,
             CONTROL_READ_HOME_LOGIN,
             [],
             SIGNIN_TIMEOUT_MS,
             "claude"
           )
-        : await callAgent(
+        : await readAgent(
             machineId,
             CONTROL_READ_HOME_CREDENTIALS,
             [],
@@ -10139,7 +10185,7 @@ export const createServer = (
    * and is asked again when the stores next change or the machine reconnects.
    */
   const adoptHomeCredentials = async (machineId: string): Promise<void> => {
-    const read = await callAgent(
+    const read = await readAgent(
       machineId,
       CONTROL_READ_HOME_CREDENTIALS,
       [],
@@ -12599,7 +12645,7 @@ export const createServer = (
     },
     // A folder preview's weight and its start page's desk captures, from its folder on the machine that serves it.
     folderWeight: async (machineId, dir, path) => {
-      const asked = await callAgent(
+      const asked = await readAgent(
         machineId,
         PREVIEW_WEIGHT,
         [dir, path],
@@ -13215,7 +13261,7 @@ export const createServer = (
       // biome-ignore lint/performance/noAwaitInLoops: machines are asked one at a time and the loop returns on the first hit — a session found on the second machine must not race an ask still in flight to the first.
       const answers = await Promise.all(
         kinds.map(async (harness) => {
-          const answer = await callAgent(
+          const answer = await readAgent(
             agent.machineId,
             CONTROL_GET_SESSION_INFO,
             [id],
@@ -13971,10 +14017,10 @@ export const createServer = (
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
-      throw new MachineAway(machineFault(machineId, "offline"));
+      throw awayError(machineId);
     }
     if (holdingStarts(machineId)) {
-      throw new MachineAway(machineFault(machineId, "offline"));
+      throw awayError(machineId);
     }
     const named = await piDefaultFor(machineId, asked);
     if ("refusal" in named) {
@@ -14026,7 +14072,7 @@ export const createServer = (
       case "answered":
         if (!reply.value.ok) {
           throw reply.value.error === MACHINE_DISCONNECTED
-            ? new MachineAway(machineFault(machineId, "offline"))
+            ? awayError(machineId)
             : new Error(reply.value.error ?? "the session failed to start");
         }
         return;
@@ -14254,7 +14300,7 @@ export const createServer = (
     machineId: string;
     sessionId?: string | null;
   }) =>
-    callAgent(
+    readAgent(
       row.machineId,
       CONTROL_GET_SESSION_INFO,
       [row.sessionId, row.cwd],
@@ -14829,7 +14875,7 @@ export const createServer = (
     if (!model) {
       return undefined;
     }
-    const asked = await callAgent(
+    const asked = await readAgent(
       machineId,
       CONTROL_MODEL_CATALOG,
       [],
@@ -14876,7 +14922,7 @@ export const createServer = (
     if (row.harness !== "claude" || !row.sessionId) {
       return { reason: "no stored Claude conversation" };
     }
-    const answer = await callAgent(
+    const answer = await readAgent(
       row.machineId,
       CONTROL_READ_SESSION_CONTEXT,
       [row.sessionId, row.cwd],
@@ -14948,11 +14994,8 @@ export const createServer = (
   /** How many tokens a running session holds right now, as its harness reads it. */
   const liveContextTokensOf = async (row: InstanceRow): Promise<number> => {
     const requestId = crypto.randomUUID();
-    const answer = await awaitReply(
-      row.machineId,
-      requestId,
-      READ_TIMEOUT_MS,
-      () => {
+    const answer = asRead(
+      await awaitReply(row.machineId, requestId, READ_TIMEOUT_MS, () => {
         const agent = registry.agent(row.machineId);
         return agent
           ? sendAnswerable(agent, {
@@ -14968,13 +15011,15 @@ export const createServer = (
               },
             } satisfies Envelope<ControlPayload>)
           : undefined;
-      }
+      })
     );
     switch (answer.kind) {
       case "unanswered":
-        throw new Error(
-          `session ${row.id} did not report its context within ${Math.round(answer.after / 1000)} s`
-        );
+        throw answer.reason === "dead"
+          ? awayError(row.machineId)
+          : new Error(
+              `session ${row.id} did not report its context within ${Math.round(answer.after / 1000)} s`
+            );
       case "answered":
         if (!answer.value.ok) {
           throw new Error(
@@ -14989,7 +15034,7 @@ export const createServer = (
 
   /** When the session started, as its own harness records it. */
   const sessionStartOf = async (where: SessionLocation): Promise<string> => {
-    const answer = await callAgent(
+    const answer = await readAgent(
       where.machineId,
       CONTROL_GET_SESSION_INFO,
       [where.sessionId, where.cwd || undefined],
@@ -14998,8 +15043,10 @@ export const createServer = (
     );
     switch (answer.kind) {
       case "unanswered":
-        throw new Error(
-          `${machineName(where.machineId)} could not say when session ${where.sessionId} started: ${silentWords(where.machineId, answer)}`
+        throw unansweredError(
+          where.machineId,
+          answer,
+          `${machineName(where.machineId)} could not say when session ${where.sessionId} started`
         );
       case "answered":
         if (!answer.value.ok) {
@@ -15026,7 +15073,7 @@ export const createServer = (
     where: SessionLocation,
     since: string
   ): Promise<GitChanges> => {
-    const answer = await callAgent(
+    const answer = await readAgent(
       where.machineId,
       CONTROL_GIT_CHANGES,
       [where.cwd, since],
@@ -15034,8 +15081,10 @@ export const createServer = (
     );
     switch (answer.kind) {
       case "unanswered":
-        throw new Error(
-          `${machineName(where.machineId)} could not read git in ${where.cwd}: ${silentWords(where.machineId, answer)}`
+        throw unansweredError(
+          where.machineId,
+          answer,
+          `${machineName(where.machineId)} could not read git in ${where.cwd}`
         );
       case "answered":
         if (!answer.value.ok) {
@@ -15054,7 +15103,7 @@ export const createServer = (
     where: SessionLocation,
     whole: boolean
   ): Promise<SessionMessage[]> => {
-    const answer = await callAgent(
+    const answer = await readAgent(
       where.machineId,
       CONTROL_GET_SESSION_MESSAGES,
       [
@@ -15067,15 +15116,13 @@ export const createServer = (
     switch (answer.kind) {
       case "unanswered":
         throw answer.reason === "dead"
-          ? new MachineAway(machineFault(where.machineId, "offline"))
+          ? awayError(where.machineId)
           : new Error(machineFault(where.machineId, "silent"));
       case "answered":
         if (!answer.value.ok) {
-          throw answer.value.error === MACHINE_DISCONNECTED
-            ? new MachineAway(machineFault(where.machineId, "offline"))
-            : new Error(
-                answer.value.error ?? "the transcript could not be read"
-              );
+          throw new Error(
+            answer.value.error ?? "the transcript could not be read"
+          );
         }
         return (
           Array.isArray(answer.value.result) ? answer.value.result : []
@@ -15094,7 +15141,7 @@ export const createServer = (
   const readContinuationOf = async (
     where: SessionLocation
   ): Promise<ContinuationRead> => {
-    const answer = await callAgent(
+    const answer = await readAgent(
       where.machineId,
       CONTROL_READ_CONTINUATION,
       [where.sessionId, { dir: where.cwd || undefined }],
@@ -15103,8 +15150,10 @@ export const createServer = (
     );
     switch (answer.kind) {
       case "unanswered":
-        throw new Error(
-          `${machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${silentWords(where.machineId, answer)}`
+        throw unansweredError(
+          where.machineId,
+          answer,
+          `${machineName(where.machineId)} could not read session ${where.sessionId}'s transcript`
         );
       case "answered":
         if (!answer.value.ok) {
@@ -15751,7 +15800,7 @@ export const createServer = (
         return false;
       }
       if (!registry.agent(row.prepared.source.machineId)) {
-        throw new MachineAway(row.prepared.source.machineId);
+        throw awayError(row.prepared.source.machineId);
       }
       // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the filing send is read
       await lifetime.sleep(IDLE_LOOK_MS);
@@ -15794,7 +15843,7 @@ export const createServer = (
         throw new Error(`${job.prepared.source.title} is no longer recorded`);
       }
       if (!registry.agent(row.machineId)) {
-        throw new MachineAway(machineFault(row.machineId, "offline"));
+        throw awayError(row.machineId);
       }
       if (cancelledContinuation(job.id)) {
         throw new Error(CONTINUATION_CANCELLED);
@@ -17615,7 +17664,7 @@ export const createServer = (
       return;
     }
 
-    const answer = await callAgent(
+    const answer = await readAgent(
       machineId,
       CONTROL_LIST_SESSIONS,
       [{}],
@@ -18290,10 +18339,14 @@ export const createServer = (
   /**
    * One machine's own user CLAUDE.md, whoever wrote it. A peek is this alone,
    * adopting is this and a store, and an overwrite is this so the copy it is
-   * about to destroy is kept before it goes.
+   * about to destroy is kept before it goes. `set`: the asking route's, which
+   * names the machine when it is away ({@link awayStatus}).
    */
-  const readMachineMemory = async (machineId: string): Promise<MemoryRead> => {
-    const answer = await callAgent(
+  const readMachineMemory = async (
+    machineId: string,
+    set: RouteSet
+  ): Promise<MemoryRead> => {
+    const answer = await readAgent(
       machineId,
       READ_MEMORY_FILE,
       [],
@@ -18301,7 +18354,7 @@ export const createServer = (
     );
     switch (answer.kind) {
       case "unanswered":
-        return { ok: false, ...unansweredStatus(machineId, answer) };
+        return { ok: false, ...unansweredStatus(set, machineId, answer) };
       case "answered":
         return answer.value.ok
           ? { ok: true, copy: peekMemoryFile(answer.value.result) }
@@ -18318,16 +18371,14 @@ export const createServer = (
 
   /**
    * One fleet hook's script as one machine has it on disk. A compare is this
-   * alone; adopting is this and a store.
+   * alone; adopting is this and a store. `set` as {@link readMachineMemory}'s.
    */
   const readMachineHookScript = async (
     machineId: string,
-    id: string
-  ): Promise<
-    | { ok: true; copy: MachineHookScript | null }
-    | { ok: false; code: 404 | 500 | 504; said: string }
-  > => {
-    const answer = await callAgent(
+    id: string,
+    set: RouteSet
+  ): Promise<{ ok: true; copy: MachineHookScript | null } | ReadRefused> => {
+    const answer = await readAgent(
       machineId,
       READ_HOOK_SCRIPT,
       [id],
@@ -18335,7 +18386,7 @@ export const createServer = (
     );
     switch (answer.kind) {
       case "unanswered":
-        return { ok: false, ...unansweredStatus(machineId, answer) };
+        return { ok: false, ...unansweredStatus(set, machineId, answer) };
       case "answered":
         return answer.value.ok
           ? {
@@ -18468,7 +18519,9 @@ export const createServer = (
     if (!agent) {
       return "offline";
     }
-    const answer = await callFs(machineId, agent, { op: "media", path });
+    const answer = asRead(
+      await callFs(machineId, agent, { op: "media", path })
+    );
     // Its own words for no answer: "offline", "timeout".
     switch (answer.kind) {
       case "unanswered":
@@ -20575,6 +20628,54 @@ export const createServer = (
       : 0;
   };
 
+  /**
+   * A read's machine is away, as every route that reads off a machine
+   * answers it: 503, the machine named (`X-Cawco-Machine`), so a reader can
+   * say which one is away and hear it come back, and whether it is on its
+   * way back: then `Retry-After` is when this hub stops reading it so (whole
+   * seconds, rounded up, so a read then finds it offline).
+   */
+  const awayHeaders = (machineId: string): Record<string, string> => {
+    const left = reconnectingFor(machineId);
+    return {
+      "X-Cawco-Machine": machineId,
+      ...(left > 0
+        ? {
+            "X-Cawco-Machine-State": "reconnecting",
+            "Retry-After": String(Math.ceil(left / 1000)),
+          }
+        : {}),
+    };
+  };
+
+  /**
+   * {@link awayHeaders} put on a route's `set`, and the 503 its typed
+   * `status` answers with: `words`, the read's own sentence, else the
+   * machine's offline fault.
+   */
+  const awayStatus = (
+    set: RouteSet,
+    machineId: string,
+    words?: string
+  ): { code: 503; said: string } => {
+    Object.assign(set.headers, awayHeaders(machineId));
+    return { code: 503, said: words ?? machineFault(machineId, "offline") };
+  };
+
+  /**
+   * A read its machine left unanswered, as a route answers it: not
+   * connected (or away past the read's deadline, {@link asRead}) is
+   * {@link awayStatus}; silent, 504.
+   */
+  const unansweredStatus = (
+    set: RouteSet,
+    machineId: string,
+    answer: Unanswered
+  ): { code: 503 | 504; said: string } =>
+    answer.reason === "dead"
+      ? awayStatus(set, machineId)
+      : { code: 504, said: machineFault(machineId, "silent") };
+
   /** The stored entries under `where`, as its machine answers, or why it could not. */
   const storedEntries = async (
     where: TranscriptWhere
@@ -20582,37 +20683,27 @@ export const createServer = (
     { entries: SessionMessage[] } | Extract<HistoryRead, { fault: string }>
   > => {
     const { machineId } = where;
-    const answer = await callAgent(
+    const answer = await readAgent(
       machineId,
       CONTROL_GET_SESSION_MESSAGES,
       [where.sessionKey, { dir: where.cwd || undefined }],
       READ_TIMEOUT_MS,
       where.harness
     );
-    const offline = {
-      fault: "offline",
-      machineId,
-      message: machineFault(machineId, "offline"),
-    } as const;
     // The history fault's own words for no answer (transcripts.ts): "offline", "timeout".
     switch (answer.kind) {
       case "unanswered":
         return answer.reason === "dead"
-          ? offline
+          ? {
+              fault: "offline",
+              machineId,
+              message: machineFault(machineId, "offline"),
+            }
           : {
               fault: "timeout",
               message: machineFault(machineId, "silent"),
             };
       case "answered":
-        // Held for a machine still away at the read's deadline: the machine
-        // is away, as a read asked of it while gone is (a 503 naming it, so
-        // the reader reads again once it is back), never a failed read. A
-        // read runs nothing, so MACHINE_DISCONNECTED's "whether it ran is
-        // not known" is not its to say (j1-check-in, 2026-10-22: a page read
-        // asked as the hub came back, its machine 18 s behind it).
-        if (!answer.value.ok && answer.value.error === MACHINE_DISCONNECTED) {
-          return offline;
-        }
         if (!answer.value.ok) {
           return {
             fault: "failed",
@@ -20941,28 +21032,12 @@ export const createServer = (
     });
   };
 
-  /**
-   * A stored transcript's machine is away, as its routes answer it: named,
-   * so a reader can say which one is away and hear it come back, and
-   * whether it is on its way back: then `Retry-After` is when this hub stops
-   * reading it so (whole seconds, rounded up, so a read then finds it
-   * offline).
-   */
-  const machineAway = (fault: HistoryFault): Response => {
-    const left = fault.machineId ? reconnectingFor(fault.machineId) : 0;
-    return new Response(fault.message, {
+  /** A stored transcript's machine is away, as its routes answer it: 503 with {@link awayHeaders}. */
+  const historyAway = (fault: HistoryFault): Response =>
+    new Response(fault.message, {
       status: 503,
-      headers: {
-        "X-Cawco-Machine": fault.machineId ?? "",
-        ...(left > 0
-          ? {
-              "X-Cawco-Machine-State": "reconnecting",
-              "Retry-After": String(Math.ceil(left / 1000)),
-            }
-          : {}),
-      },
+      headers: awayHeaders(fault.machineId ?? ""),
     });
-  };
 
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
@@ -21589,7 +21664,12 @@ export const createServer = (
       method === CONTROL_PLACE_PUSH
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
-    const answer = await callAgent(machineId, method, args, timeout);
+    // A delegate's inputs admitted or read only look at its parent's files
+    // ({@link asRead}); every other method here changes the machine.
+    const answer =
+      method === CONTROL_INPUTS_ADMIT || method === CONTROL_INPUTS_READ
+        ? await readAgent(machineId, method, args, timeout)
+        : await callAgent(machineId, method, args, timeout);
     switch (answer.kind) {
       case "unanswered":
         throw new Error(
@@ -22286,7 +22366,7 @@ export const createServer = (
       };
     },
     listStored: async (machineId) => {
-      const answer = await callAgent(
+      const answer = await readAgent(
         machineId,
         CONTROL_LIST_SESSIONS,
         [{}],
@@ -22308,7 +22388,7 @@ export const createServer = (
       }
     },
     askMachine: async (machineId, query, options, timeoutMs) => {
-      const answer = await callAgent(
+      const answer = await readAgent(
         machineId,
         CONTROL_SEARCH_TRANSCRIPTS,
         [query, options],
@@ -23913,7 +23993,7 @@ export const createServer = (
     if (!registry.agent(row.machineId)) {
       return false;
     }
-    const answer = await callAgent(
+    const answer = await readAgent(
       row.machineId,
       AGENT_BUSY,
       [],
@@ -25744,7 +25824,7 @@ export const createServer = (
               await Promise.all(
                 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: verify discovery and the ownership marker before a workflow can claim a skill on each connected machine.
                 [...registry.machineIds()].map(async (machineId) => {
-                  const answer = await callAgent(
+                  const answer = await readAgent(
                     machineId,
                     INSPECT_CONFIG,
                     [],
@@ -25784,7 +25864,7 @@ export const createServer = (
                       `Workflow slug collides with operator-installed skill ${name} on ${machineName(machineId)}.`
                     );
                   }
-                  const files = await callAgent(
+                  const files = await readAgent(
                     machineId,
                     READ_SKILL_FILES,
                     [name],
@@ -26268,7 +26348,7 @@ export const createServer = (
             asks: t.Optional(t.Boolean()),
           }),
         },
-        async ({ params, query, status }) => {
+        async ({ params, query, set, status }) => {
           try {
             const prepared = await prepareContinuation(
               params.id,
@@ -26284,6 +26364,10 @@ export const createServer = (
               entries: prepared.entries,
             };
           } catch (error) {
+            if (error instanceof MachineAway) {
+              const away = awayStatus(set, error.machineId, error.message);
+              return status(away.code, away.said);
+            }
             return status(
               422,
               error instanceof Error ? error.message : String(error)
@@ -26325,7 +26409,7 @@ export const createServer = (
             }
           },
         },
-        async ({ params, body, status }) => {
+        async ({ params, body, set, status }) => {
           const { askedBy, ...request } = body;
           if (!(request.summarizer || request.asksOnly)) {
             return status(400, "summarizer is required unless asksOnly is set");
@@ -26346,6 +26430,10 @@ export const createServer = (
             refusal = await continuationRefusal(prepared, request, asker);
           } catch (error) {
             release();
+            if (error instanceof MachineAway) {
+              const away = awayStatus(set, error.machineId, error.message);
+              return status(away.code, away.said);
+            }
             return status(
               422,
               error instanceof Error ? error.message : String(error)
@@ -26607,7 +26695,7 @@ export const createServer = (
           return status(409, "This session is still running. Stop it first");
         }
         if (row.sessionId) {
-          const stored = await callAgent(
+          const stored = await readAgent(
             row.machineId,
             CONTROL_GET_SESSION_INFO,
             [row.sessionId, row.cwd || undefined],
@@ -26687,8 +26775,8 @@ export const createServer = (
         const row = machineRow(params.machineId);
         return row ?? status(404, "No machine with that id on this hub.");
       })
-      .get("/api/agents/:machineId/busy", async ({ params, status }) => {
-        const answer = await callAgent(
+      .get("/api/agents/:machineId/busy", async ({ params, set, status }) => {
+        const answer = await readAgent(
           params.machineId,
           AGENT_BUSY,
           [],
@@ -26696,7 +26784,7 @@ export const createServer = (
         );
         switch (answer.kind) {
           case "unanswered": {
-            const away = unansweredStatus(params.machineId, answer);
+            const away = unansweredStatus(set, params.machineId, answer);
             return status(away.code, away.said);
           }
           case "answered":
@@ -26754,8 +26842,8 @@ export const createServer = (
       .post(
         "/api/agents/:machineId/inspect",
         { body: t.Object({ cwd: t.Optional(t.String()) }) },
-        async ({ params, body, status }) => {
-          const answer = await callAgent(
+        async ({ params, body, set, status }) => {
+          const answer = await readAgent(
             params.machineId,
             INSPECT_CONFIG,
             [body.cwd],
@@ -26763,7 +26851,7 @@ export const createServer = (
           );
           switch (answer.kind) {
             case "unanswered": {
-              const away = unansweredStatus(params.machineId, answer);
+              const away = unansweredStatus(set, params.machineId, answer);
               return status(away.code, away.said);
             }
             case "answered":
@@ -26998,7 +27086,7 @@ export const createServer = (
                 return { id: ask.id, title: null };
               }
 
-              const answer = await callAgent(
+              const answer = await readAgent(
                 machineId,
                 CONTROL_GET_SESSION_MESSAGES,
                 [sessionKey, { dir: cwd }],
@@ -27163,7 +27251,7 @@ export const createServer = (
           }
           switch (page.fault) {
             case "offline":
-              return machineAway(page);
+              return historyAway(page);
             case "missing":
               return status(404, page.message);
             case "timeout":
@@ -27189,7 +27277,7 @@ export const createServer = (
         if ("fault" in read) {
           switch (read.fault) {
             case "offline":
-              return machineAway(read);
+              return historyAway(read);
             case "missing":
               return status(404, read.message);
             case "timeout":
@@ -28070,7 +28158,7 @@ export const createServer = (
             projectId: t.Optional(t.Union([t.String(), t.Null()])),
           }),
         },
-        async ({ params, body, status }) => {
+        async ({ params, body, set, status }) => {
           if (!SKILL_NAME.test(params.name)) {
             return status(400, `${params.name} is not a usable skill name`);
           }
@@ -28080,7 +28168,7 @@ export const createServer = (
           }
 
           if (body.fromMachine) {
-            const asked = await callAgent(
+            const asked = await readAgent(
               body.fromMachine,
               READ_SKILL_FILES,
               [params.name, body.cwd],
@@ -28088,7 +28176,7 @@ export const createServer = (
             );
             switch (asked.kind) {
               case "unanswered": {
-                const away = unansweredStatus(body.fromMachine, asked);
+                const away = unansweredStatus(set, body.fromMachine, asked);
                 return status(away.code, away.said);
               }
               case "answered":
@@ -28186,67 +28274,70 @@ export const createServer = (
       })
       // The same source, fetched again — for a skill whose repo has moved on.
       // Answers at once, the row marked `fetching`, as the PUT does.
-      .post("/api/fleet/skills/:name/refresh", async ({ params, status }) => {
-        const stored = db
-          .listSkills()
-          .find((entry) => entry.name === params.name);
-        if (!stored) {
-          return status(404, `no skill ${params.name}`);
-        }
-
-        // An adopted skill's source is the machine it came off, so that is where
-        // "the same source, again" reads from.
-        if (stored.source.startsWith("machine:")) {
-          const machineId = stored.source.slice("machine:".length);
-          const asked = await callAgent(
-            machineId,
-            READ_SKILL_FILES,
-            [stored.name],
-            READ_TIMEOUT_MS
-          );
-          switch (asked.kind) {
-            case "unanswered": {
-              const away = unansweredStatus(machineId, asked);
-              return status(away.code, away.said);
-            }
-            case "answered":
-              break;
-            default:
-              throw unreachable(asked);
+      .post(
+        "/api/fleet/skills/:name/refresh",
+        async ({ params, set, status }) => {
+          const stored = db
+            .listSkills()
+            .find((entry) => entry.name === params.name);
+          if (!stored) {
+            return status(404, `no skill ${params.name}`);
           }
-          const answer = asked.value;
-          if (!answer.ok) {
-            return status(
-              400,
-              answer.error ?? "the machine could not read the skill"
+
+          // An adopted skill's source is the machine it came off, so that is where
+          // "the same source, again" reads from.
+          if (stored.source.startsWith("machine:")) {
+            const machineId = stored.source.slice("machine:".length);
+            const asked = await readAgent(
+              machineId,
+              READ_SKILL_FILES,
+              [stored.name],
+              READ_TIMEOUT_MS
+            );
+            switch (asked.kind) {
+              case "unanswered": {
+                const away = unansweredStatus(set, machineId, asked);
+                return status(away.code, away.said);
+              }
+              case "answered":
+                break;
+              default:
+                throw unreachable(asked);
+            }
+            const answer = asked.value;
+            if (!answer.ok) {
+              return status(
+                400,
+                answer.error ?? "the machine could not read the skill"
+              );
+            }
+
+            const files = answer.result as SkillFile[];
+            const skill = db.putSkill({
+              name: stored.name,
+              source: stored.source,
+              enabled: stored.enabled,
+              hash: hashFiles(files),
+              bytes: files.reduce(
+                (total, file) =>
+                  total + Buffer.byteLength(file.contentBase64, "base64"),
+                0
+              ),
+              files,
+            });
+            if (noteFetch({ skill: stored.name }, stored, skill, undefined)) {
+              fanOutFetched(`skill ${stored.name}`);
+            }
+            announceSkill(stored.name, stored.source);
+            return skillRow(
+              db.listSkills().find((row) => row.name === stored.name) ?? skill
             );
           }
 
-          const files = answer.result as SkillFile[];
-          const skill = db.putSkill({
-            name: stored.name,
-            source: stored.source,
-            enabled: stored.enabled,
-            hash: hashFiles(files),
-            bytes: files.reduce(
-              (total, file) =>
-                total + Buffer.byteLength(file.contentBase64, "base64"),
-              0
-            ),
-            files,
-          });
-          if (noteFetch({ skill: stored.name }, stored, skill, undefined)) {
-            fanOutFetched(`skill ${stored.name}`);
-          }
-          announceSkill(stored.name, stored.source);
-          return skillRow(
-            db.listSkills().find((row) => row.name === stored.name) ?? skill
-          );
+          detach(fetchSkill(stored.name, stored.source), "skill refresh");
+          return skillRow(stored);
         }
-
-        detach(fetchSkill(stored.name, stored.source), "skill refresh");
-        return skillRow(stored);
-      })
+      )
       // Its files kept in its history, then into the trash, off every machine.
       .delete("/api/fleet/skills/:name", ({ params, status }) => {
         db.keepSkillVersion(params.name);
@@ -28316,7 +28407,7 @@ export const createServer = (
       .post(
         "/api/fleet/skills/:name/push",
         { body: t.Object({ machineId: t.String() }) },
-        async ({ params, body, status }) => {
+        async ({ params, body, set, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
             return status(404, machineFault(body.machineId, "offline"));
@@ -28329,7 +28420,7 @@ export const createServer = (
             return status(404, `the fleet carries no skill ${params.name}`);
           }
 
-          const asked = await callAgent(
+          const asked = await readAgent(
             body.machineId,
             READ_SKILL_FILES,
             [params.name],
@@ -28337,7 +28428,7 @@ export const createServer = (
           );
           switch (asked.kind) {
             case "unanswered": {
-              const away = unansweredStatus(body.machineId, asked);
+              const away = unansweredStatus(set, body.machineId, asked);
               return status(away.code, away.said);
             }
             case "answered":
@@ -28586,8 +28677,8 @@ export const createServer = (
       .post(
         "/api/fleet/memory/peek",
         { body: t.Object({ machineId: t.String() }) },
-        async ({ body, status }) => {
-          const read = await readMachineMemory(body.machineId);
+        async ({ body, set, status }) => {
+          const read = await readMachineMemory(body.machineId, set);
           if (!read.ok) {
             return status(read.code, read.said);
           }
@@ -28613,8 +28704,8 @@ export const createServer = (
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and merges every field of an adopted memory doc in one place; splitting it would scatter the validation order this route depends on.
-        async ({ body, status }) => {
-          const read = await readMachineMemory(body.machineId);
+        async ({ body, set, status }) => {
+          const read = await readMachineMemory(body.machineId, set);
           if (!read.ok) {
             return status(read.code, read.said);
           }
@@ -28690,7 +28781,7 @@ export const createServer = (
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and pushes every field of a memory write in one place; splitting it would scatter the validation order this route depends on.
-        async ({ body, status }) => {
+        async ({ body, set, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
             return status(404, machineFault(body.machineId, "offline"));
@@ -28701,7 +28792,7 @@ export const createServer = (
             return status(400, "the fleet keeps no memory to push");
           }
 
-          const read = await readMachineMemory(body.machineId);
+          const read = await readMachineMemory(body.machineId, set);
           if (!read.ok) {
             return status(read.code, read.said);
           }
@@ -28937,11 +29028,15 @@ export const createServer = (
       .post(
         "/api/fleet/hooks/peek",
         { body: t.Object({ machineId: t.String(), id: t.String() }) },
-        async ({ body, status }) => {
+        async ({ body, set, status }) => {
           if (!db.getFleetHook(body.id)) {
             return status(404, `the fleet keeps no hook ${body.id}`);
           }
-          const read = await readMachineHookScript(body.machineId, body.id);
+          const read = await readMachineHookScript(
+            body.machineId,
+            body.id,
+            set
+          );
           if (!read.ok) {
             return status(read.code, read.said);
           }
@@ -28956,12 +29051,16 @@ export const createServer = (
       .post(
         "/api/fleet/hooks/adopt",
         { body: t.Object({ machineId: t.String(), id: t.String() }) },
-        async ({ body, status }) => {
+        async ({ body, set, status }) => {
           const current = db.getFleetHook(body.id);
           if (!current) {
             return status(404, `the fleet keeps no hook ${body.id}`);
           }
-          const read = await readMachineHookScript(body.machineId, body.id);
+          const read = await readMachineHookScript(
+            body.machineId,
+            body.id,
+            set
+          );
           if (!read.ok) {
             return status(read.code, read.said);
           }
@@ -29006,7 +29105,7 @@ export const createServer = (
         {
           body: t.Object({ machineId: t.String(), id: t.Optional(t.String()) }),
         },
-        async ({ body, status }) => {
+        async ({ body, set, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
             return status(404, machineFault(body.machineId, "offline"));
@@ -29033,7 +29132,11 @@ export const createServer = (
               continue;
             }
             // biome-ignore lint/performance/noAwaitInLoops: each hook's script is read and kept before the one push below; a push is one click on one machine, rarely more than a hook or two
-            const read = await readMachineHookScript(body.machineId, hook.id);
+            const read = await readMachineHookScript(
+              body.machineId,
+              hook.id,
+              set
+            );
             if (!read.ok) {
               return status(read.code, read.said);
             }
@@ -30397,16 +30500,16 @@ export const createServer = (
       .get(
         "/api/accounts/home-credentials",
         { query: t.Object({ machineId: t.String() }) },
-        async ({ query, status }) => {
+        async ({ query, set, status }) => {
           const [claude, others] = await Promise.all([
-            callAgent(
+            readAgent(
               query.machineId,
               CONTROL_READ_HOME_LOGIN,
               [],
               SIGNIN_TIMEOUT_MS,
               "claude"
             ),
-            callAgent(
+            readAgent(
               query.machineId,
               CONTROL_READ_HOME_CREDENTIALS,
               [],
@@ -30415,6 +30518,10 @@ export const createServer = (
           ]);
           switch (others.kind) {
             case "unanswered":
+              if (others.reason === "dead") {
+                const away = awayStatus(set, query.machineId);
+                return status(away.code, away.said);
+              }
               return status(503, awayWords(query.machineId, others));
             case "answered":
               if (!others.value.ok) {
@@ -30432,6 +30539,10 @@ export const createServer = (
           let home: HomeLogin | null;
           switch (claude.kind) {
             case "unanswered":
+              if (claude.reason === "dead") {
+                const away = awayStatus(set, query.machineId);
+                return status(away.code, away.said);
+              }
               return status(503, awayWords(query.machineId, claude));
             case "answered":
               home = claude.value.ok
@@ -33084,9 +33195,7 @@ export const createServer = (
           // continuation waits for the machine's next register instead.
           for (const waiter of turnWaiters.values()) {
             if (waiter.machineId === machineId) {
-              waiter.reject(
-                new MachineAway(machineFault(machineId, "offline"))
-              );
+              waiter.reject(awayError(machineId));
             }
           }
           // A preview outlives its machine's socket: the intent stays, without
