@@ -151,8 +151,9 @@ export const UPDATE_DRAIN_MS = 45_000;
 /**
  * How long a restart waits on the work in flight it would cut before it cuts
  * it: auto-update's restart of the machine's services, and an account move's
- * restart of a session's Claude Code process, whose background commands and
- * one-time wake-ups no resume brings back (hub server.ts `waitForLater`).
+ * restart of a running session's Claude Code process, whose background
+ * commands no resume brings back, nor a self-paced loop's wake-up (hub
+ * server.ts `waitForLater`; a session stopped at its limit doesn't wait).
  * Ours: past the long work a restart would cut (an image generation is given
  * 10 minutes, a delegate's workspace and a continuation's summary take
  * minutes, a landing gate step 10 minutes by default, a build or a probe chain run in

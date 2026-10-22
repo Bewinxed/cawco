@@ -37,6 +37,7 @@ import type {
   MemoryRole,
   ModeAsk,
   ModelInfo,
+  MoveEnded,
   MoveStage,
   NamedMoveRequest,
   NeutralUserMessage,
@@ -2496,17 +2497,21 @@ export const limitHolds = sqliteTable("limit_holds", {
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
   until: timestamp("until"),
-  /**
-   * Its move to another account waits for work in flight its process holds
-   * for later (at-limit.ts `unmoved`, server.ts `waitForLater`): where it
-   * goes, what it waits for in the machine's words, and since when, the
-   * wait's bound counting from then across hub restarts. Null otherwise.
-   */
-  carry: text("carry", { mode: "json" }).$type<{
-    since: number;
-    to: string;
-    why: string;
-  }>(),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * What a move ended with a session's process (core `MoveEnded`), from its
+ * machine's answer until the session is told on its new account (server.ts
+ * `tellEndedByMove`, at its next launch): a hub restart in between keeps it.
+ */
+export const moveEndings = sqliteTable("move_endings", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  ended: text("ended", { mode: "json" }).$type<MoveEnded>().notNull(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2549,11 +2554,14 @@ export const owedMoves = sqliteTable("owed_moves", {
  */
 export const limitCompactions = sqliteTable("limit_compactions", {
   instanceId: text("instance_id").primaryKey(),
-  stage: text("stage").$type<"filing" | "compacting">().notNull(),
+  /** `carrying`: its carry-on answers the turn its limit refused, before it files anything. */
+  stage: text("stage").$type<"carrying" | "filing" | "compacting">().notNull(),
   /** The `limit_events` id of the move's line, said again as the compaction goes. */
   lineId: text("line_id").notNull(),
   /** The move's line as written, which each stage restates. */
   move: text("move", { mode: "json" }).$type<AccountMove>().notNull(),
+  /** Its carry-on's send, when its limit or sign-in stopped it: the first step. */
+  carryUuid: text("carry_uuid"),
   filingUuid: text("filing_uuid").notNull(),
   compactUuid: text("compact_uuid").notNull(),
   /** Claude Code said its compaction boundary after the `/compact` went: it compacted. */

@@ -11,6 +11,7 @@ import {
   type PlacementExplain,
   type PlacementStrategy,
   type ProviderRouting,
+  type SkipReason,
   spanWords,
 } from "@cawco/core";
 import type { AccountPaces } from "./forecast";
@@ -881,6 +882,80 @@ export const nextFree = (
     }
   }
   return soonest;
+};
+
+/**
+ * Every account of the session's provider other than `input.exclude`, and
+ * why a carry off its limit would not take it now, by the rules
+ * {@link place} applies, in order: not signed in on its machine, not one its
+ * project or task allows, benched, past its reserve, its limits unread, at
+ * its limit, or, under the pinned strategy, never a backup. `until`, when a
+ * reading names the moment it takes sessions again. An account with room
+ * that placement would take is not listed: a carry goes there.
+ */
+export const skips = (
+  input: PlacementInput & { exclude: string }
+): { accountId: string; until?: number; why: SkipReason }[] => {
+  const usage = new Usage(input);
+  const { signedIn, allowed } = eligible(input);
+  const choice = input.routing[input.kind];
+  const pinnedId = choice.pinnedAccountId ?? byOrder(input.accounts)[0]?.id;
+  return byOrder(input.accounts).flatMap((account) => {
+    if (account.id === input.exclude) {
+      return [];
+    }
+    const why = skipOf(account, {
+      signedIn: signedIn.includes(account),
+      allowed: allowed.includes(account),
+      usage,
+      pinned: choice.strategy === "pinned" ? pinnedId : undefined,
+    });
+    if (!why) {
+      return [];
+    }
+    const until = usage.backAt(account);
+    return [{ accountId: account.id, why, ...(until ? { until } : {}) }];
+  });
+};
+
+/** {@link skips}' reason for one account, or none when a carry would take it. */
+const skipOf = (
+  account: Account,
+  how: {
+    allowed: boolean;
+    /** The pinned account, under the pinned strategy: the others back it up unless never. */
+    pinned: string | undefined;
+    signedIn: boolean;
+    usage: Usage;
+  }
+): SkipReason | undefined => {
+  const { usage } = how;
+  if (!how.signedIn) {
+    return "signin";
+  }
+  if (!how.allowed) {
+    return "allowed";
+  }
+  if (usage.benched(account.id)) {
+    return "benched";
+  }
+  if (usage.pastReserve(account)) {
+    return "reserve";
+  }
+  if (!usage.read(account)) {
+    return "unread";
+  }
+  if (!usage.headroom(account)) {
+    return "limit";
+  }
+  if (
+    how.pinned !== undefined &&
+    account.id !== how.pinned &&
+    account.neverBackup
+  ) {
+    return "backup";
+  }
+  return undefined;
 };
 
 export const place = (input: PlacementInput): Placement => {

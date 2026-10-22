@@ -120,12 +120,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    need no `kind`; the router step no `http`; the certificate step may be
  *    `needs` with `tokenWhy`, answered by the `token` act. A page built for
  *    23 would draw the 443 chips and the low ports, so it reloads first.
+ * 25: an account line's wait at a limit names every other account and why
+ *    it didn't take the session (`AccountMove` waiting `skipped`) where it
+ *    named the one with room admission kept it off (`room`). A page built
+ *    for 24 would read the reason from `room`, gone, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 24;
+export const WIRE_PROTOCOL = 25;
 
 /**
  * What a session's stream carries: the changes each frame made to its

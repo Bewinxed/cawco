@@ -689,7 +689,10 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * its account is at its limit, where a turn would only be refused, and it
  * waits for the reset, a move, or its continuation from a summary (`limit`);
  * or Claude Code refused its account's credential and no other account can
- * take it, so it waits for a sign-in or a free account (`signin`); or the
+ * take it, so it waits for a sign-in or a free account (`signin`); or it
+ * moved accounts at its limit and files its open items and is compacted
+ * there first, so it waits for that to end, or for a stop of its turn
+ * (`compacting`); or the
  * owner paused its machine until a time (`paused`, machine-pause.ts); or its
  * work item is finishing (`finishing`: its landing gate runs, or the turn
  * that called `finish_item` is still ending, work-items.ts `finishingFor`),
@@ -703,6 +706,7 @@ export type SendHold =
   | "agent"
   | "behind"
   | "build"
+  | "compacting"
   | "finishing"
   | "held"
   | "hub"
@@ -751,6 +755,8 @@ const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
     "Its account is at its usage limit, so the message is kept at the hub and goes to the session as soon as it can run again: at the reset, on another account, or once it goes on from a summary.",
   signin:
     "Its account's sign-in was refused and no other account can take it, so the message is kept at the hub and goes to the session once its account is signed in again or another account comes free.",
+  compacting:
+    "It moved to another account at its limit and is filing its open items, then compacting, as its first turns there, so the message is kept at the hub and goes to the session as soon as that ends; stopping its turn ends the compaction and sends it now.",
 };
 
 /** What the hub did with a hand-off, as its sender is told. */

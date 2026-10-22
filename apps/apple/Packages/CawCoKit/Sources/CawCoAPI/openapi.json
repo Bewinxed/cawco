@@ -49286,7 +49286,7 @@
         ]
       },
       "Stall": {
-        "description": "A session stopped at its account's limit, as its tray chip and\n`delegate_list` say it (core `accountsWords.stalled`): the words, and\nwhen it carries on (epoch ms): the reset it waits for, or, while its move\nwaits on work in flight, the first moment the hub acts without that work\nending (`carryStall`).",
+        "description": "A session stopped at its account's limit, as its tray chip and\n`delegate_list` say it (core `accountsWords.stalled`): the words, and\nwhen it carries on (epoch ms): the reset it waits for.",
         "type": "object",
         "properties": {
           "until": {
@@ -49381,6 +49381,11 @@
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",
                     "description": "Moved at its limit to another organization with a context of the\npolicy's `moveWholeUnderK` or more: it files its open items, then is\ncompacted natively, as its first steps on `to`. The line is said\nagain under its id as that goes."
+                  },
+                  "relaunched": {
+                    "description": "Its process ended on `to` before it took a step of the compaction,\nand the hub started it again there to take it.",
+                    "const": true,
+                    "type": "boolean"
                   },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
@@ -49511,21 +49516,12 @@
                     "$ref": "#/components/schemas/NamedAccount",
                     "description": "Another account that frees before `account` resets: it moves there\nat `until`. Absent: `until` is `account`'s own reset."
                   },
-                  "room": {
-                    "description": "With `why` `room`: the account with the most room left, which the\nhub's admission kept it off, and that room in percent of its 5-hour\nwindow: a person may still move it there.",
-                    "type": "object",
-                    "properties": {
-                      "account": {
-                        "$ref": "#/components/schemas/NamedAccount"
-                      },
-                      "leftPct": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "account",
-                      "leftPct"
-                    ]
+                  "skipped": {
+                    "description": "With `why` `full` or `room`: every other account of its provider and\nwhy it didn't take it: what a person reads, so a line never says no\naccount has room beside one that has.",
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/SkippedAccount"
+                    }
                   },
                   "until": {
                     "description": "The earliest moment an account takes it again, epoch ms: the line counts down to it.",
@@ -49706,7 +49702,7 @@
                     "type": "string"
                   },
                   "waits": {
-                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up): the move goes when that ends, or after\n{@link RESTART_WAIT_CAP_MS} at the latest, ending it.",
+                    "description": "Never set now: a move at a limit no longer waits for work held for\nlater. Kept on the wire only for the TestFlight builds 20261015.3 to\n20261018, which read it (packages/hub/scripts/wire-compat.ts); it\ngoes in the change that expires them.",
                     "const": true,
                     "type": "boolean"
                   }
@@ -50217,6 +50213,44 @@
           "orange",
           "rose",
           "violet"
+        ]
+      },
+      "SkippedAccount": {
+        "description": "Another account and why it didn't take a held session ({@link SkipReason}).",
+        "type": "object",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/NamedAccount"
+          },
+          "leftPct": {
+            "description": "With `room`: what its 5-hour window has left, percent.",
+            "type": "number"
+          },
+          "until": {
+            "description": "When it takes sessions again, epoch ms, when a reading says.",
+            "type": "number"
+          },
+          "why": {
+            "$ref": "#/components/schemas/SkipReason"
+          }
+        },
+        "required": [
+          "account",
+          "why"
+        ]
+      },
+      "SkipReason": {
+        "description": "Why another account didn't take a session held at its limit: at its own\nlimit (`limit`), benched (`benched`), past its reserve (`reserve`), not one\nthe session's project or task allows (`allowed`), kept out of the pinned\nstrategy's backups (`backup`), its limits never read (`unread`), not\nsigned in on the session's machine (`signin`), or with room the hub's\nadmission keeps for moves too small for its re-read (`room`).",
+        "type": "string",
+        "enum": [
+          "allowed",
+          "backup",
+          "benched",
+          "limit",
+          "reserve",
+          "room",
+          "signin",
+          "unread"
         ]
       },
       "WaitReason": {
@@ -57505,6 +57539,11 @@
                     "$ref": "#/components/schemas/BlockMetadataCompact",
                     "description": "Moved at its limit to another organization with a context of the\npolicy's `moveWholeUnderK` or more: it files its open items, then is\ncompacted natively, as its first steps on `to`. The line is said\nagain under its id as that goes."
                   },
+                  "relaunched": {
+                    "description": "Its process ended on `to` before it took a step of the compaction,\nand the hub started it again there to take it.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
@@ -57634,21 +57673,12 @@
                     "$ref": "#/components/schemas/NamedAccount",
                     "description": "Another account that frees before `account` resets: it moves there\nat `until`. Absent: `until` is `account`'s own reset."
                   },
-                  "room": {
-                    "description": "With `why` `room`: the account with the most room left, which the\nhub's admission kept it off, and that room in percent of its 5-hour\nwindow: a person may still move it there.",
-                    "type": "object",
-                    "properties": {
-                      "account": {
-                        "$ref": "#/components/schemas/NamedAccount"
-                      },
-                      "leftPct": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "account",
-                      "leftPct"
-                    ]
+                  "skipped": {
+                    "description": "With `why` `full` or `room`: every other account of its provider and\nwhy it didn't take it: what a person reads, so a line never says no\naccount has room beside one that has.",
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/SkippedAccount"
+                    }
                   },
                   "until": {
                     "description": "The earliest moment an account takes it again, epoch ms: the line counts down to it.",
@@ -57829,7 +57859,7 @@
                     "type": "string"
                   },
                   "waits": {
-                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up): the move goes when that ends, or after\n{@link RESTART_WAIT_CAP_MS} at the latest, ending it.",
+                    "description": "Never set now: a move at a limit no longer waits for work held for\nlater. Kept on the wire only for the TestFlight builds 20261015.3 to\n20261018, which read it (packages/hub/scripts/wire-compat.ts); it\ngoes in the change that expires them.",
                     "const": true,
                     "type": "boolean"
                   }

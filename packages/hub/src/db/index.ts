@@ -123,6 +123,7 @@ import {
   mergeProjectPages,
   PROJECT_PAGES_MIGRATION_WHEN,
 } from "./merge-project-pages";
+import { type MoveEndingsDb, moveEndingsDb } from "./move-endings";
 import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
 import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
 import { type PreviewsDb, previewsDb } from "./previews";
@@ -1293,6 +1294,8 @@ export interface DbShape {
   ) => number | null;
   /** The move a session started from, as {@link noteMovedHere} kept it; null when none. */
   readonly movedHereOf: (id: string) => MovedHere | null;
+  /** What each session's move ended, until it is told (move-endings.ts). */
+  readonly moveEndings: MoveEndingsDb;
   /** One project move's record (moves.ts). */
   readonly moveRow: (id: string) => MoveRow | undefined;
   /** Every project move, oldest first. */
@@ -9673,6 +9676,7 @@ const make = async (path: string): Promise<DbShape> => {
     artifacts: artifactsDb(db),
     find: findDb(db),
     previews: previewsDb(db),
+    moveEndings: moveEndingsDb(db),
     owedMoves: owedMovesDb(db),
     previewPasses: previewPassesDb(db),
     streamRelay: streamRelayDb(db),

@@ -1819,12 +1819,15 @@ export interface EndedTask {
 
 /**
  * What a move ended with a session's process ({@link CarrySessionRequest.endLater}):
- * Claude Code restores neither a background task nor a one-time wake-up on
- * resume, so the session is told of each once it runs on the new account.
+ * Claude Code restores no background task on resume ("Background Bash and
+ * monitor tasks aren't", code.claude.com/docs/en/sessions), and a one-time
+ * wake-up only when it was set with CronCreate and its time hasn't passed
+ * (a self-paced loop's isn't, code.claude.com/docs/en/scheduled-tasks), so
+ * the session is told of each once it runs on the new account.
  */
 export interface MoveEnded {
   tasks: EndedTask[];
-  /** One-time wake-ups it had scheduled (CronCreate, not recurring). */
+  /** One-time wake-ups it had scheduled (the Stop hook's `session_crons`, not recurring): CronCreate's or ScheduleWakeup's, which it doesn't say. */
   wakeups: number;
 }
 
