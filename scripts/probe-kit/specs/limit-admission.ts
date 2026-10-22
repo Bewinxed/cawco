@@ -227,7 +227,7 @@ const run = async (kit: Kit): Promise<void> => {
       changed: () => undefined,
       handMove: () => undefined,
       idle: async () => true,
-      laterSince: () => undefined,
+      compactable: () => true,
       machineName: () => "the scratch machine",
       move: (row, accountId) => {
         moves.push({
@@ -254,6 +254,7 @@ const run = async (kit: Kit): Promise<void> => {
       proven: () => new Set([full.id, soon.id, room.id, third.id]),
       refusedMove: () => undefined,
       resume: () => undefined,
+      skipped: () => [],
       startedBy: () => undefined,
       // Placement for the spec: the first signed-in account read under 100%.
       target: (row, accountId, among) => {

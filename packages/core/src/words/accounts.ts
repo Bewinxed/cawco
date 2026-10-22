@@ -330,24 +330,6 @@ export const accountsWords = {
     /** Moving to an account with room, now or once its turn ends. */
     moving: (from: string, to: string) =>
       `Stopped at ${from}’s limit; continues on ${to}`,
-    /**
-     * Its move to `to` waits for work in flight (`work`: "1 command running"),
-     * which no resume brings back: it moves when that ends, or at `clock`
-     * ("20:17") at the latest, ending it.
-     */
-    carrying: (from: string, to: string, work: string, clock: string) =>
-      `Stopped at ${from}’s limit; moves to ${to} when its work in flight ends (${work}), by ${clock} at the latest`,
-    /**
-     * Its move to `to` waits for work in flight, and `from` resets first, at
-     * `clock`: it moves when that work ends, else carries on where it is then.
-     */
-    carryingUntilReset: (
-      from: string,
-      to: string,
-      work: string,
-      clock: string
-    ) =>
-      `Stopped at ${from}’s limit; moves to ${to} when its work in flight ends (${work}), or continues at ${clock}`,
     /** No account has room: held until its own account resets at `clock` ("15:40"). */
     waiting: (from: string, clock: string) =>
       `Stopped at ${from}’s limit; continues at ${clock}`,

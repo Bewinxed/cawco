@@ -168,6 +168,7 @@ typeOverrides:
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState
+    SkipReason: OpenEnums.SkipReason
     SlashCommandKind: OpenEnums.SlashCommandKind
     SshJoinJobState: OpenEnums.SshJoinJobState
     StageHooksBy: OpenEnums.StageHooksBy

@@ -101,12 +101,16 @@ import type { HubPreviewOrigins } from "./hub-previews";
  *    `CheckoutMove`: cut again, or rebased as it landed) where it said
  *    `recutUntold`, the move its session's next message names. No page
  *    reads it; a page built for 19 reloads first all the same.
+ * 21: an account line's wait at a limit names every other account and why
+ *    it didn't take the session (`AccountMove` waiting `skipped`) where it
+ *    named the one with room admission kept it off (`room`). A page built
+ *    for 20 would read the reason from `room`, gone, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 20;
+export const WIRE_PROTOCOL = 21;
 
 /**
  * What a session's stream carries: the changes each frame made to its

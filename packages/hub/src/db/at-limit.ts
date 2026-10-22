@@ -7,12 +7,6 @@ import { limitCompactions, limitEvents, limitHolds } from "./schema";
 export interface LimitHold {
   /** The account at its limit. */
   accountId: string;
-  /**
-   * Its move to account `to` waits for work in flight (`why`, as its machine
-   * said it) since `since`, epoch ms: it moves when that ends, or once
-   * `since` is past the restart bound (core `waitedOut`). Absent otherwise.
-   */
-  carry?: { since: number; to: string; why: string };
   instanceId: string;
   /** Since when it is held, epoch ms; read only, a put keeps the first. */
   since?: number;
@@ -25,13 +19,15 @@ export interface LimitHold {
  * has ended (schema `limitCompactions`).
  */
 export interface LimitCompaction {
+  /** Its carry-on's send (`carrying`), when its limit or sign-in stopped it; null when it carries nothing on. */
+  carryUuid: string | null;
   compacted: boolean;
   compactUuid: string;
   filingUuid: string;
   instanceId: string;
   lineId: string;
   move: AccountMove;
-  stage: "filing" | "compacting";
+  stage: "carrying" | "filing" | "compacting";
 }
 
 /** One line the hub wrote into a session's transcript at its account's limit. */
@@ -55,10 +51,10 @@ export interface AtLimitDb {
   readonly forget: (instanceIds: string[]) => void;
   readonly hold: (instanceId: string) => LimitHold | undefined;
   readonly holds: () => LimitHold[];
-  /** Moves a compaction on: its stage, or that it compacted. */
+  /** Moves a compaction on: its stage, that it compacted, or its line as it now reads. */
   readonly patchCompaction: (
     instanceId: string,
-    patch: Partial<Pick<LimitCompaction, "compacted" | "stage">>
+    patch: Partial<Pick<LimitCompaction, "compacted" | "move" | "stage">>
   ) => void;
   /** Starts a session's compaction, in place of any it had. */
   readonly putCompaction: (compaction: LimitCompaction) => void;
@@ -74,7 +70,6 @@ const toHold = (row: HoldRow): LimitHold => ({
   accountId: row.accountId,
   until: row.until?.getTime() ?? null,
   since: row.createdAt.getTime(),
-  ...(row.carry ? { carry: row.carry } : {}),
 });
 
 const toCompaction = (
@@ -84,6 +79,7 @@ const toCompaction = (
   stage: row.stage,
   lineId: row.lineId,
   move: row.move,
+  carryUuid: row.carryUuid,
   filingUuid: row.filingUuid,
   compactUuid: row.compactUuid,
   compacted: row.compacted,
@@ -106,11 +102,10 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .get();
     return row ? toHold(row) : undefined;
   },
-  putHold: ({ instanceId, accountId, until, carry }) => {
+  putHold: ({ instanceId, accountId, until }) => {
     const values = {
       accountId,
       until: until === null ? null : new Date(until),
-      carry: carry ?? null,
     };
     db.insert(limitHolds)
       .values({ instanceId, ...values })

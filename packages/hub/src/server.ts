@@ -696,6 +696,7 @@ import {
 } from "./pending";
 import { createPlaceRepos } from "./place-repo";
 import {
+  skips as limitSkipsOf,
   nextFree,
   noAccountRefusal,
   type PlacementInput,
@@ -5345,6 +5346,12 @@ export const createServer = (
     if (row.state === "pending") {
       tellSender(row, reason);
     }
+    // A compaction's own step refused: the compaction ends now, stopped,
+    // and what waited behind it goes ({@link stepEnded}).
+    const plan = db.atLimit.compaction(row.instanceId);
+    if (plan && stepUuids(plan).includes(row.uuid)) {
+      queueMicrotask(() => advanceCompaction(row.instanceId));
+    }
   };
 
   /**
@@ -7339,6 +7346,8 @@ export const createServer = (
       instanceId,
       payload: revive,
     });
+    // What a move ended with its old process, said to this one first.
+    tellEndedByMove(row);
     publishInstances(machineId);
   };
 
@@ -8618,7 +8627,7 @@ export const createServer = (
     // Kept, not handed: a turn at its account's limit would only be refused.
     const limited =
       !(refused || keepAlive || ahead) &&
-      heldAtLimit(instanceId, message.origin);
+      heldAtLimit(instanceId, message.origin, message.uuid);
     // Kept while the owner has its machine paused (machine-pause.ts), and
     // while an interrupt holds its item and this sender may not wake it.
     const paused =
@@ -8773,14 +8782,24 @@ export const createServer = (
    * machine with no process for them, go to the session's next one
    * ({@link releaseOne}). Held by their own compaction, they never went: a
    * session moved at 11:57:34 on 2026-10-22 waited on its filing turn until
-   * an interrupt at 12:14:59 stopped it.
+   * an interrupt at 12:14:59 stopped it. Its own steps are the plan's two
+   * sends by their uuids (`uuid`), not every send of the compaction's
+   * origin: a Continue's filing turn, of that origin too, waits behind it.
    */
-  const heldAtLimit = (instanceId: string, origin: NeutralOrigin): boolean => {
-    if (db.atLimit.compaction(instanceId)) {
-      return !(origin.kind === "system" && origin.name === COMPACTION_ORIGIN);
-    }
+  const heldAtLimit = (
+    instanceId: string,
+    origin: NeutralOrigin,
+    uuid: string
+  ): boolean => {
+    // The hub's own word to the process about its move (what it ended, its
+    // carry-on) is held by neither hold: it reads with the carry-on, before
+    // the filing turn.
     if (origin.kind === "system" && origin.name === LIMIT_ORIGIN) {
       return false;
+    }
+    const plan = db.atLimit.compaction(instanceId);
+    if (plan) {
+      return !stepUuids(plan).includes(uuid);
     }
     return db.atLimit.hold(instanceId) !== undefined;
   };
@@ -8863,7 +8882,11 @@ export const createServer = (
       return "resting";
     }
     const origin = (record.body as SentMessage | null)?.origin;
-    if (origin && heldAtLimit(record.instanceId, origin)) {
+    if (origin && heldAtLimit(record.instanceId, origin, record.uuid)) {
+      // Behind its compaction after a move, not its old account's limit.
+      if (db.atLimit.compaction(record.instanceId)) {
+        return "compacting";
+      }
       // Held with no reset to wait for: its credential was refused.
       return db.atLimit.hold(record.instanceId)?.until === null
         ? "signin"
@@ -8975,10 +8998,11 @@ export const createServer = (
   const owedHeld = (
     instanceId: string,
     machineId: string,
-    origin: SentMessage["origin"]
+    origin: SentMessage["origin"],
+    uuid: string
   ): boolean => {
     if (
-      heldAtLimit(instanceId, origin) ||
+      heldAtLimit(instanceId, origin, uuid) ||
       machinePause.until(machineId) !== undefined
     ) {
       return true;
@@ -8995,6 +9019,39 @@ export const createServer = (
     return true;
   };
 
+  /**
+   * `send` is owed to a session compacting after a move (a step of it, or
+   * the hub's word that goes with its carry-on) whose process is gone: it
+   * ended, or never came up, before it took the step, so nothing the person
+   * sees would start it, and what waits behind the compaction would wait for
+   * an interrupt. The hub starts it again on its conversation (a wake, as a
+   * send's, {@link wakeForSend}) and says so on the move's line. True when
+   * it did; what is owed goes once it is up.
+   */
+  const relaunchForStep = (
+    send: SentMessageRow,
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    agent: NonNullable<ReturnType<typeof registry.agent>>
+  ): boolean => {
+    const plan = db.atLimit.compaction(send.instanceId);
+    if (!(plan && wakesForSend(row))) {
+      return false;
+    }
+    console.info(
+      `[at-limit] ${sessionName(row)}'s process ended before it took its ${stepWords(plan.stage)}, so the hub starts it again on ${accountWords(row.accountId)} to take it; what waits behind the compaction goes once that ends.`
+    );
+    if (plan.move.kind === "moved") {
+      const move = { ...plan.move, relaunched: true as const };
+      db.atLimit.patchCompaction(plan.instanceId, { move });
+      sayCompaction(
+        { ...plan, move },
+        plan.stage === "compacting" ? "compacting" : "filing"
+      );
+    }
+    wakeForSend(agent, row.machineId, row.id);
+    return true;
+  };
+
   /** One owed send, as {@link releaseOwed} hands it over. */
   const releaseOne = (send: SentMessageRow): void => {
     const [row] = db.getInstancesByIds([send.instanceId]);
@@ -9004,11 +9061,17 @@ export const createServer = (
       return;
     }
     const agent = row ? registry.agent(row.machineId) : undefined;
+    if (!(row && agent)) {
+      return;
+    }
+    // A compaction's own step whose session's process ended before it took
+    // it: the hub moved it and owes it that step, so it starts it again
+    // there ({@link relaunchForStep}); the step goes once it is up.
     // Kept for a session nothing owed may wake: it waits for a send that may.
     // Handed back by a machine with no process for it: it waits for the
     // session's next one ({@link waitingForProcess}).
     if (
-      !(row && agent) ||
+      relaunchForStep(send, row, agent) ||
       keptAsleep(row) ||
       waitingForProcess.has(send.instanceId)
     ) {
@@ -9020,7 +9083,7 @@ export const createServer = (
     // against this sender: it goes once the pause ends, or one who may wake
     // it writes to it.
     const { origin } = envelope.payload.message;
-    if (owedHeld(send.instanceId, row.machineId, origin)) {
+    if (owedHeld(send.instanceId, row.machineId, origin, send.uuid)) {
       return;
     }
     const refused = inputRefusal(send.instanceId, origin);
@@ -9032,6 +9095,15 @@ export const createServer = (
     if (row.status === "sleeping") {
       wakeForSend(agent, row.machineId, send.instanceId);
     }
+    handToProcess(agent, send, envelope);
+  };
+
+  /** `send` handed over once its session has a process up or starting and no start held; else it stays owed for that. */
+  const handToProcess = (
+    agent: NonNullable<ReturnType<typeof registry.agent>>,
+    send: SentMessageRow,
+    envelope: Envelope<SendPayload>
+  ): void => {
     const [now] = db.getInstancesByIds([send.instanceId]);
     if (
       db.owesSpawn(send.instanceId) ||
@@ -9111,7 +9183,7 @@ export const createServer = (
     return !(
       db.owesSpawn(send.instanceId) ||
       (row && keptAsleep(row)) ||
-      (origin && heldAtLimit(send.instanceId, origin))
+      (origin && heldAtLimit(send.instanceId, origin, send.uuid))
     );
   };
 
@@ -9601,11 +9673,18 @@ export const createServer = (
    * task, no wake-up its resume would not bring back), for a move that
    * relaunches it with its conversation; one that holds any of those is
    * kept `running`, and its move waits for its next turn's end. Without
-   * `stop`, a session whose process runs stays where it is. With
-   * `endLater` (and `stop`), work its process holds for later (a background
-   * task) does not keep it: the move ends that work, and the session is told
-   * on its new account what ended ({@link tellEndedByMove}), as a move does
-   * once its wait for that work is over ({@link endLaterNow}). A row with no
+   * `stop`, a session whose process runs stays where it is. A session
+   * `stopped` at its limit or on its refused sign-in runs no turn, so with
+   * `stop` nothing its process holds for later (a background command, a
+   * monitor, a wake-up) keeps it: the move ends that work, and the session
+   * is told on its new account what ended ({@link tellEndedByMove}). That is
+   * the one rule for every move of a stopped session, whoever started it
+   * ({@link stoppedNow}): a person's pick (`moveByHand`), a person's or the
+   * limit's owed move carried at a look or at the refusal
+   * (`takeUpOwedMove`), and the at-limit controller's own move (at the
+   * refusal, at a look a held message or a reconnect asks for, at a reset:
+   * its `move` port). A running session's move waits for that work instead,
+   * up to the restart bound ({@link waitForLater}). A row with no
    * conversation yet, or of another harness, has nothing of Claude's to
    * carry. Answers the rows that moved, and why each other did not.
    */
@@ -9618,7 +9697,7 @@ export const createServer = (
     }[],
     accountId: string | null,
     stop = false,
-    endLater = false
+    stopped?: "limit" | "signin"
   ): Promise<{ kept: Map<string, Kept>; moved: string[] }> => {
     const requests: CarrySessionRequest[] = rows.flatMap((row) =>
       row.harness === "claude" && row.sessionId
@@ -9628,7 +9707,7 @@ export const createServer = (
               sessionId: row.sessionId,
               accountId,
               ...(stop ? { stop: true } : {}),
-              ...(stop && (endLater || endLaterNow.has(row.id))
+              ...(stop && (stopped !== undefined || endLaterNow.has(row.id))
                 ? { endLater: true as const }
                 : {}),
             },
@@ -9655,7 +9734,7 @@ export const createServer = (
       lifetime.cancel(laterWaits.get(row.id)?.timer);
       laterWaits.delete(row.id);
       if (outcome?.state === "carried" && outcome.ended) {
-        endedByMove.set(row.id, outcome.ended);
+        db.moveEndings.put(row.id, outcome.ended);
       }
       db.patchInstance(row.id, { accountId });
       moved.push(row.id);
@@ -9675,19 +9754,13 @@ export const createServer = (
   const laterWaits = new Map<string, { since: number; timer: HubTimer }>();
   /** The rows whose next carry ends what their process holds for later: their wait is over. */
   const endLaterNow = new Set<string>();
-  /** What a move ended with a session's process, told to it once it runs on the new account ({@link tellEndedByMove}). */
-  const endedByMove = new Map<string, MoveEnded>();
 
   /**
-   * The move of `instanceId` is held by work its process holds for later:
-   * tried again, ending it, once its wait is over. Its wait counts from when
-   * it began, as its hold at the limit keeps that across hub restarts
-   * (at-limit.ts `unmoved`).
+   * The move of running `instanceId` is held by work its process holds for
+   * later: tried again, ending it, once its wait is over. A stopped
+   * session's move never waits so ({@link moveRowsToAccount} `stopped`).
    */
-  const waitForLater = (
-    instanceId: string,
-    since = db.atLimit.hold(instanceId)?.carry?.since ?? Date.now()
-  ): void => {
+  const waitForLater = (instanceId: string, since = Date.now()): void => {
     if (laterWaits.has(instanceId)) {
       return;
     }
@@ -9709,16 +9782,13 @@ export const createServer = (
 
   /**
    * The move owed by `instanceId` after its wait for the work it holds for
-   * later ({@link waitForLater}), carried with `endLater`: through the
-   * at-limit controller when it holds the session at its limit, else as any
-   * owed move ({@link takeUpOwedMove}). Nothing when the move was dropped
-   * meanwhile.
+   * later ({@link waitForLater}), carried with `endLater` as any owed move
+   * ({@link takeUpOwedMove}). Nothing when the move was dropped meanwhile.
    */
   const retryLaterMove = async (instanceId: string): Promise<void> => {
     const [row] = db.getInstancesByIds([instanceId]);
     const owed = owedMoves.get(instanceId);
-    const held = db.atLimit.hold(instanceId) !== undefined;
-    if (!(row && (held || owed?.to !== undefined))) {
+    if (!(row && owed?.to !== undefined)) {
       return;
     }
     console.info(
@@ -9726,27 +9796,23 @@ export const createServer = (
     );
     endLaterNow.add(instanceId);
     try {
-      await (held
-        ? atLimit.lookNow(
-            instanceId,
-            `its move waited ${RESTART_WAIT_CAP_MS / 60_000} minutes for the work its process holds for later`
-          )
-        : takeUpOwedMove(instanceId));
+      await takeUpOwedMove(instanceId);
     } finally {
       endLaterNow.delete(instanceId);
     }
   };
 
   /**
-   * Tells `row`, relaunched on its new account, what its move ended with its
-   * old process ({@link endedByMove}): each background task, by its id,
-   * description and the last of its output, and the one-time wake-ups, none
-   * of which Claude Code brings back on resume. Its first turn there reads
-   * it, so the session starts again what it still needs.
+   * Tells `row`, launched on its new account, what its move ended with its
+   * old process (db `move_endings`, kept from the machine's answer across a
+   * hub restart, taken here once): each background task, by its id,
+   * description and the last of its output, and the one-time wake-ups. Its
+   * first turn there reads it, so the session starts again what it still
+   * needs. Every launch asks ({@link resumeSpawn}): the one after the move,
+   * or, when that never came up, the next.
    */
   const tellEndedByMove = (row: { id: string; machineId: string }): void => {
-    const ended = endedByMove.get(row.id);
-    endedByMove.delete(row.id);
+    const ended = db.moveEndings.take(row.id);
     if (!ended || (ended.tasks.length === 0 && ended.wakeups === 0)) {
       return;
     }
@@ -9811,9 +9877,14 @@ export const createServer = (
           endedTaskOutputWords(task),
         ].join("\n")
       ),
+      // code.claude.com/docs/en/scheduled-tasks: a resume restores "the tasks
+      // scheduled with CronCreate, except … one-shot tasks whose scheduled
+      // time has passed", but "A self-paced `/loop` isn't restored"; the
+      // Stop hook's list doesn't say which a wake-up is, so neither is
+      // promised lost.
       ...(ended.wakeups > 0
         ? [
-            `- ${ended.wakeups} one-time wake-up(s) you had scheduled (CronCreate, not recurring).`,
+            `- ${ended.wakeups} one-time wake-up(s) you had scheduled. One you set with CronCreate comes back if its time hasn't passed; a self-paced loop's next wake-up (ScheduleWakeup) doesn't. Check with CronList.`,
           ]
         : []),
       "Start again whatever you still need, then carry on.",
@@ -20163,16 +20234,25 @@ export const createServer = (
   };
 
   /**
-   * What `instanceId` is stopped by, as the at-limit controller holds it:
-   * its account's limit, or its refused sign-in; undefined while nothing
-   * holds it. No turn of it runs then, so a person's pick moves it now, and
-   * work its process holds for later doesn't keep it: Claude Code restores
-   * no background Bash or monitor task on resume and notes the ended ones in
+   * What `instanceId` is stopped by now: `carry` when its caller knows (its
+   * turn was just refused at its limit, or on its sign-in), else what the
+   * at-limit controller holds it on (its account's limit, or its refused
+   * sign-in); undefined while it runs. No turn of it runs then, so a move
+   * goes now and ends what its process holds for later
+   * ({@link moveRowsToAccount} `stopped`): Claude Code restores no
+   * background Bash or monitor task on resume and notes the ended ones in
    * the transcript (code.claude.com/docs/en/sessions: "Background Bash and
-   * monitor tasks aren't"), so the move ends them, the session is told on
-   * the new account what ended, and it carries on past what stopped it.
+   * monitor tasks aren't"), so the session is told on the new account what
+   * ended, and it carries on past what stopped it. Every move of a session
+   * asks this one rule.
    */
-  const stoppedBy = (instanceId: string): "limit" | "signin" | undefined => {
+  const stoppedNow = (
+    instanceId: string,
+    carry?: "limit" | "signin"
+  ): "limit" | "signin" | undefined => {
+    if (carry) {
+      return carry;
+    }
     const held = db.atLimit.hold(instanceId);
     if (!held) {
       return;
@@ -20209,7 +20289,7 @@ export const createServer = (
     const running = !["sleeping", "stopping", "stopped", "error"].includes(
       row.status
     );
-    const stopped = stoppedBy(row.id);
+    const stopped = stoppedNow(row.id);
     const title = sessionName(row);
     const fromName = accountWords(row.accountId);
     const toName = accountNameAmong(account, db.accounts.list());
@@ -20241,7 +20321,7 @@ export const createServer = (
       [row],
       account.id,
       running,
-      stopped !== undefined
+      stopped
     );
     const why = kept.get(row.id);
     if (why?.running) {
@@ -20327,8 +20407,6 @@ export const createServer = (
     // wakes it next starts it there.
     const stopped = notRunning(row);
     if (stopped) {
-      // No process of it ran on, so nothing of its was ended to tell it of.
-      endedByMove.delete(row.id);
       console.log(
         `[hub] ${sessionName(row)} is on ${accountWords(row.accountId)} now, and isn't relaunched: ${stopped}. Whatever wakes it next starts it there.`
       );
@@ -20344,7 +20422,6 @@ export const createServer = (
       { ...row, sessionId: row.sessionId },
       true
     );
-    tellEndedByMove(row);
     if (carry) {
       carryOn(row, carry);
     }
@@ -20394,10 +20471,10 @@ export const createServer = (
    * return; one whose carry cannot happen stays where it is, the move
    * dropped. A move asked meanwhile replaces it, and only its own outcome
    * clears it. A second ask while it is carried joins that carry
-   * ({@link owedCarries}). A person's move of a session stopped at its limit
-   * ends the work its process holds for later rather than waiting for it, as
-   * {@link moveByHand} does. Undefined when it owes no move to an account,
-   * or its machine is away: nothing was taken up.
+   * ({@link owedCarries}). A session stopped at its limit or on its sign-in
+   * (`carry`, else its hold: {@link stoppedNow}) moves now, ending what its
+   * process holds for later, and carries on there. Undefined when it owes
+   * no move to an account, or its machine is away: nothing was taken up.
    */
   const takeUpOwedMove = (
     instanceId: string,
@@ -20419,13 +20496,14 @@ export const createServer = (
     const { to } = owed;
     /** The record is still this move's: no newer ask replaced it. */
     const still = () => owedMoves.get(stored.id)?.to === to;
+    const stopped = stoppedNow(stored.id, carry);
     transcripts.noteRelaunch(stored.id);
     const carried = moveRowsToAccount(
       stored.machineId,
       [stored],
       to,
       true,
-      owed.byHand === true && stoppedBy(stored.id) !== undefined
+      stopped
     )
       .then(({ kept }) => {
         const why = kept.get(stored.id);
@@ -20449,7 +20527,7 @@ export const createServer = (
         // Behind the carry's own end, so its relaunch (and a newer move
         // asked meanwhile) is taken up afresh, never joined to this one.
         if (landed) {
-          relaunchOnAccount(stored.id, carry);
+          relaunchOnAccount(stored.id, stopped);
           releaseOwed({ instanceId: stored.id });
         }
       });
@@ -24457,6 +24535,10 @@ export const createServer = (
    * at-limit controller's decision: another organization, `moveWholeUnderK` or
    * more; db `limit_compactions`), its first steps on the new account:
    *
+   * 0. `carrying`, when its limit or sign-in stopped it: its carry-on, the
+   *    turn that answers what the refused turn asked. Its refused message has
+   *    no answer in Claude Code's transcript, so a filing prompt sent first
+   *    would be read with it as one turn; the carry-on is that turn's own.
    * 1. `filing`: one turn whose only job is to file its open items in its
    *    records (open-items.ts `filingPrompt`).
    * 2. `compacting`: Claude Code's own `/compact`, with the hub's focus
@@ -24465,7 +24547,7 @@ export const createServer = (
    *    pays anyway; the fleet's SessionStart hook on the `compact` source
    *    lists the open items after it (`cawco tool open_items`).
    *
-   * Both go `ahead` of everything the session is owed, each alone: every
+   * Each goes `ahead` of everything the session is owed, alone: every
    * other send waits at the hub until the compaction ends ({@link
    * heldAtLimit}), so Claude Code never joins one into the `/compact`, and
    * its keep-alive sends no ping meanwhile. A person's interrupt or stop of
@@ -24476,9 +24558,10 @@ export const createServer = (
   const compactionSend = (
     row: { id: string; machineId: string },
     uuid: string,
-    content: string
+    content: string,
+    origin: string = COMPACTION_ORIGIN
   ): void => {
-    deliverSend(
+    const sent = deliverSend(
       {
         verb: "send",
         machineId: row.machineId,
@@ -24490,40 +24573,103 @@ export const createServer = (
             uuid,
             message: { role: "user", content },
             parent_tool_use_id: null,
-            origin: { kind: "system", name: COMPACTION_ORIGIN },
+            origin: { kind: "system", name: origin },
           },
         },
       } satisfies Envelope<SendPayload>,
       true
     );
+    // Refused as it was taken: the compaction ends now, stopped, and what
+    // waited behind it goes, never held for a step that went nowhere.
+    if (sent?.state === "failed") {
+      queueMicrotask(() => advanceCompaction(row.id));
+    }
   };
 
-  /** What each compaction step sends. */
-  const compactionStep = (stage: "filing" | "compacting"): string =>
-    stage === "filing"
-      ? filingPrompt("compacted")
-      : `/compact ${COMPACT_FOCUS}`;
+  /** A compaction's own sends, by their uuids: what its hold never holds. */
+  const stepUuids = (plan: LimitCompaction): string[] => [
+    ...(plan.carryUuid ? [plan.carryUuid] : []),
+    plan.filingUuid,
+    plan.compactUuid,
+  ];
 
-  /** Starts `row`'s compaction, just relaunched on its new account: its filing turn goes first. */
+  /** A compaction step's send, by its stage. */
+  const stepUuid = (plan: LimitCompaction): string => {
+    switch (plan.stage) {
+      case "carrying":
+        return plan.carryUuid ?? plan.filingUuid;
+      case "filing":
+        return plan.filingUuid;
+      case "compacting":
+        return plan.compactUuid;
+    }
+  };
+
+  /** A compaction step as a line names it. */
+  const stepWords = (stage: LimitCompaction["stage"]): string => {
+    switch (stage) {
+      case "carrying":
+        return "carry-on turn";
+      case "filing":
+        return "filing turn";
+      case "compacting":
+        return "/compact";
+    }
+  };
+
+  /** Sends a compaction's step at `plan`'s stage, under its uuid. */
+  const sendStep = (
+    row: { id: string; machineId: string },
+    plan: LimitCompaction
+  ): void => {
+    switch (plan.stage) {
+      case "carrying":
+        compactionSend(
+          row,
+          stepUuid(plan),
+          CARRY_ON[
+            plan.move.kind === "moved" && plan.move.because?.kind === "refused"
+              ? "signin"
+              : "limit"
+          ],
+          LIMIT_ORIGIN
+        );
+        return;
+      case "filing":
+        compactionSend(row, plan.filingUuid, filingPrompt("compacted"));
+        return;
+      case "compacting":
+        compactionSend(row, plan.compactUuid, `/compact ${COMPACT_FOCUS}`);
+        return;
+    }
+  };
+
+  /**
+   * Starts `row`'s compaction, just relaunched on its new account: its
+   * carry-on goes first when what `stopped` it is to be carried on past,
+   * else its filing turn.
+   */
   const startCompaction = (
     row: { id: string; machineId: string },
     line: string,
-    move: AccountMove
+    move: AccountMove,
+    stopped: false | "limit" | "signin"
   ): void => {
-    const filingUuid = crypto.randomUUID();
-    db.atLimit.putCompaction({
+    const plan: LimitCompaction = {
       instanceId: row.id,
-      stage: "filing",
+      stage: stopped ? "carrying" : "filing",
       lineId: line,
       move,
-      filingUuid,
+      carryUuid: stopped ? crypto.randomUUID() : null,
+      filingUuid: crypto.randomUUID(),
       compactUuid: crypto.randomUUID(),
       compacted: false,
-    });
+    };
+    db.atLimit.putCompaction(plan);
     console.info(
-      `[at-limit] ${sessionName(row)} files its open items now, then Claude Code compacts it on its new account; everything else it is sent waits until that ends.`
+      `[at-limit] ${sessionName(row)} ${stopped ? "carries on past what stopped it, then files its open items" : "files its open items now"}, then Claude Code compacts it on its new account; everything else it is sent waits until that ends.`
     );
-    compactionSend(row, filingUuid, compactionStep("filing"));
+    sendStep(row, plan);
   };
 
   /** Says a compaction's move line again at `stage`, under its id and where it stands. */
@@ -24576,6 +24722,34 @@ export const createServer = (
   };
 
   /**
+   * `instanceId`'s compaction as its machine registers, the hub's start
+   * included: a step whose turn ended while the hub was away (its result
+   * never reached a hub to end it) is over on the machine's own word that
+   * the session is between turns ({@link sessionIdle}), not on a turn the
+   * hub last saw open; then the next step goes. Any other state goes on as
+   * at any look ({@link advanceCompaction}).
+   */
+  const recoverCompaction = async (instanceId: string): Promise<void> => {
+    const plan = db.atLimit.compaction(instanceId);
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!(plan && row && registry.agent(row.machineId))) {
+      return;
+    }
+    const sent = db.sendRecord(stepUuid(plan));
+    if (sent?.state === "read" && (await sessionIdle(row))) {
+      const now = db.atLimit.compaction(instanceId);
+      if (now?.stage === plan.stage) {
+        console.info(
+          `[at-limit] ${sessionName(row)}'s ${stepWords(plan.stage)} ended while the hub was away; its machine says it is between turns, so the compaction goes on.`
+        );
+        nextCompactionStep(now, row);
+      }
+      return;
+    }
+    advanceCompaction(instanceId);
+  };
+
+  /**
    * Whether a compaction's current step has ended: its send read and no turn
    * of it open. A step never sent (a restart cut it) is sent now; one its
    * machine handed back, owed, goes to the session's process now if it has
@@ -24587,10 +24761,9 @@ export const createServer = (
     row: { id: string; machineId: string },
     turnEnded: boolean
   ): boolean => {
-    const uuid = plan.stage === "filing" ? plan.filingUuid : plan.compactUuid;
-    const sent = db.sendRecord(uuid);
+    const sent = db.sendRecord(stepUuid(plan));
     if (!sent) {
-      compactionSend(row, uuid, compactionStep(plan.stage));
+      sendStep(row, plan);
       return false;
     }
     if (sent.owed && sent.state === "pending") {
@@ -24601,7 +24774,7 @@ export const createServer = (
       endCompaction(
         plan,
         "stopped",
-        `its ${plan.stage === "filing" ? "filing turn" : "/compact"} was refused (${sent.reason ?? "no reason given"}), so it isn't compacted and goes on with its whole conversation`
+        `its ${stepWords(plan.stage)} was refused (${sent.reason ?? "no reason given"}), so it isn't compacted and goes on with its whole conversation`
       );
       return false;
     }
@@ -24609,19 +24782,30 @@ export const createServer = (
     return sent.state === "read" && (turnEnded || open === null);
   };
 
-  /** A compaction's step ended: the filing turn is followed by the `/compact`, whose end ends it. */
+  /**
+   * A compaction's step ended: the carry-on is followed by the filing turn,
+   * that by the `/compact`, whose end ends it.
+   */
   const nextCompactionStep = (
     plan: LimitCompaction,
     row: ReturnType<typeof db.getInstancesByIds>[number]
   ): void => {
     const { instanceId } = plan;
+    if (plan.stage === "carrying") {
+      db.atLimit.patchCompaction(instanceId, { stage: "filing" });
+      console.info(
+        `[at-limit] ${sessionName(row)} carried on past what stopped it; it files its open items now.`
+      );
+      sendStep(row, { ...plan, stage: "filing" });
+      return;
+    }
     if (plan.stage === "filing") {
       db.atLimit.patchCompaction(instanceId, { stage: "compacting" });
       sayCompaction(plan, "compacting");
       console.info(
         `[at-limit] ${sessionName(row)} filed its open items; Claude Code's /compact goes now.`
       );
-      compactionSend(row, plan.compactUuid, compactionStep("compacting"));
+      sendStep(row, { ...plan, stage: "compacting" });
       return;
     }
     endCompaction(
@@ -24640,7 +24824,7 @@ export const createServer = (
       endCompaction(
         plan,
         "stopped",
-        `its ${plan.stage === "filing" ? "filing turn" : "compaction"} was interrupted, so it goes on with its whole conversation`
+        `its ${stepWords(plan.stage)} was interrupted, so it goes on with its whole conversation`
       );
     }
   };
@@ -25341,20 +25525,16 @@ export const createServer = (
    */
   const SIGNIN_PROVEN_MS = 8 * 60 * 60_000;
 
-  /**
-   * The other account that takes `row` again soonest, and when (placement
-   * `nextFree`): among those it may run on on its machine, read and at
-   * their limit now.
-   */
-  const limitNextFree = (
+  /** What placement reads to carry `row` off `accountId` (placement.ts `nextFree`, `skips`); none for an account of no provider. */
+  const carryInput = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
     accountId: string
-  ): { accountId: string; at: number } | undefined => {
+  ) => {
     const provider = db.accounts.get(accountId)?.provider;
     if (!provider) {
-      return undefined;
+      return;
     }
-    return nextFree({
+    return {
       accounts: db.accounts
         .list()
         .filter((account) => account.provider === provider),
@@ -25368,15 +25548,39 @@ export const createServer = (
       ...rowAsks(row),
       exclude: accountId,
       now: Date.now(),
-    });
+    };
+  };
+
+  /**
+   * The other account that takes `row` again soonest, and when (placement
+   * `nextFree`): among those it may run on on its machine, read and at
+   * their limit now.
+   */
+  const limitNextFree = (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    accountId: string
+  ): { accountId: string; at: number } | undefined => {
+    const input = carryInput(row, accountId);
+    return input ? nextFree(input) : undefined;
+  };
+
+  /** Each other account and why a carry of `row` off `accountId` would not take it (placement `skips`). */
+  const limitSkips = (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    accountId: string
+  ) => {
+    const input = carryInput(row, accountId);
+    return input ? limitSkipsOf(input) : [];
   };
 
   /**
    * A session the at-limit controller moved, its conversation now in its new
-   * account's dir, relaunched there with it: with `compact`, its filing turn
-   * and Claude Code's `/compact` first, before anything it is owed (what
-   * follows waits behind them, {@link compactions}); then what the move
-   * ended, and, when its limit or sign-in stopped it, its carry-on.
+   * account's dir, relaunched there with it: what the move ended first, then,
+   * when its limit or sign-in stopped it, its carry-on, the two read as the
+   * one turn that answers what the refused turn asked; with `compact`, that
+   * carry-on is the compaction's first step, and its filing turn and Claude
+   * Code's `/compact` follow it, before anything else it is owed (which
+   * waits behind them, {@link compactions}).
    */
   const relaunchMoved = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
@@ -25391,9 +25595,9 @@ export const createServer = (
     );
     resumeSpawn(agent, now.machineId, now, true);
     if (compact) {
-      startCompaction(now, compact.line, compact.move);
+      startCompaction(now, compact.line, compact.move, stopped);
+      return;
     }
-    tellEndedByMove(now);
     if (stopped) {
       carryOn(now, stopped);
     }
@@ -25451,11 +25655,14 @@ export const createServer = (
       // One that did not move stays on its account, held until its reset;
       // a process the carry ended there is asleep, woken at that reset.
       transcripts.noteRelaunch(row.id);
+      // A stopped session's move ends what it holds for later; a rebalance's
+      // of a running one waits for it.
       const { kept } = await moveRowsToAccount(
         row.machineId,
         [row],
         accountId,
-        true
+        true,
+        stopped || undefined
       );
       const why = kept.get(row.id);
       if (why) {
@@ -25486,8 +25693,12 @@ export const createServer = (
       );
     },
     owed: owedTargets,
-    laterSince: (instanceId) => laterWaits.get(instanceId)?.since,
     named: (row) => sessionName(row),
+    // The compaction's steps are the hub's word to the session: one whose
+    // finished work takes it from nobody is moved whole, never compacted.
+    compactable: (row) =>
+      !inputRefusal(row.id, { kind: "system", name: COMPACTION_ORIGIN }),
+    skipped: limitSkips,
     handMove: (row) => {
       const owed = owedMoves.get(row.id);
       return owed?.byHand && owed.to !== undefined && owed.to !== row.accountId
@@ -25495,7 +25706,7 @@ export const createServer = (
         : undefined;
     },
     carryHandMove: async (row) => {
-      await takeUpOwedMove(row.id, "limit");
+      await takeUpOwedMove(row.id);
     },
     // A delegate's parent hears of it as a notice, the line its transcript has.
     refusedMove: (row, move) => {
@@ -31458,11 +31669,14 @@ export const createServer = (
                 }
               }
               // Compactions after a move on it: a step its turn ended while
-              // it was away, or one never sent, goes on now.
+              // it or the hub was away, or one never sent, goes on now.
               for (const plan of db.atLimit.compactions()) {
                 const [row] = db.getInstancesByIds([plan.instanceId]);
                 if (row?.machineId === message.machineId) {
-                  advanceCompaction(plan.instanceId);
+                  detach(
+                    recoverCompaction(plan.instanceId),
+                    "compaction recovery"
+                  );
                 }
               }
               // And project moves waiting on it, likewise (moves.ts).

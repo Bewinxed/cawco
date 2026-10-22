@@ -6971,6 +6971,62 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/SkipReason`.
+    public enum SkipReason: OpenEnum {
+        case allowed
+        case backup
+        case benched
+        case limit
+        case reserve
+        case room
+        case signin
+        case unread
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "allowed": self = .allowed
+            case "backup": self = .backup
+            case "benched": self = .benched
+            case "limit": self = .limit
+            case "reserve": self = .reserve
+            case "room": self = .room
+            case "signin": self = .signin
+            case "unread": self = .unread
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .allowed: "allowed"
+            case .backup: "backup"
+            case .benched: "benched"
+            case .limit: "limit"
+            case .reserve: "reserve"
+            case .room: "room"
+            case .signin: "signin"
+            case .unread: "unread"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.allowed, .backup, .benched, .limit, .reserve, .room, .signin, .unread]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/SlashCommandKind`.
     public enum SlashCommandKind: OpenEnum {
         case builtin

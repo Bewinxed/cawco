@@ -15,7 +15,6 @@
  * Browser-safe: types and pure functions only.
  */
 
-import { RESTART_WAIT_CAP_MS } from "./binary-updates";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
 
@@ -1110,6 +1109,34 @@ export const namedAccount = (
 export type WaitReason = "fork" | "off" | "full" | "room" | "soon" | "work";
 
 /**
+ * Why another account didn't take a session held at its limit: at its own
+ * limit (`limit`), benched (`benched`), past its reserve (`reserve`), not one
+ * the session's project or task allows (`allowed`), kept out of the pinned
+ * strategy's backups (`backup`), its limits never read (`unread`), not
+ * signed in on the session's machine (`signin`), or with room the hub's
+ * admission keeps for moves too small for its re-read (`room`).
+ */
+export type SkipReason =
+  | "allowed"
+  | "backup"
+  | "benched"
+  | "limit"
+  | "reserve"
+  | "room"
+  | "signin"
+  | "unread";
+
+/** Another account and why it didn't take a held session ({@link SkipReason}). */
+export interface SkippedAccount {
+  account: NamedAccount;
+  /** With `room`: what its 5-hour window has left, percent. */
+  leftPct?: number;
+  /** When it takes sessions again, epoch ms, when a reading says. */
+  until?: number;
+  why: SkipReason;
+}
+
+/**
  * Where the compaction after an at-limit move stands ({@link AccountMove}
  * `moved`): the session files its open items in its records (`filing`),
  * then Claude Code's own `/compact` runs (`compacting`); it ends compacted,
@@ -1135,6 +1162,11 @@ export type AccountMove =
        * again under its id as that goes.
        */
       compact?: CompactStage;
+      /**
+       * Its process ended on `to` before it took a step of the compaction,
+       * and the hub started it again there to take it.
+       */
+      relaunched?: true;
       from: NamedAccount;
       to: NamedAccount;
       /** Both accounts in one organization: its prompt cache came along. */
@@ -1168,11 +1200,11 @@ export type AccountMove =
        */
       frees?: NamedAccount;
       /**
-       * With `why` `room`: the account with the most room left, which the
-       * hub's admission kept it off, and that room in percent of its 5-hour
-       * window: a person may still move it there.
+       * With `why` `full` or `room`: every other account of its provider and
+       * why it didn't take it: what a person reads, so a line never says no
+       * account has room beside one that has.
        */
-      room?: { account: NamedAccount; leftPct: number };
+      skipped?: SkippedAccount[];
       /** The earliest moment an account takes it again, epoch ms: the line counts down to it. */
       until: number;
       why: WaitReason;
@@ -1261,9 +1293,10 @@ export type AccountMove =
       /** What the hub got from the step that failed. */
       reason: string;
       /**
-       * Only work its process holds for later kept it (a background task, a
-       * one-time wake-up): the move goes when that ends, or after
-       * {@link RESTART_WAIT_CAP_MS} at the latest, ending it.
+       * Never set now: a move at a limit no longer waits for work held for
+       * later. Kept on the wire only for the TestFlight builds 20261015.3 to
+       * 20261018, which read it (packages/hub/scripts/wire-compat.ts); it
+       * goes in the change that expires them.
        */
       waits?: true;
     };
@@ -1341,24 +1374,52 @@ const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
   work: () => "Its work item carries on here after the reset",
 };
 
+/** One other account and why it didn't take the session: "B is past its reserve". */
+const skippedWords = (one: SkippedAccount, tokens: string): string => {
+  const { name } = one.account;
+  const until =
+    one.until === undefined ? "" : ` until ${clockWords(one.until)}`;
+  switch (one.why) {
+    case "limit":
+      return `${name} is at its limit${until}`;
+    case "benched":
+      return `${name} is benched${until}`;
+    case "reserve":
+      return `${name} is past its reserve${until}`;
+    case "allowed":
+      return `${name} isn't one its project or task allows`;
+    case "backup":
+      return `${name} is never a backup`;
+    case "unread":
+      return `${name}'s limits haven't been read`;
+    case "signin":
+      return `${name} isn't signed in on its machine`;
+    case "room":
+      return `${name} has ${Math.round(one.leftPct ?? 0)}% left, but re-reading ${tokens} there would take more than half of it`;
+  }
+};
+
 /**
- * Why a held session waits, under its line: the account with room the
- * hub's admission kept it off, by name and room; else the account that
- * frees first and takes it; else the reason alone.
+ * Why a held session waits, under its line: the account that frees first
+ * and takes it, then each other account and why it didn't take it, so it
+ * never reads "no account has room" beside one that has; a line with no
+ * list (a reason of its own, or stored before lines named them) its reason.
  */
 const waitingDetail = (
   move: Extract<AccountMove, { kind: "waiting" }>
 ): string => {
   const tokens = tokenWords(move.tokens);
   const then = move.frees
-    ? ` · it moves to ${move.frees.name} when that resets, before ${move.account.name} does`
+    ? `It moves to ${move.frees.name} when that resets, before ${move.account.name} does`
     : "";
-  if (move.why === "room" && move.room) {
-    return `${move.room.account.name} has ${Math.round(move.room.leftPct)}% left, but re-reading ${tokens} there would take more than half of it${then}`;
+  if (!move.skipped) {
+    return then || WAIT_WHY[move.why](tokens);
   }
-  return move.frees
-    ? `No account has room for it now${then}`
-    : WAIT_WHY[move.why](tokens);
+  const why =
+    move.skipped.length === 0
+      ? "No other account is signed in for it"
+      : move.skipped.map((one) => skippedWords(one, tokens)).join(" · ");
+  return then ? `${then} · ${why}` : why;
 };
 
 /** A stop (Caw off) in words at `now`: it counts down to its account's reset, then asks for a message. */
@@ -1440,17 +1501,19 @@ const compactedMoveWords = (
 ): { line: string; detail: string } => {
   const to = move.to.name;
   const tokens = tokenWords(move.tokens);
-  const hit = limitHitWords(move, now);
+  const hit = move.relaunched
+    ? `its process ended before it took that turn, so the hub started it again · ${limitHitWords(move, now)}`
+    : limitHitWords(move, now);
   switch (move.compact) {
     case "filing":
       return {
         line: `Moved to ${to}, compacting next · re-read ${tokens}${cost}`,
-        detail: `It files its open items, then Claude Code compacts it · stop either like any turn · ${hit}`,
+        detail: `It files its open items, then Claude Code compacts it; what is sent to it waits until then · stop the turn to send it now · ${hit}`,
       };
     case "compacting":
       return {
         line: `Moved to ${to}, compacting · re-read ${tokens}${cost}`,
-        detail: `Claude Code's own /compact · stop it like any turn · ${hit}`,
+        detail: `Claude Code's own /compact; what is sent to it waits until then · stop the turn to send it now · ${hit}`,
       };
     case "compacted":
       return {
@@ -1513,7 +1576,7 @@ const unmovedWords = (
   move: Extract<AccountMove, { kind: "unmoved" }>
 ): string => {
   if (move.action === "move") {
-    return `${move.waits ? "Can't move" : "Couldn't move"}${move.from ? ` from ${move.from.name}` : ""}${move.to ? ` to ${move.to.name}` : ""}${move.waits ? " yet" : ""}`;
+    return `Couldn't move${move.from ? ` from ${move.from.name}` : ""}${move.to ? ` to ${move.to.name}` : ""}`;
   }
   return `Couldn't continue${move.to ? ` on ${move.to.name}` : ""}`;
 };
@@ -1550,9 +1613,6 @@ const unmovedNext = (
     return "It goes on in the conversation it has";
   }
   const from = move.from.name;
-  if (move.waits) {
-    return `It moves${move.to ? ` to ${move.to.name}` : ""} when that work ends, or in ${RESTART_WAIT_CAP_MS / 60_000} minutes at the latest: then the move ends it, and the session is told there what ended`;
-  }
   return move.signedOut
     ? `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} once ${from} is signed in again in Configure → Accounts`
     : `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} when ${from} resets`;
