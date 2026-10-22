@@ -75,6 +75,7 @@
   import { OptionGroup } from "#lib/components/ui/option-group/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconPen } from "#lib/icons.js";
+  import { frameObserver } from "../../frame-observer.js";
   import { dur, ease, motionOk } from "../../motion/curves.svelte";
   import { fold, landFold } from "../../motion/fold.svelte";
   import { morph } from "../../motion/morph.svelte";
@@ -177,6 +178,35 @@
       )
     );
   });
+  let optionsGrid = $state<HTMLDivElement>();
+  /**
+   * Its pictured options leave one alone on their last row: that one spans
+   * the row (Option.svelte), so no empty cell stands beside it, its chip,
+   * words and picture still on the first column's edge as every row's are
+   * (a centred last row would stand them on no column's). Read from the
+   * grid's own tracks as it mounts and as it resizes; the tracks auto-fit
+   * leaves empty are 0px.
+   */
+  let lone = $state(false);
+  $effect(() => {
+    const grid = optionsGrid;
+    const count = options.length;
+    if (!(grid && storyWidth > 0)) {
+      lone = false;
+      return;
+    }
+    const read = () => {
+      const columns = getComputedStyle(grid)
+        .gridTemplateColumns.split(" ")
+        .filter((track) => Number.parseFloat(track) > 0).length;
+      lone = columns > 1 && count > columns && count % columns === 1;
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(grid);
+    return () => sizes.disconnect();
+  });
+
   /** The pieces drawn in a well (Well.svelte), by the library's names for them. */
   const WELLS = new Set(["Image", "Diagram", "Canvas", "Preview", "Dials"]);
   /** The card's media are two pictures: they may share the body's width. */
@@ -899,15 +929,17 @@
         }
       }}
     >
-      <!-- Options with pictures stand on their stories' pitch, each story at 1:1 in its well, as many abreast as the column holds; under the phone's line one under another, each well reaching the screen's edges (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. -->
+      <!-- Options with pictures stand on their stories' pitch, each story at 1:1 in a well that hugs it, as many abreast as the column holds, one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its story does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. -->
       <div
+        bind:this={optionsGrid}
         class={[
-          "grid w-full min-w-0 gap-space-3",
+          "group/options grid w-full min-w-0 gap-space-3",
           storyWidth > 0
             ? "grid-cols-fit-story max-phone:grid-cols-1"
             : "grid-cols-fit-c-decision-option-min",
         ]}
         data-bleeds={storyWidth > 0 ? "" : undefined}
+        data-lone={lone ? "" : undefined}
         data-slot="options"
         style:--story-w={storyWidth > 0 ? `${storyWidth}px` : undefined}
       >

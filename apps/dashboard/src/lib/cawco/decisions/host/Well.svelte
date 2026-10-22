@@ -7,27 +7,29 @@
   scrolls sideways under the house edge fade (`wide`). Under it the caption
   in meta at the start and the piece's one action at the end; an action's
   refusal stands under them in the error formula's ink. A picture drawn at
-  its story's own width (`bleed`, a Preview that says it) standing alone in
-  its card on a phone reaches the screen's edges, with no side, edge or
-  corner of its own, its words kept on the page's text edge.
+  its story's own width (`picture`, a Preview that says it) has its well
+  hug it: the story at 1:1 and the well's insets, never wider than what
+  holds it, so no empty well stands beside it. Standing alone in its card
+  on a phone it reaches the screen's edges as far as its story does, with no
+  side, edge or corner of its own, its words kept on the page's text edge.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
 
   let {
     action,
-    bleed = false,
     caption,
     children,
+    picture,
     said = "",
     stage = $bindable(),
     wide = false,
   }: {
     action?: Snippet;
-    /** Under the phone's line, where it stands alone in its card (`data-bleeds`), it reaches the screen's edges. */
-    bleed?: boolean;
     caption?: string;
     children: Snippet;
+    /** Its picture's own width, px: the well hugs it, and under the phone's line, alone in its card (`data-bleeds`), reaches the screen's edges as far as it does. */
+    picture?: number;
     /** A refusal of the action, in the hub's words. */
     said?: string;
     /** The box the piece is centred in, for a piece that measures its room. */
@@ -40,11 +42,11 @@
 <figure
   class={[
     "m-0 flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well p-space-3",
-    bleed &&
-      "max-phone:in-data-bleeds:-mx-(--bleed) max-phone:in-data-bleeds:rounded-none max-phone:in-data-bleeds:border-x-0 max-phone:in-data-bleeds:px-0",
+    picture !== undefined && "well-hug max-phone:in-data-bleeds:well-bleed",
   ]}
-  data-bleed={bleed ? "" : undefined}
+  data-picture={picture}
   data-slot="media"
+  style:--picture-w={picture === undefined ? undefined : `${picture}px`}
 >
   <div
     bind:this={stage}
@@ -60,7 +62,7 @@
     <figcaption
       class={[
         "flex flex-wrap items-center justify-between gap-space-2",
-        bleed && "max-phone:in-data-bleeds:px-(--bleed)",
+        picture !== undefined && "max-phone:in-data-bleeds:well-bleed-words",
       ]}
       data-slot="media-foot"
     >
@@ -74,7 +76,7 @@
     <p
       class={[
         "type-meta text-status-fail-ink wrap-anywhere",
-        bleed && "max-phone:in-data-bleeds:px-(--bleed)",
+        picture !== undefined && "max-phone:in-data-bleeds:well-bleed-words",
       ]}
       role="status"
     >

@@ -21,12 +21,14 @@
  * A built page stops at {@link PAGE_LIMIT}.
  */
 import { bundledSkills } from "./bundled-skills";
-import { FACES_SHEET } from "./decision-program";
+import { FACES_SHEET, PAGE_ICON } from "./decision-program";
 
 /** The largest page the hub publishes. */
 export const PAGE_LIMIT = 512 * 1024;
 
 const PLACEHOLDER = /\{\{([^}]+)\}\}/g;
+/** A page's own icon, named in its head. */
+const NAMES_ICON = /<link\b[^>]*\brel=["']?(?:shortcut )?icon\b/i;
 const MOCKUP = /\{\{MK:([a-z0-9-]+)\}\}/g;
 const MOCKUP_NAME = /^MK:[a-z0-9-]+$/;
 const SOURCE = /(\bsrc=)"([^"]+)"/g;
@@ -157,6 +159,14 @@ export const buildDecisionPage = async (
     images.has(src) ? `${attribute}"${images.get(src)}"` : whole
   );
 
+  // The house icon where the page names none: in a tab of its own it asks
+  // its origin for no `/favicon.ico`, which the origin doesn't serve.
+  if (!NAMES_ICON.test(page)) {
+    page = page.replace(
+      "</head>",
+      () => `<link rel="icon" type="image/png" href="${PAGE_ICON}">\n</head>`
+    );
+  }
   const size = Buffer.byteLength(page);
   if (size > PAGE_LIMIT) {
     return {

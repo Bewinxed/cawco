@@ -87,7 +87,10 @@
  *    the largest of 742, 1417 or 2092px its room holds, never under 920
  *    and never past its room (a worded page 920); each card's options per
  *    row on their stories' pitch (190px on a worded page; one per row
- *    under the phone's line); before any scroll every picture at the height
+ *    under the phone's line), a pictured option alone on its last row
+ *    spanning it; each pictured well hugging its picture, its frame the
+ *    drawn story's width within 1px and the well never past its cell (on a
+ *    phone, the screen); before any scroll every picture at the height
  *    its canvas says, below the fold too, the first as the rest; each story
  *    at 1:1 from its embed's start where its room holds it, else zoomed to
  *    fit with no sideways scroll; on a phone each well reaching the screen's
@@ -96,6 +99,9 @@
  *    under a finger on one row (122px where Send wraps under the count);
  *    and the foot's box meeting no card's words at six scroll positions top
  *    to bottom.
+ * 13. The pictured page and its five canvases load with no console error,
+ *    no response of 400 or more and no failed request, on the page or any
+ *    frame; the page names the house icon, which answers 200 with an image.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  */
@@ -897,6 +903,11 @@ function readWidths() {
               ?.textContent?.trim() ?? "",
           shape: frame.dataset.shape ?? "",
           ...box(frame),
+          // The well round it and the cell it stands in: a well hugs its picture, never past its cell.
+          well: box(frame.closest("figure")).w,
+          cell: box(
+            frame.closest("[data-slot=option-cell], [data-slot=decision-media]")
+          ).w,
         })),
       };
     }
@@ -1050,6 +1061,80 @@ function wideFaultsOf(
   return faults.map((fault) => `“${f.caption}” Wide: ${fault}`);
 }
 
+/**
+ * 13. A page loads clean: the pictured page (five component Previews) at
+ * 1440 light logs no console error and answers no request with 400 or
+ * more, on the page or any of its frames, and no request fails; it names
+ * its icon (the house's, `/__cawco/decision/icon.png`), which answers 200
+ * with an image, so a tab of its own asks for no `/favicon.ico`.
+ */
+async function loadsClean(
+  kit: Kit,
+  stage: Awaited<ReturnType<typeof startDecisionStage>>
+): Promise<void> {
+  const page = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
+  const faults: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      const at = message.location();
+      faults.push(
+        `console: ${message.text().slice(0, 200)} (${at.url}${at.lineNumber ? `:${at.lineNumber}` : ""})`
+      );
+    }
+  });
+  page.on("pageerror", (error) =>
+    faults.push(`page error: ${error.message.slice(0, 200)}`)
+  );
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      faults.push(
+        `${response.status()} ${response.request().method()} ${response.url()} (from ${response.frame().url()})`
+      );
+    }
+  });
+  page.on("requestfailed", (request) =>
+    faults.push(
+      `failed ${request.method()} ${request.url()}: ${request.failure()?.errorText ?? ""} (from ${request.frame().url()})`
+    )
+  );
+  await page.goto(stage.pageUrl(PICTURED_PAGE, "light"), { waitUntil: "load" });
+  await picturesUnscrolled(kit, page, {
+    leg: "1440px light, loading clean",
+    pictured: true,
+    view: "desk",
+  });
+  await settle(page, 1500);
+  // The page names its icon and the icon answers: a browser asks a page
+  // that names none for the origin's `/favicon.ico`, which a preview origin
+  // doesn't serve (404 in the console, in no network list), and a headless
+  // one never asks, so it is read here, not heard.
+  const icon = await page.evaluate(async () => {
+    const href = document
+      .querySelector<HTMLLinkElement>('link[rel~="icon"]')
+      ?.getAttribute("href");
+    if (!href) {
+      return { href: null, status: 0, type: "" };
+    }
+    const answer = await fetch(href, { cache: "no-store" });
+    return {
+      href,
+      status: answer.status,
+      type: answer.headers.get("content-type") ?? "",
+    };
+  });
+  kit.check(
+    `1440px light, ${PICTURED_PAGE}: the page names its icon and it answers (${icon.href ?? "no icon"}: ${icon.status} ${icon.type})`,
+    !!icon.href && icon.status === 200 && icon.type.startsWith("image/"),
+    JSON.stringify(icon)
+  );
+  kit.check(
+    `1440px light, ${PICTURED_PAGE}: the page and its ${(await page.$$(EMBED_FRAME)).length} canvases load with no console error, no response of 400 or more and no failed request (${faults.length} found)`,
+    faults.length === 0,
+    [...new Set(faults)].slice(0, 12).join("\n    ")
+  );
+  await page.close();
+}
+
 /** One leg of 12: a page at a width, under a mouse or a finger, in a scheme. */
 interface WidthLeg {
   leg: string;
@@ -1152,6 +1237,18 @@ function checkLayout(
       card.perRow === per,
       JSON.stringify(card)
     );
+    // A pictured option left alone on its last row spans it, on the first column's edge; none on a worded page.
+    const alone = pictured && per > 1 && card.cells % per === 1;
+    const last = card.cellW.at(-1) ?? 0;
+    kit.check(
+      `${leg}: card ${card.id}'s last option ${alone ? `stands alone on its row and spans it (${last}px of ${card.body}px)` : `keeps its column (${last}px)`}`,
+      alone
+        ? Math.abs(last - card.body) <= 0.5
+        : card.cellW.every(
+            (one) => Math.abs(one - (card.cellW[0] ?? 0)) <= 0.5
+          ),
+      JSON.stringify(card.cellW)
+    );
   }
   // Words keep their measure: every question, why, line and cost at most 72ch.
   const long = read.texts.filter((one) => one.w > 72 * one.ch + 0.5);
@@ -1228,10 +1325,20 @@ async function checkPictures(
           ?.textContent?.trim() ?? ""
     );
     const [one] = inside?.frames ?? [];
-    if (!(inside && outer && one)) {
+    const held = read.cards
+      .flatMap((card) => card.embeds)
+      .find((embed) => embed.caption === caption);
+    if (!(inside && outer && one && held)) {
       kit.check(`${leg}: “${caption}” reads`, false);
       continue;
     }
+    // The well hugs its picture: its inner box (the frame) the drawn story's width within 1px, the story scaled to the cell where wider; the well never past its cell (on a phone, past it only as far as the screen's edges).
+    const reach = view === "phone" ? read.viewport : held.cell;
+    kit.check(
+      `${leg}: “${caption}”'s well hugs its picture: the frame ${Math.round(outer.width * 10) / 10}px for ${one.story} drawn ${one.drawn}px, the well ${held.well}px in a ${held.cell}px cell`,
+      Math.abs(outer.width - one.drawn) <= 1 && held.well <= reach + 0.5,
+      JSON.stringify({ frame: outer.width, drawn: one.drawn, ...held })
+    );
     // 1:1 where the room holds the story; else zoomed to fit, with no floor on a phone.
     const scale = Math.min(1, inside.room / (BOARD_WIDTHS[one.story] ?? 1));
     kit.check(
@@ -1951,6 +2058,7 @@ const spec: Spec = {
         }
       }
       await widthLegs(kit, stage);
+      await loadsClean(kit, stage);
     } finally {
       await stage.stop();
     }

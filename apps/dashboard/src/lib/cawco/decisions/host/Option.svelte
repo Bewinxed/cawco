@@ -1,7 +1,8 @@
 <!--
   One option: a cell of its card's options on the rows they share (a
   subgrid), so every chip, line, cost and media starts on one line across
-  the columns. Its first row is the pick, the kit's option (ui/option-group
+  the columns. A pictured option left alone on its card's last row spans it
+  (Decision.svelte `lone`), on the first column's edge. Its first row is the pick, the kit's option (ui/option-group
   item: the 30px option chip with its keycap, its place in its decision),
   then the Recommended and Current badges after it; then its line (what it
   gets), its cost (what it costs) and its media, each in its row. The
@@ -67,7 +68,7 @@
 
 <div
   class={[
-    "grid min-w-0 grid-rows-subgrid gap-y-space-2",
+    "grid min-w-0 grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full",
     SPAN[at.span as keyof typeof SPAN],
   ]}
   data-slot="option-cell"

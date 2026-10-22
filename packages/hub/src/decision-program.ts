@@ -635,6 +635,8 @@ export const scriptJson = (id: string, value: unknown): string =>
 
 /** The house faces' sheet on every preview origin (core decision-host.ts): a program's page links it, an HTML page's kit CSS imports it. */
 export const FACES_SHEET = `${DECISION_ASSETS}faces.css`;
+/** The plain CawCo icon every decision page names (core decision-host.ts `icon.png`): a page in a tab of its own asks for no `/favicon.ico`, which its origin doesn't serve. */
+export const PAGE_ICON = `${DECISION_ASSETS}icon.png`;
 
 /** The page the hub serves for a program: the house faces, its host bundle, the program and its files' addresses in script tags, nothing else. */
 export const programHost = (
@@ -649,6 +651,7 @@ export const programHost = (
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>${escaped(title || "Decision page")}</title>
+<link rel="icon" type="image/png" href="${PAGE_ICON}">
 <link rel="stylesheet" href="${FACES_SHEET}">
 <link rel="stylesheet" href="${DECISION_ASSETS}host.css">
 <script type="module" src="${DECISION_ASSETS}host.js"></script>

@@ -1093,6 +1093,35 @@
     minmax(min(100%, calc(var(--story-w) + 2 * var(--well-in))), 1fr)
   );
 }
+/* A picture's well hugging its story (`--picture-w`, the width a decision
+   page's Preview says, decisions/host Well.svelte): the story at 1:1 and the
+   well's own insets, never wider than what holds it, where a story too wide
+   for it is scaled to fit. No empty well stands beside a picture. */
+@utility well-hug {
+  inline-size: calc(var(--picture-w) + 2 * var(--well-in));
+  max-inline-size: 100%;
+}
+/* The same well on a phone, standing alone in its card: no inset, edge or
+   corner of its own, as wide as its story or the screen, whichever is less,
+   centred over what holds it, so a story as wide as the screen reaches both
+   its edges (the page's column is the screen's width under the phone's
+   line). */
+@utility well-bleed {
+  inline-size: min(var(--picture-w), 100vi);
+  max-inline-size: none;
+  margin-inline-start: min(0px, (100% - min(var(--picture-w), 100vi)) / 2);
+  padding-inline: 0;
+  border-inline-width: 0;
+  border-radius: 0;
+}
+/* A bled well's words on the page's text edge (`--bleed` from the screen's),
+   however far its picture reaches past them. */
+@utility well-bleed-words {
+  padding-inline: max(
+    0px,
+    var(--bleed) - (100vi - min(var(--picture-w), 100vi)) / 2
+  );
+}
 /* A well's surface easing its edge and radius as it lands, its opacity on
    the drawer's curve. */
 @utility transition-well-surface {

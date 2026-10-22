@@ -174,7 +174,7 @@
 </script>
 
 <Well
-  bleed={typeof props.width === "number"}
+  picture={typeof props.width === "number" ? props.width : undefined}
   caption={props.caption ? String(props.caption) : undefined}
 >
   {#if held?.kind === "page"}
