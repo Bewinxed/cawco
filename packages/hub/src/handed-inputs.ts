@@ -25,7 +25,11 @@ import {
 } from "@cawco/core";
 import { dataUrlBytes } from "@cawco/core/captures";
 import { type HeldInput, inputFileName } from "@cawco/core/handed-input";
-import { ArtifactRefusal, type Artifacts } from "./artifacts/service";
+import {
+  ArtifactRefusal,
+  type Artifacts,
+  type HandedReceiver,
+} from "./artifacts/service";
 import type { WorkItemRow } from "./db";
 import { mediaFilePath, storedFilePath } from "./media";
 import { FolderRefusal, readFolderBytes } from "./project-folder";
@@ -36,7 +40,7 @@ import { FolderRefusal, readFolderBytes } from "./project-folder";
  * pass), the bytes made for the session it is handed to as it is written.
  */
 export interface HandedFile {
-  bytes: Buffer | ((receiver: InstanceRow) => Buffer);
+  bytes: Buffer | ((receiver: HandedReceiver) => Promise<Buffer>);
   /** What it is, for the receiver's opening line: "report of Fix the tray (1a2b3c4d)". */
   from: string;
   name: string;

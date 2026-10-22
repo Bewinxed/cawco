@@ -358,6 +358,7 @@ import {
   waitedOut,
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
+import { workspaceReach } from "@cawco/core/boundary-reach";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   type BrowserFrame,
@@ -12590,6 +12591,22 @@ export const createServer = (
       }
     },
     browse: (instance, row) => browseAt(instance, row),
+    // A Linux workspace dials out through srt, which refuses the owner's own
+    // network and its machine's own addresses (core boundary-reach.ts); a
+    // Mac's Seatbelt boundary dials as its host does.
+    workspaceReach: (url, machineId) => {
+      const machine = db
+        .listAgents()
+        .find((agent) => agent.machineId === machineId);
+      return machine?.os.startsWith("linux")
+        ? workspaceReach(
+            url,
+            machine.machineCapabilities?.items.find(
+              (item) => item.id === "public-address"
+            )?.addresses ?? []
+          )
+        : Promise.resolve(null);
+    },
     previewAddress: (instanceId) =>
       onPreviewPort(() => previewListeners.address(instanceId)),
     // Its parent's, or its project's lead's, as stop_delegate decides.

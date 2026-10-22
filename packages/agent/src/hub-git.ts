@@ -2,7 +2,7 @@
  * The hub's git remote from places that cannot reach the hub themselves.
  *
  * A workspace's boundary dials none of the owner's machines, the hub among
- * them (`DENIED_RESOLVED_ADDRESSES`, boundary-policy.ts), so a clone whose
+ * them (`DENIED_RESOLVED_ADDRESSES`, core boundary-reach.ts), so a clone whose
  * `origin` is the hub (Projects spec §5.1: "A project with no outside remote
  * gets the hub as its remote") could neither fetch nor push from inside it.
  * Its git traffic runs on the host instead, as git's own remote helper:

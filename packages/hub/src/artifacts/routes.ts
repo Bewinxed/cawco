@@ -739,9 +739,9 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     .post(
       "/api/instances/:id/artifacts/:artifact/browse",
       { detail: { hide: true } },
-      ({ params }) => {
+      async ({ params }) => {
         try {
-          return artifacts.browse(params.id, params.artifact);
+          return await artifacts.browse(params.id, params.artifact);
         } catch (error) {
           return refused(error);
         }

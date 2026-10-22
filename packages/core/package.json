@@ -40,6 +40,7 @@
     "./launchd": "./src/launchd.ts",
     "./handover": "./src/handover.ts",
     "./handed-input": "./src/handed-input.ts",
+    "./boundary-reach": "./src/boundary-reach.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
     "./captures": "./src/captures.ts",

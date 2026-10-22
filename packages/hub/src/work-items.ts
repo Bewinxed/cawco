@@ -4775,17 +4775,23 @@ export const createWorkItems = ({
     receiver: InstanceRow
   ): Promise<void> => {
     if (inputs.held.length > 0) {
-      await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
-        refOf(workspace),
-        inputs.held.map((file): InputFile => ({
+      const files = await Promise.all(
+        inputs.held.map(async (file): Promise<InputFile> => ({
           name: file.name,
           from: file.from,
           mode: HELD_MODE,
           content: (typeof file.bytes === "function"
-            ? file.bytes(receiver)
+            ? await file.bytes({
+                session: receiver,
+                machineId: workspace.machineId,
+              })
             : file.bytes
           ).toString("base64"),
-        })),
+        }))
+      );
+      await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
+        refOf(workspace),
+        files,
       ]);
     }
     if (inputs.paths.length === 0) {

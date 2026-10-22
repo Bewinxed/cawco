@@ -8,7 +8,7 @@
  * HOST ONLY. The scratch hub stands on this computer's first IPv4 address off
  * loopback. A workspace has no such address: its network namespace holds
  * `lo` alone, and its proxy refuses this host's own addresses and private
- * ranges (agent boundary-policy.ts `DENIED_RESOLVED_ADDRESSES`; "srt's own
+ * ranges (core boundary-reach.ts `DENIED_RESOLVED_ADDRESSES`; "srt's own
  * guard refuses loopback, link-local, multicast, cloud metadata and this
  * host's own addresses besides"), so there this spec fails at its first
  * check, saying so. The relay to a hub on another computer is proven by

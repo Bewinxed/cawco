@@ -22,8 +22,13 @@
  *    page's HTML and its picks file, the pin's words and the reply, the
  *    canvas's scene with its rectangle and its PNG, the preview's pass, the
  *    picture's bytes, the text, the blob's bytes; B's brief names every one.
- * 5. B's Bash opens the preview's pass from inside its workspace and gets
- *    the folder's page.
+ * 5. The preview as B's workspace reaches it (core boundary-reach.ts, read
+ *    here as the hub reads it for B's machine): an origin the boundary
+ *    reaches lands with a pass, and B's curl of it from inside its
+ *    workspace gets the folder's page; one it refuses (a Linux workspace
+ *    and an origin on the owner's tailnet, as a scratch fleet's is) lands
+ *    with no pass and why in its place, and B's `artifact_browse` of it is
+ *    refused in the same words, never handed an address it cannot open.
  * 6. The parent's `handoff` tool, called with a `{ text, name }` input,
  *    lands it in B's inputs and names it; B finishes.
  * 7. OpenCode and pi: a parent on each calls `delegate` as that harness
@@ -38,6 +43,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
+import { workspaceReach } from "../../../packages/core/src/boundary-reach";
 import {
   MACHINE,
   MODEL,
@@ -52,6 +58,7 @@ const TAG_A = `PROBE-HANDED-A-${RUN}`;
 const TAG_B = `PROBE-HANDED-B-${RUN}`;
 const FINISH = "mcp__cawco__finish_item";
 const CREATE = "mcp__cawco__artifact_create";
+const BROWSE = "mcp__cawco__artifact_browse";
 /** OpenCode keeps MCP tools in Code Mode's catalog. */
 const CODE_MODE = "execute";
 
@@ -127,14 +134,20 @@ const otherLeg = (harness: Other): OtherLeg => ({
 
 interface Progress {
   a: { finished: boolean; made: boolean };
-  b: { finished: boolean; read: boolean };
+  b: {
+    finished: boolean;
+    /** The preview's id, for B's artifact_browse of it. */
+    preview: string;
+    read: boolean;
+    tried: boolean;
+  };
   others: Record<Other, OtherLeg>;
 }
 
 /** Where each mocked session is. */
 const state: Progress = {
   a: { made: false, finished: false },
-  b: { read: false, finished: false },
+  b: { read: false, tried: false, finished: false, preview: "" },
   others: { opencode: otherLeg("opencode"), pi: otherLeg("pi") },
 };
 
@@ -174,7 +187,11 @@ const leafA = (request: Seen): Reply => {
   return reply;
 };
 
-/** Leaf B: list its inputs and open the preview's pass, work until the handoff's input is named, then finish. */
+/**
+ * Leaf B: list its inputs and read the preview's file; open its pass when it
+ * has one, else ask artifact_browse for it; work until the handoff's input
+ * is named, then finish.
+ */
 const leafB = (request: Seen): Reply => {
   if (state.b.finished) {
     return say("ok");
@@ -182,9 +199,22 @@ const leafB = (request: Seen): Reply => {
   if (!state.b.read) {
     state.b.read = true;
     return call("Bash", {
-      command: `cd "$TMPDIR/inputs" && ls -1 && url=$(grep -o '"url": *"[^"]*"' artifact-${PREVIEW}.json | tail -1 | sed 's/.*"url": *"//; s/"$//') && curl -sSL -c "$TMPDIR/jar" -b "$TMPDIR/jar" "$url"`,
-      description: "List the inputs and open the preview's pass",
+      command: `cd "$TMPDIR/inputs" && ls -1 && cat artifact-${PREVIEW}.json`,
+      description: "List the inputs and read the preview's",
     });
+  }
+  if (!state.b.tried) {
+    // The file as the tool result carries it, JSON in JSON: `"pass": {` escaped once.
+    if (request.body.includes(String.raw`\"pass\": {`)) {
+      state.b.tried = true;
+      return call("Bash", {
+        command: `url=$(grep -o '"url": *"[^"]*"' "$TMPDIR/inputs/artifact-${PREVIEW}.json" | tail -1 | sed 's/.*"url": *"//; s/"$//') && curl -sSL -c "$TMPDIR/jar" -b "$TMPDIR/jar" "$url"`,
+        description: "Open the preview's pass",
+      });
+    }
+    const reply = found(request, BROWSE, { id: state.b.preview });
+    state.b.tried = reply.tool?.name === BROWSE;
+    return reply;
   }
   if (!request.all.includes(HANDOFF_FILE)) {
     return call("Bash", { command: "sleep 2", description: "Work" });
@@ -479,12 +509,6 @@ const landed = async (
       picture.length > 100,
     `scene ${scene.length} chars, ${scene.includes(BOX) ? "with" : "without"} ${BOX}; png ${picture.length} bytes`
   );
-  const preview = await text(`artifact-${PREVIEW}.json`);
-  check(
-    "4: the preview lands with a pass into it",
-    preview.includes('"pass"') && preview.includes('"url"'),
-    preview.slice(0, 400) || "missing"
-  );
   const pasted = await bytes("attachment-Picture-1.png");
   check(
     "4: the person's picture lands as attachment-Picture-1.png, its bytes as sent",
@@ -498,6 +522,77 @@ const landed = async (
   check(
     "4: the blob lands under its name, its bytes as sent",
     (await bytes("blob.bin")).equals(BLOB)
+  );
+};
+
+/**
+ * Step 5: with an origin B's workspace reaches (`unreached` null), the
+ * preview lands with a pass and B's curl of it gets the folder's page; with
+ * one it refuses, it lands with no pass and `unreached` in its place, and
+ * B's artifact_browse of it is refused in the same words.
+ */
+const previewReach = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  b: Started,
+  unreached: string | null
+): Promise<void> => {
+  const landedFile = await readFile(
+    join(b.workspaceTmp, "inputs", `artifact-${PREVIEW}.json`),
+    "utf8"
+  ).catch(() => "");
+  let said: { pass?: { url?: string } | null; reach?: string } = {};
+  try {
+    said = JSON.parse(landedFile) as typeof said;
+  } catch {
+    said = {};
+  }
+  if (unreached === null) {
+    check(
+      "5: the preview's origin is one B's workspace reaches: it lands with a pass",
+      typeof said.pass?.url === "string",
+      landedFile.slice(0, 400) || "missing"
+    );
+    const opened = await until(
+      "B's curl of the preview's pass",
+      () =>
+        fleet.seen.find(
+          (one) =>
+            one.afterTool &&
+            one.all.includes(TAG_B) &&
+            one.body.includes(PREVIEW_TOKEN)
+        ),
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    check(
+      "5: the preview's pass, opened from inside B's workspace, serves the folder's page",
+      opened !== undefined,
+      opened ? "the page's words in B's curl" : "no curl answer with the page"
+    );
+    return;
+  }
+  check(
+    "5: the preview's origin is one B's workspace refuses: it lands with no pass, and why in its place",
+    said.pass === null && (said.reach ?? "").startsWith(unreached),
+    said.reach ?? (landedFile.slice(0, 400) || "missing")
+  );
+  const refused = await until(
+    "B's artifact_browse of the preview, answered",
+    () =>
+      fleet.seen.find(
+        (one) =>
+          one.afterTool &&
+          one.all.includes(TAG_B) &&
+          one.body.includes("a workspace's boundary reaches public hosts only")
+      ),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  check(
+    "5: B's artifact_browse of it is refused in the same words, not handed an address it cannot open",
+    refused !== undefined,
+    refused ? unreached : "no refusal in B's requests"
   );
 };
 
@@ -527,7 +622,7 @@ const otherHarness = async (
     `7: ${harness}'s delegate call with a { text, name } input starts a leaf whose brief names the file`,
     !!brief && brief.all.includes(`${INPUTS_LINE}${leg.file}`),
     brief
-      ? "brief without the file"
+      ? `${brief.all.includes(`${INPUTS_LINE}${leg.file}`) ? "names" : "does not name"} ${leg.file}`
       : `no brief (delegate called: ${leg.called})`
   );
   const read = await until(
@@ -664,6 +759,26 @@ const spec: Spec = {
         dir: served,
       })
     ).id;
+    state.b.preview = previewId;
+    // What B's workspace reaches, read as the hub reads it for B's machine
+    // (this one): the parent, outside every workspace, is handed the address.
+    const { url: passUrl } = await fleet.api<{ url: string }>(
+      `/api/instances/${parent}/artifacts/${previewId}/browse`,
+      {}
+    );
+    // The machine's own addresses, as its agent told the hub (`public-address`).
+    const capabilities = fleet.query<{ caps: string | null }>(
+      "SELECT machine_capabilities AS caps FROM agents WHERE machine_id = ?",
+      MACHINE
+    )[0]?.caps;
+    const own =
+      (
+        JSON.parse(capabilities ?? "null") as {
+          items: { addresses?: string[]; id: string }[];
+        } | null
+      )?.items.find((item) => item.id === "public-address")?.addresses ?? [];
+    const unreached =
+      process.platform === "linux" ? await workspaceReach(passUrl, own) : null;
     await pinned(kit, fleet, parent, pageId);
     await sendPicture(fleet, parent);
 
@@ -706,28 +821,14 @@ const spec: Spec = {
       !!brief &&
         brief.all.includes(INPUTS_LINE) &&
         names.every((name) => brief.all.includes(name)),
-      names.filter((name) => !brief?.all.includes(name)).join(", ") ||
-        "no brief"
+      brief
+        ? `missing: ${names.filter((name) => !brief.all.includes(name)).join(", ") || "none"}`
+        : "no brief"
     );
     await landed(kit, b, a.workItemId);
 
-    // 5. The preview's pass opens from inside B's workspace.
-    const opened = await until(
-      "B's curl of the preview's pass",
-      () =>
-        fleet.seen.find(
-          (one) =>
-            one.afterTool &&
-            one.all.includes(TAG_B) &&
-            one.body.includes(PREVIEW_TOKEN)
-        ),
-      Boolean,
-      120_000
-    ).catch(() => undefined);
-    check(
-      "5: the preview's pass, opened from inside B's workspace, serves the folder's page",
-      opened !== undefined
-    );
+    // 5. The preview as B's workspace reaches it.
+    await previewReach(kit, fleet, b, unreached);
 
     // 6. The parent's handoff tool takes a { text, name } input.
     const response = await fetch(

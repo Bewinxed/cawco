@@ -426,13 +426,19 @@ const capturesRefused = (n: number): string =>
 const NOT_SERVED =
   'A preview of a port in a workspace names what serves it: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }. CawCo runs it in the workspace and keeps it up for as long as the preview and the workspace last; a server started in your own shell ends with it.';
 
+/** The session a handed file is written for, and the machine of the workspace it is written into. */
+export interface HandedReceiver {
+  machineId: string;
+  session: InstanceRow;
+}
+
 /**
  * One file of an artifact handed to another session (hub handed-inputs.ts):
  * its bytes, or, for a preview's pass, the bytes made for the session it is
- * handed to once that session stands.
+ * handed to once that session stands, in the workspace it reads them in.
  */
 export interface HandedArtifactFile {
-  bytes: Buffer | ((receiver: InstanceRow) => Buffer);
+  bytes: Buffer | ((receiver: HandedReceiver) => Promise<Buffer>);
   name: string;
 }
 
@@ -1355,6 +1361,13 @@ export interface ArtifactServiceDeps {
    * the ask did, one sentence.
    */
   verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
+  /**
+   * Why a browser in a workspace on machine `machineId` cannot open `url`,
+   * or null when it can (server.ts, core boundary-reach.ts
+   * `workspaceReach`): a Linux workspace's boundary reaches public hosts
+   * only; a Mac's dials as its host does.
+   */
+  workspaceReach: (url: string, machineId: string) => Promise<string | null>;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
@@ -5304,7 +5317,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      *   and notes as JSON;
      * - a preview: its source, picks and stage as JSON with a pass into it,
      *   minted when it is written for the session it is handed to, whose
-     *   browser alone it lets in;
+     *   browser alone it lets in; when that session's workspace cannot reach
+     *   the preview's origin ({@link ArtifactServiceDeps.workspaceReach}),
+     *   no pass, and why, in its place;
      * - a canvas: its scene (`.excalidraw`) and outline;
      * - a component canvas: its stories, stage, picks and what its stage
      *   drew, read as `artifact_read` with `render` and `png` reads it, its
@@ -5361,15 +5376,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         };
         files.push({
           name: `${base}.json`,
-          bytes: (receiver) => {
-            const pass = deps.browse(receiver, row);
-            return jsonFile({
-              ...stands,
-              pass: {
-                ...pass,
-                how: `Load url once in your own browser tool: it lets that browser into ${row.name}${pass.expiresAt ? ` until expiresAt or your session ends; artifact_browse { id: "${row.id}" } gives you a fresh one` : ""}.`,
-              },
-            });
+          bytes: async ({ session, machineId }) => {
+            const pass = deps.browse(session, row);
+            const unreached = await deps.workspaceReach(pass.url, machineId);
+            return jsonFile(
+              unreached
+                ? {
+                    ...stands,
+                    pass: null,
+                    reach: `${unreached}. What you have of it is this file and its latest picture, ${base}.png, when it has one; for more, ask your parent with handoff.`,
+                  }
+                : {
+                    ...stands,
+                    pass: {
+                      ...pass,
+                      how: `Load url once in your own browser tool: it lets that browser into ${row.name}${pass.expiresAt ? ` until expiresAt or your session ends; artifact_browse { id: "${row.id}" } gives you a fresh one` : ""}.`,
+                    },
+                  }
+            );
           },
         });
       } else {
@@ -5522,9 +5546,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * artifact `id`, for any artifact `artifact_read` reads ({@link
      * readTarget}): its maker opens what it changed, the next version held
      * for its parent. A browser artifact is the browser itself, and opens
-     * nothing.
+     * nothing. A session in a workspace whose boundary cannot reach the
+     * address ({@link ArtifactServiceDeps.workspaceReach}) is refused, in
+     * words saying why, rather than handed an address it cannot open.
      */
-    browse: (instanceId: string, id: string): Browsed => {
+    browse: async (instanceId: string, id: string): Promise<Browsed> => {
       const instance = sessionOf(instanceId);
       const row = readTarget(instance, id);
       if (row.kind === "browser") {
@@ -5533,7 +5559,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `${row.name} is a browser: it is the browser your browser tool drives, so open its pages there.`
         );
       }
-      return deps.browse(instance, row);
+      const pass = deps.browse(instance, row);
+      const bound = deps.ownWorkspace(instance);
+      const [workspace] = bound ? deps.workspaces(bound) : [];
+      const unreached = workspace
+        ? await deps.workspaceReach(pass.url, workspace.machineId)
+        : null;
+      if (unreached) {
+        throw new ArtifactRefusal(
+          409,
+          `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`
+        );
+      }
+      return pass;
     },
 
     /**
