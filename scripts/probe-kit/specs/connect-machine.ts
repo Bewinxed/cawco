@@ -21,7 +21,15 @@
  * - each neighbouring step's height ≥ 36px apart;
  * - no layout shift while Running (each step row's box constant across ticks);
  * - a reload with the window open restores the same step and details, the
- *   password empty and saying why;
+ *   password empty and saying why, typed at once before it too;
+ * - a press on Port focuses its field in the press's own task: focus moved
+ *   on straight after stays there, and what is typed lands where it went;
+ * - typed here while another device edits the port, the hub keeps both
+ *   edits and the window shows both (the draft travels as edits);
+ * - Copy command copies the line and says so on Reach through its hold,
+ *   then Running, never Route meanwhile, and the draft it used up is not
+ *   made again (the hub's addresses carry its loopback as a network's: a
+ *   workspace's machine lists none);
  * - Esc parks it, its row's step text changes on the engine, a press on the
  *   row reopens the window at the same step;
  * - the row stands in the band from the start, before any dismiss;
@@ -1326,39 +1334,85 @@ async function walk(
   await fleet.agentUp();
 
   /**
-   * Copy command starts a command install, where the hub lists an address
-   * for the line; a workspace's machine has loopback alone, so there the
-   * install starts at the hub's own loopback through the same route, and the
-   * run says so.
+   * Copy command, pressed as the person presses it. A workspace's machine
+   * lists no address but loopback, and Copy command waits for one, so the
+   * hub's answer to the window's read of its addresses carries one more:
+   * its own loopback, as a network's. The press, the copy, the hold and the
+   * start are the real ones. Answers the install, the steps the window
+   * stood on from the press to Running, whether "Copied · Listening for it"
+   * showed, what the clipboard holds, and the hub's draft after.
    */
-  const copyCommand = async (): Promise<string> => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route(isJoinRead, async (route) => {
+    const response = await route.fetch();
+    const joinInfo = (await response.json()) as {
+      addresses: { label: string; url: string }[];
+    };
+    await route.fulfill({
+      response,
+      json: {
+        ...joinInfo,
+        addresses: [
+          ...joinInfo.addresses,
+          { label: "probe0", url: fleet.base },
+        ],
+      },
+    });
+  });
+  const copyCommand = async () => {
     await setDraft(fleet, { route: "command" });
     await openWindow(page, dashboard, "new");
     await settled(page, "reach", "It reaches the hub at");
-    const copy = page
-      .locator(WINDOW)
-      .getByRole("button", { name: "Copy command" });
-    if (await copy.isEnabled()) {
-      await copy.click();
-      await settled(page, "running", "Waiting for the command to run on it");
-      return new URL(page.url()).searchParams.get("install") ?? "";
-    }
-    kit.note(
-      `${leg}: the hub lists no address here (loopback alone), so Copy command is disabled and says each kind is missing; the command install starts at the hub's loopback through POST /api/installs`
-    );
-    const started = await fleet.api<{ install: { id: string } }>(
-      "/api/installs",
-      {
-        route: "command",
-        address: fleet.base,
+    await page.evaluate((win) => {
+      const node = document.querySelector<HTMLElement>(win);
+      const steps = [node?.dataset.step ?? ""];
+      if (node) {
+        new MutationObserver(() => {
+          const now = node.dataset.step ?? "";
+          if (steps.at(-1) !== now) {
+            steps.push(now);
+          }
+        }).observe(node, { attributes: true, attributeFilter: ["data-step"] });
       }
-    );
-    await openWindow(page, dashboard, started.install.id);
-    return started.install.id;
+      (globalThis as { __steps?: string[] }).__steps = steps;
+    }, WINDOW);
+    await page
+      .locator(WINDOW)
+      .getByRole("button", { name: "Copy command" })
+      .click();
+    const copied = await page
+      .locator(WINDOW)
+      .getByText("Copied · Listening for it")
+      .waitFor({ timeout: 1000 })
+      .then(() => true)
+      .catch(() => false);
+    await settled(page, "running", "Waiting for the command to run on it");
+    return {
+      id: new URL(page.url()).searchParams.get("install") ?? "",
+      copied,
+      steps: await page.evaluate(
+        () => (globalThis as { __steps?: string[] }).__steps ?? []
+      ),
+      clipboard: await page.evaluate(() => navigator.clipboard.readText()),
+      draft: (await installs(fleet)).draft,
+    };
   };
 
-  // C by a command: the hub's fetch and join tick its three steps.
-  const commandId = await copyCommand();
+  // C by a command: Copy command holds its words on Reach, then Running;
+  // the hub's fetch and join tick its three steps.
+  const copy = await copyCommand();
+  const commandId = copy.id;
+  const commandLine =
+    (await installs(fleet)).installs.find((one) => one.id === commandId)
+      ?.command ?? "";
+  kit.check(
+    `${leg}: Copy command copies the line and says so on Reach through its hold, then Running; the window never stands on Route meanwhile, and the draft it used is not made again`,
+    copy.copied &&
+      copy.steps.join(",") === "reach,running" &&
+      copy.clipboard === commandLine &&
+      copy.draft === null,
+    JSON.stringify({ ...copy, commandLine })
+  );
   const listening = await settled(
     page,
     "running",
@@ -1405,7 +1459,7 @@ async function walk(
 
   // (2) A command install whose installer fails a check: it fails at its
   // own route's step, the one its window and row name, never an SSH one.
-  const checkId = await copyCommand();
+  const checkId = (await copyCommand()).id;
   await settled(page, "running", "Waiting for the command to run on it");
   const checkCode =
     CODE_IN.exec(
@@ -1469,6 +1523,7 @@ async function walk(
     .locator(WINDOW)
     .getByRole("button", { name: "Remove install" })
     .click();
+  await page.unroute(isJoinRead);
 
   kit.check(
     `${leg}: nothing inside the window scrolls at any step`,
