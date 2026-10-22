@@ -4832,7 +4832,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const parked = parkedNow(acknowledged);
       const needs: ArtifactNeedsRead["needs"] = [];
       const notices: ArtifactNeedsRead["notices"] = [];
-      for (const row of db.asking()) {
+      const rows = db.asking();
+      // An artifact gone takes its facts with it.
+      const standing = new Set(rows.map((row) => row.id));
+      for (const id of factsKept.keys()) {
+        if (!standing.has(id)) {
+          factsKept.delete(id);
+        }
+      }
+      for (const row of rows) {
         const kept = factsOf(row);
         const facts = { ...kept, asked: askOf(row, kept) };
         const sessions = sessionsOf(row, kept);

@@ -25,6 +25,7 @@
     IconWindow,
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
+  import { openArtifactIn } from "../reference-open.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import NoticeRow from "./NoticeRow.svelte";
@@ -53,6 +54,14 @@
   const words = $derived(
     notice.parts.map((part) => noticePartWords(part, notice.name)).join(" · ")
   );
+  /** Its words chosen: the panel closes, and it opens in its session's panel at its stop. */
+  function opened(): void {
+    onchoose();
+    if (notice.instanceId) {
+      // biome-ignore lint/complexity/noVoid: its refusal is its own toast
+      void openArtifactIn(notice.instanceId, notice.artifactId, notice.stop);
+    }
+  }
   const row = $derived(
     notice.instanceId
       ? cawco.instanceIndex.byId.get(notice.instanceId)
@@ -82,8 +91,8 @@
       data-slot="name"
       data-artifact-notice={notice.artifactId}
       class="select-none pe-(--x-room) min-w-0 rounded-xs type-label wrap-anywhere text-ink-row no-underline focus-inset hover:text-ink-strong"
-      href={notice.href}
-      onclick={onchoose}>{words}</a
+      href={notice.href.split("?")[0]}
+      onclick={opened}>{words}</a
     >
   {:else}
     <span

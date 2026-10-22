@@ -1355,9 +1355,10 @@ export const createPush = ({
     row: InstanceRow,
     left: ArtifactNeed,
     endedAt: Date
-  ): void => {
+  ): boolean => {
+    // Answered or looked at within the grace: the turn is an ordinary one.
     if (!artifactWaiting(left.artifactId, left.raisedAt)) {
-      return;
+      return false;
     }
     const project = projectName(row.projectId ?? null);
     arrive(
@@ -1388,6 +1389,7 @@ export const createPush = ({
       },
       false
     );
+    return true;
   };
 
   const unseenSince = (instanceId: string, at: Date): boolean => {
@@ -1662,8 +1664,7 @@ export const createPush = ({
         ) {
           return;
         }
-        if (left) {
-          artifactLeft(row, left, endedAt);
+        if (left && artifactLeft(row, left, endedAt)) {
           return;
         }
         if (!unseenSince(instanceId, endedAt)) {

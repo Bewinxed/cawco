@@ -138,6 +138,7 @@
   import OsMark from "../OsMark.svelte";
   import { allowHere, person, skipHere } from "../person.svelte";
   import { sendArtifact } from "../preview/artifact-doc";
+  import { openArtifactIn } from "../reference-open.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import { capLine } from "../usage";
@@ -174,8 +175,10 @@
       return;
     }
     if (item.kind !== "ask") {
-      // An artifact's opens its session with it in the panel at its first pending stop.
-      return item.href;
+      // An artifact's is its session's (or Caw's thread's) address; the
+      // press opens the artifact there itself (`chosen`), so a press on the
+      // address already in front opens it too.
+      return item.kind === "artifact" ? item.href.split("?")[0] : item.href;
     }
     // An ask opens where it was made (`askView`).
     return conversationHref(askView(item), cawco.instanceIndex);
@@ -418,6 +421,15 @@
       sendRefused = failureWords(error);
     } finally {
       sendingArtifact = false;
+    }
+  }
+
+  /** The row was chosen: it opens, the panel closes; an artifact opens in its panel at its first pending stop. */
+  function chosen(): void {
+    onchoose();
+    if (item.kind === "artifact") {
+      // biome-ignore lint/complexity/noVoid: its refusal is its own toast
+      void openArtifactIn(item.instanceId, item.artifactId, item.stop);
     }
   }
 
@@ -716,7 +728,7 @@
         aria-label="Open {item.title}"
         class="press-tint focus-inset absolute inset-0 rounded-inherit hover:bg-surface-hover"
         {href}
-        onclick={onchoose}
+        onclick={chosen}
         {onkeydown}><span class="sr-only">Open {item.title}</span></a
       >
     {/if}
