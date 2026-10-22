@@ -3,7 +3,11 @@
  * (`liveFeed`, NeedsCaw's) or a fixture (/motion/caw-notices). The panel
  * reads nothing else, so a preview drives the real panel with no hub.
  */
-import type { DamagedHubRecord, RebalanceNotice } from "@cawco/core";
+import type {
+  ArtifactNeedNotice,
+  DamagedHubRecord,
+  RebalanceNotice,
+} from "@cawco/core";
 import type { MovedLogin } from "../accounts/model.svelte";
 import { notices } from "../notices.svelte";
 import type { Notice } from "../updates/model";
@@ -15,6 +19,8 @@ export interface CawFeed {
   /** Notice ids acknowledged: gone here at once, and everywhere once the hub has them. */
   acknowledge: (ids: string[]) => void;
   actOnUpdate: (notice: Notice, action: NonNullable<Notice["action"]>) => void;
+  /** Each artifact's notice nobody has acknowledged (core artifact-needs.ts). */
+  readonly artifactNotices: ArtifactNeedNotice[];
   /** Live and read: the empty block may draw his face. */
   readonly connected: boolean;
   dismissUpdate: (notice: Notice) => void;
@@ -48,6 +54,9 @@ export const liveFeed: CawFeed = {
   },
   get rebalanced() {
     return cawNotices.rebalanced;
+  },
+  get artifactNotices() {
+    return cawNotices.artifacts;
   },
   get noticesDamaged() {
     return notices.damaged;

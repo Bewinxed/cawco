@@ -59,3 +59,28 @@ export async function openReference(
     return `${named.name} was not opened: ${failureClause(error)}. The panel stays as it was.`;
   }
 }
+
+/**
+ * Artifact `id` in session `instanceId`'s panel, opened at `at`: what a
+ * Needs-you row's address asks (`?artifact=<id>&stop=…`, core
+ * `artifactStopHref`), wherever it is followed from. A refusal is said in a
+ * toast.
+ */
+export async function openArtifactIn(
+  instanceId: string,
+  id: string,
+  at: OpenAt
+): Promise<void> {
+  askOpen(id, at);
+  const panel = cawco.previews[instanceId];
+  if (panel?.state === "open" && panel.artifact.id === id) {
+    revealPreview(instanceId);
+    return;
+  }
+  try {
+    await showArtifact(instanceId, id);
+    revealPreview(instanceId);
+  } catch (error) {
+    toast.error(failureWords(error));
+  }
+}

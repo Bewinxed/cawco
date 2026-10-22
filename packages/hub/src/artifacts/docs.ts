@@ -146,6 +146,8 @@ export const createArtifactDocs = (deps: {
   db: ArtifactsDb;
   /** The hub's lifetime: each doc's idle timer runs on it. */
   lifetime: HubLifetimeShape;
+  /** Any update the doc took, from anyone: what waits on the person in it may have moved (Needs you). */
+  updated?: (id: string) => void;
 }): ArtifactDocs => {
   const loaded = new Map<string, Loaded>();
 
@@ -205,6 +207,7 @@ export const createArtifactDocs = (deps: {
     if (changed.keys.length > 0) {
       deps.changed?.(id);
     }
+    deps.updated?.(id);
   };
 
   const load = (id: string): Loaded => {

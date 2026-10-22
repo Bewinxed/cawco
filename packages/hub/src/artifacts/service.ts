@@ -22,6 +22,8 @@ import {
   type ArtifactDoes,
   type ArtifactHit,
   type ArtifactKind,
+  type ArtifactNeedsRead,
+  type ArtifactPending,
   type ArtifactPromotion,
   type ArtifactSummary,
   type ArtifactThumbnail,
@@ -40,6 +42,7 @@ import {
   type InstanceRow,
   machineLabel,
   noteText,
+  type PlanStep,
   type PreviewAddress,
   type PreviewSource,
   pinLink,
@@ -72,6 +75,7 @@ import {
   pinUnsent,
   type SendBody,
   seeChanges,
+  seenOf,
   sendNoteSection,
   type ThreadEntry,
   unheardEntries,
@@ -162,6 +166,15 @@ import {
   weightSaid,
 } from "./component";
 import type { ArtifactDocs } from "./docs";
+import {
+  type ArtifactAsked,
+  type ArtifactFacts,
+  type ArtifactSessions,
+  movedOn,
+  needOf,
+  noticeOf,
+  pendingOf,
+} from "./needs";
 import {
   bytesHash,
   cardChanges,
@@ -576,7 +589,7 @@ export interface ArtifactStatus {
   /** The person's changes (picks, notes, drawn elements) since the session last read it. */
   unread: number;
   updatedAt: string;
-  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
+  /** Whose move it is: the person's (what Needs you lists it for: never opened, picks not made, marks not sent, an answer not looked at, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
   waitingOn: ("person" | "session")[];
 }
 
@@ -673,6 +686,9 @@ const HELD_NEXT =
 
 /** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
 const HANDED = "handed";
+
+/** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
+const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/;
 
 /** A view's word that it has (or could not load) the artifact at `revision` (`POST …/artifacts/:artifact/shown`). */
 export interface ShownAck {
@@ -1104,12 +1120,16 @@ export type PageFrom =
   | { folder: true };
 
 export interface ArtifactServiceDeps {
+  /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
+  acknowledged: () => readonly string[];
   /**
    * Where session `instance`'s own browser opens artifact `row`, which it
    * may read (`artifact_browse`, server.ts `browseAt`): its address, behind
    * a one-time entry and a pass of the session's own in host mode.
    */
   browse: (instance: InstanceRow, row: ArtifactRow) => Browsed;
+  /** Nothing on the artifact waits on the person: no step of the session waits on it whole (plans.ts `clearArtifactWait`). */
+  clearArtifactWait: (instanceId: string, artifactId: string) => void;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => Promise<void>;
   db: ArtifactsDb;
@@ -1144,6 +1164,12 @@ export interface ArtifactServiceDeps {
   >;
   /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
+  /**
+   * Whether a session's asks are over for good (Needs you's rule 4): it
+   * finished, its workspace was archived or moved on, its conversation is
+   * gone, or nothing can give it a turn again. A machine away is not.
+   */
+  finished: (instance: InstanceRow) => boolean;
   /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
   folderWeight: (
     machineId: string,
@@ -1199,8 +1225,15 @@ export interface ArtifactServiceDeps {
    * there, made the first time (browsers.ts `listed`).
    */
   listing: (instance: InstanceRow) => void;
+  /** The person looked at artifact `id` (a view's word that it had it on screen): its push is over. */
+  looked: (id: string) => void;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
+  /**
+   * Something an artifact's Needs-you item is read from moved (its row, its
+   * ask, the person's look): the lane is read again and every screen told.
+   */
+  needsMoved: () => void;
   /**
    * Publishes `artifact` to session `panel`'s panel (its own session's
    * unless named: another session of its delegation tree shows it in its
@@ -1332,6 +1365,8 @@ export interface ArtifactServiceDeps {
    * Throws an {@link ArtifactRefusal} saying why it can't.
    */
   stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
+  /** The session's plan steps: what a wait on its artifacts stands on (plans.ts `steps`). */
+  steps: (instanceId: string) => PlanStep[];
   /**
    * Whether a session can no longer act, ever: no one, its parent and the
    * person included, can give it a turn again. Its item ended and its
@@ -1368,6 +1403,8 @@ export interface ArtifactServiceDeps {
    * only; a Mac's dials as its host does.
    */
   workspaceReach: (url: string, machineId: string) => Promise<string | null>;
+  /** The session's current step waits on the artifact; the step that does, or null (plans.ts `waitOn`). */
+  waitOn: (instanceId: string, artifactId: string) => string | null;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
@@ -1485,23 +1522,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return !!sentAt && (!revisedAt || sentAt > revisedAt);
   };
 
-  const summaryOf = (row: ArtifactRow): ArtifactSummary => ({
-    id: row.id,
-    kind: row.kind,
-    name: row.name,
-    does: row.does,
-    ask: row.ask,
-    sent: sentOf(row),
-    waiting: waitingOnPerson(row),
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-    shownAt: row.shownAt?.toISOString() ?? null,
-    ...(isProjectPage(row) ? { project: row.projectId as string } : {}),
-    promoted:
-      (docs.doc(row.id).getMap("meta").get("promoted") as
-        ArtifactPromotion | undefined) ?? null,
-    thumbnail: thumbnailOf(row),
-  });
+  const summaryOf = (row: ArtifactRow): ArtifactSummary => {
+    const pending = pendingFor(row);
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      does: row.does,
+      ask: row.ask,
+      sent: sentOf(row),
+      waiting: pending !== null,
+      pending,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      shownAt: row.shownAt?.toISOString() ?? null,
+      ...(isProjectPage(row) ? { project: row.projectId as string } : {}),
+      promoted:
+        (docs.doc(row.id).getMap("meta").get("promoted") as
+          ArtifactPromotion | undefined) ?? null,
+      thumbnail: thumbnailOf(row),
+    };
+  };
 
   /**
    * The words on an artifact's page, for Files' search: a page's text (its
@@ -4383,12 +4424,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const handedBy = (row: ArtifactRow): { madeBy?: string } =>
     row.madeBy && row.madeBy !== row.instanceId ? { madeBy: row.madeBy } : {};
 
-  /** Whether the person has something to do on it now, as `artifact_list` reads it for its owner. */
-  const waitingOnPerson = (row: ArtifactRow): boolean => {
-    const owner = holder(row);
-    return !!owner && statusOf(owner, row).waitingOn.includes("person");
-  };
-
   /**
    * An answer about a held next version, said as its artifact's: that one's
    * id, and the next version's as `held`; with the artifact's link
@@ -4519,6 +4554,205 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
+  /* ── Needs you (needs.ts) ───────────────────────────────────────────── */
+
+  /** Each artifact's facts as last read, with the row's marks they were read at. */
+  const factsKept = new Map<string, { facts: ArtifactFacts; mark: string }>();
+  /** What a change of the doc (its seq) or of the row moves: past it, the facts are read again. */
+  const factsMark = (row: ArtifactRow): string =>
+    `${row.seq}:${row.revision}:${row.openedRevision}:${row.readSeq}:${row.deliveredSeq}:${row.updatedAt.getTime()}`;
+
+  /** When the agent last answered on `pin`: its newest entry, or its resolve. */
+  const answeredOn = (pin: Pin): string => {
+    const entry = pin.thread.findLast((one) => one.by === "agent")?.at ?? "";
+    const resolved =
+      pin.resolvedBy === "agent" && pin.resolvedAt ? pin.resolvedAt : "";
+    return entry > resolved ? entry : resolved;
+  };
+
+  /** A decision page's picks, made of asked, and its first card not picked; none for any other artifact. */
+  const picksFacts = (
+    row: ArtifactRow,
+    state: Record<string, ChoiceEntry>
+  ): Pick<ArtifactFacts, "firstUnpicked" | "picks"> => {
+    const asked = choicesAsked(row);
+    // A program's pick counts while its card still offers every option of it.
+    const unpicked = asked.filter(
+      ({ card, id }) => !(card ? pickOf(card, state[id]).picked : id in state)
+    );
+    return {
+      firstUnpicked: unpicked[0]?.id ?? null,
+      picks:
+        asked.length > 0
+          ? { asked: asked.length, made: asked.length - unpicked.length }
+          : null,
+    };
+  };
+
+  /** The latest revision's changes the person hasn't looked at. */
+  const changesFacts = (doc: Doc): ArtifactFacts["changes"] => {
+    const changes = doc.getMap("meta").get("changes") as
+      ArtifactChanges | undefined;
+    if (!changes) {
+      return null;
+    }
+    const seen = new Set(seenOf(doc).get(String(changes.revision)) ?? []);
+    return {
+      revision: changes.revision,
+      count: changes.items.filter((item) => !seen.has(item.anchor)).length,
+    };
+  };
+
+  /** What artifact `row`'s doc says, read once per change of it or of its row. */
+  const factsOf = (row: ArtifactRow): ArtifactFacts => {
+    // A maker's change held for its parent to open: the parent's move.
+    const heldNext = db.heldOf(row.id) !== undefined;
+    const mark = factsMark(row);
+    const kept = factsKept.get(row.id);
+    if (kept?.mark === mark) {
+      return heldNext ? { ...kept.facts, sessionOwes: true } : kept.facts;
+    }
+    const doc = docs.doc(row.id);
+    const meta = doc.getMap("meta");
+    const state = stateOf(doc);
+    const { sentAt } = metaOf(doc);
+    const pins = Object.values(
+      doc.getMap("pins").toJSON() as Record<string, Pin>
+    ).sort((a, b) => a.number - b.number);
+    const { owed, loose } = marksOwed(doc);
+    const unread = db.changes(row.id, { after: row.readSeq, by: "person" });
+    const picksAwaiting = unread.some(
+      ({ key, seq }) => key in state && seq <= row.deliveredSeq
+    );
+    const answered = pins.filter((pin) => !pin.resolvedAt && newAnswer(pin));
+    const facts: ArtifactFacts = {
+      ...picksFacts(row, state),
+      answeredAt: answered
+        .map(answeredOn)
+        .reduce<string | null>((a, b) => (a !== null && a > b ? a : b), null),
+      answers: answered.map((pin) => pin.number),
+      asked: (meta.get("asked") as ArtifactAsked | undefined) ?? null,
+      changes: changesFacts(doc),
+      closed: pins
+        .filter((pin) => pin.resolvedAt && newAnswer(pin))
+        .map((pin) => ({ pin: pin.number, at: answeredOn(pin) })),
+      draft: meta.get("draft") === true,
+      firstUnsentPin: owed[0]?.number ?? null,
+      lookedAt: (meta.get("lookedAt") as string | undefined) ?? null,
+      pins: pins.length,
+      revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
+      sessionOwes:
+        meta.get(HANDED) === true ||
+        picksAwaiting ||
+        (row.kind === "canvas" && unread.length > 0),
+      unsent:
+        Object.entries(state).filter(
+          ([key, entry]) => key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
+        ).length +
+        owed.length +
+        loose.length,
+    };
+    factsKept.set(row.id, { facts, mark });
+    return heldNext ? { ...facts, sessionOwes: true } : facts;
+  };
+
+  /**
+   * Its ask as its doc keeps it; one made before asks were kept stands as
+   * its maker's at its last publish, so its writer's turns retire it too.
+   */
+  const askOf = (
+    row: ArtifactRow,
+    facts: ArtifactFacts
+  ): ArtifactAsked | null => {
+    if (facts.asked) {
+      return facts.asked;
+    }
+    const by = row.madeBy ?? row.instanceId;
+    return by
+      ? { by, at: facts.revisedAt ?? row.updatedAt.toISOString() }
+      : null;
+  };
+
+  /** What the hub holds of `row`'s sessions, as its rules read it (needs.ts). */
+  const sessionsOf = (
+    row: ArtifactRow,
+    facts: ArtifactFacts
+  ): ArtifactSessions => {
+    const owner = holder(row);
+    const writer = askOf(row, facts)?.by;
+    return {
+      ended: !owner || deps.finished(owner),
+      harness: owner?.harness ?? null,
+      machineId: owner?.machineId ?? null,
+      steps: writer ? deps.steps(writer) : [],
+    };
+  };
+
+  /** What `row` waits on the person for now; null when nothing. */
+  const pendingFor = (row: ArtifactRow): ArtifactPending | null => {
+    const facts = factsOf(row);
+    return pendingOf(
+      row,
+      { ...facts, asked: askOf(row, facts) },
+      sessionsOf(row, facts)
+    );
+  };
+
+  /**
+   * `writer`'s create, revision or show of artifact `id`: its ask stands
+   * again from now, and when it asks a pick or a judgement the writer's
+   * current step waits on it (plans.ts `waitOn`; needs.ts rule 2).
+   */
+  const askedNow = (writer: InstanceRow, id: string): void => {
+    const row = db.get(id);
+    // The person's own composer canvas asks nothing until it is sent.
+    if (
+      !row ||
+      row.heldFor !== null ||
+      docs.doc(row.id).getMap("meta").get("draft") === true
+    ) {
+      return;
+    }
+    const step =
+      row.does === "pick" || row.does === "judge"
+        ? deps.waitOn(writer.id, row.id)
+        : null;
+    const asked: ArtifactAsked = {
+      by: writer.id,
+      at: new Date().toISOString(),
+      ...(step ? { step } : {}),
+    };
+    docs.transact(row.id, "hub", (doc) =>
+      doc.getMap("meta").set("asked", asked)
+    );
+    deps.needsMoved();
+  };
+
+  /** The person's Send of `row`: answered whole (needs.ts rule 1), no step of its writer waits on it any more. */
+  const answeredBy = (row: ArtifactRow): void => {
+    const writer = askOf(row, factsOf(row))?.by;
+    if (writer && !pendingFor(row)) {
+      deps.clearArtifactWait(writer, row.id);
+    }
+    deps.needsMoved();
+  };
+
+  /**
+   * The Not now's in the person's acknowledgements, by artifact: the
+   * latest `raisedAt` each was put away at. Raised again later, it is back.
+   */
+  const parkedNow = (acknowledged: readonly string[]): Map<string, number> => {
+    const parked = new Map<string, number>();
+    for (const id of acknowledged) {
+      const match = NOT_NOW.exec(id);
+      if (match) {
+        const [, artifact = "", at = "0"] = match;
+        parked.set(artifact, Math.max(parked.get(artifact) ?? 0, Number(at)));
+      }
+    }
+    return parked;
+  };
+
   /** One artifact as `artifact_list` answers it, read for `caller`. */
   const statusOf = (caller: InstanceRow, row: ArtifactRow): ArtifactStatus => {
     const doc = docs.doc(row.id);
@@ -4554,11 +4788,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       doc.getMap("meta").get(HANDED) === true ||
       db.heldOf(row.id) !== undefined;
     const waitingOn: ArtifactStatus["waitingOn"] = [];
-    if (
-      !draft &&
-      ((shown && !opened) ||
-        (picks && (picks.made < picks.asked || picks.unsent > 0)))
-    ) {
+    // The person's move: what Needs you lists it for (needs.ts), its asks retired by their rules.
+    if (pendingFor(row)) {
       waitingOn.push("person");
     }
     if (
@@ -4592,6 +4823,113 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   return {
+    /**
+     * Needs you's artifacts (needs.ts): each waiting on the person, its Not
+     * now aside until it is raised again, oldest first; and each artifact's
+     * notice, its parts the person has not acknowledged, newest first.
+     */
+    needs: (): ArtifactNeedsRead => {
+      const acknowledged = deps.acknowledged();
+      const seen = new Set(acknowledged);
+      const parked = parkedNow(acknowledged);
+      const needs: ArtifactNeedsRead["needs"] = [];
+      const notices: ArtifactNeedsRead["notices"] = [];
+      for (const row of db.asking()) {
+        const kept = factsOf(row);
+        const facts = { ...kept, asked: askOf(row, kept) };
+        const sessions = sessionsOf(row, kept);
+        const need = needOf(row, facts, sessions);
+        if (need && (parked.get(row.id) ?? -1) < need.raisedAt) {
+          needs.push(need);
+        }
+        const notice = noticeOf(row, facts, sessions);
+        const parts = notice?.parts.filter((part) => !seen.has(part.id));
+        if (notice && parts && parts.length > 0) {
+          notices.push({ ...notice, parts });
+        }
+      }
+      return {
+        needs: needs.sort((a, b) => a.raisedAt - b.raisedAt),
+        notices: notices.sort((a, b) => b.at - a.at),
+      };
+    },
+
+    /** Whether the person had artifact `id` on screen at or after `at` (ms epoch). */
+    lookedSince: (id: string, at: number): boolean => {
+      const row = db.get(id);
+      const looked = row ? factsOf(row).lookedAt : null;
+      return looked !== null && Date.parse(looked) >= at;
+    },
+
+    /**
+     * Whether session `instanceId` asked artifact `id` in the turn that
+     * followed the end at `before` (null: its first): its create, revision
+     * or show came after it.
+     */
+    askedIn: (id: string, instanceId: string, before: Date | null): boolean => {
+      const row = db.get(id);
+      const asked = row ? askOf(row, factsOf(row)) : null;
+      return (
+        asked?.by === instanceId &&
+        (before === null || asked.at > before.toISOString())
+      );
+    },
+
+    /** What artifact `id` waits on the person for now; null when nothing, or no artifact. */
+    pending: (id: string): ArtifactPending | null => {
+      const row = db.get(id);
+      return row ? pendingFor(row) : null;
+    },
+
+    /**
+     * Session `instanceId`'s turn ended at `endedAt`, the one before it at
+     * `before` (server.ts, at every result, on every harness). Each ask it
+     * made before this turn began, still asked, with no step of its plan
+     * waiting on it, is one it moved on from (needs.ts rule 2): this turn
+     * was its next.
+     */
+    turnEnded: (
+      instanceId: string,
+      before: Date | null,
+      endedAt: Date
+    ): void => {
+      if (!before) {
+        return;
+      }
+      const from = before.toISOString();
+      const steps = deps.steps(instanceId);
+      let moved = false;
+      for (const row of db.asking()) {
+        const facts = factsOf(row);
+        const asked = askOf(row, facts);
+        if (
+          !asked ||
+          asked.by !== instanceId ||
+          asked.movedAt ||
+          asked.at >= from ||
+          movedOn(row.id, asked, steps) ||
+          steps.some(
+            (step) =>
+              step.status !== "completed" && step.waitsOn?.artifactId === row.id
+          ) ||
+          !pendingFor(row)
+        ) {
+          continue;
+        }
+        const next: ArtifactAsked = {
+          ...asked,
+          movedAt: endedAt.toISOString(),
+        };
+        docs.transact(row.id, "hub", (doc) =>
+          doc.getMap("meta").set("asked", next)
+        );
+        moved = true;
+      }
+      if (moved) {
+        deps.needsMoved();
+      }
+    },
+
     list: (instanceId: string): ArtifactSummary[] => {
       const instance = sessionOf(instanceId);
       deps.listing(instance);
@@ -4786,7 +5124,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
       const ownWay = madeOwnWay(making, input);
       if (ownWay !== null) {
-        return linked(await ownWay);
+        const made = linked(await ownWay);
+        askedNow(instance, made.id);
+        return made;
       }
       let source: PreviewSource = { page: input.name };
       let machineId: string | null = null;
@@ -4832,6 +5172,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         throw new ArtifactRefusal(503, shown.why);
       }
       const said = heldId(row);
+      askedNow(instance, said.id);
       return {
         ...said,
         kind: row.kind,
@@ -4875,6 +5216,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? pageChanged(instance, row, change, ownersRead)
           : updateCanvas(row, change, ownersRead)
       );
+      askedNow(instance, found.id);
       return heldAnswer(answer);
     },
 
@@ -4926,10 +5268,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
         return programRevised(instance, row, existing, merged);
       };
-      if (peer) {
-        return heldAnswer(await revisedOn(db.heldOf(peer.id) ?? peer));
-      }
-      return heldAnswer(await changedBy(instance, found, revisedOn));
+      const revised = peer
+        ? await revisedOn(db.heldOf(peer.id) ?? peer)
+        : await changedBy(instance, found, revisedOn);
+      askedNow(instance, found.id);
+      return heldAnswer(revised);
     },
 
     /**
@@ -5043,6 +5386,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         "agent",
         row.instanceId === instance.id
       );
+      askedNow(instance, row.id);
       return componentWritten(row, change, written);
     },
 
@@ -5084,6 +5428,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (inPanel(next)) {
         await show(next, "agent");
       }
+      askedNow(instance, next.id);
       return { id: next.id, revision: next.revision, spec };
     },
 
@@ -5106,6 +5451,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       askNow(row.id, ask);
       // Every view of the panel hears the frame again with the new ask; nothing reloads.
       relistOf(row);
+      askedNow(sessionOf(instanceId), row.id);
       return { id: row.id, ask };
     },
 
@@ -5538,6 +5884,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }
+      // The agent's show of its own asks again (needs.ts rule 2: a new show of it).
+      if (by === "agent" && row.instanceId === instance.id) {
+        askedNow(instance, row.id);
+      }
       return openedOf(shown);
     },
 
@@ -5663,6 +6013,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const row = viewable(sessionOf(instanceId), id);
       if (ack.ok && row.instanceId === instanceId) {
         db.update(row.id, { openedRevision: row.revision });
+        // The person's look (needs.ts rule 6): their own mark in the doc, on every device.
+        docs.transact(row.id, "hub", (doc) =>
+          doc.getMap("meta").set("lookedAt", new Date().toISOString())
+        );
+        deps.looked(row.id);
+        deps.needsMoved();
       }
       const key = shownKey(row.id, ack.revision);
       const waiter = waiting.get(key);
@@ -5942,7 +6298,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           }
         }
       });
-      db.update(row.id, { deliveredSeq: (db.get(row.id) as ArtifactRow).seq });
+      answeredBy(
+        db.update(row.id, {
+          deliveredSeq: (db.get(row.id) as ArtifactRow).seq,
+        }) as ArtifactRow
+      );
       return { choices: state, ...metaOf(doc) };
     },
   };

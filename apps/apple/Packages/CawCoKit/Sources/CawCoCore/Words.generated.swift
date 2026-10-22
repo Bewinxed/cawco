@@ -1024,7 +1024,122 @@ public enum Words {
         }
 
         /// A row's dot, for a screen reader: the person has something to do on it.
-        public static let waitingOnYou = "Waiting on you"
+        public static let waitingOnYou = "Needs you"
+
+        /// Shown and never opened: the row's line.
+        public static let notOpened = "New · not opened"
+
+        /// The same on a Files card's meta line.
+        public static let notOpenedShort = "New"
+
+        /// A decision page's picks.
+        public static func picked(made: Int, asked: Int) -> String {
+            "\(made) of \(asked) picked"
+        }
+
+        /// The same on a Files card's meta line.
+        public static func pickedShort(made: Int, asked: Int) -> String {
+            "\(made) of \(asked)"
+        }
+
+        /// Written and not sent: picks, notes, pins and ink.
+        public static func unsent(count: Int) -> String {
+            "\(count) unsent"
+        }
+
+        /// An agent's answers on open pins the person hasn't looked at.
+        public static func newAnswers(count: Int) -> String {
+            count == 1 ? "1 new answer" : "\(count) new answers"
+        }
+
+        /// The one reason, an answer on one pin: where it is.
+        public static func newAnswerOn(pin: Int) -> String {
+            "1 new answer on pin \(pin)"
+        }
+
+        /// The kind on the row's meta line, where an ask says "Question".
+        public enum KindWord {
+            public static let page = "Page"
+
+            public static let canvas = "Canvas"
+
+            public static let component = "Components"
+
+            public static let preview = "Preview"
+
+            public static let browser = "Browser"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["page": page, "canvas": canvas, "component": component, "preview": preview, "browser": browser]
+        }
+
+        /// The row's ✕: it leaves Needs you until it is raised again, and stays in Files.
+        public static let notNow = "Not now"
+
+        public static func notNowNamed(ask: String) -> String {
+            "Not now: \(ask)"
+        }
+
+        /// The row's Send, while something is written and not sent.
+        public static func sendCount(count: Int) -> String {
+            "Send \(count)"
+        }
+
+        public static func sendNamed(count: Int, ask: String) -> String {
+            "Send \(count) on \(ask)"
+        }
+
+        public static let sending = "Sending…"
+
+        /// A Send no one took: why, in the hub's words, its own sentence.
+        public static func notSent(why: String) -> String {
+            "Not sent. \(why)"
+        }
+
+        public static func openNamed(ask: String) -> String {
+            "Open \(ask)"
+        }
+
+        /// A notice: a revision with nothing asked.
+        public static func changedSince(name: String, count: Int) -> String {
+            "\(name): \(count) changed since you looked"
+        }
+
+        /// A notice: resolved pins whose closing answer is unread.
+        public static func closedAnswers(name: String, count: Int, pin: Int) -> String {
+            count == 1 ? "\(name): pin \(pin) resolved with an answer" : "\(name): \(count) pins resolved with answers"
+        }
+
+        /// A notice: its session ended with the ask unanswered.
+        public static func ended(who: String, what: String) -> String {
+            "\(who) ended; \(what)"
+        }
+
+        /// Who ended, when the hub no longer holds the session.
+        public static let itsSession = "Its session"
+
+        public static func neverOpened(name: String) -> String {
+            "\(name) never opened"
+        }
+
+        public static func neverPicked(count: Int, name: String) -> String {
+            count == 1 ? "1 pick on \(name) never made" : "\(count) picks on \(name) never made"
+        }
+
+        public static func neverSent(count: Int, name: String) -> String {
+            "\(count) unsent on \(name) never sent"
+        }
+
+        public static func neverRead(count: Int, name: String) -> String {
+            count == 1 ? "1 answer on \(name) never read" : "\(count) answers on \(name) never read"
+        }
+
+        /// A notice's ✕, for a screen reader.
+        public static func dismissNotice(name: String) -> String {
+            "Dismiss the notice on \(name)"
+        }
+
+        public static let open = "Open"
 
         /// Its skeleton rows, for a screen reader, while the pins are read past the wait's grace.
         public static let readingComments = "Reading the comments"

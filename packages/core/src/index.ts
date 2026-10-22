@@ -9,6 +9,8 @@ export * from "./accounts";
 export * from "./actions";
 // "Continue in new session": the size rules the hub and the dashboard share.
 export * from "./archive";
+// What waits on the person among the artifacts: Needs you's artifact items.
+export * from "./artifact-needs";
 // Files and texts a turn carries, and the line naming each attached file.
 export * from "./attachments";
 // Pages are blocks: a project page's arrangement, kept by the hub.
@@ -1704,6 +1706,8 @@ export type FramePayload =
   | import("./frames").DelegateEventFrame
   /** Hub-originated: every open fleet-watch notice, whole, on each change. */
   | import("./fleet-watch").FleetWatchNoticesFrame
+  /** Hub-originated: every artifact waiting on the person, and their notices, whole, on each change. */
+  | import("./artifact-needs").ArtifactNeedsFrame
   /** Hub-originated: every law the hub caught broken, whole, on each break. */
   | import("./invariant").LawsBrokenFrame
   /** Hub-originated: the person's presence and the machines that count toward it. */
@@ -1824,6 +1828,12 @@ export interface ArtifactSummary {
   kind: ArtifactKind;
   name: string;
   /**
+   * What it waits on the person for, as Needs you derives it (core
+   * artifact-needs.ts), strongest first; null when nothing is asked of the
+   * person.
+   */
+  pending: import("./artifact-needs").ArtifactPending | null;
+  /**
    * The project whose preview origin serves it: a project's page (Projects
    * spec §5.8), loaded at `/__cawco/page/<id>/` there (`projectPagePlace`);
    * absent for anything its session's origin serves.
@@ -1838,7 +1848,7 @@ export interface ArtifactSummary {
   /** Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one. */
   thumbnail: ArtifactThumbnail | null;
   updatedAt: string;
-  /** The person has something to do on it now (`artifact_list`'s `waitingOn` person): its row wears a dot. */
+  /** What it waits on the person for ({@link pending}) stands: its card and its row wear the needs-you dot. */
   waiting: boolean;
 }
 

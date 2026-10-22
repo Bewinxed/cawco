@@ -102,6 +102,9 @@ export const askCollapseId = (requestId: string): string =>
 /** A session's finished turn: one per session, a newer turn replaces the older. */
 export const turnCollapseId = (instanceId: string): string =>
   collapseOf("turn", instanceId);
+/** An artifact a turn left waiting on the person: one per artifact, a revision's push replaces the older, and a look at it takes it down. */
+export const artifactCollapseId = (artifactId: string): string =>
+  collapseOf("artifact", artifactId);
 /** A session's message to the person (`send_to_user`): one per session, a newer replaces the older. */
 export const messageCollapseId = (instanceId: string): string =>
   collapseOf("message", instanceId);

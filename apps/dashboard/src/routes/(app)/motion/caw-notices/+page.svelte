@@ -317,6 +317,7 @@
       return moved;
     },
     rebalanced: [],
+    artifactNotices: [],
     noticesDamaged: null,
     resetNotices: () => Promise.resolve(),
     acknowledge(ids) {

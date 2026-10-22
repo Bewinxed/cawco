@@ -128,6 +128,8 @@ import {
   ARTIFACT_ORIGIN,
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
+  type ArtifactNeed,
+  type ArtifactNeedsRead,
   type ArtifactSessionFrame,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
@@ -453,6 +455,7 @@ import { createAdmission } from "./admission";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
+import { createArtifactLane } from "./artifacts/lane";
 import { artifactRoutes } from "./artifacts/routes";
 import {
   ArtifactRefusal,
@@ -676,6 +679,7 @@ import {
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
 import {
+  artifactCollapseId,
   askCollapseId,
   createNotifications,
   messageCollapseId,
@@ -3011,6 +3015,13 @@ export const createServer = (
   const notifications = createNotifications({ db, lifetime, registry });
   // Pushes to the iOS app when something newly needs you (push.ts).
   const push = createPush({
+    // Still in Needs you, and not looked at since it was raised.
+    artifactWaiting: (id, raisedAt) =>
+      artifactLane
+        .now()
+        .needs.some(
+          (need) => need.artifactId === id && need.raisedAt === raisedAt
+        ) && !artifacts.lookedSince(id, raisedAt),
     db,
     desk: (frame) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
@@ -12335,9 +12346,25 @@ export const createServer = (
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
   // listener; the person's Send tells the session to read their picks, and
   // carries their marks to it (artifacts/).
+  /**
+   * Needs you's artifacts (artifacts/lane.ts): every dashboard hears them as
+   * an `artifact.needs` frame, and one that leaves the lane takes its push
+   * down.
+   */
+  const artifactLane = createArtifactLane({
+    lifetime,
+    read: () => artifacts.needs(),
+    broadcast: (frame) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
+    left: (id) => {
+      notifications.clear([artifactCollapseId(id)], "settled");
+    },
+  });
   const artifactDocs = createArtifactDocs({
     db: db.artifacts,
     lifetime,
+    // What waits on the person in it may have moved: Needs you reads it again.
+    updated: () => artifactLane.moved(),
     // A pick or a note on a project's page moves its Decisions tab.
     changed: (id) => {
       const row = db.artifacts.get(id);
@@ -12525,6 +12552,33 @@ export const createServer = (
     instance: (id) => db.getInstancesByIds([id])[0],
     ended: (instance) =>
       !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
+    // Over for good (Needs you's rule 4), never a machine away or a sign-in to make.
+    finished: (instance) => {
+      if (instance.status === "discarded" || stranded(instance)) {
+        return true;
+      }
+      const refused = inputRefusal(instance.id, {
+        kind: "system",
+        name: ARTIFACT_ORIGIN,
+      });
+      const kind = refused?.refusal?.kind;
+      return (
+        !!refused?.gone ||
+        kind === "item-closed" ||
+        kind === "item-superseded" ||
+        kind === "workspace-archived"
+      );
+    },
+    acknowledged: () => noticesSeen.ids(),
+    needsMoved: () => artifactLane.moved(),
+    // A look at the artifact takes its push down.
+    looked: (id) => {
+      notifications.clear([artifactCollapseId(id)], "look");
+    },
+    steps: (instanceId) => plans.steps(instanceId),
+    waitOn: (instanceId, artifactId) => plans.waitOn(instanceId, artifactId),
+    clearArtifactWait: (instanceId, artifactId) =>
+      plans.clearArtifactWait(instanceId, artifactId),
     stranded,
     // Caw answers the pins of his project's sessions whose writer ended, and
     // reads every page of his project (decisions.ts).
@@ -16979,7 +17033,11 @@ export const createServer = (
   /** The notices a person acknowledged; every change goes out on the next board publish. */
   const noticesSeen = createNoticesSeen({
     dbPath: DB_PATH,
-    changed: () => publishInstances(""),
+    changed: () => {
+      publishInstances("");
+      // A Not now or a notice's ✕: Needs you's artifacts read it.
+      artifactLane.moved();
+    },
   });
 
   /** What each fleet machine proves itself with to the git remote (machine-credentials.ts). */
@@ -17658,6 +17716,8 @@ export const createServer = (
     // move republishes, so this is the one place that has to drop the cache.
     ruleEngine.forgetFacts();
     toolsMayHaveChanged();
+    // A session ending ends its artifacts' asks (Needs you's rule 4).
+    artifactLane.moved();
     pendingInstancePublishes.add(machineId);
     if (instancePublishScheduled) {
       return;
@@ -22992,8 +23052,11 @@ export const createServer = (
   const plans = createPlans({
     db,
     tasks,
-    publish: (instanceId, message) =>
-      streams.planToFollowers(instanceId, message),
+    publish: (instanceId, message) => {
+      streams.planToFollowers(instanceId, message);
+      // A step ticked, removed or waiting: an artifact's ask stands on it.
+      artifactLane.moved();
+    },
   });
   tasks.listen(plans.taskChanged);
   // A session's open items, built from its records: what every compaction
@@ -27739,7 +27802,17 @@ export const createServer = (
       // after a hand-off went out would otherwise show nothing until the next
       // time anything else moved.
       .get("/api/handoffs", () => Object.fromEntries(handoffs))
-      .get("/api/pending", () => pending.list().map(clientCopy))
+      // Every ask parked on the person, and Needs you's artifacts as one
+      // `artifact.needs` frame (artifacts/lane.ts): the lane whole, from
+      // the hub, which no session's ask names.
+      .get("/api/pending", (): Envelope[] => [
+        ...pending.list().map(clientCopy),
+        { verb: "frames", machineId: "hub", payload: artifactLane.frame() },
+      ])
+      // Needs you's artifacts and their notices as they stand (core
+      // artifact-needs.ts); each change after arrives as an
+      // `artifact.needs` frame.
+      .get("/api/artifact-needs", (): ArtifactNeedsRead => artifactLane.now())
       // The fleet's one finding engine (find.ts): names and transcripts under
       // one ranking, and what waits on your eyes: read from the looks
       // (`/api/seen`) and the `shown` acks the screens already send.
@@ -33107,9 +33180,24 @@ export const createServer = (
                   // The end on the hub's clock, on the row every screen reads:
                   // against `seenAt`, also the hub's, it says "ended since the
                   // owner last looked" without any device's clock.
+                  // What this turn left waiting on the person, and what the
+                  // one before it asked that it moved on from (Needs you's rule 2).
+                  let artifactLeft: ArtifactNeed | undefined;
                   if (row) {
+                    const before = row.turnEndedAt
+                      ? new Date(row.turnEndedAt)
+                      : null;
                     db.noteTurnEnded(turnId, endedAt);
                     publishInstances(row.machineId);
+                    artifacts.turnEnded(turnId, before, endedAt);
+                    artifactLeft = artifactLane
+                      .now()
+                      .needs.filter(
+                        (need) =>
+                          artifacts.askedIn(need.artifactId, turnId, before) &&
+                          !cut
+                      )
+                      .at(-1);
                   }
                   // Every turn of a work item's session counts against its
                   // budget, whatever answers it; one at the limit stops it.
@@ -33223,7 +33311,8 @@ export const createServer = (
                               turnId,
                               text || harnessError,
                               endedAt,
-                              neutral.wakes
+                              neutral.wakes,
+                              artifactLeft
                             );
                           }
                         }),

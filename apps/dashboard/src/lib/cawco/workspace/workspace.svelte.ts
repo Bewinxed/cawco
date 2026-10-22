@@ -17,12 +17,13 @@
  * is open. `workingSet` only remembers what a conversation is called and
  * where a stored one lives.
  */
-import { type HarnessKind, harnessNamed } from "@cawco/core";
+import { artifactStopOf, type HarnessKind, harnessNamed } from "@cawco/core";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
 import { conversationHref, isSessionRow } from "../links";
 import { asPref, keepPrefs } from "../prefs";
+import { openArtifactIn } from "../reference-open.svelte";
 import { store, stored as storedIn } from "../storage";
 import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
@@ -677,6 +678,18 @@ export const workspace = {
     const at = url.searchParams.get("at");
     if (urlId && at) {
       askOpenAt(urlId, at);
+    }
+    // An artifact to open in its panel at its first pending stop
+    // (`?artifact=`, a Needs-you row's address), asked whether or not the
+    // conversation is in front.
+    const artifact = url.searchParams.get("artifact");
+    if (browser && urlId && artifact) {
+      // biome-ignore lint/complexity/noVoid: its refusal is its own toast
+      void openArtifactIn(
+        urlId,
+        artifact,
+        artifactStopOf(url.searchParams.get("stop"))
+      );
     }
     if (urlId === this.activeSessionId) {
       return;

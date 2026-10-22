@@ -277,17 +277,33 @@ const newestCarrying = (instanceId: string): string => {
 };
 
 /**
+ * What waits on the person among the session's artifacts, as Needs you has
+ * it now (core artifact-needs.ts): each one's reasons and raise, and its
+ * notices. A change is a card's dot or reason moving.
+ */
+const waitingKey = (instanceId: string): string =>
+  JSON.stringify([
+    cawco.artifactNeeds
+      .filter((need) => need.instanceId === instanceId)
+      .map((need) => [need.artifactId, need.raisedAt, need.pending]),
+    cawco.artifactNotices
+      .filter((notice) => notice.instanceId === instanceId)
+      .map((notice) => [notice.artifactId, notice.parts]),
+  ]);
+
+/**
  * Files follows the conversation on screen: its lists are read once it is,
  * so the count stands, and each again only when it can have changed: the
  * artifacts when its panel frame names other artifacts (one made, one
- * removed), the attachments when a new message carries one. A reply that
- * carries none reads nothing again.
+ * removed) or what waits on the person among them moves (Needs you's
+ * `artifact.needs`), the attachments when a new message carries one. A
+ * reply that carries none reads nothing again.
  */
 export function followFiles(instanceId: string | null): void {
   if (!instanceId) {
     return;
   }
-  const held = cawco.previews[instanceId]?.artifacts?.join(",") ?? "";
+  const held = `${cawco.previews[instanceId]?.artifacts?.join(",") ?? ""}|${waitingKey(instanceId)}`;
   if (artifactsReadAt.get(instanceId) !== held) {
     artifactsReadAt.set(instanceId, held);
     readArtifacts(instanceId);

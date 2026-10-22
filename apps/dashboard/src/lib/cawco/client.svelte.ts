@@ -18,6 +18,8 @@ import type {
   AccountSigninResult,
   AgentRow,
   ApprovedActionView,
+  ArtifactNeed,
+  ArtifactNeedNotice,
   AvailableCommand,
   BrowserAskFrame,
   BuildInfo,
@@ -1182,6 +1184,13 @@ const state = $state({
    * `fleet_watch.notices` frames.
    */
   watchNotices: [] as FleetWatchNotice[],
+  /**
+   * The artifacts waiting on the person, and their notices (core
+   * artifact-needs.ts): read as the dashboard connects, in `/api/pending`'s
+   * `artifact.needs` envelope, then kept whole by the hub's frames.
+   */
+  artifactNeeds: [] as ArtifactNeed[],
+  artifactNotices: [] as ArtifactNeedNotice[],
   /**
    * Every system law the hub caught broken since it started (core
    * invariant.ts), whole on each `laws.broken` frame; none until one breaks.
@@ -3313,6 +3322,12 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "fleet_watch.notices") {
     heardFrame("fleet_watch.notices");
     state.watchNotices = frame.notices;
+    return;
+  }
+
+  if (frame.kind === "artifact.needs") {
+    state.artifactNeeds = frame.needs;
+    state.artifactNotices = frame.notices;
     return;
   }
 
@@ -9211,6 +9226,14 @@ export const cawco = {
   /** Fleet watch's needs-you notices, oldest first. */
   get watchNotices(): FleetWatchNotice[] {
     return state.watchNotices;
+  },
+  /** The artifacts waiting on the person, longest wait first. */
+  get artifactNeeds(): ArtifactNeed[] {
+    return state.artifactNeeds;
+  },
+  /** The artifacts' notices, newest first. */
+  get artifactNotices(): ArtifactNeedNotice[] {
+    return state.artifactNotices;
   },
   /** Every system law the hub caught broken since it started. */
   get lawsBroken(): LawBroken[] {

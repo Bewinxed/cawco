@@ -186,9 +186,12 @@ export const stepLines = (steps: PlanStep[]): string =>
     : steps
         .map((step) => {
           const box = BOX[step.status];
-          const wait = step.waitsOn
-            ? ` (waiting on the person's pick: card ${step.waitsOn.card} on page ${step.waitsOn.artifactId})`
-            : "";
+          let wait = "";
+          if (step.waitsOn?.card) {
+            wait = ` (waiting on the person's pick: card ${step.waitsOn.card} on page ${step.waitsOn.artifactId})`;
+          } else if (step.waitsOn) {
+            wait = ` (waiting on the person: artifact ${step.waitsOn.artifactId})`;
+          }
           return `${"  ".repeat(step.depth)}- ${box} ${step.content}${wait}`;
         })
         .join("\n");
@@ -481,6 +484,26 @@ export const createPlans = (deps: PlansDeps) => {
       return after;
     });
 
+  /** Each step of the session's plan whose wait `drops` names stops waiting; its followers hear it. */
+  const dropWaits = (
+    instanceId: string,
+    drops: (wait: PlanWait) => boolean
+  ): void => {
+    const own = db.sessionPlan(instanceId);
+    if (!own?.steps.some((step) => step.waitsOn && drops(step.waitsOn))) {
+      return;
+    }
+    db.putSessionSteps(
+      instanceId,
+      own.steps.map(({ waitsOn, ...step }) =>
+        waitsOn && drops(waitsOn)
+          ? step
+          : { ...step, ...(waitsOn ? { waitsOn } : {}) }
+      )
+    );
+    settleQuietly(instanceId);
+  };
+
   const settleQuietly = (instanceId: string): void => {
     settle(instanceId).catch((error: unknown) =>
       console.warn(
@@ -609,25 +632,56 @@ export const createPlans = (deps: PlansDeps) => {
       artifactId: string,
       picked: ReadonlySet<string>
     ): void {
-      const own = db.sessionPlan(instanceId);
-      if (
-        !own?.steps.some(
-          (step) =>
-            step.waitsOn?.artifactId === artifactId &&
-            picked.has(step.waitsOn.card)
-        )
-      ) {
-        return;
+      dropWaits(
+        instanceId,
+        (wait) =>
+          wait.artifactId === artifactId &&
+          wait.card !== undefined &&
+          picked.has(wait.card)
+      );
+    },
+
+    /**
+     * Artifact `artifactId` waits on the person (its maker's `artifact_create`
+     * or `artifact_update` with `does: pick` or `judge` returned): the
+     * session's current step, its first in progress, waits on it, unless it
+     * waits on something already. Answers the step that waits on it now, or
+     * null when no step does (the session has no step in progress).
+     */
+    waitOn(instanceId: string, artifactId: string): string | null {
+      const steps = db.sessionPlan(instanceId)?.steps ?? [];
+      const waiting = steps.find(
+        (step) =>
+          step.status !== "completed" && step.waitsOn?.artifactId === artifactId
+      );
+      if (waiting) {
+        return waiting.id;
+      }
+      const current = steps.find((step) => step.status === "in_progress");
+      if (!current || current.waitsOn) {
+        return null;
       }
       db.putSessionSteps(
         instanceId,
-        own.steps.map(({ waitsOn, ...step }) =>
-          waitsOn?.artifactId === artifactId && picked.has(waitsOn.card)
-            ? step
-            : { ...step, ...(waitsOn ? { waitsOn } : {}) }
+        steps.map((step) =>
+          step.id === current.id ? { ...step, waitsOn: { artifactId } } : step
         )
       );
       settleQuietly(instanceId);
+      return current.id;
+    },
+
+    /** Nothing on artifact `artifactId` waits on the person now: no step of the session waits on it whole. */
+    clearArtifactWait(instanceId: string, artifactId: string): void {
+      dropWaits(
+        instanceId,
+        (wait) => wait.artifactId === artifactId && wait.card === undefined
+      );
+    },
+
+    /** The session's steps as they stand: what its artifacts' waits are read against. */
+    steps(instanceId: string): PlanStep[] {
+      return db.sessionPlan(instanceId)?.steps ?? [];
     },
 
     /** A session's steps start another's plan: the new session that goes on from an ended one. */

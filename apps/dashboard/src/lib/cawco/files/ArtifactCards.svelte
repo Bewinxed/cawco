@@ -18,12 +18,18 @@
    * known before its picture loads (the hub keeps each picture's size), so
    * nothing moves as they arrive.
    * The one on show wears the list's selection pill (highlight, its grid
-   * axis).
+   * axis). One waiting on the person (core artifact-needs.ts, the hub's
+   * `pending`) wears the needs-you status dot on its picture's top-right
+   * corner, the picture cut away round it (DESIGN.md, Status dot), echoing
+   * three loops on the list's beat and then still, and says why first on
+   * its meta line ("1d · 3 of 9").
    */
   import {
     type ArtifactKind,
     type ArtifactSummary,
     artifactWords,
+    reasonLine,
+    reasonShort,
   } from "@cawco/core";
   import type { Component } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -41,6 +47,7 @@
   import { formatAgeShort } from "#lib/utils/time.js";
   import { thumbnailUrl } from "../artifact-api";
   import { frameObserver } from "../frame-observer";
+  import { echoBeat } from "../motion/echo.svelte";
   import type { ArtifactCard } from "./files.svelte";
 
   let {
@@ -173,6 +180,7 @@
     selected: '[data-files-card][aria-current="true"]',
     axis: "xy",
   })}
+  {@attach echoBeat()}
 >
   {#if ghosts > 0}
     <!-- The Claim Of Nothing Rule: cards as they will stand, the pane's
@@ -193,6 +201,7 @@
   {#each placed as { card, lane, span } (card.artifact.id)}
     {@const artifact = card.artifact}
     {@const Glyph = GLYPHS[artifact.kind]}
+    {@const waiting = artifact.pending}
     <!-- mark-line: the picture stands over the words; the caption is the card's mark line.
          The card: the thumbnail and its words on one surface, a space-1 inset
          so the hover ghost and the pill frame the picture; its corner the
@@ -200,9 +209,10 @@
          `minmax(0, 1fr)`, its slot's width: nothing it holds widens it. -->
     <button
       aria-current={artifact.id === chosen || undefined}
-      class="select-none col-start-(--lane) row-end-(--span) grid min-w-0 grid-cols-1 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"
+      class="select-none relative col-start-(--lane) row-end-(--span) grid min-w-0 grid-cols-1 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"
       data-artifact={artifact.id}
       data-files-card
+      data-needs-you={waiting ? "" : undefined}
       style:--lane={lane + 1}
       style:--span="span {span}"
       {@attach measured}
@@ -218,9 +228,18 @@
            over the well, out of its flow, so a page taller than 3:4 never
            sizes it. -->
       <span
-        class="relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-surface-well after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-well"
+        class={[
+          "relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-surface-well after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-well",
+          waiting && "mask-(--hole-mask)",
+        ]}
         data-files-thumb={pictured(artifact) ? "picture" : "glyph"}
         style:--shape="1 / {shape(artifact)}"
+        style:--hole={waiting
+          ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
+          : undefined}
+        style:--hole-mask={waiting
+          ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--c-tree-mark-hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--c-tree-mark-hole-edge)))"
+          : undefined}
       >
         {#if artifact.thumbnail && pictured(artifact)}
           <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load stands as its kind's glyph. -->
@@ -236,6 +255,26 @@
           <Glyph aria-hidden="true" class="size-icon-lg text-ink-subtle" />
         {/if}
       </span>
+      {#if waiting}
+        <!-- The needs-you dot, centred on the picture's top-right corner, the
+             picture cut away round it (--status-dot-cut) so the card's own
+             surface shows round it on any picture and under the hover and
+             selected washes; its echo over it, on the list's beat. -->
+        <span
+          data-slot="needs-dot"
+          aria-hidden="true"
+          class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-(--status-dot-size) rounded-pill bg-status-attn-glyph"
+          style:--dot-at="calc(var(--space-1) - var(--status-dot-size) / 2)"
+        ></span>
+        <span
+          data-ping
+          data-echo
+          data-slot="needs-dot"
+          aria-hidden="true"
+          class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-(--status-dot-size) rounded-pill bg-status-attn-glyph opacity-0"
+          style:--dot-at="calc(var(--space-1) - var(--status-dot-size) / 2)"
+        ></span>
+      {/if}
       <span
         class="mark-line flex min-w-0 items-center gap-space-1 px-space-row"
       >
@@ -255,7 +294,13 @@
       >
         <span class="num flex-none"
           >{formatAgeShort(Date.parse(artifact.createdAt))}</span
-        >{#if artifact.promoted}<span aria-hidden="true">·</span><span
+        >{#if waiting?.pending[0]}<span aria-hidden="true">·</span><span
+            class="min-w-0 truncate"
+            aria-hidden="true"
+            data-slot="needs-reason">{reasonShort(waiting.pending[0])}</span
+          ><span class="sr-only"
+            >{artifactWords.waitingOnYou}: {reasonLine(waiting.pending)}</span
+          >{/if}{#if artifact.promoted}<span aria-hidden="true">·</span><span
             class="min-w-0 truncate"
             title={artifactWords.promotedTitle(artifact.name)}
             >{artifactWords.promoted(

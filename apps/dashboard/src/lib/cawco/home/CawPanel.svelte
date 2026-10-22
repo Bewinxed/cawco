@@ -2,9 +2,10 @@
   /**
    * What Caw's popover holds (NeedsCaw): one list in two sections. Needs you
    * first, longest wait first (home `needs`), each a NeedsCard row; then
-   * Notices, the update notice, the logins moved in and what an account's
-   * arrival set moving, each with its ✕, and `Clear all` at the head's
-   * trailing edge acknowledging every one. A notice never outranks an ask.
+   * Notices, the update notice, the logins moved in, what an account's
+   * arrival set moving and each artifact's notice (ArtifactNoticeRow), each
+   * with its ✕, and `Clear all` at the head's trailing edge acknowledging
+   * every one. A notice never outranks an ask.
    * A section with nothing in it is not drawn; with neither, the empty
    * block says what he knows (The Claim Of Nothing Rule).
    *
@@ -29,6 +30,7 @@
   import { echoBeat } from "../motion/echo.svelte";
   import { reflow } from "../motion/rows.svelte";
   import type { Notice } from "../updates/model";
+  import ArtifactNoticeRow from "./ArtifactNoticeRow.svelte";
   import CawFace from "./CawFace.svelte";
   import type { CawFeed } from "./caw-feed.svelte";
   import MovedLogins from "./MovedLogins.svelte";
@@ -87,6 +89,7 @@
   const updated = $derived(feed.updated);
   const moved = $derived(feed.moved);
   const rebalanced = $derived(feed.rebalanced);
+  const artifactNotices = $derived(feed.artifactNotices);
 
   /**
    * Reload was chosen: the row says its goodbye until the tab goes, also
@@ -100,12 +103,13 @@
   const joined = $derived(
     connect.installs.filter((one) => one.state === "joined")
   );
-  /** The notices standing: the update, each moved login and rebalance, each machine joined, or the damaged record. */
+  /** The notices standing: the update, each moved login and rebalance, each machine joined, each artifact's, or the damaged record. */
   const noticeCount = $derived(
     (updateShown ? 1 : 0) +
       moved.length +
       rebalanced.length +
       joined.length +
+      artifactNotices.length +
       (damaged ? 1 : 0)
   );
 
@@ -128,11 +132,15 @@
     updated !== null ||
       moved.length > 0 ||
       rebalanced.length > 0 ||
-      joined.length > 0
+      joined.length > 0 ||
+      artifactNotices.length > 0
   );
   /** The update is all the panel holds: there is room for its notes. */
   const alone = $derived(
-    needs.length === 0 && moved.length === 0 && rebalanced.length === 0
+    needs.length === 0 &&
+      moved.length === 0 &&
+      rebalanced.length === 0 &&
+      artifactNotices.length === 0
   );
 
   function dismissUpdate(notice: Notice): void {
@@ -158,6 +166,7 @@
     const ids = [
       ...moved.map((one) => one.id),
       ...rebalanced.map((one) => one.id),
+      ...artifactNotices.flatMap((one) => one.parts.map((part) => part.id)),
     ];
     if (ids.length > 0) {
       feed.acknowledge(ids);
@@ -349,6 +358,15 @@
         {#each joined as install (install.id)}
           <li data-flip>
             <InstallNotice {install} {onchoose} />
+          </li>
+        {/each}
+        {#each artifactNotices as notice (notice.artifactId)}
+          <li data-flip>
+            <ArtifactNoticeRow
+              {notice}
+              {onchoose}
+              ondismiss={(ids) => feed.acknowledge(ids)}
+            />
           </li>
         {/each}
       </ul>

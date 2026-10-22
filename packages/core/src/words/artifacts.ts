@@ -20,7 +20,68 @@ export const artifactWords = {
   /** The head's line under the name once the person's Send is in and the session has not changed it since. */
   sentTo: (session: string) => `Sent to ${session}`,
   /** A row's dot, for a screen reader: the person has something to do on it. */
-  waitingOnYou: "Waiting on you",
+  waitingOnYou: "Needs you",
+
+  // ── Needs you: an artifact waiting on the person (home/NeedsCard.svelte, Files' cards) ──
+  /** Shown and never opened: the row's line. */
+  notOpened: "New · not opened",
+  /** The same on a Files card's meta line. */
+  notOpenedShort: "New",
+  /** A decision page's picks. */
+  picked: (made: number, asked: number) => `${made} of ${asked} picked`,
+  /** The same on a Files card's meta line. */
+  pickedShort: (made: number, asked: number) => `${made} of ${asked}`,
+  /** Written and not sent: picks, notes, pins and ink. */
+  unsent: (count: number) => `${count} unsent`,
+  /** An agent's answers on open pins the person hasn't looked at. */
+  newAnswers: (count: number) =>
+    count === 1 ? "1 new answer" : `${count} new answers`,
+  /** The one reason, an answer on one pin: where it is. */
+  newAnswerOn: (pin: number) => `1 new answer on pin ${pin}`,
+  /** The kind on the row's meta line, where an ask says "Question". */
+  kindWord: {
+    page: "Page",
+    canvas: "Canvas",
+    component: "Components",
+    preview: "Preview",
+    browser: "Browser",
+  },
+  /** The row's ✕: it leaves Needs you until it is raised again, and stays in Files. */
+  notNow: "Not now",
+  notNowNamed: (ask: string) => `Not now: ${ask}`,
+  /** The row's Send, while something is written and not sent. */
+  sendCount: (count: number) => `Send ${count}`,
+  sendNamed: (count: number, ask: string) => `Send ${count} on ${ask}`,
+  sending: "Sending…",
+  /** A Send no one took: why, in the hub's words, its own sentence. */
+  notSent: (why: string) => `Not sent. ${why}`,
+  openNamed: (ask: string) => `Open ${ask}`,
+  /** A notice: a revision with nothing asked. */
+  changedSince: (name: string, count: number) =>
+    `${name}: ${count} changed since you looked`,
+  /** A notice: resolved pins whose closing answer is unread. */
+  closedAnswers: (name: string, count: number, pin: number) =>
+    count === 1
+      ? `${name}: pin ${pin} resolved with an answer`
+      : `${name}: ${count} pins resolved with answers`,
+  /** A notice: its session ended with the ask unanswered. */
+  ended: (who: string, what: string) => `${who} ended; ${what}`,
+  /** Who ended, when the hub no longer holds the session. */
+  itsSession: "Its session",
+  neverOpened: (name: string) => `${name} never opened`,
+  neverPicked: (count: number, name: string) =>
+    count === 1
+      ? `1 pick on ${name} never made`
+      : `${count} picks on ${name} never made`,
+  neverSent: (count: number, name: string) =>
+    `${count} unsent on ${name} never sent`,
+  neverRead: (count: number, name: string) =>
+    count === 1
+      ? `1 answer on ${name} never read`
+      : `${count} answers on ${name} never read`,
+  /** A notice's ✕, for a screen reader. */
+  dismissNotice: (name: string) => `Dismiss the notice on ${name}`,
+  open: "Open",
 
   // ── The Comments rail (preview/CommentRail.svelte; the app's PinListController) ──
   /** Its skeleton rows, for a screen reader, while the pins are read past the wait's grace. */

@@ -1,11 +1,15 @@
 /**
  * The notices Caw's panel lists under "Notices" (NeedsCaw): the update
- * notice (updates/update-notice), the logins moved into CawCo, and what an
- * account's arrival set moving, each until someone acknowledges it
+ * notice (updates/update-notice), the logins moved into CawCo, what an
+ * account's arrival set moving, and each artifact's notice (a revision with
+ * nothing asked, a pin's closing answer, a session that ended with its ask
+ * unanswered; core artifact-needs.ts), each until someone acknowledges it
  * (notices.svelte.ts). The panel is their one surface; his label counts
  * them, and his rim does not (the rim counts needs you only).
  */
+import type { ArtifactNeedNotice } from "@cawco/core";
 import { movedLogins, rebalancesUnseen } from "../accounts/model.svelte";
+import { cawco } from "../client.svelte";
 import { connect } from "../connect/installs.svelte";
 import { notices } from "../notices.svelte";
 import { updateNotice } from "../updates/update-notice.svelte";
@@ -19,6 +23,17 @@ class CawNotices {
   readonly rebalanced = $derived(
     notices.known ? rebalancesUnseen(notices.seen) : []
   );
+  /** Each artifact's notice, its parts nobody has acknowledged yet. */
+  readonly artifacts = $derived<ArtifactNeedNotice[]>(
+    notices.known
+      ? cawco.artifactNotices.flatMap((notice) => {
+          const parts = notice.parts.filter(
+            (part) => !notices.seen.has(part.id)
+          );
+          return parts.length > 0 ? [{ ...notice, parts }] : [];
+        })
+      : []
+  );
   /** Machines Add machine brought in, until the person acknowledges them (connect/). */
   readonly joined = $derived(
     connect.installs.filter((one) => one.state === "joined")
@@ -29,6 +44,7 @@ class CawNotices {
       this.moved.length +
       this.rebalanced.length +
       this.joined.length +
+      this.artifacts.length +
       (notices.damaged ? 1 : 0)
   );
   /** Every notice id standing, for his beat on a new one. */
@@ -38,6 +54,7 @@ class CawNotices {
     ...this.moved.map((one) => one.id),
     ...this.rebalanced.map((one) => one.id),
     ...this.joined.map((one) => `install:${one.id}`),
+    ...this.artifacts.flatMap((one) => one.parts.map((part) => part.id)),
   ]);
 }
 

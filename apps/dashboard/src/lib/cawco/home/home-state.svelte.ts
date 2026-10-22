@@ -4,8 +4,10 @@
  *
  * - Status: the hub and the machines, in one line.
  * - Needs you: every ask parked on the operator (a session's permission or
- *   question, a workflow run's question), longest wait first by the moment
- *   the hub parked it (`raisedAt`), so every device lists them alike.
+ *   question, a workflow run's question), every card of kind `you`, and
+ *   every artifact waiting on the operator (core artifact-needs.ts),
+ *   longest wait first by the moment the hub raised it (`raisedAt`), so
+ *   every device lists them alike.
  * - Working: sessions mid-turn, with what each is doing now.
  * - Finished: sessions whose turn ended, or that failed, since this device
  *   last opened them (the `finished` choice).
@@ -14,6 +16,9 @@
  */
 import type {
   ApprovedActionView,
+  ArtifactKind,
+  ArtifactReason,
+  ArtifactStop,
   FleetWatchNotice,
   Install,
   LocalName,
@@ -62,6 +67,7 @@ import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
 import { asksHere, person } from "../person.svelte";
+import { notices } from "../notices.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -517,7 +523,48 @@ export interface TaskItem {
   title: string;
 }
 
+/**
+ * An artifact waiting on you (core artifact-needs.ts): a page to pick on, a
+ * canvas or component canvas to judge, picks or comments written and not
+ * sent, an agent's answer on a pin not looked at. It opens its session with
+ * the artifact in its panel at its first pending stop; its Send sends what
+ * is unsent; its Not now puts it away until it is raised again.
+ */
+export interface ArtifactItem {
+  artifactId: string;
+  artifactKind: ArtifactKind;
+  /** Where the session runs: its mark's hue, the seed every list uses. */
+  cwd: string;
+  /** Opens its session with the artifact in its panel at `stop`. */
+  href: string;
+  /** The session whose panel holds it. */
+  instanceId: string;
+  key: string;
+  kind: "artifact";
+  /** Its machine: the name the fleet gives it and the daemon's `platform-arch` fingerprint (OsMark). */
+  machine: { name: string; os: string };
+  machineId: string;
+  /** Its name, as its panel and Files name it. */
+  name: string;
+  /** The notice id its Not now acknowledges. */
+  notNow: string;
+  /** Its reasons, strongest first. */
+  pending: ArtifactReason[];
+  place: string;
+  /** The project it runs in, named as the rail names it, with its mark's hue; null outside any. */
+  project: ProjectMarking | null;
+  raisedAt: number;
+  /** Its machine is offline: it still stands, and Send waits for it. */
+  stale: boolean;
+  stop: ArtifactStop;
+  /** Its ask: what the person does there, in their words. */
+  title: string;
+  /** What Send sends now. */
+  unsent: number;
+}
+
 export type NeedsItem =
+  | ArtifactItem
   | AskItem
   | RunItem
   | CapItem
@@ -1322,9 +1369,46 @@ class Home {
         raisedAt: task.updatedAt,
       }))
     );
+    // The artifacts waiting on you, each under its session as an ask is;
+    // one put away with Not now (an acknowledged id, here at once) waits in
+    // Files until it is raised again.
+    const artifacts: NeedsItem[] = cawco.artifactNeeds
+      .filter((need) => !notices.seen.has(need.notNow))
+      .map((need) => {
+        const row = cawco.instanceIndex.byId.get(need.instanceId);
+        const top = row ? topsIn(cawco.instanceIndex.byId)(row) : undefined;
+        const machine = cawco.machines.find(
+          (one) => one.machineId === need.machineId
+        );
+        return {
+          kind: "artifact" as const,
+          key: `artifact:${need.artifactId}`,
+          artifactId: need.artifactId,
+          artifactKind: need.artifactKind,
+          instanceId: need.instanceId,
+          machineId: need.machineId,
+          cwd: row?.cwd ?? "",
+          title: need.ask,
+          name: need.name,
+          pending: need.pending,
+          stop: need.stop,
+          unsent: need.unsent,
+          notNow: need.notNow,
+          raisedAt: need.raisedAt,
+          href: need.href,
+          place: row ? placeOfRow(row) : machineName(need.machineId),
+          project: top ? projectAt(top.machineId, top.cwd) : null,
+          machine: {
+            name: machineName(need.machineId),
+            os: machine?.os ?? "",
+          },
+          stale: machine?.status !== "online",
+        };
+      });
     // Longest wait first; an ask the hub has not stamped sorts last.
     return [
       ...asks,
+      ...artifacts,
       ...runs,
       ...caps,
       ...actions,
@@ -1638,9 +1722,14 @@ class Home {
    * its row is on its way out.
    */
   readonly landing = $derived.by<string | null>(() => {
-    const ask = this.needs.find((item) => item.kind === "ask");
-    if (ask?.kind === "ask") {
-      return askView(ask);
+    const waiting = this.needs.find(
+      (item) => item.kind === "ask" || item.kind === "artifact"
+    );
+    if (waiting?.kind === "ask") {
+      return askView(waiting);
+    }
+    if (waiting?.kind === "artifact") {
+      return waiting.instanceId;
     }
     const cancelled = new Set(
       cawco.moves

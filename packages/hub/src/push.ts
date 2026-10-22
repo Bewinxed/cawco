@@ -69,6 +69,7 @@
  * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run.
  */
 import {
+  type ArtifactNeed,
   BROWSER_ASK_TOOL,
   causeLine,
   DELEGATE_TYPE_PROPOSAL_TOOL,
@@ -80,6 +81,7 @@ import {
   type HarnessKind,
   HELD_RECENT_MS,
   type Install,
+  type InstanceRow,
   installName,
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
@@ -99,6 +101,7 @@ import { hidden } from "./hidden";
 import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
+  artifactCollapseId,
   askCollapseId,
   installCollapseId,
   messageCollapseId,
@@ -149,6 +152,8 @@ export const PUSH_CATEGORIES = {
   permissionOpenOnly: "CAWCO_PERMISSION_OPEN",
   question: "CAWCO_QUESTION",
   turn: "CAWCO_TURN",
+  /** The turn's push for a turn that left an artifact waiting on the person: Open only. */
+  turnOpenOnly: "CAWCO_TURN_OPEN",
   task: "CAWCO_TASK",
   taskOpenOnly: "CAWCO_TASK_OPEN",
   attempt: "CAWCO_ATTEMPT",
@@ -217,6 +222,19 @@ export type PushData =
   | {
       /** A session the owner started finished its turn and waits on them. */
       kind: "turn";
+      instanceId: string;
+      machineId: string;
+      projectId: string | null;
+    }
+  | {
+      /**
+       * A turn of a session the owner started left an artifact waiting on
+       * them (core artifact-needs.ts): Open opens the session with it in its
+       * panel at its first pending stop. The app opens the board for a kind
+       * it does not know.
+       */
+      kind: "artifact";
+      artifactId: string;
       instanceId: string;
       machineId: string;
       projectId: string | null;
@@ -622,6 +640,12 @@ export interface PushOutcome {
 }
 
 export interface PushServices {
+  /**
+   * Whether artifact `id`, raised at `raisedAt`, still waits on the person
+   * and has not been looked at since: a look at the artifact clears its
+   * push, never a look at its session.
+   */
+  readonly artifactWaiting: (id: string, raisedAt: number) => boolean;
   readonly db: DbShape;
   /** Shows an item on the desk tab the person uses, in place of a phone push. */
   readonly desk: (frame: DeskAlertFrame) => void;
@@ -811,6 +835,7 @@ const removeDevice = async (
 };
 
 export const createPush = ({
+  artifactWaiting,
   db,
   desk,
   lifetime,
@@ -1319,6 +1344,52 @@ export const createPush = ({
   };
 
   /** Nobody has looked at the session since `at`: what it pushed about then still needs you. */
+  /**
+   * The turn's push when it left an artifact waiting on the person: the
+   * artifact's ask as its sealed body, under the artifact's own collapse id
+   * so a revision's push replaces it, Open only. About no session for the
+   * gate: a look at the artifact clears it (`still`), never a look at its
+   * session, and its own work running does not hold it, since the artifact
+   * waits on the person whatever else runs.
+   */
+  const artifactLeft = (
+    row: InstanceRow,
+    left: ArtifactNeed,
+    endedAt: Date
+  ): void => {
+    if (!artifactWaiting(left.artifactId, left.raisedAt)) {
+      return;
+    }
+    const project = projectName(row.projectId ?? null);
+    arrive(
+      {
+        ask: false,
+        instanceId: null,
+        landedAt: endedAt,
+        still: () => artifactWaiting(left.artifactId, left.raisedAt),
+        notification: {
+          shown: alertOf(sessionName(row.id) ?? "A session", project),
+          sealed: alertOf(
+            boardTitle(row),
+            project,
+            firstLine(left.ask) ?? NEEDS_YOU
+          ),
+          category: PUSH_CATEGORIES.turnOpenOnly,
+          collapseId: artifactCollapseId(left.artifactId),
+          threadId: row.projectId ?? row.id,
+          data: {
+            kind: "artifact",
+            artifactId: left.artifactId,
+            instanceId: row.id,
+            machineId: row.machineId,
+            projectId: row.projectId ?? null,
+          },
+        },
+      },
+      false
+    );
+  };
+
   const unseenSince = (instanceId: string, at: Date): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
     return !(row?.seenAt && row.seenAt.getTime() >= at.getTime());
@@ -1572,7 +1643,8 @@ export const createPush = ({
       instanceId: string,
       reply: string | undefined,
       endedAt: Date,
-      wakes: TurnWakes | undefined
+      wakes: TurnWakes | undefined,
+      left?: ArtifactNeed
     ): void {
       if (stopped.delete(instanceId)) {
         return;
@@ -1586,9 +1658,15 @@ export const createPush = ({
           row.workflowStepId ||
           row.workItemId ||
           row.kind === "summariser" ||
-          row.role === "lead" ||
-          !unseenSince(instanceId, endedAt)
+          row.role === "lead"
         ) {
+          return;
+        }
+        if (left) {
+          artifactLeft(row, left, endedAt);
+          return;
+        }
+        if (!unseenSince(instanceId, endedAt)) {
           return;
         }
         if (own) {

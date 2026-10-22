@@ -21437,6 +21437,23 @@
         }
       }
     },
+    "/api/artifact-needs": {
+      "get": {
+        "operationId": "getApiArtifactNeeds",
+        "responses": {
+          "200": {
+            "description": "getApiArtifactNeeds 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactNeedsRead"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/find": {
       "get": {
         "parameters": [
@@ -33461,6 +33478,9 @@
             "$ref": "#/components/schemas/FleetWatchNoticesFrame"
           },
           {
+            "$ref": "#/components/schemas/ArtifactNeedsFrame"
+          },
+          {
             "$ref": "#/components/schemas/LawsBrokenFrame"
           },
           {
@@ -33543,6 +33563,7 @@
             "project.stop": "#/components/schemas/ProjectStopFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "fleet_watch.notices": "#/components/schemas/FleetWatchNoticesFrame",
+            "artifact.needs": "#/components/schemas/ArtifactNeedsFrame",
             "laws.broken": "#/components/schemas/LawsBrokenFrame",
             "person": "#/components/schemas/PersonFrame",
             "desk_alert": "#/components/schemas/DeskAlertFrame",
@@ -37445,6 +37466,10 @@
           "name": {
             "type": "string"
           },
+          "pending": {
+            "description": "What it waits on the person for, as Needs you derives it (core\nartifact-needs.ts), strongest first; null when nothing is asked of the\nperson.",
+            "$ref": "#/components/schemas/ArtifactPending"
+          },
           "project": {
             "description": "The project whose preview origin serves it: a project's page (Projects\nspec §5.8), loaded at `/__cawco/page/<id>/` there (`projectPagePlace`);\nabsent for anything its session's origin serves.",
             "type": "string"
@@ -37472,7 +37497,7 @@
             "type": "string"
           },
           "waiting": {
-            "description": "The person has something to do on it now (`artifact_list`'s `waitingOn` person): its row wears a dot.",
+            "description": "What it waits on the person for ({@link pending}) stands: its card and its row wear the needs-you dot.",
             "type": "boolean"
           }
         },
@@ -37507,6 +37532,106 @@
           "component",
           "page",
           "preview"
+        ]
+      },
+      "ArtifactPending": {
+        "description": "An artifact's pending state as its own list reads it (Files, the panel's menu).",
+        "type": "object",
+        "properties": {
+          "pending": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactReason"
+            }
+          },
+          "raisedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "pending",
+          "raisedAt"
+        ]
+      },
+      "ArtifactReason": {
+        "description": "Why an artifact waits on the person, one reason each.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "unopened"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "asked": {
+                "type": "number"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "picks"
+                ]
+              },
+              "made": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "asked",
+              "kind",
+              "made"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "unsent"
+                ]
+              }
+            },
+            "required": [
+              "count",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "answer"
+                ]
+              },
+              "pin": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "count",
+              "kind",
+              "pin"
+            ]
+          }
         ]
       },
       "ArtifactPromotion": {
@@ -38537,7 +38662,7 @@
             "type": "string"
           },
           "waitingOn": {
-            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet).",
+            "description": "Whose move it is: the person's (what Needs you lists it for: never opened, picks not made, marks not sent, an answer not looked at, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet).",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ArtifactStatusWaitingOn"
@@ -41284,21 +41409,20 @@
         ]
       },
       "PlanWait": {
-        "description": "A step waiting on the person's choice: the card it asked on a decision\npage, set by the session as it asks (`todo_write`'s `waitsOn`). The plan\ndraws it \"Waiting on you\" with a link to the card; it stops waiting when\nthe page's Send carries a pick for that card.",
+        "description": "A step waiting on the person: the card it asked on a decision page, set\nby the session as it asks (`todo_write`'s `waitsOn`), or the whole\nartifact, set by the hub on the session's current step when its\n`artifact_create` or `artifact_update` with `does: pick` or `judge`\nreturns (hub plans.ts `waitOn`). The plan draws it \"Waiting on you\" with a\nlink to the card or the artifact; it stops waiting when the page's Send\ncarries a pick for that card, or once nothing on the artifact waits on\nthe person (core artifact-needs.ts). While it waits, the artifact's\nNeeds-you item stands; once the step is ticked or removed, it goes.",
         "type": "object",
         "properties": {
           "artifactId": {
-            "description": "The page's artifact id.",
+            "description": "The artifact's id.",
             "type": "string"
           },
           "card": {
-            "description": "The decision's id on the page (`data-cawco-choice`, an OpenUI `Decision`'s id).",
+            "description": "The decision's id on the page (`data-cawco-choice`, an OpenUI `Decision`'s id); absent, the whole artifact.",
             "type": "string"
           }
         },
         "required": [
-          "artifactId",
-          "card"
+          "artifactId"
         ]
       },
       "DispatchView": {
@@ -50414,6 +50538,298 @@
           "spawn",
           "stop",
           "usage"
+        ]
+      },
+      "ArtifactNeedsRead": {
+        "description": "`GET /api/artifact-needs`: the lane's artifacts as they stand.",
+        "type": "object",
+        "properties": {
+          "needs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactNeed"
+            }
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactNeedNotice"
+            }
+          }
+        },
+        "required": [
+          "needs",
+          "notices"
+        ]
+      },
+      "ArtifactNeed": {
+        "description": "One artifact waiting on the person: a Needs-you item.",
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "artifactKind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "ask": {
+            "description": "What the person does there, in their words: the row's title, the push's body.",
+            "type": "string"
+          },
+          "href": {
+            "description": "Opens its session with the artifact in its panel at {@link stop}.",
+            "type": "string"
+          },
+          "instanceId": {
+            "description": "The session whose panel holds it.",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "artifact"
+            ]
+          },
+          "link": {
+            "description": "`[name](cawco:artifact/<id>)`: how a line of words names it.",
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notNow": {
+            "description": "The notice id its Not now acknowledges (hub notices.ts): the item leaves\nthe lane until it is raised again, a revision or a new answer.",
+            "type": "string"
+          },
+          "pending": {
+            "description": "Its reasons, strongest first; never empty.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactReason"
+            }
+          },
+          "project": {
+            "description": "The project it was made in; null outside one.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "raisedAt": {
+            "description": "When it became pending, ms epoch on the hub's clock: its publish, or the agent's newest answer.",
+            "type": "number"
+          },
+          "stop": {
+            "$ref": "#/components/schemas/ArtifactStop"
+          },
+          "unsent": {
+            "description": "What Send sends now; 0 when nothing is written and unsent.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "artifactId",
+          "artifactKind",
+          "ask",
+          "href",
+          "instanceId",
+          "kind",
+          "link",
+          "machineId",
+          "name",
+          "notNow",
+          "pending",
+          "project",
+          "raisedAt",
+          "stop",
+          "unsent"
+        ]
+      },
+      "ArtifactStop": {
+        "description": "Where the panel opens an artifact: its first pending stop.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "card": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "card"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "pin": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "pin"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "top": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              }
+            },
+            "required": [
+              "top"
+            ]
+          }
+        ]
+      },
+      "ArtifactNeedNotice": {
+        "description": "One artifact's notice in Caw's panel: one row per artifact.",
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "artifactKind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "at": {
+            "description": "When the newest part happened, ms epoch on the hub's clock.",
+            "type": "number"
+          },
+          "href": {
+            "description": "Opens it, as a need's does; null when no session holds it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "machineId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactNeedNoticePart"
+            }
+          },
+          "project": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stop": {
+            "$ref": "#/components/schemas/ArtifactStop"
+          }
+        },
+        "required": [
+          "artifactId",
+          "artifactKind",
+          "at",
+          "href",
+          "instanceId",
+          "machineId",
+          "name",
+          "parts",
+          "project",
+          "stop"
+        ]
+      },
+      "ArtifactNeedNoticePart": {
+        "description": "What one notice of an artifact says, with the notice id its ✕ acknowledges.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "changed"
+                ]
+              }
+            },
+            "required": [
+              "count",
+              "id",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "closed"
+                ]
+              },
+              "pin": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "count",
+              "id",
+              "kind",
+              "pin"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "harness": {
+                "$ref": "#/components/schemas/HarnessKind"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ended"
+                ]
+              },
+              "reason": {
+                "$ref": "#/components/schemas/ArtifactReason"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "reason"
+            ]
+          }
         ]
       },
       "FindAnswer": {
@@ -59864,6 +60280,35 @@
         },
         "required": [
           "kind",
+          "notices"
+        ]
+      },
+      "ArtifactNeedsFrame": {
+        "description": "Hub-originated: every artifact need and notice, whole, on each change.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "artifact.needs"
+            ]
+          },
+          "needs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactNeed"
+            }
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactNeedNotice"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "needs",
           "notices"
         ]
       },

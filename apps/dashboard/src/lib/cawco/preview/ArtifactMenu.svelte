@@ -3,7 +3,9 @@
    * The artifact panel's title control (DESIGN.md Artifact panel, canvas and
    * ink): the shown artifact's name as a menu button listing the session's
    * artifacts, newest first, each promoted one tagged with its commit and
-   * each waiting on the person wearing the live dot; choosing one shows it.
+   * each waiting on the person (core artifact-needs.ts) wearing the
+   * needs-you dot, the status's own glyph ink (The Glyph, Word, Hue Rule);
+   * choosing one shows it.
    * Its line (the ask, or "Sent to <session>") stands under it in the head's
    * subtitle (SideSurface); where the head drops it, it is the menu's first
    * row, and always the control's title and description. Each row's Remove (its trailing glyph, or Delete
@@ -44,7 +46,6 @@
   import { reflow } from "../motion/rows.svelte";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
-  import LiveDot from "./LiveDot.svelte";
 
   let {
     instanceId,
@@ -334,11 +335,16 @@
             {/if}
           </span>
           {#if artifact.waiting}
-            <LiveDot
+            <!-- The needs-you dot (DESIGN.md, Status dot), its words for the
+                 screen reader. -->
+            <span
+              data-slot="row-waiting"
+              aria-label={artifactWords.waitingOnYou}
+              class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
+              data-box
               id={part(artifact.id, "waiting")}
-              label={artifactWords.waitingOnYou}
-              kind="row-waiting"
-            />
+              role="img"
+            ></span>
           {/if}
           {#if artifact.createdAt}
             <span
