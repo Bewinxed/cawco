@@ -108,6 +108,7 @@
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { json, send } from "#lib/cawco/project-tasks.js";
+  import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -139,8 +140,16 @@
   let rows = $state<ConnectionView[]>([]);
   let loaded = $state(false);
   let readError = $state<string | null>(null);
-  /** What a row's last action came to, when it failed: by connection name. */
-  let problems = $state<Record<string, string>>({});
+  /**
+   * What a row's last action came to, when it failed: by connection name.
+   * Kept in this tab through a reload, until the row's next action
+   * (DESIGN.md, The Work Outlives Its Surface Rule: a failure stands until
+   * the reader acts on it).
+   */
+  const kept = new TabDraft("cawco:connection-problems", () => ({
+    byName: {} as Record<string, string>,
+  }));
+  const problems = kept.value.byName;
 
   const path = (name: string) => `/api/connections/${encodeURIComponent(name)}`;
 
@@ -163,11 +172,6 @@
     callbackUrl = `${window.location.origin}/api/connections/oauth/callback`;
     // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
     void read();
-    return () => {
-      for (const watch of Object.values(watches)) {
-        clearInterval(watch);
-      }
-    };
   });
 
   const serviceOf = (row: ConnectionView) =>
@@ -201,17 +205,23 @@
     words.saidUnderWay,
   ]);
 
-  /** The line under a row: its sign-in under way, its last failure, or the hub's reason. */
+  /**
+   * The line under a row: its last failure, its sign-in under way (the
+   * hub's, so a reload still says it), or the hub's reason.
+   */
   function noteOf(row: ConnectionView): RowNote | undefined {
-    if (signing[row.name]) {
+    const problem = problems[row.name];
+    if (problem) {
+      return { tone: "fail", text: problem };
+    }
+    if (signing[row.name] || row.signIn) {
       return {
         tone: "busy",
         text: words.signingInTab(labelOf(row)),
       };
     }
-    const problem = problems[row.name];
-    if (problem) {
-      return { tone: "fail", text: problem };
+    if (row.state !== "signed-in" && row.reason === words.saidUnderWay) {
+      return { tone: "fail", text: words.signInLapsed };
     }
     if (
       row.state !== "signed-in" &&
@@ -233,35 +243,37 @@
   };
 
   // --- Sign in: a tab of its own; the row says so until the hub's word ---
+  //
+  // The sign-in under way is the hub's (`signIn` on its row: the page it
+  // was sent to, until it lapses), so a reload still shows it, and the
+  // row's button opens that same page again rather than starting another.
 
+  /** A sign-in asked for and not yet answered by the hub. */
   let signing = $state<Record<string, boolean>>({});
-  const watches: Record<string, ReturnType<typeof setInterval>> = {};
+  /** The tabs this page opened for sign-ins under way, by connection. */
+  const tabs: Record<string, Window> = {};
   /** How often a sign-in under way re-reads the hub. Our choice. */
   const WATCH_MS = 2000;
 
-  function stopWatching(name: string) {
-    clearInterval(watches[name]);
-    delete watches[name];
-    signing[name] = false;
-  }
-
-  /** Re-reads the hub while the sign-in tab is open, until the row moves on. */
-  function watchSignIn(name: string, tab: Window) {
-    clearInterval(watches[name]);
-    watches[name] = setInterval(async () => {
-      const { closed } = tab;
+  // While any row's sign-in is under way the hub is read again, until each
+  // moves on; a tab this page opened that closes first is said on its row.
+  const underWay = $derived(rows.some((row) => row.signIn !== undefined));
+  $effect(() => {
+    if (!underWay) {
+      return;
+    }
+    const watch = setInterval(async () => {
+      const closed = Object.entries(tabs).filter(([, tab]) => tab.closed);
       await read();
-      const row = rows.find((each) => each.name === name);
-      if (row?.reason !== words.saidUnderWay) {
-        stopWatching(name);
-        return;
-      }
-      if (closed) {
-        stopWatching(name);
-        problems[name] = words.signInClosed;
+      for (const [name] of closed) {
+        delete tabs[name];
+        if (rows.find((each) => each.name === name)?.signIn) {
+          problems[name] = words.signInClosed;
+        }
       }
     }, WATCH_MS);
-  }
+    return () => clearInterval(watch);
+  });
 
   /** Starts `name`'s OAuth sign-in in `tab`, opened by the press itself so no pop-up blocker stops it. */
   async function startSignIn(name: string, tab: Window) {
@@ -273,21 +285,31 @@
         json("POST", { origin: window.location.origin })
       );
       tab.location.assign(authorizationUrl);
-      watchSignIn(name, tab);
+      tabs[name] = tab;
     } catch (error) {
       tab.close();
-      signing[name] = false;
       problems[name] = failureWords(error);
     }
     await read();
+    delete signing[name];
   }
 
   const BLOCKED = words.blocked;
 
+  /**
+   * The row's one press: the sign-in under way, opened again where it was,
+   * or a new one when none can still finish.
+   */
   function signIn(row: ConnectionView) {
-    const tab = window.open("", "_blank");
+    const open = row.signIn;
+    const tab = window.open(open ? open.url : "", "_blank");
     if (!tab) {
       problems[row.name] = BLOCKED;
+      return;
+    }
+    if (open) {
+      delete problems[row.name];
+      tabs[row.name] = tab;
       return;
     }
     // biome-ignore lint/complexity/noVoid: the sign-in reports its own outcome on its row
@@ -363,38 +385,91 @@
 
   // --- Sign in to a service: the way, the account's words, then its way in ---
 
-  let adding = $state<Service | null>(null);
-  let addWay = $state<Way | null>(null);
-  let account = $state("");
-  /** The server's address, for a service the person runs one of (core `serverExample`). */
-  let address = $state("");
+  /**
+   * The form as typed, kept in this tab so a reload or a trip to another
+   * page opens it again as it was (The Work Outlives Its Surface Rule): the
+   * service, its way, the account's words, the address, an app's ids, and
+   * the refusal it last showed. Never a key or a secret: the form asks for
+   * those again and says why (`secretTyped`).
+   */
+  const addDraft = new TabDraft("cawco:connection-add", () => ({
+    service: null as string | null,
+    way: null as string | null,
+    account: "",
+    address: "",
+    appId: "",
+    installationId: "",
+    clientId: "",
+    /** A key or secret was typed before the page went away. */
+    secretTyped: false,
+    problem: null as string | null,
+  }));
+  const typed = addDraft.value;
+  const adding = $derived(
+    SERVICES.find((each) => each.service === typed.service) ?? null
+  );
+  const addWay = $derived(
+    adding?.ways.find((way) => way.label === typed.way) ??
+      adding?.ways[0] ??
+      null
+  );
   let addressProblem = $state<string | null>(null);
   let addKey = $state("");
-  let addApp = $state<AppDraft>(emptyApp());
+  let addApp = $state<AppDraft>({
+    ...emptyApp(),
+    appId: typed.appId,
+    installationId: typed.installationId,
+    clientId: typed.clientId,
+  });
   let addPending = $state(false);
-  let addProblem = $state<string | null>(null);
+  /** The secrets asked for again after a reload, until one is typed. */
+  const secretAskedAgain = $derived(
+    typed.secretTyped &&
+      addKey === "" &&
+      addApp.privateKey === "" &&
+      addApp.clientSecret === ""
+  );
+  $effect(() => {
+    typed.appId = addApp.appId;
+    typed.installationId = addApp.installationId;
+    typed.clientId = addApp.clientId;
+  });
 
   function startAdding(service: Service) {
-    adding = service;
-    addWay = service.ways[0] ?? null;
-    account = "";
-    address = service.url ?? "";
+    addDraft.clear();
+    typed.service = service.service;
+    typed.way = service.ways[0]?.label ?? null;
+    typed.address = service.url ?? "";
     addressProblem = null;
     addKey = "";
     addApp = emptyApp();
-    addProblem = null;
   }
 
   function stopAdding() {
-    adding = null;
+    addDraft.clear();
     addKey = "";
     addApp = emptyApp();
   }
 
+  // What the page holds of a secret is only whether one was typed.
+  $effect(() => {
+    if (
+      addKey !== "" ||
+      addApp.privateKey !== "" ||
+      addApp.clientSecret !== ""
+    ) {
+      typed.secretTyped = true;
+    }
+  });
+
   /** What follows the row's making: its key, or its app, said on the row when refused. */
-  async function setUp(name: string, service: string, way: Way) {
-    const typedKey = addKey;
-    const typedApp = addApp;
+  async function setUp(
+    name: string,
+    service: string,
+    way: Way,
+    typedKey: string,
+    typedApp: AppDraft
+  ) {
     addKey = "";
     addApp = emptyApp();
     if (way.auth === "oauth") {
@@ -422,7 +497,7 @@
     if (!(service && way)) {
       return;
     }
-    const url = service.serverExample ? serverUrl(address) : service.url;
+    const url = service.serverExample ? serverUrl(typed.address) : service.url;
     if (!url) {
       addressProblem = words.serverAddressProblem;
       return;
@@ -431,19 +506,19 @@
     const byPage = signsInByPage(service.service, way);
     const tab = byPage ? window.open("", "_blank") : null;
     if (byPage && !tab) {
-      addProblem = BLOCKED;
+      typed.problem = BLOCKED;
       return;
     }
-    const name = nameFor(service.service, account);
+    const name = nameFor(service.service, typed.account);
     addPending = true;
-    addProblem = null;
+    typed.problem = null;
     try {
       await send<ConnectionView>(
         "/api/connections",
         json("POST", {
           name,
           service: service.service,
-          account: account.trim(),
+          account: typed.account.trim(),
           transport: "http",
           url,
           auth: way.auth,
@@ -451,15 +526,17 @@
       );
     } catch (error) {
       tab?.close();
-      addProblem = failureWords(error);
+      typed.problem = failureWords(error);
       addPending = false;
       return;
     }
     // The row exists now: what follows is said on it.
-    adding = null;
+    const typedKey = addKey;
+    const typedApp = addApp;
+    addDraft.clear();
     addPending = false;
     await read();
-    const ready = await setUp(name, service.service, way);
+    const ready = await setUp(name, service.service, way, typedKey, typedApp);
     if (!tab) {
       await read();
       return;
@@ -481,7 +558,7 @@
     delete problems[row.name];
     try {
       const deleted = await send<Deleted>(path(row.name), { method: "DELETE" });
-      stopWatching(row.name);
+      delete tabs[row.name];
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
       offerUndo(
@@ -681,7 +758,7 @@
         <Choice
           label={words.signsInWith}
           onchange={(next) => {
-            addWay = service.ways.find((each) => each.label === next) ?? addWay;
+            typed.way = next;
           }}
           options={service.ways.map((way) => ({
             value: way.label,
@@ -720,7 +797,7 @@
           placeholder={service.serverExample}
           spellcheck="false"
           type="url"
-          bind:value={address}
+          bind:value={typed.address}
         />
       </Field>
     {/if}
@@ -735,7 +812,7 @@
         placeholder={words.accountPlaceholder}
         required
         {@attach focusOnOpen}
-        bind:value={account}
+        bind:value={typed.account}
       />
     </Field>
     {#if addWay?.auth === "bearer"}
@@ -755,13 +832,23 @@
     {:else if addWay?.auth === "app"}
       {@render appFields(service.service, addApp, "connection")}
     {/if}
-    {#if addProblem}
+    {#if secretAskedAgain && addWay && addWay.auth !== "oauth"}
       <p
+        data-slot="secret-again"
+        class="type-meta max-w-c-measure text-pretty text-ink-muted"
+        transition:unfold
+      >
+        {words.secretNotKept}
+      </p>
+    {/if}
+    {#if typed.problem}
+      <p
+        data-slot="add-problem"
         class="type-meta wrap-anywhere text-status-fail-ink"
         role="alert"
         transition:unfold
       >
-        {addProblem}
+        {typed.problem}
       </p>
     {/if}
     <div class="flex justify-end gap-space-2">
@@ -998,9 +1085,15 @@
                 variant="outline"
               />
             {:else if row.state !== "signed-in" && signsIn(row)}
+              <!-- One press returns to the sign-in under way, the same
+                   page; only when none can still finish does it start one. -->
               <Button
+                aria-label="{row.signIn
+                  ? words.openSignIn
+                  : words.signIn} {labelOf(row)} {row.account}"
+                data-sign-in
                 press="pressable"
-                label={words.signIn}
+                label={row.signIn ? words.openSignIn : words.signIn}
                 onclick={() => signIn(row)}
                 pending={signing[row.name] ?? false}
                 pendingLabel={words.signingIn}

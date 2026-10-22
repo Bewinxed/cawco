@@ -22328,6 +22328,52 @@
             }
           }
         }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiFleetMarketplaceLinks",
+        "responses": {
+          "200": {
+            "description": "deleteApiFleetMarketplaceLinks 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiFleetMarketplaceLinks200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetMarketplaceLinks 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiFleetMarketplaceLinks 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/fleet/marketplaces/{name}": {
@@ -25169,6 +25215,17 @@
                       "rose",
                       "violet"
                     ]
+                  },
+                  "setupStep": {
+                    "type": "string",
+                    "enum": [
+                      "signIn",
+                      "nameIt",
+                      "yourSessions",
+                      "delegates",
+                      "atLimit",
+                      "done"
+                    ]
                   }
                 },
                 "required": [
@@ -25288,6 +25345,20 @@
                     "enum": [
                       "move",
                       "extra-usage"
+                    ]
+                  },
+                  "setupStep": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "signIn",
+                      "nameIt",
+                      "yourSessions",
+                      "delegates",
+                      "atLimit",
+                      "done"
                     ]
                   }
                 }
@@ -25761,7 +25832,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdSignin200"
+                  "$ref": "#/components/schemas/ProviderSigninChallenge"
                 }
               }
             }
@@ -29421,6 +29492,12 @@
               "plugins"
             ]
           },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketplaceLink"
+            }
+          },
           "skills": {
             "type": "array",
             "items": {
@@ -29469,6 +29546,7 @@
         "required": [
           "agents",
           "config",
+          "links",
           "memoryDocs",
           "skills",
           "unpushable"
@@ -29888,6 +29966,17 @@
         },
         "required": [
           "notices"
+        ]
+      },
+      "deleteApiFleetMarketplaceLinks200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
         ]
       },
       "postApiFleetUpdatesCheck200": {
@@ -31438,6 +31527,12 @@
               "$ref": "#/components/schemas/AccountSignin"
             }
           },
+          "pending": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingAccountSignin"
+            }
+          },
           "routing": {
             "type": "array",
             "items": {
@@ -31480,6 +31575,7 @@
           "bench",
           "catalogFaults",
           "catalogs",
+          "pending",
           "readings",
           "rebalances",
           "routing",
@@ -31608,40 +31704,6 @@
           "model",
           "strategy",
           "why"
-        ]
-      },
-      "postApiAccountsByIdMachinesByMachineIdSignin200": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "url": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "url"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "expiresAt": {
-                "type": "number"
-              },
-              "userCode": {
-                "type": "string"
-              },
-              "verificationUrl": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "expiresAt",
-              "userCode",
-              "verificationUrl"
-            ]
-          }
         ]
       },
       "postApiAccountsByIdMachinesByMachineIdSigninComplete200": {
@@ -42434,6 +42496,22 @@
             "description": "Free text: github, x, linear…",
             "type": "string"
           },
+          "signIn": {
+            "description": "The sign-in under way, while it can still finish: the page it was sent\nto and when it lapses, epoch ms. A press on the row opens that same\npage again rather than starting another.",
+            "type": "object",
+            "properties": {
+              "expiresAt": {
+                "type": "number"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expiresAt",
+              "url"
+            ]
+          },
           "state": {
             "$ref": "#/components/schemas/ConnectionState"
           },
@@ -50928,6 +51006,28 @@
           "outcome"
         ]
       },
+      "MarketplaceLink": {
+        "description": "A link of the marketplace at `source`, asked for: under way (`fetching`),\nlinked (`marketplace`, the row), or refused (`error`).",
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "fetching": {
+            "type": "boolean"
+          },
+          "marketplace": {
+            "$ref": "#/components/schemas/FleetMarketplace",
+            "description": "One linked plugin marketplace. `source` is whatever\n`claude plugin marketplace add` accepts — `owner/repo`, a git URL, a\nmarketplace.json URL — passed through verbatim."
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
       "FleetSkillMeta": {
         "description": "A skill row as the hub stores and the dashboard reads it: where it came\nfrom and what the hub resolved it to. The files themselves stay out of\nthis shape — a catalog read should not weigh megabytes.\n\n`source` forms the hub's resolver accepts. Installer CLIs are deliberately\nnever run: an installer is a wrapper around \"copy files into\n`~/.claude/skills/<name>`\", and cawco does the copy itself.\n- `skills:owner/repo[@skill][#ref]` — a skills.sh-style slug (what the\n  user would have typed after `bunx skills add`). The repo tarball is\n  walked in the CLI's own discovery order, except `.claude/skills/` wins\n  over `.agents/skills/` — cawco wants the Claude-tuned variant.\n- `github:owner/repo[/path][@ref]` — the repo tarball, `path` pointing at\n  the skill directory.\n- `npm:package[@version]` — the registry tarball, for the few packages\n  that embed `skills/<name>/SKILL.md` (most installer packages carry no\n  content — their CLIs fetch from GitHub at runtime).\n- a plain URL to a `SKILL.md` (single-file skill).",
         "type": "object",
@@ -51492,28 +51592,6 @@
         },
         "required": [
           "name"
-        ]
-      },
-      "MarketplaceLink": {
-        "description": "A link of the marketplace at `source`, asked for: under way (`fetching`),\nlinked (`marketplace`, the row), or refused (`error`).",
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string"
-          },
-          "fetching": {
-            "type": "boolean"
-          },
-          "marketplace": {
-            "$ref": "#/components/schemas/FleetMarketplace",
-            "description": "One linked plugin marketplace. `source` is whatever\n`claude plugin marketplace add` accepts — `owner/repo`, a git URL, a\nmarketplace.json URL — passed through verbatim."
-          },
-          "source": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "source"
         ]
       },
       "SkillVersion": {
@@ -52310,6 +52388,10 @@
               "null",
               "number"
             ]
+          },
+          "setupStep": {
+            "$ref": "#/components/schemas/AccountSetupStep",
+            "description": "The step its setup (Configure → Accounts → Add) stands at, while that\nsetup is unfinished; absent once it is done. A reload, or a press on the\naccount's row, opens the setup there again."
           }
         },
         "required": [
@@ -52395,6 +52477,65 @@
           "mismatch",
           "signed-in",
           "signed-out"
+        ]
+      },
+      "PendingAccountSignin": {
+        "description": "A sign-in a machine has started for an account and not finished: the link\nor device code it showed, kept by the hub until it ends or lapses\n(`expiresAt`, epoch ms), so a screen that reloads or reopens shows that\nsame link or code again instead of starting another.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "challenge": {
+            "$ref": "#/components/schemas/ProviderSigninChallenge"
+          },
+          "expiresAt": {
+            "type": "number"
+          },
+          "machineId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "challenge",
+          "expiresAt",
+          "machineId"
+        ]
+      },
+      "ProviderSigninChallenge": {
+        "description": "A provider sign-in begun: a device code to enter on any device, where, and\nuntil when (`expiresAt` from the provider's own device-code expiry); or,\nfor a provider with no device code, a link to authorise at, after which\nthe person pastes the code or redirect URL it ends on.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "expiresAt": {
+                "type": "number"
+              },
+              "userCode": {
+                "type": "string"
+              },
+              "verificationUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expiresAt",
+              "userCode",
+              "verificationUrl"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
         ]
       },
       "ProviderRouting": {
@@ -58177,7 +58318,7 @@
             "description": "One installed plugin. `id` is the CLI's own `plugin@marketplace` form.\n\n`hash`, `bytes` and `error` are what the HUB resolved this row to, and they\nride the dashboard's read only — the copy a machine is sent carries the\nfiles themselves ({@link FleetPluginPayload}) and has no use for the\nbookkeeping. `error` is a hub-side failure and a different fact from a\nmachine's `failed` in {@link FleetSyncReport.plugins}: one says the bytes\nwere never fetched, the other says a machine would not take them."
           },
           "removed": {
-            "description": "The row was removed while it was fetched; its `error` says so.",
+            "description": "The row was removed while it was fetched; its `error` says so. With\n`link`: a refused link was let go, and leaves the list.",
             "type": "boolean"
           },
           "skill": {
@@ -59084,6 +59225,17 @@
           "installing",
           "missing",
           "unsupported"
+        ]
+      },
+      "AccountSetupStep": {
+        "type": "string",
+        "enum": [
+          "atLimit",
+          "delegates",
+          "done",
+          "nameIt",
+          "signIn",
+          "yourSessions"
         ]
       },
       "AgentRowAuth": {

@@ -248,7 +248,24 @@ export interface Account {
    * percentage; null: no reserve.
    */
   reservePct: number | null;
+  /**
+   * The step its setup (Configure → Accounts → Add) stands at, while that
+   * setup is unfinished; absent once it is done. A reload, or a press on the
+   * account's row, opens the setup there again.
+   */
+  setupStep?: AccountSetupStep;
 }
+
+/** A step of an account's setup after it was made (the dashboard's `words.setup.steps`). */
+export const ACCOUNT_SETUP_STEPS = [
+  "signIn",
+  "nameIt",
+  "yourSessions",
+  "delegates",
+  "atLimit",
+  "done",
+] as const;
+export type AccountSetupStep = (typeof ACCOUNT_SETUP_STEPS)[number];
 
 /** Where an account stands on one machine. */
 export type SigninState = "signed-in" | "signed-out" | "mismatch";
@@ -813,6 +830,19 @@ export interface AccountSigninResult {
 export type ProviderSigninChallenge =
   | { expiresAt: number; userCode: string; verificationUrl: string }
   | { url: string };
+
+/**
+ * A sign-in a machine has started for an account and not finished: the link
+ * or device code it showed, kept by the hub until it ends or lapses
+ * (`expiresAt`, epoch ms), so a screen that reloads or reopens shows that
+ * same link or code again instead of starting another.
+ */
+export interface PendingAccountSignin {
+  accountId: string;
+  challenge: ProviderSigninChallenge;
+  expiresAt: number;
+  machineId: string;
+}
 
 /**
  * How a provider sign-in (or a key) ended. `signed-in`: as `identity` (its

@@ -1,8 +1,56 @@
+<script lang="ts" module>
+  import { TabDraft } from "../tab-draft.svelte";
+
+  /**
+   * Where the popover was opened from: the section's header ("head"), or an
+   * empty group's action, named by its group.
+   */
+  type Where = string;
+
+  /**
+   * The popover's held state (DESIGN.md, The Work Outlives Its Surface
+   * Rule): open or not, what was typed and picked, and the skill whose fetch
+   * it started. The fetch itself is the hub's row; this only names it.
+   */
+  const draft = new TabDraft("cawco:fetch-skill", () => ({
+    open: false,
+    at: "head" as Where,
+    typed: "",
+    skillName: "",
+    named: false,
+    projectId: "",
+    /** The skill this popover asked the hub for, until it lands. */
+    asked: null as string | null,
+    /** Why the hub refused the ask itself (no row to carry it). */
+    refused: null as string | null,
+  }));
+
+  /** The popovers mounted on the page, by where: one put away opens in the header's when its own is gone. */
+  const mounted = $state<Record<Where, number>>({});
+  /** The row it is reopened from, which it opens beside and closes into. */
+  let fromRow = $state<HTMLElement | null>(null);
+
+  /** The skill whose fetch the popover is following, parked on its row while it is put away. */
+  export const fetchParkedOn = (): string | null =>
+    draft.value.open ? null : draft.value.asked;
+
+  /** One press on the parked row: the popover again, where it was, beside that row. */
+  export function reopenFetch(row: HTMLElement | null): void {
+    fromRow = row;
+    draft.value.open = true;
+  }
+</script>
+
 <script lang="ts">
   /**
    * Fetch a skill, from the section's primary button: a source and a name,
    * then — when the repo holds several — which one. The hub downloads the
    * files once and every machine writes them into ~/.claude/skills.
+   *
+   * The fetch belongs to the hub's row, not to this popover: ×, Esc or a
+   * press outside put the popover away into that row, which says how the
+   * fetch goes and carries Open fetch back here; a reload opens it again as
+   * it was (`draft`). It closes for good into the row once the fetch lands.
    */
   import {
     type FleetSkillMeta,
@@ -10,7 +58,7 @@
     userLayerLabel,
     skillsWords as words,
   } from "@cawco/core";
-  import { tick } from "svelte";
+  import { onMount } from "svelte";
   import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -33,91 +81,169 @@
   import PickerChip from "./PickerChip.svelte";
 
   let {
-    taken,
+    skills,
     down,
+    where = "head",
+    onasking,
     onsaved,
   }: {
-    taken: string[];
+    /** The fleet's skill rows (null until read): the one this popover asked for says how its fetch goes. */
+    skills: FleetSkillMeta[] | null;
     /** Why the hub cannot take a write, or null: the trigger and the submit
         are disabled on it and say it as their title. */
     down: string | null;
+    where?: Where;
+    /** A fetch of `name` is about to be asked for. */
+    onasking: (name: string) => void;
+    /** The row the hub answered with, and the row once its fetch landed. */
     onsaved: (row: FleetSkillMeta) => void;
   } = $props();
 
-  let expanded = $state(false);
-  let typed = $state("");
-  let skillName = $state("");
-  let named = $state(false);
-  let busy = $state(false);
-  let failed = $state<string | undefined>(undefined);
-  let choices = $state<string[]>([]);
-  let surface = $state<HTMLElement | null>(null);
-  /** One project's only (placed in each of its checkouts and workspaces); "" for every machine. */
-  let projectId = $state("");
-  const project = $derived(
-    cawco.projects.find((each) => each.id === projectId)
+  onMount(() => {
+    mounted[where] = (mounted[where] ?? 0) + 1;
+    return () => {
+      mounted[where] = (mounted[where] ?? 1) - 1;
+    };
+  });
+
+  const held = draft.value;
+  const open = $derived(
+    held.open &&
+      (held.at === where || (where === "head" && (mounted[held.at] ?? 0) === 0))
   );
 
-  const source = $derived(normalizeSkillSource(typed));
-  const nameProblem = $derived(skillNameProblem(skillName, taken));
+  /** The ask is on its way to the hub. */
+  let sending = $state(false);
+  let surface = $state<HTMLElement | null>(null);
+
+  const project = $derived(
+    cawco.projects.find((each) => each.id === held.projectId)
+  );
+  /** The row this popover's fetch went on in, as the hub says it stands. */
+  const asked = $derived(
+    held.asked === null
+      ? undefined
+      : skills?.find((row) => row.name === held.asked)
+  );
+  const choices = $derived(asked?.fetching ? [] : (asked?.choices ?? []));
+  const busy = $derived(sending || asked?.fetching === true);
+  const failed = $derived(
+    held.refused ??
+      (asked && !asked.fetching && asked.error && choices.length === 0
+        ? words.fetchRefused(asked.name, asked.error)
+        : null)
+  );
+
+  const source = $derived(normalizeSkillSource(held.typed));
+  const nameProblem = $derived(
+    skillNameProblem(
+      held.skillName,
+      (skills ?? [])
+        .map((row) => row.name)
+        .filter((name) => name !== held.asked)
+    )
+  );
   const ready = $derived(source !== "" && nameProblem === undefined);
 
-  function reset() {
-    typed = "";
-    skillName = "";
-    named = false;
-    failed = undefined;
-    choices = [];
-    projectId = "";
+  const rowOf = (name: string) =>
+    document.querySelector<HTMLElement>(
+      `[data-row-name="${CSS.escape(name)}"]`
+    );
+
+  /** The closed surface's flight into its row, while bits-ui still draws it. */
+  let flight: Animation | undefined;
+
+  /**
+   * Closes at once, and the surface travels into `row` as it goes (The One
+   * Object Rule): bits-ui keeps a closed surface drawn until its animations
+   * end, the flight among them. The close never waits on the flight, so a
+   * reload or a press made during it finds the popover already shut.
+   */
+  function closeOnto(row: HTMLElement | null) {
+    flight?.cancel();
+    flight = surface && row ? closeInto(surface, row) : undefined;
+    held.open = false;
+    fromRow = null;
   }
 
+  // Opened again while its flight still runs (its trigger, or the row's
+  // Open): it turns back, whole, before it is drawn.
+  $effect.pre(() => {
+    if (open) {
+      flight?.cancel();
+      flight = undefined;
+    }
+  });
+
+  // The fetch landed with its files: the popover closes into the row it
+  // made, and the row says the rest (its rollout chip, machine by machine).
+  // Put away meanwhile, it simply lets go of the fetch.
+  $effect(() => {
+    const row = asked;
+    if (
+      !row ||
+      row.fetching ||
+      row.error ||
+      (row.choices?.length ?? 0) > 0 ||
+      sending
+    ) {
+      return;
+    }
+    onsaved(row);
+    if (open) {
+      closeOnto(rowOf(row.name));
+    }
+    draft.clear();
+  });
+
+  // A reload finds the row gone (removed meanwhile): nothing is followed.
+  $effect(() => {
+    if (held.asked !== null && !sending && skills !== null && !asked) {
+      held.asked = null;
+    }
+  });
+
   async function fetchIt(from: string) {
-    busy = true;
-    failed = undefined;
+    const name = held.skillName.trim();
+    sending = true;
+    held.refused = null;
+    onasking(name);
     try {
-      const row = await saveSkill(skillName.trim(), {
+      const row = await saveSkill(name, {
         source: from,
         enabled: true,
-        projectId: projectId || null,
+        projectId: held.projectId || null,
       });
+      held.asked = row.name;
       onsaved(row);
-      if (row.choices && row.choices.length > 0) {
-        ({ choices } = row);
-        return;
-      }
-      // The form closes into the row it made.
-      await tick();
-      const made = document.querySelector<HTMLElement>(
-        `[data-row-name="${CSS.escape(row.name)}"]`
-      );
-      const closing = surface && made ? closeInto(surface, made) : undefined;
-      await closing?.finished.catch(() => undefined);
-      // The row it made says the rest: its rollout chip, machine by machine.
-      expanded = false;
-      reset();
     } catch (error) {
-      failed = failureWords(error);
+      held.refused = failureWords(error);
     } finally {
-      busy = false;
+      sending = false;
     }
   }
 
   function choose(choice: string) {
-    typed = pickSkill(source, choice);
-    choices = [];
-    // biome-ignore lint/complexity/noVoid: fetchIt tracks its own busy/failed state
-    void fetchIt(typed);
+    held.typed = pickSkill(source, choice);
+    // biome-ignore lint/complexity/noVoid: fetchIt tracks its own state
+    void fetchIt(held.typed);
+  }
+
+  /**
+   * ×, Esc or a press outside: the popover goes, the fetch stays. With a
+   * fetch to follow it travels into that row; with none, into its trigger.
+   */
+  function setOpen(next: boolean) {
+    if (next) {
+      held.at = where;
+      held.open = true;
+      return;
+    }
+    closeOnto(held.asked === null ? null : rowOf(held.asked));
   }
 </script>
 
-<Popover.Root
-  onOpenChange={(next) => {
-    if (!next) {
-      reset();
-    }
-  }}
-  bind:open={expanded}
->
+<Popover.Root bind:open={() => open, setOpen}>
   <Popover.Trigger disabled={down !== null}>
     {#snippet child({ props })}
       <Button {...props} disabled={down !== null} title={down ?? undefined}>
@@ -129,23 +255,25 @@
   <Popover.Content
     align="end"
     class="w-c-panel-w max-w-(--bits-popover-content-available-width)"
+    customAnchor={fromRow}
     gap="form"
     pad="form"
     bind:ref={surface}
   >
     <form
+      data-fetch-skill
       class="flex flex-col gap-space-3"
       onsubmit={(event) => {
         event.preventDefault();
         if (ready && !busy) {
-          // biome-ignore lint/complexity/noVoid: fetchIt tracks its own busy/failed state
+          // biome-ignore lint/complexity/noVoid: fetchIt tracks its own state
           void fetchIt(source);
         }
       }}
     >
       <Field id="skill-source" label={words.source}>
         {#snippet hint()}
-          {#if source !== "" && source !== typed.trim()}
+          {#if source !== "" && source !== held.typed.trim()}
             <Coded text={words.readsAs(source)} />
           {:else}
             <Coded text={words.sourceHint} />
@@ -155,38 +283,42 @@
           autocomplete="off"
           id="skill-source"
           oninput={() => {
-            if (!named) {
-              skillName = suggestSkillName(normalizeSkillSource(typed));
+            if (!held.named) {
+              held.skillName = suggestSkillName(
+                normalizeSkillSource(held.typed)
+              );
             }
           }}
           placeholder={words.sourcePlaceholder}
           spellcheck="false"
-          bind:value={typed}
+          bind:value={held.typed}
         />
       </Field>
       <Field
         id="skill-name"
         label={words.name}
-        problem={skillName === "" ? undefined : nameProblem}
+        problem={held.skillName === "" ? undefined : nameProblem}
       >
         {#snippet hint()}
           {words.landsIn}
           <span class="type-code"
             >{project
-              ? projectClaudeRelative("skills", skillName || "name")
-              : userLayerLabel("skills", skillName || "name")}</span
+              ? projectClaudeRelative("skills", held.skillName || "name")
+              : userLayerLabel("skills", held.skillName || "name")}</span
           >{project ? words.inProjectFolders(project.name) : ""}
         {/snippet}
         <Input
-          aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}
+          aria-invalid={held.skillName !== "" && nameProblem
+            ? "true"
+            : undefined}
           autocomplete="off"
           id="skill-name"
           oninput={() => {
-            named = true;
+            held.named = true;
           }}
           placeholder={words.namePlaceholder}
           spellcheck="false"
-          bind:value={skillName}
+          bind:value={held.skillName}
         />
       </Field>
       <Field id="skill-scope" label={words.scope}>
@@ -194,7 +326,7 @@
           field={{ id: "skill-scope" }}
           label={words.scope}
           onpick={(next) => {
-            projectId = next;
+            held.projectId = next;
           }}
           options={[
             { value: "", label: words.everyMachine },
@@ -203,11 +335,12 @@
               label: each.name,
             })),
           ]}
-          value={projectId}
+          value={held.projectId}
         />
       </Field>
       {#if choices.length > 0}
         <div
+          data-slot="choices"
           class="flex flex-col max-h-c-choice-list-max-h overflow-y-auto"
           transition:unfold
         >
@@ -233,7 +366,8 @@
       {/if}
       {#if failed}
         <p
-          class="type-meta text-status-fail-ink"
+          data-slot="refused"
+          class="type-meta wrap-anywhere text-status-fail-ink"
           role="alert"
           transition:unfold
         >
@@ -243,7 +377,7 @@
       <Button
         class="self-end"
         disabled={down !== null || !ready}
-        failed={failed !== undefined}
+        failed={failed !== null}
         label={words.fetchSkill}
         pending={busy}
         pendingLabel={words.fetching}

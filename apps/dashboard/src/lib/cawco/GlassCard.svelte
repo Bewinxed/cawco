@@ -451,6 +451,21 @@
   const close = () => {
     barGlass.open = null;
   };
+
+  /**
+   * Whose an Escape is. bits-ui hands it to the last layer opened that
+   * takes one, so the rehearsal, opened unseen just after the page loads,
+   * would take the first Escape from a popover the page opened before it (a
+   * surface a reload brought back open, The Work Outlives Its Surface Rule)
+   * and shut nothing anyone sees. While it rehearses it defers, and the
+   * Escape goes to what is really open; so does a press outside.
+   */
+  const escapeBehavior = $derived.by(() => {
+    if (rehearsing) {
+      return "defer-otherwise-ignore";
+    }
+    return shown === "jump" || lightbox.current ? "ignore" : "close";
+  });
 </script>
 
 <svelte:window
@@ -482,9 +497,8 @@
     frame={shown}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
-    escapeKeydownBehavior={shown === "jump" || lightbox.current
-      ? "ignore"
-      : "close"}
+    escapeKeydownBehavior={escapeBehavior}
+    interactOutsideBehavior={rehearsing ? "defer-otherwise-ignore" : "close"}
     folded={() => barGlass.instant}
     forceMount
     glass

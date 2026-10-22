@@ -102,6 +102,56 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/AccountSetupStep`.
+    public enum AccountSetupStep: OpenEnum {
+        case atLimit
+        case delegates
+        case done
+        case nameIt
+        case signIn
+        case yourSessions
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "atLimit": self = .atLimit
+            case "delegates": self = .delegates
+            case "done": self = .done
+            case "nameIt": self = .nameIt
+            case "signIn": self = .signIn
+            case "yourSessions": self = .yourSessions
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .atLimit: "atLimit"
+            case .delegates: "delegates"
+            case .done: "done"
+            case .nameIt: "nameIt"
+            case .signIn: "signIn"
+            case .yourSessions: "yourSessions"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.atLimit, .delegates, .done, .nameIt, .signIn, .yourSessions]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ActionState`.
     public enum ActionState: OpenEnum {
         case approved

@@ -8,7 +8,11 @@
  * the machine answers: a tab opened after an `await` is a popup the
  * browser blocks.
  */
-import { type AccountJoined, accountsWords } from "@cawco/core";
+import {
+  type AccountJoined,
+  accountsWords,
+  type PendingAccountSignin,
+} from "@cawco/core";
 import { beginSignin, completeSignin } from "../client.svelte";
 import { failureWords } from "../hub-read";
 
@@ -41,6 +45,23 @@ export class SigninFlow {
 
   get busy(): boolean {
     return this.phase === "opening" || this.phase === "checking";
+  }
+
+  /** The sign-in is under way: a link shown, its code not yet taken. */
+  get live(): boolean {
+    return this.phase === "opening" || this.phase === "ready" || this.busy;
+  }
+
+  /**
+   * Takes up the link the hub kept for this sign-in (a reload, or a screen
+   * opened after it started): the same link again, never a new one.
+   */
+  resume(pending: PendingAccountSignin | undefined): void {
+    if (this.phase !== "idle" || !pending || !("url" in pending.challenge)) {
+      return;
+    }
+    this.url = pending.challenge.url;
+    this.phase = "ready";
   }
 
   /** Asks the machine for the link and opens it in a new tab. */

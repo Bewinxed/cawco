@@ -109,6 +109,7 @@ import {
   ACCOUNT_MOVE,
   ACCOUNT_READ,
   ACCOUNT_RULES,
+  ACCOUNT_SETUP_STEPS,
   type Account,
   type AccountBorrowFrame,
   type AccountCatalogFault,
@@ -268,6 +269,7 @@ import {
   type NeutralSystemMessage,
   namedAccount,
   PAIRING_REQUIRED,
+  type PendingAccountSignin,
   PLACEMENT_STRATEGIES,
   PLAN_ORIGIN,
   type PlacementPreview,
@@ -1226,6 +1228,10 @@ const NO_PROCESS_STATUSES: ReadonlySet<string> = new Set([
 /** An account sign-in step on a machine (core `ACCOUNT_RULES.signinWaitMs`). */
 const SIGNIN_TIMEOUT_MS = ACCOUNT_RULES.signinWaitMs;
 const accountHue = t.Union(ACCOUNT_HUES.map((hue) => t.Literal(hue)));
+/** A step of an unfinished account setup (core `AccountSetupStep`). */
+const accountSetupStep = t.Union(
+  ACCOUNT_SETUP_STEPS.map((step) => t.Literal(step))
+);
 /** An account provider's id: Claude's `anthropic`, or a provider pi or OpenCode speaks. */
 const accountProvider = t.String({
   minLength: 1,
@@ -4395,6 +4401,57 @@ export const createServer = (
    * dashboard, as a catalog kept does.
    */
   const catalogFaults = new Map<string, string>();
+
+  /**
+   * The sign-ins machines have started and not finished, by `account:machine`
+   * (core `PendingAccountSignin`): the link or device code each showed, so a
+   * dashboard that reloads or reopens its popover shows the same one rather
+   * than minting another. Kept in memory: the login it names lives on the
+   * machine, and a hub that starts again has lost its answer anyway.
+   */
+  const pendingSignins = new Map<string, PendingAccountSignin>();
+  /**
+   * How long a Claude Code login's link is shown again: its `claude auth
+   * login` waits with no clock of its own. Our choice, as long as a
+   * connection's sign-in waits.
+   */
+  const PENDING_LINK_MS = 10 * 60_000;
+  const pendingKey = (accountId: string, machineId: string): string =>
+    `${accountId}:${machineId}`;
+  /** What a machine showed for a sign-in it started, kept until it ends or lapses. */
+  const keepPending = (
+    accountId: string,
+    machineId: string,
+    challenge: ProviderSigninChallenge
+  ): void => {
+    pendingSignins.set(pendingKey(accountId, machineId), {
+      accountId,
+      machineId,
+      challenge,
+      expiresAt:
+        "expiresAt" in challenge
+          ? challenge.expiresAt
+          : Date.now() + PENDING_LINK_MS,
+    });
+  };
+  /** Every sign-in under way for an account let go: the account is gone. */
+  const forgetPendingOf = (accountId: string): void => {
+    for (const one of [...pendingSignins.values()]) {
+      if (one.accountId === accountId) {
+        pendingSignins.delete(pendingKey(accountId, one.machineId));
+      }
+    }
+  };
+  /** The pending sign-ins still live, the lapsed ones let go. */
+  const livePendingSignins = (): PendingAccountSignin[] => {
+    const now = Date.now();
+    for (const [key, one] of pendingSignins) {
+      if (one.expiresAt <= now) {
+        pendingSignins.delete(key);
+      }
+    }
+    return [...pendingSignins.values()];
+  };
   const noteCatalogFault = (
     machineId: string,
     account: string,
@@ -18533,8 +18590,14 @@ export const createServer = (
     return work;
   };
 
-  /** Marketplace links under way, by source. */
-  const marketplaceLinks = new Set<string>();
+  /**
+   * Marketplace links that have no row yet, by source: under way
+   * (`fetching`), or refused (`error`). A refused one stands, said in the
+   * dashboard's marketplace list, until it is tried again or let go
+   * (`DELETE /api/fleet/marketplace-links`); a landed one leaves, its row the
+   * list's own. Kept in memory: a hub that starts again has dropped the read.
+   */
+  const marketplaceLinks = new Map<string, MarketplaceLink>();
 
   /** What a landed read of `source` comes to as a link: the row it linked, or why not. */
   const linkRead = (read: MarketplaceRead): MarketplaceLink => {
@@ -18562,8 +18625,8 @@ export const createServer = (
    * second link of a source joins the one under way.
    */
   const linkMarketplace = (source: string): MarketplaceLink => {
-    if (!marketplaceLinks.has(source)) {
-      marketplaceLinks.add(source);
+    if (!marketplaceLinks.get(source)?.fetching) {
+      marketplaceLinks.set(source, { source, fetching: true });
       announceFetch({ link: { source, fetching: true } });
       detach(
         readMarketplaceSource(source).then((read) => {
@@ -18576,13 +18639,28 @@ export const createServer = (
               error: error instanceof Error ? error.message : String(error),
             };
           }
-          marketplaceLinks.delete(source);
+          if (link.error === undefined) {
+            marketplaceLinks.delete(source);
+          } else {
+            marketplaceLinks.set(source, link);
+          }
           announceFetch({ link });
         }),
         "marketplace link"
       );
     }
     return { source, fetching: true };
+  };
+
+  /** Lets a refused link go: it was read, and nobody will try it again. */
+  const dropMarketplaceLink = (source: string): boolean => {
+    const held = marketplaceLinks.get(source);
+    if (held === undefined || held.fetching) {
+      return false;
+    }
+    marketplaceLinks.delete(source);
+    announceFetch({ link: { source }, removed: true });
+    return true;
   };
 
   // Every row the hub holds no bytes for, plugin or skill: never fetched, or
@@ -27014,6 +27092,8 @@ export const createServer = (
             marketplaces,
             plugins: db.listPlugins().map(pluginRow),
           },
+          // Links with no row yet: under way, or refused and not let go.
+          links: [...marketplaceLinks.values()],
           skills: db.listSkills().map(skillRow),
           agents: db.listFleetAgents(),
           memory: db.getFleetMemory() ?? null,
@@ -27440,6 +27520,19 @@ export const createServer = (
         "/api/fleet/marketplace-links",
         { body: t.Object({ source: t.String({ minLength: 1 }) }) },
         ({ body }): MarketplaceLink => linkMarketplace(body.source.trim())
+      )
+      // A refused link let go, by the person who read why: it leaves the
+      // list. One under way is not dropped: it lands or is refused first.
+      .delete(
+        "/api/fleet/marketplace-links",
+        { query: t.Object({ source: t.String({ minLength: 1 }) }) },
+        ({ query, status }) =>
+          dropMarketplaceLink(query.source.trim())
+            ? { ok: true }
+            : status(
+                404,
+                `No refused link of ${query.source.trim()} is waiting to be let go.`
+              )
       )
       .delete("/api/fleet/marketplaces/:name", ({ params, status }) => {
         const trashed = db.trash.put(
@@ -29235,6 +29328,11 @@ export const createServer = (
           return {
             accounts,
             signins: mine(db.accounts.signins()),
+            // Sign-ins started and not finished: the link or code each
+            // showed, for a screen that reloads or reopens to show again.
+            pending: livePendingSignins().filter((one) =>
+              ids.has(one.accountId)
+            ),
             routing: (query.provider
               ? [query.provider]
               : [
@@ -29284,6 +29382,9 @@ export const createServer = (
             // A nickname; without one the account goes by its email once signed in.
             label: t.Optional(t.String({ minLength: 1 })),
             hue: t.Optional(accountHue),
+            // Made by the dashboard's setup: the step it stands at, kept
+            // until the setup is done so a reload opens it there again.
+            setupStep: t.Optional(accountSetupStep),
           }),
         },
         ({ body, status }) => {
@@ -29308,6 +29409,8 @@ export const createServer = (
             atPlanLimit: t.Optional(
               t.Union([t.Literal("move"), t.Literal("extra-usage")])
             ),
+            // Where its setup stands; null: the setup is done.
+            setupStep: t.Optional(t.Union([accountSetupStep, t.Null()])),
           }),
         },
         ({ params, body, status }) => {
@@ -29376,6 +29479,7 @@ export const createServer = (
           );
         }
         db.accounts.remove(account.id, "removed");
+        forgetPendingOf(account.id);
         rowsLeave(account.id, null);
         publishUsage();
         // Machines offline now, which sign it out when they next connect.
@@ -29707,14 +29811,18 @@ export const createServer = (
           switch (answer.kind) {
             case "unanswered":
               return status(503, awayWords(params.machineId, answer));
-            case "answered":
-              return answer.value.ok
-                ? (answer.value.result as
-                    { url: string } | ProviderSigninChallenge)
-                : status(
-                    422,
-                    answer.value.error ?? "The sign-in did not start."
-                  );
+            case "answered": {
+              if (!answer.value.ok) {
+                pendingSignins.delete(pendingKey(params.id, params.machineId));
+                return status(
+                  422,
+                  answer.value.error ?? "The sign-in did not start."
+                );
+              }
+              const challenge = answer.value.result as ProviderSigninChallenge;
+              keepPending(params.id, params.machineId, challenge);
+              return challenge;
+            }
             default:
               throw unreachable(answer);
           }
@@ -29761,10 +29869,17 @@ export const createServer = (
             );
           }
           if (!answer.ok) {
+            // The machine's login stopped: its link or code is spent.
+            pendingSignins.delete(pendingKey(params.id, params.machineId));
             return status(422, answer.error ?? "The sign-in did not finish.");
           }
           const result = answer.result as
             AccountSigninResult | ProviderSigninResult;
+          // Ended, one way or another; a code still waited on, or one that
+          // did not take, leaves the same link or code standing.
+          if (["signed-in", "mismatch", "expired"].includes(result.state)) {
+            pendingSignins.delete(pendingKey(params.id, params.machineId));
+          }
           const settled =
             now.id === params.id
               ? await settleSignin(now, params.machineId, result)

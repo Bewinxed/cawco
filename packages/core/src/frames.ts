@@ -814,7 +814,10 @@ export interface FleetFetchFrame {
   link?: MarketplaceLink;
   marketplace?: MarketplaceRead;
   plugin?: FleetPlugin;
-  /** The row was removed while it was fetched; its `error` says so. */
+  /**
+   * The row was removed while it was fetched; its `error` says so. With
+   * `link`: a refused link was let go, and leaves the list.
+   */
   removed?: boolean;
   skill?: FleetSkillMeta;
 }

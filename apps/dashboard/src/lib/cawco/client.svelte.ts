@@ -13,6 +13,7 @@ import type {
   AccountKind,
   AccountProvider,
   AccountReading,
+  AccountSetupStep,
   AccountSignin,
   AccountSigninResult,
   AgentRow,
@@ -53,6 +54,7 @@ import type {
   NeutralStatus,
   OnCap,
   OpenCodeGoLimits,
+  PendingAccountSignin,
   PermissionMode,
   PermissionPresentation,
   PermissionResult,
@@ -2469,6 +2471,8 @@ export interface AccountsView {
   /** Why accounts with no catalog have none: their last probe's fault. */
   catalogFaults: AccountCatalogFault[];
   catalogs: AccountCatalog[];
+  /** Sign-ins started on a machine and not finished: the link or code each showed. */
+  pending: PendingAccountSignin[];
   /** Each account's freshest reading: its windows, plan and extra usage. */
   readings: AccountReading[];
   /** What adding an account (or one back from its bench) set moving, newest first. */
@@ -2552,6 +2556,8 @@ export const createAccount = (body: {
   provider: AccountProvider;
   hue?: AccountHue;
   label?: string;
+  /** Made by the setup: the step it stands at, until it is done. */
+  setupStep?: AccountSetupStep;
 }): Promise<Account> => accountsWrite("/api/accounts", "POST", body);
 
 /** Changes an account's nickname (null: its email), colour, order or limits. */
@@ -2563,6 +2569,8 @@ export const patchAccount = (
     neverBackup?: boolean;
     order?: number;
     reservePct?: number | null;
+    /** Where its setup stands; null once the setup is done. */
+    setupStep?: AccountSetupStep | null;
   }
 ): Promise<Account> =>
   accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "PATCH", patch);

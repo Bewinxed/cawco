@@ -75,6 +75,11 @@ export const skillsWords = {
   scope: "Scope",
   everyMachine: "Every machine in the fleet",
   severalSkills: "That repo holds several skills. Pick the one to fetch.",
+  /** The row a fetch went on in, once its popover is put away: one press brings it back. */
+  openFetch: "Open fetch",
+  /** A fetch the hub could not make, said in the popover in the error formula. */
+  fetchRefused: (name: string, why: string) =>
+    `${name} was not fetched: ${why}. Change the source and fetch it again; its row says this until then.`,
 
   /** Link marketplace. */
   linkMarketplace: "Link marketplace",
@@ -90,6 +95,12 @@ export const skillsWords = {
   callsItself: (name: string) =>
     `This marketplace calls itself \`${name}\`, and links as \`${name}\`: its plugins install as \`plugin@${name}\`.`,
   alreadyLinked: (name: string) => `"${name}" is already linked.`,
+  /** A link with no row yet, in the marketplace list: one press brings its popover back. */
+  openLink: "Open link",
+  removeLink: "Remove link",
+  /** A link the hub refused, said on its row and in the popover in the error formula. */
+  linkRefused: (source: string, why: string) =>
+    `${source} was not linked: ${why}. Change the source and link it again, or remove this row.`,
 
   /** On each machine. */
   onEachMachine: "On each machine",
@@ -108,11 +119,9 @@ export const skillsWords = {
   adopting: "Adopting…",
   inTheFleet: "In the fleet",
 
-  /** A marketplace the hub could not read or link, with its reason. */
+  /** A marketplace the hub could not read, with its reason. */
   couldNotRead: (what: string, why: string) =>
     `Could not read ${what} — ${why}.`,
-  couldNotLink: (what: string, why: string) =>
-    `Could not link ${what} — ${why}.`,
   saidNothing: "it said nothing",
 
   /** Why a name cannot be used. */

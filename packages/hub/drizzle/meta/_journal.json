@@ -1961,6 +1961,13 @@
       "when": 1792590940828,
       "tag": "0287_preview_pass_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "6",
+      "when": 1792646501306,
+      "tag": "0288_work_outlives_surface",
+      "breakpoints": true
     }
   ]
 }

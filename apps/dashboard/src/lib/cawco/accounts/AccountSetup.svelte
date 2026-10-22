@@ -18,6 +18,15 @@
    * into it (hub `joinExisting`): the account made for it is gone, and the
    * setup carries on with the one it joined, said on the Sign in step, Name
    * it starting from that account's own name and colour.
+   *
+   * The setup outlives the page (DESIGN.md, The Work Outlives Its Surface
+   * Rule). Its account keeps the step it stands at on the hub
+   * (`setupStep`) until it is done, and the address names it
+   * (`?account=`, or `?choice=` before it is made), so a reload opens the
+   * same step; leaving it parks it on the account's row in the list
+   * ("Setup not finished"), whose press opens it here again. Its sign-ins
+   * are the shared flows (flows.svelte.ts): a link or code shown stays
+   * shown, and a device code's wait goes on while the page is away.
    */
   import {
     type Account,
@@ -32,8 +41,7 @@
     type ProviderChoice,
     type StrategyChoice,
   } from "@cawco/core";
-  import { onDestroy, untrack } from "svelte";
-  import { SvelteMap } from "svelte/reactivity";
+  import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import {
     cawco,
@@ -67,11 +75,22 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
+  import { TabDraft } from "../tab-draft.svelte";
   import AccountName from "./AccountName.svelte";
   import AccountTile from "./AccountTile.svelte";
   import AtLimitBlock from "./AtLimitBlock.svelte";
   import DevicePanel from "./DevicePanel.svelte";
   import { DeviceFlow } from "./device.svelte";
+  import {
+    adoptFlows,
+    deviceFlow,
+    dropFlow,
+    flowKey,
+    heldFlow,
+    pasteFlow,
+    pendingOf,
+  } from "./flows.svelte";
   import KeyPanel from "./KeyPanel.svelte";
   import {
     accountsOf,
@@ -130,7 +149,27 @@
       )
     );
 
-  let choice = $state<ProviderChoice | null>(null);
+  /**
+   * The setup this address names, left unfinished: its account (`?account=`,
+   * still standing at a step on the hub), else the row picked before the
+   * account was made (`?choice=`).
+   */
+  const resumed = untrack(() => {
+    const id = page.url.searchParams.get("account");
+    return (
+      cawco.accounts?.accounts.find(
+        (one) => one.id === id && one.setupStep !== undefined
+      ) ?? null
+    );
+  });
+  const picked = untrack(() => {
+    const asked = resumed
+      ? `${resumed.provider}:${resumed.kind}`
+      : page.url.searchParams.get("choice");
+    return choicesOf().find((one) => keyOf(one) === asked) ?? null;
+  });
+
+  let choice = $state<ProviderChoice | null>(picked);
   /** The provider's one account, when this is its second: the setup goes on to routing. */
   let existing = $state<Account | null>(null);
   const provider = $derived(choice?.provider ?? null);
@@ -163,10 +202,12 @@
 
   // ── Sign in ────────────────────────────────────────────────────────────
   /** The account made for this setup by its first sign-in. */
-  let createdId = $state<string | null>(null);
+  let createdId = $state<string | null>(resumed?.id ?? null);
   let creating: Promise<string> | null = null;
   /** The colour the account is made in: the first its provider's accounts don't wear. */
-  let hue = $state<AccountHue>("orange");
+  let hue = $state<AccountHue>(resumed?.hue ?? "orange");
+  /** Where the flows of this setup's sign-ins are kept: its account, or the row picked before it. */
+  const root = $derived(createdId ?? `new:${choice ? keyOf(choice) : "none"}`);
 
   /** The account's id, making it first: it is made by its first sign-in. */
   function ensureAccount(): Promise<string> {
@@ -181,8 +222,11 @@
       provider: row.provider,
       kind: row.kind,
       hue,
+      setupStep: "signIn",
     }).then(
       (made) => {
+        adoptFlows(`new:${keyOf(row)}`, made.id);
+        savedStep = "signIn";
         createdId = made.id;
         return made.id;
       },
@@ -195,16 +239,27 @@
   }
 
   const machines = $derived(choice ? runsOn(choice.harnesses) : []);
-  const pastes = new SvelteMap<string, SigninFlow>();
-  const devices = new SvelteMap<string, DeviceFlow>();
+  const flowOn = (machineId: string) => heldFlow(flowKey(root, machineId));
+  const pasteOn = (machineId: string) => {
+    const flow = flowOn(machineId);
+    return flow instanceof SigninFlow ? flow : undefined;
+  };
+  const deviceOn = (machineId: string) => {
+    const flow = flowOn(machineId);
+    return flow instanceof DeviceFlow ? flow : undefined;
+  };
+  /** Each machine's sign-in flow, as far as one is made. */
+  const flows = $derived(
+    machines.flatMap((machine) => {
+      const flow = flowOn(machine.machineId);
+      return flow ? [flow] : [];
+    })
+  );
   /** The account the hub already had that a key sent here came out as (KeyPanel). */
   let keyJoined = $state<AccountJoined | null>(null);
   /** The account the hub already had that a sign-in here came out as. */
   const joined = $derived(
-    keyJoined ??
-      [...pastes.values(), ...devices.values()].find((flow) => flow.joined)
-        ?.joined ??
-      null
+    keyJoined ?? flows.find((flow) => flow.joined)?.joined ?? null
   );
   /** The account being added: the one its sign-in joined, else the one made for it. */
   const accountId = $derived(joined?.accountId ?? createdId);
@@ -213,37 +268,48 @@
   );
   $effect.pre(() => {
     const kind = choice?.signin;
+    const under = root;
+    const id = createdId;
     for (const machine of machines) {
       const { machineId } = machine;
-      if (kind === "paste-code" && !untrack(() => pastes.has(machineId))) {
-        pastes.set(machineId, new SigninFlow(ensureAccount, machineId));
-      }
-      if (kind === "device-code" && !untrack(() => devices.has(machineId))) {
-        devices.set(machineId, new DeviceFlow(ensureAccount, machineId));
-      }
+      untrack(() => {
+        if (kind === "paste-code") {
+          pasteFlow(flowKey(under, machineId), ensureAccount, machineId, id);
+        }
+        if (kind === "device-code") {
+          deviceFlow(flowKey(under, machineId), ensureAccount, machineId, id);
+        }
+      });
     }
   });
-  onDestroy(() => {
-    for (const flow of devices.values()) {
-      flow.dispose();
+  // The accounts read since a flow was made: an idle one takes up the
+  // sign-in the hub says is under way, its same link or code.
+  $effect(() => {
+    for (const machine of machines) {
+      flowOn(machine.machineId)?.resume(
+        pendingOf(createdId, machine.machineId)
+      );
     }
   });
+  /** This setup's flows let go: another row was picked, or it was cancelled. */
+  function dropFlows() {
+    for (const machine of machines) {
+      dropFlow(flowKey(root, machine.machineId));
+    }
+  }
 
   const signins = $derived(cawco.accounts?.signins ?? []);
   const stateOn = (machineId: string) =>
     accountId ? signinState(signins, accountId, machineId) : "signed-out";
   const doneOn = (machineId: string) =>
     stateOn(machineId) === "signed-in" ||
-    pastes.get(machineId)?.phase === "signed-in" ||
-    devices.get(machineId)?.phase === "signed-in";
+    flowOn(machineId)?.phase === "signed-in";
   const signedIn = $derived(
     machines.filter((machine) => doneOn(machine.machineId)).length
   );
   const email = $derived(
     account?.email ??
-      [...pastes.values(), ...devices.values()].find(
-        (flow) => flow.phase === "signed-in"
-      )?.email ??
+      flows.find((flow) => flow.phase === "signed-in")?.email ??
       null
   );
 
@@ -276,6 +342,109 @@
   // ── Moving through ─────────────────────────────────────────────────────
   let busy = $state(false);
   let refused = $state<string | null>(null);
+
+  // ── Kept through a reload ──────────────────────────────────────────────
+  /** The step the hub last kept for the account (`setupStep`). */
+  let savedStep: string | null = resumed?.setupStep ?? null;
+  /**
+   * What the steps after Sign in hold before they are saved, kept in this
+   * tab for the account they are for: the nickname, and a second account's
+   * routing as picked and dragged.
+   */
+  const kept = new TabDraft("cawco:account-setup", () => ({
+    accountId: null as string | null,
+    nickname: "",
+    yours: null as StrategyChoice | null,
+    delegates: null as StrategyChoice | null,
+    atLimit: null as typeof atLimit | null,
+    dragged: null as string[] | null,
+  }));
+
+  // A setup taken up again stands where it was left: its row, its account's
+  // colour and name, the routing it was given, at the step the hub kept.
+  if (resumed && picked) {
+    const theirs = accountsOf(picked.provider).filter(
+      (one) => one.id !== resumed.id
+    );
+    const other = theirs.length === 1 ? (theirs[0] ?? null) : null;
+    existing = other;
+    const defaults = defaultRouting(picked.provider);
+    const held = kept.value.accountId === resumed.id ? kept.value : null;
+    yours =
+      held?.yours ??
+      (defaults.yours.strategy === "pinned"
+        ? { strategy: "pinned", pinnedAccountId: other?.id }
+        : { ...defaults.yours });
+    delegates = held?.delegates ?? { ...defaults.delegates };
+    if (held?.atLimit) {
+      ({ atLimit } = held);
+    }
+    dragged = held?.dragged ?? null;
+    nickname = held?.nickname ?? resumed.label ?? "";
+    step = Math.max(
+      1,
+      untrack(() => STEPS.indexOf(resumed.setupStep ?? "signIn"))
+    );
+  } else if (picked) {
+    hue = nextHue(accountsOf(picked.provider));
+    step = 1;
+  }
+
+  $effect(() => {
+    if (accountId) {
+      Object.assign(kept.value, {
+        accountId,
+        nickname,
+        yours: $state.snapshot(yours),
+        delegates: $state.snapshot(delegates),
+        atLimit: $state.snapshot(atLimit),
+        dragged: $state.snapshot(dragged),
+      });
+    }
+  });
+
+  /** The address that names this setup: its account, else the row picked, else none. */
+  const named = $derived.by(() => {
+    if (accountId) {
+      return `?account=${encodeURIComponent(accountId)}`;
+    }
+    return choice ? `?choice=${encodeURIComponent(keyOf(choice))}` : "";
+  });
+  /** The address last written, so each change of `named` is written once. */
+  let written = untrack(() => page.url.search);
+
+  // The address names the setup, so a reload opens it again. It follows the
+  // setup alone: the router's own state is read untracked, since writing the
+  // address moves it.
+  $effect(() => {
+    const search = named;
+    if (search === written) {
+      return;
+    }
+    written = search;
+    untrack(() => {
+      // biome-ignore lint/complexity/noVoid: a shallow replace of the address, nothing to wait on
+      void goto(`${page.url.pathname}${search}`, {
+        shallow: true,
+        replace: true,
+        state: page.state,
+      });
+    });
+  });
+
+  // The hub keeps the step it stands at, for the account's row to offer
+  // the setup back.
+  $effect(() => {
+    const id = accountId;
+    const now = at;
+    if (!id || now === undefined || now === "provider" || now === savedStep) {
+      return;
+    }
+    savedStep = now;
+    patchAccount(id, { setupStep: now }).catch((error: unknown) => {
+      refused = failureWords(error);
+    });
+  });
 
   const canGo = $derived(
     at === "provider" ? false : at !== "signIn" || signedIn > 0
@@ -310,14 +479,11 @@
         return;
       }
       busy = false;
+      dropFlows();
       createdId = null;
       creating = null;
+      savedStep = null;
       keyJoined = null;
-      pastes.clear();
-      for (const flow of devices.values()) {
-        flow.dispose();
-      }
-      devices.clear();
     }
     const theirs = accountsOf(row.provider).filter(
       (one) => one.id !== createdId
@@ -365,6 +531,11 @@
         });
         await saveOrder();
       }
+      // Done: the account's row no longer offers this setup back.
+      if (step === LAST && accountId) {
+        await patchAccount(accountId, { setupStep: null });
+        kept.clear();
+      }
     } catch (error) {
       refused = failureWords(error);
       busy = false;
@@ -406,16 +577,21 @@
 
   /** Cancel takes back an account no machine signed in; one signed in, or joined, stays. */
   async function cancel() {
-    if (createdId && !joined && signedIn === 0) {
-      busy = true;
-      try {
+    busy = true;
+    try {
+      if (createdId && !joined && signedIn === 0) {
         await deleteAccount(createdId);
-      } catch (error) {
-        refused = failureWords(error);
-        busy = false;
-        return;
+      } else if (accountId) {
+        // Signed in somewhere, it stays, and its setup is over.
+        await patchAccount(accountId, { setupStep: null });
       }
+    } catch (error) {
+      refused = failureWords(error);
+      busy = false;
+      return;
     }
+    dropFlows();
+    kept.clear();
     await goto("/config/accounts");
   }
 
@@ -752,8 +928,8 @@
           {@const online = machineOnline(machine)}
           {@const state = stateOn(machine.machineId)}
           {@const done = doneOn(machine.machineId)}
-          {@const paste = pastes.get(machine.machineId)}
-          {@const device = devices.get(machine.machineId)}
+          {@const paste = pasteOn(machine.machineId)}
+          {@const device = deviceOn(machine.machineId)}
           {#if device}
             <li
               class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"

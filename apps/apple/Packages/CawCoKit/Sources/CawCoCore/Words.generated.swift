@@ -257,6 +257,14 @@ public enum Words {
 
             public static let sendKey = "Send key"
 
+            /// A sign-in under way, its popover put away: one press opens it again as it was.
+            public static let openSignIn = "Open sign-in"
+
+            /// What a row says while its sign-in waits, the popover put away.
+            public static let waitingCode = "Waiting for the code"
+
+            public static let waitingPaste = "Waiting for the pasted code"
+
             /// The sign-in's label: "Sign in you@x.com on obelisk".
             public static func signInOn(verb: String, account: String, machine: String) -> String {
                 "\(verb) \(account) on \(machine)"
@@ -391,6 +399,11 @@ public enum Words {
 
         public enum Setup {
             public static let title = "Add account"
+
+            /// An account whose setup was left before it was done, on its row in the list.
+            public static func unfinished(step: String) -> String {
+                "Setup not finished · \(step)"
+            }
 
             public enum Steps {
                 public static let provider = "Provider"
@@ -1999,7 +2012,16 @@ public enum Words {
             "\(service)'s sign-in is open in a new tab; this row turns signed in when you finish there."
         }
 
-        public static let signInClosed = "The sign-in tab closed before it finished."
+        public static let signInClosed = "The sign-in tab closed before it finished. Open sign-in to go on where it was, until it lapses."
+
+        /// The row's own button while its sign-in can still finish: the same page again, never another sign-in.
+        public static let openSignIn = "Open sign-in"
+
+        /// The hub still says a sign-in is under way, but it ran past its time.
+        public static let signInLapsed = "The last sign-in ran out of time before it finished. Sign in to start another."
+
+        /// A secret is never kept through a reload: the form asks for it again and says why.
+        public static let secretNotKept = "Keys and secrets are never kept when the page reloads, so paste it again to sign in."
 
         public static let blocked = "The browser blocked the sign-in tab. Allow pop-ups for this page, then try again."
 
@@ -2735,6 +2757,14 @@ public enum Words {
 
         public static let severalSkills = "That repo holds several skills. Pick the one to fetch."
 
+        /// The row a fetch went on in, once its popover is put away: one press brings it back.
+        public static let openFetch = "Open fetch"
+
+        /// A fetch the hub could not make, said in the popover in the error formula.
+        public static func fetchRefused(name: String, why: String) -> String {
+            "\(name) was not fetched: \(why). Change the source and fetch it again; its row says this until then."
+        }
+
         /// Link marketplace.
         public static let linkMarketplace = "Link marketplace"
 
@@ -2760,6 +2790,16 @@ public enum Words {
 
         public static func alreadyLinked(name: String) -> String {
             "\"\(name)\" is already linked."
+        }
+
+        /// A link with no row yet, in the marketplace list: one press brings its popover back.
+        public static let openLink = "Open link"
+
+        public static let removeLink = "Remove link"
+
+        /// A link the hub refused, said on its row and in the popover in the error formula.
+        public static func linkRefused(source: String, why: String) -> String {
+            "\(source) was not linked: \(why). Change the source and link it again, or remove this row."
         }
 
         /// On each machine.
@@ -2793,13 +2833,9 @@ public enum Words {
 
         public static let inTheFleet = "In the fleet"
 
-        /// A marketplace the hub could not read or link, with its reason.
+        /// A marketplace the hub could not read, with its reason.
         public static func couldNotRead(what: String, why: String) -> String {
             "Could not read \(what) — \(why)."
-        }
-
-        public static func couldNotLink(what: String, why: String) -> String {
-            "Could not link \(what) — \(why)."
         }
 
         public static let saidNothing = "it said nothing"

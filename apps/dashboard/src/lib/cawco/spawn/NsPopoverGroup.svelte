@@ -22,6 +22,7 @@
     popoverRoom,
   } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { cn } from "#lib/utils.js";
   import { browser } from "$app/env";
   import {
@@ -124,7 +125,10 @@
 
 {@render children()}
 {#if !outer}
-  <Popover.Root
+  <!-- The kit's Root (root-open): a member open as the page mounts (a
+       sign-in a reload brought back open) registers after the Root is made,
+       and bits-ui's own would never draw it. -->
+  <PopoverRoot
     onOpenChange={(value) => {
       if (!value) {
         active?.onchange(false);
@@ -231,5 +235,5 @@
         </Popover.Content>
       {/if}
     </Popover.Portal>
-  </Popover.Root>
+  </PopoverRoot>
 {/if}

@@ -4,6 +4,7 @@ import type {
   AccountMove,
   AccountOverage,
   AccountProvider,
+  AccountSetupStep,
   AtLimit,
   AtPlanLimit,
   AttemptResult,
@@ -2272,6 +2273,8 @@ export const accounts = sqliteTable(
     email: text("email"),
     organization: text("organization"),
     orgId: text("org_id"),
+    /** Where its unfinished setup stands (core `AccountSetupStep`); null once done. */
+    setupStep: text("setup_step").$type<AccountSetupStep>(),
     createdAt: timestamp("created_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -4651,6 +4654,8 @@ export const connections = sqliteTable("connections", {
   signInState: text("sign_in_state").unique(),
   signInRedirect: text("sign_in_redirect"),
   signInExpiresAt: timestamp("sign_in_expires_at"),
+  /** The page that sign-in sent the person to, so a reload returns to it. */
+  signInUrl: text("sign_in_url"),
   /** When the held access token runs out, as its token response said. */
   tokensExpireAt: timestamp("tokens_expire_at"),
   createdAt: timestamp("created_at").notNull(),
