@@ -1673,6 +1673,23 @@ async function copyLeg(kit: Kit, page: Page, base: string, instanceId: string) {
     JSON.stringify(said)
   );
   await page.keyboard.press("Escape");
+  // Its menu opened again after a reload says it again under the item.
+  await reload(page);
+  const again = page.locator('[data-slot="tab"]:visible').first();
+  await again.waitFor({ state: "visible", timeout: 30_000 });
+  await again.dispatchEvent("contextmenu", { button: 2 });
+  await page
+    .getByRole("menuitem", { name: "Copy link" })
+    .first()
+    .waitFor({ state: "visible", timeout: 10_000 });
+  const kept = await faultOf(page, line);
+  kit.check(
+    "copy: after a reload, the menu opened again says the refused copy under the item",
+    kept.text.includes("The browser didn't allow copying the link") &&
+      kept.again,
+    JSON.stringify(kept)
+  );
+  await page.keyboard.press("Escape");
 }
 
 /** Behind's line at each width: inside the pane, wrapping, nothing past its box. */

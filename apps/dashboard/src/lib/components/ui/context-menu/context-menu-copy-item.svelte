@@ -9,11 +9,14 @@
    * and returns focus. A copy the browser refused keeps the menu open and
    * says so under the item (RowFault, cawco/copy.ts `copyRefused`), with Try
    * again and the text under Show details to copy by hand; never a toast.
+   * It is kept (cawco/refusals.svelte.ts): the same item says it again
+   * whenever its menu opens, after a reload too, until a copy goes.
    */
   import type { Snippet } from "svelte";
   import { copyRefused, copyToClipboard } from "#lib/cawco/copy.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { IconCheck, IconCopy } from "#lib/icons.js";
   import ContextMenuItem from "./context-menu-item.svelte";
 
@@ -32,8 +35,8 @@
 
   let ref = $state<HTMLElement | null>(null);
   let copied = $state(false);
-  /** The browser refused the last copy. */
-  let refused = $state(false);
+  /** Where a refused copy of this text is said: under this item, kept. */
+  const key = $derived(`copy:item:${what}:${text}`);
   let closing = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => () => clearTimeout(timer));
@@ -52,10 +55,13 @@
   }
 
   async function copy() {
+    const at = key;
     copied = await copyToClipboard(what, text);
-    refused = !copied;
     if (copied) {
+      refusals.delete(at);
       timer = setTimeout(close, dur("--dur-hold"));
+    } else {
+      refusals.set(at, { reason: copyRefused(what) });
     }
   }
 </script>
@@ -73,5 +79,5 @@
   details={text}
   end="var(--space-2)"
   indent="var(--space-2)"
-  reason={refused ? copyRefused(what) : null}
+  reason={refusals.reason(key)}
 />
