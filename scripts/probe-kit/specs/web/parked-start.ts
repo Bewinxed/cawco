@@ -675,6 +675,12 @@ async function closeSheet(kit: Kit, page: Page, label: string) {
  * grabber drawn down past vaul's close threshold, a move a frame, then let
  * go (raw touch input, as decision-pick drags). The drawer's exit runs on
  * the sheet (read from the engine), and the sheet leaves.
+ *
+ * A cursor rests on the sheet's path meanwhile and moves once mid-swipe, as
+ * an iPad's trackpad or a touch laptop's does: the sheet slides under it
+ * (Chromium's mouse `pointerout` as it does), and its move lands on the
+ * sheet. Neither is the finger's, and neither moves or ends the drag
+ * (patches/vaul-svelte, the pressing pointer's drag).
  */
 async function swipeSheet(kit: Kit, page: Page, label: string) {
   const grab = await page.evaluate((sheet) => {
@@ -711,19 +717,56 @@ async function swipeSheet(kit: Kit, page: Page, label: string) {
       }
       return "waapi";
     };
+    const name = (node: EventTarget | null): string | null => {
+      if (!(node instanceof Element)) {
+        return null;
+      }
+      const slot = node.getAttribute("data-slot");
+      return `${node.tagName.toLowerCase()}${slot ? `[${slot}]` : ""}`;
+    };
+    // Where a pointer event came from: its target and the one it went to,
+    // whether that is in the sheet, whether it holds the pointer, and where
+    // the sheet stood.
+    const told = (pointer: PointerEvent) => {
+      const card = document.querySelector<HTMLElement>(sheet);
+      const { target } = pointer;
+      return {
+        kind: pointer.pointerType,
+        target: name(target),
+        to: name(pointer.relatedTarget),
+        onSheet: target instanceof Node && (card?.contains(target) ?? false),
+        captured:
+          target instanceof Element &&
+          target.hasPointerCapture(pointer.pointerId),
+        y: pointer.clientY,
+        sheet: card ? getComputedStyle(card).transform : null,
+      };
+    };
     for (const type of [
       "pointerdown",
+      "pointermove",
       "pointerup",
       "pointercancel",
       "pointerout",
+      "gotpointercapture",
       "lostpointercapture",
       "touchend",
       "touchcancel",
     ]) {
       window.addEventListener(
         type,
-        () => {
-          log.push({ at: now(), event: type });
+        (event) => {
+          // The finger's own moves are the drag; only another pointer's
+          // move is told.
+          const pointer = event instanceof PointerEvent ? event : null;
+          if (type === "pointermove" && pointer?.pointerType === "touch") {
+            return;
+          }
+          log.push({
+            at: now(),
+            event: type,
+            ...(pointer ? told(pointer) : {}),
+          });
         },
         { capture: true }
       );
@@ -754,6 +797,8 @@ async function swipeSheet(kit: Kit, page: Page, label: string) {
   const cdp = await page.context().newCDPSession(page);
   const steps = 16;
   const distance = grab.height * 0.6;
+  const cursor = { x: grab.x, y: grab.y + 150 };
+  await page.mouse.move(cursor.x, cursor.y);
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchStart",
     touchPoints: [{ x: grab.x, y: grab.y }],
@@ -763,6 +808,11 @@ async function swipeSheet(kit: Kit, page: Page, label: string) {
       type: "touchMove",
       touchPoints: [{ x: grab.x, y: grab.y + (distance * step) / steps }],
     });
+    // Halfway, the cursor moves onto the sheet's body where it stands now,
+    // well below the finger.
+    if (step === steps / 2) {
+      await page.mouse.move(cursor.x + 24, grab.y + distance / 2 + 150);
+    }
     await page.waitForTimeout(16);
   }
   await page.evaluate(() => {
@@ -784,6 +834,9 @@ async function swipeSheet(kit: Kit, page: Page, label: string) {
   )) as {
     drawn?: boolean;
     event?: string;
+    kind?: string;
+    onSheet?: boolean;
+    sheet?: string | null;
     runs?: string[];
     state?: string | null;
     transform?: string | null;
@@ -806,18 +859,35 @@ async function swipeSheet(kit: Kit, page: Page, label: string) {
     `${label}: the swiped sheet's exit leaves from where it was dragged to, not from the top (translateY ${lift(lastOpen)} → ${lift(firstClosed)})`,
     lift(lastOpen) > 0 && lift(firstClosed) >= lift(lastOpen) - 1
   );
-  // The sheet follows the finger until it lifts: a `pointerout` while the
-  // finger is down (it leaves the 6px grabber as the sheet moves) ends
-  // nothing (patches/vaul-svelte, huntabyte/vaul-svelte#134).
+  // The sheet follows the finger until it lifts: the resting cursor's
+  // `pointerout` as the sheet slides under it, and its move over the sheet,
+  // neither move nor end the finger's drag (patches/vaul-svelte).
   const released = log.findIndex((frame) => frame.event === "probe: release");
   const held = log.slice(0, released);
-  const outs = held.filter((frame) => frame.event === "pointerout").length;
+  const cursorOuts = held.filter(
+    (frame) => frame.event === "pointerout" && frame.kind === "mouse"
+  ).length;
+  const cursorMoves = held.filter(
+    (frame) =>
+      frame.event === "pointermove" &&
+      frame.kind === "mouse" &&
+      frame.onSheet === true &&
+      lift(frame.sheet === undefined ? undefined : { transform: frame.sheet }) >
+        0
+  ).length;
+  const heldAt = held
+    .filter((frame) => frame.state !== undefined)
+    .map((frame) => lift(frame));
   const lastHeld = held.filter((frame) => frame.state !== undefined).at(-1);
   kit.check(
-    `${label}: the sheet follows the finger until it lifts: no closed frame before the release, ${outs} pointerout(s) while the finger was down ended nothing, and it stood at the finger's travel when it lifted (translateY ${lift(lastHeld)} of ${Math.round(distance)}px)`,
+    `${label}: the sheet follows the finger until it lifts, a resting cursor's ${cursorOuts} pointerout(s) and ${cursorMoves} move(s) on the dragged sheet ending and moving nothing: no closed frame before the release, never a step back, and it stood at the finger's travel when it lifted (translateY ${lift(lastHeld)} of ${Math.round(distance)}px)`,
     released > 0 &&
+      cursorOuts > 0 &&
+      cursorMoves > 0 &&
       held.every((frame) => frame.state !== "closed") &&
-      lift(lastHeld) >= distance * 0.95
+      heldAt.every((y, at) => at === 0 || y >= heldAt[at - 1] - 1) &&
+      lift(lastHeld) >= distance * 0.95,
+    JSON.stringify(heldAt)
   );
   kit.check(
     `${label}: swiped down past its threshold mid-start, the sheet runs the drawer's exit (getAnimations, every frame from the touch)`,
@@ -847,23 +917,24 @@ async function holdThroughResize(kit: Kit, page: Page, label: string) {
   // vaul takes no drag in the half second after a sheet opens
   // (use-drawer-root `shouldDrag`, "Allow scrolling when animating").
   await page.waitForTimeout(700);
-  // Held by its header row, as wide as the sheet, which the finger stays
-  // over as the sheet follows it: off the 6px grabber, the finger leaves it
-  // and vaul takes the `pointerout` as a release (the swipe leg's log).
+  // Held by its 6px grabber, touch alone: the cursor the probe's presses
+  // left stands above the sheet, at the screen's top, so nothing but the
+  // finger is over it (the swipe leg is the one with a cursor on the sheet).
   const grab = await page.evaluate((sheet) => {
-    const header = document
+    const grabber = document
       .querySelector(sheet)
-      ?.querySelector('[data-slot="drawer-header"]');
-    if (!header) {
+      ?.querySelector('[data-slot="drawer-grabber"]');
+    if (!grabber) {
       return null;
     }
-    const at = header.getBoundingClientRect();
-    return { x: at.left + at.width * 0.4, y: at.top + 6 };
+    const at = grabber.getBoundingClientRect();
+    return { x: at.left + at.width / 2, y: at.top + at.height / 2 };
   }, PHONE_FORM);
   if (!grab) {
-    kit.check(`${label}: the sheet has its header to hold`, false);
+    kit.check(`${label}: the sheet has its grabber to hold`, false);
     return;
   }
+  await page.mouse.move(grab.x, 1);
   await page.evaluate(() => {
     const heard: string[] = [];
     (window as unknown as { heard: string[] }).heard = heard;
@@ -873,9 +944,16 @@ async function holdThroughResize(kit: Kit, page: Page, label: string) {
       "pointercancel",
       "pointerup",
     ]) {
-      window.addEventListener(type, () => heard.push(type), {
-        capture: true,
-      });
+      window.addEventListener(
+        type,
+        (event) =>
+          heard.push(
+            event instanceof PointerEvent
+              ? `${type}:${event.pointerType}`
+              : type
+          ),
+        { capture: true }
+      );
     }
   });
   /** The sheet's translateY, its --visible-height, and its state. */

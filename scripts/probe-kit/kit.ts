@@ -496,10 +496,13 @@ const OUTPUT_STAMP = join(KIT_DIR, "output", "probe-tree.txt");
 const OUTPUT_WAIT_MS = 2000;
 /**
  * What a build reads, from the root: the dashboard, the workspace packages
- * it imports, the design tokens and the root's own files (`bun.lock`,
- * `package.json`); a glob's `*` stops at a `/`.
+ * it imports, the design tokens, the patches the install applies to its
+ * dependencies (`patches/`: `bun.lock` names a patch's path, not its
+ * content, so an edited patch kept the old build and its old library) and
+ * the root's own files (`bun.lock`, `package.json`); a glob's `*` stops at
+ * a `/`.
  */
-const BUILD_DIRS = ["apps/dashboard", "packages", "design"];
+const BUILD_DIRS = ["apps/dashboard", "packages", "design", "patches"];
 const BUILD_READS = [...BUILD_DIRS, ":(glob)*"];
 
 /** Git's answer in the checkout, `input` on its stdin. */
