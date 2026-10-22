@@ -140,7 +140,7 @@ const reason = z
   .string()
   .max(300)
   .optional()
-  .describe("Required: one sentence on why, for which task.");
+  .describe("Required: why, for which task.");
 
 /** What a memory write answers: the hash to write against next, when it landed, and the size kept; never the text back. */
 const keptMemory = (
@@ -247,7 +247,7 @@ function admin<T extends z.ZodRawShape>(
   );
   const write = tool(
     `admin_${group}_write`,
-    `Change ${about} \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The call waits while the person approves it, then runs once with these arguments; a refusal comes back with their reason. Read with admin_${group}_read first.`,
+    `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} Waits for the person to approve it.`,
     { action: z.enum(writes), reason, ...input },
     // The reason is the person's to read on the approval, not a setting.
     (args) => {

@@ -2844,7 +2844,9 @@ const delegated = (
         state: "started",
         workItemId: started.item.id,
         workspaceId: started.workspace.id,
-        ...(started.workspace.tmp ? { workspaceTmp: started.workspace.tmp } : {}),
+        ...(started.workspace.tmp
+          ? { workspaceTmp: started.workspace.tmp }
+          : {}),
         instanceId: started.item.instanceId,
         title: started.item.title,
         text: started.text,
@@ -23957,6 +23959,7 @@ export const createServer = (
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
     writePlan: (actor, written) => changesOfPlans.written(actor, written),
+    artifactNamed: (instanceId, asked) => artifacts.named(instanceId, asked),
     delegationTree: (actor, query) => delegationTree.read(actor, query),
     cawTools: (actor, toolUseId) => caw.tools(actor, toolUseId),
     routineTools: (actor, toolUseId) => routines.tools(actor, toolUseId),

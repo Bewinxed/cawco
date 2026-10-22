@@ -3682,12 +3682,12 @@ export const createMemory = ({
         ),
         tool(
           "memory_propose",
-          "AGENTS.md or knowledge/ files' whole new text, citing its inbox notes; several files are one change. A fact is one line: `- <fact> (since <date>, from <note ids>, used <date>)`. Caw's commits now (ask: true asks the person first); the curator's waits for the person.",
+          "AGENTS.md or knowledge/ files' whole new text, citing its inbox notes, as one change. A fact is one line: `- <fact> (since <date>, from <note ids>, used <date>)`. Caw's commits now (ask: true asks first); the curator's waits for the person.",
           {
             files: z
               .array(z.object({ path: z.string(), content: z.string() }))
               .min(1)
-              .describe("Each file's path and whole text."),
+              .describe("Each path and whole text."),
             notes: z.array(z.string()).optional(),
             why: z.string().describe("One line."),
             ask: z.boolean().optional(),

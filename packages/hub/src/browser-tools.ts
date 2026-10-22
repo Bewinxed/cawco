@@ -53,8 +53,7 @@ const isOrigin = (value: string): boolean => {
 
 const DESCRIPTION =
   "Ask the person to take over your browser for what only they may do: a sign-in, a one-time code, a CAPTCHA, a payment, a consent. " +
-  "Call it with that page open; it waits for them. While they hold the browser your browser tool is refused and nothing they type or see reaches you. " +
-  'Answers {"outcome":"handed_back","origin":…} (carry on, signed in) or {"outcome":"declined","words":…}.';
+  "Call it with that page open; it waits for them, and nothing they type or see reaches you.";
 
 /** How browser asks reach the rest of the hub. */
 export interface BrowserAsksDeps {

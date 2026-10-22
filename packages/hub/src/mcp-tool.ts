@@ -50,9 +50,7 @@ const responseFormat = () =>
   z
     .enum(RESPONSE_FORMATS)
     .optional()
-    .describe(
-      "concise (default): what you act on, in words, each thing by its name or the short handle the tools take. detailed: the hub's whole record as JSON, every id and time; ask for it only when the words leave out what you need."
-    );
+    .describe("detailed: the whole record, as JSON");
 
 export interface McpTool {
   annotations?: ToolAnnotations;

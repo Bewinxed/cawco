@@ -2312,7 +2312,7 @@ export const createRoutines = ({
     return [
       tool(
         "routine_create",
-        `Make a routine in your project: a prompt the hub runs on a schedule. target 'delegate' starts a fresh delegate each run; its finish_item headline is the output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <one sentence on why> fails it with that reason, retried once then the owner is asked, anything else is noted in the routine's thread. target 'lead' messages Caw (skipped while Caw is off). It runs once at once as a test, and turns itself off after 7 days unless kept. The owner is told, with what you said just before this call: say why first.`,
+        `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'lead' messages Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first.`,
         {
           name: z.string().describe("3–6 plain words."),
           prompt: z.string().describe("What each run does."),
@@ -2417,7 +2417,7 @@ export const createRoutines = ({
       ),
       tool(
         "routine_result",
-        `Say how a routine's run that woke you went, before your turn ends (a turn that ends without it fails the run): exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <one sentence on why> fails it with that reason, retried once then the owner is asked, anything else is noted in the routine's thread as the result. One call per run.`,
+        `Say how the routine's run that woke you went, once, before your turn ends: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in its thread.`,
         {
           run: z
             .string()

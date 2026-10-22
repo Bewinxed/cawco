@@ -1227,7 +1227,7 @@ export const createRelay = ({
     return [
       tool(
         "relay_create",
-        "Open a public webhook path for your project (Tailscale Funnel) once the owner approves; GitHub's webhook is registered for you. Answers its state, any step the owner must take, and routes to propose.",
+        "Open a public webhook path for your project (Tailscale Funnel) once the owner approves; GitHub's webhook is registered for you.",
         {
           provider: z.enum(RELAY_PROVIDERS).optional(),
           connection: z.string().optional().describe("github"),

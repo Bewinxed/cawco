@@ -251,6 +251,8 @@ export function createDelegationMcp(options: {
   ) => Promise<AttemptStart>;
   /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
+  /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`). */
+  artifactNamed?: (instanceId: string, asked: string) => string;
   /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
   writePlan?: TaskToolContext["writePlan"];
   /** `delegate_list`: the calling session's own delegation tree (delegation-tree.ts). */
@@ -588,6 +590,9 @@ export function createDelegationMcp(options: {
         duplicates: options.duplicates,
         projectRunsOn: options.projectRunsOn,
         startAttempt: options.startAttempt,
+        artifactNamed: options.artifactNamed
+          ? (asked) => options.artifactNamed?.(actor.id, asked) ?? asked
+          : undefined,
         retryAttempt: options.retryAttempt,
         tasks: options.tasks,
         writePlan: options.writePlan,

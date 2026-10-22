@@ -56,16 +56,29 @@ export type Updated =
 /** What `comment_reply` answers. */
 export interface CommentReplied {
   entry: ThreadEntry;
+  /** The pin's link, `[label](cawco:pin/<artifact>/<number>)`. */
+  link: string;
   number: number;
   pin: string;
 }
 
 /** What `comment_resolve` answers. */
 export interface CommentResolved {
+  /** The pin's link. */
+  link: string;
   number: number;
   pin: string;
   resolvedAt: string;
 }
+
+/** A decision page's cards' links, as the agent names each to the person. */
+const cardLinkLines = (
+  heading: string,
+  cards: Record<string, string> | undefined
+): string[] => {
+  const links = Object.values(cards ?? {});
+  return links.length > 0 ? [heading, ...links.map((link) => `- ${link}`)] : [];
+};
 
 /** An artifact as an agent names it: `pricing (page 08899254)`. */
 const named = (artifact: { id: string; kind: string; name: string }): string =>
@@ -333,7 +346,9 @@ const pickLines = (read: ArtifactRead, now: number): string[] => {
       ? [`Choices (${answered} of ${decisions.length} picked):`]
       : []),
     ...decisions.map((answer) => answerLine(answer, now)),
-    ...(values.length > 0 ? ["What the person set beside them:", ...values] : []),
+    ...(values.length > 0
+      ? ["What the person set beside them:", ...values]
+      : []),
     ...(none ? ["Nothing picked, noted or set on it."] : []),
     ...(read.removed?.length
       ? [`Taken out since: ${listed(read.removed)}.`]
@@ -369,7 +384,9 @@ const canvasLines = (read: ArtifactRead, now: number): string[] => {
 const writeLines = (read: ArtifactRead): string[] => [
   ...(read.wrote?.length ? [`Wrote ${listed(read.wrote)}.`] : []),
   ...(read.deleted?.length ? [`Deleted ${listed(read.deleted)}.`] : []),
-  ...(read.missing?.length ? [`No such element: ${listed(read.missing)}.`] : []),
+  ...(read.missing?.length
+    ? [`No such element: ${listed(read.missing)}.`]
+    : []),
   ...(read.edit
     ? [
         `Wrote ${read.edit.file}:${read.edit.lines.from}-${read.edit.lines.to}${read.edit.formatted ? `, formatted by ${read.edit.formatted}` : ""}.`,
@@ -447,10 +464,10 @@ const brokenLines = (broken: GraphBroken | undefined): string[] =>
 export const artifactCreatedWords = (created: Created): string =>
   lines(
     `Made ${named(created)}. ${openedWords(created.opened ? { opened: true } : { opened: false, why: created.why ?? "no view said why" })}`,
+    created.link && `Name it to the person as ${created.link}.`,
     created.held,
     created.note,
-    !!created.decisions?.length &&
-      `Its decisions: ${listed(created.decisions)}.`,
+    cardLinkLines("Its cards, as you name each to the person:", created.cards),
     !!created.dropped?.length &&
       `Components the library does not have, dropped: ${listed(created.dropped)}.`,
     brokenLines(created.broken),
@@ -483,59 +500,81 @@ export const artifactCreatedWords = (created: Created): string =>
     created.hint
   );
 
+/** A decision page's revision: what its statements did, its decisions and cards now, what it broke. */
+const revisedWords = (revised: Revised): string => {
+  const said = (verb: string, names: string[]) =>
+    names.length > 0 ? [`${verb} ${listed(names)}`] : [];
+  const statements = [
+    ...said("added", revised.statements.added),
+    ...said("rewrote", revised.statements.replaced),
+    ...said("dropped, as nothing reaches them,", revised.statements.removed),
+  ];
+  return lines(
+    `Revised to revision ${revised.revision}${statements.length > 0 ? `: ${statements.join("; ")}` : ""}.`,
+    revised.held,
+    `Its decisions now: ${listed(revised.decisions) || "none"}.`,
+    cardLinkLines(
+      "The cards it put in or rewrote, as you name each to the person:",
+      revised.cards
+    ),
+    revised.moved.added.length > 0 &&
+      `New decisions: ${listed(revised.moved.added)}.`,
+    revised.moved.removed.length > 0 &&
+      `Decisions taken out (a pick on one is kept): ${listed(revised.moved.removed)}.`,
+    !!revised.dropped?.length &&
+      `Components the library does not have, dropped: ${listed(revised.dropped)}.`,
+    brokenLines(revised.broken)
+  );
+};
+
+/** A component canvas's change: its new spec, or a states file's write and its frames. */
+const componentChangedWords = (changed: ComponentChanged): string => {
+  if ("spec" in changed) {
+    return `The canvas is at revision ${changed.revision}: ${count(changed.spec.edges?.length ?? 0, "edge")}, ${count(Object.keys(changed.spec.group ?? {}).length, "group")}, ${count(changed.spec.dials?.length ?? 0, "dial")}.`;
+  }
+  return lines(
+    `Wrote ${changed.file}:${changed.lines.from}-${changed.lines.to}${changed.formatted ? `, formatted by ${changed.formatted}` : ""}.`,
+    changed.story
+      ? `Story ${changed.story.name}: args ${valueWords(changed.story.args, 1500)}.`
+      : "The story it named is gone.",
+    changed.render === "unseen"
+      ? "No browser drew it within the wait: read with render: true."
+      : [
+          "Its frames, as drawn:",
+          ...changed.render.map(
+            (frame) =>
+              `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${frame.error}` : ""}`
+          ),
+        ]
+  );
+};
+
+/** A page's change: the page as it reads now, its link first when the answer carries it. */
+const pageChangedWords = (
+  answer: ArtifactRead & { link?: string }
+): Presented => {
+  const read = artifactReadWords(answer);
+  const { link } = answer;
+  if (!link) {
+    return read;
+  }
+  const naming = `Name it to the person as ${link}.`;
+  return typeof read === "string"
+    ? lines(naming, read)
+    : { ...read, text: lines(naming, read.text) };
+};
+
 /** `artifact_update`: what the change came to. */
 export const artifactUpdatedWords = (updated: Updated): Presented => {
   switch (updated.change) {
     case "ask":
       return `Its head now asks ${quote(updated.answer.ask, 200)}.`;
-    case "statements": {
-      const revised = updated.answer;
-      const said = (verb: string, names: string[]) =>
-        names.length > 0 ? [`${verb} ${listed(names)}`] : [];
-      const statements = [
-        ...said("added", revised.statements.added),
-        ...said("rewrote", revised.statements.replaced),
-        ...said(
-          "dropped, as nothing reaches them,",
-          revised.statements.removed
-        ),
-      ];
-      return lines(
-        `Revised to revision ${revised.revision}${statements.length > 0 ? `: ${statements.join("; ")}` : ""}.`,
-        revised.held,
-        `Its decisions now: ${listed(revised.decisions) || "none"}.`,
-        revised.moved.added.length > 0 &&
-          `New decisions: ${listed(revised.moved.added)}.`,
-        revised.moved.removed.length > 0 &&
-          `Decisions taken out (a pick on one is kept): ${listed(revised.moved.removed)}.`,
-        !!revised.dropped?.length &&
-          `Components the library does not have, dropped: ${listed(revised.dropped)}.`,
-        brokenLines(revised.broken)
-      );
-    }
-    case "component": {
-      const changed = updated.answer;
-      if ("spec" in changed) {
-        return `The canvas is at revision ${changed.revision}: ${count(changed.spec.edges?.length ?? 0, "edge")}, ${count(Object.keys(changed.spec.group ?? {}).length, "group")}, ${count(changed.spec.dials?.length ?? 0, "dial")}.`;
-      }
-      return lines(
-        `Wrote ${changed.file}:${changed.lines.from}-${changed.lines.to}${changed.formatted ? `, formatted by ${changed.formatted}` : ""}.`,
-        changed.story
-          ? `Story ${changed.story.name}: args ${valueWords(changed.story.args, 1500)}.`
-          : "The story it named is gone.",
-        changed.render === "unseen"
-          ? "No browser drew it within the wait: read with render: true."
-          : [
-              "Its frames, as drawn:",
-              ...changed.render.map(
-                (frame) =>
-                  `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${frame.error}` : ""}`
-              ),
-            ]
-      );
-    }
+    case "statements":
+      return revisedWords(updated.answer);
+    case "component":
+      return componentChangedWords(updated.answer);
     case "page":
-      return artifactReadWords(updated.answer);
+      return pageChangedWords(updated.answer);
     default: {
       const unhandled: never = updated;
       return String(unhandled);
@@ -597,7 +636,10 @@ const pinState = (pin: Pin, now: number): string => {
 
 /** One pin: what it stands on, its state, its thread. */
 const pinLines = (
-  pin: Pin & { inkBox?: { h: number; w: number; x: number; y: number } },
+  pin: Pin & {
+    inkBox?: { h: number; w: number; x: number; y: number };
+    link: string;
+  },
   now: number
 ): string[] => {
   const [heading, ...facts] = pinStandsOn(pin);
@@ -614,6 +656,7 @@ const pinLines = (
         ]
       : []),
     `- Pin ${handle(pin.id)}: ${pinState(pin, now)}, left ${ago(pin.at, now)}`,
+    `- Link: ${pin.link}`,
     ...threadLines(pin.thread, now),
   ];
 };
@@ -630,7 +673,7 @@ export const commentReadWords = (
   }
   return lines(
     read.artifacts.flatMap((artifact) => [
-      `# ${named(artifact)}: ${count(artifact.pins.length, filter === "all" ? "pin" : `${filter} pin`)}${artifact.address.endsWith(`/${artifact.id}`) ? "" : `, marked at ${artifact.address}`}`,
+      `# ${artifact.link} (${artifact.kind} ${handle(artifact.id)}): ${count(artifact.pins.length, filter === "all" ? "pin" : `${filter} pin`)}${artifact.address.endsWith(`/${artifact.id}`) ? "" : `, marked at ${artifact.address}`}`,
       ...artifact.pins.flatMap((pin) => pinLines(pin, now)),
     ]),
     "comment_reply and comment_resolve take a pin's handle.",
@@ -640,11 +683,11 @@ export const commentReadWords = (
 
 /** `comment_reply`. */
 export const commentRepliedWords = (replied: CommentReplied): string =>
-  `Answered pin ${replied.number} (${handle(replied.pin)}) in its thread${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}.`;
+  `Answered ${replied.link} (pin ${handle(replied.pin)}) in its thread${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}.`;
 
 /** `comment_resolve`. */
 export const commentResolvedWords = (resolved: CommentResolved): string =>
-  `Resolved pin ${resolved.number} (${handle(resolved.pin)}). The person can reopen it.`;
+  `Resolved ${resolved.link} (pin ${handle(resolved.pin)}). The person can reopen it.`;
 
 /** `design_map`: each component of the library, or one's card. */
 export const designMapWords = (map: DesignMap): string => {

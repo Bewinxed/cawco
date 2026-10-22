@@ -17,9 +17,9 @@
  * two runs (today's tree and a change) compare on the same fixture.
  *
  * a. Every call is answered, none refused.
- * b. A concise answer is words an agent decides on: no full id (a spawn's
- *    session link aside, which the transcript's card is keyed by, and an
- *    address it loads whole), no 64-hex hash, no ISO time (comment_read's
+ * b. A concise answer is words an agent decides on: no full id (a link's
+ *    destination aside, which it copies whole for the person's chip, and
+ *    an address it loads whole), no 64-hex hash, no ISO time (comment_read's
  *    cursor aside, which its `since` takes back), no `null`.
  * c. A detailed answer is the hub's whole record: JSON that parses.
  * d. A concise answer is never longer than its detailed one, past the
@@ -174,8 +174,12 @@ const ONE_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
 const FULL_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 const HASH = /\b[0-9a-f]{64}\b/;
 const NULL = /\bnull\b/;
-/** A spawn's own session link: the transcript's delegate card is keyed by its id. */
-const SPAWN_LINK = /\(cawco:session\/[0-9a-f-]{36}\)/g;
+/**
+ * A reference link's destination (core references.ts): a spawn's session,
+ * which the transcript's delegate card is keyed by; a pin, a decision card
+ * or an artifact, which the agent copies whole for the person's chip.
+ */
+const REFERENCE_DESTINATION = /\(cawco:[a-z]+\/[^)\s]+\)/g;
 
 const standUp = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -735,7 +739,7 @@ const checkOne = (kit: Kit, one: Measured) => {
     shortOf(one.concise.text || one.detailed.text)
   );
   const words = one.concise.text
-    .replace(SPAWN_LINK, "(cawco:session/…)")
+    .replace(REFERENCE_DESTINATION, "(cawco:…)")
     .replace(SINCE_CURSOR, "")
     .replace(URL_WORDS, "");
   const ids = words.match(FULL_ID) ?? [];

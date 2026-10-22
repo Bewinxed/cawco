@@ -1298,7 +1298,7 @@ export const createIngress = ({
       .array(z.string())
       .optional()
       .describe(
-        "pr.opened|merged|closed, issue.opened|closed|labeled, comment.created, item; any if left out."
+        "pr.opened|merged|closed, issue.opened|closed|labeled, comment.created, item."
       ),
     author: z.string().optional(),
     label: z.string().optional(),
@@ -1312,7 +1312,7 @@ export const createIngress = ({
     items_path: z
       .string()
       .optional()
-      .describe("Dot path to the list; the answer itself if left out."),
+      .describe("Dot path to the list; default the answer."),
     id_path: z.string().describe("Dot path to an item's id."),
     version_path: z
       .string()
@@ -1365,7 +1365,7 @@ export const createIngress = ({
     return [
       tool(
         "event_route_create",
-        "Send your project's matching inbound events (GitHub PRs, issues, comments; connector poll items) to one of its routines, as that run's input. The oldest matching route takes an event; unmatched ones go to the lead's next wake.",
+        "Send your project's matching inbound events (GitHub PRs, issues, comments; connector poll items) to one of its routines as that run's input; the oldest matching route takes an event.",
         { ...conditions, routine: z.string().describe("The routine's id.") },
         ({ routine, ...rest }) =>
           run(() => createRoute({ ...rest, routineId: routine }, me())),
@@ -1407,7 +1407,7 @@ export const createIngress = ({
       ),
       tool(
         "connector_poll_create",
-        "Call a read-only tool of a connection your project grants every interval; each new or changed item (by id and version) becomes an inbound event your routes route. The first call only looks.",
+        "Call a read-only tool of a connection your project grants every interval; each new or changed item becomes an inbound event for your routes.",
         {
           connection: z.string(),
           tool: z

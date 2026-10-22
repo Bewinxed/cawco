@@ -5093,6 +5093,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     },
 
+    /** The whole id of the artifact a session names by its name, handle or id ({@link whole}). */
+    named: (instanceId: string, asked: string): string =>
+      whole(sessionOf(instanceId), asked),
+
     list: (instanceId: string): ArtifactSummary[] => {
       const instance = sessionOf(instanceId);
       deps.listing(instance);

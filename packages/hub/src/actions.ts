@@ -814,7 +814,7 @@ export const createActions = ({
     return [
       tool(
         "action_propose",
-        "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve. The hub makes the call once, at run_at or as soon as it is approved, with exactly these arguments; you get its id now and go on working. Check how it went with action_list.",
+        "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve; the hub makes it once, at run_at or once approved. Go on working; action_list says how it went.",
         {
           connection: z
             .string()

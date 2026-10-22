@@ -180,7 +180,7 @@ export const SESSION_TITLE_MAX = 48;
 
 /** What the caller's model is asked for when it names a delegate or a started session. */
 export const SESSION_TITLE_DESCRIPTION =
-  "What this delegate is doing, in 3–6 plain words, verb first, e.g. 'Fix tray chip overflow'. It names the session in the sidebar and the tray chip.";
+  "3–6 plain words, verb first, like 'Fix tray chip overflow'.";
 
 /** Why a title a caller gave cannot name a session, or nothing when it can. */
 export const titleProblem = (title: string): string | undefined => {
