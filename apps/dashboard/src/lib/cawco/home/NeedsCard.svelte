@@ -44,10 +44,6 @@
    * hub finds it taken; once HTTPS is on, the row's tick with the https
    * dashboard to open.
    *
-   * The hub's `.local` name typed in a browser is one of the same: its line,
-   * then its one step (the command that lets the hub answer on port 80),
-   * ticking once the hub holds the port.
-   *
    * This browser's presence is one more: its notice as its line (what
    * Chrome shares, and that what needs you shows here instead of on your
    * phone), then Skip and Allow as peers. Allow asks the browser for Idle
@@ -67,7 +63,6 @@
     type ArtifactKind,
     artifactWords,
     causeLine,
-    localNameWords,
     pairingWords,
     presenceWords,
     questionsOf,
@@ -171,7 +166,6 @@
       item.kind === "choice" ||
       item.kind === "tailnet" ||
       item.kind === "desk" ||
-      item.kind === "local-name" ||
       item.kind === "relay"
     ) {
       return;
@@ -207,14 +201,6 @@
         return item.done
           ? presenceWords.done(item.idle)
           : presenceWords.lead(item.idle);
-      case "local-name":
-        return item.done
-          ? localNameWords.done(item.localName.name)
-          : localNameWords.lead(
-              item.localName.name,
-              item.localName.host,
-              item.localName.dashboardPort
-            );
       case "relay":
         return "";
       case "artifact":
@@ -339,8 +325,6 @@
         return "Onboarding · each project can change it";
       case "tailnet":
         return tailnetWords.meta(item.tailnet.host);
-      case "local-name":
-        return localNameWords.meta(item.localName.host);
       case "desk":
         return presenceWords.meta;
       case "relay":
@@ -593,42 +577,18 @@
     };
   }
 
-  /**
-   * Every step on an onboarding row's path, while one stands; none once it
-   * is done: HTTPS on the tailnet's, and port 80 for the `.local` name's one.
-   */
-  const todos = $derived.by(
-    (): {
-      step: string;
-      done: boolean;
-      label: string;
-      note: string;
-      href?: string;
-      link?: string;
-      command?: string;
-    }[] => {
-      if (item.kind === "local-name" && !item.done) {
-        return [
-          {
-            step: "low-ports",
-            done: false,
-            label: localNameWords.step,
-            note: localNameWords.note(item.localName.host),
-            command: item.localName.command,
-          },
-        ];
-      }
-      if (item.kind !== "tailnet" || item.done) {
-        return [];
-      }
-      const { tailnet } = item;
-      return (tailnet.steps ?? []).map((todo) => ({
-        step: todo.step,
-        done: todo.done,
-        ...tailnetTodo(tailnet, todo),
-      }));
+  /** Every step on the tailnet's path, while one stands; none once HTTPS is on. */
+  const todos = $derived.by(() => {
+    if (item.kind !== "tailnet" || item.done) {
+      return [];
     }
-  );
+    const { tailnet } = item;
+    return (tailnet.steps ?? []).map((todo) => ({
+      step: todo.step,
+      done: todo.done,
+      ...tailnetTodo(tailnet, todo),
+    }));
+  });
   /** An approved action waiting for your approval: Deny and Approve stand. */
   const approvable = $derived(
     item.kind === "action" && item.action.state === "proposed"
@@ -761,14 +721,12 @@
         {:else}
           <IconMonitor aria-hidden="true" class="size-icon-md" />
         {/if}
-      {:else if item.kind === "tailnet" || item.kind === "local-name"}
+      {:else if item.kind === "tailnet"}
         {#if item.done}
           <IconSuccess
             aria-hidden="true"
             class="size-icon-md text-status-done-ink"
           />
-        {:else if item.kind === "local-name"}
-          <IconGlobe aria-hidden="true" class="size-icon-md" />
         {:else}
           <IconTailnetHttps aria-hidden="true" class="size-icon-md" />
         {/if}
@@ -882,7 +840,7 @@
     {/if}
     <span
       data-slot="want"
-      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-local-name/row:block group-kind-local-name/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo"
+      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo"
       >{want}</span
     >
     {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
@@ -1163,7 +1121,7 @@
           <span class="flex-none num">{item.action.taskId}</span>
         {/if}
       </span>
-    {:else if item.kind === "tailnet" || item.kind === "local-name"}
+    {:else if item.kind === "tailnet"}
       <!-- Where it comes from, under what it wants, as every row's meta
            stands; its steps follow. -->
       <span

@@ -61,7 +61,7 @@ export * from "./invariant";
 // Adding a machine: the join routes' shapes and the install script's step
 // prefix, which `cawco binary-install agent` prints and the hub reads back off SSH output.
 export * from "./join";
-// The hub's `.local` name typed in a browser: port 80's state.
+// The hub's `.local` name and the dashboard's address at it.
 export * from "./local-name";
 // Moving a project to a machine without a checkout of it: the hub-owned job,
 // its estimate and request, and the hub ↔ machine controls that run its steps.
@@ -1695,7 +1695,6 @@ export type FramePayload =
   | import("./frames").HubRestartFrame
   | import("./frames").FleetUpstreamFrame
   | import("./frames").TailnetHttpsFrame
-  | import("./frames").LocalNameFrame
   | import("./frames").FleetFetchFrame
   | import("./frames").ProjectCapFrame
   | import("./actions").ActionsFrame
@@ -2201,7 +2200,6 @@ export * from "./words/decisions";
 export * from "./words/delegate-types";
 export * from "./words/helpers";
 export * from "./words/lfs";
-export * from "./words/local-name";
 export * from "./words/made";
 export * from "./words/mcp";
 export * from "./words/memory";

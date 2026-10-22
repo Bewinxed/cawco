@@ -337,12 +337,9 @@ const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
     given &&
     typeof given.hostname === "string" &&
     (given.cloudflareToken === undefined ||
-      typeof given.cloudflareToken === "string") &&
-    (given.webroot === undefined || typeof given.webroot === "string")
+      typeof given.cloudflareToken === "string")
   )) {
-    throw new Error(
-      "relay.certify takes a hostname and, for DNS, a token, or for HTTP through the hub's port 80, its webroot."
-    );
+    throw new Error("relay.certify takes a hostname and, for DNS, a token.");
   }
   return given as RelayCertifyArgs;
 };
@@ -3504,18 +3501,11 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(RELAY_STOP, () => stopRelay());
     supervisor.registerDaemonFunction(RELAY_REMOVE, () => removeRelay());
     supervisor.registerDaemonFunction(RELAY_RENEW, (args) => {
-      const given = args as {
-        cloudflareToken?: unknown;
-        webroot?: unknown;
-      } | null;
-      return renewRelay({
-        ...(typeof given?.cloudflareToken === "string"
-          ? { cloudflareToken: given.cloudflareToken }
-          : {}),
-        ...(typeof given?.webroot === "string"
-          ? { webroot: given.webroot }
-          : {}),
-      });
+      const token = (args as { cloudflareToken?: unknown } | null)
+        ?.cloudflareToken;
+      return renewRelay(
+        typeof token === "string" ? { cloudflareToken: token } : {}
+      );
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
     // runtime read, the router asked, and a binding from here through it.

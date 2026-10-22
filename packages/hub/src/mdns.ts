@@ -49,20 +49,6 @@ interface Run {
 /** The responder answering now; undefined while the hub waits for a network. */
 let current: Run | undefined;
 
-/** What else follows the interfaces the name is answered on (local-name.ts's port 80). */
-const followers: ((interfaces: string[]) => Promise<void>)[] = [];
-
-/**
- * `follower` hears the interfaces the name is answered on at each read
- * ({@link FOLLOW_MS}), changed or not; never while mDNS is off or the hub
- * listens where no other device reaches it.
- */
-export const followNameInterfaces = (
-  follower: (interfaces: string[]) => Promise<void>
-): void => {
-  followers.push(follower);
-};
-
 /**
  * The `.local` name this hub holds on its networks right now: `cawco.local`,
  * or the next free `cawco-<n>.local`. Undefined with mDNS off, and while a
@@ -176,12 +162,6 @@ const move = async (
   addresses: Partial<ServiceOptions>
 ): Promise<string> => {
   const interfaces = await answeredOn();
-  for (const follower of followers) {
-    // biome-ignore lint/performance/noAwaitInLoops: each follower in turn, before the next read
-    await follower(interfaces).catch((error: Error) =>
-      console.log(`[hub] following ${interfaces.join(", ")}: ${error.message}`)
-    );
-  }
   const key = interfaces.join(",");
   if (key !== current?.key) {
     const old = current;

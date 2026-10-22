@@ -33457,9 +33457,6 @@
             "$ref": "#/components/schemas/TailnetHttpsFrame"
           },
           {
-            "$ref": "#/components/schemas/LocalNameFrame"
-          },
-          {
             "$ref": "#/components/schemas/ProjectCapFrame"
           },
           {
@@ -33556,7 +33553,6 @@
             "hub.restart": "#/components/schemas/HubRestartFrame",
             "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
             "tailnet.https": "#/components/schemas/TailnetHttpsFrame",
-            "local.name": "#/components/schemas/LocalNameFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
             "installs": "#/components/schemas/InstallsFrame",
@@ -47015,15 +47011,11 @@
         ]
       },
       "LocalName": {
-        "description": "What `GET /api/local-name` answers, and the `local.name` frame carries.",
+        "description": "What `GET /api/local-name` answers.",
         "type": "object",
         "properties": {
-          "command": {
-            "description": "The one-line command that lets the hub bind port 80, while `needs`.",
-            "type": "string"
-          },
           "dashboardPort": {
-            "description": "The dashboard's port, the one port 80 redirects to.",
+            "description": "The dashboard's port: the one the name's address carries.",
             "type": "number"
           },
           "host": {
@@ -47031,11 +47023,15 @@
             "type": "string"
           },
           "name": {
-            "description": "The `.local` name the hub holds, once it holds one.",
+            "description": "The `.local` name the hub holds, while `held`.",
             "type": "string"
           },
           "state": {
             "$ref": "#/components/schemas/LocalNameState"
+          },
+          "url": {
+            "description": "The dashboard at the name, with its port (`http://cawco.local:3000`), while `held`.",
+            "type": "string"
           }
         },
         "required": [
@@ -47045,12 +47041,11 @@
         ]
       },
       "LocalNameState": {
-        "description": "Where a typed `.local` name stands:\n- `off`: the hub answers no name here (mDNS off, no shared network), or\n  port 80 is refused for a reason this machine's setting doesn't fix (a\n  listener of another process holds it);\n- `needs`: Linux refuses the port below `ip_unprivileged_port_start`, and\n  `command` lowers it;\n- `serving`: port 80 redirects to the dashboard.",
+        "description": "Where the name stands:\n- `held`: the hub answers `name` on its networks (`cawco.local`, or\n  `cawco-2.local` when another hub there answers the first);\n- `absent`: it answers none (mDNS off, no network other devices share, or\n  the name still being probed).",
         "type": "string",
         "enum": [
-          "needs",
-          "off",
-          "serving"
+          "absent",
+          "held"
         ]
       },
       "AgentRow": {
@@ -60121,25 +60116,6 @@
         "required": [
           "kind",
           "tailnet"
-        ]
-      },
-      "LocalNameFrame": {
-        "description": "Hub-originated: the hub's `.local` name typed in a browser changed state\n(hub local-name.ts): port 80 came to need the person, they let it, or the\nname came or went. Its onboarding row in Needs you follows.",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "local.name"
-            ]
-          },
-          "localName": {
-            "$ref": "#/components/schemas/LocalName"
-          }
-        },
-        "required": [
-          "kind",
-          "localName"
         ]
       },
       "ProjectCapFrame": {

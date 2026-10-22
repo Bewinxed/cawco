@@ -43,7 +43,6 @@ import {
   type RelayPortHealth,
   type RelayPortName,
   type RelayReach,
-  type RelayRenewArgs,
   type RelayRenewed,
   type RelayStartArgs,
   STREAM_RELAY_PORT,
@@ -138,8 +137,6 @@ export interface StreamRelayDeps {
   machines: () => RelayFleetMachine[];
   /** A renewal said when the certificate ends now. */
   renewed: (expiresAt: number) => void;
-  /** The folder the hub answers ACME challenges from on `machineId`, while it holds port 80 there (local-name.ts); null elsewhere. */
-  webrootFor: (machineId: string) => string | null;
 }
 
 /** A refusal the routes answer with its status and the sentence. */
@@ -396,14 +393,10 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return;
     }
     const token = deps.cloudflareToken();
-    const webroot = deps.webrootFor(relay.machineId);
-    const args: RelayRenewArgs = token
-      ? { cloudflareToken: token }
-      : { ...(webroot ? { webroot } : {}) };
     const read = await call(
       relay.machineId,
       RELAY_RENEW,
-      [args],
+      [token ? { cloudflareToken: token } : {}],
       RENEW_CALL_MS
     );
     const done = answered<RelayRenewed>(

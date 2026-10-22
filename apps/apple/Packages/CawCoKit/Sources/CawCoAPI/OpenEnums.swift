@@ -4577,26 +4577,23 @@ public enum OpenEnums {
 
     /// `#/components/schemas/LocalNameState`.
     public enum LocalNameState: OpenEnum {
-        case needs
-        case off
-        case serving
+        case absent
+        case held
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
-            case "needs": self = .needs
-            case "off": self = .off
-            case "serving": self = .serving
+            case "absent": self = .absent
+            case "held": self = .held
             default: self = .unrecognized(rawValue)
             }
         }
 
         public var rawValue: String {
             switch self {
-            case .needs: "needs"
-            case .off: "off"
-            case .serving: "serving"
+            case .absent: "absent"
+            case .held: "held"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -4605,7 +4602,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.needs, .off, .serving]
+        public static let allCases: [Self] = [.absent, .held]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -35,7 +35,6 @@ import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { pageOrigin } from "@cawco/core/browser-gate";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
 import {
-  lowPortsCommand,
   type NameFinding,
   portNameOf,
   RELAY_DNS_NAME,
@@ -112,19 +111,10 @@ export interface RelayJourneyDeps {
   hubMachineId: () => string | null;
   /** The hub's lifetime: the tick runs on it. */
   lifetime: HubLifetimeShape;
-  /**
-   * The lowest port the hub binds itself on its own machine and is refused
-   * there (port 80 for its `.local` name, local-name.ts); null when it binds
-   * none or holds it. The runtime step's command on that machine lowers the
-   * one setting to it, so running it never takes the hub's port away.
-   */
-  lowestHere: () => number | null;
   machines: () => RelayFleetMachine[];
   /** The view changed: every dashboard hears it. */
   publish: (view: RelayJourneyView) => void;
   relay: StreamRelay;
-  /** The folder the hub answers ACME challenges from on `machineId`, while it holds port 80 there (local-name.ts); null elsewhere. */
-  webrootFor: (machineId: string) => string | null;
 }
 
 export interface RelayJourney {
@@ -703,11 +693,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         runtimeRead = { machineId, lowest, read: "failed" };
         return;
       }
-      const runtime = here(
-        machineId,
-        lowest,
-        read.value.result as RelayRuntimeRead
-      );
+      const runtime = read.value.result as RelayRuntimeRead;
       runtimeRead = { machineId, lowest, read: runtime };
       // Kept as whether the runtime holds what the relay needs, so the step
       // stands ticked across a hub restart until the next read.
@@ -722,28 +708,6 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     }
   };
 
-  /**
-   * A runtime read on the hub's own machine, its low ports' command lowered
-   * to the lowest port the hub itself needs there ({@link
-   * RelayJourneyDeps.lowestHere}): one setting holds both.
-   */
-  const here = (
-    machineId: string,
-    lowest: number,
-    read: RelayRuntimeRead
-  ): RelayRuntimeRead => {
-    const hub = deps.lowestHere();
-    if (
-      read.need?.kind !== "low-ports" ||
-      machineId !== deps.hubMachineId() ||
-      hub === null ||
-      hub >= lowest
-    ) {
-      return read;
-    }
-    return { ...read, need: { ...read.need, command: lowPortsCommand(hub) } };
-  };
-
   const certify = async (journey: StoredJourney): Promise<void> => {
     const { machineId, name } = journey;
     if (!(machineId && name)) {
@@ -751,14 +715,12 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     }
     certifying = true;
     publish();
-    // Over HTTP on the hub's own machine, through the hub's port 80.
-    const webroot = deps.webrootFor(machineId);
     try {
       const endsAt = await relay.certify(machineId, {
         hostname: name,
         ...(journey.cloudflareToken
           ? { cloudflareToken: journey.cloudflareToken }
-          : { ...(webroot ? { webroot } : {}) }),
+          : {}),
       });
       db.journeyUpdate({
         certificateName: name,

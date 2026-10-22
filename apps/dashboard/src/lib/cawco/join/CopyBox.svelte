@@ -9,7 +9,7 @@
    * The line truncates to fit; what is copied is always the whole of it, and
    * the whole of it is the box's title. A command the person reads before
    * running it (`wrap`) takes the box's whole width and wraps only between
-   * its words, never inside one (`net.ipv4.ip_unprivileged_port_start=80`
+   * its words, never inside one (`net.ipv4.ip_unprivileged_port_start=443`
    * stays whole); a word wider than the box scrolls the command sideways.
    * Copy stands under it, at the trailing edge, so it never narrows the
    * command.

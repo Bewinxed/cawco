@@ -105,12 +105,16 @@ import type { HubPreviewOrigins } from "./hub-previews";
  *    wait on the whole artifact a session's create or update asks the
  *    person on (Needs you, core artifact-needs.ts). No page reads it; a
  *    page built for 20 reloads first all the same.
+ * 22: the hub's `.local` name (`GET /api/local-name`) is `held` with its
+ *    `url` (the name with the dashboard's port) or `absent`: no `needs` state,
+ *    no `command`, and no `local.name` frame, since the hub binds no port of
+ *    its own for the name. A page built for 21 reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 21;
+export const WIRE_PROTOCOL = 22;
 
 /**
  * What a session's stream carries: the changes each frame made to its

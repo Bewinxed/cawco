@@ -468,11 +468,14 @@ export default defineConfig(({ command }) => {
     server: {
       port: 3000,
       host: true,
-      // The dashboard is reached from the other machines on the tailnet, by name.
-      // Vite refuses an unknown Host header with a 403, so the tailnet suffix is
-      // named here; `.ts.net` covers this tailnet's MagicDNS names without
-      // pinning the machine's own hostname into the repo.
-      allowedHosts: [".ts.net", "localhost"],
+      // The dashboard is reached from the other machines on the tailnet, by name,
+      // and from the LAN by the hub's `.local` name (hub mdns.ts:
+      // `http://cawco.local:3000`). Vite refuses an unknown Host header with a
+      // 403, so both suffixes are named here (`vite preview` inherits it);
+      // `.ts.net` covers this tailnet's MagicDNS names without pinning the
+      // machine's own hostname into the repo, and a `.local` name is answered
+      // by multicast on the link alone, never by a DNS server's record.
+      allowedHosts: [".ts.net", ".local", "localhost"],
       fs: { allow: SERVED_DIRS },
       // The hub's live socket. REST /api is handled by SvelteKit's own route
       // (routes/api/[...path]).

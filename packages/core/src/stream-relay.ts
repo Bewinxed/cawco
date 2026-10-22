@@ -132,15 +132,7 @@ export interface RelayCertifyArgs {
   /** The person's Cloudflare API token (Zone · DNS · Edit): the DNS challenge, no port 80. */
   cloudflareToken?: string;
   hostname: string;
-  /**
-   * Over HTTP on the hub's own machine, while the hub holds port 80 there
-   * (hub local-name.ts): the folder the hub answers ACME challenges from,
-   * which certbot writes them into (`--webroot`) instead of binding the port.
-   */
-  webroot?: string;
 }
-/** `relay.renew`'s: the token for a certificate issued by DNS, else the hub's webroot as {@link RelayCertifyArgs} names it. */
-export type RelayRenewArgs = Omit<RelayCertifyArgs, "hostname">;
 export interface RelayCertified {
   /** The certificate's end (ms epoch). */
   expiresAt: number;
