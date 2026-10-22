@@ -131,6 +131,7 @@ import {
   type ArtifactSessionFrame,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
+  type AwayWait,
   accountMoveSentence,
   accountNameAmong,
   accountProvidersOf,
@@ -278,6 +279,7 @@ import {
   PLAN_ORIGIN,
   type PlacementPreview,
   type PlacementStrategy,
+  type PlanStep,
   PREVIEW_START,
   PREVIEW_STOP,
   PREVIEW_WEIGHT,
@@ -8457,6 +8459,27 @@ export const createServer = (
    */
   const recapped = new Map<string, string>();
 
+  /**
+   * What waits on the person, read from the plan as it stands: each open
+   * step waiting on a page, with the page by its chip, never a copy of the
+   * page's state.
+   */
+  const waitingOn = (steps: readonly PlanStep[]): AwayWait[] =>
+    steps.flatMap((step) => {
+      const page = step.waitsOn
+        ? db.artifacts.get(step.waitsOn.artifactId)
+        : undefined;
+      return page && step.status !== "completed"
+        ? [
+            {
+              step: step.id,
+              content: step.content,
+              artifact: { id: page.id, name: page.name },
+            },
+          ]
+        : [];
+    });
+
   /** HH:MM on the hub's clock, as the presence line and the notes' heading say a time. */
   const clockOf = (at: number): string =>
     new Intl.DateTimeFormat("en-GB", {
@@ -8464,6 +8487,25 @@ export const createServer = (
       minute: "2-digit",
       hour12: false,
     }).format(at);
+
+  /**
+   * The person's own message: on this chat, with the notes the session kept
+   * in its plan while they were away (`awayNotesOf`) and what waits on them
+   * there, once per section, for its recap.
+   */
+  const recapFor = (instanceId: string): PresenceSaid => {
+    const plan = db.sessionPlan(instanceId);
+    const notes = awayNotesOf(plan?.spec ?? undefined);
+    if (!notes || recapped.get(instanceId) === notes.notes) {
+      return { kind: "on" };
+    }
+    recapped.set(instanceId, notes.notes);
+    const waiting = waitingOn(plan?.steps ?? []);
+    return {
+      kind: "on",
+      recap: { ...notes, ...(waiting.length > 0 ? { waiting } : {}) },
+    };
+  };
 
   /**
    * What the session is told of the person as this send starts its turn
@@ -8474,14 +8516,10 @@ export const createServer = (
    */
   const personSaid = (instanceId: string, human: boolean): PresenceSaid => {
     const person = notifications.person();
-    if (human || (person.state === "here" && person.on === instanceId)) {
-      const notes = human
-        ? awayNotesOf(db.sessionPlan(instanceId)?.spec ?? undefined)
-        : undefined;
-      if (notes && recapped.get(instanceId) !== notes.notes) {
-        recapped.set(instanceId, notes.notes);
-        return { kind: "on", recap: notes };
-      }
+    if (human) {
+      return recapFor(instanceId);
+    }
+    if (person.state === "here" && person.on === instanceId) {
       return { kind: "on" };
     }
     if (person.state === "here") {

@@ -90,6 +90,9 @@ interface Act {
   searched: boolean;
 }
 const acts = new Map<Harness, Act>();
+/** Each harness's decision page, a step of its plan waiting on it. */
+const pages = new Map<Harness, string>();
+const CARD = "colour";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const call = (name: string, input: object): Reply => ({
@@ -148,7 +151,17 @@ const respond = (request: Seen): Reply => {
         called: false,
         done: false,
         searched: false,
-        input: { spec: `${heading}\n${note(away)}` },
+        input: {
+          spec: `${heading}\n${note(away)}`,
+          steps: [
+            {
+              id: "w1",
+              content: "Pick the colour",
+              status: "pending",
+              waitsOn: `${pages.get(away)}#${CARD}`,
+            },
+          ],
+        },
       };
       acts.set(away, act);
     }
@@ -387,6 +400,25 @@ const lineLegs = async (
     await atRest(fleet, id);
   }
 
+  // Each session's decision page, which a step of its plan will wait on.
+  for (const harness of HARNESSES) {
+    const id = ids.get(harness) as string;
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const made = await fetch(`${fleet.base}/api/instances/${id}/artifacts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "page",
+        name: `colour-${harness}`,
+        does: "pick",
+        ask: "Pick the colour",
+        html: `<main><section data-cawco-choice="${CARD}"><h2>Colour</h2><button data-option="a">Teal</button><button data-option="b">Amber</button></section></main>`,
+      }),
+    });
+    const page = (await made.json().catch(() => ({}))) as { id?: string };
+    pages.set(harness, page.id ?? "none");
+  }
+
   // Here, on another chat: a hand-off reads "elsewhere".
   await beat(fleet, "probe-phone", {
     client: "ios",
@@ -468,7 +500,15 @@ const lineLegs = async (
         seen.last.includes(tag("NOTE", harness)) &&
         plan?.spec?.includes(tag("NOTE", harness))
       ),
-      `plan: ${JSON.stringify(plan?.spec)}; turn: ${seen?.last.slice(-600) ?? "no turn"}`
+      `plan: ${JSON.stringify(plan?.spec)}; turn: ${seen?.last.slice(-900) ?? "no turn"}`
+    );
+    const chip = `[colour-${harness}](cawco:artifact/${pages.get(harness)})`;
+    kit.check(
+      `(recap) ${harness}: the step waiting on its page is named by the page's chip, read from the plan`,
+      Boolean(
+        seen?.last.includes(`- step w1 (Pick the colour) waits on ${chip}`)
+      ),
+      seen?.last.slice(-900) ?? "no turn"
     );
     const [record] = fleet.query<{ body: string }>(
       "SELECT body FROM sent_messages WHERE uuid = ?",
@@ -483,13 +523,21 @@ const lineLegs = async (
   }
 };
 
-/** In the page: every desktop notification it was asked to show. */
-const recordNotifications = () => {
+/**
+ * In the page: the OS's notifications, which a headless Chromium keeps
+ * denied whatever is granted (measured: `Notification.permission` reads
+ * "denied" after `grantPermissions` and a reload). The stand-in records
+ * every notification the page shows, and answers its permission as the
+ * person would: what `__notifyAnswer` says (an init script before it sets
+ * it, as a script is sent by its source, never its closure), until asked,
+ * then yes.
+ */
+const notificationStandIn = () => {
   const shown: { body?: string; tag?: string; title: string }[] = [];
-  const real = window.Notification;
-  if (!real) {
-    return;
-  }
+  const page = window as unknown as {
+    __notifyAnswer?: NotificationPermission;
+  };
+  let answer: NotificationPermission = page.__notifyAnswer ?? "default";
   function Fake(
     this: { close: () => void },
     title: string,
@@ -498,11 +546,23 @@ const recordNotifications = () => {
     shown.push({ title, body: options?.body, tag: options?.tag });
     this.close = () => undefined;
   }
-  Object.defineProperty(Fake, "permission", { get: () => real.permission });
+  Object.defineProperty(Fake, "permission", { get: () => answer });
   Object.assign(Fake, {
-    requestPermission: (...args: []) => real.requestPermission(...args),
+    requestPermission: () => {
+      answer = "granted";
+      return Promise.resolve(answer);
+    },
   });
   Object.assign(window, { Notification: Fake, __shown: shown });
+};
+/** The person allowed notifications before: the stand-in answers granted. */
+const notificationsGranted = () => {
+  Object.assign(window, { __notifyAnswer: "granted" });
+};
+
+/** In the page: the person at this computer in another app, as a headless page can't be. */
+const elsewhereOnTheDesk = () => {
+  Document.prototype.hasFocus = () => false;
 };
 
 /** The row this browser's onboarding stands in, in Caw's panel. */
@@ -525,7 +585,10 @@ const openNeeds = async (
 /** (onboarding) Chromium's step and its Idle Detection; WebKit's notifications-only row. */
 const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const base = await fleet.dashboard();
-  const page = await kit.page("desk", { engine: "chromium" });
+  const page = await kit.page("desk", {
+    engine: "chromium",
+    init: [notificationStandIn],
+  });
   await openNeeds(page, base);
   const row = page.locator(DESK_ROW);
   await row
@@ -541,12 +604,16 @@ const onboardingLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
       (await row.getByRole("button", { name: "Skip" }).count()) === 1,
     asked
   );
-  // The person's yes to both prompts, as the browser takes it.
+  // The person's yes to Idle Detection's prompt, as the browser takes it:
+  // granted to this page's own context (a grant with no context id goes to
+  // the default one). Notifications' yes is the stand-in's.
   const { origin } = new URL(base);
   const cdp = await page.context().newCDPSession(page);
+  const { targetInfo } = await cdp.send("Target.getTargetInfo");
   await cdp.send("Browser.grantPermissions", {
     origin,
-    permissions: ["idleDetection", "notifications"],
+    permissions: ["idleDetection"],
+    browserContextId: targetInfo.browserContextId,
   });
   await cdp.send("Emulation.setIdleOverride", {
     isUserActive: true,
@@ -884,22 +951,13 @@ const holdLegs = async (
   cwd: string
 ): Promise<void> => {
   const base = await fleet.dashboard();
+  // The person is at this computer, in another app: the tab is not the
+  // one in front, and it may show notifications.
   const page = await kit.page("desk", {
     engine: "chromium",
-    init: [recordNotifications],
-  });
-  await page.context().grantPermissions(["notifications"], {
-    origin: new URL(base).origin,
+    init: [notificationsGranted, notificationStandIn, elsewhereOnTheDesk],
   });
   await open(page, base, "[data-needs-caw]");
-  // The person is at the computer, not on this tab: its window unfocused,
-  // as the page itself reads it (Playwright otherwise tells every page it
-  // has focus).
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false });
-  kit.note(
-    `(hold) the desk tab reads hasFocus ${await page.evaluate(() => document.hasFocus())}`
-  );
   // Its beats say it can show them.
   await until(
     "(hold) the desk tab beating with alerts",
