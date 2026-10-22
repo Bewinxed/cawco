@@ -45,6 +45,7 @@
  * delegate's row and its task attempt on Details and Review, drawn after
  * it aged off, wear that same fill.
  */
+import { readFile } from "node:fs/promises";
 import type { Page, Route } from "playwright-core";
 import type {
   FindAnswer,
@@ -822,8 +823,9 @@ async function runStep(kit: Kit, base: string): Promise<void> {
  * answer (the dev server has no hub: its own reads of the session fail).
  */
 async function ownPage(kit: Kit, base: string): Promise<void> {
+  const serverSaid = await serverLog(base);
   const page = await kit.page("desk", { engine: "chromium" });
-  await hubNames(page);
+  const asked = await hubNames(page);
   await page.routeWebSocket(
     (url) => url.pathname === "/ws/dashboard",
     (hubSide) => {
@@ -865,7 +867,27 @@ async function ownPage(kit: Kit, base: string): Promise<void> {
       !(read.status ?? "").includes("Stored"),
     JSON.stringify(read.status)
   );
+  const naming = (await serverSaid()).filter((line) =>
+    line.includes("[cawco] naming")
+  );
+  kit.check(
+    "own page: loaded cold, the server renders it without asking the hub's names (no `[cawco] naming … failed` in its log); the browser asked, by its own origin, and the name arrived",
+    naming.length === 0 && asked.includes(FAR_ID),
+    JSON.stringify({ naming: naming.slice(0, 3), asked })
+  );
   await page.close();
+}
+
+/**
+ * What the bench's dev server prints to its stderr from now on (kit.ts
+ * `serve`: `$TMPDIR/probe-kit/vite-dev-<port>.err.log`), as lines.
+ */
+async function serverLog(base: string): Promise<() => Promise<string[]>> {
+  const file = `${process.env.TMPDIR ?? ".probe"}/probe-kit/vite-dev-${new URL(base).port}.err.log`;
+  const read = () => readFile(file).catch(() => Buffer.alloc(0));
+  const from = (await read()).length;
+  return async () =>
+    (await read()).subarray(from).toString("utf8").split("\n").filter(Boolean);
 }
 
 /**
