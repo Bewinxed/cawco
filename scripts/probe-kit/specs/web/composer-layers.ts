@@ -260,7 +260,22 @@ function waapiClock(page: Page): SurfaceClock {
         })
       );
       if (held.length === 0) {
-        throw new Error(`no animation started inside ${within}`);
+        // Whether the surface is there, and every run on it as it stands:
+        // an entrance the engine never ran, or one the catch missed.
+        const there = await page.evaluate((sel) => {
+          const els = [...document.querySelectorAll(sel)];
+          return els.map((el) => ({
+            opacity: getComputedStyle(el).opacity,
+            scale: getComputedStyle(el).scale,
+            runs: el.getAnimations({ subtree: true }).map((run) => {
+              const named = run as Animation & { transitionProperty?: string };
+              return `${run.constructor.name} ${named.transitionProperty ?? ""} ${run.playState} ${Math.round(Number(run.currentTime ?? -1))}`;
+            }),
+          }));
+        }, within);
+        throw new Error(
+          `no animation started inside ${within}: ${JSON.stringify(there)}`
+        );
       }
       return held;
     },

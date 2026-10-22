@@ -86,9 +86,9 @@
     easeDrawer,
     easeOut,
     motionOk,
-    popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { popIn, popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
   import { Button, sendVariants } from "#lib/components/ui/button/index.js";
@@ -567,29 +567,6 @@
       duration: dur("--dur-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
-    };
-  }
-
-  /**
-   * The `/` and `@` menu leaves the way the kit's surfaces leave
-   * (`floatingSurface` closed, here `data-side="top"`): back
-   * down toward the field it stands on, shrinking to the pop scale as it
-   * fades, over --dur-exit. It comes in by the kit's own `@starting-style`.
-   */
-  function menuOut(node: HTMLElement): TransitionConfig {
-    const duration = dur("--dur-exit");
-    if (!motionOk.current) {
-      return { duration, css: (t) => `opacity: ${t}` };
-    }
-    const scale = popScale();
-    const lift = Number.parseFloat(
-      getComputedStyle(node).getPropertyValue("--pop-rise")
-    );
-    return {
-      duration,
-      easing: easeDrawer,
-      css: (t) =>
-        `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: 0 ${((1 - t) * lift).toFixed(2)}px`,
     };
   }
 
@@ -3621,15 +3598,16 @@
           <div
             data-slot="menu"
             class={floatingSurface({
+              motion: "hang",
               class:
                 "absolute inset-x-0 bottom-(--menu-foot) max-h-c-composer-menu-max-h overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-c-composer-menu-max-h [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-border-hairline [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-c-btn-h-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:text-ink-strong coarse:[&_[data-slot=command-item]]:min-h-c-row-h",
             })}
             data-side="top"
-            data-state="open"
             id="composer-menu"
             onmousedown={(event) => event.preventDefault()}
             role="presentation"
-            out:menuOut
+            in:popIn={{ side: "top" }}
+            out:popOut={{ side: "top" }}
             style:--menu-foot="calc(100% + var(--space-2))"
           >
             <Command.Root loop shouldFilter={false} bind:value={highlight}>

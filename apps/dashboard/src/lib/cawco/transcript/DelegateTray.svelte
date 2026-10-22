@@ -64,7 +64,7 @@
   import { markHue, sessionSprite } from "../mark";
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { morph } from "../motion/morph.svelte";
-  import { popOut } from "../motion/pop.svelte";
+  import { popIn, popOut } from "../motion/pop.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { land } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
@@ -1639,10 +1639,11 @@
              composer's whole width. Absolute in the dock's layer, in no
              flow: opening and closing it moves nothing, the row, the
              composer and the transcript under it included. It comes in by
-             the kit's own `@starting-style` (opacity, translate and scale
-             on one transition, --dur-pop on the drawer curve, from its
-             bottom edge) and leaves by `popOut` back down into the row
-             (--dur-exit, The Fast Exit Rule). What it holds changing size
+             `popIn` (opacity, rise and scale on one animation, --dur-pop
+             on the drawer curve, from its bottom edge) and leaves by
+             `popOut` back down into the row (--dur-exit, The Fast Exit
+             Rule); never by `@starting-style`, which WebKit sometimes skips
+             for an element just added (motion/pop). What it holds changing size
              (a reason field, a row leaving) tweens its height (`morph`),
              up from its foot. -->
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1653,11 +1654,11 @@
             ? "Failed delegates"
             : "More delegates"}
           class={floatingSurface({
+            motion: "hang",
             class:
               "absolute start-0 end-(--shelf-end) bottom-(--shelf-foot) z-1 flex flex-col max-h-(--shelf-room) p-0 overflow-clip origin-bottom pointer-events-auto",
           })}
           data-side="top"
-          data-state="open"
           id={shelfId}
           inert={held}
           onkeydown={onshelfkey}
@@ -1666,6 +1667,7 @@
           style:--shelf-room="{shelfRoom}px"
           bind:this={shelfEl}
           {@attach morph({ rows: true })}
+          in:popIn={{ side: "top" }}
           out:popOut={{ side: "top" }}
         >
           <header
