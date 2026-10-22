@@ -20353,20 +20353,30 @@ export const createServer = (
       READ_TIMEOUT_MS,
       where.harness
     );
+    const offline = {
+      fault: "offline",
+      machineId,
+      message: machineFault(machineId, "offline"),
+    } as const;
     // The history fault's own words for no answer (transcripts.ts): "offline", "timeout".
     switch (answer.kind) {
       case "unanswered":
         return answer.reason === "dead"
-          ? {
-              fault: "offline",
-              machineId,
-              message: machineFault(machineId, "offline"),
-            }
+          ? offline
           : {
               fault: "timeout",
               message: machineFault(machineId, "silent"),
             };
       case "answered":
+        // Held for a machine still away at the read's deadline: the machine
+        // is away, as a read asked of it while gone is (a 503 naming it, so
+        // the reader reads again once it is back), never a failed read. A
+        // read runs nothing, so MACHINE_DISCONNECTED's "whether it ran is
+        // not known" is not its to say (j1-check-in, 2026-10-22: a page read
+        // asked as the hub came back, its machine 18 s behind it).
+        if (!answer.value.ok && answer.value.error === MACHINE_DISCONNECTED) {
+          return offline;
+        }
         if (!answer.value.ok) {
           return {
             fault: "failed",

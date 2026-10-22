@@ -6,10 +6,12 @@
   toast, until the hub's deadline for it passes on the clock
   (`reconnectingNow`); or it is
   offline; either way the rest comes in once the hub says it is back
-  (`readBehind`). Or the read failed: "Not caught up" beside
-  Try again, which reads it now, as the backoff does by itself
-  (`readAgainLater`). Why it failed is the toast's to say, once per fault
-  (`toastBehind`): the line never carries the hub's words.
+  (`readBehind`). Or the read failed: the line says so in the error formula,
+  the hub's own sentence for why, beside Try again, which reads it now, as
+  the backoff does by itself (`readAgainLater`). Never a toast (DESIGN.md,
+  The Work Outlives Its Surface Rule): the failure stands here, over the rows
+  it concerns, until a read lands. A hub sentence runs long (a held read's
+  is three clauses), so the line wraps inside the dock at any width.
 
   `floating`: it stands in the dock over the foot of a pane's list (see
   `Transcript`), on the surface "Catching up…" and "Jump to latest" share, at
@@ -67,7 +69,9 @@
       > is offline. The rest comes in once it's back.
     </p>
   {:else}
-    <p class="min-w-0 text-balance">Not caught up</p>
+    <p class="min-w-0 text-pretty wrap-anywhere">
+      Not caught up: {fault.message}. It's read again by itself.
+    </p>
     <!-- The kit link: an action in the line, in the link's ink, never plain
          words beside the words it answers. -->
     <Button onclick={onretry} pad="none" size="xs" variant="link"

@@ -7626,10 +7626,10 @@ async function readBackToHeld(
 
 /**
  * Why a read failed, where the view says it: over rows held, they stay where
- * the reader has them and the view is behind ({@link SessionState.behind}),
- * the dock saying "Not caught up" and a toast saying why, once for each
- * fault ({@link toastBehind}); with nothing held, the pane says why in their
- * place. A read the hub failed is read again on {@link READ_AGAIN_MS}; one
+ * the reader has them and the view is behind ({@link SessionState.behind}):
+ * the line over them says why, with its way back (transcript/Behind.svelte),
+ * never a toast (DESIGN.md, The Work Outlives Its Surface Rule); with nothing
+ * held, the pane says why in their place. A read the hub failed is read again on {@link READ_AGAIN_MS}; one
  * that found the machine offline waits for it ({@link readBehind}), unless
  * the hub already lists that machine online: then the machine list has
  * nothing more to say, and its every change would read again at once, so it
@@ -7641,11 +7641,6 @@ async function readBackToHeld(
 function readFailed(target: SessionState, fault: ReadFault): void {
   if (target.blocks.length > 0) {
     target.behind = fault;
-    // A machine on its way back is a wait the line over the rows says; the
-    // toast is for a read that failed.
-    if (!reconnectingNow(fault)) {
-      toastBehind(target.instanceId, fault);
-    }
   } else {
     target.readFault = fault;
   }
@@ -7727,42 +7722,12 @@ function readAgainLater(viewId: string): void {
   failedReads.set(viewId, failed);
 }
 
-/** A read landed: the next failure waits the first delay again, and its fault toasts again. */
+/** A read landed: the next failure waits the first delay again. */
 function readLanded(viewId: string): void {
   clearTimeout(failedReads.get(viewId)?.timer);
   failedReads.delete(viewId);
   clearTimeout(deadlineReads.get(viewId));
   deadlineReads.delete(viewId);
-  toasted.delete(viewId);
-}
-
-/** The fault each view last toasted, until a read lands: the same one again says nothing. */
-const toasted = new Map<string, string>();
-
-/**
- * The error formula for a transcript that could not be caught up, as a
- * toast: what happened (its name isn't caught up), why (the read's one
- * sentence), how to fix it and what happens next. Once per distinct fault.
- */
-function toastBehind(viewId: string, fault: ReadFault): void {
-  const key = `${fault.reason}|${fault.reason === "offline" ? fault.machineId : ""}|${fault.message}`;
-  if (toasted.get(viewId) === key) {
-    return;
-  }
-  toasted.set(viewId, key);
-  const row = instanceIndex.byId.get(viewId);
-  const name = resolveSessionTitle({
-    title: row?.title,
-    cwd: row?.cwd,
-    id: viewId,
-  });
-  const title = `${name} isn't caught up`;
-  const description =
-    fault.reason === "offline"
-      ? `${fault.message}. The rest comes in once it's back.`
-      : `${fault.message}. Try again reads it now; otherwise it's read again in 2 seconds, then less often, up to once a minute.`;
-  console.info(`[cawco] toast: ${title}. ${description} ${viewId.slice(0, 8)}`);
-  toast.error(title, { id: `behind:${viewId}`, description });
 }
 
 /**
