@@ -3,7 +3,7 @@ import {
   type Pin,
   type PinnedElement,
   wholePage,
-} from "@cawco/core/comments";
+} from "./comments";
 
 /** A pin on the page as a whole (core `wholePage`), by name. Our call. */
 const PAGE_WORDS = "Whole page";

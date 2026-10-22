@@ -25,8 +25,12 @@
    * resolved recessed. `tail` names the corner that stands on the pressed
    * point, a `--radius-hair` corner; none is the round pill (the page as a
    * whole). Focused, a second ring in the focus ink; a dot on its top end
-   * says the agent is working (pulsing on `--dur-loop`) or an answer is
-   * unread (still); gone from the page, a dashed `--border-control` ring.
+   * says the agent is working (the live dot, pulsing on `--dur-loop`) or
+   * an answer is unread (the needs-you dot, in `status-attn-glyph`, its
+   * echo three loops and then still: DESIGN.md, Status dot); gone from the
+   * page, a dashed `--border-control` ring. `inline`, it stands in a line
+   * of text as a chip's mark (a pin's chip, PinReference): the inline
+   * chip's line tall.
    */
   let {
     number = null,
@@ -35,6 +39,7 @@
     focused = false,
     dot = null,
     gone = false,
+    size = "regular",
   }: {
     number?: number | null;
     state?: PinMarkState;
@@ -42,14 +47,16 @@
     focused?: boolean;
     dot?: "live" | "unread" | null;
     gone?: boolean;
+    size?: "regular" | "inline";
   } = $props();
 </script>
 
 <span
   aria-hidden="true"
-  class="relative inline-flex flex-none items-center justify-center h-c-pin min-w-c-pin rounded-pill ring-2 ring-surface-raised shadow-xs type-caps num leading-none data-wide:px-c-pin-pad data-tail:rounded-es-hair data-[state=provisional]:border-2 data-[state=provisional]:border-action-solid data-[state=provisional]:bg-surface-raised data-[state=unsent]:border-2 data-[state=unsent]:border-action-solid data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-action-solid data-[state=sent]:bg-action-solid data-[state=sent]:text-on-action data-[state=resolved]:bg-surface-fill-strong data-[state=resolved]:text-ink-muted data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-(length:--c-pin-gone-ring) not-data-focused:data-gone:outline-border-control"
+  class="relative inline-flex flex-none items-center justify-center h-c-pin min-w-c-pin data-inline:h-c-inline-chip-line data-inline:min-w-c-inline-chip-line rounded-pill ring-2 ring-surface-raised shadow-xs type-caps num leading-none data-wide:px-c-pin-pad data-tail:rounded-es-hair data-[state=provisional]:border-2 data-[state=provisional]:border-action-solid data-[state=provisional]:bg-surface-raised data-[state=unsent]:border-2 data-[state=unsent]:border-action-solid data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-action-solid data-[state=sent]:bg-action-solid data-[state=sent]:text-on-action data-[state=resolved]:bg-surface-fill-strong data-[state=resolved]:text-ink-muted data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-(length:--c-pin-gone-ring) not-data-focused:data-gone:outline-border-control"
   data-focused={focused || undefined}
   data-gone={gone || undefined}
+  data-inline={size === "inline" || undefined}
   data-mark
   data-state={state}
   data-tail={tail === "none" ? undefined : tail}
@@ -59,9 +66,18 @@
   {#if dot}
     <span
       aria-hidden="true"
-      class="loops absolute -end-space-row -top-space-row size-(--status-dot-size) rounded-pill bg-status-live-glyph ring-(length:--status-dot-cut) ring-surface-raised data-live:motion-safe:animate-pulse"
+      class="loops absolute -end-space-row -top-space-row size-(--status-dot-size) rounded-pill bg-status-live-glyph data-unread:bg-status-attn-glyph ring-(length:--status-dot-cut) ring-surface-raised data-live:motion-safe:animate-pulse"
       data-dot={dot}
       data-live={dot === "live" || undefined}
-    ></span>
+      data-unread={dot === "unread" || undefined}
+    >
+      {#if dot === "unread"}
+        <!-- The needs-you dot's echo: three loops, then still. -->
+        <span
+          class="absolute inset-0 rounded-pill bg-status-attn-glyph opacity-0 motion-safe:opacity-100 motion-safe:animate-attn-echo"
+          data-echo
+        ></span>
+      {/if}
+    </span>
   {/if}
 </span>

@@ -151,6 +151,7 @@ export type TokenColor =
   | "color.brand-hover"
   | "color.brand-wash"
   | "color.c-target-tint"
+  | "color.c-change-wash"
   | "color.brand-ink"
   | "color.brand-ink-strong"
   | "color.link-ink"

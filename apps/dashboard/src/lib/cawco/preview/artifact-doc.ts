@@ -1,10 +1,14 @@
 import type { ArtifactChoices, ChoiceEntry } from "@cawco/core";
 import {
+  type ArtifactChanges,
   deletePin,
   type Pin,
   replyToPin,
   resolvePin,
   type Said,
+  seeChanges,
+  seenOf,
+  seePin,
 } from "@cawco/core/comments";
 import {
   ARTIFACT_GONE,
@@ -50,12 +54,16 @@ export const LINK_DROPPED = `${NOT_REACHING}. The link to the hub dropped.`;
 
 /** The doc as the pane reads it. */
 export interface ArtifactView extends ArtifactChoices {
+  /** What the latest revision changed, as the hub read it (`meta.changes`); null before any revision did. */
+  changes: ArtifactChanges | null;
   /** Ink groups the person drew that no pin stands on and no delivery has carried. */
   looseInk: number;
   /** The pins, by number. */
   pins: Pin[];
   /** When the session last changed it, a revision or a new ask (`meta.revisedAt`): a Send after it is unanswered. */
   revisedAt: string | null;
+  /** The anchors of the latest changes the person has looked at (the doc's `seen`, core `seenOf`). */
+  seen: ReadonlySet<string>;
   /** A sheet's stage, as the hub keeps it (live components): its status and the errors in the modules the sheet imports. */
   stage: StageState | null;
   /** The hub's last read couldn't reach the stage (`meta.unreached`): which hop, why, since when. */
@@ -93,6 +101,10 @@ export interface ArtifactDoc {
   resolve: (pin: string, resolved: boolean) => string | null;
   /** Try again on a link that failed or stands lost: a new socket now (reading again before the first sync). */
   retry: () => void;
+  /** The person looked at pin `pin`'s thread: what the agent answered there is seen. */
+  see: (pin: string) => void;
+  /** The person looked at these of revision `revision`'s changes: each is seen. */
+  seeChanges: (revision: number, anchors: string[]) => void;
 }
 
 /** A sentence's last mark. */
@@ -129,7 +141,12 @@ const viewOf = (doc: Doc): ArtifactView => {
       { id: string; sentAt?: string }
     >
   ).filter((group) => !(group.sentAt || pinned.has(group.id))).length;
+  const changes = (meta.get("changes") as ArtifactChanges | undefined) ?? null;
   return {
+    changes,
+    seen: new Set(
+      changes ? (seenOf(doc).get(String(changes.revision)) ?? []) : []
+    ),
     choices: doc.getMap("state").toJSON() as Record<string, ChoiceEntry>,
     pageHash: (meta.get("pageHash") as string | undefined) ?? null,
     sentAt: (meta.get("sentAt") as string | undefined) ?? null,
@@ -360,6 +377,8 @@ export function joinArtifact(
   return {
     reply: (pin, said) => replyToPin(doc, pin, said),
     resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
+    see: (pin) => seePin(doc, pin, new Date().toISOString()),
+    seeChanges: (revision, anchors) => seeChanges(doc, revision, anchors),
     delete: (pin) => deletePin(doc, pin),
     retry: () => {
       clearDown();

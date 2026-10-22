@@ -180,7 +180,7 @@ export function previewPinAt(value: unknown): PreviewPinAt | null {
 /** The most of a press's chain the page may offer (overlay page.ts `CHAIN_MOST` and the page as a whole). */
 const CHAIN_MAX = 8;
 
-/** One target the composer's chip offers: what it stands on, as a pin would hold it (named by pin-name.ts). */
+/** One target the composer's chip offers: what it stands on, as a pin would hold it (named by core pin-name.ts). */
 export interface ComposeTarget {
   anchor: Record<string, unknown> & { selector: string };
   elements: unknown[];

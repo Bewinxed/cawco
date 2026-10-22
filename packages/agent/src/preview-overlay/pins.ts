@@ -10,7 +10,8 @@
  * resolved, which is drawn only while its thread is open. A 2px raised ring
  * and the xs shadow lift it off the page; an open or stepped-to pin adds a
  * second ring in the focus ink; a dot on its top end says the agent is
- * working on it (pulsing) or has answered unread (still).
+ * working on it (the live dot, pulsing) or has answered and the person
+ * hasn't looked (the needs-you dot, echoing three loops, then still).
  *
  * Pins are drawn in an `<svg>` in the page's own document like the ink, so
  * they scroll with the page; a pin on the page as a whole stands at the
@@ -80,6 +81,8 @@ const PIN_REACH = { x: 960, y: 640 } as const;
 const BEHIND = 2;
 /** A finger's hit area round a pill, px. */
 const FINGER = 44;
+/** The loops a needs-you dot echoes before it stands still (DESIGN.md, Status dot). */
+const ECHOES = 3;
 
 export interface Box {
   h: number;
@@ -93,9 +96,14 @@ export interface DraftTarget {
   el: Element;
   /** The stroke group whose Comment the person picked. */
   ink?: string;
+  /** Its composer is closed with its words kept: the pill holds a draft, and a press opens it again. */
+  parked?: boolean;
   /** Where on `el` the press landed: fractions of its box. */
   point?: { x: number; y: number };
 }
+
+/** The id a parked draft's pill answers to (`data-pin-id`): a press on it opens its composer again. */
+export const DRAFT_PIN = "draft";
 
 export interface PinsDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
@@ -116,6 +124,8 @@ export interface PinsDeps {
    */
   outline: (el: Element | null, lead?: boolean) => void;
   post: (type: string, payload?: object) => void;
+  /** The parked draft's pill pressed: its composer opens again. */
+  reopenDraft: () => void;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
   waiting: (anchor: PageAnchor) => boolean;
 }
@@ -365,6 +375,10 @@ export function startPins(deps: PinsDeps): Pins {
    * thread from that, and writes its words through the page (`cawco:reply`).
    */
   const open = (id: string) => {
+    if (id === DRAFT_PIN) {
+      deps.reopenDraft();
+      return;
+    }
     const pin = pinsMap().get(id);
     deps.post("cawco:pin-open", {
       id,
@@ -392,6 +406,8 @@ export function startPins(deps: PinsDeps): Pins {
   let tracked: string | null = null;
   let live = new Set<string>();
   let unread = new Set<string>();
+  /** When each unread answer's dot began its echo (`performance.now()`): its three loops run from there. */
+  const echoed = new Map<string, number>();
   /** What of the page's viewport the host's chrome covers (`cawco:covered`): a phone's card or rail. */
   let covered: Box[] = [];
   /** Pins no scroll brought out from under the host's chrome when they were last revealed. */
@@ -485,6 +501,7 @@ export function startPins(deps: PinsDeps): Pins {
     focus: chrome.token("--focus-ring"),
     shadow: chrome.token("--shadow-tint"),
     dot: chrome.token("--status-live-glyph"),
+    attn: chrome.token("--status-attn-glyph"),
     font: chrome.token("--type-caps", "font"),
     height: Number.parseFloat(chrome.token("--c-pin", "width")) || 20,
     deck: Number.parseFloat(chrome.token("--deck-step", "width")) || 1.25,
@@ -637,32 +654,83 @@ export function startPins(deps: PinsDeps): Pins {
       number.textContent = String(pin.number);
       g.append(number);
     }
-    const dot = pin && (live.has(pin.id) || unread.has(pin.id));
-    if (dot) {
-      const r = paint.dotSize / 2;
-      const cx = box.x + box.w - 1;
-      const cy = box.y + 1;
-      const cut = document.createElementNS(SVG, "circle");
-      cut.setAttribute("cx", String(cx));
-      cut.setAttribute("cy", String(cy));
-      cut.setAttribute("r", String(r + paint.dotCut));
-      cut.setAttribute("fill", paint.raised);
-      const mark = document.createElementNS(SVG, "circle");
-      mark.setAttribute("cx", String(cx));
-      mark.setAttribute("cy", String(cy));
-      mark.setAttribute("r", String(r));
-      mark.setAttribute("fill", paint.dot);
-      mark.setAttribute("data-dot", live.has(pin.id) ? "live" : "unread");
-      if (live.has(pin.id) && motionOk()) {
-        mark.animate([{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }], {
-          duration: paint.loop,
-          iterations: Number.POSITIVE_INFINITY,
-          easing: "ease-in-out",
-        });
-      }
-      g.append(cut, mark);
+    if (pin && (live.has(pin.id) || unread.has(pin.id))) {
+      g.append(...dotOf(pin.id, box, paint));
     }
     return g;
+  };
+
+  /**
+   * A pill's dot on its top end, cut round by `--status-dot-cut`: working,
+   * the live dot, pulsing; an answer unread, the needs-you dot with its
+   * echo (DESIGN.md, Status dot).
+   */
+  const dotOf = (id: string, box: Box, paint: Paint): SVGElement[] => {
+    const r = paint.dotSize / 2;
+    const cx = box.x + box.w - 1;
+    const cy = box.y + 1;
+    const cut = document.createElementNS(SVG, "circle");
+    cut.setAttribute("cx", String(cx));
+    cut.setAttribute("cy", String(cy));
+    cut.setAttribute("r", String(r + paint.dotCut));
+    cut.setAttribute("fill", paint.raised);
+    const working = live.has(id);
+    const mark = document.createElementNS(SVG, "circle");
+    mark.setAttribute("cx", String(cx));
+    mark.setAttribute("cy", String(cy));
+    mark.setAttribute("r", String(r));
+    mark.setAttribute("fill", working ? paint.dot : paint.attn);
+    mark.setAttribute("data-dot", working ? "live" : "unread");
+    if (!working) {
+      return [cut, mark, echoOf(id, cx, cy, r, paint)];
+    }
+    if (motionOk()) {
+      mark.animate([{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }], {
+        duration: paint.loop,
+        iterations: Number.POSITIVE_INFINITY,
+        easing: "ease-in-out",
+      });
+    }
+    return [cut, mark];
+  };
+
+  /**
+   * An unread answer's echo on its dot: a ring growing from it as it fades,
+   * once a `--dur-loop`, three loops from when the answer was first drawn
+   * unread and then still, however often the pill is drawn again in them.
+   */
+  const echoOf = (
+    id: string,
+    cx: number,
+    cy: number,
+    r: number,
+    paint: Paint
+  ): SVGCircleElement => {
+    const ring = document.createElementNS(SVG, "circle");
+    ring.setAttribute("cx", String(cx));
+    ring.setAttribute("cy", String(cy));
+    ring.setAttribute("r", String(r));
+    ring.setAttribute("fill", paint.attn);
+    ring.setAttribute("data-echo", "");
+    ring.style.opacity = "0";
+    ring.style.transformBox = "fill-box";
+    ring.style.transformOrigin = "center";
+    const now = performance.now();
+    const started = echoed.get(id) ?? now;
+    echoed.set(id, started);
+    const spent = now - started;
+    if (motionOk() && spent < paint.loop * ECHOES) {
+      const echo = ring.animate(
+        [
+          { opacity: 1, transform: "scale(1)" },
+          { opacity: 0, transform: "scale(2)", offset: 0.75 },
+          { opacity: 0, transform: "scale(2)" },
+        ],
+        { duration: paint.loop, iterations: ECHOES, easing: paint.ease }
+      );
+      echo.currentTime = spent;
+    }
+    return ring;
   };
 
   /** A pin's pill, pressable, at `pill`; resting on it chooses its element and asks for its peek. */
@@ -812,7 +880,50 @@ export function startPins(deps: PinsDeps): Pins {
     drafted.pill = pill;
     const g = pillShape(null, pill, paint);
     g.setAttribute("data-pin", "new");
+    if (drafted.parked) {
+      parkedPill(g, pill, paint);
+    }
     (where.page ? fixed : layer).append(g);
+  };
+
+  /**
+   * A parked draft's pill (The Work Outlives Its Surface Rule): hollow at its
+   * target as it stood while written, an ellipsis in the action ink saying
+   * it holds words not yet sent, and one press (a finger's 44px) opens its
+   * composer again with them.
+   */
+  const parkedPill = (g: SVGGElement, pill: Pill, paint: Paint) => {
+    const { box } = pill;
+    g.setAttribute("data-parked", "");
+    g.setAttribute("data-pin-id", DRAFT_PIN);
+    g.style.pointerEvents = "auto";
+    g.style.cursor = "pointer";
+    const name = document.createElementNS(SVG, "title");
+    name.textContent = "Draft comment, not sent";
+    const dots = document.createElementNS(SVG, "text");
+    dots.setAttribute("x", String(box.x + box.w / 2));
+    dots.setAttribute("y", String(box.y + box.h / 2));
+    dots.setAttribute("text-anchor", "middle");
+    dots.setAttribute("dominant-baseline", "central");
+    dots.setAttribute("fill", paint.action);
+    dots.style.font = paint.font;
+    dots.style.userSelect = "none";
+    dots.textContent = "…";
+    const reach = Math.max(0, (FINGER - box.h) / 2);
+    const area = coarse() ? grow(box, reach) : grow(box, RING);
+    const hit = document.createElementNS(SVG, "rect");
+    hit.setAttribute("x", String(area.x));
+    hit.setAttribute("y", String(area.y));
+    hit.setAttribute("width", String(area.w));
+    hit.setAttribute("height", String(area.h));
+    hit.setAttribute("fill", "transparent");
+    g.prepend(hit);
+    g.append(name, dots);
+    g.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      open(DRAFT_PIN);
+    });
   };
 
   function draw() {
@@ -1093,6 +1204,12 @@ export function startPins(deps: PinsDeps): Pins {
       }
       live = working;
       unread = answered;
+      // An answer read is done echoing: a new one on that pin echoes afresh.
+      for (const id of [...echoed.keys()]) {
+        if (!unread.has(id) || live.has(id)) {
+          echoed.delete(id);
+        }
+      }
       draw();
     },
     track: (id) => {

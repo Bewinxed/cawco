@@ -38,6 +38,8 @@ export const MAPS = [
   "comments",
   "files",
   "requests",
+  // The person's looks at what the latest revision changed (core comments.ts `seenOf`).
+  "seen",
 ] as const;
 
 /** The doc's one top-level array: a canvas's scene, as y-excalidraw lays it out. */

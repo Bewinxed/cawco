@@ -29,6 +29,7 @@ import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark, markOf } from "./boot";
+import { type Changes, startChanges } from "./changes";
 import {
   answerEmbedder,
   EMBED_ARTIFACT,
@@ -151,12 +152,20 @@ let ringed = false;
  * point on it, or an ink group), the element's chain out to the page's
  * root, which of it the person chose in the composer's target chip, and the
  * press. Nothing of it is written until the host says the words
- * (`cawco:comment`); Esc, a press outside, a mode switch or a reload leave
- * nothing behind.
+ * (`cawco:comment`). Its composer closed with words in it (Esc, a press
+ * outside, a mode switch: The Work Outlives Its Surface Rule), the host parks
+ * it (`cawco:compose-park`): its hollow pill stays at its target saying it
+ * holds a draft, and one press on it opens the composer again; a reload
+ * brings it back from the host's keeping (`cawco:compose-restore`). Only the
+ * host's cancel of an empty composer, or its comment written, ends it.
  */
 let drafting: {
   chain: Element[];
   chosen: number;
+  /** Its composer is closed and its words kept: the pill stays, pressable, and nothing is chosen. */
+  parked?: boolean;
+  /** Where on its first target it stands, as fractions of its box: a draft brought back after a reload keeps its place however the page lays out. */
+  point?: { x: number; y: number };
   /** An ink group's Comment: the elements it marks, and its anchor. */
   ink?: {
     anchor: PageAnchor;
@@ -167,7 +176,8 @@ let drafting: {
   y: number;
 } | null = null;
 /** A composer or a thread stands: the chosen element alone is drawn. */
-const composing = () => threadOpen || drafting !== null;
+const composing = () =>
+  threadOpen || (drafting !== null && drafting.parked !== true);
 
 /**
  * Frames of another origin whose overlay answers (a decision page's
@@ -225,7 +235,10 @@ function drawsBox(el: Element): boolean {
 
 /** The one target drawn: the chosen pin's element, else the element under the pointer in Comment mode; and its label in Comment mode. */
 function paint() {
-  const drafted = drafting ? (drafting.chain[drafting.chosen] ?? null) : null;
+  const drafted =
+    drafting && !drafting.parked
+      ? (drafting.chain[drafting.chosen] ?? null)
+      : null;
   const pinned =
     pinEl?.isConnected && (!commenting() || composing() || pinLeads)
       ? pinEl
@@ -322,7 +335,17 @@ const pins: Pins = startPins({
   locate,
   outline,
   post,
+  reopenDraft: () => reopenDraft(),
   waiting,
+});
+
+/** What the latest revision changed that the person hasn't looked at, washed under the pins (changes.ts). */
+const changes: Changes = startChanges({
+  chrome,
+  interacting: () => modeNow === "interact",
+  locate,
+  outline: (el) => outline(el),
+  post,
 });
 
 /**
@@ -401,6 +424,7 @@ addEventListener("cawco:hmr", (event) => {
   pins.draw();
   ink.replace();
   pins.keepClear();
+  changes.draw();
 });
 addEventListener(
   "scroll",
@@ -682,6 +706,7 @@ const kept = (node: Node): boolean =>
   node === ink.layer ||
   node === pins.layer ||
   node === pins.fixed ||
+  node === changes.layer ||
   (node instanceof Element && node.hasAttribute("data-cawco-host")) ||
   (node instanceof HTMLScriptElement &&
     OVERLAY_SRC.test(node.getAttribute("src") ?? ""));
@@ -709,6 +734,8 @@ function morphTo(html: string) {
   ink.replace();
   // The open card's pin, moved under the host's chrome, is brought out again.
   pins.keepClear();
+  // Each wash stands on its element as the revision has it.
+  changes.draw();
   if (held) {
     held.addEventListener(
       "focusout",
@@ -920,10 +947,7 @@ function navigated() {
 
 /** The pane's mode; `again` names the moved pin the next tap in Comment places again. */
 function mode(next: PreviewMode, again: string | null = null) {
-  // A mode switch leaves nothing of a comment being written.
-  if (next !== modeNow && drafting) {
-    endDraft();
-  }
+  // A mode switch closes a comment's composer; the host parks its words, or cancels an empty one.
   modeNow = next;
   placing = next === "comment" ? again : null;
   layer.classList.toggle("comment", next === "comment");
@@ -1833,13 +1857,84 @@ function tellDraft() {
     return;
   }
   const { ink: inked } = drafting;
+  const point = draftTarget()?.point;
   post("cawco:compose", {
     via: "pointer",
     chosen: drafting.chosen,
     chain: inked
       ? [{ anchor: inked.anchor, elements: inked.elements, ink: true }]
       : drafting.chain.map(named),
+    // What the host keeps to bring it back after a reload.
+    ...(point ? { point } : {}),
+    ...(inked ? { inkId: inked.id } : {}),
   });
+}
+
+/** The parked draft's pill pressed: its composer opens again with what it held. */
+function reopenDraft() {
+  if (!drafting?.parked) {
+    return;
+  }
+  drafting.parked = false;
+  tellDraft();
+  pins.draft(draftTarget());
+  paint();
+}
+
+/**
+ * A draft the host kept across a reload (`cawco:compose-restore`): its
+ * target found again by its anchor, at the point it stood on, parked or
+ * with its composer open.
+ */
+function restoreDraft(message: HostMessage) {
+  const target = message.target as {
+    anchor?: unknown;
+    elements?: unknown;
+    inkId?: unknown;
+    point?: { x?: unknown; y?: unknown };
+  } | null;
+  const anchor = target?.anchor as PageAnchor | undefined;
+  if (!(anchor && typeof anchor.selector === "string" && artifact.keeps())) {
+    return;
+  }
+  const el = locate(anchor)?.el ?? null;
+  if (!el) {
+    return;
+  }
+  const parked = message.parked === true;
+  const group =
+    typeof target?.inkId === "string"
+      ? (artifact.doc().getMap("ink") as YMap<InkGroup>).get(target.inkId)
+      : undefined;
+  const r = el.getBoundingClientRect();
+  const fx = Number(target?.point?.x);
+  const fy = Number(target?.point?.y);
+  drafting = {
+    chain: group ? [el] : chainOf(el),
+    chosen: 0,
+    x: r.left + (Number.isFinite(fx) ? fx : 0.5) * r.width,
+    y: r.top + (Number.isFinite(fy) ? fy : 0.5) * r.height,
+    parked,
+    ...(Number.isFinite(fx) && Number.isFinite(fy)
+      ? { point: { x: fx, y: fy } }
+      : {}),
+    ...(group
+      ? {
+          ink: {
+            anchor: group.anchor as PageAnchor,
+            elements: Array.isArray(target?.elements)
+              ? (target.elements as PinnedElement[])
+              : [],
+            id: group.id,
+          },
+        }
+      : {}),
+  };
+  if (!parked) {
+    tellDraft();
+  }
+  pins.draft(draftTarget());
+  paint();
 }
 
 /** The chosen target of the comment being written, as pins.ts draws its hollow pill. */
@@ -1848,13 +1943,16 @@ function draftTarget(): DraftTarget | null {
   if (!(drafting && el)) {
     return null;
   }
+  const parked = drafting.parked ? { parked: true } : {};
   if (drafting.ink) {
-    return { el, ink: drafting.ink.id };
+    return { el, ink: drafting.ink.id, ...parked };
   }
   const root = el === el.ownerDocument.body;
-  return root
-    ? { el }
-    : { el, point: pins.pointOn(el, drafting.x, drafting.y) };
+  const point =
+    drafting.point && drafting.chosen === 0
+      ? drafting.point
+      : pins.pointOn(el, drafting.x, drafting.y);
+  return root ? { el, ...parked } : { el, point, ...parked };
 }
 
 /**
@@ -2303,6 +2401,14 @@ function coveredOf(value: unknown): Box[] {
 const idOf = (message: HostMessage) =>
   typeof message.id === "string" ? message.id : null;
 
+/** A host's list of strings, its other entries left out; none when it is no list. Our bound: 200. */
+const strings = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value
+        .filter((one): one is string => typeof one === "string")
+        .slice(0, 200)
+    : [];
+
 /**
  * The person's write on pin `message.pin`, once the doc holds the hub's
  * state, answered as `result` with `ok`, or the refusal's sentence. A message
@@ -2442,6 +2548,16 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:comment": (message) => writeDraft(message),
     // The composer closed with nothing said (Esc, a press outside, Close): nothing was written, and its pill goes.
     "cawco:compose-cancel": () => endDraft(),
+    // The composer closed with its words kept: its pill stays, saying it holds a draft, and opens it again.
+    "cawco:compose-park": () => {
+      if (drafting) {
+        drafting.parked = true;
+        pins.draft(draftTarget());
+        paint();
+      }
+    },
+    // A draft the host kept across a reload: brought back at its target.
+    "cawco:compose-restore": (message) => restoreDraft(message),
     // The composer's target chip chose another of the press's chain: its pill and outline follow.
     "cawco:compose-target": (message) => {
       const index = typeof message.index === "number" ? message.index : -1;
@@ -2479,6 +2595,15 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:reconnect": () => artifact.reconnect(),
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
+    // What the latest revision changed that the person hasn't looked at, and the pins with an answer he hasn't: washed, their stops told.
+    "cawco:changes": (message) =>
+      changes.show(strings(message.anchors), strings(message.pins)),
+    // A step of the host's tag, or a chip's decision card: brought into view and chosen.
+    "cawco:show-element": (message) => {
+      if (typeof message.selector === "string") {
+        changes.step(message.selector, message.outline === "flash");
+      }
+    },
     // The card open on a pin: its element is the one target while it stands; closed, the pointer's leads again.
     // The pointer or the keyboard on a pin's row in the host's list: its element chosen while it rests there.
     "cawco:hover-pin": (message) => pins.hover(idOf(message)),

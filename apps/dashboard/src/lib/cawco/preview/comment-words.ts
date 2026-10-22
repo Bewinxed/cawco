@@ -47,4 +47,11 @@ export const commentWords = {
   note: "Add a note for the agent",
   send: "Send",
   sendCount: (n: number) => `Send ${n}`,
+  // Changed since you looked: the tag over the page, and what a screen reader hears.
+  changedSince: (n: number) => `${n} changed since you looked`,
+  changeOf: (k: number, n: number) => `${k} of ${n}`,
+  previousChange: "Previous change",
+  nextChange: "Next change",
+  newAnswer: "New answer",
+  pinNewAnswer: (n: number) => `Pin ${n}, new answer`,
 } as const;

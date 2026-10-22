@@ -13,7 +13,7 @@
  * note ({@link ArtifactServiceDeps.deliverMarks}); a sheet's saves and
  * compile errors go by themselves once quiet {@link MARKS_QUIET_MS}.
  */
-import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
   type AgentRow,
@@ -29,17 +29,20 @@ import {
   ASK_PATHLIKE,
   artifactCommentsNotice,
   artifactErrorsNotice,
+  artifactLink,
   artifactSavesNotice,
   type ChoiceEntry,
   choiceEntryProblem,
   DESK_CAPTURE_WIDTH,
   DESK_CAPTURES_PER_PAGE,
+  decisionLink,
   fileHash,
   type InstanceRow,
   machineLabel,
   noteText,
   type PreviewAddress,
   type PreviewSource,
+  pinLink,
   type SendAttachment,
   type ShownFailure,
 } from "@cawco/core";
@@ -52,17 +55,22 @@ import {
 } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
+  type ArtifactChanges,
   type Carried,
+  CHANGES_LIMIT,
+  type ChangedItem,
   COMMENT_LIMITS,
   type CommentAttachment,
   inkSection,
   type MarkPictures,
+  newAnswer,
   type Pin,
   pinDelivery,
   pinHeard,
   pinSaid,
   pinUnsent,
   type SendBody,
+  seeChanges,
   sendNoteSection,
   type ThreadEntry,
   unheardEntries,
@@ -82,6 +90,7 @@ import {
   parse,
 } from "@cawco/core/find-match";
 import type { InkGroup } from "@cawco/core/ink";
+import { pinName } from "@cawco/core/pin-name";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
 import {
   type CanvasDial,
@@ -152,6 +161,13 @@ import {
   weightSaid,
 } from "./component";
 import type { ArtifactDocs } from "./docs";
+import {
+  bytesHash,
+  cardChanges,
+  cssEscape,
+  htmlChanges,
+  pictureChanges,
+} from "./page-changes";
 import { picturePath, thumbnailPath } from "./sync";
 
 export class ArtifactRefusal extends Error {
@@ -169,6 +185,21 @@ export class ArtifactRefusal extends Error {
 /** A program the hub can't keep, refused as the artifact's (decision-program.ts). */
 const refusedProgram = (error: ProgramRefusal): ArtifactRefusal =>
   new ArtifactRefusal(error.status, error.message, { cause: error });
+
+/** A page's files as they stood before a revision wrote the next: its HTML, a decision page's program, and its pictures' fingerprints by address. */
+interface PageWas {
+  files: ReadonlyMap<string, string>;
+  html: string;
+  program?: string;
+}
+
+/**
+ * Pin `pin`'s link on artifact `artifact`, labelled by what it stands on
+ * (core pin-name.ts): what the agent names it by to the person, drawn as
+ * the pin's chip (core references.ts).
+ */
+const linkOfPin = (artifact: string, pin: Pin): string =>
+  pinLink(artifact, pin.number, pinName(pin));
 
 /** Statements lang-core could not merge into the program: nothing was changed. */
 const unmerged = (error: unknown): ArtifactRefusal =>
@@ -476,6 +507,8 @@ export interface GraphBroken {
 export interface Revised {
   /** What it left broken on the picks and the graph; absent when nothing. */
   broken?: GraphBroken;
+  /** The cards it put in or rewrote, each by its link (`[question](cawco:decision/<artifact>/<card>)`), by id. */
+  cards: Record<string, string>;
   /** Its decisions now, by id, in page order. */
   decisions: string[];
   /** Components the library does not have, dropped and never drawn. */
@@ -529,6 +562,8 @@ export interface ArtifactStatus {
 export interface Created {
   /** What a decision page's program left broken on the picks and the graph; absent when nothing. */
   broken?: GraphBroken;
+  /** A decision page's cards' links, by id (`[question](cawco:decision/<artifact>/<card>)`): what the agent names each by. */
+  cards?: Record<string, string>;
   /** A decision page's decisions, by id, in page order. */
   decisions?: string[];
   /** Components a decision page's program names that the library does not have: dropped, never drawn. */
@@ -543,6 +578,8 @@ export interface Created {
   host?: string;
   id: string;
   kind: ArtifactKind;
+  /** Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person. */
+  link?: string;
   /** A component canvas's flow moves, each with the animations it fired. */
   moves?: ReturnType<typeof movesSaid>;
   name: string;
@@ -638,8 +675,11 @@ export interface CommentRead {
     address: string;
     id: string;
     kind: ArtifactKind;
+    /** Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person. */
+    link: string;
     name: string;
-    pins: (Pin & { inkBox?: InkGroup["page"] })[];
+    /** Each with its link, `[label](cawco:pin/<artifact>/<number>)`. */
+    pins: (Pin & { inkBox?: InkGroup["page"]; link: string })[];
   }[];
   at: string;
 }
@@ -2060,6 +2100,108 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
+  /** A page's files as they stand before a revision writes the next: its HTML and a decision page's program; null before its first. */
+  const pageWas = (id: string): PageWas | null => {
+    const folder = join(deps.root, id);
+    const html = join(folder, "index.html");
+    if (!existsSync(html)) {
+      return null;
+    }
+    const program = join(folder, PROGRAM_FILE);
+    // Each picture's file by its address, fingerprinted: what tells one drawn again.
+    const files = new Map<string, string>();
+    const pictures = join(folder, "files");
+    if (existsSync(pictures)) {
+      for (const name of readdirSync(pictures)) {
+        files.set(
+          `files/${name}`,
+          bytesHash(readFileSync(join(pictures, name)))
+        );
+      }
+    }
+    return {
+      html: readFileSync(html, "utf8"),
+      files,
+      ...(existsSync(program)
+        ? { program: readFileSync(program, "utf8") }
+        : {}),
+    };
+  };
+
+  /**
+   * What a page's revision changed (page-changes.ts): a decision page's
+   * cards, else an HTML page's elements, told at the elements its pins
+   * stand on where a change falls inside one.
+   */
+  const pageChanges = (
+    id: string,
+    was: PageWas,
+    now: { html: string; program?: BuiltProgram | undefined }
+  ): ChangedItem[] => {
+    if (now.program && was.program !== undefined) {
+      return [
+        ...cardChanges(readKept(was.program).cards, now.program.read.cards),
+        ...pictureChanges(was.files, now.program.files),
+      ];
+    }
+    const anchors = Object.values(
+      docs.doc(id).getMap("pins").toJSON() as Record<string, Pin>
+    ).flatMap((pin) =>
+      "selector" in pin.anchor && !pin.anchor.frames?.length
+        ? [pin.anchor.selector]
+        : []
+    );
+    return htmlChanges(was.html, now.html, anchors);
+  };
+
+  /**
+   * Revision `row.revision`'s changes, in the doc's meta (core
+   * `ArtifactChanges`): every view marks them until the person has looked.
+   * The next revision's replace them.
+   */
+  const markChanges = (row: ArtifactRow, items: ChangedItem[]) => {
+    const changes: ArtifactChanges = {
+      revision: row.revision,
+      at: new Date().toISOString(),
+      items: items.slice(0, CHANGES_LIMIT),
+    };
+    docs.transact(row.id, "hub", (doc) =>
+      doc.getMap("meta").set("changes", changes)
+    );
+  };
+
+  /**
+   * A made page's files written for `row`: one made again under its name
+   * is its next revision, and what that changed is marked
+   * ({@link markChanges}).
+   */
+  const writeMade = (
+    row: ArtifactRow,
+    html: string,
+    program: BuiltProgram | undefined
+  ) => {
+    const was = pageWas(row.id);
+    writePage(row.id, html, program);
+    if (was) {
+      markChanges(row, pageChanges(row.id, was, { html, program }));
+    }
+  };
+
+  /** A create's answer with the artifact's link, which the agent names it by. */
+  const linked = (made: Created): Created => ({
+    ...made,
+    link: artifactLink(made.id, made.name),
+  });
+
+  /** A decision page's cards' links, by id: what the agent names each by. */
+  const cardLinks = (
+    id: string,
+    cards: readonly DecisionCard[]
+  ): Record<string, string> =>
+    Object.fromEntries(
+      cards.map((card) => [card.id, decisionLink(id, card.id, card.question)])
+    );
+
   /** A decision page's program as the hub keeps it; undefined for an HTML page or any other artifact. */
   const programOf = (row: ArtifactRow): string | undefined => {
     const file = join(deps.root, row.id, PROGRAM_FILE);
@@ -2374,13 +2516,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** What a create answers of a decision page: its decisions, and the components it dropped. */
   const programAnswer = (
+    id: string,
     program: BuiltProgram | undefined
-  ): Pick<Created, "decisions" | "dropped"> => {
+  ): Pick<Created, "cards" | "decisions" | "dropped"> => {
     if (!program) {
       return {};
     }
     return {
       decisions: program.read.cards.map((card) => card.id),
+      cards: cardLinks(id, program.read.cards),
       ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
     };
   };
@@ -2834,8 +2978,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** Each owed pin's section, what it carries named as the delivery carries it. */
+  /** Each owed pin's section of artifact `artifact`, its link with it, what it carries named as the delivery carries it. */
   const pinSections = (
+    artifact: string,
     owed: Pin[],
     groups: Record<string, InkGroup>,
     url: string,
@@ -2844,6 +2989,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     owed.map((pin) =>
       pinDelivery(pin, {
         url,
+        link: linkOfPin(artifact, pin),
         carried: (one) => carried.get(one.ref) ?? { as: "file" },
         ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
       })
@@ -2891,7 +3037,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
     const marks = [
       ...(send?.note ? [sendNoteSection(send.note)] : []),
-      ...pinSections(owed, groups, url, carried),
+      ...pinSections(row.id, owed, groups, url, carried),
       ...loose.map((group) =>
         inkSection(group, {
           url,
@@ -4152,12 +4298,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return !!owner && statusOf(owner, row).waitingOn.includes("person");
   };
 
-  /** An answer about a held next version, said as its artifact's: that one's id, and the next version's as `held`. */
+  /**
+   * An answer about a held next version, said as its artifact's: that one's
+   * id, and the next version's as `held`; with the artifact's link
+   * (`[name](cawco:artifact/<id>)`), which the agent names it by.
+   */
   const heldAnswer = <T extends { held?: string; id: string }>(
     answer: T
-  ): T => {
+  ): T & { link?: string } => {
     const row = db.get(answer.id);
-    return row?.heldFor ? { ...answer, ...heldId(row) } : answer;
+    const said = row?.heldFor ? { ...answer, ...heldId(row) } : answer;
+    return row ? { ...said, link: artifactLink(said.id, row.name) } : said;
   };
 
   /**
@@ -4180,10 +4331,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         row.heldFor === null
       );
       const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+      const was = pageWas(moved.id);
       writePage(moved.id, html);
       // Every page open on it hears the new revision in the doc and morphs
       // in place (the overlay); nothing reloads.
       stampMeta(moved, pageHash(html));
+      markChanges(moved, was ? pageChanges(moved.id, was, { html }) : []);
       return read(moved, undefined, ownersRead);
     }
     const doc = docs.doc(row.id);
@@ -4237,18 +4390,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
     const program = page.program as BuiltProgram;
     mediaHeld(holder(row) ?? instance, program);
-    const before = new Set(readKept(existing).cards.map((card) => card.id));
+    const kept = readKept(existing).cards;
+    const before = new Set(kept.map((card) => card.id));
     const after = program.read.cards.map((card) => card.id);
     const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+    const was = pageWas(moved.id);
     writePage(moved.id, page.html, program);
     const hash = pageHash(program.program);
     stampMeta(moved, hash);
+    const changes = [
+      ...cardChanges(kept, program.read.cards),
+      ...pictureChanges(was?.files ?? new Map(), program.files),
+    ];
+    markChanges(moved, changes);
+    const touched = new Set(
+      changes.filter((item) => item.kind === "card").map((item) => item.anchor)
+    );
     return {
       id: moved.id,
       revision: moved.revision,
       pageHash: hash,
       statements: merged.change,
       decisions: after,
+      // The cards it put in or rewrote, each by its link: what the agent names them by.
+      cards: cardLinks(
+        moved.heldFor ?? moved.id,
+        program.read.cards.filter((card) =>
+          touched.has(`#decision-${cssEscape(card.id)}`)
+        )
+      ),
       moved: {
         added: after.filter((card) => !before.has(card)),
         removed: [...before].filter((card) => !after.includes(card)),
@@ -4525,7 +4695,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
       const ownWay = madeOwnWay(making, input);
       if (ownWay !== null) {
-        return await ownWay;
+        return linked(await ownWay);
       }
       let source: PreviewSource = { page: input.name };
       let machineId: string | null = null;
@@ -4557,7 +4727,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       });
       await letGo(movedFrom, row);
       if (html !== null) {
-        writePage(row.id, html, program);
+        writeMade(row, html, program);
       }
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
@@ -4576,10 +4746,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         kind: row.kind,
         name: row.name,
         route: routeOf(said.id),
+        link: artifactLink(said.id, row.name),
         ...openedOf(shown),
         ...(stage ? { stage } : {}),
         ...(weight ? { weight } : {}),
-        ...programAnswer(program),
+        ...programAnswer(said.id, program),
         ...(broken ? { broken } : {}),
       };
     },
@@ -5325,7 +5496,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
         const answered = pins.map((pin) => {
           const inkBox = pin.ink ? groups[pin.ink]?.page : undefined;
-          return inkBox ? { ...pin, inkBox } : pin;
+          const link = linkOfPin(row.id, pin);
+          return inkBox ? { ...pin, inkBox, link } : { ...pin, link };
         });
         const address =
           (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
@@ -5336,6 +5508,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
                 id: row.id,
                 kind: row.kind,
                 name: row.name,
+                link: artifactLink(row.id, row.name),
                 address,
                 pins: answered,
               },
@@ -5351,7 +5524,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       pinId: string,
       text: string,
       files?: string[]
-    ): { entry: ThreadEntry; number: number; pin: string } => {
+    ): { entry: ThreadEntry; link: string; number: number; pin: string } => {
       const { row, pin } = pinOf(sessionOf(instanceId), pinId);
       if (pin.thread.length >= COMMENT_LIMITS.entries) {
         throw new ArtifactRefusal(
@@ -5373,7 +5546,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           .getMap("pins")
           .set(pin.id, { ...before, thread: [...before.thread, entry] })
       );
-      return { pin: pin.id, number: pin.number, entry };
+      return {
+        pin: pin.id,
+        number: pin.number,
+        link: linkOfPin(row.id, pin),
+        entry,
+      };
     },
 
     /** The agent resolves a pin, with a last reply when given; the person can reopen it. */
@@ -5381,7 +5559,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       pinId: string,
       text?: string
-    ): { number: number; pin: string; resolvedAt: string } => {
+    ): { link: string; number: number; pin: string; resolvedAt: string } => {
       const { row, pin } = pinOf(sessionOf(instanceId), pinId);
       const at = new Date().toISOString();
       const thread = text
@@ -5395,7 +5573,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             },
           ].slice(-COMMENT_LIMITS.entries)
         : pin.thread;
-      const resolved: Pin = { ...pin, thread, resolvedAt: at };
+      // The agent's resolve is an answer: the person's next look takes it in (core `newAnswer`).
+      const resolved: Pin = {
+        ...pin,
+        thread,
+        resolvedAt: at,
+        resolvedBy: "agent",
+      };
       // The agent's own resolve is not the person's to tell it of.
       docs.transact(row.id, "hub", (doc) =>
         doc.getMap("pins").set(pin.id, {
@@ -5403,7 +5587,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ...(pin.heard === undefined ? {} : { heard: pinSaid(resolved) }),
         })
       );
-      return { pin: pin.id, number: pin.number, resolvedAt: at };
+      return {
+        pin: pin.id,
+        number: pin.number,
+        link: linkOfPin(row.id, pin),
+        resolvedAt: at,
+      };
     },
 
     /**
@@ -5509,6 +5698,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         const meta = live.getMap("meta");
         meta.set("sentAt", at);
         meta.set("sentText", note);
+        // His Send is a look at everything on this revision: every change and every answer.
+        const changes = meta.get("changes") as ArtifactChanges | undefined;
+        if (changes) {
+          seeChanges(
+            live,
+            changes.revision,
+            changes.items.map((item) => item.anchor)
+          );
+        }
+        const pins = live.getMap("pins");
+        for (const [pinId, pin] of [...pins.entries()] as [string, Pin][]) {
+          if (newAnswer(pin)) {
+            pins.set(pinId, { ...pin, seenAt: at });
+          }
+        }
       });
       db.update(row.id, { deliveredSeq: (db.get(row.id) as ArtifactRow).seq });
       return { choices: state, ...metaOf(doc) };

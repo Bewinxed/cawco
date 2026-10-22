@@ -1,0 +1,495 @@
+/**
+ * What a revision of a page changed, read by the hub at that revision and
+ * written into the doc's `meta.changes` (core comments.ts `ArtifactChanges`):
+ * the panel marks each changed thing with the done wash until the person has
+ * looked at it (PRD §5.7, "Pointing and what changed").
+ *
+ * An HTML page's is a diff of its body before and after, element by
+ * element, whitespace and attribute order ignored, scripts and styles left
+ * out. A change is told at the nearest element that names itself (an id that
+ * isn't minted, a test id, a decision card's choice: core
+ * `ANCHOR_IDENTITIES`) or holds a pin's anchor, the change's own element
+ * when none does; an element put in is told at itself; one taken out, at the
+ * nearest such element still there that held it, else as a removed stop with
+ * its first words. Each is named by the selector the page's overlay names
+ * elements by (overlay page.ts `selectorOf`), so the overlay finds it.
+ *
+ * A decision page's is its cards: each card added or rewritten, by its
+ * `#decision-<id>`, and each taken out, a removed stop with its question.
+ */
+import { createHash } from "node:crypto";
+import {
+  ANCHOR_IDENTITIES,
+  CHANGES_LIMIT,
+  type ChangedItem,
+  generatedId,
+} from "@cawco/core/comments";
+import type { DecisionCard } from "@cawco/core/decisions";
+
+/** Elements whose insides are no part of what the person sees. */
+const UNSEEN = new Set(["script", "style", "template", "noscript", "head"]);
+/** Words a label keeps. Our call. */
+const LABEL_CHARS = 60;
+const SPACES = /\s+/g;
+
+/** One element of a page, as the diff reads it. */
+interface Node {
+  attrs: [string, string][];
+  children: Node[];
+  /** What names it alone, by identity, in its page; null when nothing does. */
+  identity: string | null;
+  parent: Node | null;
+  /** Its fingerprint: its tag, attributes, words and children's, so equal ones read the same. */
+  sig: string;
+  tag: string;
+  /** Its own words, each run of spaces one. */
+  text: string;
+}
+
+/** An identifier as a CSS selector writes it (CSSOM `CSS.escape`, for the characters ids and attribute values carry). */
+export function cssEscape(value: string): string {
+  let out = "";
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value.charAt(i);
+    const code = value.charCodeAt(i);
+    if (code === 0) {
+      out += "�";
+    } else if (
+      (code >= 0x01 && code <= 0x1f) ||
+      code === 0x7f ||
+      (i === 0 && code >= 0x30 && code <= 0x39) ||
+      (i === 1 && code >= 0x30 && code <= 0x39 && value.charAt(0) === "-")
+    ) {
+      out += `\\${code.toString(16)} `;
+    } else if (i === 0 && ch === "-" && value.length === 1) {
+      out += `\\${ch}`;
+    } else if (
+      code >= 0x80 ||
+      ch === "-" ||
+      ch === "_" ||
+      (code >= 0x30 && code <= 0x39) ||
+      (code >= 0x41 && code <= 0x5a) ||
+      (code >= 0x61 && code <= 0x7a)
+    ) {
+      out += ch;
+    } else {
+      out += `\\${ch}`;
+    }
+  }
+  return out;
+}
+
+/** The body of `html` as a tree, scripts and styles left out; null when it has none. */
+function bodyOf(html: string): Node | null {
+  const root: Node = {
+    tag: "#root",
+    attrs: [],
+    children: [],
+    identity: null,
+    parent: null,
+    sig: "",
+    text: "",
+  };
+  const stack: Node[] = [root];
+  /** Inside an element whose insides are unseen: how deep. */
+  let unseen = 0;
+  new HTMLRewriter()
+    .on("*", {
+      element(el) {
+        const tag = el.tagName.toLowerCase();
+        const opens = el.canHaveContent && !el.selfClosing;
+        if (unseen > 0 || UNSEEN.has(tag)) {
+          if (opens) {
+            unseen += 1;
+            el.onEndTag(() => {
+              unseen -= 1;
+            });
+          }
+          return;
+        }
+        const parent = stack.at(-1) as Node;
+        const node: Node = {
+          tag,
+          attrs: [...el.attributes]
+            .map(([name, value]): [string, string] => [
+              name.toLowerCase(),
+              value.replace(SPACES, " ").trim(),
+            ])
+            .sort(([a], [b]) => a.localeCompare(b)),
+          children: [],
+          identity: null,
+          parent,
+          sig: "",
+          text: "",
+        };
+        parent.children.push(node);
+        if (opens) {
+          stack.push(node);
+          el.onEndTag(() => {
+            // An element left open closes with its parent's end.
+            const at = stack.lastIndexOf(node);
+            if (at > 0) {
+              stack.length = at;
+            }
+          });
+        }
+      },
+      text(chunk) {
+        if (unseen === 0) {
+          const node = stack.at(-1) as Node;
+          node.text += chunk.text;
+        }
+      },
+    })
+    .transform(html);
+  const find = (node: Node, tag: string): Node | null => {
+    if (node.tag === tag) {
+      return node;
+    }
+    for (const child of node.children) {
+      const found = find(child, tag);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  };
+  const body = find(root, "body");
+  if (!body) {
+    return null;
+  }
+  body.parent = null;
+  settle(body);
+  identify(body);
+  return body;
+}
+
+/** Each element's words made even and its fingerprint taken, from its leaves up. */
+function settle(node: Node): void {
+  node.text = node.text.replace(SPACES, " ").trim();
+  for (const child of node.children) {
+    settle(child);
+  }
+  node.sig = JSON.stringify([
+    node.tag,
+    node.attrs,
+    node.text,
+    node.children.map((child) => child.sig),
+  ]);
+}
+
+/** What names `node` by identity, as the overlay's `identityOf` does: its id, else an identity attribute, when it names only it. */
+function identify(body: Node): void {
+  const all: Node[] = [];
+  const walk = (node: Node) => {
+    all.push(node);
+    for (const child of node.children) {
+      walk(child);
+    }
+  };
+  walk(body);
+  const attr = (node: Node, name: string) =>
+    node.attrs.find(([key]) => key === name)?.[1] ?? null;
+  const counts = new Map<string, number>();
+  const candidates = new Map<Node, string[]>();
+  for (const node of all) {
+    const id = attr(node, "id");
+    const named = [
+      ...(id && !generatedId(id) ? [`#${cssEscape(id)}`] : []),
+      ...ANCHOR_IDENTITIES.flatMap((name) => {
+        const value = attr(node, name);
+        return value ? [`[${name}="${cssEscape(value)}"]`] : [];
+      }),
+    ];
+    candidates.set(node, named);
+    for (const one of named) {
+      counts.set(one, (counts.get(one) ?? 0) + 1);
+    }
+  }
+  for (const node of all) {
+    node.identity =
+      candidates.get(node)?.find((one) => counts.get(one) === 1) ?? null;
+  }
+}
+
+/** `node`'s selector in its page, as the overlay's `selectorOf` writes it. */
+function selectorOf(node: Node): string {
+  const path: string[] = [];
+  for (let at: Node | null = node; at; at = at.parent) {
+    if (at.identity) {
+      path.unshift(at.identity);
+      break;
+    }
+    if (!at.parent) {
+      path.unshift(at.tag);
+      break;
+    }
+    const index =
+      at.parent.children
+        .slice(0, at.parent.children.indexOf(at))
+        .filter((sibling) => sibling.tag === at?.tag).length + 1;
+    path.unshift(`${cssEscape(at.tag)}:nth-of-type(${index})`);
+  }
+  return path.join(" > ");
+}
+
+/** All of an element's words, its own and its children's, for a label. */
+function wordsOf(node: Node): string {
+  const words = [node.text, ...node.children.map(wordsOf)]
+    .filter(Boolean)
+    .join(" ")
+    .replace(SPACES, " ")
+    .trim();
+  return words;
+}
+
+/** A changed element's label: its first words, else what it is. */
+const labelOf = (node: Node): string => {
+  const words = wordsOf(node);
+  if (!words) {
+    return node.tag;
+  }
+  return words.length > LABEL_CHARS
+    ? `${words.slice(0, LABEL_CHARS - 1).trimEnd()}…`
+    : words;
+};
+
+/** The places of `before` and `after` that read the same, in order: their longest common run by fingerprint. */
+function commonRun(before: Node[], after: Node[]): [number, number][] {
+  const n = before.length;
+  const m = after.length;
+  const runs: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array<number>(m + 1).fill(0)
+  );
+  const at = (i: number, j: number) => (runs[i] as number[])[j] as number;
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      (runs[i] as number[])[j] =
+        before[i]?.sig === after[j]?.sig
+          ? at(i + 1, j + 1) + 1
+          : Math.max(at(i + 1, j), at(i, j + 1));
+    }
+  }
+  const same: [number, number][] = [];
+  for (let i = 0, j = 0; i < n && j < m;) {
+    if (before[i]?.sig === after[j]?.sig) {
+      same.push([i, j]);
+      i += 1;
+      j += 1;
+    } else if (at(i + 1, j) >= at(i, j + 1)) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+  return same;
+}
+
+/** Between two untouched elements: one of the same tag in its place is the same element, changed; the rest went or came. */
+function pairGap(
+  gapBefore: Node[],
+  gapAfter: Node[],
+  into: { added: Node[]; pairs: [Node, Node][]; removed: Node[] }
+): void {
+  let left = gapBefore;
+  for (const node of gapAfter) {
+    const at = left.findIndex(
+      (was) => was.tag === node.tag && !was.identity && !node.identity
+    );
+    if (at === -1) {
+      into.added.push(node);
+      continue;
+    }
+    into.removed.push(...left.slice(0, at));
+    into.pairs.push([left[at] as Node, node]);
+    left = left.slice(at + 1);
+  }
+  into.removed.push(...left);
+}
+
+/**
+ * The pairs of `before` and `after` that are the same element: one that
+ * names itself by the same identity, then the same fingerprint in order
+ * (their longest common run), then, between those, one of the same tag in
+ * its place. What pairs with nothing was taken out, or put in.
+ */
+function pair(
+  before: Node[],
+  after: Node[]
+): { added: Node[]; pairs: [Node, Node][]; removed: Node[] } {
+  const out = {
+    pairs: [] as [Node, Node][],
+    added: [] as Node[],
+    removed: [] as Node[],
+  };
+  const byIdentity = new Map(
+    before.filter((node) => node.identity).map((node) => [node.identity, node])
+  );
+  const taken = new Set<Node>();
+  for (const node of after) {
+    const was = node.identity ? byIdentity.get(node.identity) : undefined;
+    if (was) {
+      out.pairs.push([was, node]);
+      taken.add(was);
+      taken.add(node);
+    }
+  }
+  const restBefore = before.filter((node) => !taken.has(node));
+  const restAfter = after.filter((node) => !taken.has(node));
+  const bounds: [number, number][] = [
+    [-1, -1],
+    ...commonRun(restBefore, restAfter),
+    [restBefore.length, restAfter.length],
+  ];
+  for (let k = 0; k < bounds.length - 1; k += 1) {
+    const [i0, j0] = bounds[k] as [number, number];
+    const [i1, j1] = bounds[k + 1] as [number, number];
+    if (k > 0) {
+      out.pairs.push([restBefore[i0] as Node, restAfter[j0] as Node]);
+    }
+    pairGap(restBefore.slice(i0 + 1, i1), restAfter.slice(j0 + 1, j1), out);
+  }
+  return out;
+}
+
+/**
+ * What changed from the page `before` to the page `after`, each told at its
+ * nearest element that names itself or holds a pin's anchor (`anchors`, the
+ * selectors pins stand on), else its own, in the new page's order. Nothing
+ * when the body is the same; one stop for the page as a whole when either
+ * has no body.
+ */
+export function htmlChanges(
+  before: string,
+  after: string,
+  anchors: readonly string[]
+): ChangedItem[] {
+  const was = bodyOf(before);
+  const now = bodyOf(after);
+  if (!(was && now)) {
+    return was === now
+      ? []
+      : [{ kind: "element", anchor: "body", label: "Whole page" }];
+  }
+  if (was.sig === now.sig) {
+    return [];
+  }
+  const pinned = new Set(anchors);
+  const bounds = (at: Node) =>
+    !!at.identity || (pinned.size > 0 && pinned.has(selectorOf(at)));
+  /** The nearest of `node` (of the new page) and its ancestors that names itself or holds a pin; null when only the body holds it. */
+  const holderOf = (node: Node): Node | null => {
+    for (let at: Node | null = node; at?.parent; at = at.parent) {
+      if (bounds(at)) {
+        return at;
+      }
+    }
+    return null;
+  };
+  /** Where a change in `node` is told: its holder, else itself. */
+  const toldAt = (node: Node): Node => holderOf(node) ?? node;
+  const changed = new Set<Node>();
+  const removed: ChangedItem[] = [];
+  const compare = (old: Node, node: Node) => {
+    if (old.sig === node.sig) {
+      return;
+    }
+    const own =
+      old.tag !== node.tag ||
+      old.text !== node.text ||
+      JSON.stringify(old.attrs) !== JSON.stringify(node.attrs);
+    if (own) {
+      changed.add(toldAt(node));
+    }
+    const paired = pair(old.children, node.children);
+    for (const added of paired.added) {
+      changed.add(toldAt(added));
+    }
+    for (const gone of paired.removed) {
+      const holder = holderOf(node);
+      if (holder) {
+        changed.add(holder);
+      } else {
+        removed.push({
+          kind: "removed",
+          anchor: `removed:${selectorOf(node)}:${labelOf(gone)}`,
+          label: labelOf(gone),
+        });
+      }
+    }
+    for (const [a, b] of paired.pairs) {
+      compare(a, b);
+    }
+  };
+  compare(was, now);
+  // In the new page's order; one inside another already told is told once.
+  const order: Node[] = [];
+  const walk = (node: Node) => {
+    order.push(node);
+    for (const child of node.children) {
+      walk(child);
+    }
+  };
+  walk(now);
+  const told = order.filter((node) => changed.has(node));
+  const items: ChangedItem[] = told.map((node) => ({
+    kind: "element",
+    anchor: node.parent ? selectorOf(node) : "body",
+    label: node.parent ? labelOf(node) : "Whole page",
+  }));
+  return [...items, ...removed].slice(0, CHANGES_LIMIT);
+}
+
+/** A file's bytes as a fingerprint: what tells a picture drawn again from the same one. */
+export const bytesHash = (bytes: Uint8Array): string =>
+  createHash("sha256").update(bytes).digest("hex");
+
+/**
+ * What a decision page's revision changed in its pictures: each Image file
+ * whose bytes are new under its address (`files/<n>-<name>`, hub
+ * decision-program.ts), at the picture that shows it (its `src` ends with
+ * that address). `before` is each address's fingerprint as the page stood.
+ */
+export function pictureChanges(
+  before: ReadonlyMap<string, string>,
+  after: readonly { bytes: Uint8Array; path: string }[]
+): ChangedItem[] {
+  return after
+    .filter((file) => before.get(file.path) !== bytesHash(file.bytes))
+    .map((file) => ({
+      kind: "element",
+      anchor: `img[src$="${file.path.replace(CSS_STRING, "\\$&")}"]`,
+      label: file.path.split("/").at(-1)?.replace(INDEXED, "") ?? file.path,
+    }));
+}
+
+/** What would end a CSS string early. */
+const CSS_STRING = /["\\]/g;
+/** A file's place in its page (`<n>-`), before its name. */
+const INDEXED = /^\d+-/;
+
+/** What a decision page's revision changed: each card put in or rewritten, by its `#decision-<id>`, and each taken out. */
+export function cardChanges(
+  before: readonly DecisionCard[],
+  after: readonly DecisionCard[]
+): ChangedItem[] {
+  const was = new Map(before.map((card) => [card.id, card]));
+  const now = new Set(after.map((card) => card.id));
+  const items: ChangedItem[] = after
+    .filter((card) => JSON.stringify(was.get(card.id)) !== JSON.stringify(card))
+    .map((card) => ({
+      kind: "card",
+      anchor: `#decision-${cssEscape(card.id)}`,
+      label: card.question,
+    }));
+  for (const card of before) {
+    if (!now.has(card.id)) {
+      items.push({
+        kind: "removed",
+        anchor: `removed:#decision-${cssEscape(card.id)}`,
+        label: card.question,
+      });
+    }
+  }
+  return items.slice(0, CHANGES_LIMIT);
+}

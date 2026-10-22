@@ -87,7 +87,7 @@
     ondraft,
   }: {
     pin: Pin;
-    /** What it stands on, in words (pin-name.ts). */
+    /** What it stands on, in words (core pin-name.ts). */
     name: string;
     /** Its element's nearest parent, in words; none for the whole page. */
     parent: string | null;

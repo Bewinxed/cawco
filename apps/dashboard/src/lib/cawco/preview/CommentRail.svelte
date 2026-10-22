@@ -34,6 +34,7 @@
   import { artifactWords as words } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
   import { parse } from "@cawco/core/find-match";
+  import { pinName } from "@cawco/core/pin-name";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -74,7 +75,6 @@
   } from "./comment-rows";
   import { commentWords as said } from "./comment-words";
   import PinMark, { markState } from "./PinMark.svelte";
-  import { pinName } from "./pin-name";
 
   let {
     pins,
@@ -271,6 +271,9 @@
           number={pin.number}
           state={markState(pin)}
         />
+        {#if dotOf(pin) === "unread"}<span class="sr-only"
+            >{said.pinNewAnswer(pin.number)}</span
+          >{/if}
       </span>
       <span class="flex flex-1 min-w-0 flex-col">
         <span class="flex min-w-0 items-baseline gap-space-2" data-line="place">

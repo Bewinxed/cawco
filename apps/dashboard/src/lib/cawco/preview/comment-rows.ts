@@ -4,8 +4,8 @@
  */
 import type { CommentAttachment, Pin } from "@cawco/core/comments";
 import { field, type MatchEntry, matchOf, parse } from "@cawco/core/find-match";
+import { pinName } from "@cawco/core/pin-name";
 import type { PendingFile } from "../transcript/composer-draft.svelte";
-import { pinName } from "./pin-name";
 
 /** The words a pin is found by (Find's engine, core find-match): its number, its words, where it stands, and whether it is open. */
 export const searchEntry = (pin: Pin): MatchEntry => ({

@@ -15,12 +15,15 @@
   } from "@cawco/core";
   import { readWithin } from "@cawco/core/bounded";
   import {
+    type ChangedItem,
+    newAnswer,
     type Pin,
     type PreviewMode,
     pinProblem,
     pinUnsent,
     previewMode,
   } from "@cawco/core/comments";
+  import { pinName } from "@cawco/core/pin-name";
   import {
     STAGE_CLONE_MS,
     STAGE_READY_MS,
@@ -47,6 +50,8 @@
   import {
     IconAlert,
     IconChat,
+    IconChevronLeft,
+    IconChevronRight,
     IconComment,
     IconExternal,
     IconEyeClosed,
@@ -73,6 +78,13 @@
     verifyArtifact,
     writeSheet,
   } from "../artifact-api";
+  import {
+    holdArtifact,
+    noteArtifact,
+    openAsked,
+    releaseArtifact,
+    takeOpen,
+  } from "../artifact-names.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import {
     handBack,
@@ -88,6 +100,7 @@
     easeDrawer,
     easeOut,
     motionOk,
+    rise,
   } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
@@ -128,7 +141,6 @@
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
   import { enterPreviews } from "./pass";
-  import { pinName } from "./pin-name";
   import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
@@ -1234,6 +1246,8 @@
       id,
       (next) => {
         view = next;
+        // A chip naming this artifact, a pin or a card of it reads it live from here.
+        holdArtifact(id, { pins: next.pins, choices: next.choices });
         // A pin the pane's doc holds now is its own from here on: the page's
         // copy goes, so a later delete or take-back there never brings it back.
         const held = new Set(next.pins.map((pin) => pin.id));
@@ -1255,8 +1269,20 @@
     view = null;
     return () => {
       joined.destroy();
+      releaseArtifact(id);
       doc = null;
     };
+  });
+  // What this pane holds names itself to the chips that name it: no chip asks the hub for it.
+  $effect(() => {
+    const shown = artifact;
+    if (shown) {
+      noteArtifact(shown.id, {
+        instanceId,
+        kind: shown.kind,
+        name: shown.name,
+      });
+    }
   });
 
   /*
@@ -1508,49 +1534,25 @@
     );
   });
   /**
-   * The agent's answer the person has read, per pin: its newest agent entry
-   * as it stood when its thread was last open, kept on this device per
-   * artifact. A pin whose newest agent entry is another is unread.
+   * The pins with an answer the person hasn't looked at (core `newAnswer`:
+   * an agent's entry or resolve newer than his last look, the pin's
+   * `seenAt` in the doc, so it holds on every device). The open thread is
+   * being looked at.
    */
-  let readUpTo = $state<Record<string, string>>({});
-  const readKey = $derived(
-    artifactId ? `cawco-comments-read:${artifactId}` : null
-  );
-  $effect.pre(() => {
-    const key = readKey;
-    untrack(() => {
-      readUpTo = key ? readJson<Record<string, string>>(key, {}) : {};
-    });
-  });
-  const lastAgent = (pin: Pin) =>
-    pin.thread.findLast((entry) => entry.by === "agent") ?? null;
   const unread = $derived(
     new Set(
       pins
-        .filter((pin) => {
-          const answer = lastAgent(pin);
-          return (
-            !!answer &&
-            !pin.resolvedAt &&
-            pin.id !== openPin &&
-            readUpTo[pin.id] !== answer.id
-          );
-        })
+        .filter((pin) => pin.id !== openPin && newAnswer(pin))
         .map((pin) => pin.id)
     )
   );
-  // The open thread is read: its newest answer stops being unread.
+  // The open thread is looked at: what the agent answered there is seen, on every device.
   $effect(() => {
     const pin = cardPin;
-    const key = readKey;
-    const answer = pin ? lastAgent(pin) : null;
-    if (!(pin && key && answer) || readUpTo[pin.id] === answer.id) {
+    if (!(pin && doc && newAnswer(pin)) || onlyOnPage(pin.id)) {
       return;
     }
-    untrack(() => {
-      readUpTo = { ...readUpTo, [pin.id]: answer.id };
-      writeJson(key, readUpTo);
-    });
+    untrack(() => doc?.see(pin.id));
   });
   // Each pill's dot on the page: the agent at work on it, or an answer unread.
   $effect(() => {
@@ -1562,6 +1564,143 @@
       );
     }
   });
+  /*
+   * Changed since you looked (PRD §5.7, "Pointing and what changed"): what
+   * the latest revision changed (the hub's `meta.changes`) less what the
+   * person has looked at (the doc's `seen`), each washed on the page in the
+   * done wash; and the pins with an answer he hasn't looked at. The tag at
+   * the well's top steps through them in page order, a pin and its changed
+   * element one stop: a step brings it out and chooses it, and opens a
+   * pin's thread; each is seen as it is stepped onto, and all of them on
+   * his Send (the hub's).
+   */
+  const unseenChanges = $derived.by((): ChangedItem[] => {
+    const changes = view?.changes;
+    const seen = view?.seen;
+    return changes && seen
+      ? changes.items.filter((item) => !seen.has(item.anchor))
+      : [];
+  });
+  /** The stops as the page orders them (`cawco:change-stops`): each change's anchors and the pin standing with it. */
+  let pageStops = $state.raw<{ anchors: string[]; pin: string | null }[]>([]);
+  $effect(() => {
+    const anchors = unseenChanges
+      .filter((item) => item.kind === "element" || item.kind === "card")
+      .map((item) => item.anchor);
+    const answered = [...unread];
+    if (connected) {
+      untrack(() => post({ type: "cawco:changes", anchors, pins: answered }));
+    }
+  });
+  /** One stop of the tag: what changed there, the pin standing with it, and its words. */
+  interface ChangeStop {
+    anchors: string[];
+    label: string;
+    pin: string | null;
+  }
+  /** The stops not looked at yet, in page order, then what was taken out (no box to wash). */
+  const changeStops = $derived.by((): ChangeStop[] => {
+    const labels = new Map(
+      unseenChanges.map((item) => [item.anchor, item.label])
+    );
+    const pinLabel = (id: string) => {
+      const pin = pins.find((one) => one.id === id);
+      return pin ? `Pin ${pin.number} · ${pinName(pin)}` : "";
+    };
+    const told = new Set<string>();
+    const stops: ChangeStop[] = [];
+    for (const stop of pageStops) {
+      const anchors = stop.anchors.filter((anchor) => labels.has(anchor));
+      const pin = stop.pin && unread.has(stop.pin) ? stop.pin : null;
+      for (const anchor of anchors) {
+        told.add(anchor);
+      }
+      if (anchors.length > 0 || pin) {
+        stops.push({
+          anchors,
+          pin,
+          label: anchors[0]
+            ? (labels.get(anchors[0]) ?? "")
+            : pinLabel(pin ?? ""),
+        });
+      }
+    }
+    for (const item of unseenChanges) {
+      if (!told.has(item.anchor)) {
+        stops.push({ anchors: [item.anchor], pin: null, label: item.label });
+      }
+    }
+    return stops;
+  });
+  /** The stops as they stood at the first step: "k of N" counts them while he steps. */
+  let tour = $state.raw<ChangeStop[] | null>(null);
+  let tourAt = $state(0);
+  // Every stop looked at: the tag leaves, and the next revision starts afresh.
+  $effect(() => {
+    if (changeStops.length === 0 && tour) {
+      tour = null;
+    }
+  });
+  /** The page's stops as it said them, each a list of anchors and a pin or none; anything else left out. */
+  const changeStopsOf = (value: unknown): typeof pageStops =>
+    Array.isArray(value)
+      ? value.flatMap((one: unknown) => {
+          const stop = one as { anchors?: unknown; pin?: unknown } | null;
+          return stop &&
+            Array.isArray(stop.anchors) &&
+            stop.anchors.every((anchor) => typeof anchor === "string") &&
+            (stop.pin === null || typeof stop.pin === "string")
+            ? [{ anchors: stop.anchors as string[], pin: stop.pin }]
+            : [];
+        })
+      : [];
+  /** A step of the tag: by one stop each way, or the first when it starts; brought out, chosen and seen. */
+  function stepChange(by: 1 | -1 | 0) {
+    const stops = tour ?? changeStops;
+    if (stops.length === 0) {
+      return;
+    }
+    if (tour) {
+      tourAt = (tourAt + by + stops.length) % stops.length;
+    } else {
+      tour = stops;
+      tourAt = by === -1 ? stops.length - 1 : 0;
+    }
+    const stop = stops[tourAt];
+    if (!stop) {
+      return;
+    }
+    const [anchor] = stop.anchors;
+    if (anchor && !anchor.startsWith("removed:")) {
+      post({ type: "cawco:show-element", selector: anchor, outline: "chosen" });
+    }
+    const revision = view?.changes?.revision;
+    if (revision !== undefined && stop.anchors.length > 0) {
+      doc?.seeChanges(revision, stop.anchors);
+    }
+    if (stop.pin) {
+      openCard(stop.pin, "key");
+    }
+  }
+  /** The person pressed a washed element in Interact mode: he has looked at it. */
+  function changePressed(anchor: unknown) {
+    const revision = view?.changes?.revision;
+    if (typeof anchor === "string" && revision !== undefined) {
+      doc?.seeChanges(revision, [anchor]);
+    }
+  }
+  /** J and K step the tag while it holds the focus; elsewhere they step the pins. */
+  function tagKey(event: KeyboardEvent) {
+    const key = event.key.toLowerCase();
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
+    if (key === "j" || key === "k") {
+      event.preventDefault();
+      stepChange(key === "j" ? 1 : -1);
+    }
+  }
+
   /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
   const stepping = $derived(
     pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
@@ -1665,16 +1804,83 @@
   }
   /**
    * The composer closes with nothing written (Esc, a press outside it, a
-   * mode switch): its hollow pill goes from the page. Its words and chips
-   * stay as the next comment's draft, an upload in flight going on.
+   * mode switch, a thread opened). Holding words or chips, it is parked
+   * (The Work Outlives Its Surface Rule): its hollow pill stays at its
+   * target saying it holds a draft, and one press on it opens the composer
+   * again with them; its words and chips stay as the next comment's draft,
+   * an upload in flight going on. Empty, its pill goes.
    */
   function cancelComposer() {
     if (!composing) {
       return;
     }
     composing = null;
-    post({ type: "cawco:compose-cancel" });
+    if (nextDraft?.hasContent) {
+      post({ type: "cawco:compose-park" });
+      keepDraftAt(keptDraft ? { ...keptDraft, parked: true } : null);
+    } else {
+      post({ type: "cawco:compose-cancel" });
+      keepDraftAt(null);
+    }
     post({ type: "cawco:composer-ring", on: false });
+  }
+  /**
+   * Where the next comment's draft stands, kept on this device per artifact
+   * beside its words (the draft store): its target as the page named it,
+   * the point on it, and whether its composer is open or parked. A reload
+   * brings it back at its target as it was.
+   */
+  interface KeptDraft {
+    inkId?: string;
+    parked: boolean;
+    point?: { x: number; y: number };
+    target: ComposeTarget;
+  }
+  let keptDraft: KeptDraft | null = null;
+  const draftKey = $derived(
+    artifactId ? `cawco-comment-draft:${artifactId}` : null
+  );
+  function keepDraftAt(next: KeptDraft | null) {
+    keptDraft = next;
+    if (draftKey) {
+      writeJson(draftKey, next);
+    }
+  }
+  /** What the page said of a draft it opened (`cawco:compose`): kept, open. */
+  function keepComposed(
+    said: { chain: ComposeTarget[]; chosen: number },
+    message: Record<string, unknown>
+  ) {
+    const target = said.chain[said.chosen];
+    if (!target) {
+      return;
+    }
+    const point = message.point as { x?: unknown; y?: unknown } | undefined;
+    keepDraftAt({
+      target,
+      parked: false,
+      ...(typeof point?.x === "number" && typeof point.y === "number"
+        ? { point: { x: point.x, y: point.y } }
+        : {}),
+      ...(typeof message.inkId === "string" ? { inkId: message.inkId } : {}),
+    });
+  }
+  /** A page loaded again: the draft kept for it comes back at its target, parked or open, once per load. */
+  function restoreDraft() {
+    const key = draftKey;
+    const kept = key ? readJson<KeptDraft | null>(key, null) : null;
+    keptDraft = kept;
+    if (!kept?.target?.anchor || composing) {
+      return;
+    }
+    if (!kept.parked) {
+      loadKit();
+    }
+    post({
+      type: "cawco:compose-restore",
+      target: { ...kept.target, point: kept.point, inkId: kept.inkId },
+      parked: kept.parked,
+    });
   }
   /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once. */
   function comment(text: string) {
@@ -1698,6 +1904,7 @@
         pageSays((pin as Pin).id, pin);
       }
       composing = null;
+      keepDraftAt(null);
       // The newest comment is the one J and K step from.
       if (written) {
         focusedPin = (pin as Pin).id;
@@ -1755,23 +1962,75 @@
     artifactId
       ? `${location.origin}/artifact/${encodeURIComponent(artifactId)}?pin=${number}`
       : location.href;
-  /** The pin the address names (`?pin=N`), opened once its page is ready and its pins are read. */
+  /**
+   * The place the address names, opened once its page is ready and its pins
+   * are read: a pin's thread (`?pin=N`), or a decision card (`?card=<id>`).
+   */
   let linkedFor: string | null = null;
   function openLinkedPin() {
-    const number = Number(new URL(location.href).searchParams.get("pin"));
-    const pin = Number.isInteger(number)
-      ? pins.find((one) => one.number === number && !one.movedAt)
-      : undefined;
-    if (!(pin && artifactId) || linkedFor === artifactId) {
+    const asked = new URL(location.href).searchParams;
+    if (!artifactId || linkedFor === artifactId) {
       return;
     }
-    linkedFor = artifactId;
-    openCard(pin.id);
+    const card = asked.get("card");
+    if (card) {
+      linkedFor = artifactId;
+      showCard(card);
+      return;
+    }
+    const number = Number(asked.get("pin"));
+    if (openPinNumbered(number)) {
+      linkedFor = artifactId;
+    }
   }
   $effect(() => {
     if (connected && view) {
       untrack(openLinkedPin);
     }
+  });
+  /** Pin `number`'s thread opened, when the page holds it; whether it did. */
+  function openPinNumbered(number: number): boolean {
+    const pin = Number.isInteger(number)
+      ? pins.find((one) => one.number === number)
+      : undefined;
+    if (!pin) {
+      return false;
+    }
+    if (pin.resolvedAt || pin.movedAt) {
+      // Off the page: its thread opens from its row, in Resolved or Open.
+      listFilter = pin.resolvedAt ? "resolved" : "open";
+      showList(true);
+    }
+    openCard(pin.id);
+    return true;
+  }
+  /** Decision card `card` brought into view and outlined for a moment. */
+  function showCard(card: string) {
+    post({
+      type: "cawco:show-element",
+      selector: `#decision-${CSS.escape(card)}`,
+      outline: "flash",
+    });
+  }
+  /*
+   * A chip's press (artifact-names.svelte.ts `askOpen`): once the page is
+   * up and its pins are read, the place it names opens, once: a pin's
+   * thread, a decision card, or the artifact as it is.
+   */
+  $effect(() => {
+    const id = artifactId;
+    const at = id ? openAsked(id) : null;
+    if (!(id && at && connected && view)) {
+      return;
+    }
+    untrack(() => {
+      takeOpen(id);
+      if ("pin" in at) {
+        openPinNumbered(at.pin);
+      } else if ("card" in at) {
+        showCard(at.card);
+      }
+    });
   });
   /**
    * The open thread's Pin it somewhere else: Comment mode, its thread still
@@ -2065,6 +2324,7 @@
             showPins(false);
           }
           openLinkedPin();
+          restoreDraft();
           if (openPin) {
             post({ type: "cawco:track-pin", id: openPin });
           }
@@ -2153,6 +2413,7 @@
           error: "",
           sending: false,
         };
+        keepComposed(said, message);
         break;
       }
       case "cawco:compose-at":
@@ -2182,6 +2443,12 @@
       }
       case "cawco:peek":
         heardPeek(message);
+        break;
+      case "cawco:change-stops":
+        pageStops = changeStopsOf(message.stops);
+        break;
+      case "cawco:change-pressed":
+        changePressed(message.anchor);
         break;
       case "cawco:pictures-sent":
         picturesWaiter?.();
@@ -3397,6 +3664,53 @@
     {/if}
     {#if peekPin && peekAt}
       <PinPeek mark={peekAt.mark} pin={peekPin} room={{ w: roomW, h: roomH }} />
+    {/if}
+    {#if changeStops.length > 0 && !isCanvas}
+      {@const total = tour?.length ?? changeStops.length}
+      <!-- Changed since you looked: the floating tag at the well's top centre, stepping through the stops (‹ ›; J and K while it holds the focus). -->
+      <fieldset
+        data-slot="changes-tag"
+        aria-label={commentWords.changedSince(total)}
+        class="mark-line pointer-events-auto absolute top-space-2 inset-x-space-2 mx-auto w-fit p-0 min-w-0 flex items-center h-c-btn-h-sm coarse:h-c-btn-h-lg border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong"
+        in:rise={"--dur-panel"}
+        out:rise={"--dur-exit"}
+      >
+        <button
+          aria-label={commentWords.previousChange}
+          class="touch-hit grid place-items-center h-full px-space-2 rounded-s-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+          data-box
+          data-slot="change-previous"
+          onkeydown={tagKey}
+          onclick={() => stepChange(-1)}
+          title={commentWords.previousChange}
+          type="button"
+        >
+          <IconChevronLeft class="size-icon-md" />
+        </button>
+        <button
+          class="touch-hit min-w-0 h-full px-space-1 overflow-clip text-ellipsis whitespace-nowrap num can-hover:hover:bg-surface-hover"
+          data-slot="change-count"
+          onkeydown={tagKey}
+          onclick={() => stepChange(tour ? 0 : 1)}
+          type="button"
+        >
+          {tour
+            ? commentWords.changeOf(tourAt + 1, total)
+            : commentWords.changedSince(total)}
+        </button>
+        <button
+          aria-label={commentWords.nextChange}
+          class="touch-hit grid place-items-center h-full px-space-2 rounded-e-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+          data-box
+          data-slot="change-next"
+          onkeydown={tagKey}
+          onclick={() => stepChange(1)}
+          title={commentWords.nextChange}
+          type="button"
+        >
+          <IconChevronRight class="size-icon-md" />
+        </button>
+      </fieldset>
     {/if}
   </div>
   {#if failure}

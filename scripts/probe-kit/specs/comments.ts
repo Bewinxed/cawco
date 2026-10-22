@@ -81,8 +81,9 @@
  *
  * And the empty-pin rule (commenting build spec): a press writes nothing.
  * e. A composer closed by Esc, by a press on the pane's chrome or elsewhere
- *    in the dashboard, by a mode switch or by a reload leaves no pin in the
- *    doc; the words typed in one closed unsaid are back in the next; a press
+ *    in the dashboard, by a mode switch or by a press on Reload leaves no pin
+ *    in the doc, its half-written draft parked (The Work Outlives Its Surface
+ *    Rule); the words typed in one closed unsaid are back in the next; a press
  *    on a pin's pill while a composer stands opens that pin's thread in its
  *    place.
  *
@@ -207,15 +208,39 @@
  * - A thread opening takes every peek down: none stands while it does.
  * - A thread's entries wrap pretty, and a later entry's age stands on its
  *   words' first baseline (0.5px).
+ * And pointing and what changed (PRD §5.7, the pin links design of
+ * 2026-10-21):
+ * - links: comment_reply, comment_resolve, comment_read and the delivery
+ *   carry each pin's `[label](cawco:pin/<artifact>/<n>)`; artifact_create
+ *   its artifact's and a decision page's every card's; artifact_update the
+ *   card it rewrote.
+ * - chip: the agent's pin, card and artifact links draw as their chips (a
+ *   bare "pin 2" stays words), the pin's with its pill, its label, its
+ *   state in its name and the needs-you dot while its answer is unread
+ *   (after a reload too); resting on it peeks the thread; a press opens the
+ *   panel there (the pin's thread open, `seenAt` written, the dot gone; the
+ *   card outlined for a moment; the artifact in front), on the desk and on
+ *   the phone's sheet.
+ * - changed: a revision's changes in `meta.changes` (a page's elements, a
+ *   decision page's cards and redrawn pictures), washed in `c-change-wash`
+ *   on their own box, words 4.5:1 through it; the tag steps through them,
+ *   each step seen in the doc and its wash fading over `--dur-fade`; seen,
+ *   a reload washes nothing.
+ * - drafts (The Work Outlives Its Surface Rule): a half-written comment
+ *   survives a reload with its composer open at its target; Esc and a press
+ *   outside park it as the hollow pill saying it holds a draft; one press
+ *   brings the composer back with its words and chip, after a reload too.
  * The captures for the reviewer (light and dark, desk and 390) are written
  * under `.probe/commenting/`; nothing here opens them.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
+import type { Pin } from "../../../packages/core/src/comments";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
+import { pinName } from "../../../packages/core/src/pin-name";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
 import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
@@ -240,7 +265,11 @@ const UPDATE = "mcp__cawco__artifact_update";
 const READ = "mcp__cawco__comment_read";
 const REPLY = "mcp__cawco__comment_reply";
 const RESOLVE = "mcp__cawco__comment_resolve";
+const SHOW = "mcp__cawco__artifact_show";
 const COMMAND = /PROBE-CALL:(\d+)/g;
+/** A message the model answers with the words kept under its number: an agent's line, written as the probe needs it. */
+const SAY = /PROBE-SAY:(\d+)/;
+const says = new Map<string, string>();
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 /** The person's comments, delivered by themselves (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
@@ -303,6 +332,10 @@ const respond = (request: Seen): Reply => {
   heard.push({ last: request.last, body: request.body });
   if (NOTICE.test(request.last) && !request.afterTool) {
     return text("Heard the comments.");
+  }
+  const say = SAY.exec(request.last)?.[1];
+  if (say && says.has(say) && !request.afterTool) {
+    return text(says.get(say) as string);
   }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
@@ -617,6 +650,11 @@ const runOn = async (kit: Kit, on: On) => {
     () => insertChecks(on),
     () => mintedIdChecks(on),
     () => listChecks(on),
+    // Pointing and what changed: the links, their chips, the wash and the dot.
+    () => pointChecks(on, { id, made, one, two }),
+    () => changedChecks(on),
+    // The Work Outlives Its Surface Rule on the composer.
+    () => draftChecks(on),
     // Last: it loads the desk again, which gives the split its kept width.
     () => keyOpenChecks(on),
   ]) {
@@ -3310,11 +3348,24 @@ const dismissChecks = async (on: On) => {
     30_000
   )) as Frame;
   await after("a reload");
+  // The Reload press stood outside the composer: its draft parked first, and the reload keeps it parked (The Work Outlives Its Surface Rule).
+  const parkedPill = await until(
+    "the parked draft after the reload",
+    () =>
+      frame
+        .locator('svg[data-cawco-pins] g[data-pin="new"][data-parked]')
+        .count(),
+    (count) => count === 1,
+    10_000
+  ).catch(() => 0);
   on.kit.check(
-    "e: a press writes nothing: Esc, a press on the pane's chrome or elsewhere in the dashboard, a mode switch and a reload each close the composer and leave no pin",
+    "e: a press writes nothing: Esc, a press on the pane's chrome or elsewhere in the dashboard, a mode switch and a press on Reload each close the composer and leave no pin; the half-written draft stands parked after the reload",
     Object.values(left).length === 5 &&
-      Object.values(left).every((one) => one.composer === 0 && one.pins === 0),
-    JSON.stringify(left)
+      Object.values(left).every(
+        (one) => one.composer === 0 && one.pins === 0
+      ) &&
+      parkedPill === 1,
+    `${JSON.stringify(left)}; parked pills after the reload ${parkedPill}`
   );
   on.kit.check(
     "e: the words typed in a composer closed unsaid are back in the next one",
@@ -6003,7 +6054,7 @@ const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
   await settle(on.page, 600);
   await capture(on.page, "p3-send-sent-light-desk", on.page.locator(PANE));
 
-  // The agent answers on the heading (unread); the person's own reply on the paragraph, sent; one more unsent.
+  // The person's own reply on the paragraph, sent; then the agent answers on the heading (unread: a Send is a look at every answer before it); one more unsent.
   const pinIdOn = async (selector: string) =>
     String(
       (
@@ -6014,10 +6065,6 @@ const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
         ) as { id?: string } | undefined
       )?.id ?? ""
     );
-  await on.fleet.api(
-    `/api/instances/${on.session}/artifacts/comments/${await pinIdOn("#a")}/reply`,
-    { text: "Made it a step larger." }
-  );
   const onB = await numberOn("#b");
   const card = await openThread(on, frame, onB);
   await card.getByRole("combobox").fill("And keep them in that order.");
@@ -6026,6 +6073,10 @@ const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
   await card.getByRole("button", { name: "Close", exact: true }).click();
   await (await rowsOf(on)).locator('[data-slot="rail-send"]').click();
   await settle(on.page, 1500);
+  await on.fleet.api(
+    `/api/instances/${on.session}/artifacts/comments/${await pinIdOn("#a")}/reply`,
+    { text: "Made it a step larger." }
+  );
   await pressOn("#a", 0.8, 0.5);
   await submit("And its weight, too.");
   // A revision drops the block: its comment's element is gone.
@@ -6572,6 +6623,1039 @@ const cutoverCheck = async (kit: Kit) => {
     gone === "",
     gone.split("\n").slice(0, 4).join(" | ") || "none"
   );
+};
+
+/*
+ * Pointing and what changed (PRD §5.7, "Pointing and what changed"; the pin
+ * links design of 2026-10-21).
+ */
+
+/** A decision page of two cards, the second showing a picture, and its revision rewording that card. */
+const pointProgram = (
+  image: string
+) => `root = Decisions("Point at a card", [reach, tone])
+reach = Decision("reach", "Which channels carry the launch?", [mail, feed], "Both reach a reader.")
+mail = Option("mail", "Newsletter", "Readers who signed up.", true, [], "A week's wait.")
+feed = Option("feed", "Blog feed", "Readers who follow us.", false, [], "Slow to spread.")
+tone = Decision("tone", "Which tone does it take?", [plain, warm], "One voice.", [shot])
+shot = Image("${image}", "The launch line as it reads", "Today's line")
+plain = Option("plain", "Plain", "Says it.", true, [], "Reads cold to some.")
+warm = Option("warm", "Warm", "Says it kindly.", false, [], "Takes more words.")`;
+const POINT_REVISION = `tone = Decision("tone", "Which tone does the launch take?", [plain, warm], "One voice.", [shot])`;
+
+/** A flat PNG of one grey: the picture a decision card shows, drawn again in another. */
+const greyPng = (level: number) => {
+  const png = new PNG({ width: 48, height: 32 });
+  png.data.fill(level);
+  return PNG.sync.write(png);
+};
+
+/** The artifact the page in a frame holds, by id; null before it joined one. */
+const frameArtifact = (frame: Frame) =>
+  frame
+    .evaluate(() => {
+      let held: string | null = null;
+      const global = (
+        window as unknown as {
+          cawcoArtifact?: {
+            subscribe: (
+              holder: (hold: { ref: { id: string } | null }) => void
+            ) => () => void;
+          };
+        }
+      ).cawcoArtifact;
+      const stop = global?.subscribe((hold) => {
+        held = hold.ref?.id ?? null;
+      });
+      stop?.();
+      return held;
+    })
+    .catch(() => null);
+
+/** The pane's page on `screen` once it holds artifact `id`; null when it doesn't within 30 s. */
+const frameHolding = (screen: Page, id: string, what: string) =>
+  until(
+    what,
+    async () => {
+      let handle: Awaited<
+        ReturnType<ReturnType<Page["locator"]>["elementHandle"]>
+      > | null = null;
+      try {
+        handle = await screen.locator(FRAME).elementHandle({ timeout: 1000 });
+      } catch {
+        return null;
+      }
+      const frame = await handle?.contentFrame();
+      return frame && (await frameArtifact(frame)) === id ? frame : null;
+    },
+    Boolean,
+    30_000
+  ).catch(() => null) as Promise<Frame | null>;
+
+/** Colours as sRGB bytes, as `screen` paints them. */
+const srgbOf = (screen: Page, colors: string[]) =>
+  screen.evaluate((list) => {
+    const paint = document
+      .createElement("canvas")
+      .getContext("2d", { willReadFrequently: true });
+    return list.map((color) => {
+      if (!paint) {
+        return [0, 0, 0, 0];
+      }
+      paint.clearRect(0, 0, 1, 1);
+      paint.fillStyle = color;
+      paint.fillRect(0, 0, 1, 1);
+      return [...paint.getImageData(0, 0, 1, 1).data];
+    });
+  }, colors);
+
+/** A token's colour as the dashboard resolves it now. */
+const tokenColor = (screen: Page, token: string) =>
+  screen.evaluate((name) => {
+    const probe = document.createElement("i");
+    probe.style.background = `var(${name})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  }, token);
+
+const sameRgb = (a: number[] | undefined, b: number[] | undefined, slack = 3) =>
+  !!a &&
+  !!b &&
+  [0, 1, 2].every((i) => Math.abs((a[i] ?? 0) - (b[i] ?? 0)) <= slack);
+
+/** The agent says `words` in the session, as its next message. */
+const agentSays = async (on: On, words: string) => {
+  const number = String(says.size + 1);
+  says.set(number, words);
+  await on.fleet.send(on.session, `PROBE-SAY:${number}`);
+};
+
+/** The split at rest: a leg before may have left the panel expanded over the transcript, which is inert then; Esc gives it back. */
+const restSplit = async (on: On) => {
+  for (let tries = 0; tries < 3; tries += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: one Esc, then a look, until the split rests
+    if ((await on.page.locator("[data-split-expanded]").count()) === 0) {
+      return;
+    }
+    await on.page.keyboard.press("Escape");
+    await settle(on.page, 400);
+  }
+};
+
+/**
+ * Links (1–4): every comment_reply and comment_resolve result, comment_read
+ * and the pin delivery carry the pin's link ready-made, artifact_create its
+ * artifact's and a decision page's every card's, artifact_update's revision
+ * the card it rewrote; written by the agent, a pin's, a card's and an
+ * artifact's draw as their chips (a bare "pin 2" stays words), and a press
+ * opens the panel there: the card scrolled to and outlined for a moment, the
+ * pin's artifact with its thread open (on the desk, and on the phone's
+ * sheet), the artifact in front. A pin's unread answer wears the needs-you
+ * dot on the page, on its chip after a reload, and none once its thread opened.
+ */
+const pointChecks = async (
+  on: On,
+  ids: { id: string; made: string; one: string; two: string }
+) => {
+  const { id, made, one, two } = ids;
+  const { origin } = new URL(on.page.url());
+  await restSplit(on);
+  // The comments page in front again, after the legs before showed their own.
+  await on.call(SHOW, { id });
+  const frame = await frameHolding(on.page, id, "the comments page again");
+  if (!frame) {
+    on.kit.check("pointing: the comments page is in front", false, "not shown");
+    return;
+  }
+  const attn = await tokenColor(on.page, "--status-attn-glyph");
+  // Pin 2's thread shut, so its answer arrives unread.
+  await on.page
+    .locator('[data-slot="pin-card"]')
+    .getByRole("button", { name: "Close", exact: true })
+    .click({ timeout: 2000 })
+    .catch(() => undefined);
+  const replied = await on.call(REPLY, {
+    pin: two,
+    text: "Drew the stroke under it thicker.",
+  });
+  const resolved = await on.call(RESOLVE, { pin: one });
+  const read = await on.call(READ, { artifact: id, filter: "all" });
+  const delivered = heard.some(
+    ({ last }) =>
+      last.includes("- Link: [") && last.includes(`(cawco:pin/${id}/1)`)
+  );
+  const linked = (said: string, number: number) =>
+    said.includes('"link":"[') &&
+    said.includes(`](cawco:pin/${id}/${number})"`);
+  on.kit.check(
+    "links: comment_reply and comment_resolve answer the pin's link, comment_read each pin's and its artifact's, the delivery each pin's (`- Link:`), artifact_create its artifact's",
+    linked(replied, 2) &&
+      linked(resolved, 1) &&
+      read.includes(`(cawco:pin/${id}/2)`) &&
+      read.includes(`(cawco:artifact/${id})`) &&
+      delivered &&
+      made.includes(`(cawco:artifact/${id})`),
+    `reply ${replied.slice(replied.indexOf("{"), replied.indexOf("{") + 220)}; resolve ${resolved.slice(resolved.indexOf("{"), resolved.indexOf("{") + 200)}; delivered ${delivered}; made ${made.includes(`(cawco:artifact/${id})`)}`
+  );
+
+  // The answer unread on the page: the needs-you dot, its echo three loops.
+  const dot = await until(
+    "pin 2's unread dot on the page",
+    () =>
+      frame.evaluate(() => {
+        const mark = document.querySelector(
+          'svg[data-cawco-pins] g[data-pin="2"] circle[data-dot="unread"]'
+        );
+        const echo = document.querySelector(
+          'svg[data-cawco-pins] g[data-pin="2"] [data-echo]'
+        );
+        return mark
+          ? {
+              fill: mark.getAttribute("fill") ?? "",
+              loops: echo
+                ?.getAnimations()
+                .map((each) => each.effect?.getTiming().iterations),
+            }
+          : null;
+      }),
+    Boolean,
+    5000
+  ).catch(() => null);
+  const [dotRgb, attnRgb] = await srgbOf(on.page, [dot?.fill ?? "", attn]);
+  on.kit.check(
+    "dot: pin 2's unread answer wears the needs-you dot on the page (status-attn-glyph), its echo three loops",
+    !!dot && sameRgb(dotRgb, attnRgb) && dot.loops?.[0] === 3,
+    `dot ${JSON.stringify(dot)} ${JSON.stringify(dotRgb)}; attn ${attn} ${JSON.stringify(attnRgb)}`
+  );
+  const pin2 = pinNumbered((await docOf(frame)).pins, 2) as unknown as Pin;
+
+  // A decision page: its cards' links from artifact_create, the rewritten one's from artifact_update.
+  const pictures = join(on.fleet.sandbox, "pointing");
+  await mkdir(pictures, { recursive: true });
+  const image = join(pictures, "line.png");
+  await writeFile(image, greyPng(200));
+  const decided = await on.call(CREATE, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick for the launch",
+    name: "pointing-cards",
+    program: pointProgram(image),
+  });
+  const did = decided.match(ANSWERED_ID)?.[1] ?? "";
+  // The picture drawn again before the revision: the revision carries its new bytes.
+  await writeFile(image, greyPng(90));
+  const revised = await on.call(UPDATE, {
+    id: did,
+    statements: POINT_REVISION,
+  });
+  on.kit.check(
+    "links: a decision page's artifact_create answers its link and every card's, artifact_update the card it rewrote and no other",
+    !!did &&
+      decided.includes(`(cawco:artifact/${did})`) &&
+      decided.includes(`(cawco:decision/${did}/reach)`) &&
+      decided.includes(`(cawco:decision/${did}/tone)`) &&
+      revised.includes(`(cawco:decision/${did}/tone)`) &&
+      !revised.includes(`(cawco:decision/${did}/reach)`),
+    `create ${decided.slice(decided.indexOf("{"), decided.indexOf("{") + 300)}; update ${revised.slice(revised.indexOf("{"), revised.indexOf("{") + 300)}`
+  );
+  const cards = await frameHolding(
+    on.page,
+    did,
+    "the decision page in the pane"
+  );
+  const cardChange = cards
+    ? await until(
+        "the rewritten card washed",
+        () =>
+          cards.evaluate(() => {
+            const meta = (
+              window as unknown as {
+                cawcoArtifact: {
+                  doc: {
+                    getMap: (n: string) => { get: (k: string) => unknown };
+                  };
+                };
+              }
+            ).cawcoArtifact.doc.getMap("meta");
+            return {
+              changes: meta.get("changes") as {
+                items: { anchor: string; kind: string }[];
+              } | null,
+              washed: [
+                ...document.querySelectorAll(
+                  "svg[data-cawco-changes] rect[data-change]"
+                ),
+              ].map((rect) => rect.getAttribute("data-change")),
+            };
+          }),
+        (now) => now.washed.length > 1,
+        15_000
+      ).catch(() => null)
+    : null;
+  const picture = 'img[src$="files/0-line.png"]';
+  on.kit.check(
+    "changed: a decision page's revision writes the card it rewrote and the picture drawn again into meta.changes, and the page washes those two alone",
+    JSON.stringify(
+      cardChange?.changes?.items.map((item) => [item.kind, item.anchor])
+    ) ===
+      JSON.stringify([
+        ["card", "#decision-tone"],
+        ["element", picture],
+      ]) &&
+      JSON.stringify(cardChange?.washed) ===
+        JSON.stringify(["#decision-tone", picture]),
+    JSON.stringify(cardChange)
+  );
+
+  // The agent names a pin, the page and a card; a bare number stays words.
+  await agentSays(
+    on,
+    `Answered [When](cawco:pin/${id}/2); pin 2 is bare words here. The page is [Cards](cawco:artifact/${did}), its card [Which channels carry it?](cawco:decision/${did}/reach).`
+  );
+  const pinChip = on.page.locator(`[data-pin-chip="${id}/2"]`).first();
+  await pinChip.waitFor({ timeout: 60_000 }).catch(() => undefined);
+  const readChips = () =>
+    on.page.evaluate(
+      ({ pinId, decisionId, pageId }) => {
+        const chip = document.querySelector(`[data-pin-chip="${pinId}"]`);
+        const line = chip?.parentElement;
+        const dotEl = chip?.querySelector('[data-dot="unread"]');
+        return {
+          inLine: line ? line.querySelectorAll("[data-pin-chip]").length : 0,
+          label:
+            chip?.querySelector('[data-slot="label"]')?.textContent?.trim() ??
+            null,
+          figure: chip?.querySelector("[data-figure]")?.textContent ?? null,
+          name: chip?.getAttribute("aria-label") ?? null,
+          dot: dotEl ? getComputedStyle(dotEl).backgroundColor : null,
+          bare: line?.textContent?.includes("pin 2 is bare words") ?? false,
+          cawcoLinks: line
+            ? [...line.querySelectorAll("a")].filter((a) =>
+                (a.getAttribute("href") ?? "").startsWith("cawco:")
+              ).length
+            : -1,
+          page:
+            document
+              .querySelector(
+                `[data-artifact-chip="${pageId}"] [data-slot="label"]`
+              )
+              ?.textContent?.trim() ?? null,
+          card:
+            document
+              .querySelector(
+                `[data-decision-chip="${decisionId}"] [data-slot="label"]`
+              )
+              ?.textContent?.trim() ?? null,
+        };
+      },
+      { pinId: `${id}/2`, decisionId: `${did}/reach`, pageId: did }
+    );
+  const chips = await readChips();
+  const [chipDot] = await srgbOf(on.page, [chips.dot ?? ""]);
+  const wanted = pinName(pin2);
+  on.kit.check(
+    "chip: the agent's `[When](cawco:pin/<artifact>/2)` draws as the pin chip: its pill numbered 2, its label what the pin stands on, its name with its state (Pin 2 on …, New answer), the needs-you dot while the answer is unread; a bare \"pin 2\" stays words; the artifact's and the card's links draw as their chips; no cawco: link is an anchor",
+    chips.inLine === 1 &&
+      chips.figure === "2" &&
+      chips.label === wanted &&
+      chips.name === `Pin 2 on ${wanted}, New answer` &&
+      sameRgb(chipDot, attnRgb) &&
+      chips.bare &&
+      chips.cawcoLinks === 0 &&
+      chips.page === "pointing-cards" &&
+      chips.card === "Which channels carry it?",
+    `${JSON.stringify(chips)}; wanted ${JSON.stringify(wanted)}; dot ${JSON.stringify(chipDot)}`
+  );
+
+  // Resting the pointer on it peeks the thread under it.
+  await pinChip.hover();
+  const peeked = await until(
+    "the pin chip's peek",
+    async () => {
+      const peek = on.page.locator(
+        '[data-slot="pin-chip-peek"] [data-slot="pin-peek"]'
+      );
+      return (await peek.count()) > 0 ? peek.first().textContent() : null;
+    },
+    (words) => !!words,
+    4000
+  ).catch(() => null);
+  await on.page.mouse.move(0, 0);
+  const peekGone = await on.page
+    .locator('[data-slot="pin-chip-peek"]')
+    .waitFor({ state: "detached", timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  on.kit.check(
+    "chip: resting the pointer on the pin chip peeks its thread under it (its first words, the agent's answer); moving off takes it down",
+    !!peeked?.includes("This stroke, thicker.") &&
+      peeked.includes("Drew the stroke under it thicker.") &&
+      peekGone,
+    `peek ${JSON.stringify(peeked)}; gone ${peekGone}`
+  );
+
+  // A card's chip, its page in front: the card brought into view and outlined for a moment.
+  if (cards) {
+    await interactTab(on)
+      .click()
+      .catch(() => undefined);
+    await cards.evaluate(() => {
+      const rect = document
+        .querySelector("cawco-overlay")
+        ?.shadowRoot?.querySelector<HTMLElement>(".rect");
+      const seen: {
+        hidden: boolean;
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+      }[] = [];
+      (window as unknown as { probeOutline: typeof seen }).probeOutline = seen;
+      if (rect) {
+        new MutationObserver(() => {
+          const r = rect.getBoundingClientRect();
+          seen.push({
+            hidden: rect.hidden === true,
+            x: r.x,
+            y: r.y,
+            w: r.width,
+            h: r.height,
+          });
+        }).observe(rect, { attributes: true });
+      }
+    });
+    await on.page
+      .locator(`[data-decision-chip="${did}/reach"]`)
+      .first()
+      .click();
+    await settle(on.page, 900);
+    const card = await boxIn(cards, "#decision-reach").catch(() => null);
+    const outlined = await cards.evaluate(
+      () =>
+        (
+          window as unknown as {
+            probeOutline: {
+              hidden: boolean;
+              x: number;
+              y: number;
+              w: number;
+              h: number;
+            }[];
+          }
+        ).probeOutline
+    );
+    const shown = outlined.filter((each) => !each.hidden);
+    on.kit.check(
+      "chip: a card's chip, pressed, outlines its card on the page for a moment (the 1px chosen line over it, then none)",
+      !!card &&
+        shown.some((each) => near(each, card, 6)) &&
+        outlined.at(-1)?.hidden === true,
+      `card ${JSON.stringify(card)}; outlines ${JSON.stringify(outlined.slice(-4))}`
+    );
+  }
+
+  // Coming back: the chip still says the answer is unread, from the hub's doc.
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  await pinChip.waitFor({ timeout: 30_000 }).catch(() => undefined);
+  const back = await until(
+    "the chip's unread dot after a reload",
+    () => readChips(),
+    (now) => now.dot !== null,
+    15_000
+  ).catch(() => null);
+  await on.page.locator(`[data-pin-chip="${id}/2"]`).first().click();
+  const pinned = await frameHolding(on.page, id, "the pin's page in the pane");
+  const thread = on.page.locator('[data-slot="pin-card"][data-pin-card="2"]');
+  const opened = await thread
+    .waitFor({ timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  const seen = pinned
+    ? await until(
+        "pin 2 looked at",
+        async () => pinNumbered((await docOf(pinned)).pins, 2),
+        (pin) => typeof pin?.seenAt === "string",
+        10_000
+      ).catch(() => null)
+    : null;
+  const after = await readChips();
+  const pageDot = pinned
+    ? await pinned
+        .locator('svg[data-cawco-pins] g[data-pin="2"] [data-dot]')
+        .count()
+    : -1;
+  on.kit.check(
+    "chip: after a reload the chip still wears the dot; pressed, the panel holds the pin's artifact with pin 2's thread open, pin 2 is looked at (`seenAt`), and the dot is gone from the chip and the page",
+    !!back &&
+      !!pinned &&
+      opened &&
+      !!seen &&
+      after.dot === null &&
+      pageDot === 0,
+    `back ${JSON.stringify(back?.dot)}; artifact ${pinned ? id : "not shown"}; thread ${opened}; seenAt ${String(seen?.seenAt)}; chip dot ${after.dot}; page dots ${pageDot}`
+  );
+  await thread
+    .getByRole("button", { name: "Close", exact: true })
+    .click()
+    .catch(() => undefined);
+
+  // The artifact's chip: it comes to the front.
+  await on.page.locator(`[data-artifact-chip="${did}"]`).first().click();
+  const front = await frameHolding(on.page, did, "the page the chip names");
+  on.kit.check(
+    "chip: an artifact's chip, pressed, brings it to the front of the panel",
+    !!front,
+    front ? "shown" : "not shown"
+  );
+
+  // The phone: the sheet put away, the pin's chip opens it on the pin's thread.
+  const phone = await on.kit.page("phone");
+  await open(phone, `${origin}/session/${on.session}`, COMPOSER);
+  await phone
+    .locator('[data-side-card="preview"] button[data-slot="close"]')
+    .click({ timeout: 10_000 })
+    .catch(() => undefined);
+  await phone
+    .locator('[data-side-card="preview"]')
+    .waitFor({ state: "hidden", timeout: 10_000 })
+    .catch(() => undefined);
+  await phone
+    .locator(`[data-pin-chip="${id}/2"]`)
+    .first()
+    .click({ timeout: 15_000 });
+  const onPhone = await frameHolding(phone, id, "the pin's page on the phone");
+  const phoneCard = phone.locator('[data-slot="pin-card"][data-pin-card="2"]');
+  const phoneOpen = await phoneCard
+    .waitFor({ timeout: 10_000 })
+    .then(() => phoneCard.boundingBox())
+    .catch(() => null);
+  const view = phone.viewportSize();
+  on.kit.check(
+    "chip (phone): pressed in the transcript, the sheet opens on the pin's artifact with pin 2's thread open, inside the screen",
+    !!onPhone &&
+      !!phoneOpen &&
+      !!view &&
+      phoneOpen.y >= 0 &&
+      phoneOpen.y + phoneOpen.height <= view.height + 1,
+    `artifact ${onPhone ? id : "not shown"}; card ${JSON.stringify(phoneOpen)}; view ${JSON.stringify(view)}`
+  );
+  await phone.close();
+};
+
+/** A page whose revision rewords one paragraph, puts one in and takes one out. */
+const changedPage = (revised: boolean) => `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 18px/1.6 system-ui; }
+  main { padding: 24px; }
+  p { width: 70%; margin: 0 0 32px; padding: 8px; border-radius: 12px; }
+</style></head>
+<body><main>
+  <p id="a">Alpha stays as it is.</p>
+  <p id="b">${revised ? "Beta, written again." : "Beta, as first written."}</p>
+  ${revised ? '<p id="c">Delta, new here.</p>' : '<p id="gone">Gamma, soon taken out.</p>'}
+</main></body></html>`;
+
+/**
+ * WCAG 2 contrast of `selector`'s words over its ground with the change
+ * wash (`c-change-wash`) laid over both, as the overlay lays it, by day and
+ * by night: the ground the nearest painted ancestor's, else the page's
+ * canvas.
+ */
+const textUnderWash = (frame: Frame, selector: string) =>
+  frame.evaluate((sel) => {
+    const shadow = document.querySelector("cawco-overlay")?.shadowRoot;
+    const el = document.querySelector(sel);
+    const paint = document.createElement("canvas").getContext("2d", {
+      willReadFrequently: true,
+    });
+    if (!(shadow && el && paint)) {
+      return null;
+    }
+    const pixel = (...layers: string[]) => {
+      paint.clearRect(0, 0, 1, 1);
+      for (const layer of layers) {
+        paint.fillStyle = layer;
+        paint.fillRect(0, 0, 1, 1);
+      }
+      const [r = 0, g = 0, b = 0] = paint.getImageData(0, 0, 1, 1).data;
+      return { r, g, b };
+    };
+    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+      const lin = (c: number) => {
+        const v = c / 255;
+        return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const clear = (color: string) =>
+      color === "transparent" ||
+      color.endsWith(", 0)") ||
+      color.endsWith("/ 0)");
+    const root = document.documentElement;
+    const was = root.style.colorScheme;
+    const out: Record<string, number> = {};
+    for (const scheme of ["light", "dark"] as const) {
+      root.style.colorScheme = scheme;
+      let ground = "";
+      for (let at: Element | null = el; at && !ground; at = at.parentElement) {
+        const color = getComputedStyle(at).backgroundColor;
+        if (!clear(color)) {
+          ground = color;
+        }
+      }
+      const probe = document.createElement("span");
+      probe.style.colorScheme = scheme;
+      probe.style.color = "var(--c-change-wash)";
+      probe.style.background = "Canvas";
+      shadow.append(probe);
+      const { color: wash, backgroundColor: canvas } = getComputedStyle(probe);
+      probe.remove();
+      const base = ground || canvas;
+      const text = lum(pixel(base, getComputedStyle(el).color, wash));
+      const under = lum(pixel(base, wash));
+      out[scheme === "light" ? "day" : "night"] =
+        Math.round(
+          ((Math.max(text, under) + 0.05) / (Math.min(text, under) + 0.05)) *
+            100
+        ) / 100;
+    }
+    root.style.colorScheme = was;
+    return out;
+  }, selector);
+
+/** What a page's doc says of its latest changes and the person's looks at them, and what its overlay washes. */
+const changedRead = (frame: Frame) =>
+  frame.evaluate(() => {
+    const { doc } = (
+      window as unknown as {
+        cawcoArtifact: {
+          doc: {
+            getMap: (n: string) => {
+              get: (k: string) => unknown;
+              toJSON: () => Record<string, string[]>;
+            };
+          };
+        };
+      }
+    ).cawcoArtifact;
+    const changes = doc.getMap("meta").get("changes") as {
+      items: { anchor: string; kind: string; label: string }[];
+      revision: number;
+    } | null;
+    const seen = doc.getMap("seen").toJSON();
+    return {
+      changes,
+      seen: changes ? (seen[String(changes.revision)] ?? []) : [],
+      washes: [
+        ...document.querySelectorAll<SVGRectElement>(
+          "svg[data-cawco-changes] rect[data-change]"
+        ),
+      ].map((rect) => {
+        const anchor = rect.getAttribute("data-change") ?? "";
+        const el = document.querySelector(anchor);
+        const r = el?.getBoundingClientRect();
+        return {
+          anchor,
+          fill: rect.getAttribute("fill") ?? "",
+          rx: Number(rect.getAttribute("rx")),
+          box: {
+            x: Number(rect.getAttribute("x")),
+            y: Number(rect.getAttribute("y")),
+            w: Number(rect.getAttribute("width")),
+            h: Number(rect.getAttribute("height")),
+          },
+          element: r
+            ? { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height }
+            : null,
+          pointer: getComputedStyle(rect).pointerEvents,
+        };
+      }),
+    };
+  });
+
+/**
+ * Changed since you looked (5): a revision's changes in `meta.changes`, each
+ * changed element washed in the done wash where it stands after the person
+ * comes back (a reload), the tag counting them; each step brings one out,
+ * marks it seen in the doc and fades its wash off over `--dur-fade`; every
+ * stop seen, the tag leaves, and a reload washes nothing.
+ */
+const changedChecks = async (on: On) => {
+  const { origin } = new URL(on.page.url());
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge what changed",
+    name: "changed",
+    html: changedPage(false),
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  await frameHolding(on.page, id, "the changed page in the pane");
+  await on.call(UPDATE, { id, html: changedPage(true) });
+  // Coming back to it.
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const frame = await frameHolding(
+    on.page,
+    id,
+    "the changed page after a reload"
+  );
+  if (!frame) {
+    on.kit.check("changed: the page is in the pane", false, "not shown");
+    return;
+  }
+  await frame.waitForSelector("#c", { timeout: 10_000 }).catch(() => undefined);
+  const before = await until(
+    "the changed page's washes",
+    () => changedRead(frame),
+    (read) => read.washes.length === 2,
+    15_000
+  ).catch(() => null);
+  const items = before?.changes?.items ?? [];
+  const done = await tokenColor(on.page, "--c-change-wash");
+  const coral = await tokenColor(on.page, "--brand-solid");
+  const [washRgb, doneRgb, coralRgb] = await srgbOf(on.page, [
+    before?.washes[0]?.fill ?? "",
+    done,
+    coral,
+  ]);
+  const placed = (before?.washes ?? []).every(
+    (wash) =>
+      wash.element !== null &&
+      near(wash.box, wash.element, 1) &&
+      wash.rx === 12 &&
+      wash.pointer === "none"
+  );
+  const tag = on.page.locator(
+    '[data-slot="changes-tag"] [data-slot="change-count"]'
+  );
+  // The wash stands over the element: its words read through it.
+  const readable = await textUnderWash(frame, "#b");
+  const said = (
+    await tag.textContent({ timeout: 5000 }).catch(() => null)
+  )?.trim();
+  on.kit.check(
+    "changed: the revision's changes are in the doc (#b rewritten, #c put in, the gone paragraph a removed stop); coming back, #b and #c wear the done wash (c-change-wash, status-done-bg seen through, never coral) on their own box and radius, taking no press, #b's words 4.5:1 or better through it by day and by night; the tag reads \"3 changed since you looked\"",
+    JSON.stringify(
+      items.map((item) => [
+        item.kind,
+        item.anchor.startsWith("removed:") ? "removed" : item.anchor,
+      ])
+    ) ===
+      JSON.stringify([
+        ["element", "#b"],
+        ["element", "#c"],
+        ["removed", "removed"],
+      ]) &&
+      JSON.stringify(before?.washes.map((wash) => wash.anchor)) ===
+        JSON.stringify(["#b", "#c"]) &&
+      sameRgb(washRgb, doneRgb) &&
+      !sameRgb(washRgb, coralRgb, 10) &&
+      placed &&
+      said === "3 changed since you looked" &&
+      (readable?.day ?? 0) >= 4.5 &&
+      (readable?.night ?? 0) >= 4.5,
+    `contrast ${JSON.stringify(readable)}; items ${JSON.stringify(items)}; washes ${JSON.stringify(before?.washes)}; wash ${JSON.stringify(washRgb)} done ${JSON.stringify(doneRgb)}; tag ${said}`
+  );
+
+  // A step: #b brought out and chosen, seen in the doc, its wash fading off over --dur-fade.
+  await frame.evaluate(() => {
+    const leaving: string[] = [];
+    (window as unknown as { probeLeaving: string[] }).probeLeaving = leaving;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const rect = record.target as SVGRectElement;
+        if (rect.hasAttribute("data-leaving")) {
+          leaving.push(rect.style.transition);
+        }
+      }
+    }).observe(document.querySelector("svg[data-cawco-changes]") as Element, {
+      attributes: true,
+      attributeFilter: ["data-leaving"],
+      subtree: true,
+    });
+  });
+  await on.page.locator('[data-slot="change-next"]').click();
+  const stepped = await until(
+    "#b looked at",
+    () => changedRead(frame),
+    (read) =>
+      read.seen.includes("#b") &&
+      !read.washes.some((wash) => wash.anchor === "#b"),
+    5000
+  ).catch(() => null);
+  const leaving = await frame.evaluate(
+    () => (window as unknown as { probeLeaving: string[] }).probeLeaving
+  );
+  const chosen = await outlineOf(frame);
+  const b = await boxIn(frame, "#b");
+  const counted = (await tag.textContent().catch(() => null))?.trim();
+  on.kit.check(
+    'changed: a step onto #b chooses it (the outline over it), marks it seen in the doc\'s `seen`, fades its wash off over --dur-fade (200ms), and the tag reads "1 of 3"',
+    !!stepped &&
+      near(chosen, b, 6) &&
+      leaving.some((transition) => transition.includes("200ms")) &&
+      counted === "1 of 3",
+    `seen ${JSON.stringify(stepped?.seen)}; washes ${JSON.stringify(stepped?.washes.map((w) => w.anchor))}; outline ${JSON.stringify(chosen)} over ${JSON.stringify(b)}; leaving ${JSON.stringify(leaving)}; tag ${counted}`
+  );
+
+  await on.page.locator('[data-slot="change-next"]').click();
+  await on.page.locator('[data-slot="change-next"]').click();
+  const cleared = await until(
+    "every change looked at",
+    () => changedRead(frame),
+    (read) => read.seen.length === 3 && read.washes.length === 0,
+    5000
+  ).catch(() => null);
+  const tagGone = await on.page
+    .locator('[data-slot="changes-tag"]')
+    .waitFor({ state: "detached", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const again = await frameHolding(
+    on.page,
+    id,
+    "the changed page after another reload"
+  );
+  await settle(on.page, 1500);
+  const still = again ? await changedRead(again) : null;
+  const tagBack = await on.page.locator('[data-slot="changes-tag"]').count();
+  on.kit.check(
+    "changed: every stop stepped onto, all three are seen and the tag leaves; coming back again washes nothing and draws no tag",
+    !!cleared &&
+      tagGone &&
+      !!still &&
+      still.washes.length === 0 &&
+      tagBack === 0,
+    `seen ${JSON.stringify(cleared?.seen)}; tag gone ${tagGone}; after reload washes ${JSON.stringify(still?.washes)}, tags ${tagBack}`
+  );
+};
+
+/** A page with one paragraph to start a comment on. */
+const DRAFT_PAGE = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 18px/1.6 system-ui; }
+  main { padding: 24px; }
+  p { width: 70%; margin: 0 0 48px; }
+</style></head>
+<body><main>
+  <p id="target">A paragraph a comment is started on and left half-written.</p>
+  <p id="elsewhere">Another paragraph, never pressed.</p>
+</main></body></html>`;
+
+const DRAFT_WORDS = "Kept through a reload, and through Esc.";
+
+/** The composer as it stands: shown, its words, its chips. */
+const composerNow = async (screen: Page) => {
+  const composer = screen.locator(COMPOSE);
+  if ((await composer.count()) === 0) {
+    return null;
+  }
+  return {
+    words: (
+      await composer
+        .getByRole("combobox")
+        .textContent()
+        .catch(() => null)
+    )?.trim(),
+    chips: await composer.locator("[data-atts] > span").count(),
+  };
+};
+
+/** The draft's pill on the page: where it stands, whether parked, what it says. */
+const draftPillOf = (frame: Frame) =>
+  frame.evaluate(() => {
+    const g = document.querySelector(
+      'svg[data-cawco-pins] g[data-pin="new"], svg[data-cawco-pins-fixed] g[data-pin="new"]'
+    );
+    const face = g?.querySelector("[data-face]")?.getBoundingClientRect();
+    const target = document.querySelector("#target")?.getBoundingClientRect();
+    return g && face && target
+      ? {
+          parked: g.hasAttribute("data-parked"),
+          says: g.querySelector("title")?.textContent ?? null,
+          mark: g.querySelector("text")?.textContent ?? null,
+          pressable: getComputedStyle(g).pointerEvents,
+          face: { x: face.x, y: face.y, w: face.width, h: face.height },
+          onTarget:
+            face.x + face.width >= target.x - 30 &&
+            face.x <= target.right + 30 &&
+            face.y + face.height >= target.y - 40 &&
+            face.y <= target.bottom + 30,
+        }
+      : null;
+  });
+
+/**
+ * The Work Outlives Its Surface Rule on the composer: a comment half-written
+ * survives a reload with its composer open at its target, its words and its
+ * chip; Esc and a press outside each park it as the hollow pill at its
+ * target, saying it holds a draft, with no pin written; a reload keeps it
+ * parked; one press on the pill opens the composer again with the words and
+ * the chip.
+ */
+const draftChecks = async (on: On) => {
+  const { origin } = new URL(on.page.url());
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "drafts",
+    html: DRAFT_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const frame = await frameHolding(on.page, id, "the drafts page in the pane");
+  const pane = await on.page.locator(FRAME).boundingBox();
+  if (!(frame && pane)) {
+    on.kit.check("drafts: the page is in the pane", false, "not shown");
+    return;
+  }
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
+  await pageInComment(frame, true);
+  const target = await boxIn(frame, "#target");
+  await commentAt(
+    on,
+    pane.x + target.x + target.w * 0.3,
+    pane.y + target.y + target.h / 2,
+    null
+  );
+  await on.page.locator(COMPOSE).getByRole("combobox").fill(DRAFT_WORDS);
+  await attachFiles(on.page, [
+    {
+      name: "notes.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("A note that goes with the draft."),
+    },
+  ]);
+  // The draft store writes at most every 250ms.
+  await settle(on.page, 800);
+
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const back = await frameHolding(
+    on.page,
+    id,
+    "the drafts page after a reload"
+  );
+  const reopened = await until(
+    "the composer back after a reload",
+    () => composerNow(on.page),
+    (now) => now?.words === DRAFT_WORDS && now.chips === 1,
+    15_000
+  ).catch(() => null);
+  const pillBack = back ? await draftPillOf(back) : null;
+  const pinsAfterReload = back
+    ? Object.keys((await docOf(back)).pins).length
+    : -1;
+  on.kit.check(
+    "drafts: a half-written comment survives a reload with its composer open at its target, its words and its chip, its hollow pill on the paragraph, no pin written",
+    !!reopened &&
+      !!pillBack?.onTarget &&
+      !pillBack.parked &&
+      pinsAfterReload === 0,
+    `composer ${JSON.stringify(reopened)}; pill ${JSON.stringify(pillBack)}; pins ${pinsAfterReload}`
+  );
+  if (!back) {
+    return;
+  }
+
+  // Esc parks it.
+  await on.page.locator(COMPOSE).getByRole("combobox").focus();
+  await on.page.keyboard.press("Escape");
+  await on.page
+    .locator(COMPOSE)
+    .waitFor({ state: "detached", timeout: 5000 })
+    .catch(() => undefined);
+  const parked = await until(
+    "the parked pill",
+    () => draftPillOf(back),
+    (pill) => !!pill?.parked,
+    5000
+  ).catch(() => null);
+  on.kit.check(
+    'drafts: Esc closes the composer and parks the draft as the hollow pill where it stood (±1px) at its target, saying it holds a draft (… and "Draft comment, not sent"), pressable, with no pin written',
+    (await on.page.locator(COMPOSE).count()) === 0 &&
+      !!parked?.onTarget &&
+      !!pillBack &&
+      near(parked.face, pillBack.face, 1) &&
+      parked.mark === "…" &&
+      parked.says === "Draft comment, not sent" &&
+      parked.pressable === "auto" &&
+      Object.keys((await docOf(back)).pins).length === 0,
+    `parked ${JSON.stringify(parked)}; open ${JSON.stringify(pillBack?.face)}`
+  );
+
+  // One press on it brings the composer back; a press outside parks it again.
+  const pressPill = async (holding: Frame) => {
+    const pill = await draftPillOf(holding);
+    if (!pill) {
+      return;
+    }
+    const x = pane.x + pill.face.x + pill.face.w / 2;
+    const y = pane.y + pill.face.y + pill.face.h / 2;
+    await on.page.mouse.move(x, y, { steps: 2 });
+    await on.page.mouse.click(x, y);
+  };
+  await pressPill(back);
+  const again = await until(
+    "the composer from the parked pill",
+    () => composerNow(on.page),
+    (now) => now?.words === DRAFT_WORDS && now.chips === 1,
+    5000
+  ).catch(() => null);
+  // A press elsewhere in the dashboard, outside the composer.
+  await on.page.mouse.click(4, 300);
+  const outside = await until(
+    "parked by a press outside",
+    () => draftPillOf(back),
+    (pill) => !!pill?.parked,
+    5000
+  ).catch(() => null);
+  const closed = await on.page
+    .locator(COMPOSE)
+    .waitFor({ state: "detached", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  on.kit.check(
+    "drafts: one press on the parked pill opens the composer again with the words and the chip; a press outside parks it again",
+    !!again && !!outside && closed,
+    `composer ${JSON.stringify(again)}; parked ${JSON.stringify(outside)}`
+  );
+
+  // Parked through a reload, and one press brings it back.
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const last = await frameHolding(on.page, id, "the drafts page, parked");
+  const still = last
+    ? await until(
+        "the parked pill after a reload",
+        () => draftPillOf(last),
+        (pill) => !!pill?.parked,
+        15_000
+      ).catch(() => null)
+    : null;
+  const noComposer = (await on.page.locator(COMPOSE).count()) === 0;
+  if (last) {
+    await pressPill(last);
+  }
+  const fromReload = await until(
+    "the composer from the parked pill after a reload",
+    () => composerNow(on.page),
+    (now) => now?.words === DRAFT_WORDS && now.chips === 1,
+    8000
+  ).catch(() => null);
+  on.kit.check(
+    "drafts: a parked draft stays parked through a reload (its pill at its target, no composer), and one press on it opens the composer with the words and the chip",
+    !!still?.onTarget && noComposer && !!fromReload,
+    `pill ${JSON.stringify(still)}; composer before ${!noComposer}; after ${JSON.stringify(fromReload)}`
+  );
+  await on.page.keyboard.press("Escape");
 };
 
 const spec: Spec = { name: "comments", run };

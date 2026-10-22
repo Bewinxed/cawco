@@ -169,6 +169,7 @@
   --color-brand-hover: var(--brand-hover);
   --color-brand-wash: var(--brand-wash);
   --color-c-target-tint: var(--c-target-tint);
+  --color-c-change-wash: var(--c-change-wash);
   --color-brand-ink: var(--brand-ink);
   --color-brand-ink-strong: var(--brand-ink-strong);
   --color-link-ink: var(--link-ink);
@@ -731,6 +732,7 @@
   --animate-arrive-late: kit-fade-in var(--dur-menu) var(--ease-out)
     var(--dur-control) both;
   --animate-finish: finish calc(var(--dur-fade) * 2) var(--ease-out);
+  --animate-attn-echo: ping var(--dur-loop) var(--ease-out) 3 forwards;
   --animate-head-fade: head-fade linear both;
   --animate-dialog-in: kit-dialog-in var(--dur-panel) var(--ease-out) both;
   --animate-dialog-out: kit-dialog-out var(--dur-exit) var(--ease-out) both;

@@ -204,6 +204,8 @@ public enum Palette {
     public static let brandWash = Palette.named("brand-wash")
     /// The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through.
     public static let cTargetTint = Palette.named("c-target-tint")
+    /// The overlay's see-through done wash over what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): status-done-bg at 40%, never the opaque chip fill and never coral; drawn by the overlay over the element, not under it, so the element's words read through it.
+    public static let cChangeWash = Palette.named("c-change-wash")
     public static let brandInk = Palette.named("brand-ink")
     /// Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills.
     public static let brandInkStrong = Palette.named("brand-ink-strong")

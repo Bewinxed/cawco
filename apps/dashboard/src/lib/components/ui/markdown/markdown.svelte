@@ -32,7 +32,7 @@
   import { markMentions } from "#lib/cawco/find/mention.svelte.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { outsideCode } from "#lib/cawco/outside-code.js";
-  import { referenceOf } from "#lib/cawco/references.js";
+  import { referenceOf, writtenLabel } from "#lib/cawco/references.js";
   import SkillChip from "#lib/cawco/SkillChip.svelte";
   import {
     markSkills,
@@ -393,11 +393,11 @@
       children: Snippet;
       href?: string | null;
       /** The fields of marked's link token read here. */
-      token: { href: string; title?: string | null };
+      token: { href: string; text?: string; title?: string | null };
     })}
       {@const drawn = referenceOf(token.href)}
       {#if drawn.draw === "element"}
-        <drawn.element id={drawn.id} />
+        <drawn.element id={drawn.id} label={writtenLabel(token.text)} />
       {:else if drawn.draw === "label"}
         {@render children()}
       {:else if token.href.startsWith("/")}

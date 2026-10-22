@@ -404,8 +404,8 @@ export const commentRead = {
 export const commentReply = {
   name: "comment_reply",
   description:
-    "Answer a pin in its thread on the page. After a change, name the files you changed; ask a question here " +
-    "and leave the pin open.",
+    "Answer a pin in its thread. After a change, name the files changed; ask here and leave it " +
+    "open. Answers its link: name it by that.",
   input: {
     pin,
     text: z.string().min(1).max(COMMENT_LIMITS.text),

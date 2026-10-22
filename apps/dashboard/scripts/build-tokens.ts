@@ -228,6 +228,9 @@ const ANIMATIONS: Record<string, string> = {
   "animate-arrive-late":
     "kit-fade-in var(--dur-menu) var(--ease-out) var(--dur-control) both",
   "animate-finish": "finish calc(var(--dur-fade) * 2) var(--ease-out)",
+  // A needs-you dot's echo (DESIGN.md, Status dot: "three loops and then
+  // still"): its ring grows from the dot and fades, once a --dur-loop.
+  "animate-attn-echo": "ping var(--dur-loop) var(--ease-out) 3 forwards",
   // The transcript head's layers come in over the first c-head-fade of
   // scroll, on the transcript's scroll timeline (`head-fade-scrub`).
   "animate-head-fade": "head-fade linear both",

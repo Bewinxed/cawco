@@ -26874,6 +26874,9 @@
           "entry": {
             "$ref": "#/components/schemas/ThreadEntry"
           },
+          "link": {
+            "type": "string"
+          },
           "number": {
             "type": "number"
           },
@@ -26883,6 +26886,7 @@
         },
         "required": [
           "entry",
+          "link",
           "number",
           "pin"
         ]
@@ -26890,6 +26894,9 @@
       "postApiInstancesByIdArtifactsCommentsByPinResolve200": {
         "type": "object",
         "properties": {
+          "link": {
+            "type": "string"
+          },
           "number": {
             "type": "number"
           },
@@ -26901,6 +26908,7 @@
           }
         },
         "required": [
+          "link",
           "number",
           "pin",
           "resolvedAt"
@@ -36808,6 +36816,10 @@
             "$ref": "#/components/schemas/GraphBroken",
             "description": "What a decision page's program left broken on the picks and the graph; absent when nothing."
           },
+          "cards": {
+            "type": "object",
+            "description": "A decision page's cards' links, by id (`[question](cawco:decision/<artifact>/<card>)`): what the agent names each by."
+          },
           "decisions": {
             "description": "A decision page's decisions, by id, in page order.",
             "type": "array",
@@ -36846,6 +36858,10 @@
           },
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "link": {
+            "description": "Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person.",
+            "type": "string"
           },
           "moves": {
             "description": "A component canvas's flow moves, each with the animations it fired.",
@@ -38185,6 +38201,10 @@
             "$ref": "#/components/schemas/GraphBroken",
             "description": "What it left broken on the picks and the graph; absent when nothing."
           },
+          "cards": {
+            "type": "object",
+            "description": "The cards it put in or rewrote, each by its link (`[question](cawco:decision/<artifact>/<card>)`), by id."
+          },
           "decisions": {
             "description": "Its decisions now, by id, in page order.",
             "type": "array",
@@ -38240,6 +38260,7 @@
           }
         },
         "required": [
+          "cards",
           "decisions",
           "id",
           "moved",
@@ -38622,10 +38643,15 @@
                 "kind": {
                   "$ref": "#/components/schemas/ArtifactKind"
                 },
+                "link": {
+                  "description": "Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person.",
+                  "type": "string"
+                },
                 "name": {
                   "type": "string"
                 },
                 "pins": {
+                  "description": "Each with its link, `[label](cawco:pin/<artifact>/<number>)`.",
                   "type": "array",
                   "items": {
                     "allOf": [
@@ -38657,8 +38683,14 @@
                               "x",
                               "y"
                             ]
+                          },
+                          "link": {
+                            "type": "string"
                           }
-                        }
+                        },
+                        "required": [
+                          "link"
+                        ]
                       }
                     ]
                   }
@@ -38668,6 +38700,7 @@
                 "address",
                 "id",
                 "kind",
+                "link",
                 "name",
                 "pins"
               ]
@@ -38753,6 +38786,14 @@
             ]
           },
           "resolvedAt": {
+            "type": "string"
+          },
+          "resolvedBy": {
+            "$ref": "#/components/schemas/PinResolvedBy",
+            "description": "Who resolved it: the person, or the agent (comment_resolve), whose resolve is an answer."
+          },
+          "seenAt": {
+            "description": "When the person last looked at it: its thread opened (a press, a chip,\na step) or a Send of the page. An agent's entry or resolve newer than it\nis a new answer ({@link newAnswer}). Kept in the doc, so it holds on\nevery device he opens the page on.",
             "type": "string"
           },
           "sentAt": {
@@ -39165,7 +39206,7 @@
             }
           },
           "by": {
-            "$ref": "#/components/schemas/SessionAttachmentWho"
+            "$ref": "#/components/schemas/PinResolvedBy"
           },
           "files": {
             "description": "Files an agent's reply names as changed.",
@@ -48910,7 +48951,7 @@
             "type": "string"
           },
           "who": {
-            "$ref": "#/components/schemas/SessionAttachmentWho",
+            "$ref": "#/components/schemas/PinResolvedBy",
             "description": "Who sent it: the person, or the session's agent."
           }
         },
@@ -59566,6 +59607,13 @@
           "comment"
         ]
       },
+      "PinResolvedBy": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "person"
+        ]
+      },
       "PlanStepPriority": {
         "type": "string",
         "enum": [
@@ -59641,13 +59689,6 @@
           "delivered",
           "failed",
           "silent"
-        ]
-      },
-      "SessionAttachmentWho": {
-        "type": "string",
-        "enum": [
-          "agent",
-          "person"
         ]
       },
       "SessionPulseActivity": {

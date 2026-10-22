@@ -256,10 +256,122 @@ export interface Pin {
   /** Where on its element a tapped pin stands: fractions of the element's box. */
   point?: { x: number; y: number };
   resolvedAt?: string;
+  /** Who resolved it: the person, or the agent (comment_resolve), whose resolve is an answer. */
+  resolvedBy?: "person" | "agent";
+  /**
+   * When the person last looked at it: its thread opened (a press, a chip,
+   * a step) or a Send of the page. An agent's entry or resolve newer than it
+   * is a new answer ({@link newAnswer}). Kept in the doc, so it holds on
+   * every device he opens the page on.
+   */
+  seenAt?: string;
   /** When it was first delivered to the session. */
   sentAt?: string;
   /** Oldest first. */
   thread: ThreadEntry[];
+}
+
+/**
+ * Whether pin `pin` holds an answer the person hasn't looked at: an agent's
+ * entry in its thread, or the agent's resolve, newer than his last look
+ * (`seenAt`).
+ */
+export const newAnswer = (pin: Pin): boolean => {
+  const seen = pin.seenAt ?? "";
+  const answered = pin.thread.findLast((entry) => entry.by === "agent")?.at;
+  const resolved =
+    pin.resolvedBy === "agent" && pin.resolvedAt ? pin.resolvedAt : undefined;
+  return (!!answered && answered > seen) || (!!resolved && resolved > seen);
+};
+
+/** Pin `pin` as looked at, at `at`: what {@link newAnswer} reads it by. */
+export function seePin(doc: Doc, pin: string, at: string): void {
+  const held = pinsOf(doc).get(pin);
+  if (held && (held.seenAt ?? "") < at) {
+    doc.transact(() => pinsOf(doc).set(pin, { ...held, seenAt: at }));
+  }
+}
+
+/**
+ * What one revision of an artifact changed, as the hub reads it at that
+ * revision (the doc's `meta.changes`): a page's elements, a decision page's
+ * cards, a canvas's elements. Each is a stop the panel marks until the
+ * person has looked at it.
+ */
+export interface ArtifactChanges {
+  at: string;
+  items: ChangedItem[];
+  revision: number;
+}
+
+/**
+ * One thing a revision changed: `element`, a page's element by its
+ * selector, washed where it stands; `card`, a decision card, by its
+ * selector (`#decision-<id>`); `canvas`, a canvas's element by its id;
+ * `removed`, something gone, with no box to wash, stood in the tag by its
+ * label alone. The anchor is what the person's look is kept by.
+ */
+export interface ChangedItem {
+  anchor: string;
+  kind: "element" | "card" | "canvas" | "removed";
+  /** Its first words, or what it is. */
+  label: string;
+}
+
+/** Items one revision's changes keep. Our call: past it, the page changed whole. */
+export const CHANGES_LIMIT = 100;
+
+/**
+ * The person's looks at what revisions changed (the doc's `seen` map): per
+ * revision, the anchors he has stepped onto or pressed, his Send marking
+ * all of them. Written by the person, so it holds on every device.
+ */
+export const seenOf = (doc: Doc) => doc.getMap("seen") as YMap<string[]>;
+
+/** The anchors of revision `revision`'s changes the person has looked at, written as seen. */
+export function seeChanges(
+  doc: Doc,
+  revision: number,
+  anchors: string[]
+): void {
+  const seen = seenOf(doc);
+  const key = String(revision);
+  const was = seen.get(key) ?? [];
+  const next = [...new Set([...was, ...anchors])].slice(0, CHANGES_LIMIT);
+  if (next.length > was.length) {
+    doc.transact(() => {
+      // Only the latest revision's looks are worth keeping: the next replaces the set.
+      for (const old of [...seen.keys()]) {
+        if (old !== key) {
+          seen.delete(old);
+        }
+      }
+      seen.set(key, next);
+    });
+  }
+}
+
+/** A revision's key in the `seen` map: its number. */
+const REVISION_KEY = /^\d{1,9}$/;
+
+/** Why a person's `seen` map may not be kept; null when it may. */
+export function seenProblem(seen: Map<string, unknown>): string | null {
+  if (seen.size > 2) {
+    return "The page keeps the looks of its latest revision only.";
+  }
+  for (const [revision, anchors] of seen) {
+    if (!(
+      REVISION_KEY.test(revision) &&
+      Array.isArray(anchors) &&
+      anchors.length <= CHANGES_LIMIT &&
+      anchors.every(
+        (anchor) => typeof anchor === "string" && anchor.length <= 500
+      )
+    )) {
+      return "A look is a revision's list of the anchors seen.";
+    }
+  }
+  return null;
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -618,11 +730,15 @@ export function resolvePin(
   if (!held) {
     return `This pin is gone from the page, so it wasn't ${resolved ? "resolved" : "reopened"}.`;
   }
-  const { resolvedAt: _was, ...rest } = held;
+  const { resolvedAt: _was, resolvedBy: _by, ...rest } = held;
+  const at = new Date().toISOString();
+  // His own resolve or reopen is a look: whatever the agent answered there is seen.
   doc.transact(() =>
     pinsOf(doc).set(
       pin,
-      resolved ? { ...rest, resolvedAt: new Date().toISOString() } : rest
+      resolved
+        ? { ...rest, resolvedAt: at, resolvedBy: "person", seenAt: at }
+        : { ...rest, seenAt: at }
     )
   );
   return null;
@@ -879,18 +995,21 @@ export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
 /**
  * One pin's part of a delivery: a pin the session already has, where only
  * its resolve moved, is one line; else its section ({@link pinSection}),
- * with its id for `comment_reply`, and its resolve when it stands resolved.
+ * with its id for `comment_reply`, its link for naming it to the person
+ * (`[label](cawco:pin/<artifact>/<number>)`, core references.ts), and its
+ * resolve when it stands resolved.
  */
 export function pinDelivery(
   pin: Pin,
-  context: Parameters<typeof pinSection>[1]
+  context: Parameters<typeof pinSection>[1] & { link: string }
 ): string {
   if (pinKnown(pin) && unheardEntries(pin).length === 0) {
-    return `## ${pin.number}. ${pin.resolvedAt ? "Resolved" : "Reopened"} by the person (pin ${pin.id})`;
+    return `## ${pin.number}. ${pin.resolvedAt ? "Resolved" : "Reopened"} by the person (pin ${pin.id}), its link ${context.link}`;
   }
   return [
     pinSection(pin, context),
     `- Pin: ${pin.id}`,
+    `- Link: ${context.link}`,
     ...(pin.resolvedAt ? ["- Resolved by the person."] : []),
   ].join("\n");
 }
