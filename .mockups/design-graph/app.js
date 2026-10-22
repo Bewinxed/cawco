@@ -1808,13 +1808,14 @@ function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); 
 // (GRIP_BODY + 1 points), run-out B (GRIP_RUN points, out to its tip). Every frame is drawn exactly from one
 // number, its progress p (0 at rest, 1 held), so each frame is a true member of the family.
 //   At rest (p = 0) the run-outs have no length: the body alone with round caps, Apple's arc, inset.
-//   Held (p = 1) the stroke stands on the border itself: its outer edge on the panel's outer edge, the body
-//   round the border's own curve, each run-out along the border's hairline. Past the corner's curve the
-//   stroke's width over the hairline goes in its first quarter, and its ink fades to nothing along the run (one
-//   radial gradient centred on the corner, so both edges fade alike): the tapered highlight is the border
-//   lighting up, one line, never a second line beside it.
-//   Between, the body moves out as p grows and each run-out bends onto the border, its bend shortening to
-//   nothing as p reaches 1.
+//   Held (p = 1) the stroke is the border itself: the border's own width, on the border's line, round the
+//   border's curve and on along both edges, its ink (the edge ink) fading to nothing along the run through one
+//   radial gradient centred on the corner, so both edges fade alike. One line, one width all the way round.
+//   Between, the stroke narrows from Apple's to the border's as it moves out onto the border, and each run-out
+//   bends onto the border, the bend shortening to nothing as p reaches 1. At every p the stroke has one width
+//   from tip to tip, so nothing kinks where the corner's curve meets a straight run.
+// Under it, the hover pad: the rest stroke's own shape widened to fill the gap to the border (the house hover
+// fill, style.css), so a pointer resting on a grip lights an area a person sees.
 // The clock: CSS transitions one registered number, --grip-p, out over --dur-reveal and back over --dur-exit;
 // paintGrip draws the path's `d` attribute and its gradient from it (Safari and iPadOS draw nothing from the
 // `d` CSS property).
@@ -1837,42 +1838,49 @@ function gripGeo(tool) {
   return { R, d, w, len, L, B, sweep, legs, bw: parseFloat(getComputedStyle(tool).borderLeftWidth) };
 }
 const smooth = (u) => { const t = Math.min(1, Math.max(0, u)); return t * t * (3 - 2 * t); };
-// The run-out's width s along it: the full stroke over the rest mark (to `from`), then its width over the
-// border's goes down a smoothstep over a quarter of the run (no kink where it starts or ends), leaving the
-// hairline's own width.
-const gripWidth = (g, s, from) => (s <= from ? g.w : g.bw + (g.w - g.bw) * (1 - smooth((s - from) / (g.L / 4))));
+// The stroke's one width at progress p: Apple's at rest, the border's held.
+const gripW = (g, p) => g.w + (g.bw - g.w) * p;
 // A straight run-out's place across its edge, s along it from where it straightens: from the body's inset di
-// it bends over `bend` onto the border, its outer edge on the outer edge (centreline half its width in).
-const gripAcross = (g, s, di, bend, from) => di + (gripWidth(g, s, from) / 2 - di) * smooth(s / bend);
+// it bends over `bend` onto the border's line (its outer edge on the border's outer edge).
+const gripAcross = (wp, s, di, bend) => di + (wp / 2 - di) * smooth(s / bend);
 // A centreline from a function of s: the direction each point travels, from its neighbours.
 function along(at, s, ds = 0.01) { const a = at(Math.max(0, s - ds)), b = at(s + ds), n = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / n, (b[1] - a[1]) / n]; }
 // The panel's handle in the corner's own frame: the outer corner at 0,0, x in from the width edge, -y up it.
 // The corner's circle is centred on (R, −R); t = π points at the width edge, π/2 at the foot. Run-out A goes up
 // the width edge; B is its mirror about the diagonal, along the foot.
 function cornerShape(g, p) {
-  const { R, d, w, L, B, sweep, legs } = g, di = d + (w / 2 - d) * p, ri = R - di, tA = (3 * Math.PI) / 4 + sweep / 2, sc = (ri * (Math.PI / 2 - sweep)) / 2, from = Math.max(sc, legs), bend = B * (1 - p) + 0.5;
+  const { R, d, L, B, sweep, legs } = g, wp = gripW(g, p), di = d + (wp / 2 - d) * p, ri = R - di, tA = (3 * Math.PI) / 4 + sweep / 2, sc = (ri * (Math.PI / 2 - sweep)) / 2, bend = B * (1 - p) + 0.5;
   // Where A stands s along it from the body's end: round the circle to the edge, then up it.
-  const at = (s) => (s <= sc ? [R + ri * Math.cos(tA + s / ri), -R + ri * Math.sin(tA + s / ri)] : [gripAcross(g, s - sc, di, bend, from - sc), -R - (s - sc)]);
+  const at = (s) => (s <= sc ? [R + ri * Math.cos(tA + s / ri), -R + ri * Math.sin(tA + s / ri)] : [gripAcross(wp, s - sc, di, bend), -R - (s - sc)]);
   const a = legs + p * (L - legs), C = [];
-  for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x, y, tx: -tx, ty: -ty, w: gripWidth(g, s, from) }); }
-  for (let j = 0; j <= GRIP_BODY; j++) { const t = tA - sweep * (j / GRIP_BODY); C.push({ x: R + ri * Math.cos(t), y: -R + ri * Math.sin(t), tx: Math.sin(t), ty: -Math.cos(t), w }); }
+  for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x, y, tx: -tx, ty: -ty, w: wp }); }
+  for (let j = 0; j <= GRIP_BODY; j++) { const t = tA - sweep * (j / GRIP_BODY); C.push({ x: R + ri * Math.cos(t), y: -R + ri * Math.sin(t), tx: Math.sin(t), ty: -Math.cos(t), w: wp }); }
   // B is A mirrored about the diagonal: (x, y) → (−y, −x), and so its direction.
-  for (let i = 1; i <= GRIP_RUN; i++) { const s = (a * i) / GRIP_RUN, [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x: -y, y: -x, tx: -ty, ty: -tx, w: gripWidth(g, s, from) }); }
-  // Its ink: opaque over the rest mark (the corner's curve and a finger's legs), fading to nothing at the tips.
-  const solid = R + Math.max(0, legs - sc) * (1 - p), reach = R + Math.max(0, a - sc);
+  for (let i = 1; i <= GRIP_RUN; i++) { const s = (a * i) / GRIP_RUN, [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x: -y, y: -x, tx: -ty, ty: -tx, w: wp }); }
+  // Its ink: opaque over the corner's curve and the whole rest mark (a finger's legs and every cap, so no part
+  // of a round cap falls past the gradient's opaque radius and is cut square), fading to nothing at the tips.
+  const solid = gripSolid(C, a > legs ? GRIP_RUN - Math.ceil((GRIP_RUN * legs) / a) : 0, R, wp), reach = Math.max(solid + 0.01, R + Math.max(0, a - sc));
   return { pts: ribbon(C), solid, reach };
 }
 // The dock's: the same stroke straightened into a capsule `len` long, d down from its top edge and centred on
-// it; held, it stands on the top border and each end runs out along it the same way.
+// it; held, it is the top border, running out along it either way the same way.
 function edgeShape(g, p) {
-  const { d, w, len, L, B } = g, half = len / 2, di = d + (w / 2 - d) * p, bend = B * (1 - p) + 0.5;
-  const at = (s) => [half + s, gripAcross(g, s, di, bend, 0)];
+  const { d, len, L, B } = g, half = len / 2, wp = gripW(g, p), di = d + (wp / 2 - d) * p, bend = B * (1 - p) + 0.5;
+  const at = (s) => [half + s, gripAcross(wp, s, di, bend)];
   const a = p * L, C = [];
-  for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x: -x, y, tx, ty: -ty, w: gripWidth(g, s, 0) }); }
-  for (let j = 0; j <= GRIP_BODY; j++) C.push({ x: -half + (2 * half * j) / GRIP_BODY, y: di, tx: 1, ty: 0, w });
-  for (let i = 1; i <= GRIP_RUN; i++) { const s = (a * i) / GRIP_RUN, [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x, y, tx, ty, w: gripWidth(g, s, 0) }); }
-  return { pts: ribbon(C), solid: half, reach: half + a };
+  for (let i = 0; i < GRIP_RUN; i++) { const s = a * (1 - i / GRIP_RUN), [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x: -x, y, tx, ty: -ty, w: wp }); }
+  for (let j = 0; j <= GRIP_BODY; j++) C.push({ x: -half + (2 * half * j) / GRIP_BODY, y: di, tx: 1, ty: 0, w: wp });
+  for (let i = 1; i <= GRIP_RUN; i++) { const s = (a * i) / GRIP_RUN, [x, y] = at(s), [tx, ty] = along(at, s); C.push({ x, y, tx, ty, w: wp }); }
+  const solid = gripSolid(C, a > 0 ? GRIP_RUN : 0, half, wp);
+  return { pts: ribbon(C), solid, reach: Math.max(solid + 0.01, half + a) };
 }
+// How far the gradient stays opaque from its centre: past the rest mark's farthest ink, its caps included (the
+// centreline points from index `from` to the mirror index, the rest mark), and at least `floor` (the corner's
+// curve; the capsule's half-length).
+function gripSolid(C, from, floor, wp) { let m = floor; for (let i = from; i < C.length - from; i++) m = Math.max(m, Math.hypot(C[i].x, C[i].y) + wp / 2); return m; }
+// The hover pad: the rest stroke's shape, as wide as the gap it stands in (from the border's inner edge to as
+// far in again past its centreline), round-capped.
+const padShape = (shape, g) => shape({ ...g, w: 2 * (g.d - g.bw) }, 0).pts;
 // Each handle's path: its shape, its geometry, its gradient and the progress last painted.
 const gripShapes = new Map();
 function paintGrip(path) {
@@ -1904,12 +1912,14 @@ for (const type of ["transitionrun", "focusin", "focusout", "pointerdown", "poin
 function drawGrips() {
   const c = $("gripC"), gc = gripGeo(panel), S = Math.ceil(gc.R + gc.L + gc.w + 2);
   c.setAttribute("width", S); c.setAttribute("height", S); c.setAttribute("viewBox", "0 " + -S + " " + S + " " + S);
-  const g = $("gripD"), gd = gripGeo($("dock")), W = 2 * Math.ceil(gd.len / 2 + gd.L + gd.w), H = Math.ceil(gd.d + gd.w);
+  const g = $("gripD"), gd = gripGeo($("dock")), W = 2 * Math.ceil(gd.len / 2 + gd.L + gd.w), H = Math.ceil(2 * gd.d);
   g.setAttribute("width", W); g.setAttribute("height", H); g.setAttribute("viewBox", -W / 2 + " 0 " + W + " " + H);
+  const r3 = (n) => Math.round(n * 1000) / 1000;
   for (const [svg, shape, geo] of [[c, cornerShape, gc], [g, edgeShape, gd]]) {
     const grad = svg.querySelector("radialGradient");
     if (!grad.children.length) for (let i = 0; i <= GRIP_STOPS; i++) grad.append(document.createElementNS("http://www.w3.org/2000/svg", "stop"));
-    gripShapes.set(svg.querySelector("path"), { shape, g: geo, grad, p: null });
+    svg.querySelector(".handle-pad").setAttribute("d", "M " + padShape(shape, geo).map(([x, y]) => r3(x) + " " + r3(y)).join(" L ") + " Z");
+    gripShapes.set(svg.querySelector(".handle-ink"), { shape, g: geo, grad, p: null });
   }
   paintGrips();
 }
