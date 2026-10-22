@@ -14,7 +14,7 @@
       <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph" data-icon="eyeClosed"></button>
     </header>
 
-    <aside class="tool panel t-panel-slide" id="panel" data-open="true" aria-label="Design graph">
+    <aside class="tool panel" id="panel" data-open="true" aria-label="Design graph">
       <div class="toolbar">
         <div class="t-tabs" id="tabs" role="tablist" aria-label="Components"><span class="t-tabs-pill" aria-hidden="true"></span></div>
         <div class="bar-end">
@@ -24,7 +24,8 @@
             <button class="icon-btn" id="zoomIn" aria-label="Zoom in" data-tip="Zoom in (⌘ scroll)" data-icon="zoomIn"></button>
             <button class="icon-btn" id="zoomFit" aria-label="Fit" data-tip="Fit" data-icon="fit"></button>
           </div>
-          <button class="icon-btn hide-btn" id="hide" aria-label="Hide graph" data-tip="Hide graph (H)" data-icon="eyeClosed"></button>
+          <!-- Hide, and at a desk the Show pill too: the panel folds into this button (round 27, pin 29). -->
+          <button class="icon-btn hide-btn" id="hide" aria-label="Hide graph" aria-expanded="true" data-tip="Hide graph (H)"><span class="hs-glyph hs-closed" data-icon="eyeClosed"></span><span class="hs-glyph hs-open" data-icon="eye"></span><span class="show-label">Show graph</span></button>
         </div>
       </div>
       <!-- One section per component: its name, its own zoom and Fit, its graph and its dials. -->
@@ -32,17 +33,21 @@
       <div class="sash sash-w" id="sashW" role="separator" aria-orientation="vertical" aria-label="Resize panel width" tabindex="0" data-edge="w"></div>
       <div class="sash sash-h" id="sashH" role="separator" aria-orientation="horizontal" aria-label="Resize graph height" tabindex="0" data-edge="h"></div>
       <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize panel" tabindex="0" data-edge="wh"></div>
-      <span class="edge-pill edge-pill-w" aria-hidden="true"></span>
-      <span class="edge-pill edge-pill-h" aria-hidden="true"></span>
-      <span class="corner-l" aria-hidden="true"></span>
+      <!-- The resize handle (html[data-handle]): one lit arm per resizable edge, and the bead design's marks. -->
+      <span class="lit" data-arm="w" aria-hidden="true"></span>
+      <span class="lit" data-arm="h" aria-hidden="true"></span>
+      <span class="bead" data-arm="w" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg></span>
+      <span class="bead" data-arm="h" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M9 6l3-3 3 3M9 18l3 3 3-3"/></svg></span>
+      <span class="bead" data-arm="wh" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19L19 5M5 14v5h5M14 5h5v5"/></svg></span>
       <!-- Two graphs stacked: the foot edge between them splits their heights. -->
       <div class="sash sash-s" id="sashS" role="separator" aria-orientation="horizontal" aria-label="Split the graphs' heights" tabindex="0" data-edge="s"></div>
-      <span class="edge-pill edge-pill-s" aria-hidden="true"></span>
+      <span class="lit" data-arm="s" aria-hidden="true"></span>
     </aside>
 
     <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The kept move">
       <div class="sash sash-d" id="sashD" role="separator" aria-orientation="horizontal" aria-label="Resize the dock's height" tabindex="0" data-edge="d"></div>
-      <span class="edge-pill edge-pill-d" aria-hidden="true"></span>
+      <span class="lit" data-arm="d" aria-hidden="true"></span>
+      <span class="bead" data-arm="d" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M9 6l3-3 3 3M9 18l3 3 3-3"/></svg></span>
       <div class="dock-body" id="dockBody"></div>
     </section>
   </div>
