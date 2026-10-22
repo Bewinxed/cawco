@@ -821,6 +821,8 @@ const studioRouted = async (page: Page): Promise<void> => {
 };
 
 /** The studio's keychain unlocked from its menu, its password sent, and `answer` the Mac's (`studioRouted`). */
+/** The unlock tile's title while the Mac has not answered (UnlockKeychain `working`). */
+const UNLOCKING = /^Unlocking /;
 const unlockStudio = (answer?: UnlockAnswer) => async (page: Page) => {
   await studioRouted(page);
   studioAnswers.set(page, answer);
@@ -2390,14 +2392,14 @@ export const SURFACES: Surface[] = [
           await unlockStudio()(page);
           await page
             .locator(`${UNLOCK_TILE} [data-slot=title]`)
-            .filter({ hasText: /^Unlocking / })
+            .filter({ hasText: UNLOCKING })
             .waitFor();
         },
         heldFrame: true,
         root: "body",
         ready: {
           shows: `${UNLOCK_TILE} [data-slot=title]`,
-          says: /^Unlocking /,
+          says: UNLOCKING,
         },
       },
       {
