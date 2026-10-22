@@ -55,7 +55,10 @@
  *   hub is asked for a sync: for {@link IDLE_MS} the machine starts no
  *   OpenCode server, applies nothing, evicts nothing and starts no MCP
  *   server, and its log says the edit waits for the next need; the next
- *   OpenCode session's start applies it.
+ *   OpenCode session's start applies it;
+ * - the fleet carries a `chrome-devtools` and an OpenCode session starts in a
+ *   folder no workspace holds: no process of it runs under an OpenCode
+ *   server, and the row reads it applied for OpenCode.
  *
  * Runs inside a workspace or on the host alike: it delegates nothing.
  *
@@ -673,6 +676,100 @@ const placeTouchesItsPlace = async (
   );
 };
 
+/** The fleet's browser server, by the name each harness gates it by (agent browser/door.ts `CHROME_DEVTOOLS`). */
+const BROWSER = "chrome-devtools";
+
+/** An OpenCode server's command line. */
+const OPENCODE_SERVE = /opencode\S* serve/;
+
+/** The command line of `pid`'s parent, read from /proc; empty when either is gone. */
+const parentCommand = async (pid: string): Promise<string> => {
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => "");
+  // After the command's closing parenthesis: state, then the parent's pid.
+  const [, ppid] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  return ppid
+    ? (
+        await readFile(`/proc/${ppid}/cmdline`, "utf8").catch(() => "")
+      ).replaceAll("\0", " ")
+    : "";
+};
+
+/**
+ * chrome-devtools runs in an OpenCode location only through a workspace's
+ * browser door. The fleet carries a `chrome-devtools` (the fixture, writing
+ * its pids), and an OpenCode session starts in a folder no workspace holds:
+ * its location boots (his own server starts there) and no process of the
+ * fleet's browser server has an OpenCode server for a parent. Claude Code's
+ * and pi's own status reads start it too, ungated, so a process is judged
+ * by its parent. The row reads it applied for OpenCode, the status read
+ * having started none. Linux only: a parent is read from /proc.
+ */
+const noBrowserOutsideWorkspace = async (
+  kit: Kit,
+  fleet: KitFleet,
+  browserPids: string,
+  homePids: string[]
+): Promise<void> => {
+  if (process.platform !== "linux") {
+    kit.check("chrome-devtools outside a workspace: read on Linux only", true);
+    return;
+  }
+  const put = await fetch(`${fleet.base}/api/fleet/mcp/${BROWSER}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ config: fixture(browserPids), enabled: true }),
+  });
+  kit.check(
+    `the fleet runs a ${BROWSER} (the fixture)`,
+    put.ok,
+    `${put.status} ${await put.text()}`
+  );
+  const opencodeState = () => {
+    const said = fleet
+      .query<{ fleet: string | null }>("SELECT fleet FROM agents")
+      .map((one) => one.fleet ?? "")
+      .at(0);
+    return said
+      ? (JSON.parse(said) as Row).mcpByHarness?.opencode?.[BROWSER]
+      : undefined;
+  };
+  const read = await until(
+    `the row reads ${BROWSER} for OpenCode`,
+    opencodeState,
+    (state) => state?.state === "applied",
+    180_000
+  ).catch(opencodeState);
+  const booted = await startedIn(homePids);
+  const session = await fleet.spawn("opencode", "Outside a workspace");
+  const location = await until(
+    "the session's location booted (his own server started there)",
+    () => startedIn(homePids),
+    (count) => count > booted,
+    60_000
+  ).catch(() => booted);
+  const startedByOpencode = async (dirs: string[]) =>
+    (
+      await Promise.all(
+        (await Promise.all(dirs.map(pidsIn))).flat().map(async (pid) => ({
+          pid,
+          parent: await parentCommand(pid),
+        }))
+      )
+    ).filter(({ parent }) => OPENCODE_SERVE.test(parent));
+  // His own server, which the location started: the parent reading works.
+  const his = await startedByOpencode(homePids);
+  const browser = await startedByOpencode([browserPids]);
+  kit.check(
+    `an OpenCode session outside a workspace (its location booted: ${location - booted} server(s) of his started, ${his.length} running under an OpenCode server) started no ${BROWSER} (${browser.length} process(es) under an OpenCode server); the row reads it ${read?.state} for OpenCode`,
+    location > booted &&
+      his.length > 0 &&
+      browser.length === 0 &&
+      read?.state === "applied",
+    JSON.stringify({ browser, his })
+  );
+  await fleet.stopSession(session);
+};
+
 /**
  * A machine with no session running starts no OpenCode server and no MCP
  * server on its own, over {@link IDLE_MS}: not for the person's own
@@ -1155,6 +1252,7 @@ const run = async (kit: Kit): Promise<void> => {
     stopped.every((one) => one === "stopped")
   );
   await idleStartsNothing(kit, fleet, opencodeJson, homePids);
+  await noBrowserOutsideWorkspace(kit, fleet, pids("browser"), homePids);
 };
 
 const spec: Spec = { name: "fleet-mcp-parity", run };

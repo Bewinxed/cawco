@@ -518,9 +518,11 @@ export default {
     // server's command line, which every local user can read.
     const door = state && existsSync(state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)}) ? state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)} : undefined;
     await ctx.mcp.transform((editor) => {
+      // Servers kept from a location are removed: 2.0.29 starts one set
+      // \`enabled = false\` (2026-10-22, a stdio fixture writing its pid; v2's
+      // field is \`disabled\`, opencode.ai/v2/docs/mcp-servers), and keeps a
+      // \`disabled\` one listed, which a status read would take for a verdict.
       // The agent's reads of this server run here, and need no MCP server.
-      // Removed, not \`enabled = false\`: 2.0.29 started a server updated so
-      // (2026-10-22, a stdio fixture writing its pid), and none removed.
       if (realOf(directory) === realOf(cawcoQuiet)) {
         for (const [name] of [...editor.list()]) {
           editor.remove(name);
@@ -528,15 +530,14 @@ export default {
         return;
       }
       placeMcp(editor, directory);
+      if (!door && editor.get(${JSON.stringify(CHROME_DEVTOOLS)})?.type === "local") {
+        editor.remove(${JSON.stringify(CHROME_DEVTOOLS)});
+      }
       for (const [name, config] of editor.list()) {
         if (config.type !== "local") continue;
         editor.update(name, (server) => {
           server.environment = { ...(server.environment ?? {}), XDG_DATA_HOME: machineData };
           if (name !== ${JSON.stringify(CHROME_DEVTOOLS)}) return;
-          if (!door) {
-            server.enabled = false;
-            return;
-          }
           server.command = [...server.command.filter((arg) => !browserArg.test(arg)), "--config=" + door];
           if (typeof roots?.scratch === "string" && typeof roots?.clone === "string") {
             server.command = [...server.command, "--filesystem-root=" + roots.scratch, "--filesystem-root=" + roots.clone];

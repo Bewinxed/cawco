@@ -464,6 +464,39 @@ const fleetDigest = (config: Record<string, unknown>): string => {
     .slice(0, 16);
 };
 
+/**
+ * What a status read says of chrome-devtools without reading it. OpenCode
+ * runs it only in a workspace's location, through that workspace's browser
+ * door; the plugin removes it from every other location, as Claude Code and
+ * pi load none without a door. The read runs in the machine server's own
+ * location, which no door opens on, so it holds none to read.
+ */
+const DOOR_ONLY: FleetItemState = {
+  state: "applied",
+  detail:
+    "OpenCode starts it only in a workspace's location, through that workspace's browser door.",
+};
+
+/**
+ * `names` split into those a status read reads and what is said of the
+ * rest without starting them: one the hub holds no sign-in for
+ * ({@link apartSignedOut}), and chrome-devtools ({@link DOOR_ONLY}).
+ */
+const apartUnread = async (
+  names: string[]
+): Promise<{ read: string[]; said: Record<string, FleetItemState> }> => {
+  const { read, signedOut } = apartSignedOut(names, await readFleetMcpSet());
+  return {
+    read: read.filter((name) => name !== CHROME_DEVTOOLS),
+    said: {
+      ...signedOut,
+      ...(read.includes(CHROME_DEVTOOLS)
+        ? { [CHROME_DEVTOOLS]: DOOR_ONLY }
+        : {}),
+    },
+  };
+};
+
 let quietMade: Promise<void> | null = null;
 
 /**
@@ -5474,9 +5507,9 @@ export class OpencodeHarness implements Harness {
     // to the one it replaces.
     const unsettled = serversMoved ? await this.#configSettled() : undefined;
     if (unsettled) {
-      const { read, signedOut } = apartSignedOut(mcp, await readFleetMcpSet());
+      const { read, said } = await apartUnread(mcp);
       const states = {
-        ...signedOut,
+        ...said,
         ...Object.fromEntries(read.map((name) => [name, unsettled])),
       };
       this.#heardFleetMcp(states, "report");
@@ -5674,14 +5707,11 @@ export class OpencodeHarness implements Harness {
     use: "fresh" | "latest"
   ): Promise<FleetSyncReport["mcp"]> {
     return this.#fleetMcpTurn(async () => {
-      const { read, signedOut } = apartSignedOut(
-        names,
-        await readFleetMcpSet()
-      );
+      const { read, said } = await apartUnread(names);
       const taken = this.#takenReading(read);
       if (taken && (use === "latest" || taken.settled)) {
         const states = {
-          ...signedOut,
+          ...said,
           ...Object.fromEntries(
             read.map((name) => [name, taken.states[name] as FleetItemState])
           ),
@@ -5812,10 +5842,7 @@ export class OpencodeHarness implements Harness {
       this.#mendAttempt = 0;
       return;
     }
-    if (
-      this.#takenReading(apartSignedOut(names, await readFleetMcpSet()).read)
-        ?.settled
-    ) {
+    if (this.#takenReading((await apartUnread(names)).read)?.settled) {
       console.info(
         `[opencode] fleet MCP pass: generation ${this.#serverOwner.active?.procId} runs the fleet servers read already, every one settled: nothing read`
       );
@@ -5940,10 +5967,7 @@ export class OpencodeHarness implements Harness {
     if (all.length === 0) {
       return {};
     }
-    const { read: names, signedOut } = apartSignedOut(
-      all,
-      await readFleetMcpSet()
-    );
+    const { read: names, said } = await apartUnread(all);
     const { states: live, read } =
       names.length > 0 ? await this.#readLiveFleetMcp(names) : { states: {} };
     if (read) {
@@ -5963,7 +5987,7 @@ export class OpencodeHarness implements Harness {
           }
         : null;
     }
-    const states = { ...signedOut, ...live };
+    const states = { ...said, ...live };
     this.#heardFleetMcp(states, by);
     return states;
   }
