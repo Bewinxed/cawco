@@ -42,12 +42,44 @@
   const TRIGGER = /(^|[\s ])([@/])([\w./-]*)$/;
   const LEADING_SPACE = /^[\s\u00a0]+/;
   const NAV = ["ArrowUp", "ArrowDown", "Enter", "Tab", "Escape"];
-  let promptFocus = $state(false);
   let menu = $state.raw<Menu | null>(null);
   let menuIdx = $state(0);
   const items = $derived(menu ? menuItems(menu.type, menu.query) : []);
   const promptEmpty = $derived(!(value || lead));
-  const grown = $derived(Boolean(promptFocus || value || menu));
+
+  /**
+   * The New Session surface the editor stands in, its desk popover or its
+   * phone sheet, and the popovers its chips open (portaled out of it).
+   */
+  const FORM = "[data-ns-popover], [data-ns-dialog], [data-ns-pop]";
+  /**
+   * The person is writing the prompt: from the editor taking the focus until
+   * the focus goes to something outside the form. Its room is held while
+   * they work the rest of the form. Let go on the editor's own blur, it was
+   * let go at a chip's pointerdown (a press focuses at its pointerdown), so
+   * everything under the editor moved up while the press was down: the
+   * release landed on what moved in under the pointer and the click went to
+   * their common ancestor. A chip of an empty prompt's form never opened,
+   * nor a harness under it (style-snapshot, new-session · desk light reduced,
+   * "pointerdown span … at 573,283.87", "pointerup p.type-meta.m-0"), and
+   * with motion the row slid away under a person's press. Focus that goes
+   * nowhere (a press on the form's own words) takes nothing from it.
+   */
+  let engaged = $state(false);
+  $effect(() => {
+    const moved = (event: FocusEvent) => {
+      const to = event.target;
+      if (to === element) {
+        engaged = true;
+      } else if (!(to instanceof Element && to.closest(FORM))) {
+        engaged = false;
+      }
+    };
+    addEventListener("focusin", moved, true);
+    return () => removeEventListener("focusin", moved, true);
+  });
+  const grown = $derived(Boolean(engaged || value || menu));
+
   /**
    * The menu stands on the caret where the caret is now, measured each time
    * the popover places itself. Measured once, as the trigger was typed, a
@@ -342,14 +374,8 @@
     class="fai-scroll h-c-row-h data-grown:h-c-prompt-grown-h max-phone:h-c-prompt-grown-h w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:duration-(--dur-pop) motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
-    onblur={() => {
-      promptFocus = false;
-      closeMenu();
-    }}
+    onblur={closeMenu}
     onclick={caret}
-    onfocus={() => {
-      promptFocus = true;
-    }}
     oninput={input}
     {onkeydown}
     onkeyup={caret}
