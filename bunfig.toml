@@ -18,5 +18,14 @@
 # Bun's bundles do the same for react, which tunnel-rat imports undeclared
 # (pmndrs/tunnel-rat#24): core agent-react.ts resolves it from the agent package
 # in every Bun.build, so the root declares no react.
+#
+# A checkout bun install has not run in has no node_modules, and bun then
+# auto-installs every import into its global cache, where a package's peer is
+# never linked: core's bun-plugin-svelte loads from <cache>/bun-plugin-svelte@
+# 0.0.6@@@1 and its own import of svelte/compiler fails from there. `auto =
+# "disable"` makes such a run stop at its first import, "Cannot find package",
+# which `bun install` answers. It counts only in the directory bun starts in.
+# https://bun.com/docs/runtime/auto-install
 [install]
 hoist = false
+auto = "disable"
