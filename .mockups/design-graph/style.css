@@ -28,7 +28,7 @@
      (rehafachperson.ch, "Accessility Tools in iOS 26": "a white (dark colour scheme) or black corner"). At rest
      ours stands at Apple's 8.7:1 on the raised surface, an opaque mix of the strong ink into it (84% by day,
      81% at night); under the pointer and in a drag it brightens to the strong ink itself. */
-  --c-grip-ink-rest: light-dark(color-mix(in oklab, var(--ink-strong) 84%, var(--surface-raised)), color-mix(in oklab, var(--ink-strong) 81%, var(--surface-raised)));
+  --c-handle-ink-rest: light-dark(color-mix(in oklab, var(--ink-strong) 84%, var(--surface-raised)), color-mix(in oklab, var(--ink-strong) 81%, var(--surface-raised)));
   /* My call: how far the held handle runs out from each end of its body, three radii: past the corner's curve
      (one R) and two radii on along each straight edge, enough to show which two edges move, short enough that
      it stays the corner's mark and never becomes a lit edge. Its bend onto the hairline takes one radius. */
@@ -142,8 +142,11 @@ button { font: inherit; color: inherit; }
 .wash.del { background: var(--diff-del-bg); box-shadow: inset 0 0 0 1px var(--data-bad); }
 .wash.in { opacity: 1; }
 
-/* ---- The tool: the house floating panel ---- */
-.tool { position: fixed; z-index: var(--layer-dock); color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-overlay); font: var(--type-label); font-weight: var(--weight-body); }
+/* ---- The tool: the house floating panel ----
+   Its cast is the overlay's drop without the night ring (--shadow-overlay-hung, the house token for exactly that):
+   the ring drew a second 1px band inside the border at night, a two-tone edge under the handle's line (round
+   28, the third review). The 1px border is the panel's one edge. */
+.tool { position: fixed; z-index: var(--layer-dock); color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-overlay-hung); font: var(--type-label); font-weight: var(--weight-body); }
 .tool :focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 /* The panel stands a step over the dock, its neighbour on the same layer: the dock's long shadow falls under
    the panel, never over its corner and its handle (round 28: it greyed the panel's bottom-start corner, the
@@ -300,35 +303,45 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline
 @property --c-grip-run { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-bend { syntax: "<length>"; inherits: true; initial-value: 0px; }
 /* The handle's ink is the svg's own colour: its path's fill is the radial gradient app.js keeps in it (stops
-   in currentColor), opaque round the corner and fading along the run-out. */
-.resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; color: var(--c-grip-ink-rest); transition: color var(--dur-control) var(--ease-out); }
-.resize-handle path { --grip-p: 0; transition: --grip-p var(--dur-exit) var(--ease-out); }
+   in currentColor), opaque round the corner and fading along the run-out. Its inks by role: at rest Apple's
+   contrast (--c-handle-ink-rest), under the pointer the strong ink with the house hover fill under it (the pad),
+   held the edge ink (--border-contrast): held, the line is the border lit, and edge inks are for edges. */
+.resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; color: var(--c-handle-ink-rest); transition: color var(--dur-control) var(--ease-out); }
+.resize-handle .handle-ink { --grip-p: 0; transition: --grip-p var(--dur-exit) var(--ease-out); }
 .resize-handle stop { stop-color: currentColor; }
+.resize-handle .handle-pad { fill: var(--surface-hover); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
 /* The panel's at its border box's bottom-start corner, the dock's at the middle of its top edge. */
 #gripC { inset-inline-start: -1px; inset-block-end: -1px; }
 #gripD { inset-inline-start: 50%; inset-block-start: -1px; translate: -50% 0; }
 @media (hover: hover) {
   .panel:has(.sash-w:hover, .sash-h:hover, .sash-c:hover) #gripC,
   .dock:has(.sash-d:hover) #gripD { color: var(--ink-strong); }
+  .panel:has(.sash-w:hover, .sash-h:hover, .sash-c:hover) #gripC .handle-pad,
+  .dock:has(.sash-d:hover) #gripD .handle-pad { opacity: 1; }
 }
 /* The demo's pointer (#demo, handle-demo.html) is the hover's own state. */
 .panel[data-pointing] #gripC, .dock[data-pointing] #gripD { color: var(--ink-strong); }
-.panel:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC,
-.dock[data-resizing] #gripD { color: var(--ink-strong); }
-.panel:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC path,
-.dock[data-resizing] #gripD path { --grip-p: 1; transition: --grip-p var(--dur-reveal) var(--ease-out); }
+.panel[data-pointing] #gripC .handle-pad, .dock[data-pointing] #gripD .handle-pad { opacity: 1; }
+/* Held: the edge ink, the pad gone (the line on the border is the feedback). These outrank the hover's rules
+   (the pointer stays on the grip through a drag): the same weight, and later. */
+.panel[data-resizing]:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC,
+.dock[data-resizing][data-resizing] #gripD { color: var(--border-contrast); }
+.panel[data-resizing]:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC .handle-pad,
+.dock[data-resizing][data-resizing] #gripD .handle-pad { opacity: 0; }
+.panel[data-resizing]:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC .handle-ink,
+.dock[data-resizing][data-resizing] #gripD .handle-ink { --grip-p: 1; transition: --grip-p var(--dur-reveal) var(--ease-out); }
 /* Focus from the keyboard holds the highlight in the focus ink, with no motion (keys move the edge, so
    nothing animates on a key). */
 .panel:has(.sash-w:focus-visible, .sash-h:focus-visible, .sash-c:focus-visible) #gripC,
 .dock:has(.sash-d:focus-visible) #gripD { color: var(--focus-ring); transition: none; }
-.panel:has(.sash-w:focus-visible, .sash-h:focus-visible, .sash-c:focus-visible) #gripC path,
-.dock:has(.sash-d:focus-visible) #gripD path { --grip-p: 1; transition: none; }
+.panel:has(.sash-w:focus-visible, .sash-h:focus-visible, .sash-c:focus-visible) #gripC .handle-ink,
+.dock:has(.sash-d:focus-visible) #gripD .handle-ink { --grip-p: 1; transition: none; }
 /* Stacked graphs have no corner (the r23 ruling): no rest mark; the width edge's highlight comes in with its
    drag or its focus. */
 html[data-graphs="stack"] #gripC { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
 html[data-graphs="stack"] .panel:is([data-resizing="w"], :has(.sash-w:focus-visible)) #gripC { opacity: 1; transition: opacity var(--dur-control) var(--ease-out); }
 /* Less motion: the shape changes at once, its ink still fades. */
-@media (prefers-reduced-motion: reduce) { .resize-handle { transition: color var(--dur-fade) var(--ease-out) !important; } .resize-handle path { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .resize-handle { transition: color var(--dur-fade) var(--ease-out) !important; } .resize-handle .handle-ink { transition: none !important; } }
 
 /* The split between stacked graphs lies inside the panel, off its outline: a line across the gap (top set
    by app.js), its ends tapered, shown while it is pointed at, held or focused. */
