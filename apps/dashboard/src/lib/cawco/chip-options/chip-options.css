@@ -1,0 +1,25 @@
+/*
+ * The tokens the chip options name (the designer's spec, "New tokens"),
+ * local to the chip-options canvas: nothing in the app imports this file,
+ * and the token source (design/tokens/cawco.resolver.json) is untouched
+ * until a pick lands.
+ */
+@layer base {
+  :root {
+    /* Light: surface-recess. Dark: surface-fill (neutral-5). */
+    --chip-inline-bg: light-dark(var(--surface-recess), var(--surface-fill));
+    /* Light: border-hairline. Dark: border-control (neutral-6). */
+    --chip-inline-ring: light-dark(
+      var(--border-hairline),
+      var(--border-control)
+    );
+    /* Light: surface-hover. Dark: surface-fill-strong (neutral-7). */
+    --chip-inline-hover: light-dark(
+      var(--surface-hover),
+      var(--surface-fill-strong)
+    );
+    --c-inline-chip-max-w: 32ch;
+    /* space-2: how far a coarse pointer's hit box reaches past each end. */
+    --c-inline-chip-hit-x: var(--space-2);
+  }
+}
