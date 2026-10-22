@@ -8,12 +8,12 @@
  * and the code stages (`review` is the person's): a session there files two
  * tasks with `task_create` and starts each with `task_start` (as
  * task-approval's filer does). One task's attempt commits under apps/apple:
- * with no Mac online, its finish_item is answered with the gate's sentence
- * and it waits with wait_item, the item still running and the task never
- * failed. A Mac comes
- * online (a second scratch machine reporting darwin-arm64, a stub build
- * script in the project), the attempt finishes again, the gate's check
- * passes on the Mac, and the task reaches review.
+ * with no Mac online, its finish_item is answered with the gate's sentence,
+ * the hub has the item wait for a Mac (its wait reason said, the item still
+ * running and the task never failed), and the attempt ends its turn. A Mac
+ * comes online (a second scratch machine reporting darwin-arm64, a stub
+ * build script in the project), the hub wakes the attempt, it finishes
+ * again, the gate's check passes on the Mac, and the task reaches review.
  *
  * Attempts are delegates in workspace boundaries: this journey runs only
  * where one can start (the host), never inside a workspace.
@@ -26,7 +26,7 @@ import {
   type Reply,
   type Seen,
 } from "../../scratch-fleet";
-import { APPLE_GATE, declareGate, NO_MAC } from "../gate";
+import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
 import type { KitFleet } from "../kit";
 import { caw } from "./j1-check-in";
 import { callsInOrder, listedAs, say } from "./mock";
@@ -56,7 +56,8 @@ const GATE_CHECK = "iOS build compiles";
 const APPROVE = /^Approve →/;
 const SEND_BACK_TO = /^Send back →/;
 const FINISHED = /"name":"mcp__cawco__finish_item"/g;
-const WAITED = /"name":"mcp__cawco__wait_item"/g;
+/** The hub's end of a wait it declared (work-items.ts `endWait`). */
+const WAIT_OVER = "Your wait is over";
 const REGEX_SIGNS = /[.*+?^${}()|[\]\\]/g;
 const IOS = "Ship the iOS widget";
 const NOTES = "Write the release notes";
@@ -338,7 +339,7 @@ async function walk(leg: Leg): Promise<void> {
 /** `words` matched as they are, inside a pattern. */
 const literal = (words: string) => words.replace(REGEX_SIGNS, "\\$&");
 
-/** What an attempt does: commit its file, finish; refused for want of a Mac, wait for one, then finish again. */
+/** What an attempt does: commit its file, finish; refused for want of a Mac, end its turn as the refusal says, and finish again once the hub wakes it. */
 function attempt(seen: Seen, task: string, title: string): Reply {
   const file = title.startsWith(IOS)
     ? `apps/apple/Widget-${task}.swift`
@@ -363,25 +364,19 @@ function attempt(seen: Seen, task: string, title: string): Reply {
     input: { headline: `Did ${task}.`, summary: `Committed ${file}.` },
   };
   const finishes = (seen.body.match(FINISHED) ?? []).length;
-  const waits = (seen.body.match(WAITED) ?? []).length;
-  const refused = seen.body.split(NO_MAC).length - 1 > waits;
-  if (finishes > 0 && refused) {
-    return (
-      callsInOrder(seen, [
-        {
-          name: "wait_item",
-          input: { minutes: 3, reason: "waiting for a Mac to come online" },
-        },
-      ]) ?? say("Waiting for a Mac.")
-    );
-  }
-  if (finishes === 0 || (waits > 0 && finishes === waits)) {
+  const refusals = seen.body.split(NO_MAC).length - 1;
+  const wakes =
+    seen.all.split(MAC_ONLINE).length -
+    1 +
+    seen.all.split(WAIT_OVER).length -
+    1;
+  if (finishes === 0 || (finishes === refusals && wakes >= refusals)) {
     const name = listedAs(seen, "finish_item");
     return name
       ? { everyMs: 20, words: [], tool: { name, input: finish.input } }
       : (callsInOrder(seen, [finish]) ?? say("finish_item is not offered."));
   }
-  return say("Done.");
+  return finishes === refusals ? say("Waiting for a Mac.") : say("Done.");
 }
 
 const journey: Journey = {

@@ -421,7 +421,9 @@ export const lastCapable = (
 /**
  * Why an item does not land while no machine a step needs is online, in one
  * sentence: what it changed (for a step with `on:`), the step, and the
- * machine it would have used, by name, or that the hub knows none.
+ * machine it would have used, by name, or that the hub knows none. The item
+ * waits for one ({@link capableWaitReason}) and its session is woken when
+ * one is online ({@link capableOnline}).
  */
 export const capableRefusal = (
   step: { name: string; needs: RunsOnCapability },
@@ -434,5 +436,24 @@ export const capableRefusal = (
       ? `This project's landing gate runs “${step.name}” on ${needs}`
       : `This item changes ${touched.length === 1 ? touched[0] : `${touched.length} files “${step.name}” reads (${touched[0]} first)`}, so it lands only once “${step.name}” passes on ${needs}`;
   const machines = last ? `${last} is offline` : "the hub knows none";
-  return `${why}, and none is online (${machines}): wait for one with wait_item and call finish_item again, or call it with blocked.`;
+  return `${why}, and none is online (${machines}). The item waits for one: end your turn, and the hub wakes you when one is online to call finish_item again; or call finish_item with blocked.`;
 };
+
+/** The reason an item waits for while its gate needs `capability` and no such machine is online. */
+export const capableWaitReason = (capability: RunsOnCapability): string =>
+  `waiting for ${runsOnWords(capability)} to come online`;
+
+/** The capability an item's wait reason waits for, when it is {@link capableWaitReason}'s. */
+export const capableWaitFor = (
+  reason: string | null
+): RunsOnCapability | undefined =>
+  RUNS_ON_CAPABILITIES.find(
+    (capability) => capableWaitReason(capability) === reason
+  );
+
+/** What wakes an item that waited for `capability`: `machine`, which has it, is online. */
+export const capableOnline = (
+  capability: RunsOnCapability,
+  machine: string
+): string =>
+  `${machine}, ${runsOnWords(capability)}, is online now: call finish_item again.`;

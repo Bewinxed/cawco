@@ -127,7 +127,10 @@ import type {
 } from "./db/schema";
 import {
   capableMachines,
+  capableOnline,
   capableRefusal,
+  capableWaitFor,
+  capableWaitReason,
   changedPathsCommand,
   covers,
   diffPaths,
@@ -1565,6 +1568,22 @@ interface Gate {
   steps: GateStep[];
 }
 
+/**
+ * Why an item's gate cannot run now, in words; `needs`, when that is no
+ * online machine with a capability a due step needs: the item waits for one.
+ */
+interface GateRefusal {
+  needs?: RunsOnCapability;
+  refusal: string;
+}
+
+/**
+ * How long an item waits for a machine its gate needs before the hub wakes
+ * it to try again (the {@link WAIT_ITEM_LIMIT} ceiling); one coming online
+ * wakes it sooner, at the sweep.
+ */
+const CAPABLE_WAIT_MINUTES = 120;
+
 /** What a landing that pushed says of a project that declares no gate. */
 const NO_CHECKS = "landed with no checks: this project declares none";
 
@@ -2177,6 +2196,32 @@ export const createWorkItems = ({
       });
     }
   };
+  /**
+   * THE declared wait of a live item: `minutes` from now, for `reason`. The
+   * turn that ends with it is a waiting turn ({@link waitingTurn}), and its
+   * session is woken when it ends ({@link endWait}). wait_item declares one,
+   * and so does the gate, for an item no capable machine is online for.
+   */
+  const declareWait = (
+    item: WorkItemRow,
+    minutes: number,
+    reason: string
+  ): WorkItemRow => {
+    clearWait(item);
+    const waitUntil = new Date(Date.now() + minutes * 60_000);
+    const waiting = update(item.id, {
+      state: "running",
+      waitUntil,
+      waitReason: reason,
+      waitHistory: {
+        count: ((db.workItem(item.id) ?? item).waitHistory?.count ?? 0) + 1,
+        until: waitUntil.getTime(),
+        reason,
+      },
+    }) as WorkItemRow;
+    armWait(waiting);
+    return waiting;
+  };
 
   // --- the project's lead: co-parent of its project's items -----------------
 
@@ -2744,6 +2789,7 @@ export const createWorkItems = ({
     }
     followSessions();
     wakeAsleep();
+    wakeCapable();
   });
 
   // --- groups ---------------------------------------------------------------------
@@ -5171,10 +5217,11 @@ export const createWorkItems = ({
    * reached it, or the turn that declared the wait. That turn's end settles
    * the wait ({@link waitingTurn}, `turnState` going idle), and a re-check
    * stands meanwhile, so a turn whose end never comes holds no wait for
-   * ever. Otherwise the wait ends and the session is told so, with a minute
-   * to resume before its parent hears it did not.
+   * ever. Otherwise the wait ends and the session is told so (`words`, else
+   * that its wait is over), with a minute to resume before its parent hears
+   * it did not.
    */
-  const endWait = (id: string, turnOver = false): void => {
+  const endWait = (id: string, turnOver = false, words?: string): void => {
     const item = db.workItem(id);
     if (!item?.waitUntil) {
       disarmWait(id);
@@ -5186,7 +5233,7 @@ export const createWorkItems = ({
       lifetime.cancel(waitTimers.get(id));
       waitTimers.set(
         id,
-        lifetime.after(WAIT_RESUME_GRACE_MS, () => endWait(id))
+        lifetime.after(WAIT_RESUME_GRACE_MS, () => endWait(id, false, words))
       );
       return;
     }
@@ -5198,8 +5245,31 @@ export const createWorkItems = ({
       armWait(resuming);
       tell(
         row,
-        `Your wait is over: ${reason}. Continue, then call finish_item.`
+        words ??
+          `Your wait is over: ${reason}. Continue, then call finish_item.`
       );
+    }
+  };
+  /**
+   * THE wake of an item waiting for a machine its gate needs
+   * ({@link capableWaitReason}): once one with that capability is online,
+   * its wait ends ({@link endWait}) and its session is told to call
+   * finish_item again. The sweep looks, so a machine that registers, or
+   * whose reported OS changes, wakes it within one sweep.
+   */
+  const wakeCapable = (): void => {
+    for (const item of db.waitingWorkItems()) {
+      const needs = capableWaitFor(item.waitReason);
+      const [machine] = needs
+        ? capableMachines(db.listAgents(), needs, online)
+        : [];
+      if (needs && machine && LIVE.has(item.state)) {
+        endWait(
+          item.id,
+          false,
+          capableOnline(needs, machineName(machine.machineId))
+        );
+      }
     }
   };
   const armWait = (item: WorkItemRow): void => {
@@ -6649,12 +6719,13 @@ export const createWorkItems = ({
    * last commit, in the workspace's gate workspace there ({@link runGate}).
    * A project with no gate.md declares none. An item that lands none has no
    * gate: it puts nothing anywhere. `refusal`, in words, when gate.md does
-   * not read or no machine a due step needs is online.
+   * not read or no machine a due step needs is online (then `needs`, the
+   * capability the item waits for).
    */
   const gateSteps = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
-  ): Promise<Gate | { refusal: string }> => {
+  ): Promise<Gate | GateRefusal> => {
     const { projectId } = item;
     if (item.lands === "none" || !projectId) {
       return { declared: false, steps: [] };
@@ -6692,7 +6763,7 @@ export const createWorkItems = ({
     projectId: string,
     step: DeclaredStep,
     touched: readonly string[]
-  ): { steps: GateStep[] } | { refusal: string } => {
+  ): { steps: GateStep[] } | GateRefusal => {
     const { inputs, needs } = step;
     const reads = inputs ? touched.filter((path) => covers(inputs, path)) : [];
     if (inputs && reads.length === 0) {
@@ -6717,6 +6788,7 @@ export const createWorkItems = ({
             reads,
             lastCapable(db.listAgents(), needs)
           ),
+          needs,
         };
   };
 
@@ -6794,7 +6866,16 @@ export const createWorkItems = ({
     const settled = { landingSince: null, submission: null };
     const gate = await gateSteps(workspace, item);
     if ("refusal" in gate) {
-      update(item.id, settled);
+      const refused = update(item.id, settled) ?? item;
+      // No machine a due step needs is online: the item waits for one, never
+      // idle, and the sweep wakes it when one comes ({@link wakeCapable}).
+      if (gate.needs && LIVE.has(refused.state)) {
+        declareWait(
+          refused,
+          CAPABLE_WAIT_MINUTES,
+          capableWaitReason(gate.needs)
+        );
+      }
       return { done: false, text: gate.refusal };
     }
     const refused = await branchRefused(workspace, item, gate);
@@ -7188,21 +7269,9 @@ export const createWorkItems = ({
           `${item.title} (${item.id}) cannot wait while ${item.landingSince ? "its landing gate runs" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
         );
       }
-      clearWait(item);
-      const waitUntil = new Date(Date.now() + minutes * 60_000);
       const waitReason = reason.trim().replace(/\s+/g, " ");
-      const waiting = update(item.id, {
-        state: "running",
-        waitUntil,
-        waitReason,
-        waitHistory: {
-          count: (item.waitHistory?.count ?? 0) + 1,
-          until: waitUntil.getTime(),
-          reason: waitReason,
-        },
-      }) as WorkItemRow;
-      armWait(waiting);
-      const clock = waitClock(waitUntil);
+      const waiting = declareWait(item, minutes, waitReason);
+      const clock = waitClock(waiting.waitUntil as Date);
       const line = `${item.title} is waiting until ${clock}: ${waitReason}`;
       return `${line}\n\nEnd your turn. The hub will wake you when the wait ends.`;
     },
