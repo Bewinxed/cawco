@@ -4631,7 +4631,7 @@ export const createWorkItems = ({
    */
   const admitPaths = async (
     paths: string[],
-    reader: InstanceRow,
+    reader: Pick<Parent, "machineId" | "projectId">,
     bound: WorkspaceRef | null
   ): Promise<InputNamed[]> => {
     if (paths.length === 0) {
@@ -4708,11 +4708,14 @@ export const createWorkItems = ({
    * none for none. Each entry is checked against the core's shapes; paths
    * are admitted on `reader`'s machine ({@link admitPaths}), every other
    * entry resolved by the hub ({@link resolveHeld}); two that would land
-   * under one name are refused.
+   * under one name are refused. The hub's own reader (a routine, a design
+   * check's verifier: {@link isHubParent}) has no session row and runs in no
+   * boundary: its paths are admitted on its machine for its project, and
+   * it hands nothing held, which is read for a session.
    */
   const readInputs = async (
     entries: unknown[] | undefined,
-    reader: Pick<Parent, "id" | "machineId">
+    reader: Pick<Parent, "id" | "machineId" | "projectId">
   ): Promise<Inputs> => {
     if (!entries?.length) {
       return NO_INPUTS;
@@ -4727,13 +4730,31 @@ export const createWorkItems = ({
         `inputs: ${checked.inputs.length} entries; one delegation carries ${INPUTS_COUNT_LIMIT} at most.`
       );
     }
+    const paths = checked.inputs.filter(
+      (input): input is string => typeof input === "string"
+    );
+    if (isHubParent(reader.id)) {
+      if (paths.length < checked.inputs.length) {
+        throw new WorkItemRefusal(
+          400,
+          "inputs: the hub's own work hands paths only; what the hub holds by name is read for a session."
+        );
+      }
+      const files = await admitPaths(paths, reader, null);
+      oneNameEach(files);
+      return {
+        paths,
+        bound: null,
+        project: reader.projectId ?? null,
+        machineId: reader.machineId,
+        files,
+        held: [],
+      };
+    }
     const [row] = db.getInstancesByIds([reader.id]);
     if (!row) {
       throw new WorkItemRefusal(404, `unknown session ${reader.id}`);
     }
-    const paths = checked.inputs.filter(
-      (input): input is string => typeof input === "string"
-    );
     const bound = boundOf(row) ?? null;
     const [pathFiles, hubFiles] = await Promise.all([
       admitPaths(paths, row, bound),
