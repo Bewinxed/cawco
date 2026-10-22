@@ -120,6 +120,26 @@ const asks = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   );
 
 /**
+ * Whether `row` could wait on the person or notice them at all, read from
+ * its facts alone: the rest of its rules need its sessions (their plans,
+ * their turns, whether they ended), read only for these.
+ */
+export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
+  !facts.draft &&
+  row.heldFor === null &&
+  row.does !== "try" &&
+  ((row.openedRevision === null &&
+    (row.does === "pick" || row.does === "judge")) ||
+    (facts.picks !== null && facts.picks.made < facts.picks.asked) ||
+    facts.unsent > 0 ||
+    facts.answers.length > 0 ||
+    facts.closed.length > 0 ||
+    (facts.changes !== null &&
+      facts.changes.count > 0 &&
+      row.openedRevision !== null &&
+      row.openedRevision < row.revision));
+
+/**
  * Rule 2: the writer moved on. A step of its plan waiting on the artifact
  * holds the ask; the step the hub set ticked, removed or no longer waiting
  * lets it go, and so does the writer's next turn ending with none waiting.

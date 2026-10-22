@@ -170,6 +170,7 @@ import {
   type ArtifactAsked,
   type ArtifactFacts,
   type ArtifactSessions,
+  mayWait,
   movedOn,
   needOf,
   noticeOf,
@@ -4686,6 +4687,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /** What `row` waits on the person for now; null when nothing. */
   const pendingFor = (row: ArtifactRow): ArtifactPending | null => {
     const facts = factsOf(row);
+    if (!mayWait(row, facts)) {
+      return null;
+    }
     return pendingOf(
       row,
       { ...facts, asked: askOf(row, facts) },
@@ -4842,6 +4846,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       for (const row of rows) {
         const kept = factsOf(row);
+        if (!mayWait(row, kept)) {
+          continue;
+        }
         const facts = { ...kept, asked: askOf(row, kept) };
         const sessions = sessionsOf(row, kept);
         const need = needOf(row, facts, sessions);
