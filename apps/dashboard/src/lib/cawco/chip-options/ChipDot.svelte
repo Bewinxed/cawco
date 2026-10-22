@@ -10,9 +10,12 @@
    * mark's top-right corner: flush with the mark's end, so the chip's gap
    * stands whole between it and the label, its centre at `--dot-y`
    * (ChipMark's: its top half the chip's pad inside the chip's ground). The
-   * mark is cut away round it by `--status-dot-cut` (ChipMark's mask). Needs you echoes three loops and
-   * then stands still (PinMark's echo). A machine's presence: online and
-   * away filled in their presence inks, off a hollow `--presence-off` ring.
+   * mark is cut away round it by `--status-dot-cut` (ChipMark's mask). Its
+   * state is its motion as well as its colour: live breathes to
+   * `--breath-floor` (Live work breathes), needs you echoes three loops and
+   * then stands still (PinMark's echo), failed stands still from the start.
+   * A machine's presence: online and away filled in their presence inks,
+   * off a hollow `--presence-off` ring.
    */
   let { tone }: { tone: DotTone } = $props();
 
@@ -29,7 +32,7 @@
 
 <span
   aria-hidden="true"
-  class="absolute z-1 top-(--dot-top) end-0 size-(--status-dot-size) rounded-pill bg-(color:--dot) data-[tone=off]:inset-ring-(length:--status-dot-cut) data-[tone=off]:inset-ring-presence-off"
+  class="absolute z-1 top-(--dot-top) end-0 size-(--status-dot-size) rounded-pill bg-(color:--dot) motion-safe:data-[tone=live]:animate-breath data-[tone=off]:inset-ring-(length:--status-dot-cut) data-[tone=off]:inset-ring-presence-off"
   data-slot="dot"
   data-tone={tone}
   style:--dot={INK[tone]}

@@ -2,7 +2,8 @@
  * Chip Option A, glyph, number, dot (Component Story Format 3, live
  * components): the inline chip with its kind as a 12px Solar duotone glyph
  * in the 18px mark slot, a tile only for a session, a project and a
- * machine, and its state as the house status dot or a swapped glyph. The
+ * machine, and its state as the house status dot (live breathes, needs you
+ * echoes, failed stands still, finished draws none) or a swapped glyph. The
  * meta's args are every story's; a story's own args are what it changes.
  * A scratch canvas for the owner's pick; nothing in the app mounts it.
  */
@@ -17,6 +18,12 @@ export default {
 
 /** Every kind at rest, one chip of each. */
 export const EveryKind = { ...states.every, parameters: { viewport: 1440 } };
+
+/** Every kind at rest, one chip of each, on a phone. */
+export const EveryKindPhone = {
+  ...states.every,
+  parameters: { viewport: 390 },
+};
 
 /** A session idle, working, needing you, failed and done. */
 export const Session = states.session;

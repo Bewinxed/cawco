@@ -1,8 +1,10 @@
 /**
  * Chip Option B, the kind as a word (Component Story Format 3, live
  * components): the inline chip led by a caps-role keycap naming its kind
- * (PIN 12, CARD, TASK, PLAN 3/7), its state the keycap's tint, the status
- * pair's fill and ink; a session keeps its tile and dot. The
+ * (PIN 12, CARD, TASK, PLAN 3/7), its state the keycap's tint (the status
+ * pair's fill and ink for live, needs you and failed), outline (pending),
+ * tick (done) or presence dot (a machine); a session keeps its tile and
+ * dot. The
  * meta's args are every story's; a story's own args are what it changes.
  * A scratch canvas for the owner's pick; nothing in the app mounts it.
  */
@@ -17,6 +19,12 @@ export default {
 
 /** Every kind at rest, one chip of each. */
 export const EveryKind = { ...states.every, parameters: { viewport: 1440 } };
+
+/** Every kind at rest, one chip of each, on a phone. */
+export const EveryKindPhone = {
+  ...states.every,
+  parameters: { viewport: 390 },
+};
 
 /** A session idle, working, needing you, failed and done. */
 export const Session = states.session;

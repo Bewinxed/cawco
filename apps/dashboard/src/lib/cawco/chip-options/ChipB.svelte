@@ -3,9 +3,11 @@
    * Option B, the kind is a word (GitHub, Plain, Linear, Tana, Slack): a
    * caps-role keycap (`--type-caps`, 500 11px, tabular) at the chip's start,
    * `space-1` in, then a `space-1` gap and the label. The state is the
-   * keycap's tint: with no state, bare `ink-muted` words; with one, the
-   * status pair's fill and ink, the mark's 18px tall, `radius-xs`, `space-1`
-   * each side. The keycap never clips; the label clips at the chip's
+   * keycap's tint: at rest, bare `ink-muted` words; live, needs you and
+   * failed, the status pair's fill and ink, the mark's 18px tall,
+   * `radius-xs`, `space-1` each side; pending, an outline in the keycap's
+   * ink; done, a tick after the word. A machine's keycap carries its
+   * presence dot. The keycap never clips; the label clips at the chip's
    * maximum width. A session keeps its tile and dot (Option A's). The state
    * word is in the chip's name and in its peek's head.
    */
@@ -59,9 +61,14 @@
   });
 
   /**
-   * The keycap's tint: a status pair, a pin's own faces, or none. A sent
-   * pin, a blocked task, a paused or scheduled routine, an online machine,
-   * an idle project and every artifact stand bare.
+   * The keycap's tint: a status pair for what moves or asks (live, needs
+   * you, failed), a pin's own faces, an outline in the keycap's own ink for
+   * work not started (pending), or none. Done is no fill but a tick in
+   * `status-done-glyph`, so finished work stays quiet and a line of done
+   * chips is not a row of one olive. Rest stands bare (DESIGN.md, The Idle
+   * Has No Fill Rule): a sent pin, a blocked task, a paused or scheduled
+   * routine, an idle project, a machine (its presence is its dot) and every
+   * artifact.
    */
   const tint = $derived.by(() => {
     if (chip.kind === "pin") {
@@ -74,15 +81,20 @@
       return state === "unread" ? "attn" : null;
     }
     if (chip.kind === "machine") {
-      return state === "away" ? "attn" : null;
+      return null;
     }
-    if (chip.kind === "routine") {
-      return state === "ok" || state === "failed" || state === "running"
-        ? role
-        : null;
+    if (state === "pending") {
+      return "pending";
     }
-    return role;
+    return role === "done" ? null : role;
   });
+
+  /** A machine's presence dot: the machine row's (DESIGN.md, Machine row). */
+  const PRESENCE: Record<string, string> = {
+    online: "bg-presence-online",
+    away: "bg-presence-away",
+    off: "inset-ring-(length:--status-dot-cut) inset-ring-presence-off",
+  };
 
   /** A bare keycap's own ink: a project's hue, an offline machine's grey. */
   const ink = $derived.by(() => {
@@ -116,13 +128,15 @@
     type="button"
   >
     {#if chip.kind === "session"}
-      <ChipMark dot={role} fill={`var(--mark-${chip.hue ?? 1})`}
+      <ChipMark
+        dot={role === "done" ? null : role}
+        fill={`var(--mark-${chip.hue ?? 1})`}
         ><Sprite class="size-icon-sm" /></ChipMark
       >
     {:else}
       <span
         aria-hidden="true"
-        class="mark-line num inline-flex h-c-inline-chip-line flex-none items-center gap-space-1 whitespace-nowrap rounded-xs type-caps text-ink-muted data-tint:px-space-1 data-[tint=live]:bg-status-live-bg data-[tint=live]:text-status-live-ink data-[tint=attn]:bg-status-attn-bg data-[tint=attn]:text-status-attn-ink data-[tint=done]:bg-status-done-bg data-[tint=done]:text-status-done-ink data-[tint=fail]:bg-status-fail-bg data-[tint=fail]:text-status-fail-ink data-[tint=resolved]:bg-surface-fill-strong data-[tint=gone]:outline-1 data-[tint=gone]:outline-dashed data-[tint=gone]:-outline-offset-1 data-[tint=gone]:outline-border-control {ink}"
+        class="mark-line num inline-flex h-c-inline-chip-line flex-none items-center gap-space-1 whitespace-nowrap rounded-xs type-caps text-ink-muted data-tint:px-space-1 data-[tint=live]:bg-status-live-bg data-[tint=live]:text-status-live-ink data-[tint=attn]:bg-status-attn-bg data-[tint=attn]:text-status-attn-ink data-[tint=done]:bg-status-done-bg data-[tint=done]:text-status-done-ink data-[tint=fail]:bg-status-fail-bg data-[tint=fail]:text-status-fail-ink data-[tint=resolved]:bg-surface-fill-strong data-[tint=pending]:outline-1 data-[tint=pending]:-outline-offset-1 data-[tint=pending]:outline-current data-[tint=gone]:outline-1 data-[tint=gone]:outline-dashed data-[tint=gone]:-outline-offset-1 data-[tint=gone]:outline-current {ink}"
         data-box
         data-slot="kind"
         data-tint={tint ?? undefined}
@@ -133,15 +147,17 @@
         <span>{word}</span>
         {#if chip.kind === "task" && state === "blocked"}
           <IconLock class="size-icon-sm" />
-        {:else if chip.kind === "todo" && state === "ticked"}
-          <IconTick class="size-icon-sm" />
+        {:else if role === "done" && chip.kind !== "pin"}
+          <IconTick class="size-icon-sm text-status-done-glyph" />
         {:else if chip.kind === "routine" && state === "paused"}
           <IconPauseCircle class="size-icon-sm" />
-        {:else if chip.kind === "machine" && state === "off"}
+        {:else if chip.kind === "machine"}
           <span
-            class="size-(--status-dot-size) rounded-pill inset-ring-(length:--status-dot-cut) inset-ring-current"
+            class="size-(--status-dot-size) flex-none rounded-pill {PRESENCE[
+              state
+            ]}"
             data-box
-            data-slot="ring"
+            data-slot="presence"
           ></span>
         {/if}
       </span>

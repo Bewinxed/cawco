@@ -130,8 +130,8 @@ export const STATES: Record<ChipKind, Record<string, string>> = {
 /** The state's colour role (the spec's table). */
 export function roleOf(kind: ChipKind, state: string): StateRole {
   if (kind === "machine") {
-    // Presence is its own dot (A) or tint (B), not a status role.
-    return state === "away" ? "attn" : null;
+    // Presence is its own dot in both options, not a status role.
+    return null;
   }
   switch (state) {
     case "working":

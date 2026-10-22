@@ -3,11 +3,12 @@
    * Option A, glyph, number, dot (Linear, GitHub, Campsite): the kind is a
    * distinct 12px Solar duotone glyph in the 18px mark slot. The slot is a
    * filled identity tile only for a session, a project and a machine; every
-   * other kind is its bare glyph in `ink-muted`. A numbered kind carries its
-   * number by the mark. The state is the house status dot on the mark's
-   * top-right corner; where the glyph is the state (a to-do's box, a plan's
-   * ring, a step's circle) the glyph swaps instead. The state word is in the
-   * chip's name and in its peek's head.
+   * other kind is its bare glyph in the label's `ink-strong` (ChipMark). A
+   * numbered kind carries its number by the mark. The state is the house
+   * status dot on the mark's top-right corner, its motion as well as its
+   * colour; where the glyph is the state (a to-do's box, a plan's ring, a
+   * step's circle, a picked card's check) the glyph swaps instead. The state
+   * word is in the chip's name and in its peek's head.
    */
   import type { Component } from "svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -60,7 +61,12 @@
     site: IconGlobe,
   };
 
-  /** The dot a kind's state puts on its mark. */
+  /**
+   * The dot a kind's state puts on its mark. Finished draws none, as on the
+   * house tree mark ("Idle and finished: nothing"); a kind whose glyph can
+   * say done swaps it instead. Live breathes, needs you echoes, failed
+   * stands still (ChipDot), so no two dots differ by colour alone.
+   */
   const dot = $derived.by((): DotTone | null => {
     switch (chip.kind) {
       case "machine":
@@ -86,7 +92,7 @@
       case "routine":
       case "workflow":
       case "run":
-        return role;
+        return role === "done" ? null : role;
     }
   });
 
