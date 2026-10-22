@@ -60,6 +60,7 @@
    * One column under its title that scrolls, as tall as what it holds up
    * to the room over the row (to the top of the composer's dock).
    */
+  import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { Button } from "#lib/components/ui/button/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
@@ -67,6 +68,7 @@
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { popIn, popOut } from "../motion/pop.svelte";
+  import { composerLayer } from "../transcript/composer-layer.svelte";
   import PlanTree from "./PlanTree.svelte";
 
   let {
@@ -113,6 +115,21 @@
     onclose();
     ring?.focus();
   }
+
+  /**
+   * It holds the composer's layer while it is open: the tray's shelf
+   * opening over the same row takes it, and the plan shuts.
+   */
+  const layerOwner = Symbol("plan");
+  $effect.pre(() => {
+    untrack(() => composerLayer.take(layerOwner));
+  });
+  $effect(() => {
+    if (!composerLayer.holds(layerOwner)) {
+      untrack(onclose);
+    }
+  });
+  $effect(() => () => composerLayer.drop(layerOwner));
 
   let section = $state<HTMLElement>();
   function onkeydown(event: KeyboardEvent): void {

@@ -673,6 +673,44 @@ function traceObservers(): void {
   });
 }
 
+/**
+ * The shelf and the plan rise from the same row to the same place: they
+ * stand one at a time (composer-layer). The plan opened, then the shelf:
+ * the shelf alone; then the plan again: the plan alone.
+ */
+async function oneAtATime(kit: Kit, page: Page, name: string): Promise<void> {
+  const opener = (await visible(page, MORE)) ? MORE : FAILED;
+  if (!((await visible(page, RING)) && (await visible(page, opener)))) {
+    kit.note(
+      `${name} · one layer at a time: not here (no plan ring or no shelf chip)`
+    );
+    return;
+  }
+  const standing = () =>
+    page.evaluate(() => ({
+      plan: document.querySelectorAll('section[data-slot="plan"]').length,
+      shelf: document.querySelectorAll('section[data-slot="shelf"]').length,
+    }));
+  await page.locator(RING).click();
+  await settle(page, 500);
+  await page.locator(opener).first().click();
+  await settle(page, 500);
+  const shelfOver = await standing();
+  await page.locator(RING).click();
+  await settle(page, 500);
+  const planOver = await standing();
+  await page.locator(RING).click();
+  await settle(page, 500);
+  kit.check(
+    `${name} · one layer at a time: the shelf opened over the plan shuts it, and the plan opened over the shelf shuts that`,
+    shelfOver.plan === 0 &&
+      shelfOver.shelf === 1 &&
+      planOver.plan === 1 &&
+      planOver.shelf === 0,
+    JSON.stringify({ shelfOver, planOver })
+  );
+}
+
 async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
   const name = `${at.engine} ${at.width} · ${at.count} delegates · ${at.place}`;
   const page = await kit.page(at.view, { engine: at.engine });
@@ -701,6 +739,18 @@ async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
       `${error.name}: ${error.message} ${error.stack ?? ""}`.slice(0, 600)
     );
   });
+  if (process.env.LAYERS_SURFACES === undefined) {
+    try {
+      await place(page, at.place);
+      await oneAtATime(kit, page, name);
+    } catch (error) {
+      kit.check(
+        `${name} · one layer at a time: runs`,
+        false,
+        String(error).split("\n")[0]
+      );
+    }
+  }
   for (const surface of surfacesRead()) {
     const what = `${name} · ${surface.name}`;
     try {

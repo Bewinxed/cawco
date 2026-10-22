@@ -70,6 +70,7 @@
   import { pressOutside } from "../press-outside";
   import RowFault from "../RowFault.svelte";
   import { sessionPlace } from "../session-names.svelte";
+  import { composerLayer } from "./composer-layer.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import { layoutScale } from "./grown";
   import { askDetailOf, askShortOf, matchesSession } from "./present";
@@ -843,6 +844,7 @@
     if (root) {
       shelfRoom = Math.max(0, roomOver(root));
     }
+    composerLayer.take(layerOwner);
     shelf = kind;
     opener = key;
     // Opened from the keys (a click with no pointer), focus goes in with it.
@@ -865,7 +867,16 @@
     }
     shelf = null;
     allReason = null;
+    composerLayer.drop(layerOwner);
   }
+  /** The shelf's hold on the composer's layer: another taking it (the plan) shuts it. */
+  const layerOwner = Symbol("delegate tray shelf");
+  $effect(() => {
+    if (shelf && !composerLayer.holds(layerOwner)) {
+      untrack(() => closeShelf(false));
+    }
+  });
+  $effect(() => () => composerLayer.drop(layerOwner));
   // Nothing left to list: the shelf shuts.
   $effect(() => {
     if (
