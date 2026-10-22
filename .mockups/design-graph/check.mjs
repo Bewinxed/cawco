@@ -71,11 +71,12 @@ function install() {
     return out;
   };
   K.controls = () => [...document.querySelectorAll("button, input, [role=button], [role=tab], .badge")].filter((el) => K.vis(el) && !el.closest(".tip")).map((el) => ({ el, r: el.getBoundingClientRect(), kind: "control" }));
-  // The resize handle's path read back from its computed `d` (round 28): app.js draws it as a ribbon, side A
+  // The resize handle's path read back from the `d` app.js paints from its --grip-p (round 28): app.js draws it as a ribbon, side A
   // (N + 1 points), a cap, side B back (N + 1), a cap. So the centreline, the width at every sample, a circle
   // fitted to the centreline (page px), its sweep and the whole shape's extent come straight off the points.
   K.grip = (svg) => {
-    const path = svg.querySelector("path"), m = path.getScreenCTM(), d = getComputedStyle(path).d;
+    if (window.paintGrips) paintGrips();
+    const path = svg.querySelector("path"), m = path.getScreenCTM(), d = path.getAttribute("d") || "";
     const nums = (d.match(/-?\d*\.?\d+(e-?\d+)?/g) || []).map(Number), P = [];
     for (let i = 0; i + 1 < nums.length; i += 2) { const q = new DOMPoint(nums[i], nums[i + 1]).matrixTransform(m); P.push([q.x, q.y]); }
     const total = P.length, N = (total - 2 * 8) / 2 - 1, A = P.slice(0, N + 1), B = P.slice(N + 1 + 8, 2 * N + 2 + 8).reverse();
@@ -88,7 +89,80 @@ function install() {
     const cx = -Dx / 2, cy = -Ey / 2, r = Math.sqrt(cx * cx + cy * cy - F), ang = (p) => Math.atan2(p[1] - cy, p[0] - cx);
     let sweep = Math.abs(ang(mid[n - 1]) - ang(mid[0])) * 180 / Math.PI; if (sweep > 180) sweep = 360 - sweep;
     const xs = P.map((p) => p[0]), ys = P.map((p) => p[1]), len = mid.reduce((s, p, i) => (i ? s + Math.hypot(p[0] - mid[i - 1][0], p[1] - mid[i - 1][1]) : 0), 0);
-    return { points: total, cx, cy, r, sweep, len, w0: w[0], wN: w[n - 1], wMid: w[Math.floor(n / 2)], wMax: Math.max(...w), ends: [mid[0], mid[n - 1]], box: { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) }, fill: K.rgba(getComputedStyle(path).fill), shown: K.vis(svg) };
+    return { points: total, cx, cy, r, sweep, len, w0: w[0], wN: w[n - 1], wMid: w[Math.floor(n / 2)], wMax: Math.max(...w), ends: [mid[0], mid[n - 1]], box: { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) }, fill: K.rgba(getComputedStyle(path).fill), shown: K.vis(svg), mid, w };
+  };
+  // The owner's bar for the line along the edges (round 28): read the stroke's width and opacity at every
+  // centreline point of the one path, end to end. Symmetric: equal width at mirrored points, and the mirrored
+  // points mirror in place (the corner's about its diagonal, the dock's about its middle). Monotonic: from the
+  // middle out to each tip the width never grows. Continuous: no step in width, place or heading from one point
+  // to the next, the corner included. Opacity: one opaque solid fill on the one path, nothing over or under it
+  // that fades it (no mask, filter, gradient or partial opacity on it or the handle).
+  K.gripProfile = (svg) => {
+    const g = K.grip(svg), path = svg.querySelector("path"), T = svg.closest(".tool"), b = T.getBoundingClientRect(), n = g.mid.length, corner = svg.id === "gripC";
+    // A point's place in the tool's own frame: across its edge and along it (corner: in from the width edge, up
+    // from the foot; dock: from the middle, down from the top).
+    const own = ([x, y]) => (corner ? [x - b.left, b.bottom - y] : [x - (b.left + b.width / 2), y - b.top]);
+    const P = g.mid.map(own);
+    let sym = 0, place = 0;
+    for (let i = 0; i < n; i++) {
+      const j = n - 1 - i, a = P[i], c = P[j];
+      sym = Math.max(sym, Math.abs(g.w[i] - g.w[j]));
+      place = Math.max(place, corner ? Math.hypot(a[0] - c[1], a[1] - c[0]) : Math.hypot(a[0] + c[0], a[1] - c[1]));
+    }
+    const half = Math.floor(n / 2);
+    let grow = 0; for (let i = 0; i < half; i++) grow = Math.max(grow, g.w[i] - g.w[i + 1], g.w[n - 1 - i] - g.w[n - 2 - i]);
+    let dw = 0, step = 0, turn = 0;
+    for (let i = 1; i < n; i++) { dw = Math.max(dw, Math.abs(g.w[i] - g.w[i - 1])); step = Math.max(step, Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1])); }
+    for (let i = 2; i < n; i++) { const h1 = Math.atan2(P[i - 1][1] - P[i - 2][1], P[i - 1][0] - P[i - 2][0]), h2 = Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0]); let d = Math.abs(h2 - h1) * 180 / Math.PI; if (d > 180) d = 360 - d; if (Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]) > 0.05 && Math.hypot(P[i - 1][0] - P[i - 2][0], P[i - 1][1] - P[i - 2][1]) > 0.05) turn = Math.max(turn, d); }
+    // No corner cut: every run-out point (the first and last 32) stands on its own edge's line, e in from that
+    // edge (the corner's: in from the width edge, then up from the foot; the dock's: down from its top), at
+    // every frame, rest included (parked on the arc's overshoot, within a hundredth of it).
+    const rs = getComputedStyle(document.documentElement), e = parseFloat(getComputedStyle(T).borderBottomLeftRadius) - parseFloat(rs.getPropertyValue("--c-grip-pull")) - parseFloat(rs.getPropertyValue("--c-grip-r"));
+    let line = 0; for (let i = 0; i < 32; i++) line = Math.max(line, Math.abs(P[i][corner ? 0 : 1] - e), Math.abs(P[n - 1 - i][1] - e));
+    const pcs = getComputedStyle(path), scs = getComputedStyle(svg), fill = K.rgba(pcs.fill);
+    const solid = fill[3] === 1 && +pcs.fillOpacity === 1 && +pcs.opacity === 1 && pcs.stroke === "none" && pcs.maskImage === "none" && pcs.filter === "none" && scs.maskImage === "none" && scs.filter === "none" && !/url\(/.test(pcs.fill);
+    // Nine samples for the report: each tip, half way out, each join, the middle (the arc's apex), mirrored.
+    const q = (v) => Math.round(v * 100) / 100, at = [0, 8, 16, 31, half, n - 32, n - 17, n - 9, n - 1].filter((i) => i >= 0 && i < n);
+    return { n, sym: q(sym), place: q(place), grow: Math.round(grow * 1000) / 1000, dw: q(dw), step: q(step), turn: q(turn), line: q(line), e: q(e), solid, opacity: +scs.opacity, samples: at.map((i) => [i, q(P[i][0]), q(P[i][1]), q(g.w[i])]) };
+  };
+  // A one-sided faded edge on a panel (round 28, the owner's pin): every line drawn on the panel or the dock (an
+  // element or a pseudo-element under 8px across with a gradient fill or a mask) must fade the same at both
+  // ends: its gradient's stops read the same from either end.
+  K.fadedLines = () => {
+    const out = [], lines = [];
+    const split = (s) => { const parts = []; let depth = 0, cur = ""; for (const ch of s) { if (ch === "(") depth++; if (ch === ")") depth--; if (ch === "," && depth === 0) { parts.push(cur.trim()); cur = ""; } else cur += ch; } if (cur.trim()) parts.push(cur.trim()); return parts; };
+    const mirror = (grad) => {
+      const m = grad.match(/^(?:repeating-)?linear-gradient\((.*)\)$/s); if (!m) return false;
+      let stops = split(m[1]); if (/^(to |-?[\d.]+deg)/.test(stops[0])) stops = stops.slice(1);
+      const col = (s) => s.replace(/\s+(calc\(.*\)|-?[\d.]+(px|%))$/, "").trim(), pos = (s) => s.slice(col(s).length).trim();
+      // Two stops mirror when one stands as far from the end as the other from the start.
+      const far = (p) => { const m = p.match(/^calc\(100% - (.*)\)$/); if (m) return m[1]; const pc = p.match(/^(-?[\d.]+)%$/); return pc ? 100 - +pc[1] + "%" : p === "0px" ? "100%" : null; };
+      const mirrored = (pa, pb) => (pa === "" && pb === "") || far(pb) === pa || far(pa) === pb || (pa === "0%" && pb === "100%") || (pa === "100%" && pb === "0%");
+      for (let i = 0; i < stops.length; i++) {
+        const a = stops[i], b = stops[stops.length - 1 - i];
+        if (K.rgba(col(a)).join() !== K.rgba(col(b)).join()) return false;
+        if (i !== stops.length - 1 - i && !mirrored(pos(a), pos(b))) return false;
+      }
+      return true;
+    };
+    // The timeline's own marks inside the dock (a spring's settle tail, the ruler) are data, not the panel's
+    // edges; everything else on both panels is read.
+    for (const el of document.querySelectorAll("#panel, #panel *, #dock, #dock *")) {
+      if (el.closest("svg, .tl")) continue;
+      for (const pseudo of [null, "::before", "::after"]) {
+        const cs = getComputedStyle(el, pseudo);
+        if (pseudo && cs.content === "none") continue;
+        if (cs.display === "none" || cs.visibility === "hidden") continue;
+        const imgs = [cs.backgroundImage, cs.maskImage].filter((v) => v && v !== "none" && /gradient/.test(v));
+        if (!imgs.length) continue;
+        const w = parseFloat(cs.width), h = parseFloat(cs.height);
+        if (!(Math.min(w, h) < 8 && Math.max(w, h) >= 24)) continue;
+        const name = (el.id || (typeof el.className === "string" ? el.className : "") || el.tagName) + (pseudo || "");
+        lines.push(name);
+        for (const v of imgs) for (const gr of split(v)) if (!mirror(gr)) out.push(name + " fades one way: " + gr.slice(0, 120));
+      }
+    }
+    return { lines, out };
   };
   K.compact = () => document.documentElement.dataset.layout !== "desk";
   // The graphs and pages on screen: one each below the line, every component's from it.
@@ -406,6 +480,7 @@ for (const view of views) await runView(view);
 for (const view of compactViews) await runClass(view);
 await runReduced();
 await runTwoX("light"); await runTwoX("dark");
+await runWebKit("light"); await runWebKit("dark");
 grepCheck();
 await browser.close();
 console.log("\n" + passes + " passed, " + fails + " failed");
@@ -571,10 +646,10 @@ async function runView(view) {
         }
       };
       const panel = document.getElementById("panel");
-      // The handle's arc in the panel's corner (round 28): its centreline circle shares the corner's centre, its
-      // radius the panel's less its inset.
+      // The handle's arc in the panel's corner (round 28): Apple's, measured, is not concentric. Its circle's
+      // centre stands 0.201 R from the corner radius's centre toward the corner on both axes, its radius 0.560 R.
       const pb = panel.getBoundingClientRect(), gc = document.getElementById("gripC");
-      if (gc && K.vis(panel) && K.vis(gc) && !panel.dataset.resizing) { const g = K.grip(gc), R = parseFloat(getComputedStyle(panel).borderBottomLeftRadius), off = Math.hypot(g.cx - (pb.left + R), g.cy - (pb.bottom - R)); out.push({ name: "panel ⊃ handle arc", R, r: Math.round(g.r * 100) / 100, gap: Math.round((R - g.r) * 100) / 100, even: true, pass: off <= 0.5 }); }
+      if (gc && K.vis(panel) && K.vis(gc) && !panel.dataset.resizing) { const g = K.grip(gc), R = parseFloat(getComputedStyle(panel).borderBottomLeftRadius), k = 0.201 * R, off = Math.hypot(g.cx - (pb.left + R - k), g.cy - (pb.bottom - R + k)); out.push({ name: "panel ⊃ handle arc (Apple's: centre 0.201 R toward the corner, r 0.560 R)", R, r: Math.round(g.r * 100) / 100, gap: Math.round((R - g.r) * 100) / 100, even: true, pass: off <= 0.5 && Math.abs(g.r - 0.56 * R) <= 0.1 }); }
       for (const n of document.querySelectorAll(".node")) pair("region ⊃ node", n.closest(".region"), n);
       for (const b of document.querySelectorAll(".zoom .icon-btn")) pair("zoom group ⊃ button", b.closest(".zoom"), b);
       for (const t of document.querySelectorAll(".t-tabs")) pair("tabs track ⊃ pill", t, t.querySelector(".t-tabs-pill"));
@@ -613,8 +688,14 @@ async function runView(view) {
     return out;
   });
   ok(V, "3 no element on the panel or the dock draws a border or an inset ring wider than 1px", thick.length === 0, thick.slice(0, 6).join(", "));
-  // The handle (round 28): iPadOS 26's, measured on Apple's picture against its window's corner radius R.
-  const MEAS = { inset: 0.198, stroke: 0.111, sweep: 72.8, contrast: 8.7 };
+  const faded = await ev(() => __k.fadedLines());
+  ok(V, "3 no one-sided faded edge on the panel or the dock: every line drawn on them fades the same at both ends", faded.out.length === 0, (faded.out.length ? faded.out.join(" | ") + "; " : "") + "lines read: " + (faded.lines.join(", ") || "none"));
+  // The handle (round 28): iPadOS 26's, measured on Apple's picture against its window's corner radius R (its
+  // circle's centre pulled toward the corner, its radius, its stroke, its sweep; its contrast on its window).
+  const MEAS = { pull: 0.201, r: 0.56, stroke: 0.114, sweep: 95, contrast: 8.7 };
+  // The owner's bar for the line (sym, place, grow, dw, step, turn as K.gripProfile reads them).
+  const lineOK = (p, wmax) => p.sym <= 0.02 && p.place <= 0.05 && p.grow <= 0.001 && p.dw <= wmax * Math.sin(Math.PI / 64) + 0.02 && p.turn <= 12 && p.line <= 0.05 && p.solid && p.opacity === 1;
+  const profile = (id) => ev((id) => __k.gripProfile(document.getElementById(id)), id);
   const inkIs = (a, b) => a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) <= 1);
   const gripAt = (id) => ev((id) => {
     const svg = document.getElementById(id), T = svg.closest(".tool"), b = T.getBoundingClientRect(), cs = getComputedStyle(T), g = __k.grip(svg), raised = __k.bgOf(T);
@@ -626,19 +707,24 @@ async function runView(view) {
   const stackPanel = view.multi === "stack";
   await page.mouse.move(5, 5); await settle(450);
   const g0 = await gripAt("gripC");
-  const Rp = g0.R, want = { r: Rp * (1 - MEAS.inset), w: Rp * MEAS.stroke, len: Rp * (1 - MEAS.inset) * MEAS.sweep * Math.PI / 180 };
-  const diag = (g) => { const a = g.ends.map((e) => Math.atan2(e[1] - g.cy, e[0] - g.cx) * 180 / Math.PI); return r2((a[0] + a[1]) / 2); };
+  const Rp = g0.R, want = { k: Rp * MEAS.pull, r: Rp * MEAS.r, w: Rp * MEAS.stroke, len: Rp * MEAS.r * MEAS.sweep * Math.PI / 180, e: Rp * (1 - MEAS.pull - MEAS.r) };
+  // The arc's middle direction from its circle's centre: the circular mean of its two ends (the 95° arc runs
+  // across ±180°, so a plain mean of the two angles would wrap).
+  const diag = (g) => { const a = g.ends.map((e) => Math.atan2(e[1] - g.cy, e[0] - g.cx)); return r2((Math.atan2(Math.sin(a[0]) + Math.sin(a[1]), Math.cos(a[0]) + Math.cos(a[1])) * 180) / Math.PI); };
   if (stackPanel) ok(V, "3 stacked graphs: no corner, so no handle at rest (the width edge carries no mark of its own)", g0.op === "0", "opacity " + g0.op);
   else {
-    const off = Math.hypot(g0.cx - (g0.tool.left + Rp), g0.cy - (g0.tool.bottom - Rp));
-    ok(V, "3 handle at rest: an arc concentric with the panel's resizing corner, its centre within 0.5px of the corner radius's, its radius the panel's " + Rp + "px less the measured 0.198 R (" + r2(want.r) + "px)", g0.shown && off <= 0.5 && Math.abs(g0.r - want.r) <= 0.1, JSON.stringify({ centre: [r2(g0.cx), r2(g0.cy)], corner: [r2(g0.tool.left + Rp), r2(g0.tool.bottom - Rp)], off: r2(off), r: r2(g0.r) }));
-    ok(V, "3 handle at rest: the measured stroke (0.111 R = " + r2(want.w) + "px) the arc's whole length, round caps, sweeping the measured 72.8° centred on the corner's diagonal (135°)", Math.abs(g0.wMid - want.w) <= 0.05 && Math.abs(g0.w0 - want.w) <= 0.05 && Math.abs(g0.wN - want.w) <= 0.05 && Math.abs(g0.wMax - want.w) <= 0.05 && Math.abs(g0.sweep - MEAS.sweep) <= 0.5 && Math.abs(diag(g0) - 135) <= 0.5, JSON.stringify({ w: [r2(g0.w0), r2(g0.wMid), r2(g0.wN)], sweep: r2(g0.sweep), diagonal: diag(g0), points: g0.points }));
-    ok(V, "3 handle at rest: Apple's contrast, " + MEAS.contrast + ":1 on the raised surface (the strong ink mixed into it)", inkIs(g0.fill, g0.rest) && Math.abs(g0.ratio - MEAS.contrast) <= 0.3, g0.ratio + ":1");
+    const at = [g0.tool.left + Rp - want.k, g0.tool.bottom - Rp + want.k], off = Math.hypot(g0.cx - at[0], g0.cy - at[1]);
+    ok(V, "3 handle at rest: Apple's arc in the panel's resizing corner, its circle's centre within 0.5px of the measured place (the corner radius's centre pulled 0.201 R = " + r2(want.k) + "px toward the corner on both axes), its radius the measured 0.560 R (" + r2(want.r) + "px)", g0.shown && off <= 0.5 && Math.abs(g0.r - want.r) <= 0.1, JSON.stringify({ centre: [r2(g0.cx), r2(g0.cy)], want: at.map(r2), cornerCentre: [r2(g0.tool.left + Rp), r2(g0.tool.bottom - Rp)], off: r2(off), r: r2(g0.r) }));
+    ok(V, "3 handle at rest: the measured stroke (0.114 R = " + r2(want.w) + "px) the arc's whole length, round caps, sweeping the measured " + MEAS.sweep + "° centred on the corner's diagonal (135°)", Math.abs(g0.wMid - want.w) <= 0.05 && Math.abs(g0.w0 - want.w) <= 0.05 && Math.abs(g0.wN - want.w) <= 0.05 && Math.abs(g0.wMax - want.w) <= 0.05 && Math.abs(g0.sweep - MEAS.sweep) <= 0.5 && Math.abs(diag(g0) - 135) <= 0.5, JSON.stringify({ w: [r2(g0.w0), r2(g0.wMid), r2(g0.wN)], sweep: r2(g0.sweep), diagonal: diag(g0), points: g0.points }));
+    ok(V, "3 handle at rest: Apple's contrast, " + MEAS.contrast + ":1 on the raised surface (--c-grip-ink-rest, the strong ink mixed into it, opaque)", inkIs(g0.fill, g0.rest) && g0.fill[3] === 1 && Math.abs(g0.ratio - MEAS.contrast) <= 0.3, g0.ratio + ":1");
+    const p = await profile("gripC");
+    ok(V, "3 handle at rest, the line read end to end: one opaque fill, the same width at mirrored points, mirrored about the diagonal, no step anywhere", lineOK(p, want.w), JSON.stringify(p));
   }
   const dockOn = await ev(() => __k.vis(document.getElementById("gripD")));
   if (dockOn) {
-    const d0 = await gripAt("gripD"), dr = reach(d0);
-    ok(V, "3 the dock's handle at rest: the same stroke as a capsule the arc's length (" + r2(want.len) + "px), " + r2(Rp * MEAS.inset) + "px in from its top edge, centred on it, in the same ink", Math.abs(d0.len - want.len) <= 0.1 && Math.abs(d0.wMid - want.w) <= 0.05 && Math.abs(d0.w0 - want.w) <= 0.05 && Math.abs(d0.ends[0][1] - (d0.tool.top + Rp * MEAS.inset)) <= 0.1 && Math.abs(dr.mid) <= 0.5 && inkIs(d0.fill, d0.rest), JSON.stringify({ len: r2(d0.len), w: r2(d0.wMid), y: r2(d0.ends[0][1] - d0.tool.top), mid: dr.mid }));
+    const d0 = await gripAt("gripD"), dr = reach(d0), p = await profile("gripD");
+    ok(V, "3 the dock's handle at rest: the same stroke as a capsule the arc's length (" + r2(want.len) + "px), " + r2(want.e) + "px in from its top edge (where the corner's arc meets its edges), centred on it, in the same ink", Math.abs(d0.len - want.len) <= 0.1 && Math.abs(d0.wMid - want.w) <= 0.05 && Math.abs(d0.w0 - want.w) <= 0.05 && Math.abs(d0.ends[0][1] - (d0.tool.top + want.e)) <= 0.1 && Math.abs(dr.mid) <= 0.5 && inkIs(d0.fill, d0.rest), JSON.stringify({ len: r2(d0.len), w: r2(d0.wMid), y: r2(d0.ends[0][1] - d0.tool.top), mid: dr.mid }));
+    ok(V, "3 the dock's handle at rest, read end to end: one opaque fill, mirrored about its middle, no step", lineOK(p, want.w), JSON.stringify(p));
   }
   // The captures frame the corner and the dock's edge at 1:1, room left for the drag's run-out.
   const cornerClip = async () => { const b = await ev(() => { const r = document.getElementById("panel").getBoundingClientRect(), x = Math.max(0, Math.floor(r.left - 64)), y = Math.max(0, Math.floor(r.bottom - 200)); return { x, y, w: Math.min(innerWidth - x, 320), h: Math.min(innerHeight - y, 240) }; }); return { x: b.x, y: b.y, width: b.w, height: b.h }; };
@@ -659,17 +745,17 @@ async function runView(view) {
     const svg = document.getElementById(id), path = svg.querySelector("path"), T = svg.closest(".tool"), q = (n) => Math.round(n * 100) / 100;
     for (let i = 0; i < 20 && !window.__held; i++) await new Promise((r) => requestAnimationFrame(r));
     if (window.__unarm) window.__unarm();
-    const a = window.__held || path.getAnimations().find((x) => x.transitionProperty === "d");
+    const a = window.__held || path.getAnimations().find((x) => x.transitionProperty === "--grip-p");
     window.__held = null;
     if (!a) return null;
     a.pause();
     const tm = a.effect.getTiming(), out = [];
-    for (const f of [0, 0.25, 0.5, 0.75, 1]) { a.currentTime = tm.delay + f * tm.duration; const b = T.getBoundingClientRect(), g = __k.grip(svg); out.push({ f, up: q(b.bottom - g.box.top), right: q(g.box.right - b.left), half: q((g.box.right - g.box.left) / 2), ends: [q(g.w0), q(g.wN)], wMax: q(g.wMax), points: g.points }); }
+    for (const f of [0, 0.25, 0.5, 0.75, 1]) { a.currentTime = tm.delay + f * tm.duration; const b = T.getBoundingClientRect(), g = __k.grip(svg), p = __k.gripProfile(svg); out.push({ f, up: q(b.bottom - g.box.top), right: q(g.box.right - b.left), half: q((g.box.right - g.box.left) / 2), ends: [q(g.w0), q(g.wN)], wMax: q(g.wMax), points: g.points, p }); }
     a.play();
     return { delay: tm.delay, dur: tm.duration, easing: tm.easing, clocks: path.getAnimations().length, out };
   }, id);
   const tok = await ev(() => { const s = getComputedStyle(document.documentElement), t = (n) => s.getPropertyValue(n).trim(); return { reveal: parseFloat(t("--dur-reveal")), exit: parseFloat(t("--dur-exit")), control: parseFloat(t("--dur-control")), easeOut: t("--ease-out") }; });
-  const L = g0.run, runTo = Rp + L;
+  const L = g0.run, runTo = Rp - want.k + L;
   const rest0 = reach(g0);
   // Pointing at an edge or the corner: the resize cursor, and the handle brightens to the strong ink.
   if (!touch && !stackPanel) for (const [sashId, cur] of [["sashW", "ew-resize"], ["sashH", "ns-resize"], ["sashC", "nesw-resize"]]) {
@@ -687,32 +773,36 @@ async function runView(view) {
   if (G.sashC && !stackPanel) {
     const c = await center("#sashC");
     await page.mouse.move(c.x, c.y); await settle(300);
-    await arm("#gripC path", "d");
+    await arm("#gripC path", "--grip-p");
     await page.mouse.down(); await page.mouse.move(c.x - 12, c.y + 9, { steps: 2 });
     const s = await gripScrub("gripC");
     const mono = s && s.out.every((o, i) => !i || (o.up >= s.out[i - 1].up - 0.01 && o.right >= s.out[i - 1].right - 0.01));
-    ok(V, "3 corner drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms, --ease-out); the arc's stroke runs out up the width edge and along the foot to " + runTo + "px from the corner, growing at every step, thinning to nothing at both ends, never wider than the arc", !!s && s.clocks <= 2 && s.dur === tok.reveal && s.delay === 0 && mono && Math.abs(s.out[0].up - rest0.up) <= 0.5 && Math.abs(s.out[4].up - runTo) <= 1 && Math.abs(s.out[4].right - runTo) <= 1 && s.out[4].ends.every((w) => w <= 0.05) && s.out.every((o) => o.wMax <= want.w + 0.05 && o.points === g0.points) && s.out[2].up > s.out[0].up + 20, JSON.stringify(s && s.out.map((o) => [o.f, o.up, o.right, o.ends, o.wMax])) + " " + JSON.stringify(s && { dur: s.dur, easing: s.easing, clocks: s.clocks }));
+    ok(V, "3 corner drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms, --ease-out); the arc's stroke runs out up the width edge and along the foot alike to " + r2(runTo) + "px from the corner, growing at every step, thinning to nothing at both ends, never wider than the arc", !!s && s.clocks <= 2 && s.dur === tok.reveal && s.delay === 0 && s.easing === tok.easeOut && mono && Math.abs(s.out[0].up - rest0.up) <= 0.5 && Math.abs(s.out[4].up - runTo) <= 1 && Math.abs(s.out[4].right - runTo) <= 1 && s.out[4].ends.every((w) => w <= 0.05) && s.out.every((o) => o.wMax <= want.w + 0.05 && o.points === g0.points && Math.abs(o.up - o.right) <= 0.1) && s.out[2].up > s.out[0].up + 20, JSON.stringify(s && s.out.map((o) => [o.f, o.up, o.right, o.ends, o.wMax])) + " " + JSON.stringify(s && { dur: s.dur, easing: s.easing, clocks: s.clocks }));
+    ok(V, "3 corner drag, the line read end to end at 0, ¼, ½, ¾ and 1: one opaque fill; mirrored about the diagonal in width and place; the width never growing from the arc out to either tip; no step in width, place or heading across the corner; every run-out point on its edge's line (no corner cut)", !!s && s.out.every((o) => lineOK(o.p, want.w)), JSON.stringify(s && s.out.map((o) => ({ f: o.f, sym: o.p.sym, place: o.p.place, grow: o.p.grow, dw: o.p.dw, step: o.p.step, turn: o.p.turn, line: o.p.line, solid: o.p.solid }))));
+    if (s) console.log("INFO [" + V + "] 3 corner drag, the line's samples [index, in from the width edge, up from the foot, width] at each fraction: " + s.out.map((o) => o.f + ": " + JSON.stringify(o.p.samples)).join(" ; "));
     await settle(tok.reveal + 100);
     const held = await gripAt("gripC"), hr = reach(held);
     await shot("corner-drag", await cornerClip());
     ok(V, "3 corner held: the whole highlight in the strong ink, " + runTo + "px up and along from the corner", held.resizing === "wh" && inkIs(held.fill, held.strong) && Math.abs(hr.up - runTo) <= 1 && Math.abs(hr.right - runTo) <= 1, JSON.stringify({ hr, fill: held.fill.slice(0, 3) }));
-    await arm("#gripC path", "d");
+    await arm("#gripC path", "--grip-p");
     await page.mouse.up();
     const back = await gripScrub("gripC");
     await page.mouse.move(5, 5); await settle(tok.reveal + 200);
     const g1 = await gripAt("gripC");
-    ok(V, "3 corner let go: it runs back into the arc on one clock over --dur-exit (" + tok.exit + "ms), from the highlight to the rest arc", !!back && back.dur === tok.exit && Math.abs(back.out[0].up - runTo) <= 1 && Math.abs(back.out[4].up - rest0.up) <= 0.5 && Math.abs(reach(g1).up - rest0.up) <= 0.5 && inkIs(g1.fill, g1.rest), JSON.stringify(back && back.out.map((o) => [o.f, o.up, o.right])));
+    ok(V, "3 corner let go: it runs back into the arc on one clock over --dur-exit (" + tok.exit + "ms), from the highlight to the rest arc, the line whole at every step", !!back && back.dur === tok.exit && Math.abs(back.out[0].up - runTo) <= 1 && Math.abs(back.out[4].up - rest0.up) <= 0.5 && back.out.every((o) => lineOK(o.p, want.w)) && Math.abs(reach(g1).up - rest0.up) <= 0.5 && inkIs(g1.fill, g1.rest), JSON.stringify(back && back.out.map((o) => [o.f, o.up, o.right, o.p.sym, o.p.line])));
   }
   // The dock's handle does the same along its top edge.
   if (dockOn && (await page.locator("#sashD").isVisible())) {
     const d0 = await gripAt("gripD"), c = await center("#sashD");
     await page.mouse.move(c.x, c.y); await settle(300);
     if (!touch) { const dh = await gripAt("gripD"); await shot("dock-hover", await dockClip()); ok(V, "3 pointing at the dock's edge: its handle brightens to the strong ink", inkIs(dh.fill, dh.strong), JSON.stringify(dh.fill.slice(0, 3))); }
-    await arm("#gripD path", "d");
+    await arm("#gripD path", "--grip-p");
     await page.mouse.down(); await page.mouse.move(c.x, c.y - 12, { steps: 2 });
-    const s = await gripScrub("gripD"), half = want.len / 2 + L;
+    const s = await gripScrub("gripD"), half = (want.r * Math.PI) / 4 + L;
     const mono = s && s.out.every((o, i) => !i || o.half >= s.out[i - 1].half - 0.01);
-    ok(V, "3 dock drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms); its stroke runs out either way along the top edge to " + r2(half) + "px from the middle, growing at every step, thinning to nothing at both ends", !!s && s.dur === tok.reveal && mono && Math.abs(s.out[4].half - half) <= 1 && s.out[4].ends.every((w) => w <= 0.05) && s.out.every((o) => o.wMax <= want.w + 0.05) && Math.abs(s.out[0].half - reach(d0).half) <= 0.5, JSON.stringify(s && s.out.map((o) => [o.f, o.half, o.ends, o.wMax])));
+    ok(V, "3 dock drag (scrubbed at 0, ¼, ½, ¾, 1): one path on one clock (" + tok.reveal + "ms, --ease-out); its stroke runs out either way along the top edge to " + r2(half) + "px from the middle, growing at every step, thinning to nothing at both ends", !!s && s.dur === tok.reveal && s.easing === tok.easeOut && mono && Math.abs(s.out[4].half - half) <= 1 && s.out[4].ends.every((w) => w <= 0.05) && s.out.every((o) => o.wMax <= want.w + 0.05) && Math.abs(s.out[0].half - reach(d0).half) <= 0.5, JSON.stringify(s && s.out.map((o) => [o.f, o.half, o.ends, o.wMax])));
+    ok(V, "3 dock drag, the line read end to end at 0, ¼, ½, ¾ and 1: one opaque fill, mirrored about its middle, thinning only outward, no step, on its edge's line", !!s && s.out.every((o) => lineOK(o.p, want.w)), JSON.stringify(s && s.out.map((o) => ({ f: o.f, sym: o.p.sym, place: o.p.place, grow: o.p.grow, dw: o.p.dw, line: o.p.line, solid: o.p.solid }))));
+    if (s) console.log("INFO [" + V + "] 3 dock drag, the line's samples [index, from the middle, down from the top, width] at each fraction: " + s.out.map((o) => o.f + ": " + JSON.stringify(o.p.samples)).join(" ; "));
     await settle(tok.reveal + 100);
     await shot("dock-drag", await dockClip());
     await page.mouse.up(); await page.mouse.move(5, 5); await settle(tok.reveal + 200);
@@ -728,8 +818,8 @@ async function runView(view) {
     await page.keyboard.press("Shift"); await settle(100);
     const s0 = await size(); await page.keyboard.press(key); const s1 = await size(); await page.keyboard.press("Shift+" + key); const s2 = await size();
     const held = await ev(() => document.getElementById("panel").dataset.resizing || "");
-    const gf = await gripAt("gripC"), fr = reach(gf), moving = await ev(() => document.querySelector("#gripC path").getAnimations().filter((a) => a.transitionProperty === "d").length);
-    ok(V, "3 " + sashId + ": a key steps the edge 8px, 32px with Shift, held as it moves; its focus draws the edge's highlight in the focus ink at once (no `d` transition)", r2(s1 - s0) === 8 && r2(s2 - s1) === 32 && !!held && inkIs(gf.fill, gf.focus) && moving === 0 && (sign === "w" ? Math.abs(fr.up - runTo) <= 1 : Math.abs(fr.right - runTo) <= 1), s0 + " → " + s1 + " → " + s2 + ", data-resizing=" + held + ", reach " + JSON.stringify(fr));
+    const gf = await gripAt("gripC"), fr = reach(gf), moving = await ev(() => document.querySelector("#gripC path").getAnimations().filter((a) => a.transitionProperty === "--grip-p").length);
+    ok(V, "3 " + sashId + ": a key steps the edge 8px, 32px with Shift, held as it moves; its focus draws the highlight along both edges in the focus ink at once (no --grip-p transition)", r2(s1 - s0) === 8 && r2(s2 - s1) === 32 && !!held && inkIs(gf.fill, gf.focus) && moving === 0 && Math.abs(fr.up - runTo) <= 1 && Math.abs(fr.right - runTo) <= 1, s0 + " → " + s1 + " → " + s2 + ", data-resizing=" + held + ", reach " + JSON.stringify(fr));
     await ev(() => document.activeElement.blur());
     await settle(300);
   }
@@ -742,8 +832,8 @@ async function runView(view) {
     const cur = await ev(([x, y]) => ({ html: getComputedStyle(document.documentElement).cursor, under: getComputedStyle(document.elementFromPoint(x, y) || document.body).cursor, panel: document.getElementById("panel").dataset.resizing }), [c.x + dx * 3, c.y + dy * 3]);
     const g = await gripAt("gripC"), r = reach(g);
     await page.mouse.up();
-    const arms = sashId === "sashW" ? Math.abs(r.up - runTo) <= 1 && r.right < Rp + 2 : sashId === "sashH" ? Math.abs(r.right - runTo) <= 1 && r.up < Rp + 2 : Math.abs(r.up - runTo) <= 1 && Math.abs(r.right - runTo) <= 1;
-    ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want_ + "), and the handle runs out " + (sashId === "sashW" ? "up the width edge alone" : sashId === "sashH" ? "along the foot alone" : "along both") + ", in the strong ink", cur.html === want_ && cur.under === want_ && arms && inkIs(g.fill, g.strong) && g.op === "1", JSON.stringify({ cur, r, op: g.op }));
+    const arms = Math.abs(r.up - runTo) <= 1 && Math.abs(r.right - runTo) <= 1;
+    ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want_ + "), and the handle runs out along both edges of its curve alike (the owner: no fade on one side only), in the strong ink", cur.html === want_ && cur.under === want_ && arms && inkIs(g.fill, g.strong) && g.op === "1", JSON.stringify({ cur, r, op: g.op }));
     await settle(300);
   }
   // ---- Round 27: pins 27, 28 and 30, read on the engine ----
@@ -1422,7 +1512,7 @@ async function runReduced() {
   const gone = await ev(() => !document.querySelector(".pop"));
   ok(V, "the popover fades only, opening and closing", !!open && open.length > 0 && open.every((p) => p === "opacity") && !!close && close.length > 0 && close.every((p) => p === "opacity") && gone, "open " + JSON.stringify(open) + ", close " + JSON.stringify(close) + ", gone " + gone);
   // Round 28: pointing at the corner and dragging it, the handle's ink fades and its shape changes at once
-  // (no `d` transition); nothing on the panel travels.
+  // (no --grip-p transition); nothing on the panel travels.
   const handleAnims = () => ev(() => document.getAnimations().map((a) => { const t = a.effect.target, h = t && t.closest && t.closest(".resize-handle, .panel"); return { target: h ? h.id || "panel" : "", prop: a.transitionProperty || "keyframes" }; }).filter((a) => a.target));
   const c = await page.locator("#sashC").boundingBox();
   await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
@@ -1433,7 +1523,7 @@ async function runReduced() {
   await page.waitForTimeout(20);
   const held = await handleAnims(), up = await ev(() => { const b = document.getElementById("panel").getBoundingClientRect(), g = __k.grip(document.getElementById("gripC")); return Math.round(b.bottom - g.box.top); });
   await page.mouse.up(); await page.waitForTimeout(300);
-  ok(V, "the handle only changes its ink: pointed at and held, no `d` transition, its highlight there at once (" + up + "px up the edge), nothing on the panel moving", pointed.length > 0 && [...pointed, ...held].every((a) => ["fill", "opacity", "background-color", "box-shadow"].includes(a.prop)) && up >= 130, JSON.stringify({ pointed, held }));
+  ok(V, "the handle only changes its ink: pointed at and held, no --grip-p transition, its highlight there at once (" + up + "px up the edge), nothing on the panel moving", pointed.length > 0 && [...pointed, ...held].every((a) => ["fill", "opacity", "background-color", "box-shadow"].includes(a.prop)) && up >= 130, JSON.stringify({ pointed, held }));
   await page.mouse.move(40, 40); await page.waitForTimeout(300);
   // A key's step lands at once: the panel's width and a bar's start, with nothing animating them.
   await ev(() => document.getElementById("sashW").focus());
@@ -1483,6 +1573,35 @@ async function runTwoX(scheme) {
   await ctx.close();
 }
 
+// The handle in Safari's engine (round 28): WebKit 27.2, the build playwright-core ships. Safari draws nothing
+// from the `d` CSS property, so this proves the handle draws at rest, runs out on a drag (its transition on
+// --grip-p, scrubbed at ½), and runs back on the let-go, by day and at night.
+async function runWebKit(scheme) {
+  const V = "1440-" + scheme + "-webkit";
+  const { webkit } = await import(join(here, "../../node_modules/playwright-core/index.mjs"));
+  const wk = await webkit.launch();
+  const page = await wk.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, deviceScaleFactor: 1 });
+  const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
+  const ev = (fn, arg) => page.evaluate(fn, arg);
+  await page.goto(URL_); await page.waitForTimeout(700); await ev(install);
+  const read = () => ev(() => { const g = __k.grip(document.getElementById("gripC")), b = document.getElementById("panel").getBoundingClientRect(), p = __k.gripProfile(document.getElementById("gripC")); return { up: Math.round((b.bottom - g.box.top) * 100) / 100, right: Math.round((g.box.right - b.left) * 100) / 100, w: Math.round(g.wMax * 100) / 100, r: Math.round(g.r * 100) / 100, points: g.points, sym: p.sym, line: p.line, solid: p.solid, fill: g.fill.slice(0, 3) }; });
+  await page.mouse.move(5, 5); await page.waitForTimeout(300);
+  const rest = await read();
+  ok(V, "the handle draws in WebKit at rest: Apple's arc (r " + rest.r + "px, stroke " + rest.w + "px, " + rest.points + " points), one opaque fill, mirrored", rest.points === 178 && Math.abs(rest.r - 8.96) <= 0.1 && Math.abs(rest.w - 1.82) <= 0.05 && Math.abs(rest.up - rest.right) <= 0.1 && rest.up > 13 && rest.up < 16 && rest.solid && rest.sym <= 0.02, JSON.stringify(rest));
+  const c = await page.locator("#sashC").boundingBox(), x = c.x + c.width / 2, y = c.y + c.height / 2;
+  await page.mouse.move(x, y); await page.waitForTimeout(300);
+  await ev(() => { window.__held = null; const el = document.querySelector("#gripC path"); const on = (e) => { if (e.target !== el || e.propertyName !== "--grip-p") return; const a = el.getAnimations().find((x) => x.transitionProperty === "--grip-p"); if (a) { a.pause(); window.__held = a; document.removeEventListener("transitionrun", on, true); } }; document.addEventListener("transitionrun", on, true); });
+  await page.mouse.down(); await page.mouse.move(x - 12, y + 9, { steps: 2 });
+  const half = await ev(async () => { for (let i = 0; i < 20 && !window.__held; i++) await new Promise((r) => requestAnimationFrame(r)); const a = window.__held; if (!a) return null; const t = a.effect.getTiming(); a.currentTime = t.duration / 2; const g = __k.grip(document.getElementById("gripC")), b = document.getElementById("panel").getBoundingClientRect(), p = __k.gripProfile(document.getElementById("gripC")); a.play(); return { dur: t.duration, easing: t.easing, up: Math.round((b.bottom - g.box.top) * 100) / 100, right: Math.round((g.box.right - b.left) * 100) / 100, sym: p.sym, line: p.line }; });
+  await page.waitForTimeout(400);
+  const held = await read();
+  ok(V, "WebKit drag: one transition on --grip-p (240ms), at ½ the stroke part way out along both edges alike and on its edge lines, held at 132.78px each way in the strong ink", !!half && half.dur === 240 && half.up > rest.up + 20 && half.up < 132 && Math.abs(half.up - half.right) <= 0.1 && half.line <= 0.05 && half.sym <= 0.02 && Math.abs(held.up - 132.78) <= 1 && Math.abs(held.right - 132.78) <= 1, JSON.stringify({ half, held }));
+  await page.mouse.up(); await page.mouse.move(5, 5); await page.waitForTimeout(500);
+  const back = await read();
+  ok(V, "WebKit let go: back to the rest arc", Math.abs(back.up - rest.up) <= 0.5 && errors.length === 0, JSON.stringify(back) + (errors.length ? " errors " + errors.join(" | ") : ""));
+  await wk.close();
+}
+
 function same(a, b) { return a.length === b.length && a.every((x, i) => x === b[i]); }
 
 function grepCheck() {
@@ -1492,6 +1611,10 @@ function grepCheck() {
   ok("grep", "8 no font-weight 600", w600.length === 0, w600.join(", "));
   const grip = find(/\.grip\b|class="grip|grip-corner|gripCorner/);
   ok("grep", "8 no .grip, its SVG or its title", grip.length === 0, grip.join(", "));
+  // Round 28: Safari and iPadOS draw nothing from the `d` CSS property (caniuse mdn-svg_elements_path_d_path),
+  // so no shape is set or transitioned through it: the handle's path carries its shape in its attribute.
+  const dProp = find(/(^|[;{\s])d:\s*(var\(|path\(|none)|transition:[^;]*\bd\s+var\(/);
+  ok("grep", "3 no shape through the `d` CSS property (Safari and iPadOS do not draw it)", dProp.length === 0, dProp.join(", "));
   const band = find(/\.index\b|class="index|index-band|pinned|region > header|<header class="region/);
   ok("grep", "8 no index band or region headers", band.length === 0, band.join(", "));
   const showing = find(/Showing|Previewing|nowText|nowMode/);

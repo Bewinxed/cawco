@@ -11,17 +11,20 @@
   --c-edge-hit: var(--space-3);
   /* The split line's taper at each end. */
   --c-edge-lit-fade: 36px;
-  /* Round 28: iPadOS 26's window handle, measured on Apple's own picture of it (support.apple.com 125309,
-     its magnified corner) against that window's corner radius, then scaled to ours: an arc concentric with
-     the corner, its centreline 0.198 R in from the edge, 0.111 R thick, sweeping 72.8° about the corner's
-     diagonal, round caps. */
-  --c-grip-inset: calc(var(--radius-panel) * 0.198);
-  --c-grip-stroke: calc(var(--radius-panel) * 0.111);
-  --c-grip-sweep: 72.8deg;
-  /* Apple's handle is an opaque near-black (24, 24, 24) on its window, 8.7:1 against it. At rest ours stands
-     at that same contrast on the raised surface, a mix of the strong ink into it; under the pointer and in a
-     drag it brightens to the strong ink itself. (Apple: white on a dark window; the same 8.7:1 at night.) */
-  /* 84% of the strong ink into the raised surface by day, 81% at night: both 8.7:1. */
+  /* Round 28: iPadOS 26's window handle, measured on Apple's own picture of it (support.apple.com 125309, its
+     magnifier over the window's corner; circles fitted to the window's edge and to the handle's ink, R the
+     window's corner radius, 51.74px there), then scaled to ours. Not concentric: the handle's circle is
+     tighter than the corner's (r = 0.560 R) and its centre is pulled 0.201 R toward the corner on both axes,
+     so its stroke stands 0.156 R in from the edge on the diagonal and 0.239 R in where it meets the straight
+     edges. 0.114 R thick, sweeping 95° centred on the diagonal, round caps. */
+  --c-grip-pull: calc(var(--radius-panel) * 0.201);
+  --c-grip-r: calc(var(--radius-panel) * 0.56);
+  --c-grip-stroke: calc(var(--radius-panel) * 0.114);
+  --c-grip-sweep: 95deg;
+  /* Apple's handle is opaque near-black, rgb(24 24 24), on its window, 8.7:1 against it; white on a dark window
+     (rehafachperson.ch, "Accessility Tools in iOS 26": "a white (dark colour scheme) or black corner"). At rest
+     ours stands at Apple's 8.7:1 on the raised surface, an opaque mix of the strong ink into it (84% by day,
+     81% at night); under the pointer and in a drag it brightens to the strong ink itself. */
   --c-grip-ink-rest: light-dark(color-mix(in oklab, var(--ink-strong) 84%, var(--surface-raised)), color-mix(in oklab, var(--ink-strong) 81%, var(--surface-raised)));
   /* My call: how far the held handle runs out along each edge before it has thinned to nothing. */
   --c-grip-run: 120px;
@@ -262,19 +265,23 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline
    the r23 "no corner on touch" ruling falls with the handle it served). */
 
 /* ---- The resize handle (round 28): iPadOS 26's window handle ----
-   One path per handle (app.js draws it as a filled ribbon round its centreline: every shape is the same
-   list of points, so `d` interpolates point for point). At rest, the panel's is the short arc concentric with
-   its resizing corner (iPadOS puts it at the corner that resizes: bottom-right on a window, bottom-left on
-   one snapped right, as this panel stands); the dock's, the same stroke as a short capsule on its top edge.
-   Pointing at an edge or the corner brightens it to the strong ink. A drag runs its stroke out along the
-   edges it moves, thinning to nothing at the ends (pin 26), on one clock: out over --dur-reveal, back over
-   --dur-exit (The Fast Exit Rule), both on --ease-out. No side edge carries a mark of its own (pin 25). */
-@property --c-grip-inset { syntax: "<length>"; inherits: true; initial-value: 0px; }
+   One filled path per handle, its two shapes drawn by app.js from one list of points (see cornerShape). At
+   rest the panel's is Apple's arc in its resizing corner (iPadOS puts the handle at the corner that resizes:
+   bottom-right on a window, bottom-left on one snapped right, as this panel stands); the dock's, the same
+   stroke straightened into a short capsule on its top edge. No side edge carries a mark of its own (pin 25).
+   Pointing at an edge or the corner gives the resize cursor and brightens the handle to the strong ink. A
+   drag on any of the panel's edges runs the arc's stroke out along both edges of its curve, the same length
+   each way, thinning to nothing (pin 26); the dock's runs out both ways along its edge. One transition, on
+   --grip-p (0 rest, 1 run; app.js paints the path's points from it): out over --dur-reveal, back over --dur-exit
+   (The Fast Exit Rule), both on --ease-out. */
+@property --grip-p { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --c-grip-pull { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-grip-r { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-stroke { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-sweep { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
 @property --c-grip-run { syntax: "<length>"; inherits: true; initial-value: 0px; }
 .resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; }
-.resize-handle path { d: var(--grip-rest); fill: var(--c-grip-ink-rest); transition: d var(--dur-exit) var(--ease-out), fill var(--dur-control) var(--ease-out); }
+.resize-handle path { --grip-p: 0; fill: var(--c-grip-ink-rest); transition: --grip-p var(--dur-exit) var(--ease-out), fill var(--dur-control) var(--ease-out); }
 /* The panel's at its border box's bottom-start corner, the dock's at the middle of its top edge. */
 #gripC { inset-inline-start: -1px; inset-block-end: -1px; }
 #gripD { inset-inline-start: 50%; inset-block-start: -1px; translate: -50% 0; }
@@ -285,17 +292,11 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline
 /* The demo's pointer (#demo, handle-demo.html) is the hover's own state. */
 .panel[data-pointing] #gripC path, .dock[data-pointing] #gripD path { fill: var(--ink-strong); }
 .panel:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC path,
-.dock[data-resizing] #gripD path { fill: var(--ink-strong); transition: d var(--dur-reveal) var(--ease-out), fill var(--dur-control) var(--ease-out); }
-.panel[data-resizing="w"] #gripC path { d: var(--grip-w); }
-.panel[data-resizing="h"] #gripC path { d: var(--grip-h); }
-.panel[data-resizing="wh"] #gripC path { d: var(--grip-wh); }
-.dock[data-resizing] #gripD path { d: var(--grip-run); }
-/* Focus from the keyboard holds the edge's highlight in the focus ink, with no motion (keys move it, so
+.dock[data-resizing] #gripD path { --grip-p: 1; fill: var(--ink-strong); transition: --grip-p var(--dur-reveal) var(--ease-out), fill var(--dur-control) var(--ease-out); }
+/* Focus from the keyboard holds the highlight in the focus ink, with no motion (keys move the edge, so
    nothing animates on a key). */
-.panel:has(.sash-w:focus-visible) #gripC path { d: var(--grip-w); fill: var(--focus-ring); transition: none; }
-.panel:has(.sash-h:focus-visible) #gripC path { d: var(--grip-h); fill: var(--focus-ring); transition: none; }
-.panel:has(.sash-c:focus-visible) #gripC path { d: var(--grip-wh); fill: var(--focus-ring); transition: none; }
-.dock:has(.sash-d:focus-visible) #gripD path { d: var(--grip-run); fill: var(--focus-ring); transition: none; }
+.panel:has(.sash-w:focus-visible, .sash-h:focus-visible, .sash-c:focus-visible) #gripC path,
+.dock:has(.sash-d:focus-visible) #gripD path { --grip-p: 1; fill: var(--focus-ring); transition: none; }
 /* Stacked graphs have no corner (the r23 ruling): no rest mark; the width edge's highlight comes in with its
    drag or its focus. */
 html[data-graphs="stack"] #gripC { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
