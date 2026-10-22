@@ -12,6 +12,7 @@
  * against the same tape ("dev").
  */
 import type { Locator, Page, WebSocketRoute } from "playwright-core";
+import { deviceDocName } from "../../../packages/core/src/doc-link";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
@@ -1402,6 +1403,14 @@ const dropPin = async (page: Page) => {
  * drops one is refused whole (core comments.ts `pinsProblem`: "The agent's
  * replies are written by comment_reply, not by the page"). Whether pin 1
  * holds the agent's answer, after.
+ *
+ * Written once the doc holds all there is of it: the hub's (its socket has
+ * synced, the overlay's `hasSynced`, as the overlay itself refuses a write
+ * before) and the device's (its y-indexeddb copy merged in). A write
+ * before either removes only the pins the doc held then, and what the hub
+ * or the device held beside them stood again on the next load: a state
+ * read after a clear held the seeded pins in some walks and none in others
+ * (artifact/place-folder "Open 4, Resolved 6" against "Open 1").
  */
 const writePins = async (
   page: Page,
@@ -1413,11 +1422,66 @@ const writePins = async (
   if (!inner) {
     throw new Error("the preview's frame has no document");
   }
-  await inner.waitForFunction(
-    () =>
-      !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
-        .cawcoArtifact?.doc
-  );
+  await inner.waitForFunction(() => {
+    const artifact = (
+      window as unknown as {
+        cawcoArtifact?: {
+          subscribe: (
+            holder: (hold: { hasSynced: boolean; ref: unknown }) => void
+          ) => () => boolean;
+        };
+      }
+    ).cawcoArtifact;
+    let synced = false;
+    // `subscribe` answers at once with the hold as it stands.
+    artifact?.subscribe((hold) => {
+      synced = hold.hasSynced && hold.ref !== null;
+    })();
+    return synced;
+  });
+  await inner.evaluate(async (prefix) => {
+    interface Hold {
+      doc: object;
+      ref: { id: string } | null;
+    }
+    const artifact = (
+      window as unknown as {
+        cawcoArtifact: {
+          subscribe: (holder: (hold: Hold) => void) => () => boolean;
+          Y: { applyUpdate: (doc: object, update: Uint8Array) => void };
+        };
+      }
+    ).cawcoArtifact;
+    let held: Hold | null = null;
+    artifact.subscribe((hold) => {
+      held = hold;
+    })();
+    const { doc, ref } = held as unknown as Hold;
+    const name = `${prefix}${ref?.id}`;
+    const listed = await indexedDB.databases();
+    if (!listed.some((one) => one.name === name)) {
+      return;
+    }
+    const kept = await new Promise<Uint8Array[]>((resolve, reject) => {
+      const open = indexedDB.open(name);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const read = db.transaction("updates").objectStore("updates").getAll();
+        read.onsuccess = () => {
+          db.close();
+          resolve(read.result as Uint8Array[]);
+        };
+        read.onerror = () => {
+          db.close();
+          reject(read.error);
+        };
+      };
+    });
+    for (const update of kept) {
+      artifact.Y.applyUpdate(doc, update);
+    }
+  }, deviceDocName(""));
   return await inner.evaluate(
     ({ seeds: wanted, answered }) => {
       interface Entry {
