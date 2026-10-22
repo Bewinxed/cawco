@@ -1803,27 +1803,53 @@ function syncSashes() {
   if (stackedGraphs()) set($("sashS"), splitGraphs()[0].offsetHeight, splitFloor(), splitCeil());
 }
 function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); mark(); for (const c of shownComps()) showKept(c.id); placeSplit(); if (tl) layoutDock(); sizeDockRoom(); if (pop) placePop(); }
-// The resize handle's design: html[data-handle] (arc, light or bead), from #handle= or ?handle=, arc by
-// default (round 27; the owner picks one on its decision page).
-rootEl.dataset.handle = (location.hash.match(/handle=(arc|light|bead)/) || location.search.match(/handle=(arc|light|bead)/) || [, rootEl.dataset.handle || "arc"])[1];
-// Where along each arm the light (and the bead's knob) stands: the pointer's place on that arm, held 16px
-// clear of the corners; on the corner, both arms' corner ends.
-const armsOf = (owner, edge) => (edge === "wh" ? ["w", "h"] : edge === "d" || edge === "s" ? [edge] : [edge]);
-function aimArms(owner, edge, e) {
-  const b = owner.getBoundingClientRect(), R = px("--radius-panel"), clear = px("--c-edge-pull");
-  for (const arm of armsOf(owner, edge)) {
-    const lit = owner.querySelector('.lit[data-arm="' + arm + '"]'), bead = owner.querySelector('.bead[data-arm="' + arm + '"]');
-    const len = arm === "w" ? b.height : b.width;
-    const along = edge === "wh" ? (arm === "w" ? len - R : R) : arm === "w" ? e.clientY - b.top : e.clientX - b.left;
-    const at = clamp(along, R + clear, len - R - clear);
-    if (lit) lit.style.setProperty("--at", Math.round(at) + "px");
-    if (bead && edge !== "wh") bead.style.translate = arm === "w" ? "0 " + Math.round(at - len / 2) + "px" : Math.round(at - len / 2) + "px 0";
-  }
+// ---- The resize handle (round 28): iPadOS 26's window handle, one path per handle ----
+// Every shape is a ribbon round a centreline: GRIP_N + 1 points down one side, a round cap, the same back up
+// the other side, a round cap, all straight segments. So each shape a handle takes is the same list of
+// points, and CSS interpolates `d` between them point for point, on one clock, turning back mid-way.
+const GRIP_N = 64, GRIP_CAP = 8;
+function ribbon(len, at, width) {
+  const A = [], B = [], r2 = (n) => Math.round(n * 100) / 100;
+  for (let i = 0; i <= GRIP_N; i++) { const [x, y, tx, ty] = at((len * i) / GRIP_N), h = width((len * i) / GRIP_N) / 2; A.push([x - ty * h, y + tx * h]); B.push([x + ty * h, y - tx * h]); }
+  // A cap: the half circle round the end, from one side to the other through the point the stroke runs on to.
+  const cap = (s, sign) => { const [x, y, tx, ty] = at(s), h = width(s) / 2, out = []; for (let k = 1; k <= GRIP_CAP; k++) { const f = (Math.PI * k) / (GRIP_CAP + 1), c = Math.cos(f), sn = Math.sin(f); out.push([x + sign * h * (-ty * c + tx * sn), y + sign * h * (tx * c + ty * sn)]); } return out; };
+  const pts = [...A, ...cap(len, 1), ...B.reverse(), ...cap(0, -1)];
+  return 'path("M ' + pts.map(([x, y]) => r2(x) + " " + r2(y)).join(" L ") + ' Z")';
 }
+// The panel's handle, in the corner's own frame (its outer corner at 0,0, up the left edge is -y): `a` of
+// stroke run up the width edge and `b` along the foot, round the arc between. At rest both are 0 and the arc
+// is the measured sweep about the corner's diagonal; a run arm takes the arc on to that edge's tangent.
+function cornerShape(a, b) {
+  const R = px("--radius-panel"), d = px("--c-grip-inset"), r = R - d, w0 = px("--c-grip-stroke"), half = (px("--c-grip-sweep") * Math.PI) / 360;
+  const t0 = a > 0 ? Math.PI : (3 * Math.PI) / 4 + half, t1 = b > 0 ? Math.PI / 2 : (3 * Math.PI) / 4 - half, lc = r * (t0 - t1), len = a + lc + b;
+  const at = (s) => {
+    if (s < a) return [d, -R - a + s, 0, 1];
+    if (s <= a + lc) { const t = t0 - (s - a) / r; return [R + r * Math.cos(t), -R + r * Math.sin(t), Math.sin(t), -Math.cos(t)]; }
+    return [R + (s - a - lc), -d, 1, 0];
+  };
+  const taper = (u) => w0 * Math.cos((Math.PI / 2) * Math.min(1, Math.max(0, u)));
+  const width = (s) => (s < a ? taper((a - s) / a) : s <= a + lc ? w0 : taper((s - a - lc) / b));
+  return ribbon(len, at, width);
+}
+// The dock's: the same stroke as a capsule the arc's length, centred on its top edge, `a` run out either way.
+function edgeShape(a) {
+  const R = px("--radius-panel"), d = px("--c-grip-inset"), w0 = px("--c-grip-stroke"), h0 = ((R - d) * px("--c-grip-sweep") * Math.PI) / 360;
+  const taper = (u) => w0 * Math.cos((Math.PI / 2) * Math.min(1, Math.max(0, u)));
+  return ribbon(2 * (a + h0), (s) => [-h0 - a + s, d, 1, 0], (s) => (s < a ? taper((a - s) / a) : s <= a + 2 * h0 ? w0 : taper((s - a - 2 * h0) / a)));
+}
+function drawGrips() {
+  const R = px("--radius-panel"), L = px("--c-grip-run"), d = px("--c-grip-inset"), w0 = px("--c-grip-stroke"), h0 = ((R - d) * px("--c-grip-sweep") * Math.PI) / 360;
+  const c = $("gripC"), S = Math.ceil(R + L + w0);
+  c.setAttribute("width", S); c.setAttribute("height", S); c.setAttribute("viewBox", "0 " + -S + " " + S + " " + S);
+  c.style.setProperty("--grip-rest", cornerShape(0, 0)); c.style.setProperty("--grip-w", cornerShape(L, 0)); c.style.setProperty("--grip-h", cornerShape(0, L)); c.style.setProperty("--grip-wh", cornerShape(L, L));
+  const g = $("gripD"), W = Math.ceil(2 * (h0 + L) + w0), H = Math.ceil(d + w0);
+  g.setAttribute("width", W); g.setAttribute("height", H); g.setAttribute("viewBox", -W / 2 + " 0 " + W + " " + H);
+  g.style.setProperty("--grip-rest", edgeShape(0)); g.style.setProperty("--grip-run", edgeShape(L));
+}
+drawGrips();
 for (const sash of document.querySelectorAll(".sash")) {
   const edge = sash.dataset.edge, owner = sash.closest(".tool");
-  sash.addEventListener("pointermove", (e) => { if (!owner.dataset.resizing) aimArms(owner, edge, e); });
-  sash.onpointerenter = (e) => { owner.dataset.edge = edge; aimArms(owner, edge, e); };
+  sash.onpointerenter = () => { owner.dataset.edge = edge; };
   sash.onfocus = () => { owner.dataset.edge = edge; };
   sash.onpointerdown = (e) => {
     e.preventDefault();
@@ -1951,5 +1977,45 @@ addEventListener("resize", onResize);
 rootEl.dataset.tools = "open";
 if (layoutIs("drawer")) setStop("peek");
 setFace("graph");
+
+// ---- The handle's demo (round 28) ----
+// #demo=corner or #demo=dock (with &theme=dark for the night) plays the handle on this page's own elements on
+// a loop for handle-demo.html, which shows it cropped at 1:1: at rest, the pointer arrives (data-pointing, the
+// hover's own rule), a drag wider (the real data-resizing and the real setSize/setDockH), let go. The first
+// real pointer on the page stops it where it is, and the page is the person's.
+const demoOf = location.hash.match(/demo=(corner|dock)/);
+if (demoOf) {
+  const which = demoOf[1];
+  rootEl.style.colorScheme = /theme=dark/.test(location.hash) ? "dark" : "light";
+  // The dock stands once a state is kept: keep the first one, as a press on it would.
+  if (which === "dock") { const n = document.querySelector(".node:not(.kept)"); if (n) n.click(); }
+  const owner = which === "corner" ? panel : $("dock");
+  let on = true, timer = null;
+  const anchor = () => { const b = owner.getBoundingClientRect(); return which === "corner" ? { x: b.left, y: b.bottom } : { x: b.left + b.width / 2, y: b.top }; };
+  const say = (step) => parent.postMessage({ demo: which, step, ...anchor() }, "*");
+  const tween = (dur, set) => new Promise((done) => { let t0 = null; const go = (now) => { t0 ??= now; const k = Math.min(1, (now - t0) / dur); set(1 - (1 - k) ** 3); if (k < 1 && on) requestAnimationFrame(go); else done(); }; requestAnimationFrame(go); });
+  const w0 = panel.offsetWidth, h0 = graphOf(tab).offsetHeight, d0 = () => $("dock").offsetHeight;
+  let dock0 = null;
+  const steps = [
+    ["rest", 1200, () => {}],
+    ["pointing", 1000, () => { owner.dataset.pointing = ""; }],
+    ["drag", 1300, () => {
+      if (which === "corner") { panel.dataset.resizing = rootEl.dataset.resizing = "wh"; tween(800, (e) => setSize(w0 + 40 * e, h0 + 30 * e)); }
+      else { dock0 ??= d0(); $("dock").dataset.resizing = rootEl.dataset.resizing = "d"; tween(800, (e) => setDockH(dock0 + 40 * e)); }
+    }],
+    ["release", 1400, () => { delete owner.dataset.resizing; delete rootEl.dataset.resizing; delete owner.dataset.pointing; }],
+    ["reset", 700, () => { if (which === "corner") tween(500, (e) => setSize(w0 + 40 * (1 - e), h0 + 30 * (1 - e))); else tween(500, (e) => setDockH(dock0 + 40 * (1 - e))); }],
+  ];
+  let i = 0;
+  const next = () => { if (!on) return; const [k, ms_, fn] = steps[i]; fn(); say(k); i = (i + 1) % steps.length; timer = setTimeout(next, ms_); };
+  setTimeout(next, 300);
+  addEventListener("pointerover", () => {
+    if (!on) return;
+    on = false; clearTimeout(timer);
+    delete owner.dataset.pointing; delete owner.dataset.resizing; delete rootEl.dataset.resizing;
+    if (which === "corner") setSize(w0, h0); else if (dock0) setDockH(dock0);
+    relayoutAfterResize(); say("yours");
+  }, { once: true });
+}
 render();
 document.fonts.ready.then(() => { if (layoutIs("drawer")) setStop(stop); render(); });

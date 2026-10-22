@@ -1,8 +1,0 @@
-root = Decisions("The resize handle", [handle])
-handle = Decision("handle", "Which resize handle?", [arc, light, bead], "The corner arc: it's what iPadOS windows use, and the only one with a mark at rest that isn't a pill.")
-arc = Option("arc", "Corner arc", "A short curved mark hugs the panel's corner. When you drag, it stretches along the edge into a thin line, and shrinks back when you let go.", true, [arcpic], "Only the corner shows that the panel resizes; the edges look plain until you point at them.")
-light = Option("light", "Light under the pointer", "Nothing is drawn. The edges you can drag are a shade darker, and a short glow follows your pointer along the edge, then runs the whole edge as you drag.", false, [lightpic], "Nothing says the panel resizes until your pointer is on its edge.")
-bead = Option("bead", "Dot that becomes a knob", "A small dot sits on each edge you can drag. Under your pointer it grows into a knob with an arrow, then melts into the edge as you drag.", false, [beadpic], "Three dots always show on the panel, which is more to look at.")
-arcpic = Preview("2a423c84-9558-4fb8-a45c-b0f6729d2bbe")
-lightpic = Preview("6e7961e9-4305-4107-8c57-2850e2166790")
-beadpic = Preview("4a779a83-737a-4793-9c90-3ac5ed76bc0b")
