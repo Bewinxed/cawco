@@ -47,11 +47,18 @@
    * The hub's `.local` name typed in a browser is one of the same: its line,
    * then its one step (the command that lets the hub answer on port 80),
    * ticking once the hub holds the port.
+   *
+   * This browser's presence is one more: its notice as its line (what
+   * Chrome shares, and that what needs you shows here instead of on your
+   * phone), then Skip and Allow as peers. Allow asks the browser for Idle
+   * Detection and notifications on one press; a refusal says what the
+   * browser blocked and where to change it; once allowed, the row's tick.
    */
   import {
     causeLine,
     localNameWords,
     pairingWords,
+    presenceWords,
     questionsOf,
     type TailnetHttps,
     type TailnetHttpsTodo,
@@ -83,6 +90,7 @@
     IconInteract,
     IconLock,
     IconMaximize,
+    IconMonitor,
     IconNeedsYou,
     IconSend,
     IconServer,
@@ -110,6 +118,7 @@
   import { conversationHref } from "../links";
   import OriginText from "../OriginText.svelte";
   import OsMark from "../OsMark.svelte";
+  import { allowHere, person, skipHere } from "../person.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import { capLine } from "../usage";
@@ -139,6 +148,7 @@
     if (
       item.kind === "choice" ||
       item.kind === "tailnet" ||
+      item.kind === "desk" ||
       item.kind === "local-name" ||
       item.kind === "relay"
     ) {
@@ -168,6 +178,10 @@
         return item.done
           ? tailnetWords.done(item.tailnet.dashboard ?? "")
           : tailnetWords.lead;
+      case "desk":
+        return item.done
+          ? presenceWords.done(item.idle)
+          : presenceWords.lead(item.idle);
       case "local-name":
         return item.done
           ? localNameWords.done(item.localName.name)
@@ -300,6 +314,8 @@
         return tailnetWords.meta(item.tailnet.host);
       case "local-name":
         return localNameWords.meta(item.localName.host);
+      case "desk":
+        return presenceWords.meta;
       case "relay":
         return "";
       case "pairing":
@@ -654,6 +670,15 @@
         <IconWorkflow aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "choice"}
         <IconShield aria-hidden="true" class="size-icon-md" />
+      {:else if item.kind === "desk"}
+        {#if item.done}
+          <IconSuccess
+            aria-hidden="true"
+            class="size-icon-md text-status-done-ink"
+          />
+        {:else}
+          <IconMonitor aria-hidden="true" class="size-icon-md" />
+        {/if}
       {:else if item.kind === "tailnet" || item.kind === "local-name"}
         {#if item.done}
           <IconSuccess
@@ -746,7 +771,7 @@
     {/if}
     <span
       data-slot="want"
-      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-local-name/row:block group-kind-local-name/row:line-clamp-undo"
+      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-local-name/row:block group-kind-local-name/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo"
       >{want}</span
     >
     {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
@@ -1138,6 +1163,40 @@
             variant="secondary"
           />
         {/each}
+      </div>
+    {:else if item.kind === "desk" && !item.done}
+      <!-- Skip and Allow as peers (The Peer Rule): Skip puts the row away in
+           this browser, the presence menu still offers it; Allow asks the
+           browser for both on one press. A refusal stands over them, with
+           where to change it. -->
+      <div
+        data-slot="peers"
+        class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-wrap justify-end gap-space-2 coarse:gap-space-4"
+      >
+        {#if person.refusal}
+          <ErrorText
+            message={person.refusal.message}
+            title={person.refusal.title}
+          />
+        {/if}
+        <Button
+          data-skip
+          disabled={person.pending === "allow"}
+          label={presenceWords.skip}
+          onclick={skipHere}
+          size="sm"
+          variant="secondary"
+        />
+        <Button
+          data-allow
+          disabled={person.pending === "allow"}
+          label={presenceWords.allow}
+          onclick={() => allowHere()}
+          pending={person.pending === "allow"}
+          pendingLabel={presenceWords.allowing}
+          size="sm"
+          variant="secondary"
+        />
       </div>
     {:else if item.kind === "tailnet" && item.done}
       <!-- Ticked: the https dashboard to open. -->

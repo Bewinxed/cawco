@@ -8500,7 +8500,9 @@ export const createServer = (
    * record keeps the send as it was accepted: the person's bubble is their
    * words alone. A keep-alive ping goes as it is.
    */
-  const presenced = (envelope: Envelope<SendPayload>): Envelope<SendPayload> => {
+  const presenced = (
+    envelope: Envelope<SendPayload>
+  ): Envelope<SendPayload> => {
     const { instanceId, message } = envelope.payload;
     if (isKeepAlive(message)) {
       return envelope;
@@ -8515,7 +8517,10 @@ export const createServer = (
       const last = content[at];
       next =
         last?.type === "text"
-          ? content.with(at, { ...last, text: withPresenceLine(last.text, said) })
+          ? content.with(at, {
+              ...last,
+              text: withPresenceLine(last.text, said),
+            })
           : [...content, { type: "text", text: withPresenceLine("", said) }];
     }
     console.log(

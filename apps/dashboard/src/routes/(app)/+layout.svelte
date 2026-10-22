@@ -17,6 +17,7 @@
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
   import { departAll } from "#lib/cawco/motion/share.svelte.js";
   import PairingScreen from "#lib/cawco/PairingScreen.svelte";
+  import { startPresence } from "#lib/cawco/presence.js";
   import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import { setPaneFleet } from "#lib/cawco/preview/pane-fleet.js";
   import Shell from "#lib/cawco/Shell.svelte";
@@ -76,6 +77,8 @@
     readAuth().then(() => {
       if (!mustPair()) {
         ensureConnected();
+        // This tab's presence beats from now on, whatever is in front.
+        startPresence();
       }
     });
   });

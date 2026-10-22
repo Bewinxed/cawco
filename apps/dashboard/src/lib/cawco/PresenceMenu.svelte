@@ -1,0 +1,188 @@
+<script lang="ts">
+  /**
+   * The person's presence on the rail's avatar (hub notifications.ts, read
+   * through person.svelte.ts): a dot on its corner, and its menu.
+   *
+   * The dot is the machine row's presence dot (DESIGN.md, Identity marks):
+   * here is a solid dot in `presence-online`; away is a hollow ring in
+   * `presence-off`, and in `presence-away` while Appear away is on. Shape,
+   * then hue; the word is the trigger's name and the menu's head (The
+   * Glyph, Word, Hue Rule).
+   *
+   * The menu: the person's state on its first row; Appear away, the hub's
+   * switch (agents go quiet and the phone gets pushes while it is on); the
+   * machines whose desktop can count, each turned on by the person, with its
+   * state word; and, while this browser has something still to allow, Set up
+   * this browser. Nothing changes here before the hub says so: a refused
+   * switch says why under it.
+   */
+  import { presenceWords } from "@cawco/core";
+  import { mergeProps } from "bits-ui";
+  import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { cawco } from "./client.svelte";
+  import ErrorText from "./ErrorText.svelte";
+  import { instanceTitle } from "./home/home-state.svelte";
+  import {
+    allowHere,
+    person,
+    setAppearAway,
+    setMachineCounts,
+  } from "./person.svelte";
+
+  /** HH:MM in this browser's zone. */
+  const clock = (at: number | null): string | null =>
+    at === null
+      ? null
+      : new Intl.DateTimeFormat(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(at);
+
+  const view = $derived(person.view);
+  /** The chat in front, by its title, when the hub knows it. */
+  const onChat = $derived.by(() => {
+    if (!view?.on) {
+      return null;
+    }
+    const row = cawco.instanceIndex.byId.get(view.on);
+    return row ? instanceTitle(row) : null;
+  });
+  /** What the dot says: here, away, or appearing away. */
+  const dot = $derived.by((): "here" | "away" | "appearing" => {
+    if (view?.manual) {
+      return "appearing";
+    }
+    return view?.state === "here" ? "here" : "away";
+  });
+  /** The person's state in words: the trigger's name and the menu's head. */
+  const said = $derived.by(() => {
+    if (!view) {
+      return presenceWords.away(null);
+    }
+    if (view.manual) {
+      return presenceWords.appearingAway(clock(view.since));
+    }
+    if (view.state === "here") {
+      return onChat ? presenceWords.hereOn(onChat) : presenceWords.here;
+    }
+    return presenceWords.away(clock(view.since));
+  });
+  const setUp = $derived(
+    person.permissions !== null &&
+      (person.permissions.idle === "prompt" ||
+        person.permissions.notify === "default")
+  );
+  const devices = $derived(view?.devices ?? []);
+</script>
+
+<DropdownMenu.Root>
+  <Tip label={said}>
+    {#snippet children(tip)}
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Sidebar.MenuButton
+            {...mergeProps(tip, props)}
+            aria-label={presenceWords.you(said)}
+            data-presence={dot}
+            row="avatar"
+          >
+            <!-- No picture of the reader yet: Caw stands in, the brand icon
+                 as a round picture, with the presence dot on its corner. -->
+            <span class="relative grid flex-none place-items-center" data-box>
+              <img
+                alt=""
+                class="size-space-5 rounded-pill outline outline-image-outline -outline-offset-1"
+                height="18"
+                src={cawcoIcon}
+                width="18"
+              />
+              <span
+                data-slot="presence-dot"
+                aria-hidden="true"
+                class={[
+                  "absolute -end-px -bottom-px size-(--status-dot-size) rounded-pill ring-2 ring-surface-page transition-[background-color,box-shadow] duration-(--dur-control) ease-out",
+                  dot === "here" && "bg-presence-online",
+                  dot === "away" &&
+                    "bg-surface-page inset-ring-1 inset-ring-presence-off",
+                  dot === "appearing" &&
+                    "bg-surface-page inset-ring-1 inset-ring-presence-away",
+                ]}
+              ></span>
+            </span>
+          </Sidebar.MenuButton>
+        {/snippet}
+      </DropdownMenu.Trigger>
+    {/snippet}
+  </Tip>
+  <DropdownMenu.Content align="start" side="top" width="wide">
+    <DropdownMenu.Label data-slot="presence-state" kind="line"
+      >{said}</DropdownMenu.Label
+    >
+    <DropdownMenu.CheckboxItem
+      checked={view?.manual ?? false}
+      closeOnSelect={false}
+      data-slot="appear-away"
+      disabled={!view || person.pending === "away"}
+      onCheckedChange={(on) => setAppearAway(on)}
+      >{presenceWords.appearAway}</DropdownMenu.CheckboxItem
+    >
+    {#if devices.length > 0}
+      <DropdownMenu.Separator />
+      <DropdownMenu.Group>
+        <DropdownMenu.GroupHeading
+          >{presenceWords.machines}</DropdownMenu.GroupHeading
+        >
+        {#each devices as device (device.id)}
+          <DropdownMenu.CheckboxItem
+            checked={device.counts}
+            closeOnSelect={false}
+            data-machine={device.id}
+            disabled={person.pending === device.id}
+            onCheckedChange={(on) => setMachineCounts(device.id, on)}
+          >
+            <span
+              data-slot="machine-name"
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              >{device.name}</span
+            >
+            {#if device.counts}
+              <span
+                data-slot="machine-state"
+                class="flex-none type-meta text-ink-muted"
+                >{presenceWords.machineState(device.state)}</span
+              >
+            {/if}
+          </DropdownMenu.CheckboxItem>
+        {/each}
+      </DropdownMenu.Group>
+    {/if}
+    {#if setUp}
+      <DropdownMenu.Separator />
+      <DropdownMenu.Group>
+        <DropdownMenu.GroupHeading
+          >{presenceWords.thisBrowser}</DropdownMenu.GroupHeading
+        >
+        <DropdownMenu.Item
+          closeOnSelect={false}
+          data-slot="set-up-browser"
+          disabled={person.pending === "allow"}
+          onSelect={() => allowHere()}>{presenceWords.setUp}</DropdownMenu.Item
+        >
+      </DropdownMenu.Group>
+    {/if}
+    {#if person.refusal}
+      <DropdownMenu.Label kind="line">
+        <ErrorText
+          class="text-status-fail-ink"
+          message={person.refusal.message}
+          title={person.refusal.title}
+        />
+      </DropdownMenu.Label>
+    {/if}
+  </DropdownMenu.Content>
+</DropdownMenu.Root>

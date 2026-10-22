@@ -1128,7 +1128,9 @@ export const createPush = ({
         to: tab,
         collapseId: id,
         title: sealed.title,
-        body: sealed.subtitle ? `${sealed.subtitle} · ${sealed.body}` : sealed.body,
+        body: sealed.subtitle
+          ? `${sealed.subtitle} · ${sealed.body}`
+          : sealed.body,
         session: item.instanceId,
       });
       console.log(

@@ -44,9 +44,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { MachineActivity, MachineState } from "@cawco/core";
 import { Display, type Wl_interface } from "wayland-client";
-import coreProtocol from "wayland-client/protocol/wayland.json" with {
-  type: "json",
-};
+import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
 import { resolveBin, toolEnv } from "./tools";
 
 /** How often the polled sources are read. Our call: a lock or a return shows within 5 s. */
@@ -151,26 +149,27 @@ const IDLE_NOTIFY = [
  * does: its `init` reads the protocol file from disk, which a compiled agent
  * does not have, so the bundled copy is loaded here instead.
  */
-const CORE = (coreProtocol as { name: string; requests: { args: unknown[] }[] }[]).map(
-  (itf) =>
-    itf.name === "wl_registry"
-      ? {
-          ...itf,
-          requests: itf.requests.map((request, opcode) =>
-            opcode === 0
-              ? {
-                  ...request,
-                  args: [
-                    { name: "id", type: "uint", summary: "" },
-                    { name: "interface", type: "string", summary: "" },
-                    { name: "version", type: "uint", summary: "" },
-                    { name: "id", type: "new_id", summary: "" },
-                  ],
-                }
-              : request
-          ),
-        }
-      : itf
+const CORE = (
+  coreProtocol as { name: string; requests: { args: unknown[] }[] }[]
+).map((itf) =>
+  itf.name === "wl_registry"
+    ? {
+        ...itf,
+        requests: itf.requests.map((request, opcode) =>
+          opcode === 0
+            ? {
+                ...request,
+                args: [
+                  { name: "id", type: "uint", summary: "" },
+                  { name: "interface", type: "string", summary: "" },
+                  { name: "version", type: "uint", summary: "" },
+                  { name: "id", type: "new_id", summary: "" },
+                ],
+              }
+            : request
+        ),
+      }
+    : itf
 );
 
 /** The compositor's connection: wayland-client's display, opened from the bundled protocol. */
@@ -275,17 +274,18 @@ const waylandIdle = async (): Promise<IdleSource | undefined> => {
       return;
     }
     const seat = await compositor.bind("wl_seat", 1);
-    const notifier = (await compositor.bind("ext_idle_notifier_v1")) as
-      Wl_interface & {
-        get_idle_notification: (
-          timeout: number,
-          seat: Wl_interface
-        ) => Promise<Wl_interface>;
-        get_input_idle_notification: (
-          timeout: number,
-          seat: Wl_interface
-        ) => Promise<Wl_interface>;
-      };
+    const notifier = (await compositor.bind(
+      "ext_idle_notifier_v1"
+    )) as Wl_interface & {
+      get_idle_notification: (
+        timeout: number,
+        seat: Wl_interface
+      ) => Promise<Wl_interface>;
+      get_input_idle_notification: (
+        timeout: number,
+        seat: Wl_interface
+      ) => Promise<Wl_interface>;
+    };
     const input = notifier.version >= 2;
     const notification = await (input
       ? notifier.get_input_idle_notification(IDLE_AFTER_MS, seat)
@@ -460,7 +460,6 @@ const macIdle = async (): Promise<IdleSource | undefined> => {
     };
   } catch {
     // No CoreGraphics to open: this Mac has no idle source.
-    
   }
 };
 

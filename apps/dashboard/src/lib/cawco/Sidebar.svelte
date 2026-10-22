@@ -79,6 +79,7 @@
     runningIds,
   } from "./older";
   import { openTrees, type TreeList } from "./open-trees.svelte";
+  import PresenceMenu from "./PresenceMenu.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { folderOf } from "./projects";
   import { type RailSort, rail } from "./rail.svelte";
@@ -1197,21 +1198,9 @@
     <div class="flex items-center gap-space-1" data-flip>
       <Sidebar.Menu aria-label="User" class="w-auto">
         <Sidebar.MenuItem>
-          <Tip label="You">
-            {#snippet children(tip)}
-              <Sidebar.MenuButton {...tip} aria-label="You" row="avatar">
-                <!-- No picture of the reader yet: Caw stands in, the brand
-                     icon as a round picture. -->
-                <img
-                  alt=""
-                  class="flex-none size-space-5 rounded-pill outline outline-image-outline -outline-offset-1"
-                  height="18"
-                  src={cawcoIcon}
-                  width="18"
-                />
-              </Sidebar.MenuButton>
-            {/snippet}
-          </Tip>
+          <!-- The reader's avatar, with their presence on its corner and its
+               menu: Appear away, and the machines that count. -->
+          <PresenceMenu />
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <!-- Configure, the theme and sound: the settings in the corner. -->

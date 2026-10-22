@@ -29,6 +29,7 @@ import {
   archiveRefusal,
   localNameWords,
   machineLabel,
+  presenceWords,
   projectsFor,
   questionsOf,
   STREAM_RELAY_WORDS,
@@ -60,6 +61,7 @@ import {
 import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
+import { asksHere, person } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -404,6 +406,24 @@ export interface TailnetItem {
 }
 
 /**
+ * This browser telling CawCo when the person is at this computer (Chromium's
+ * Idle Detection) and showing what needs them as a desktop notification
+ * (presence.ts), while either is still to allow and the row wasn't put away
+ * with Skip: its notice says what it shares and what changes, Allow asks the
+ * browser for both. Once allowed the row ticks (`done`) for a moment, then
+ * leaves. `idle`: this browser has Idle Detection.
+ */
+export interface DeskItem {
+  done: boolean;
+  idle: boolean;
+  key: string;
+  kind: "desk";
+  place: string;
+  raisedAt: undefined;
+  title: string;
+}
+
+/**
  * The hub's `.local` name typed in a browser, while Linux keeps port 80 from
  * the hub (core local-name.ts): one step, the command that lets it. The hub
  * tries again on its own; once the port is held the row ticks (`done`) for
@@ -505,6 +525,7 @@ export type NeedsItem =
   | WatchItem
   | ChoiceItem
   | TailnetItem
+  | DeskItem
   | LocalNameItem
   | RelayItem
   | PairingItem
@@ -1205,6 +1226,25 @@ class Home {
             },
           ]
         : [];
+    // This browser's presence: its step while something is still to allow, its tick a moment after.
+    const { permissions } = person;
+    const desk: NeedsItem[] =
+      permissions &&
+      (asksHere() ||
+        person.ticked ||
+        (!person.skipped && person.refusal?.title === presenceWords.blocked))
+        ? [
+            {
+              kind: "desk",
+              key: "desk:this-browser",
+              idle: permissions.idle !== "unsupported",
+              done: person.ticked,
+              title: presenceWords.title(permissions.idle !== "unsupported"),
+              place: "Onboarding",
+              raisedAt: undefined,
+            },
+          ]
+        : [];
     // Port 80 for the hub's `.local` name: its step while it stands, its tick a moment after.
     const local = cawco.localName;
     const named: NeedsItem[] =
@@ -1294,6 +1334,7 @@ class Home {
       ...watched,
       ...unanswered,
       ...secured,
+      ...desk,
       ...named,
       ...relaying,
       ...pairings,

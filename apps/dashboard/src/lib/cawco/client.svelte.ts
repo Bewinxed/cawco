@@ -170,6 +170,7 @@ import {
 } from "./links";
 import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
+import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { type HeldPlan, handlePlanMessage } from "./plan";
 import { presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
@@ -2817,6 +2818,8 @@ async function refresh(): Promise<boolean> {
   readWatchNotices();
   // The fleet's upstream answer: Needs you asks it while nobody has.
   readFleetUpstream();
+  // The person's presence: the rail's dot, and Needs you's row for this browser.
+  readPerson().catch(() => undefined);
   // HTTPS on the tailnet name: Needs you shows its step while one stands.
   readTailnetHttps();
   // The hub's `.local` name typed in a browser: its step while one stands.
@@ -3334,6 +3337,18 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "projects.changed") {
     rereadProjects();
+    return;
+  }
+
+  // The person's presence, and the machines that count toward it.
+  if (frame.kind === "person") {
+    takePerson(frame.person);
+    return;
+  }
+
+  // Something that needs the person, shown on the desk tab they use.
+  if (frame.kind === "desk_alert") {
+    showDeskAlert(frame, instanceIndex);
     return;
   }
 

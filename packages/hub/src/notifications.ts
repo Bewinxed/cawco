@@ -331,7 +331,9 @@ const personLine = (person: Rolled): string => {
   const since = person.since
     ? new Date(person.since).toISOString()
     : "never seen";
-  return person.manual ? `away (Appear away, since ${since})` : `away since ${since}`;
+  return person.manual
+    ? `away (Appear away, since ${since})`
+    : `away since ${since}`;
 };
 
 export interface NotificationsServices {
@@ -365,38 +367,33 @@ export const createNotifications = ({
   const facts = (): DeviceFacts[] => {
     const counted = db.presence.counted();
     return [
-      ...[...clients].map(
-        ([id, client]): DeviceFacts => ({
-          id,
-          kind: client.client,
-          at: client.at,
-          front: client.active ? client.sessionId : null,
-          inputAt: client.inputAt,
-          lockedAt: client.lockedAt,
-          machine: client.machine,
-        })
-      ),
+      ...[...clients].map(([id, client]): DeviceFacts => ({
+        id,
+        kind: client.client,
+        at: client.at,
+        front: client.active ? client.sessionId : null,
+        inputAt: client.inputAt,
+        lockedAt: client.lockedAt,
+        machine: client.machine,
+      })),
       ...[...machines]
         .filter(([id]) => counted.has(id))
-        .map(
-          ([id, word]): DeviceFacts => ({
-            id,
-            kind: "machine",
-            at: word.at,
-            front: null,
-            inputAt: word.inputAt,
-            lockedAt: word.lockedAt,
-            machine: word.state,
-          })
-        ),
+        .map(([id, word]): DeviceFacts => ({
+          id,
+          kind: "machine",
+          at: word.at,
+          front: null,
+          inputAt: word.inputAt,
+          lockedAt: word.lockedAt,
+          machine: word.state,
+        })),
     ];
   };
 
   const manualAt = (): number | null =>
     db.presence.appearAway()?.getTime() ?? null;
 
-  const rolled = (now = Date.now()): Rolled =>
-    rollup(facts(), manualAt(), now);
+  const rolled = (now = Date.now()): Rolled => rollup(facts(), manualAt(), now);
 
   /** The machines that can count: each one whose agent reads its desktop, and each one opted in. */
   const devices = (now: number): PresenceDevice[] => {
@@ -416,8 +413,7 @@ export const createNotifications = ({
             id,
             name: machineLabel(name),
             counts: counted.has(id),
-            state:
-              word && now - word.at < DEVICE_TTL_MS ? word.state : null,
+            state: word && now - word.at < DEVICE_TTL_MS ? word.state : null,
           },
         ];
       })
