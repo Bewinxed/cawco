@@ -52,6 +52,7 @@ import {
   parseWorkflowNotice,
 } from "./injected";
 import { invariant } from "./invariant";
+import { parseReference } from "./references";
 import { parseRuleMarker } from "./rules";
 import type {
   BlockMetadata,
@@ -1817,15 +1818,19 @@ export function personWords(entry: SessionMessage): string | null {
   return said.length ? said.join("\n") : null;
 }
 
-/** A `workflow_run` call, whichever harness named the tool (`mcp__cawco__…`, `cawco_…`). */
-const RUN_TOOL = /(?:^|_)workflow_run$/;
+/** A session's link in a spawn's words, `[title](cawco:session/<id>)`, its label's escapes kept. */
+const SESSION_LINK = /\[((?:[^\]\\]|\\.)*)\]\((cawco:session\/[^)\s]+)\)/;
+const ESCAPED = /\\(.)/g;
 
 /**
- * The run a `workflow_run` call started, off its result: the hub's own
- * answer, `{"runId": …}` as JSON (hub delegation-tools.ts), as a string or
- * its first text block. Undefined for a result that is not that answer.
+ * The session a `delegate` or `start_session` call started, off its result:
+ * the first session link in the hub's sentence (hub work-items.ts and
+ * delegation-actions.ts name the new session first, by its whole id),
+ * its id and title. Undefined for a result that names none (a refusal).
  */
-const startedRun = (result: unknown): string | undefined => {
+const spawnedOf = (
+  result: unknown
+): { id: string; title: string } | undefined => {
   let text: unknown = result;
   if (Array.isArray(result)) {
     text = (result as { type?: unknown; text?: unknown }[]).find(
@@ -1835,19 +1840,14 @@ const startedRun = (result: unknown): string | undefined => {
   if (typeof text !== "string") {
     return;
   }
-  let answer: unknown;
-  try {
-    answer = JSON.parse(text);
-  } catch {
-    // Not the hub's answer (a refusal in words): it started no run.
-    return;
-  }
-  const runId = (answer as { runId?: unknown } | null)?.runId;
-  return typeof runId === "string" ? runId : undefined;
+  const link = SESSION_LINK.exec(text);
+  const reference = link?.[2] ? parseReference(link[2]) : null;
+  return reference && link?.[1] !== undefined
+    ? { id: reference.id, title: link[1].replace(ESCAPED, "$1") }
+    : undefined;
 };
 
 /** Folds a tool result into the `tool.use` it answers; returns the block it changed. */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one dispatch over every tool-result shape a `tool.use` can be answered by
 export function applyToolResult(
   blocks: TranscriptBlock[],
   {
@@ -1873,47 +1873,18 @@ export function applyToolResult(
     return null;
   }
 
-  let delegateInstanceId: string | undefined;
-  let delegateTitle: string | undefined;
-  // The routing payload may live in result JSON while structuredContent contains
-  // only OpenCode transport metadata. Explicit structured fields take precedence.
-  let sc = structuredContent;
-  if (target.type === "tool.handoff" && typeof result === "string") {
-    try {
-      const parsed: unknown = JSON.parse(result);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        sc = { ...(parsed as Record<string, unknown>), ...structuredContent };
-      }
-    } catch {
-      // Most tool results are not JSON; there is no structured payload to read.
-    }
-  }
-  if (target.type === "tool.handoff" && !isError && sc) {
-    if (
-      target.metadata?.handoffKind === "delegate" &&
-      typeof sc.delegateInstanceId === "string"
-    ) {
-      ({ delegateInstanceId } = sc as { delegateInstanceId: string });
-    } else if (
-      target.metadata?.handoffKind === "start" &&
-      typeof sc.instanceId === "string"
-    ) {
-      delegateInstanceId = sc.instanceId;
-    }
-    if (typeof sc.title === "string") {
-      delegateTitle = sc.title;
-    }
-  }
-
-  const runId =
-    !isError && RUN_TOOL.test(target.metadata?.toolName ?? "")
-      ? startedRun(result)
+  // A spawn's session, as its sentence links it: what the delegate card is keyed by.
+  const spawned =
+    target.type === "tool.handoff" &&
+    !isError &&
+    (target.metadata?.handoffKind === "delegate" ||
+      target.metadata?.handoffKind === "start")
+      ? spawnedOf(result)
       : undefined;
 
   target.metadata = {
     ...target.metadata,
     toolResult: result,
-    ...(runId ? { workflowRunId: runId } : {}),
     ...(target.metadata?.toolName === "apply_patch" &&
     typeof structuredContent?.diff === "string"
       ? { toolDiff: structuredContent.diff }
@@ -1921,8 +1892,9 @@ export function applyToolResult(
     ...(images ? { resultImages: images } : {}),
     toolStatus: isError ? "error" : "success",
     ...(questionResult ? { toolUseResult: questionResult } : {}),
-    ...(delegateInstanceId ? { delegateInstanceId } : {}),
-    ...(delegateTitle ? { delegateTitle } : {}),
+    ...(spawned
+      ? { delegateInstanceId: spawned.id, delegateTitle: spawned.title }
+      : {}),
   };
   return target;
 }

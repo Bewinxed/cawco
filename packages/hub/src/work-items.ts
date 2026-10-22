@@ -4080,7 +4080,7 @@ export const createWorkItems = ({
         );
       }
       throw new Error(
-        `Workspace create on ${machineName(machineId)} failed after ${waited}s: ${reason}. Workspace ${id} was discarded; no clone or boundary was left.`,
+        `Workspace create on ${machineName(machineId)} failed after ${waited}s: ${reason}. Workspace ${id.slice(0, 8)} was discarded; no clone or boundary was left.`,
         { cause: error }
       );
     } finally {
@@ -4402,10 +4402,10 @@ export const createWorkItems = ({
       item,
       workspace,
       text:
-        `Continued ${sessionLink(session.id, boardTitle(session))}, ${label}, as work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
+        `Continued ${sessionLink(session.id, boardTitle(session))}, ${label}, as work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}): ` +
         "the brief is its next message, in the same session and its cached transcript. " +
         `${REPORT_ARRIVES} Guide it, or continue it after it ` +
-        `reports, with handoff("${session.id}", ...).${extrasLine(item)}${inputsSaid(inputs)}`,
+        `reports, with handoff("${label}", ...).${extrasLine(item)}${inputsSaid(inputs)}`,
     };
   };
 
@@ -5231,12 +5231,12 @@ export const createWorkItems = ({
       item,
       workspace,
       text:
-        `Started work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
+        `Started work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}): ` +
         (settings.forkOf
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${sessionLink(instanceId, request.title)}, ${label}. It starts with every turn of yours so far.`
           : `a fresh ${harness} session, ${sessionLink(instanceId, request.title)}, ${label}.`) +
         ` ${REPORT_ARRIVES} Guide it, or continue it after it ` +
-        `reports, with handoff("${instanceId}", ...): the message lands in the same session and its cached transcript.` +
+        `reports, with handoff("${label}", ...): the message lands in the same session and its cached transcript.` +
         (canDelegate
           ? " It may spawn delegates of its own."
           : " It is a leaf: it cannot delegate further.") +
@@ -7221,7 +7221,7 @@ export const createWorkItems = ({
             : `${error.message} It waits in your delegate tray and starts when no live item owns its files any more`;
         return {
           queued: queued.id,
-          text: `Queued “${queued.title}” (${queued.id}): ${until}; its report reaches you as any delegate's does.`,
+          text: `Queued “${queued.title}” (${queued.id.slice(0, 8)}): ${until}; its report reaches you as any delegate's does.`,
         };
       }
     },

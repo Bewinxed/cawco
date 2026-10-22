@@ -106,7 +106,6 @@ import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
 import type {
@@ -117,10 +116,20 @@ import type {
   WorkItemRow,
 } from "./db";
 import type { Origin, WorkOrigin } from "./db/schema";
+import { byHandle } from "./handles";
 import { inboxText } from "./ingress";
+import { sentence, tool } from "./mcp-tool";
 import { mediaBase64, storeImage } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
+import {
+  folderReadWords,
+  folderWrittenWords,
+  threadReadWords,
+  threadRepliedWords,
+  viewDraftedWords,
+  viewQueryWords,
+} from "./presenters/project";
 import type { Caps } from "./project-caps";
 import {
   FOLDER_CONTENT_LIMIT,
@@ -149,6 +158,8 @@ import {
 import type { TaskEvent, TaskView } from "./tasks";
 import type { Views } from "./views";
 
+/** A thread's handle as find and a chip write it: `thread#1a2b3c4d`. */
+const THREAD_HANDLE_PREFIX = /^thread#/;
 /**
  * Where a view asked for from a page's end stands once drafted: that page,
  * at `position` in its order (null: its end).
@@ -1883,6 +1894,19 @@ export const createCaw = ({
       : refuse(404, `The project has no thread ${threadId}.`);
   };
 
+  /** The id of the project's thread `asked` names: its id, its handle, or its title (handles.ts). */
+  const threadNamed = (projectId: string, asked: string): string =>
+    byHandle(
+      asked.replace(THREAD_HANDLE_PREFIX, ""),
+      db.projectThreads(projectId),
+      {
+        id: (thread) => thread.id,
+        names: (thread) => [thread.title],
+        said: (thread) => `“${thread.title}” ${thread.id.slice(0, 8)}`,
+      },
+      "thread"
+    ).id;
+
   /** What Caw reads when you write: the thread, and your words. */
   const yourWords = (thread: ThreadRow, body: string, first: boolean) =>
     `${first ? "You started a thread" : "You wrote in the thread"} “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nAnswer in plain text: it is posted in this thread as your reply, and the person watches it as you write it. When your reply names tasks or files, send it with thread_reply({ thread: "${thread.id}", body, tasks, files }) instead.`;
@@ -3290,9 +3314,6 @@ export const createCaw = ({
         }
         return mine();
       };
-      const ok = (data: unknown) => ({
-        content: [{ type: "text" as const, text: JSON.stringify(data) }],
-      });
       return [
         tool(
           "thread_read",
@@ -3301,18 +3322,15 @@ export const createCaw = ({
           ({ thread }) => {
             const projectId = mine();
             return Promise.resolve(
-              ok(
-                thread
-                  ? read(projectId, thread)
-                  : db
-                      .projectThreads(projectId)
-                      .map((listed: ThreadListRow) => ({
-                        ...summaryOf(listed),
-                        last: listed.last,
-                      }))
-              )
+              thread
+                ? read(projectId, threadNamed(projectId, thread))
+                : db.projectThreads(projectId).map((listed: ThreadListRow) => ({
+                    ...summaryOf(listed),
+                    last: listed.last,
+                  }))
             );
-          }
+          },
+          threadReadWords
         ),
         tool(
           "thread_reply",
@@ -3330,8 +3348,9 @@ export const createCaw = ({
               .optional()
               .describe("Folder files you wrote."),
           },
-          async ({ thread, body, tasks, files }) => {
+          async ({ thread: asked, body, tasks, files }) => {
             const projectId = mine();
+            const thread = threadNamed(projectId, asked);
             threadIn(projectId, thread);
             const named = files?.length
               ? await folderFiles(projectId, files)
@@ -3351,8 +3370,9 @@ export const createCaw = ({
               speech.get(actor.id)?.replied.add(thread);
             }
             said(added.thread, added.message);
-            return ok({ ok: true, message: added.message.id });
-          }
+            return { ok: true, message: added.message.id };
+          },
+          threadRepliedWords
         ),
         tool(
           "folder_read",
@@ -3360,23 +3380,20 @@ export const createCaw = ({
           { path: z.string().optional() },
           async ({ path }) => {
             const projectId = readsFolder();
-            return ok(
-              await folderCall(() =>
-                readFolderFile(projectId, path ?? "").catch(
-                  (error: unknown) => {
-                    // No path, or a folder: its listing.
-                    if (
-                      error instanceof FolderRefusal &&
-                      (error.status === 400 || error.status === 409)
-                    ) {
-                      return listFolder(projectId, path ?? "");
-                    }
-                    throw error;
-                  }
-                )
-              )
+            return await folderCall(() =>
+              readFolderFile(projectId, path ?? "").catch((error: unknown) => {
+                // No path, or a folder: its listing.
+                if (
+                  error instanceof FolderRefusal &&
+                  (error.status === 400 || error.status === 409)
+                ) {
+                  return listFolder(projectId, path ?? "");
+                }
+                throw error;
+              })
             );
-          }
+          },
+          folderReadWords
         ),
         tool(
           "folder_write",
@@ -3402,7 +3419,7 @@ export const createCaw = ({
                   `${rel} was not proposed: a delegate type is text, not bytes.`
                 );
               }
-              return ok(await proposeType(me(), rel, body, toolUseId));
+              return await proposeType(me(), rel, body, toolUseId);
             }
             if (rel === STAGES_FILE) {
               stagesRead(body);
@@ -3413,8 +3430,9 @@ export const createCaw = ({
               })
             );
             folderChanged(projectId);
-            return ok({ ok: true, path: rel, sha: written.sha });
-          }
+            return { ok: true, path: rel, sha: written.sha };
+          },
+          folderWrittenWords
         ),
         tool(
           "view_draft",
@@ -3439,8 +3457,9 @@ export const createCaw = ({
                 event: { kind: "view", name: drafted.view },
               }
             );
-            return ok(drafted);
-          }
+            return drafted;
+          },
+          viewDraftedWords
         ),
         tool(
           "view_query",
@@ -3451,10 +3470,11 @@ export const createCaw = ({
           },
           async ({ tool: name, args }) => {
             const projectId = mine();
-            return ok(
-              await folderCall(() => views.query(projectId, name, args ?? {}))
+            return await folderCall(() =>
+              views.query(projectId, name, args ?? {})
             );
-          }
+          },
+          viewQueryWords
         ),
         tool(
           "project_setup",
@@ -3466,8 +3486,9 @@ export const createCaw = ({
               .optional()
               .describe("Answered parts to ask again."),
           },
-          async ({ thread, change }) => {
+          async ({ thread: asked, change }) => {
             const projectId = mine();
+            const thread = threadNamed(projectId, asked);
             threadIn(projectId, thread);
             const stages = await folderCall(() => stagesOf(projectId));
             const template = await folderCall(() => templateOf(projectId));
@@ -3476,24 +3497,12 @@ export const createCaw = ({
             // Setup runs here now: the thread is a Setup thread, so its
             // reply naming the files he wrote offers "Open the board".
             upsert(db.setSetupThread(thread));
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: setupText(
-                    projectOf(projectId),
-                    thread,
-                    "ask",
-                    template,
-                    {
-                      ...(change ? { change } : {}),
-                      ...(stages === undefined ? {} : { stages }),
-                    }
-                  ),
-                },
-              ],
-            };
-          }
+            return setupText(projectOf(projectId), thread, "ask", template, {
+              ...(change ? { change } : {}),
+              ...(stages === undefined ? {} : { stages }),
+            });
+          },
+          sentence
         ),
       ];
     },

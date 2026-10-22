@@ -587,7 +587,11 @@ import {
   decisionRoutes,
 } from "./decisions";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
-import type { SendDelivery, SendHold } from "./delegation-actions";
+import type {
+  DelegateResult,
+  SendDelivery,
+  SendHold,
+} from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree, treeSessions } from "./delegation-tree";
 import {
@@ -871,6 +875,7 @@ import {
   type Unlanded,
   WAIT_ITEM_LIMIT,
   WorkItemRefusal,
+  type WorkItemStart,
 } from "./work-items";
 import { workflowRoutes } from "./workflows/routes";
 import { createWorkflowRuntime } from "./workflows/runtime";
@@ -2823,6 +2828,28 @@ export interface ServerOptions {
   background?: boolean;
 }
 
+/** What `POST /api/work-items` answers: the item started, its session and workspace; or queued for owned files, with neither yet. */
+const delegated = (
+  started: WorkItemStart | { queued: string; text: string },
+  asked: string
+): DelegateResult =>
+  "queued" in started
+    ? {
+        state: "queued",
+        queued: started.queued,
+        title: asked.trim(),
+        text: started.text,
+      }
+    : {
+        state: "started",
+        workItemId: started.item.id,
+        workspaceId: started.workspace.id,
+        ...(started.workspace.tmp ? { workspaceTmp: started.workspace.tmp } : {}),
+        instanceId: started.item.instanceId,
+        title: started.item.title,
+        text: started.text,
+      };
+
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { background = true }: ServerOptions = {}
@@ -3102,9 +3129,7 @@ export const createServer = (
       if (!entry) {
         throw new Error(`No admin tool ${name} in this build.`);
       }
-      const result = (await entry.handler(input)) as {
-        content?: { text?: string; type?: string }[];
-      };
+      const result = await entry.call(input);
       return (result.content ?? [])
         .map((part) => (part.type === "text" ? (part.text ?? "") : ""))
         .join("\n")
@@ -23796,6 +23821,8 @@ export const createServer = (
   const findTool = createFindTool({
     find,
     instance: (id) => db.getInstancesByIds([id])[0] as InstanceRow | undefined,
+    instancesByPrefix: (prefix) =>
+      db.getInstancesByIds(db.find.idsByPrefix(prefix)) as InstanceRow[],
     machines: () =>
       db.listAgents().map((agent) => ({
         id: agent.machineId,
@@ -23808,6 +23835,11 @@ export const createServer = (
       })),
     readHistory: (id) => readHistory(id),
     thread: (id) => db.thread(id),
+    threadsByPrefix: (prefix) =>
+      db
+        .allThreads()
+        .filter((thread) => thread.id.startsWith(prefix))
+        .map((thread) => thread.id),
     threadMessages: (threadId) =>
       db.threadMessages(threadId).map((message) => ({
         id: message.id,
@@ -23852,7 +23884,7 @@ export const createServer = (
       }
       return attachmentsOfPages(read.pages);
     },
-    find: (actor, input) => findTool.call(actor, input),
+    find: (actor, input) => findTool.call(actor, input, "detailed"),
     folderFiles: (projectId, dir) => {
       const walk = async (at: string): Promise<string[]> =>
         (
@@ -23897,7 +23929,7 @@ export const createServer = (
   });
   const hubTools = createHubTools({
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
-    find: (actor, input) => findTool.call(actor, input),
+    find: (actor, input, format) => findTool.call(actor, input, format),
     designVerdict: (actor, verdict) => designVerify.verdict(actor, verdict),
     designWrite: (actor, files, why, toolUseId) =>
       designSystem.write(actor, files, why, toolUseId),
@@ -29847,27 +29879,7 @@ export const createServer = (
               ...body,
               ...(await delegateTypeFor(body)),
             });
-            // Waiting for files a live item owns: no item yet.
-            if ("queued" in started) {
-              return {
-                queued: started.queued,
-                workItemId: null,
-                workspaceId: null,
-                workspaceTmp: null,
-                instanceId: null,
-                title: body.title.trim(),
-                text: started.text,
-              };
-            }
-            return {
-              queued: null,
-              workItemId: started.item.id,
-              workspaceId: started.workspace.id,
-              workspaceTmp: started.workspace.tmp,
-              instanceId: started.item.instanceId,
-              title: started.item.title,
-              text: started.text,
-            };
+            return delegated(started, body.title);
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);

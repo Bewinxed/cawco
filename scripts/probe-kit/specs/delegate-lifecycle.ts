@@ -35,6 +35,15 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { jevMock, jevOn } from "../jev-mock";
 import type { Kit, KitFleet, Spec } from "../kit";
 
+/** A tool's detailed answer, the hub's record as JSON; empty when it answered words (a refusal). */
+const recordOf = (text: string): Record<string, unknown> => {
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+};
+
 const WAITER = "PROBE-LIFECYCLE-WAITER";
 const CHILD = "PROBE-LIFECYCLE-CHILD";
 const DIRTY = "PROBE-LIFECYCLE-DIRTY";
@@ -188,7 +197,11 @@ const callAs = async (
       "content-type": "application/json",
       Authorization: `Bearer ${await credentialOf(fleet, parent)}`,
     },
-    body: JSON.stringify({ name, arguments: args }),
+    // The hub's record of the answer (mcp-tool.ts), which this spec reads.
+    body: JSON.stringify({
+      name,
+      arguments: { response_format: "detailed", ...args },
+    }),
   });
   if (!response.ok) {
     return {
@@ -200,12 +213,14 @@ const callAs = async (
   const result = (await response.json()) as {
     content?: { text?: string }[];
     isError?: boolean;
-    structuredContent?: Record<string, unknown>;
   };
+  const text = (result.content ?? [])
+    .map((block) => block.text ?? "")
+    .join("\n");
   return {
     isError: !!result.isError,
-    structured: result.structuredContent ?? {},
-    text: (result.content ?? []).map((block) => block.text ?? "").join("\n"),
+    structured: recordOf(text),
+    text,
   };
 };
 

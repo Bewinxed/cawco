@@ -44,11 +44,10 @@ import {
   publishedWords,
   type ThreadNote,
 } from "@cawco/core";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import type { Connections } from "./connections";
 import type { DbShape, ProjectRow } from "./db";
+import { type McpTool, sentence, tool } from "./mcp-tool";
 import { type ProjectEdit, projectName } from "./project-edit";
 import type { RepoPublish } from "./repo-publish";
 import { roleOf } from "./roles";
@@ -121,13 +120,12 @@ const definition = z.object({
   project: z.string().optional(),
 });
 
-/** The tool as `tools/list` answers it (the call itself runs through {@link createProjectSettings}). */
-const listing = tool(
-  PROJECT_SETTINGS,
-  "Change your project's settings, noted in the thread; ask: true asks the person first (create_repo and set_review always do).",
-  definition.shape,
-  () => Promise.reject(new Error("project_settings runs through its own call"))
-);
+const DESCRIPTION =
+  "Change your project's settings, noted in the thread; ask: true asks the person first (create_repo and set_review always do).";
+
+/** What a malformed call is told, after what it got wrong. */
+const INPUT_HELP =
+  "changes is a list of grant_connection, link_repo, set_lands, set_runs_on, create_repo, rename or set_review, and reason one sentence.";
 
 export interface ProjectSettingsDeps {
   /** Parks the change as the person's ask in Caw's thread and waits; rejects with their refusal (admin-asks.ts). */
@@ -369,10 +367,6 @@ export const createProjectSettings = ({
     }${reason ? `\n\nWhy: ${reason}` : ""}`;
   };
 
-  const ok = (text: string): CallToolResult => ({
-    content: [{ type: "text", text }],
-  });
-
   /**
    * Asked and approved: checked again against the project as it is now,
    * then applied. A publish keeps what its card said it left out: the
@@ -401,64 +395,71 @@ export const createProjectSettings = ({
     return said;
   };
 
-  /** The call: checked, then applied at once, or asked about first. */
-  const call = async (
+  /** The call: checked, then applied at once, or asked about first; answers what was done. */
+  const changeSettings = async (
     actor: InstanceRow,
-    raw: unknown,
+    input: z.infer<typeof definition>,
     toolUseId: string | undefined
-  ): Promise<CallToolResult> => {
-    try {
-      const input = definition.parse(raw);
-      const project = ownProject(actor, input.project);
-      const reason = reasonOf(input.reason);
-      const changes = await checkAll(project, input.changes);
-      // Creating a remote and pushing reach outside, and whether work waits
-      // for the person's review is theirs to choose: always the person's.
-      const asking =
-        input.ask === true ||
-        changes.some(
-          (one) => one.kind === "create_repo" || one.kind === "set_review"
-        );
-      if (!asking) {
-        const said = await apply(project, changes);
-        note(actor, {
-          title: "Caw changed this project's settings",
-          body: noteBody(said, changes, reason),
-          event: {
-            kind: "project",
-            what: "settings-changed",
-            name: project.name,
-          },
-        });
-        return ok(`Applied: ${said.join("; ")}. It is noted in the thread.`);
-      }
-      try {
-        await ask(actor, { changes, reason, project: project.name }, toolUseId);
-      } catch (declined) {
-        note(actor, {
-          title: "You declined a project setting",
-          body: noteBody(changes.map(projectSettingWords), changes, reason),
-          event: {
-            kind: "project",
-            what: "settings-declined",
-            name: project.name,
-          },
-        });
-        throw declined;
-      }
-      const said = await approved(actor, input.changes, reason, changes);
-      return ok(`The person approved it, and it applied: ${said.join("; ")}.`);
-    } catch (error) {
-      let text = String(error);
-      if (error instanceof z.ZodError) {
-        text =
-          "changes is a list of grant_connection, link_repo, set_lands, set_runs_on, create_repo, rename or set_review, and reason one sentence.";
-      } else if (error instanceof Error) {
-        text = error.message;
-      }
-      return { isError: true, content: [{ type: "text", text }] };
+  ): Promise<string> => {
+    const project = ownProject(actor, input.project);
+    const reason = reasonOf(input.reason);
+    const changes = await checkAll(project, input.changes);
+    // Creating a remote and pushing reach outside, and whether work waits
+    // for the person's review is theirs to choose: always the person's.
+    const asking =
+      input.ask === true ||
+      changes.some(
+        (one) => one.kind === "create_repo" || one.kind === "set_review"
+      );
+    if (!asking) {
+      const said = await apply(project, changes);
+      note(actor, {
+        title: "Caw changed this project's settings",
+        body: noteBody(said, changes, reason),
+        event: {
+          kind: "project",
+          what: "settings-changed",
+          name: project.name,
+        },
+      });
+      return `Applied: ${said.join("; ")}. It is noted in the thread.`;
     }
+    try {
+      await ask(actor, { changes, reason, project: project.name }, toolUseId);
+    } catch (declined) {
+      note(actor, {
+        title: "You declined a project setting",
+        body: noteBody(changes.map(projectSettingWords), changes, reason),
+        event: {
+          kind: "project",
+          what: "settings-declined",
+          name: project.name,
+        },
+      });
+      throw declined;
+    }
+    const said = await approved(actor, input.changes, reason, changes);
+    return `The person approved it, and it applied: ${said.join("; ")}.`;
   };
+
+  /** `project_settings`, bound to the calling session and its call; with none, its listing. */
+  const definitionFor = (
+    actor: InstanceRow | undefined,
+    toolUseId?: string
+  ): McpTool =>
+    tool(
+      PROJECT_SETTINGS,
+      DESCRIPTION,
+      definition.shape,
+      (input) => {
+        if (!actor) {
+          return Promise.reject(new Error("Discovery cannot execute tools"));
+        }
+        return changeSettings(actor, input, toolUseId);
+      },
+      sentence,
+      { inputHelp: INPUT_HELP }
+    );
 
   /** An ask approved after a hub restart (admin-asks.ts `carryOut`): applied for its asker now. */
   const runApproved = async (
@@ -478,7 +479,11 @@ export const createProjectSettings = ({
     return `Applied: ${said.join("; ")}.`;
   };
 
-  return { call, runApproved, definition: listing };
+  return {
+    tool: definitionFor,
+    runApproved,
+    definition: definitionFor(undefined),
+  };
 };
 
 export type ProjectSettings = ReturnType<typeof createProjectSettings>;

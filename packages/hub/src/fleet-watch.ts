@@ -64,11 +64,11 @@ import {
 } from "@cawco/core";
 import { Gone, readWithin } from "@cawco/core/bounded";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import type { CawEvent } from "./caw";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
+import { sentence, tool } from "./mcp-tool";
 import { MEANING_THRESHOLD } from "./meaning";
 import { CAWCO_TOOL } from "./web-reads";
 import { isLive } from "./work-items";
@@ -1131,15 +1131,9 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
                 `A ${decision} needs \`words\`: what the ${decision === "nudge" ? "lead" : "person"} reads.`
               );
             }
-            return Promise.resolve({
-              content: [
-                {
-                  type: "text" as const,
-                  text: decide(triage, decision, said, reason),
-                },
-              ],
-            });
-          }
+            return Promise.resolve(decide(triage, decision, said, reason));
+          },
+          sentence
         ),
       ];
     },

@@ -23,6 +23,9 @@ import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
 
+/** The longest name, handle or id an artifact tool takes. */
+const ARTIFACT_REF_MAX = 100;
+
 /** A workspace id, or the 8-character prefix delegate reports. */
 export const WORKSPACE_ID = /^[0-9a-f][0-9a-f-]{7,35}$/;
 
@@ -55,8 +58,9 @@ const argValues = z.record(z.string(), z.unknown());
 
 const id = z
   .string()
-  .regex(/^[0-9a-f-]{36}$/)
-  .describe("Its id, from artifact_create.");
+  .min(1)
+  .max(ARTIFACT_REF_MAX)
+  .describe("Its name or handle, as artifact_list names it, or its id.");
 
 /** An Excalidraw element skeleton: its type, an id you choose, and Excalidraw's own fields. */
 const skeleton = z.looseObject({
@@ -288,7 +292,7 @@ export const artifactRead = {
   name: "artifact_read",
   description:
     "Read the person's picks, notes and values on an artifact (yours, your delegation tree's, your project's " +
-    "pages), each with its page hash; a decision page adds its `program`. " +
+    "pages): each choice picked or not yet, and on which revision; response_format detailed adds each pick's page hash and a decision page's `program`. " +
     "`since` (your last read's `seq`) returns only later changes. No id: your newest. A canvas answers " +
     "its outline (a line per element; pen strokes as ink over the ids crossed) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture. A component answers its " +
@@ -316,9 +320,8 @@ export const artifactRead = {
 export const artifactList = {
   name: "artifact_list",
   description:
-    "Your artifacts and your delegation tree's (a lead: its project's too), newest first: each with `does`, `ask`, shown, opened, open pins, unread changes, picks, `sent` (Send pressed since " +
-    "your last change) and `waitingOn` person or " +
-    "session. `waiting: true` keeps those waiting on someone.",
+    "Your artifacts and your delegation tree's (a lead: its project's too), the 25 newest first: each with what the person does, its ask, whether it is on screen and opened, picks, unread changes, open pins, Send pressed since " +
+    "your last change, and whose move it is. `waiting: true` keeps those waiting on someone.",
   input: { waiting: z.boolean().optional() },
 };
 
@@ -381,8 +384,9 @@ export const designMap = {
 
 const pin = z
   .string()
-  .regex(/^[0-9a-f-]{36}$/)
-  .describe("The pin's id, from its delivery.");
+  .min(6)
+  .max(36)
+  .describe("The pin's handle, as comment_read names it, or its id.");
 
 export const commentRead = {
   name: "comment_read",

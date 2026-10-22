@@ -113,5 +113,5 @@ export function parseReference(
  * what it writes, so the person sees the session itself and not its id.
  */
 export const REFERENCE_GUIDANCE =
-  "To mention a session, delegate or Caw thread in anything you write, link it by its full id: `[its title](cawco:session/<id>)`. CawCo shows the link as that session's chip; a bare id or handle stays plain text. CawCo's own tool results and reports name sessions this way. " +
+  "To mention a session, delegate or Caw thread in anything you write, link it by the handle CawCo's tools name it by, or its id: `[its title](cawco:session/cockpit#5a167bde)`. CawCo shows the link as that session's chip; a bare id or handle stays plain text. CawCo's own tool results and reports name sessions this way. " +
   "To point at a pin, a decision card or an artifact, write the link CawCo gave you for it: a pin's from its delivery or comment_reply (`[When](cawco:pin/<artifact>/12)`), a card's or an artifact's from artifact_create or artifact_update. CawCo draws each as a chip that opens it in the panel at that place; a bare number (\"pin 12\") stays plain text.";

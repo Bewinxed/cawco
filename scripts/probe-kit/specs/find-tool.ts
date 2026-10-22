@@ -198,16 +198,23 @@ const standUp = async (kit: Kit) => {
       return { refused: true, text: `${response.status} ${raw}` };
     }
   };
-  /** One `find` call, its answer read. */
+  /**
+   * One `find` call, its answer read: the hub's record (`response_format:
+   * "detailed"`, JSON) unless the call asks for the concise words, which
+   * are read as words.
+   */
   const find = async (as: Session, args: object): Promise<Called> => {
-    const called = await tool(as, "find", args);
+    const called = await tool(as, "find", {
+      response_format: "detailed",
+      ...args,
+    });
+    if (called.refused) {
+      return { ...called, answer: {} };
+    }
     try {
-      return {
-        ...called,
-        answer: called.refused ? {} : (JSON.parse(called.text) as Answer),
-      };
+      return { ...called, answer: JSON.parse(called.text) as Answer };
     } catch {
-      return { refused: true, text: called.text, answer: {} };
+      return { ...called, answer: {} };
     }
   };
   /** `GET /api/find`, as the dashboard's Find asks it once typing settles. */
@@ -595,13 +602,14 @@ const secretLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
   const concise = await probe.find(seeded.orchestrator, {
     query: "narwhal sudo",
     project: "all",
+    response_format: "concise",
   });
   const detailed = await probe.find(seeded.orchestrator, {
     query: "narwhal sudo",
     project: "all",
     response_format: "detailed",
   });
-  const hit = concise.answer.hits?.find((each) => each.id === talker.id);
+  const hit = detailed.answer.hits?.find((each) => each.id === talker.id);
   const around = hit?.ref
     ? await probe.find(seeded.orchestrator, { around: hit.ref })
     : undefined;
@@ -692,13 +700,17 @@ const farSecretLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
   const concise = await probe.find(seeded.orchestrator, {
     query: "pangolin",
     project: "all",
+    response_format: "concise",
   });
-  const hit = concise.answer.hits?.find((each) => each.id === talker.id);
+  // The concise words: the hit's line, its excerpt quoted after its time.
+  const line = concise.text
+    .split("\n")
+    .find((each) => each.includes("Pangolin queue"));
   kit.check(
     'k: a password typed more than 16 words after "password" comes back [redacted] in a concise hit',
-    Boolean(hit?.excerpt?.includes("[redacted]")) &&
+    Boolean(line?.includes("[redacted]")) &&
       !FAR_HALVES.some((half) => concise.text.includes(half)),
-    said(concise)
+    concise.text.slice(0, 900)
   );
 };
 

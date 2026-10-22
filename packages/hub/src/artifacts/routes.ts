@@ -646,7 +646,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       "/api/instances/:id/artifacts/comments",
       {
         query: t.Object({
-          artifact: t.Optional(t.String({ pattern: "^[0-9a-f-]{36}$" })),
+          // Its id, or (the session's comment_read) its name or handle.
+          artifact: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
           filter: t.Optional(
             t.Union([
               t.Literal("open"),

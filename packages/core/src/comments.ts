@@ -936,7 +936,14 @@ function amongWritten<E, D>(
 }
 
 /** A section's head and what its pin stands on: the element by selector, source, page and text, or a canvas's element. */
-const standsOn = (pin: Pin, url: string): string[] => {
+/**
+ * What a pin stands on, one line per fact, under its heading: the element by
+ * its selector (or a canvas's element), the frames and artifact it stands
+ * in, its source's file:line, the components it is inside, its state, its
+ * text, the elements under its ink. `url`, when given, is the page's address
+ * as its own line; `comment_read` says it once for the artifact instead.
+ */
+export const pinStandsOn = (pin: Pin, url?: string): string[] => {
   const { anchor } = pin;
   if (!("selector" in anchor)) {
     const named = (pin.elements as string[]).join(", ");
@@ -970,7 +977,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
           `- State: ${anchor.sheet.story} · ${anchor.sheet.state.interaction} · ${anchor.sheet.state.scheme} · ${anchor.sheet.state.width === null ? "fit" : `${anchor.sheet.state.width}px`}`,
         ]
       : []),
-    `- Page: ${url}`,
+    ...(url === undefined ? [] : [`- Page: ${url}`]),
     ...(anchor.text?.trim()
       ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]
       : []),
@@ -1101,7 +1108,7 @@ export function pinSection(
     url: string;
   }
 ): string {
-  const lines = standsOn(pin, context.url);
+  const lines = pinStandsOn(pin, context.url);
   if (context.ink) {
     const { w, h, x, y } = context.ink;
     lines.push(`- Ink: ${w} × ${h} px at ${x}, ${y} in the page`);

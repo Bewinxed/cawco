@@ -134,6 +134,7 @@ import {
   type StatementChange,
 } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
+import { byHandle, HANDLE_MIN } from "../handles";
 import { sessionLabel } from "../labels";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
 import { storedFilePath } from "../media";
@@ -460,14 +461,51 @@ export interface HandedArtifactFile {
 const jsonFile = (value: unknown): Buffer =>
   Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
 
+/** A whole artifact id, which needs no resolving. */
+const WHOLE_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 /** An entry as `artifact_read` answers it. */
 type ReadEntry = ChoiceEntry & { earlierRevision?: true };
+
+/**
+ * One choice a page asks the person (a decision page's question, or a
+ * `data-cawco-choice` an HTML page declares), as they answered it: not yet
+ * (`open`, perhaps with a note), with options (`picked`), picked then
+ * unpicked (`cleared`), or with an option a revision took out (`gone`).
+ * `earlierRevision`: answered on a revision before the one shown now.
+ */
+export type DecisionAnswer = {
+  id: string;
+  /** Its question; a choice an HTML page declares has none. */
+  question?: string;
+} & (
+  | { answer: "open"; note?: string }
+  | {
+      answer: "picked";
+      at: string;
+      earlierRevision?: true;
+      note?: string;
+      options: { id: string; label?: string }[];
+    }
+  | { answer: "cleared"; at: string; earlierRevision?: true; note?: string }
+  | {
+      answer: "gone";
+      at: string;
+      earlierRevision?: true;
+      gone: string[];
+      note?: string;
+      options: string[];
+    }
+);
 
 export interface ArtifactRead {
   /** A canvas's elements the person changed since `since` (or since your last read). */
   changed?: string[];
   /** A canvas's elements you replaced that the person had changed since your last read: "<id> changed under you". */
   changedUnderYou?: string[];
+  /** A page's choices in page order, each answered or not ({@link DecisionAnswer}); on a whole read of a page that asks any. */
+  decisions?: DecisionAnswer[];
   /** Elements an update deleted, and the ids it named that the canvas does not hold. */
   deleted?: string[];
   /** A canvas the person opened in the composer and has not sent yet. */
@@ -486,6 +524,7 @@ export interface ArtifactRead {
   name: string;
   /** A canvas, as you read it: one line per element (core `canvasOutline`). */
   outline?: string;
+  /** A built page's hash, which each pick records; null for a preview (the hub never built it) and a canvas. Wire-pinned: installable app builds decode it. */
   pageHash: string | null;
   /** When the canvas's latest picture was drawn; null when it has none. */
   pictureAt?: string | null;
@@ -496,6 +535,7 @@ export interface ArtifactRead {
   /** Keys that changed since `since` and are no longer there. */
   removed?: string[];
   revision: number;
+  /** When the person last pressed Send; null before they have (and on a canvas, which has no Send). */
   sentAt: string | null;
   /** What the page's `cawco.send(text)` sent with the person's last send. */
   sentText?: string;
@@ -505,7 +545,7 @@ export interface ArtifactRead {
   sheet?: SheetRead;
   /** A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`. */
   stage?: StageState;
-  /** Every key, or with `since` only those changed after it. */
+  /** Every key, or with `since` only those changed after it; a canvas's is empty. */
   state: Record<string, ReadEntry>;
   /** A component canvas's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it. */
   unreached?: StageUnreached;
@@ -844,6 +884,53 @@ const metaOf = (doc: Doc) => {
 /** The words a page's `cawco.send(text)` sent with the person's last send; none when it sent none. */
 const sentTextOf = (doc: Doc): string | null =>
   (doc.getMap("meta").get("sentText") as string | null | undefined) ?? null;
+
+/** How the person answered one choice a page asks ({@link DecisionAnswer}), from its entry in the doc's state. */
+const answerOf = (
+  asked: { card?: DecisionCard; id: string },
+  entry: ChoiceEntry | undefined,
+  current: string | null
+): DecisionAnswer => {
+  const { card, id } = asked;
+  const question = card ? { question: card.question } : {};
+  if (!entry) {
+    return { id, ...question, answer: "open" };
+  }
+  const said = {
+    at: entry.at,
+    ...(current && entry.pageHash !== current
+      ? { earlierRevision: true as const }
+      : {}),
+    ...(noteText(entry.note) ? { note: noteText(entry.note) as string } : {}),
+  };
+  if (entry.options.length === 0) {
+    // A note with no pick is still open; a pick taken back, cleared.
+    return said.note
+      ? { id, ...question, answer: "open", note: said.note }
+      : { id, ...question, answer: "cleared", ...said };
+  }
+  const gone = card ? pickOf(card, entry).gone : [];
+  if (gone.length > 0) {
+    return {
+      id,
+      ...question,
+      answer: "gone",
+      options: entry.options,
+      gone,
+      ...said,
+    };
+  }
+  return {
+    id,
+    ...question,
+    answer: "picked",
+    options: entry.options.map((option) => {
+      const label = card?.options.find((one) => one.id === option)?.label;
+      return label ? { id: option, label } : { id: option };
+    }),
+    ...said,
+  };
+};
 
 /** The page hash the newest entry was made on: a preview's, which the hub never built. */
 const newestHash = (state: Record<string, ChoiceEntry>): string | null =>
@@ -1609,8 +1696,41 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : []
     );
 
+  /**
+   * The artifact `asked` names for `instance`: a whole id as given, else its
+   * handle or its name among the artifacts the session can name (its own,
+   * its project's it answers, its delegation tree's, its project's pages),
+   * refused when none or several are (handles.ts).
+   */
+  const whole = (instance: InstanceRow, asked: string): string => {
+    if (WHOLE_ID.test(asked)) {
+      return asked;
+    }
+    const seen = new Map<string, ArtifactRow>();
+    for (const row of [
+      ...answerable(instance),
+      ...ofTree(instance),
+      ...(instance.projectId
+        ? db.ofProject(instance.projectId).filter((one) => one.kind === "page")
+        : []),
+    ]) {
+      seen.set(row.id, row);
+    }
+    return byHandle(
+      asked,
+      [...seen.values()],
+      {
+        id: (row) => row.id,
+        names: (row) => [row.name],
+        said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
+      },
+      "artifact"
+    ).id;
+  };
+
   /** The session's artifact `id`; refused when it is another session's or not there. */
-  const own = (instance: InstanceRow, id: string): ArtifactRow => {
+  const own = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const row = db.get(id);
     if (row && row.instanceId !== instance.id && inTree(instance, row)) {
       throw new ArtifactRefusal(
@@ -1665,7 +1785,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Artifact `id`, when the session owns it or made it: a delegate goes on
    * updating and reading what it handed to its parent.
    */
-  const ownedOrMade = (instance: InstanceRow, id: string): ArtifactRow => {
+  const ownedOrMade = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const row = db.get(id);
     if (row?.madeBy === instance.id) {
       return row;
@@ -1679,7 +1800,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * session's of its delegation tree ({@link inTree}); refused as not there
    * otherwise. Every change keeps to {@link own}.
    */
-  const viewable = (instance: InstanceRow, id: string): ArtifactRow => {
+  const viewable = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const row = db.get(id);
     if (
       row &&
@@ -1729,8 +1851,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const readTarget = (
     instance: InstanceRow,
-    id: string | undefined
+    asked: string | undefined
   ): ArtifactRow => {
+    const id = asked === undefined ? undefined : whole(instance, asked);
     const handed = id === undefined ? undefined : db.get(id);
     let row: ArtifactRow | undefined = handed;
     if (id === undefined) {
@@ -2004,7 +2127,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * none. A held next version is read by whoever
    * reads its artifact: the parent reviews what its maker changed.
    */
-  const readable = (instance: InstanceRow, id: string): ArtifactRow => {
+  const readable = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const next = db.get(id);
     if (next?.heldFor) {
       readable(instance, next.heldFor);
@@ -2059,8 +2183,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     instance: InstanceRow,
     pinId: string
   ): { pin: Pin; row: ArtifactRow } => {
+    const handle = pinId.length >= HANDLE_MIN && pinId.length < 36;
     for (const row of answerable(instance)) {
-      const pin = docs.doc(row.id).getMap("pins").get(pinId) as Pin | undefined;
+      const pins = docs.doc(row.id).getMap("pins");
+      const pin =
+        (pins.get(pinId) as Pin | undefined) ??
+        (handle
+          ? (Object.values(pins.toJSON() as Record<string, Pin>).find((one) =>
+              one.id.startsWith(pinId)
+            ) as Pin | undefined)
+          : undefined);
       if (pin) {
         return { pin, row };
       }
@@ -2434,6 +2566,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ...(docs.viewers(row.id) > 0 ? { openedRevision: row.revision + 1 } : {}),
   });
 
+  /** A whole read's `decisions`: each choice the page asks, answered or not; nothing for a page that asks none. */
+  const decisionsOf = (
+    row: ArtifactRow,
+    state: Record<string, ChoiceEntry>,
+    current: string | null
+  ): Pick<ArtifactRead, "decisions"> => {
+    const asked = choicesAsked(row);
+    return asked.length > 0
+      ? {
+          decisions: asked.map((one) => answerOf(one, state[one.id], current)),
+        }
+      : {};
+  };
+
   /**
    * A page or preview as the session reads it, which counts as its read
    * when `ownersRead`: its owner's. A maker's read leaves the owner's unread.
@@ -2462,6 +2608,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ? [...changed].filter((key) => !(key in state))
       : [];
     return {
+      ...(since === undefined ? decisionsOf(row, state, current) : {}),
       id: row.id,
       kind: row.kind,
       name: row.name,

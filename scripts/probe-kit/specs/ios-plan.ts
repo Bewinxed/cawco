@@ -216,7 +216,11 @@ const run = async (kit: Kit) => {
   const call = async (input: object, name = TODO_WRITE) => {
     n += 1;
     const marker = String(n);
-    asks.set(marker, { name, input });
+    asks.set(marker, {
+      name,
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      input: { response_format: "detailed", ...input },
+    });
     await fleet.send(session, `PROBE-CALL:${marker}`);
     await until(
       `${name}'s answer (${marker})`,

@@ -1419,6 +1419,8 @@ export const made = async (
   asks.set(marker, {
     name: CREATE,
     input: {
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      response_format: "detailed",
       kind: "page",
       does: "judge",
       ask: "Judge the chip wraps: pin anything that reads wrong on a narrow pane",

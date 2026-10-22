@@ -1217,7 +1217,11 @@ const run = async (kit: Kit) => {
     input: object,
     who: string = session
   ) => {
-    asks.set(n, { name, input });
+    asks.set(n, {
+      name,
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      input: { response_format: "detailed", ...input },
+    });
     await fleet.send(who, `PROBE-CALL:${n}`);
     return (await until(
       `${name}'s answer`,

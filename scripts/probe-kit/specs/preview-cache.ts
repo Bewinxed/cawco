@@ -184,6 +184,8 @@ const probe = async (kit: Kit) => {
   asks.set("1", {
     name: CREATE,
     input: {
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      response_format: "detailed",
       kind: "preview",
       does: "try",
       ask: "Try this page and say whether it works",

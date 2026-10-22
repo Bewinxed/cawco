@@ -71,17 +71,24 @@ import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import type { Caw } from "./caw";
 import { HUB_DEBUG } from "./config";
 import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
+import { byHandle } from "./handles";
 import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { tool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
+import {
+  deletedWords,
+  routineListWords,
+  routineRunWords,
+  routineWords,
+} from "./presenters/project";
 import type { Push } from "./push";
 import { BUDGET, LANDS } from "./tasks";
 import {
@@ -2267,10 +2274,6 @@ export const createRoutines = ({
 
   // --- tools -------------------------------------------------------------------
 
-  const ok = (data: unknown) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(data) }],
-  });
-
   const scheduleParameters = {
     cron: z
       .string()
@@ -2278,7 +2281,21 @@ export const createRoutines = ({
     time_zone: z.string().describe("An IANA zone, like Europe/London."),
   };
 
-  const routineRef = () => z.string().trim().min(1).describe("Its id.");
+  const routineRef = () =>
+    z.string().trim().min(1).describe("Its handle, id or name.");
+
+  /** The id of the routine `asked` names among the caller's project's: its id, handle or name (handles.ts). */
+  const routineNamed = (asked: string, caller: InstanceRow): string =>
+    byHandle(
+      asked,
+      store.list(caller.projectId ?? null),
+      {
+        id: (routine) => routine.id,
+        names: (routine) => [routine.name],
+        said: (routine) => `${routine.name} ${routine.id.slice(0, 8)}`,
+      },
+      "routine"
+    ).id;
 
   /**
    * The routine tools, bound to the calling session and, when its harness
@@ -2329,33 +2346,33 @@ export const createRoutines = ({
         (input) => {
           const caller = me();
           return Promise.resolve(
-            ok(
-              create(
-                {
-                  projectId: caller.projectId ?? null,
-                  name: input.name,
-                  prompt: input.prompt,
-                  target: input.target,
-                  cron: input.cron,
-                  timeZone: input.time_zone,
-                  delegateType: input.delegate_type ?? null,
-                  ...(input.lands ? { lands: input.lands } : {}),
-                  budget: input.budget ?? null,
-                  dailyCapUsd: input.daily_cap_usd ?? null,
-                  keep: input.keep ?? false,
-                },
-                caller,
-                toolUseId
-              )
+            create(
+              {
+                projectId: caller.projectId ?? null,
+                name: input.name,
+                prompt: input.prompt,
+                target: input.target,
+                cron: input.cron,
+                timeZone: input.time_zone,
+                delegateType: input.delegate_type ?? null,
+                ...(input.lands ? { lands: input.lands } : {}),
+                budget: input.budget ?? null,
+                dailyCapUsd: input.daily_cap_usd ?? null,
+                keep: input.keep ?? false,
+              },
+              caller,
+              toolUseId
             )
           );
-        }
+        },
+        routineWords
       ),
       tool(
         "routine_list",
         "List your project's routines with their schedule, next slot and newest runs (state, outcome, output, why skipped or failed).",
         {},
-        () => Promise.resolve(ok(list(me().projectId ?? null)))
+        () => Promise.resolve(list(me().projectId ?? null)),
+        routineListWords
       ),
       tool(
         "routine_update",
@@ -2370,32 +2387,33 @@ export const createRoutines = ({
         },
         ({ id, enabled, keep, cron, time_zone, prompt }) =>
           Promise.resolve(
-            ok(
-              update(
-                id,
-                {
-                  ...(enabled === undefined ? {} : { enabled }),
-                  ...(keep === undefined ? {} : { keep }),
-                  ...(cron === undefined ? {} : { cron }),
-                  ...(time_zone === undefined ? {} : { timeZone: time_zone }),
-                  ...(prompt === undefined ? {} : { prompt }),
-                },
-                me()
-              )
+            update(
+              routineNamed(id, me()),
+              {
+                ...(enabled === undefined ? {} : { enabled }),
+                ...(keep === undefined ? {} : { keep }),
+                ...(cron === undefined ? {} : { cron }),
+                ...(time_zone === undefined ? {} : { timeZone: time_zone }),
+                ...(prompt === undefined ? {} : { prompt }),
+              },
+              me()
             )
-          )
+          ),
+        routineWords
       ),
       tool(
         "routine_delete",
         "Delete a routine and its runs.",
         { id: routineRef() },
-        ({ id }) => Promise.resolve(ok(remove(id, me())))
+        ({ id }) => Promise.resolve(remove(routineNamed(id, me()), me())),
+        deletedWords("routine")
       ),
       tool(
         "routine_run_now",
         "Run a routine once now; skipped while its last run still goes.",
         { id: routineRef() },
-        ({ id }) => Promise.resolve(ok(runNow(id, me())))
+        ({ id }) => Promise.resolve(runNow(routineNamed(id, me()), me())),
+        routineRunWords
       ),
       tool(
         "routine_result",
@@ -2408,7 +2426,8 @@ export const createRoutines = ({
             .describe("The run's id, from the message that woke you."),
           result: z.string().describe("The run's output."),
         },
-        ({ run, result }) => Promise.resolve(ok(leadResult(me(), run, result)))
+        ({ run, result }) => Promise.resolve(leadResult(me(), run, result)),
+        routineRunWords
       ),
     ];
   };

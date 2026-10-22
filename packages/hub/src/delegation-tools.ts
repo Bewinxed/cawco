@@ -5,9 +5,20 @@ import {
   REFERENCE_GUIDANCE,
 } from "@cawco/core";
 import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
+import type { DesignMap } from "@cawco/core/stage";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
-import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import type {
+  ArtifactRead,
+  ArtifactStatus,
+  Browsed,
+  CommentRead,
+  Created,
+  Opened,
+  Promoted,
+  Removed,
+  Revised,
+} from "./artifacts/service";
 import {
   artifactBrowse,
   artifactCreate,
@@ -28,6 +39,39 @@ import {
   handoffActions,
   SPAWNING_TOOLS,
 } from "./delegation-actions";
+import { sentence, tool } from "./mcp-tool";
+import {
+  type AskChanged,
+  artifactBrowsedWords,
+  artifactCreatedWords,
+  artifactListWords,
+  artifactPromotedWords,
+  artifactReadDetailed,
+  artifactReadWords,
+  artifactRemovedWords,
+  artifactShownWords,
+  artifactUpdatedDetailed,
+  artifactUpdatedWords,
+  type CommentReplied,
+  type CommentResolved,
+  type ComponentChanged,
+  commentReadWords,
+  commentRepliedWords,
+  commentResolvedWords,
+  designMapWords,
+  type Updated,
+} from "./presenters/artifacts";
+import {
+  delegateListWords,
+  delegateTypesWords,
+  delegateWords,
+  imageWords,
+  runStartedWords,
+  startedWords,
+  stateSlotWords,
+  workflowSavedWords,
+  workflowsWords,
+} from "./presenters/sessions";
 import { budgetParameter, groupParameter, ownsParameter } from "./task-tools";
 import {
   SESSION_TITLE_DESCRIPTION,
@@ -99,34 +143,6 @@ const forgeWriteOf = (asked: {
   );
 };
 
-function tool<T extends z.ZodRawShape>(
-  name: string,
-  description: string,
-  input: T,
-  handler: (args: z.infer<z.ZodObject<T>>) => Promise<unknown>,
-  annotations?: ToolAnnotations,
-  inputError?: string
-) {
-  // A tool with its own input error refuses unknown keys itself, as it
-  // parses. What a harness is shown never says `additionalProperties: false`:
-  // OpenCode 2.0.29's own `opencode.tool.input.repair` hook deletes every key
-  // such a schema does not name, so a call would reach the hub without the
-  // `__cawco` credential the CawCo plugin stamps into it, and be refused.
-  const schema = inputError
-    ? z.strictObject(input, { error: inputError })
-    : z.object(input);
-  return {
-    name,
-    description,
-    inputSchema: z.toJSONSchema(z.object(input), {
-      target: "draft-07",
-      io: "input",
-    }),
-    ...(annotations ? { annotations } : {}),
-    handler: (args: unknown) => handler(schema.parse(args)),
-  };
-}
-
 /**
  * What `finish_item` says: the report is the proof, and what the hub does
  * with the work: the session's own work item's landing (`lands`), so a
@@ -194,7 +210,7 @@ const inputsParameter = () =>
 /** `handoff`'s call: the message, with the inputs of a session that may delegate. */
 const handed =
   (actions: ReturnType<typeof handoffActions>) =>
-  async ({
+  ({
     target,
     message,
     inputs,
@@ -202,14 +218,16 @@ const handed =
     inputs?: HandedInput[];
     message: string;
     target: string;
-  }) => ({
-    content: [
-      {
-        type: "text" as const,
-        text: await actions.handoff(target, message, inputs),
-      },
-    ],
-  });
+  }) =>
+    actions.handoff(target, message, inputs);
+
+/** A read the harness may run without asking: it changes nothing. */
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
 
 /** Only a workflow step session gets these; they need its step and run. */
 const STEP_TOOLS: ReadonlySet<string> = new Set([
@@ -228,18 +246,7 @@ export type { HandoffDeps } from "./delegation-actions";
  */
 export const MCP_SERVER_NAME = "cawco";
 
-/**
- * Called when a tool handler returns structured data the Claude SDK would
- * otherwise drop. The harness intercepts the result text and injects the
- * structured payload onto the `tool_result` content block it can match.
- */
-
 /** The tools themselves, separated from the server so they can be exercised directly. */
-/** A tool's answer: the hub's JSON, as text. */
-const json = (answer: unknown) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(answer) }],
-});
-
 export function handoffTools(deps: HandoffDeps) {
   const actions = handoffActions(deps);
   const all = [
@@ -247,63 +254,36 @@ export function handoffTools(deps: HandoffDeps) {
       "workflow_create",
       'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. `w.ask({ question, options, answer: z.object({…}) })` takes a typed answer: the answer\'s `value` is validated against that schema, which is how a supervisor fills in a decision. A `w.run`/`w.spawn` step that runs out of attempts in a supervised run is held for the supervisor to retry or fail; give it `onExhausted: "fail"` when the program handles its StepError itself. A step prompt or Jev state may name an earlier call\'s result as `{{ref:N.path}}` (N is the call\'s effect number); the hub fills it in when the step starts. Every call is a durable workflow-engine step and a run replays its program after a restart or resume, so zod is the only import allowed and the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
       { name: z.string(), program: z.string() },
-      async ({ name, program }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(await actions.createWorkflow(name, program)),
-          },
-        ],
-      })
+      ({ name, program }) => actions.createWorkflow(name, program),
+      workflowSavedWords
     ),
     tool(
       "workflow_update",
       "Replace a saved workflow by name, slug or id with a complete TypeScript program. Returns the saved workflow, or line-numbered typecheck problems verbatim.",
       { name: z.string(), program: z.string() },
-      async ({ name, program }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(await actions.updateWorkflow(name, program)),
-          },
-        ],
-      })
+      ({ name, program }) => actions.updateWorkflow(name, program),
+      workflowSavedWords
     ),
     tool(
       "workflow_state_read",
       "Read a named slot of this workflow run's shared state. Only slots the run's program declared with w.state(name, schema) exist.",
       { name: z.string() },
-      async ({ name }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(await actions.readWorkflowState(name)),
-          },
-        ],
-      })
+      ({ name }) => actions.readWorkflowState(name),
+      stateSlotWords
     ),
     tool(
       "workflow_state_write",
       "Write a named slot of this workflow run's shared state. The value is validated against the schema the run's program declared with w.state(name, schema); the validator's message comes back verbatim on failure.",
       { name: z.string(), value: z.unknown() },
-      async ({ name, value }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.writeWorkflowState(name, value),
-          },
-        ],
-      })
+      ({ name, value }) => actions.writeWorkflowState(name, value),
+      sentence
     ),
     tool(
       "submit_result",
       "Call exactly once with an object matching the schema in your instructions, then end your turn. The hub's validation message is returned verbatim on failure.",
       { result: z.record(z.string(), z.unknown()) },
-      async ({ result }) => ({
-        content: [
-          { type: "text" as const, text: await actions.submitResult(result) },
-        ],
-      })
+      ({ result }) => actions.submitResult(result),
+      sentence
     ),
     tool(
       "workflow_run",
@@ -315,16 +295,9 @@ export function handoffTools(deps: HandoffDeps) {
           .object({ path: z.string(), machineId: z.string() })
           .optional(),
       },
-      async ({ name, inputs, workspace }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(
-              await actions.runWorkflow(name, inputs, { workspace })
-            ),
-          },
-        ],
-      })
+      ({ name, inputs, workspace }) =>
+        actions.runWorkflow(name, inputs, { workspace }),
+      runStartedWords
     ),
     tool(
       "workflow_read",
@@ -354,19 +327,14 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("Characters to return. Default 4,000, at most 20,000."),
       },
-      async ({ runId, ref, path, offset, limit }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.readWorkflow(runId, {
-              ref,
-              path,
-              offset,
-              limit,
-            }),
-          },
-        ],
-      })
+      ({ runId, ref, path, offset, limit }) =>
+        actions.readWorkflow(runId, {
+          ref,
+          path,
+          offset,
+          limit,
+        }),
+      sentence
     ),
     tool(
       "workflow_steer",
@@ -398,27 +366,15 @@ export function handoffTools(deps: HandoffDeps) {
           z.object({ type: z.literal("cancel") }),
         ]),
       },
-      async ({ runId, action }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.steerWorkflow(runId, action),
-          },
-        ],
-      })
+      ({ runId, action }) => actions.steerWorkflow(runId, action),
+      sentence
     ),
     tool(
       "workflow_list",
       "List the fleet's saved workflows, their input definitions, and graphs before choosing one to run.",
       {},
-      async () => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(await actions.listWorkflows()),
-          },
-        ],
-      })
+      () => actions.listWorkflows(),
+      workflowsWords
     ),
     tool(
       "generate_image",
@@ -457,18 +413,15 @@ export function handoffTools(deps: HandoffDeps) {
             "Defaults to auto. low for drafts; high for dense text, diagrams or fine detail, raised only when a result falls short: higher is not always better."
           ),
       },
-      async (request) => {
-        const image = await actions.generateImage(request);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(image) }],
-          structuredContent: image,
-        };
-      },
+      (request) => actions.generateImage(request),
+      imageWords,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
       }
     ),
     tool(
@@ -497,7 +450,7 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("What number names; default issue."),
       },
-      async ({ kind, repo, title, body, head, base, number, on }) => {
+      ({ kind, repo, title, body, head, base, number, on }) => {
         const write = forgeWriteOf({
           kind,
           body: body ?? "",
@@ -507,23 +460,19 @@ export function handoffTools(deps: HandoffDeps) {
           ...(number ? { number } : {}),
           ...(on ? { on } : {}),
         });
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: await actions.forgePost({
-                write,
-                ...(repo ? { repo } : {}),
-              }),
-            },
-          ],
-        };
+        return actions.forgePost({
+          write,
+          ...(repo ? { repo } : {}),
+        });
       },
+      sentence,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
       }
     ),
     tool(
@@ -532,13 +481,8 @@ export function handoffTools(deps: HandoffDeps) {
         "In a project its own types (source 'project') come first and replace fleet types of the same name. " +
         "Read it before choosing a type or answering what a type runs; it spawns nothing, and a setting is configuration, not proof of the model served.",
       {},
-      async () => {
-        const catalog = await actions.listDelegateTypes();
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(catalog) }],
-          structuredContent: catalog,
-        };
-      }
+      () => actions.listDelegateTypes(),
+      delegateTypesWords
     ),
     tool(
       "list_sessions",
@@ -547,19 +491,25 @@ export function handoffTools(deps: HandoffDeps) {
         "Use it to find a session that already owns the work, or to name a delegate; delegate types are list_delegate_types'. " +
         "A finished delegate still takes a handoff from its parent or the user, in its own session.",
       {},
-      async () => ({
-        content: [{ type: "text" as const, text: actions.listSessions() }],
-      })
+      () => Promise.resolve(actions.listSessions()),
+      sentence
     ),
     // A leaf has no delegate of its own to hand inputs to: only a session
     // that may delegate is listed `inputs`.
     deps.canDelegate === false
-      ? tool("handoff", HANDOFF_DESCRIPTION, handoffShape(), handed(actions))
+      ? tool(
+          "handoff",
+          HANDOFF_DESCRIPTION,
+          handoffShape(),
+          handed(actions),
+          sentence
+        )
       : tool(
           "handoff",
           HANDOFF_DESCRIPTION,
           { ...handoffShape(), inputs: inputsParameter() },
-          handed(actions)
+          handed(actions),
+          sentence
         ),
     tool(
       "start_session",
@@ -636,7 +586,7 @@ export function handoffTools(deps: HandoffDeps) {
             "How the new session answers tool permissions. Default: this session's own mode; when this session has none (pi), it must be named for a harness with modes, or nothing starts. Omit it for a harness without permission modes (pi)."
           ),
       },
-      async ({
+      ({
         cwd,
         prompt,
         title,
@@ -646,27 +596,16 @@ export function handoffTools(deps: HandoffDeps) {
         account,
         permissionMode,
         machine,
-      }) => {
-        const result = await actions.startSession(cwd, prompt, title, {
+      }) =>
+        actions.startSession(cwd, prompt, title, {
           spinOff,
           type,
           model,
           account,
           permissionMode,
           machine,
-        });
-        // The sentence rides in the structured result: Claude Code hands the
-        // model `structuredContent` when a tool returns one, not `content`.
-        const sc = {
-          instanceId: result.id,
-          title: result.title,
-          text: result.text,
-        };
-        return {
-          content: [{ type: "text" as const, text: result.text }],
-          structuredContent: sc,
-        };
-      }
+        }),
+      startedWords
     ),
     tool(
       "delegate",
@@ -778,7 +717,7 @@ export function handoffTools(deps: HandoffDeps) {
         owns: ownsParameter().optional(),
         budget: budgetParameter().optional(),
       },
-      async ({
+      ({
         prompt,
         title,
         type,
@@ -798,8 +737,8 @@ export function handoffTools(deps: HandoffDeps) {
         group,
         owns,
         budget,
-      }) => {
-        const result = await actions.delegate(prompt, {
+      }) =>
+        actions.delegate(prompt, {
           title,
           cwd,
           harness,
@@ -818,21 +757,8 @@ export function handoffTools(deps: HandoffDeps) {
           group,
           owns,
           budget,
-        });
-        const sc = {
-          delegateInstanceId: result.id,
-          title: result.title,
-          workItemId: result.workItemId,
-          workspaceId: result.workspaceId,
-          ...(result.workspaceTmp ? { workspaceTmp: result.workspaceTmp } : {}),
-          ...(result.queued ? { queued: result.queued } : {}),
-          text: result.text,
-        };
-        return {
-          content: [{ type: "text" as const, text: result.text }],
-          structuredContent: sc,
-        };
-      }
+        }),
+      delegateWords
     ),
     tool(
       "delegate_list",
@@ -849,24 +775,16 @@ export function handoffTools(deps: HandoffDeps) {
         ),
         before: isoTime().describe("ISO time: only items started before it."),
       },
-      async ({ include, since, before }) => {
+      ({ include, since, before }) => {
         const windowed = since !== undefined || before !== undefined;
-        const tree = await actions.delegateList({
+        return actions.delegateList({
           include: include ?? (windowed ? "all" : "live"),
           ...(since === undefined ? {} : { since: new Date(since) }),
           ...(before === undefined ? {} : { before: new Date(before) }),
         });
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(tree) }],
-          structuredContent: tree,
-        };
       },
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      delegateListWords,
+      { annotations: READ_ONLY }
     ),
     tool(
       "wait_item",
@@ -886,16 +804,9 @@ export function handoffTools(deps: HandoffDeps) {
           .min(1, { error: WAIT_ITEM_LIMIT })
           .describe("What you are waiting for from a command you started."),
       },
-      async ({ minutes, reason }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.waitItem(minutes, reason),
-          },
-        ],
-      }),
-      undefined,
-      WAIT_ITEM_LIMIT
+      ({ minutes, reason }) => actions.waitItem(minutes, reason),
+      sentence,
+      { inputError: WAIT_ITEM_LIMIT }
     ),
     tool(
       "finish_item",
@@ -924,11 +835,8 @@ export function handoffTools(deps: HandoffDeps) {
             "The exact command and error text of what stops the work, when it is outside your control."
           ),
       },
-      async (request) => ({
-        content: [
-          { type: "text" as const, text: await actions.finishItem(request) },
-        ],
-      })
+      (request) => actions.finishItem(request),
+      sentence
     ),
     tool(
       "continue_session",
@@ -986,17 +894,8 @@ export function handoffTools(deps: HandoffDeps) {
             "What to focus the summary on. Also added to the new session's opening message as its next step."
           ),
       },
-      async (input) => {
-        const result = await actions.continueSession(input);
-        return {
-          content: [{ type: "text" as const, text: result.text }],
-          structuredContent: {
-            targetInstanceId: result.targetInstanceId,
-            summariserInstanceId: result.summariserInstanceId,
-            text: result.text,
-          },
-        };
-      }
+      (input) => actions.continueSession(input),
+      startedWords
     ),
     tool(
       "stop_delegate",
@@ -1011,11 +910,8 @@ export function handoffTools(deps: HandoffDeps) {
             'The delegate to stop: its directory name, e.g. "keeboard", or its id; for a queued delegate, its queued id or its first 8 characters.'
           ),
       },
-      async ({ target }) => ({
-        content: [
-          { type: "text" as const, text: await actions.stopDelegate(target) },
-        ],
-      })
+      ({ target }) => actions.stopDelegate(target),
+      sentence
     ),
     tool(
       "discard_workspace",
@@ -1023,14 +919,8 @@ export function handoffTools(deps: HandoffDeps) {
       {
         workspace: z.string().describe("Its id, as the hub's notice names it."),
       },
-      async ({ workspace }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.discardWorkspace(workspace),
-          },
-        ],
-      })
+      ({ workspace }) => actions.discardWorkspace(workspace),
+      sentence
     ),
     tool(
       "interrupt_delegate",
@@ -1043,14 +933,8 @@ export function handoffTools(deps: HandoffDeps) {
             'The delegate to interrupt: its directory name, e.g. "keeboard", or its id.'
           ),
       },
-      async ({ target }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: actions.interruptDelegate(target),
-          },
-        ],
-      })
+      ({ target }) => Promise.resolve(actions.interruptDelegate(target)),
+      sentence
     ),
     tool(
       "machine_pause",
@@ -1060,14 +944,9 @@ export function handoffTools(deps: HandoffDeps) {
         minutes: z.number().int().min(1).max(1440).optional(),
         resume: z.boolean().optional(),
       },
-      async ({ machine, minutes, resume }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.machinePause(machine, minutes, resume),
-          },
-        ],
-      })
+      ({ machine, minutes, resume }) =>
+        actions.machinePause(machine, minutes, resume),
+      sentence
     ),
     tool(
       "answer_delegate",
@@ -1097,14 +976,11 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("Refuse the ask instead of answering it. Default false."),
       },
-      async ({ target, requestId, answers, deny }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: actions.answerDelegate(target, requestId, answers, deny),
-          },
-        ],
-      })
+      ({ target, requestId, answers, deny }) =>
+        Promise.resolve(
+          actions.answerDelegate(target, requestId, answers, deny)
+        ),
+      sentence
     ),
     tool(
       "send_to_user",
@@ -1120,23 +996,16 @@ export function handoffTools(deps: HandoffDeps) {
             "Absolute paths of image or video files on this machine (png, jpg, gif, webp, avif, bmp, mp4, mov, webm; up to 50 MB each), shown under the message: you need not read them yourself."
           ),
       },
-      async ({ message, attachments }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.sendToUser(message, attachments),
-          },
-        ],
-      })
+      ({ message, attachments }) => actions.sendToUser(message, attachments),
+      sentence
     ),
     tool(
       "open_items",
       "Your open items, word for word, as every compaction lists them.",
       {},
-      async () => ({
-        content: [{ type: "text" as const, text: await actions.openItems() }],
-      }),
-      { readOnlyHint: true }
+      () => actions.openItems(),
+      sentence,
+      { annotations: { readOnlyHint: true } }
     ),
     tool(
       "set_title",
@@ -1152,16 +1021,15 @@ export function handoffTools(deps: HandoffDeps) {
             `The session's name, at most ${SESSION_TITLE_MAX} characters, e.g. 'Fix tray chip overflow'.`
           ),
       },
-      async ({ title }) => ({
-        content: [
-          { type: "text" as const, text: await actions.setTitle(title) },
-        ],
-      }),
+      ({ title }) => actions.setTitle(title),
+      sentence,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       }
     ),
     tool(
@@ -1179,28 +1047,20 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("One line under the image saying what it shows."),
       },
-      ({ path }) =>
-        Promise.resolve({
-          content: [{ type: "text" as const, text: actions.showImage(path) }],
-        })
+      ({ path }) => Promise.resolve(actions.showImage(path)),
+      sentence
     ),
     tool(
       artifactList.name,
       artifactList.description,
       artifactList.input,
-      async ({ waiting }) =>
-        json(
-          await actions.artifactCall(
-            "GET",
-            `/status${waiting ? "?waiting=true" : ""}`
-          )
-        ),
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      ({ waiting }) =>
+        actions.artifactCall(
+          "GET",
+          `/status${waiting ? "?waiting=true" : ""}`
+        ) as Promise<ArtifactStatus[]>,
+      artifactListWords,
+      { annotations: READ_ONLY }
     ),
     // A delegate may hand it to its parent instead (`to`), unopened.
     deps.hasParent
@@ -1208,19 +1068,23 @@ export function handoffTools(deps: HandoffDeps) {
           artifactCreate.name,
           artifactCreate.description + artifactCreateToParent.description,
           { ...artifactCreate.input, ...artifactCreateToParent.input },
-          async (input) => json(await actions.artifactCall("POST", "", input))
+          (input) =>
+            actions.artifactCall("POST", "", input) as Promise<Created>,
+          artifactCreatedWords
         )
       : tool(
           artifactCreate.name,
           artifactCreate.description,
           artifactCreate.input,
-          async (input) => json(await actions.artifactCall("POST", "", input))
+          (input) =>
+            actions.artifactCall("POST", "", input) as Promise<Created>,
+          artifactCreatedWords
         ),
     tool(
       artifactUpdate.name,
       artifactUpdate.description,
       artifactUpdate.input,
-      async ({ id, statements, ask, ...change }) => {
+      async ({ id, statements, ask, ...change }): Promise<Updated> => {
         const at = `/${encodeURIComponent(id)}`;
         const changes = Object.values(change).some(
           (value) => value !== undefined
@@ -1234,33 +1098,50 @@ export function handoffTools(deps: HandoffDeps) {
         const asked =
           ask === undefined
             ? undefined
-            : await actions.artifactCall("POST", `${at}/ask`, { ask });
-        if (statements === undefined) {
-          if (!changes && asked !== undefined) {
-            return json(asked);
-          }
-          // A component canvas's states file and its own spec have their own route.
-          const component = (
-            ["args", "story", "edges", "group", "dials"] as const
-          ).some((key) => change[key] !== undefined);
-          return json(
-            await actions.artifactCall(
-              "PATCH",
-              `${at}${component ? "/component" : ""}`,
-              change
-            )
-          );
+            : ((await actions.artifactCall("POST", `${at}/ask`, {
+                ask,
+              })) as AskChanged);
+        if (statements !== undefined) {
+          return {
+            change: "statements",
+            answer: (await actions.artifactCall("POST", `${at}/statements`, {
+              statements,
+            })) as Revised,
+          };
         }
-        return json(
-          await actions.artifactCall("POST", `${at}/statements`, { statements })
-        );
-      }
+        if (!changes && asked !== undefined) {
+          return { change: "ask", answer: asked };
+        }
+        // A component canvas's states file and its own spec have their own route.
+        const component = (
+          ["args", "story", "edges", "group", "dials"] as const
+        ).some((key) => change[key] !== undefined);
+        return component
+          ? {
+              change: "component",
+              answer: (await actions.artifactCall(
+                "PATCH",
+                `${at}/component`,
+                change
+              )) as ComponentChanged,
+            }
+          : {
+              change: "page",
+              answer: (await actions.artifactCall(
+                "PATCH",
+                at,
+                change
+              )) as ArtifactRead,
+            };
+      },
+      artifactUpdatedWords,
+      { detailed: artifactUpdatedDetailed }
     ),
     tool(
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and a picture into an image block
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and the newest artifact when none is named
       async ({ id, since, png, detail, story, state, render, verify }) => {
         const query = new URLSearchParams({
           ...(since === undefined ? {} : { since: String(since) }),
@@ -1281,121 +1162,97 @@ export function handoffTools(deps: HandoffDeps) {
           }
           target = newest.id;
         }
-        const answer = (await actions.artifactCall(
+        return (await actions.artifactCall(
           "GET",
           `/${encodeURIComponent(target)}${query ? `?${query}` : ""}`
-        )) as { png?: string | null };
-        // A canvas's picture is an image the model sees, beside the outline.
-        const { png: picture, ...rest } = answer;
-        return picture
-          ? {
-              content: [
-                { type: "text" as const, text: JSON.stringify(rest) },
-                {
-                  type: "image" as const,
-                  data: picture,
-                  mimeType: "image/png",
-                },
-              ],
-            }
-          : json(png ? { ...rest, png: null } : rest);
+        )) as ArtifactRead;
       },
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      artifactReadWords,
+      { annotations: READ_ONLY, detailed: artifactReadDetailed }
     ),
     tool(
       designMap.name,
       designMap.description,
       designMap.input,
-      async (ask) => {
+      (ask) => {
         const query = new URLSearchParams(
           Object.entries(ask)
             .filter(([, value]) => value !== undefined)
             .map(([key, value]): [string, string] => [key, String(value)])
         ).toString();
-        return json(
-          await actions.artifactCall(
-            "GET",
-            `/design-map${query ? `?${query}` : ""}`
-          )
-        );
+        return actions.artifactCall(
+          "GET",
+          `/design-map${query ? `?${query}` : ""}`
+        ) as Promise<DesignMap>;
       },
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      designMapWords,
+      { annotations: READ_ONLY }
     ),
     tool(
       artifactShow.name,
       artifactShow.description,
       artifactShow.input,
-      async ({ id }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/${encodeURIComponent(id)}/show?by=agent`
-          )
-        )
+      ({ id }) =>
+        actions.artifactCall(
+          "POST",
+          `/${encodeURIComponent(id)}/show?by=agent`
+        ) as Promise<Opened>,
+      artifactShownWords
     ),
     tool(
       artifactBrowse.name,
       artifactBrowse.description,
       artifactBrowse.input,
-      async ({ id }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/${encodeURIComponent(id)}/browse`
-          )
-        ),
+      ({ id }) =>
+        actions.artifactCall(
+          "POST",
+          `/${encodeURIComponent(id)}/browse`
+        ) as Promise<Browsed>,
+      artifactBrowsedWords,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
       }
     ),
     tool(
       artifactPromote.name,
       artifactPromote.description,
       artifactPromote.input,
-      async ({ id }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/${encodeURIComponent(id)}/promote`
-          )
-        ),
+      ({ id }) =>
+        actions.artifactCall(
+          "POST",
+          `/${encodeURIComponent(id)}/promote`
+        ) as Promise<Promoted>,
+      artifactPromotedWords,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
       }
     ),
     tool(
       artifactDelete.name,
       artifactDelete.description,
       artifactDelete.input,
-      async ({ id }) =>
-        json(
-          await actions.artifactCall(
-            "DELETE",
-            `/${encodeURIComponent(id)}?by=agent`
-          )
-        )
+      ({ id }) =>
+        actions.artifactCall(
+          "DELETE",
+          `/${encodeURIComponent(id)}?by=agent`
+        ) as Promise<Removed>,
+      artifactRemovedWords
     ),
     tool(
       commentRead.name,
       commentRead.description,
       commentRead.input,
-      async ({ artifact, filter, since }) => {
+      ({ artifact, filter, since }) => {
         // The session reads them itself: what it reads counts as heard.
         const query = new URLSearchParams({
           filter,
@@ -1403,40 +1260,37 @@ export function handoffTools(deps: HandoffDeps) {
           ...(artifact ? { artifact } : {}),
           ...(since ? { since } : {}),
         }).toString();
-        return json(await actions.artifactCall("GET", `/comments?${query}`));
+        return actions.artifactCall(
+          "GET",
+          `/comments?${query}`
+        ) as Promise<CommentRead>;
       },
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      commentReadWords,
+      { annotations: READ_ONLY }
     ),
     tool(
       commentReply.name,
       commentReply.description,
       commentReply.input,
-      async ({ pin, ...reply }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/comments/${encodeURIComponent(pin)}/reply`,
-            reply
-          )
-        )
+      ({ pin, ...reply }) =>
+        actions.artifactCall(
+          "POST",
+          `/comments/${encodeURIComponent(pin)}/reply`,
+          reply
+        ) as Promise<CommentReplied>,
+      commentRepliedWords
     ),
     tool(
       commentResolve.name,
       commentResolve.description,
       commentResolve.input,
-      async ({ pin, ...resolve }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/comments/${encodeURIComponent(pin)}/resolve`,
-            resolve
-          )
-        )
+      ({ pin, ...resolve }) =>
+        actions.artifactCall(
+          "POST",
+          `/comments/${encodeURIComponent(pin)}/resolve`,
+          resolve
+        ) as Promise<CommentResolved>,
+      commentResolvedWords
     ),
   ];
   return all.filter(

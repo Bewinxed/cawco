@@ -41,7 +41,6 @@ import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import { readsOnly } from "./connection-writes";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -54,9 +53,18 @@ import type {
 import type { GitHubCursor, GitHubResource, InboundVia } from "./db/schema";
 import type { Dispatcher } from "./dispatch";
 import { githubRepoOf, pollRepo } from "./github";
+import { byHandle } from "./handles";
 import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_LEAD } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { tool } from "./mcp-tool";
+import {
+  deletedWords,
+  ingressWords,
+  pollListWords,
+  pollWords,
+  routeWords,
+} from "./presenters/project";
 import type { Routines } from "./routines";
 
 /** One event as every path normalises it before the store. */
@@ -1284,10 +1292,6 @@ export const createIngress = ({
 
   // --- tools -------------------------------------------------------------------------
 
-  const ok = (data: unknown) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(data) }],
-  });
-
   const conditions = {
     source: z.string().describe("* globs: github:*, conn:<connection>:<tool>."),
     kinds: z
@@ -1325,9 +1329,9 @@ export const createIngress = ({
       }
       return actor;
     };
-    const run = async (work: () => unknown) => {
+    const run = async <T>(work: () => T | Promise<T>): Promise<T> => {
       try {
-        return ok(await work());
+        return await work();
       } catch (error) {
         if (error instanceof IngressRefusal) {
           throw new Error(error.message, { cause: error });
@@ -1335,19 +1339,44 @@ export const createIngress = ({
         throw error;
       }
     };
+    /** The id of the caller's project's route `asked` names: its id or handle (handles.ts). */
+    const routeNamed = (asked: string): string =>
+      byHandle(
+        asked,
+        store.routes(scopeOf(me())),
+        {
+          id: (one) => one.id,
+          said: (one) => `${one.source} ${one.id.slice(0, 8)}`,
+        },
+        "event route"
+      ).id;
+    /** The id of the caller's project's connector poll `asked` names. */
+    const pollNamed = (asked: string): string =>
+      byHandle(
+        asked,
+        store.connectorPolls(scopeOf(me())),
+        {
+          id: (poll) => poll.id,
+          said: (poll) =>
+            `${poll.connection}:${poll.tool} ${poll.id.slice(0, 8)}`,
+        },
+        "connector poll"
+      ).id;
     return [
       tool(
         "event_route_create",
         "Send your project's matching inbound events (GitHub PRs, issues, comments; connector poll items) to one of its routines, as that run's input. The oldest matching route takes an event; unmatched ones go to the lead's next wake.",
         { ...conditions, routine: z.string().describe("The routine's id.") },
         ({ routine, ...rest }) =>
-          run(() => createRoute({ ...rest, routineId: routine }, me()))
+          run(() => createRoute({ ...rest, routineId: routine }, me())),
+        routeWords
       ),
       tool(
         "event_route_list",
         "Your project's event routes, whether its GitHub repo is polled (and why not), its connector polls and newest inbound events.",
         {},
-        () => run(() => view(scopeOf(me())))
+        () => run(() => view(scopeOf(me()))),
+        ingressWords
       ),
       tool(
         "event_route_update",
@@ -1361,14 +1390,20 @@ export const createIngress = ({
         },
         ({ id, routine, ...rest }) =>
           run(() =>
-            updateRoute(id, defined({ ...rest, routineId: routine }), me())
-          )
+            updateRoute(
+              routeNamed(id),
+              defined({ ...rest, routineId: routine }),
+              me()
+            )
+          ),
+        routeWords
       ),
       tool(
         "event_route_delete",
         "Delete an event route.",
         { id: ref() },
-        ({ id }) => run(() => deleteRoute(id, me()))
+        ({ id }) => run(() => deleteRoute(routeNamed(id), me())),
+        deletedWords("event route")
       ),
       tool(
         "connector_poll_create",
@@ -1396,13 +1431,15 @@ export const createIngress = ({
               },
               me()
             )
-          )
+          ),
+        pollWords
       ),
       tool(
         "connector_poll_list",
         "Your project's connector polls, each with what its last call saw or why it failed.",
         {},
-        () => run(() => store.connectorPolls(scopeOf(me())).map(pollView))
+        () => run(() => store.connectorPolls(scopeOf(me())).map(pollView)),
+        pollListWords
       ),
       tool(
         "connector_poll_update",
@@ -1419,7 +1456,7 @@ export const createIngress = ({
         (input) =>
           run(() =>
             updatePoll(
-              input.id,
+              pollNamed(input.id),
               defined({
                 args: input.args,
                 intervalS: input.interval_s,
@@ -1430,13 +1467,15 @@ export const createIngress = ({
               }),
               me()
             )
-          )
+          ),
+        pollWords
       ),
       tool(
         "connector_poll_delete",
         "Delete a connector poll.",
         { id: ref() },
-        ({ id }) => run(() => deletePoll(id, me()))
+        ({ id }) => run(() => deletePoll(pollNamed(id), me())),
+        deletedWords("connector poll")
       ),
     ];
   };

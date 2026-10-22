@@ -46,7 +46,10 @@ import {
   type FindPage,
   FindRefusal,
 } from "./find";
+import { HANDLE_MIN } from "./handles";
 import { boardTitle } from "./labels";
+import { tool } from "./mcp-tool";
+import { findWords } from "./presenters/find";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
 import type { HistoryRead } from "./transcripts";
@@ -118,17 +121,17 @@ const INPUT = {
     .optional()
     .describe(`Default ${DEFAULT_LIMIT}, max ${MAX_LIMIT}.`),
   cursor: z.string().optional().describe("next_cursor."),
-  response_format: z
-    .enum(["concise", "detailed"])
-    .optional()
-    .describe("detailed adds every moment, neighbouring turns, state."),
   around: z
     .string()
     .optional()
     .describe("A hit's ref or id: its neighbouring turns, not a search."),
 };
+/** `find`'s input; `response_format` is the tool's (mcp-tool.ts), its detailed form adding every moment, neighbouring turns and state. */
+export const FIND_INPUT = INPUT;
 const SCHEMA = z.object(INPUT);
-export type FindInput = z.infer<typeof SCHEMA>;
+export type FindInput = z.infer<typeof SCHEMA> & {
+  response_format?: "concise" | "detailed";
+};
 
 const DESCRIPTION =
   "Find anything said or made across the fleet, as the dashboard's Find does, best first, each hit dated with an excerpt and id. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
@@ -140,6 +143,8 @@ export interface FindToolDeps {
   find: Find;
   /** A session the hub holds, by id. */
   instance: (id: string) => InstanceRow | undefined;
+  /** The sessions whose id begins with `prefix`: a handle `around` was given. */
+  instancesByPrefix: (prefix: string) => InstanceRow[];
   /** The machines, by id and name. */
   machines: () => { id: string; name: string }[];
   /** The projects, by id and name. */
@@ -156,6 +161,8 @@ export interface FindToolDeps {
     id: string;
     noteTitle: string | null;
   }[];
+  /** The ids of the threads whose id begins with `prefix`. */
+  threadsByPrefix: (prefix: string) => string[];
 }
 
 /** One turn of a conversation or thread, as an answer shows it. */
@@ -381,10 +388,14 @@ const entryWho = (
 };
 
 /** Whether a stored entry is the record `docId`. */
+/** Whether `id` is `docId`, or begins with it when `docId` is a handle (six or more characters). */
+const names = (id: string | undefined, docId: string): boolean =>
+  id === docId || (docId.length >= HANDLE_MIN && !!id?.startsWith(docId));
+
 const isRecord = (entry: SessionMessage, docId: string): boolean =>
-  entry.uuid === docId ||
-  entry.sourceUuid === docId ||
-  (entry.sends ?? []).includes(docId);
+  names(entry.uuid, docId) ||
+  names(entry.sourceUuid, docId) ||
+  (entry.sends ?? []).some((send) => names(send, docId));
 
 /** A stored transcript as `around` reads it. */
 interface Stored {
@@ -498,7 +509,7 @@ const threadTurnsOf = (
   side: number
 ): TurnsRead | NoTurns => {
   const centre = messageId
-    ? messages.findIndex((message) => message.id === messageId)
+    ? messages.findIndex((message) => names(message.id, messageId))
     : messages.length - 1;
   if (centre < 0) {
     return {
@@ -711,7 +722,7 @@ const detailedHitOf = (result: FindResult) => {
 };
 
 /** The hits that fit {@link ANSWER_MAX_CHARS}: past it, a hit goes to the next page. */
-const bounded = (hits: Record<string, unknown>[]) => {
+const bounded = <T>(hits: T[]): T[] => {
   const kept = [...hits];
   while (
     kept.length > 1 &&
@@ -920,11 +931,27 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
+  /** The full id a hit's id or handle names: a session's or a thread's; as given when none or several begin with it. */
+  const wholeId = (asked: string): string => {
+    if (
+      asked.length >= 36 ||
+      asked.length < HANDLE_MIN ||
+      deps.instance(asked)
+    ) {
+      return asked;
+    }
+    const ids = [
+      ...deps.instancesByPrefix(asked).map((row) => row.id),
+      ...deps.threadsByPrefix(asked),
+    ];
+    return ids.length === 1 && ids[0] ? ids[0] : asked;
+  };
+
   /** `around`: a hit's ref or id, read as turns. */
   const around = async (ref: string, format: "concise" | "detailed") => {
     const { side, chars } = AROUND[format];
     const mark = ref.indexOf(REF_MARK);
-    const id = (mark < 0 ? ref : ref.slice(0, mark)).trim();
+    const id = wholeId((mark < 0 ? ref : ref.slice(0, mark)).trim());
     const docId = mark < 0 ? undefined : ref.slice(mark + 1);
     const target = targetOf(id);
     if (!target) {
@@ -1151,16 +1178,13 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
-  /** One `find` call: a search, or `around` a hit. */
-  const call = async (actor: InstanceRow, raw: unknown): Promise<unknown> => {
-    const parsed = SCHEMA.safeParse(raw);
-    if (!parsed.success) {
-      const [issue] = parsed.error.issues;
-      throw new FindToolRefusal(
-        `${issue?.path.join(".") || "input"}: ${issue?.message ?? "not valid"}. Kinds: ${FIND_KINDS.join(", ")}. Example: ${EXAMPLE}`
-      );
-    }
-    const input = parsed.data;
+  /** One `find` call, its input parsed: a search, or `around` a hit; `format` the form asked. */
+  const call = async (
+    actor: InstanceRow,
+    asked: z.infer<typeof SCHEMA>,
+    format: "concise" | "detailed"
+  ) => {
+    const input: FindInput = { ...asked, response_format: format };
     try {
       if (input.around?.trim()) {
         return await around(input.around, input.response_format ?? "concise");
@@ -1181,18 +1205,22 @@ export const createFindTool = (deps: FindToolDeps) => {
 
 export type FindTool = ReturnType<typeof createFindTool>;
 
+/** What a malformed `find` is told, after what it got wrong. */
+const INPUT_HELP = `Kinds: ${FIND_KINDS.join(", ")}. Example: ${EXAMPLE}`;
+
 /** `find`'s definition, as a session is listed it; `call` runs it for the calling session. */
 export const findToolDefinition = (
-  call: (raw: unknown) => Promise<unknown>
-) => ({
-  name: FIND_TOOL,
-  description: DESCRIPTION,
-  inputSchema: z.toJSONSchema(SCHEMA, { target: "draft-07", io: "input" }),
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-  handler: call,
-});
+  call: (
+    input: z.infer<typeof SCHEMA>,
+    format: "concise" | "detailed"
+  ) => Promise<Parameters<typeof findWords>[0]>
+) =>
+  tool(FIND_TOOL, DESCRIPTION, INPUT, call, findWords, {
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputHelp: INPUT_HELP,
+  });

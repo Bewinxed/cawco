@@ -19,7 +19,7 @@ import type { Envelope, InstanceRow, PermissionResult } from "@cawco/core";
 import { BROWSER_ASK_TOOL, type BrowserAskFrame } from "@cawco/core";
 import type { BrowserKey } from "@cawco/core/browser";
 import { z } from "zod";
-import { tool } from "./admin-tools";
+import { tool } from "./mcp-tool";
 
 /** The session tools browsers give, by name: what a call is routed by (delegation-mcp.ts). */
 export const BROWSER_TOOLS: ReadonlySet<string> = new Set(["browser_ask"]);
@@ -28,6 +28,12 @@ export const BROWSER_TOOLS: ReadonlySet<string> = new Set(["browser_ask"]);
 export type BrowserAskAnswer =
   | { outcome: "handed_back"; origin: string | null }
   | { outcome: "declined"; words: string };
+
+/** What the person did with the browser, in words. */
+const browserAnsweredWords = (answer: BrowserAskAnswer): string =>
+  answer.outcome === "declined"
+    ? `They declined: ${answer.words}`
+    : `They handed the browser back${answer.origin ? `, on ${answer.origin}` : "; it did not say which origin it was on"}. Go on in your browser tool.`;
 
 /** The longest reason the person reads. */
 const REASON_MAX = 300;
@@ -258,14 +264,9 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
             if (!actor) {
               throw new Error("Discovery cannot execute tools");
             }
-            const answer = await asks.ask(actor, input, toolUseId);
-            return {
-              content: [
-                { type: "text" as const, text: JSON.stringify(answer) },
-              ],
-              structuredContent: answer,
-            };
-          }
+            return await asks.ask(actor, input, toolUseId);
+          },
+          browserAnsweredWords
         ),
       ];
     },

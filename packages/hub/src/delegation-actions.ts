@@ -20,7 +20,9 @@ import type {
   PermissionResult,
   SendPayload,
   SpawnPayload,
+  Workflow,
   WorkflowAction,
+  WorkflowListing,
 } from "@cawco/core";
 import {
   delegateTypeProblem,
@@ -904,7 +906,7 @@ export interface HandoffActions {
     targetInstanceId: string;
     text: string;
   }>;
-  readonly createWorkflow: (name: string, program: string) => Promise<unknown>;
+  readonly createWorkflow: (name: string, program: string) => Promise<Workflow>;
   /**
    * Starts a work item: a fresh session or a fork of this one in a new workspace, or the follow-up
    * in an existing one, on the session that workspace's last item ran. The
@@ -997,7 +999,7 @@ export interface HandoffActions {
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   listSessions(): string;
-  readonly listWorkflows: () => Promise<unknown>;
+  readonly listWorkflows: () => Promise<{ workflows: WorkflowListing[] }>;
   /**
    * Pauses the machine `machine` names for `minutes` (machine-pause.ts), or
    * ends its pause (`resume`). Answers what the hub did, in a sentence.
@@ -1067,7 +1069,7 @@ export interface HandoffActions {
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   stopDelegate(target: string): Promise<string>;
   readonly submitResult: (result: unknown) => Promise<string>;
-  readonly updateWorkflow: (name: string, program: string) => Promise<unknown>;
+  readonly updateWorkflow: (name: string, program: string) => Promise<Workflow>;
   readonly waitItem: (minutes: number, reason: string) => Promise<string>;
   readonly writeWorkflowState: (
     name: string,
@@ -1083,20 +1085,29 @@ export interface HandoffResult {
 }
 
 /**
- * A delegation's result: its session, and the work item and workspace it
- * runs in; all three null while it waits, queued, for files a live item owns.
+ * A delegation's result (`POST /api/work-items`): started, its session and
+ * the work item and workspace it runs in; or queued, waiting for files a
+ * live item owns, with no session yet.
  */
-export interface DelegateResult {
-  id: string | null;
-  /** The queued request's id, while it waits for owned files. */
-  queued: string | null;
-  text: string;
-  title: string;
-  workItemId: string | null;
-  workspaceId: string | null;
-  /** The workspace's scratch dir on its machine, the delegate's `TMPDIR`: where inputs for it are copied. */
-  workspaceTmp: string | null;
-}
+export type DelegateResult =
+  | {
+      /** Its session. */
+      instanceId: string;
+      state: "started";
+      text: string;
+      title: string;
+      workItemId: string;
+      workspaceId: string;
+      /** The workspace's scratch dir on its machine, the delegate's `TMPDIR`: where inputs for it are copied; absent when the machine named none. */
+      workspaceTmp?: string;
+    }
+  | {
+      /** The queued request's id. */
+      queued: string;
+      state: "queued";
+      text: string;
+      title: string;
+    };
 
 /** A work item as the hub answers for it (`GET /api/work-items/:id`). */
 interface WorkItemView {
@@ -1204,7 +1215,7 @@ async function saveWorkflowProgram(
   method: string,
   path: string,
   body: { name?: string; program: string }
-): Promise<unknown> {
+): Promise<Workflow> {
   const response = await fetch(`${hubHttpUrl()}${path}`, {
     method,
     headers: { "content-type": "application/json" },
@@ -1222,7 +1233,7 @@ async function saveWorkflowProgram(
     }
     throw new Error(text);
   }
-  return response.json();
+  return (await response.json()) as Workflow;
 }
 
 const coldRefusals = new Map<string, string>();
@@ -1759,7 +1770,7 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    return response.json();
+    return (await response.json()) as { workflows: WorkflowListing[] };
   },
   async generateImage(request) {
     const read = await readWithin(
@@ -2064,7 +2075,7 @@ export const handoffActions = ({
         `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
         `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
         "It is in the sidebar now, under this session, and the user can open its transcript. " +
-        `Hand it more work later with handoff("${id}", ...).`,
+        `Hand it more work later with handoff("${leafOf(settled)}#${id.slice(0, 8)}", ...).`,
     };
   },
 
@@ -2094,26 +2105,13 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    const started = (await response.json()) as {
-      instanceId: string | null;
-      queued: string | null;
-      text: string;
-      title: string;
-      workItemId: string | null;
-      workspaceId: string | null;
-      workspaceTmp: string | null;
-    };
-    return {
-      id: started.instanceId,
-      queued: started.queued,
-      title: started.title,
-      text: target
-        ? `${started.text} It runs on ${machineCalled(target.machineId, fleet.machines())}.`
-        : started.text,
-      workItemId: started.workItemId,
-      workspaceId: started.workspaceId,
-      workspaceTmp: started.workspaceTmp,
-    };
+    const started = (await response.json()) as DelegateResult;
+    return target
+      ? {
+          ...started,
+          text: `${started.text} It runs on ${machineCalled(target.machineId, fleet.machines())}.`,
+        }
+      : started;
   },
 
   async finishItem(request) {

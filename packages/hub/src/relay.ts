@@ -65,14 +65,20 @@ import { detach } from "@cawco/core/detach";
 import { machineId } from "@cawco/core/machine-id";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { RelayPatch, RelayRow } from "./db/relays";
 import { createFunnel, type Funnel, type FunnelState } from "./funnel";
 import { type GitHubKind, githubRepoOf, normalizeGitHub } from "./github";
+import { byHandle } from "./handles";
 import type { Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { tool } from "./mcp-tool";
+import {
+  relayCreatedWords,
+  relayListWords,
+  relayRemovedWords,
+} from "./presenters/project";
 
 /** The most a delivery's body holds: 1 MiB. */
 export const RELAY_BODY_MAX = 1024 * 1024;
@@ -1138,10 +1144,6 @@ export const createRelay = ({
 
   // --- tools ---------------------------------------------------------------------------
 
-  const ok = (data: unknown) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(data) }],
-  });
-
   /** A tool's or an ask's words (snake case), as a relay's input. */
   const inputOf = (
     projectId: string,
@@ -1212,9 +1214,9 @@ export const createRelay = ({
     const projectOfMe = () =>
       me().projectId ??
       refuse(403, "This session is in no project, so it has no relays.");
-    const run = async (work: () => unknown) => {
+    const run = async <T>(work: () => T | Promise<T>): Promise<T> => {
       try {
-        return ok(await work());
+        return await work();
       } catch (error) {
         if (error instanceof RelayRefusal) {
           throw new Error(error.message, { cause: error });
@@ -1233,19 +1235,37 @@ export const createRelay = ({
           timestamp_header: z.string().optional().describe("generic"),
           id_path: z.string().optional().describe("generic: event id path"),
         },
-        (input) => run(() => askThenCreate(me(), inputOf(projectOfMe(), input)))
+        (input) =>
+          run(() => askThenCreate(me(), inputOf(projectOfMe(), input))),
+        relayCreatedWords
       ),
       tool(
         "relay_list",
         "Your project's relays: URL, state, the owner's step.",
         {},
-        () => run(() => list(projectOfMe()))
+        () => run(() => list(projectOfMe())),
+        relayListWords
       ),
       tool(
         "relay_remove",
         "Turn a relay off; the GitHub webhook the hub made goes with it.",
         { id: z.string().trim().min(1) },
-        ({ id }) => run(() => remove(id, me()))
+        ({ id }) =>
+          run(() =>
+            remove(
+              byHandle(
+                id,
+                list(projectOfMe()),
+                {
+                  id: (relay) => relay.id,
+                  said: (relay) => `${relay.provider} ${relay.id.slice(0, 8)}`,
+                },
+                "relay"
+              ).id,
+              me()
+            )
+          ),
+        relayRemovedWords
       ),
     ];
   };

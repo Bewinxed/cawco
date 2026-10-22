@@ -34,9 +34,9 @@ import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { normaliseRemote } from "@cawco/core/upstream-guard";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import type { DbShape, ProjectOfferRow, ProjectRow } from "./db";
 import { leafOf, sessionLabel } from "./labels";
+import { tool } from "./mcp-tool";
 import { FolderRefusal, refused } from "./project-folder";
 import type { TaskActor, Tasks } from "./tasks";
 
@@ -476,12 +476,25 @@ export const projectFromSessionTool = (accept?: () => Promise<AcceptResult>) =>
       if (!accept) {
         throw new Error("Discovery cannot execute tools");
       }
-      const result = await accept();
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result) }],
-      };
-    }
+      return await accept();
+    },
+    acceptedWords
   );
+
+/** What making a session a project did, in words. */
+const acceptedWords = (result: AcceptResult): string =>
+  [
+    `${result.joined ? "Joined" : "Made"} project ${result.project.name}; ${result.sessions.length === 1 ? "this session moved" : `this session and ${result.sessions.length - 1} delegates moved`} into it.`,
+    result.setupThread
+      ? `Its Caw sets it up in the thread “${result.setupThread.title}”.`
+      : "",
+    result.tasks.length > 0
+      ? `Filed as proposed tasks: ${result.tasks.map((task) => `${task.id} “${task.title}”`).join(", ")}.`
+      : "No plan items to file.",
+    ...result.unfiled.map((one) => `Not filed, “${one.title}”: ${one.why}`),
+  ]
+    .filter(Boolean)
+    .join("\n");
 
 /** Whether a session may make itself a project: one you started, and in none yet. */
 export const mayMakeProject = (actor: InstanceRow): boolean =>

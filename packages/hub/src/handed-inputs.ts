@@ -51,8 +51,8 @@ export interface HandedInputDeps {
   artifacts: Pick<Artifacts, "commentRead" | "handed">;
   /** A session's attachments, newest first (server.ts `sessionAttachments`); throws in words when its transcript can't be read. */
   attachments: (instanceId: string) => Promise<SessionAttachment[]>;
-  /** One `find` call as the caller would make it (find-tool.ts). */
-  find: (actor: InstanceRow, input: unknown) => Promise<unknown>;
+  /** The turns around a `find` hit, as `find` answers them detailed (find-tool.ts): the hub's whole record. */
+  find: (actor: InstanceRow, input: { around: string }) => Promise<unknown>;
   /** Every file under a folder of a project's folder, by path from its root. */
   folderFiles: (projectId: string, dir: string) => Promise<string[]>;
   instance: (id: string) => InstanceRow | undefined;
@@ -233,10 +233,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
   ): Promise<HandedFile[]> => {
     let turns: unknown;
     try {
-      turns = await deps.find(caller, {
-        around: ref,
-        response_format: "detailed",
-      });
+      turns = await deps.find(caller, { around: ref });
     } catch (error) {
       throw new HandedInputRefusal(
         `{ find: "${ref}" }: ${error instanceof Error ? error.message : String(error)}`,

@@ -115,13 +115,13 @@ import type {
 } from "@cawco/core/workflow-program";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
 import type { DbShape, ProjectRow, SessionTaintRow } from "./db";
 import { useKey } from "./db/memory-facts";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine, type PlacementRow } from "./jev-placement";
 import { boardTitle } from "./labels";
+import { tool } from "./mcp-tool";
 import {
   archived as archivedLines,
   archivePath,
@@ -156,6 +156,12 @@ import {
   withUses,
   wordsOf,
 } from "./memory-facts";
+import {
+  memoryClassifiedWords,
+  memoryNotedWords,
+  memoryProposedWords,
+  memoryReadWords,
+} from "./presenters/project";
 import { typeFileProblem } from "./project-delegate-types";
 import {
   changeFolderFiles,
@@ -3660,9 +3666,6 @@ export const createMemory = ({
         }
         return actor;
       };
-      const ok = (data: unknown) => ({
-        content: [{ type: "text" as const, text: JSON.stringify(data) }],
-      });
       return [
         tool(
           "memory_note",
@@ -3674,7 +3677,8 @@ export const createMemory = ({
               .optional()
               .describe("YYYY-MM-DD it became true, if before today."),
           },
-          async ({ text, since }) => ok(await note(me(), text, since))
+          ({ text, since }) => note(me(), text, since),
+          memoryNotedWords
         ),
         tool(
           "memory_propose",
@@ -3688,14 +3692,13 @@ export const createMemory = ({
             why: z.string().describe("One line."),
             ask: z.boolean().optional(),
           },
-          async ({ files, notes, why, ask }) =>
-            ok(
-              await propose(
-                me(),
-                { files, notes: notes ?? [], why, ask: ask ?? false },
-                toolUseId
-              )
-            )
+          ({ files, notes, why, ask }) =>
+            propose(
+              me(),
+              { files, notes: notes ?? [], why, ask: ask ?? false },
+              toolUseId
+            ),
+          memoryProposedWords
         ),
         tool(
           "memory_classify",
@@ -3706,13 +3709,15 @@ export const createMemory = ({
               .min(1)
               .max(RUN_NOTES),
           },
-          async ({ notes }) => ok(await classify(me(), notes))
+          ({ notes }) => classify(me(), notes),
+          memoryClassifiedWords
         ),
         tool(
           "memory_read",
           "Read AGENTS.md, a knowledge/ file or an inbox note; no path: the inbox's waiting notes and knowledge/'s files.",
           { path: z.string().optional() },
-          async ({ path }) => ok(await read(me(), path))
+          ({ path }) => read(me(), path),
+          memoryReadWords
         ),
       ];
     },

@@ -284,6 +284,8 @@ const probe = async (kit: Kit) => {
   asks.set("1", {
     name: CREATE,
     input: {
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      response_format: "detailed",
       kind: "page",
       does: "judge",
       ask: "Judge this page: pin anything that reads wrong",

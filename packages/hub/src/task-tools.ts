@@ -23,17 +23,25 @@ import {
   type SessionPlan,
 } from "@cawco/core";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import { BUILD_TITLE } from "./design-offers";
 import type { AttemptStart } from "./dispatch";
+import { tool } from "./mcp-tool";
 import type { WrittenStep } from "./plans";
+import {
+  attemptStartWords,
+  taskArchivedWords,
+  taskChangedWords,
+  taskCommentedWords,
+  taskCreatedWords,
+  taskReadWords,
+  taskResultWords,
+  todoWrittenWords,
+} from "./presenters/tasks";
 import { appleSuggestion } from "./runs-on";
 import { EDGES, normaliseTaskRef } from "./task-file";
 import {
-  type StagesView,
   sessionActor,
   type TaskActor,
-  type TaskList,
   type Tasks,
   type TaskView,
 } from "./tasks";
@@ -97,74 +105,6 @@ export interface TaskToolContext {
     written: { steps?: WrittenStep[]; spec?: string }
   ) => Promise<SessionPlan & { personChanged?: string }>;
 }
-
-const ok = (data: unknown) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(data) }],
-});
-
-/** A stage as a model reads it: `draft (active, runs writer)`. */
-const stageLine = ({ name, kind, hooks }: StagesView["stages"][number]) => {
-  const said = [
-    kind,
-    ...(hooks.runs ? [`runs ${hooks.runs}`] : []),
-    ...(hooks.until ? [`until ${hooks.until}`] : []),
-    ...(hooks.after ? [`after ${hooks.after}`] : []),
-    ...(hooks.by ? [`only ${hooks.by} moves a task in`] : []),
-  ];
-  return `${name} (${said.join(", ")})`;
-};
-
-type TaskLine = TaskList["tasks"][number];
-
-/** What a task's attempts and edges add to its line: only what is so. */
-const attemptFields = (task: TaskLine) => ({
-  ...(task.liveAttempt ? { attempt: "live" } : {}),
-  ...(task.lastAttemptFailed ? { attempt: "failed" } : {}),
-  ...(task.lastAttemptStopped ? { attempt: "stopped" } : {}),
-  ...(task.lastAttemptFailed || task.lastAttemptStopped
-    ? { attemptEnded: task.attempts[0]?.endedHow }
-    : {}),
-  ...(task.blockedBy.length > 0 ? { blockedBy: task.blockedBy } : {}),
-  ...(task.startProblem ? { startProblem: task.startProblem } : {}),
-});
-
-/** One task as a model reads it in a list: its fields that are set. */
-const taskLine = (task: TaskLine) => ({
-  id: task.id,
-  title: task.title,
-  stage: task.stage,
-  ...(task.needsYou ? { needsYou: true } : {}),
-  ...(task.type ? { type: task.type } : {}),
-  ...(task.after.length > 0 ? { after: task.after } : {}),
-  ...(task.parent ? { parent: task.parent } : {}),
-  ...(task.labels.length > 0 ? { labels: task.labels } : {}),
-  ...(task.todos.total > 0
-    ? { todos: `${task.todos.done}/${task.todos.total}` }
-    : {}),
-  ...attemptFields(task),
-  ...(task.duplicateOf ? { duplicateOf: task.duplicateOf } : {}),
-  ...(task.problem ? { problem: task.problem } : {}),
-  createdAt: task.createdAt,
-  ...(task.createdBy ? { createdBy: task.createdBy.name } : {}),
-  updatedAt: task.updatedAt,
-  ...(task.updatedBy ? { updatedBy: task.updatedBy.name } : {}),
-  ...(task.startedAt === null ? {} : { startedAt: task.startedAt }),
-  ...(task.completedAt === null ? {} : { completedAt: task.completedAt }),
-  ...(task.droppedAt === null ? {} : { droppedAt: task.droppedAt }),
-  ...(task.closeReason ? { closeReason: task.closeReason } : {}),
-  ...(task.archivedAt === null ? {} : { archivedAt: task.archivedAt }),
-  ...(Object.keys(task.fields).length > 0 ? { fields: task.fields } : {}),
-});
-
-/** A list as a model reads it: the project's stages, then one short line of fields per task. */
-const compact = (list: TaskList, stages: StagesView) => ({
-  stages: stages.stages.map(stageLine),
-  ...(list.stagesProblems.length > 0
-    ? { stagesProblems: list.stagesProblems }
-    : {}),
-  tasks: list.tasks.map(taskLine),
-  ...(list.problems.length > 0 ? { problems: list.problems } : {}),
-});
 
 /**
  * One artifact as `task_result` takes it, read as the kind it names: a file
@@ -412,14 +352,12 @@ export function taskTools(context: TaskToolContext | undefined) {
         const { projectId, tasks } = scope();
         if (id) {
           const task = await tasks.get(projectId, id);
-          return ok(
-            history
-              ? {
-                  ...task,
-                  history: (await tasks.history(projectId, id)).events,
-                }
-              : task
-          );
+          return history
+            ? {
+                ...task,
+                history: (await tasks.history(projectId, id)).events,
+              }
+            : task;
         }
         if (history) {
           throw new Error(
@@ -430,8 +368,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           tasks.list(projectId, filter),
           tasks.stages(projectId),
         ]);
-        return ok(compact(list, stages));
-      }
+        return { list, stages };
+      },
+      taskReadWords
     ),
     tool(
       "task_create",
@@ -473,7 +412,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         const { projectId, tasks, actor } = scope();
         // The design system's build carries the hub's words, never the filer's.
         if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
-          return ok(await context.designBuild(projectId, actor, draft.stage));
+          return await context.designBuild(projectId, actor, draft.stage);
         }
         const task = await tasks.create(
           projectId,
@@ -491,12 +430,13 @@ export function taskTools(context: TaskToolContext | undefined) {
                 task.acceptance,
                 ...task.checks,
               ]);
-        return ok({
+        return {
           ...task,
           ...(duplicates ? { duplicates } : {}),
           ...(suggest ? { suggest } : {}),
-        });
-      }
+        };
+      },
+      taskCreatedWords
     ),
     tool(
       "task_update",
@@ -544,8 +484,9 @@ export function taskTools(context: TaskToolContext | undefined) {
         if (stage !== undefined) {
           task = await tasks.move(projectId, id, stage, actor, reason);
         }
-        return ok(task ?? (await tasks.get(projectId, id)));
-      }
+        return task ?? (await tasks.get(projectId, id));
+      },
+      taskChangedWords
     ),
     tool(
       "task_link",
@@ -558,8 +499,9 @@ export function taskTools(context: TaskToolContext | undefined) {
       },
       async ({ id, edge, to, remove }) => {
         const { projectId, tasks, actor } = scope();
-        return ok(await tasks.link(projectId, id, { edge, to, remove }, actor));
-      }
+        return await tasks.link(projectId, id, { edge, to, remove }, actor);
+      },
+      taskChangedWords
     ),
     tool(
       "task_start",
@@ -570,8 +512,9 @@ export function taskTools(context: TaskToolContext | undefined) {
         if (!context?.startAttempt) {
           throw new Error("Attempts cannot be started on this hub.");
         }
-        return ok(await context.startAttempt(projectId, id, context.actor));
-      }
+        return await context.startAttempt(projectId, id, context.actor);
+      },
+      attemptStartWords
     ),
     tool(
       "task_retry",
@@ -582,8 +525,9 @@ export function taskTools(context: TaskToolContext | undefined) {
         if (!context?.retryAttempt) {
           throw new Error("Attempts cannot be retried on this hub.");
         }
-        return ok(await context.retryAttempt(projectId, id, context.actor));
-      }
+        return await context.retryAttempt(projectId, id, context.actor);
+      },
+      attemptStartWords
     ),
     tool(
       "todo_write",
@@ -623,12 +567,10 @@ export function taskTools(context: TaskToolContext | undefined) {
           if (!context?.writePlan) {
             throw new Error("Discovery cannot execute tools");
           }
-          return ok(
-            await context.writePlan(context.actor, {
-              ...(steps ? { steps: stepsOf(steps) } : {}),
-              ...(spec === undefined ? {} : { spec }),
-            })
-          );
+          return await context.writePlan(context.actor, {
+            ...(steps ? { steps: stepsOf(steps) } : {}),
+            ...(spec === undefined ? {} : { spec }),
+          });
         }
         const { projectId, tasks, actor } = scope();
         const done = await tasks.todos(
@@ -637,8 +579,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           changes,
           actor
         );
-        return ok({ id: done.id, todos: done.todos });
-      }
+        return { id: done.id, todos: done.todos };
+      },
+      todoWrittenWords
     ),
     tool(
       "task_comment",
@@ -652,8 +595,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           text,
           actor
         );
-        return ok({ id: done.id, comments: done.comments });
-      }
+        return { id: done.id, comments: done.comments };
+      },
+      taskCommentedWords
     ),
     tool(
       "task_result",
@@ -683,14 +627,13 @@ export function taskTools(context: TaskToolContext | undefined) {
             "task_result hands in an attempt at a task, and this session works none. Say what you did in finish_item instead."
           );
         }
-        return ok(
-          await tasks.result(projectId, own, workItemId, {
-            summary,
-            check,
-            artifacts: artifacts?.map(resultArtifact),
-          })
-        );
-      }
+        return await tasks.result(projectId, own, workItemId, {
+          summary,
+          check,
+          artifacts: artifacts?.map(resultArtifact),
+        });
+      },
+      taskResultWords
     ),
     tool(
       "task_archive",
@@ -704,12 +647,13 @@ export function taskTools(context: TaskToolContext | undefined) {
           actor,
           archived ?? true
         );
-        return ok({
+        return {
           id: done.id,
           path: done.path,
           archivedAt: done.archivedAt,
-        });
-      }
+        };
+      },
+      taskArchivedWords
     ),
   ];
 }

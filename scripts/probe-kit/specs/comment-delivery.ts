@@ -1197,7 +1197,11 @@ const run = async (kit: Kit) => {
   ): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, { name: tool, input });
+    asks.set(marker, {
+      name: tool,
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      input: { response_format: "detailed", ...input },
+    });
     await fleet.send(to, `PROBE-CALL:${marker}`);
     return (await until(
       `the ${tool} call (${marker})`,

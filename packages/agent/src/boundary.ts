@@ -1954,7 +1954,7 @@ const refusal = (id: string, why: string): Error =>
   new Error(
     isPlace(id)
       ? `place ${id} cannot be bounded on this machine: ${why}`
-      : `workspace ${id} cannot run a delegate on this machine: ${why}`
+      : `workspace ${id.slice(0, 8)} cannot run a delegate on this machine: ${why}`
   );
 
 /**

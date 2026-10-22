@@ -6518,7 +6518,8 @@
             "in": "query",
             "required": false,
             "schema": {
-              "pattern": "^[0-9a-f-]{36}$",
+              "minLength": 1,
+              "maxLength": 100,
               "type": "string"
             }
           },
@@ -38738,6 +38739,13 @@
       "ArtifactRead": {
         "type": "object",
         "properties": {
+          "decisions": {
+            "description": "A page's choices in page order, each answered or not ({@link DecisionAnswer}); on a whole read of a page that asks any.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionAnswer"
+            }
+          },
           "changed": {
             "description": "A canvas's elements the person changed since `since` (or since your last read).",
             "type": "array",
@@ -38821,6 +38829,7 @@
             "type": "string"
           },
           "pageHash": {
+            "description": "A built page's hash, which each pick records; null for a preview (the hub never built it) and a canvas. Wire-pinned: installable app builds decode it.",
             "type": [
               "null",
               "string"
@@ -38855,6 +38864,7 @@
             "type": "number"
           },
           "sentAt": {
+            "description": "When the person last pressed Send; null before they have (and on a canvas, which has no Send).",
             "type": [
               "null",
               "string"
@@ -38885,7 +38895,7 @@
           },
           "state": {
             "type": "object",
-            "description": "Every key, or with `since` only those changed after it."
+            "description": "Every key, or with `since` only those changed after it; a canvas's is empty."
           },
           "unreached": {
             "$ref": "#/components/schemas/StageUnreached",
@@ -38920,6 +38930,211 @@
           "sentAt",
           "seq",
           "state"
+        ]
+      },
+      "DecisionAnswer": {
+        "description": "One choice a page asks the person (a decision page's question, or a\n`data-cawco-choice` an HTML page declares), as they answered it: not yet\n(`open`, perhaps with a note), with options (`picked`), picked then\nunpicked (`cleared`), or with an option a revision took out (`gone`).\n`earlierRevision`: answered on a revision before the one shown now.",
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "description": "Its question; a choice an HTML page declares has none.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string",
+                    "enum": [
+                      "open"
+                    ]
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "answer"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "description": "Its question; a choice an HTML page declares has none.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string",
+                    "enum": [
+                      "picked"
+                    ]
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "earlierRevision": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "answer",
+                  "at",
+                  "options"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "description": "Its question; a choice an HTML page declares has none.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string",
+                    "enum": [
+                      "cleared"
+                    ]
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "earlierRevision": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "answer",
+                  "at"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "description": "Its question; a choice an HTML page declares has none.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string",
+                    "enum": [
+                      "gone"
+                    ]
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "earlierRevision": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "gone": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "answer",
+                  "at",
+                  "gone",
+                  "options"
+                ]
+              }
+            ]
+          }
         ]
       },
       "StageUnreached": {
@@ -41566,7 +41781,7 @@
         ]
       },
       "AttemptStart": {
-        "description": "An attempt as it started; or, `queued`, waiting for files a live item owns\n(its ids null until it starts).",
+        "description": "An attempt as it started; or, `queued`, waiting for files a live item owns\n(its ids null until it starts). Wire-pinned: installable app builds decode\nthese fields from `POST /api/projects/:id/tasks/:taskId/attempts`.",
         "type": "object",
         "properties": {
           "instanceId": {
@@ -41595,7 +41810,7 @@
             "type": "string"
           },
           "type": {
-            "description": "The delegate type it runs.",
+            "description": "The delegate type it runs; null, the hub's default.",
             "type": [
               "null",
               "string"
