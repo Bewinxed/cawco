@@ -8,14 +8,14 @@
  * delete). This spec delegates, so its fleet cuts workspaces: it runs on the
  * host, outside every boundary.
  *
- * A parent delegates; the child creates a page, leaves a file uncommitted
+ * A parent delegates; the child creates a page, commits a file on no remote
  * and fails its item as blocked, so its workspace is held. Then:
  * - (a) while the child can still act (its workspace held: a handoff
  *   reopens it), the parent's artifact_delete is refused, saying that
  *   session deletes it now and the parent can once it can't; the page stays;
  * - (b) a session of the project outside the tree is refused, its words
  *   naming who deletes it: the writer, the sessions up its tree, the person;
- * - (c) the parent discards the workspace (a carry holds the file), and the
+ * - (c) the parent discards the workspace (a carry holds the commit), and the
  *   child can no longer act: the parent's handoff to it is refused naming
  *   the discard;
  * - (d) the outsider is still refused, with the same words;
@@ -61,8 +61,10 @@ const found = (request: Seen, name: string, input: object): Reply => {
 };
 
 /**
- * The child: creates its page, leaves a file uncommitted (so the discard
- * writes a carry), then fails its item as blocked.
+ * The child: creates its page, commits a file on no remote (so the discard
+ * writes a carry; finish_item refuses a clone with uncommitted files,
+ * work-items.ts "Not finished: your clone holds work that is in no
+ * commit"), then fails its item as blocked.
  */
 const child = (request: Seen): Reply => {
   if (request.all.includes(BLOCKED)) {
@@ -77,7 +79,7 @@ const child = (request: Seen): Reply => {
   }
   if (ANSWERED_ID.test(request.all)) {
     return useTool("Bash", {
-      command: `echo left > orphan-probe.txt && echo ${MADE}`,
+      command: `echo left > orphan-probe.txt && git add orphan-probe.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Probe commit on no remote' && echo ${MADE}`,
       description: "Probe step",
     });
   }
