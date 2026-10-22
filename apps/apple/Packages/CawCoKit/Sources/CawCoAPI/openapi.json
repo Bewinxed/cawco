@@ -44933,6 +44933,24 @@
                   "kind": {
                     "type": "string",
                     "enum": [
+                      "offer"
+                    ]
+                  },
+                  "said": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "said"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
                       "check"
                     ]
                   },
