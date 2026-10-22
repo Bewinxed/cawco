@@ -2678,8 +2678,9 @@ let continuationFollower: ((table: ContinuationJob[]) => void) | null = null;
 
 /**
  * Hands `follower` the continuation table every time the hub's word on it
- * lands — a publish, or the read on connect. One follower: the Continue
- * flow's (continue.svelte.ts).
+ * lands — a publish, or the read on connect. One follower: the parked
+ * starts' (spawn/parked.svelte.ts), which follow every continuation this tab
+ * started.
  */
 export function followContinuations(
   follower: (table: ContinuationJob[]) => void
@@ -5477,11 +5478,13 @@ async function explicit(
  */
 async function start({
   machineId,
+  instanceId = newId(),
   ...spawn
 }: Omit<NamedSpawn, "instanceId"> & {
   machineId: string;
+  /** The id it is asked under; one is minted when none is named. */
+  instanceId?: string;
 }): Promise<Bounded<SessionState>> {
-  const instanceId = newId();
   const requestId = newId();
   const payload = await explicit(machineId, { instanceId, ...spawn });
   let taken: Bounded<void>;
@@ -5521,6 +5524,7 @@ async function start({
  * the hub's reason, and its first prompt is never sent.
  */
 export async function spawnSession({
+  instanceId,
   machineId,
   cwd,
   prompt,
@@ -5534,6 +5538,12 @@ export async function spawnSession({
   account,
   extras = {},
 }: {
+  /**
+   * The id the session is asked for under, minted by the caller before it
+   * asks, so a page reloaded while the hub answers finds it on the board
+   * (spawn/parked); one is minted here when none is named.
+   */
+  instanceId?: string;
   machineId: string;
   cwd: string;
   prompt?: string;
@@ -5550,6 +5560,7 @@ export async function spawnSession({
   account?: string;
 }): Promise<Bounded<string>> {
   const started = await start({
+    ...(instanceId ? { instanceId } : {}),
     machineId,
     cwd,
     harness,
@@ -5572,14 +5583,18 @@ export async function spawnSession({
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
-  sendFirst(started.value.instanceId, machineId, prompt, extras);
+  sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return { kind: "answered", value: started.value.instanceId };
 }
 
-/** A new session's first message, when it has words or files: sent once the hub has taken the start. */
-function sendFirst(
+/**
+ * A new session's first message, when it has words or files: sent once the
+ * hub has taken the start, or once a page reloaded while it answered finds
+ * the session on the board (spawn/parked).
+ */
+export function sendFirstPrompt(
   instanceId: string,
   machineId: string,
   prompt: string | undefined,
@@ -5673,7 +5688,7 @@ export async function forkSession({
     case "unanswered":
       return started;
     case "answered":
-      sendFirst(started.value.instanceId, machineId, prompt, extras);
+      sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
       // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
       void refresh();
       return { kind: "answered", value: started.value.instanceId };

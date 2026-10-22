@@ -40,6 +40,14 @@
    * a popover hanging from the trigger pressed (NewSessionPopover), the
    * bottom sheet under 640px (NewSessionDialog). The frame calls `close` when
    * it is dismissed and `escapeStep` on Esc.
+   *
+   * A start belongs to its work, not to this form (DESIGN.md, The Work
+   * Outlives Its Surface Rule): Start parks it in the tab's parked starts
+   * (spawn/parked), which it runs into, and the form shows it from there
+   * (`spawning.shown`) while it is open. Dismissed, the form closes and the
+   * start goes on as its own row; only the form's Cancel drops what it
+   * holds. Its picks are kept in the tab's storage and its prompt in the
+   * draft store, so a reload opens it again as it was.
    */
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -71,11 +79,10 @@
     type ContinueSource,
     cancelContinuation,
     continuationStageWords,
-    detachContinuation,
-    releaseContinuation,
     type SessionDraft,
     startContinuation,
   } from "../continue.svelte";
+  import type { DraftContent } from "../draft-store";
   import { EFFORT_LEVELS } from "../effort-levels";
   import { type FleetSnapshot, inspectMachine } from "../fleet";
   import { newId } from "../id";
@@ -98,7 +105,7 @@
     rememberSpawn,
     spawnPrefs,
   } from "../spawnPrefs.svelte";
-  import { store, stored } from "../storage";
+  import { readJson, store, stored, unstore, writeJson } from "../storage";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -114,7 +121,7 @@
   import { deriveModelEntries, type ModelEntry } from "./model-entries";
   import { lastSpawnAt, lastUsedAt, recordModelUse } from "./modelUse.svelte";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
-  import type { SpawnPrefill } from "./new-session.svelte";
+  import { placeOf, type SpawnPrefill, spawning } from "./new-session.svelte";
   import type {
     LeadChip,
     MachineItem,
@@ -123,6 +130,21 @@
   } from "./ns-types";
   import ProjectChip from "./ProjectChip.svelte";
   import PromptEditor from "./PromptEditor.svelte";
+  import {
+    askedFor,
+    beginStart,
+    dropStart,
+    failStart,
+    followJob,
+    keepDraftOf,
+    type ParkedStart,
+    parkedStart,
+    parkKey,
+    planAsks,
+    sentTo,
+    stageStart,
+    startedStart,
+  } from "./parked.svelte";
   import Segmented from "./Segmented.svelte";
   import SessionFooter from "./SessionFooter.svelte";
   import { effortNotExposed } from "./ToolChips.svelte";
@@ -131,8 +153,8 @@
     open,
     prefill,
     continueFrom,
-    restore,
     onclose,
+    onparked,
     onexitcontinue,
     sheet = false,
   }: {
@@ -149,9 +171,12 @@
      * of this one. Mutually exclusive with `prefill` — the source says where.
      */
     continueFrom?: ContinueSource;
-    /** Continue mode: the form a failed continuation was submitted with, opened as it was. */
-    restore?: SessionDraft;
     onclose: () => void;
+    /**
+     * Dismissed on a start, which goes on as its own row (spawn/parked): its
+     * id, for the frame to travel into that row as it closes.
+     */
+    onparked?: (id: string) => void;
     /** The operator deleted the source chip: the dialog stays open as a plain New Session. */
     onexitcontinue?: () => void;
   } = $props();
@@ -181,11 +206,30 @@
     }
     return `new-session:${id}`;
   }
-  // The first prompt outlives a reload of this tab (`reload.svelte.ts`), as
-  // a session's draft does: kept as it is written while the dialog is open,
-  // read back as it opens, gone once it closes (`close` discards it).
-  const keptDraft = keepDraft(firstMessage, () => (open ? keptKey() : null));
+  // The first prompt outlives a reload of this tab (`reload.svelte.ts`), and
+  // a dismissal, as a session's draft does: kept as it is written while the
+  // form is open, read back as it opens, gone on Cancel or once it has
+  // started a session. A form showing a parked start keeps that start's
+  // prompt under the start's own key instead (spawn/parked `parkKey`).
+  const keptDraft = keepDraft(firstMessage, () => {
+    if (!open) {
+      return null;
+    }
+    return parkedStart(spawning.shown)
+      ? parkKey(spawning.shown as string)
+      : keptKey();
+  });
+  /** Where the tab keeps the form's picks while it is open on no start. */
+  const FORM_KEY = "cawco:new-session-form";
+  /** The form's picks as kept: what it was opened with, the picks, and whether step 2 stood. */
+  interface KeptPicks {
+    opening: string;
+    picks: SessionDraft;
+    step: boolean;
+  }
   const STILL_UPLOADING = "Wait for your file to finish uploading.";
+  /** Start's word while the machine reads the folder it starts in. */
+  const CHECKING = "Checking the folder…";
   const NOT_UPLOADED =
     "A file couldn't upload. Tap it to try again, or remove it.";
   // Either holds Start only while its file does: settled, it is gone.
@@ -259,7 +303,7 @@
   let projectId = $state<string>();
   let editing = $state(false);
   let spinOff = $state(false);
-  let busy = $state(false);
+  /** Why Start held back before anything was sent (a file uploading, a form that doesn't hold); "" otherwise. */
   let error = $state("");
   let unreadable = $state(false);
   /** A machine that did not answer the folder check in time, in its sentence; "" when none. */
@@ -295,11 +339,16 @@
     openingTokens: number;
   } | null>(null);
   /**
-   * The continuation this dialog started and follows, by id. Closing the
-   * dialog hands it to the tab (`detachContinuation`); only Cancel stops it.
+   * The parked start the form shows (spawn/parked): its stage while it
+   * runs, its failure, the session it started. None for a form not started.
    */
-  let job = $state<string | null>(null);
-  const followed = $derived(job ? cawco.continuation(job) : undefined);
+  const showing = $derived(open ? parkedStart(spawning.shown) : undefined);
+  /** A start runs: the form takes no input, and Start says its stage. */
+  const busy = $derived(showing?.state === "running");
+  /** What the form says went wrong: its own hold, or the start's failure. */
+  const failure = $derived(
+    error || (showing?.state === "failed" ? showing.error : "")
+  );
   const machineId = $derived(machineIds[0] ?? "");
   const locationKey = $derived(JSON.stringify([machineIds, cwd.trim()]));
   const locationUnverified = $derived(
@@ -836,16 +885,16 @@
       return "No spawn while the hub is unreachable. Reconnect to continue.";
     }
     if (moveTo) {
-      return error || moveReading;
+      return failure || moveReading;
     }
-    return error || locationReading || (locationUnverified ? "Reading…" : "");
+    return failure || locationReading || (locationUnverified ? "Reading…" : "");
   });
   const locationInformational = $derived(
     moveTo
-      ? !(error || moveAnswer?.error || moveEstimated?.refused)
+      ? !(failure || moveAnswer?.error || moveEstimated?.refused)
       : Boolean(
           !(
-            error ||
+            failure ||
             locationUnverified ||
             unreadable ||
             unanswered ||
@@ -916,9 +965,9 @@
   /** A harness with modes and none picked: Start waits for the person's pick. */
   const modeUnchosen = $derived(!modeless && permissionMode === null);
   /** The last start failed: the footer shows no check. */
-  const startFailed = $derived(error !== "");
+  const startFailed = $derived(failure !== "");
   /** The line under the chips says why Start can't go: it stays on step 2 too. */
-  const readingSaysWhy = $derived(cawco.hub !== "connected" || error !== "");
+  const readingSaysWhy = $derived(cawco.hub !== "connected" || failure !== "");
   const cantStart = $derived(
     firstMessage.uploading ||
       continueBlocked ||
@@ -944,21 +993,12 @@
       title: continueFrom.title,
     }
   );
-  /** What Start says while its press waits: on the folder check, the source's work in flight, its filing, the summary, the start. */
-  const busyLabel = $derived.by(() => {
-    if (pressedFor !== null) {
-      return "Checking the folder…";
-    }
-    if (continueFrom && followed?.stage === "waiting") {
-      return continuationStageWords.waiting;
-    }
-    if (continueFrom && followed?.stage === "filing") {
-      return continuationStageWords.filing;
-    }
-    return continueFrom && carry === "summary" && followed?.stage !== "starting"
-      ? continuationStageWords.summarising
-      : continuationStageWords.starting;
-  });
+  /** What Start says while its press waits: on the folder check, then the start's own stage (spawn/parked). */
+  const busyLabel = $derived(
+    pressedFor === null
+      ? showing?.stage || continuationStageWords.starting
+      : CHECKING
+  );
   const startLabel = $derived.by(() => {
     if (continueFrom) {
       return "Continue";
@@ -1016,7 +1056,49 @@
   function openingHarness(): HarnessKind {
     return prefill?.fork?.harness ?? spawnPrefs.harness;
   }
+  /** What the form was opened with, as its kept picks name it: they are read back only for the same. */
+  function openingKey(): string {
+    return JSON.stringify({
+      prefill: placeOf(prefill) ?? null,
+      continueFrom: continueFrom ?? null,
+    });
+  }
+  /** The picks the form was left on, when it is opened again with the same: a reload, a dismissal. */
+  function keptPicks(): KeptPicks | null {
+    const kept = readJson<KeptPicks | null>(FORM_KEY, null, "session");
+    return kept?.opening === openingKey() ? kept : null;
+  }
+  /**
+   * Step 2 stood when the form was left: it stands again once the move's
+   * estimate is read again (`moving`).
+   */
+  let stepWanted = false;
   $effect(() => {
+    if (moving && stepWanted) {
+      stepWanted = false;
+      moveStep = true;
+    }
+  });
+  /** The form as it was left, or as a start was submitted with: its picks over what it opened with. */
+  function applyPicks(kept: SessionDraft): void {
+    ({ repo, projectId, harness, effort, permissionMode } = kept);
+    fullSendCarried = permissionMode === "fullSend";
+    ({ harness: summarizerHarness, model: summarizerModel } = kept.summarizer);
+    carry = kept.asks ? "asks" : "summary";
+    const [openedOn] = machineIds;
+    const openedIn = cwd;
+    machineIds = [...kept.machineIds];
+    machinesTouched = true;
+    cwd = kept.baseCwd;
+    model = kept.usedModel;
+    account = kept.account ?? null;
+    spinOff = kept.scratch !== undefined;
+    editing = kept.baseCwd !== openedIn || kept.machineIds[0] !== openedOn;
+    lastMachine = kept.machineIds[0] ?? "";
+  }
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: read-only dependency — each opening (a row reopening its start) reads the form again
+    void spawning.opening;
     if (!open) {
       return;
     }
@@ -1048,36 +1130,28 @@
       repo = undefined;
       editing = false;
       spinOff = Boolean(prefill?.spinOff);
-      busy = false;
       error = "";
       popover = null;
       verifiedLocation = "";
       moveRead = null;
       moveStep = false;
+      stepWanted = false;
       moveAt = undefined;
       moveEditing = false;
-      // A refused send picked up here: its words and what rode them are
-      // the first prompt (the kept draft, read back after, yields to it).
-      if (prefill?.prompt) {
+      // A parked start opens on what it was started with (its prompt read
+      // back from the draft store, `keptDraft`); a form left as it was, on
+      // what it was left on.
+      const shown = parkedStart(spawning.shown);
+      const kept = shown ? null : keptPicks();
+      if (shown) {
+        applyPicks(shown.draft);
+      } else if (kept) {
+        applyPicks(kept.picks);
+        stepWanted = kept.step;
+      } else if (prefill?.prompt) {
+        // A refused send picked up here: its words and what rode them are
+        // the first prompt (the kept draft, read back after, yields to it).
         firstMessage.restore(prefill.prompt.text, prefill.prompt.extras);
-      }
-      if (continueFrom && restore) {
-        ({ repo, projectId, harness, effort, permissionMode } = restore);
-        // Its words and what rode them, as they were submitted.
-        firstMessage.restore(restore.prompt, restore.extras);
-        fullSendCarried = permissionMode === "fullSend";
-        ({ harness: summarizerHarness, model: summarizerModel } =
-          restore.summarizer);
-        carry = restore.asks ? "asks" : "summary";
-        machineIds = [...restore.machineIds];
-        machinesTouched = true;
-        cwd = restore.baseCwd;
-        model = restore.usedModel;
-        spinOff = restore.scratch !== undefined;
-        editing =
-          restore.baseCwd !== continueFrom.cwd ||
-          restore.machineIds[0] !== continueFrom.machineId;
-        lastMachine = restore.machineIds[0] ?? "";
       }
       if (continueFrom) {
         loadEstimate(continueFrom.instanceId, submission);
@@ -1086,36 +1160,38 @@
     });
     return () => {
       submission += 1;
-      // Dismissed while a continuation runs: it runs on, and the tab opens
-      // its new session when it starts.
-      if (job) {
-        detachContinuation(job);
-        job = null;
-      }
     };
   });
-  // The continuation this dialog follows, stage by stage, as the hub publishes it.
+  /**
+   * The form's picks, kept as they change: under the tab's own key while
+   * it is on no start (a reload and a dismissal open it on them again), on
+   * a failed start it shows while it is (its Reopen opens on them).
+   */
   $effect(() => {
-    const current = followed;
-    if (!current) {
+    if (!open) {
       return;
     }
+    const now = picks();
+    const step = moveStep;
+    const { shown } = spawning;
     untrack(() => {
-      if (current.stage === "started") {
-        releaseContinuation(current.id);
-        job = null;
-        exitTo(current.targetInstanceId, () => open);
-      } else if (current.stage === "failed") {
-        releaseContinuation(current.id);
-        job = null;
-        error = current.error ?? "";
-        busy = false;
-      } else if (current.stage === "cancelled") {
-        releaseContinuation(current.id);
-        job = null;
-        busy = false;
+      if (shown) {
+        keepDraftOf(shown, { ...now, prompt: firstMessage.text });
+        return;
       }
+      writeJson(
+        FORM_KEY,
+        { opening: openingKey(), picks: now, step } satisfies KeptPicks,
+        "session"
+      );
     });
+  });
+  // The start the form shows has started: the form leaves for its session.
+  $effect(() => {
+    const shown = showing;
+    if (shown?.state === "started" && shown.target) {
+      untrack(() => exitTo(shown));
+    }
   });
   // With nothing else naming one, the form opens on the machine it last
   // started a session on, once the fleet lists it: the fleet arrives over the
@@ -1285,26 +1361,55 @@
     pressedFor = null;
     untrack(start);
   });
-  /** The form is done with (dismissed, or left for the session it started): its frame closes. */
-  export function close(): void {
+  /**
+   * ×, Esc, a press outside: the form closes and drops nothing. Its prompt
+   * and picks are kept for the next opening; a start it shows goes on as
+   * its own row (spawn/parked), and a press the folder check was holding
+   * goes now, as that start. Returns the start it parked, for its frame to
+   * travel into its row; null when it parked none.
+   */
+  export function close(): string | null {
+    submission += 1;
+    if (pressedFor !== null && !spawning.shown) {
+      pressedFor = null;
+      // biome-ignore lint/complexity/noVoid: the start parks itself as it begins, and says how it ends on its row
+      void start(true);
+    }
+    pressedFor = null;
+    const left = spawning.shown;
+    onclose();
+    if (left) {
+      onparked?.(left);
+    }
+    return left;
+  }
+  /**
+   * Cancel: the form is done with, and what it holds goes with it: its
+   * prompt, its picks, and a failed start it shows. A start still running
+   * is the hub's to stop (`cancelContinue`).
+   */
+  function cancel(): void {
     submission += 1;
     pressedFor = null;
+    const { shown } = spawning;
     firstMessage.text = "";
     firstMessage.dropAttachments();
     keptDraft.discard();
+    unstore("session", FORM_KEY);
+    if (shown) {
+      dropStart(shown);
+    }
     onclose();
   }
-  /** Cancel while a continuation runs: the hub stops it, and the dialog closes. */
+  /** Cancel while a continuation runs: the hub stops it, and the form closes. */
   async function cancelContinue() {
-    const id = job;
-    if (!id) {
+    const job = showing?.job;
+    if (!job) {
       return;
     }
     try {
-      await cancelContinuation(id);
-      job = null;
-      busy = false;
-      close();
+      await cancelContinuation(job);
+      cancel();
     } catch (cause) {
       error = failureWords(cause);
     }
@@ -1461,31 +1566,30 @@
       }
     }
   }
+  /**
+   * Whether `path` holds on `target` before anything is asked of it: ""
+   * when it does, else why not, in the words the form's line says it in.
+   */
   async function verifyBeforeSpawn(
-    id: string,
-    path: string,
-    current: () => boolean
-  ) {
+    target: string,
+    path: string
+  ): Promise<string> {
     try {
-      const quiet = quietOn(id, await inspectLocation(id, path));
-      if (quiet && current()) {
+      const quiet = quietOn(target, await inspectLocation(target, path));
+      if (quiet) {
         unanswered = quiet;
-        busy = false;
-        return false;
       }
-      return current();
+      return quiet;
     } catch {
-      if (!current()) {
-        return false;
-      }
       unreadable = true;
-      busy = false;
-      await tick();
-      if (!current()) {
-        return false;
+      const host =
+        cawco.machines.find((row) => row.machineId === target)?.hostname ??
+        target;
+      if (open) {
+        await tick();
+        document.getElementById("session-dir")?.focus();
       }
-      document.getElementById("session-dir")?.focus();
-      return false;
+      return `That directory can't be read on ${host}. Check the path and try again.`;
     }
   }
   /**
@@ -1503,16 +1607,27 @@
     const attached = id ? cawco.project(id) : null;
     return attached && placedOn(attached, target) ? attached.id : undefined;
   }
-  /** Starts one session on `target`; a hub that did not answer throws saying so, for the dialog to show. */
+  /**
+   * Starts one session on `target` under `instanceId`, minted before it is
+   * asked for (spawn/parked `planAsks`), for start `id`; a hub that did not
+   * answer throws saying so, for the start's row and the form to say.
+   */
   async function spawnOne(
+    id: string,
     target: string,
+    instanceId: string | undefined,
     draft: SessionDraft
   ): Promise<string> {
     if (forking) {
+      askedFor(id);
       return await forkOne(target, draft, forking);
     }
     const toAttach = attachable(draft.projectId, target);
+    if (instanceId) {
+      askedFor(id, instanceId);
+    }
     const started = await spawnSession({
+      ...(instanceId ? { instanceId } : {}),
       machineId: target,
       cwd: draft.cwd,
       prompt: draft.prompt,
@@ -1531,11 +1646,14 @@
       projectId: toAttach,
       ...(draft.account ? { account: draft.account } : {}),
     });
-    return answeredOr(
+    const spawned = answeredOr(
       target,
       started,
       "whether the session started is not known"
     );
+    // Taken, its first prompt went with it (`spawnSession`).
+    sentTo(id, spawned);
+    return spawned;
   }
   /** Forks `source` on the form's picks; a hub that did not answer throws saying so. */
   async function forkOne(
@@ -1564,7 +1682,7 @@
    * same words), or a form that doesn't hold. Move & start goes no further
    * either: it morphs the form to step 2, and Move it starts the move.
    */
-  function heldBack(): boolean {
+  function heldBack(force: boolean): boolean {
     if (firstMessage.uploading) {
       error = STILL_UPLOADING;
       return true;
@@ -1584,8 +1702,9 @@
     if (cantStart) {
       return true;
     }
-    // The folder not read yet: the press waits for it (`pressedFor`).
-    if (locationUnverified) {
+    // The folder not read yet: the press waits for it (`pressedFor`),
+    // unless the form is closing on it, when the start's own check reads it.
+    if (locationUnverified && !force) {
       pressedFor = locationKey;
       return true;
     }
@@ -1596,18 +1715,13 @@
     }
     return false;
   }
-  async function start() {
-    if (busy || cawco.hub !== "connected" || heldBack()) {
-      return;
-    }
-    submission += 1;
-    const id = submission;
-    const current = () => open && id === submission;
-    const draft: SessionDraft = {
+  /** The form's picks, without the prompt: what a start goes with, and what is kept as it changes. */
+  function picks(): SessionDraft {
+    return {
       machineIds: [...machineIds],
       baseCwd: cwd.trim(),
       cwd: workdir,
-      prompt: firstMessage.text,
+      prompt: "",
       harness,
       permissionMode,
       model,
@@ -1623,18 +1737,60 @@
       // The person's own pick; "" when they left the harness's default.
       usedModel: model,
       ...(accountTool && account ? { account } : {}),
+      extras: {},
+    };
+  }
+  /** What a start leaves its form with, remembered for the next. */
+  function remember(draft: SessionDraft): void {
+    recordModelUse(draft.harness, draft.usedModel);
+    rememberSpawn({
+      harness: draft.harness,
+      model: shownModel(draft),
+      permissionMode: draft.permissionMode,
+      effort: draft.effort,
+    });
+    rememberMachine(draft.machineIds);
+  }
+  /**
+   * Start: the start is parked as it begins (spawn/parked `beginStart`) and
+   * runs there, whatever becomes of the form; the form shows it while open.
+   * `force`: the form is closing on a press the folder check held.
+   */
+  async function start(force = false) {
+    if (busy || cawco.hub !== "connected" || heldBack(force)) {
+      return;
+    }
+    submission += 1;
+    const draft: SessionDraft = {
+      ...picks(),
+      prompt: firstMessage.text,
       extras: firstMessage.extras(),
     };
-    busy = true;
+    const id = newId();
+    beginStart({
+      id,
+      draft,
+      content: $state.snapshot(firstMessage.keep) as DraftContent,
+      ...(continueFrom ? { continueFrom } : {}),
+      ...(prefill ? { prefill: placeOf(prefill) } : {}),
+      replacing: spawning.shown,
+      stage:
+        continueFrom && !draft.asks
+          ? continuationStageWords.summarising
+          : CHECKING,
+    });
+    // The prompt and picks went with the start: the next form is a new one.
+    keptDraft.discard();
+    unstore("session", FORM_KEY);
+    spawning.shown = id;
     popover = null;
-    let first = "";
     try {
       if (continueFrom) {
-        await startContinue(continueFrom, draft, current);
+        await startContinue(id, continueFrom, draft);
         return;
       }
       if (moving) {
-        await startMoving(draft, current);
+        await startMoving(id, draft);
         return;
       }
       // The folder there is already the project's: the session starts in it.
@@ -1642,55 +1798,63 @@
         draft.baseCwd = moveEstimated.path;
         draft.cwd = moveEstimated.path;
       }
-      for (const target of draft.machineIds) {
+      // Each session's id, minted before it is asked for: a reload while
+      // the hub answers finds it on the board (spawn/parked). A fork's is
+      // the hub's to name.
+      const asks = forking
+        ? []
+        : draft.machineIds.map((on) => ({
+            instanceId: newId(),
+            machineId: on,
+            asked: false,
+            sent: false,
+          }));
+      planAsks(id, asks);
+      let first = "";
+      for (const [at, target] of draft.machineIds.entries()) {
+        stageStart(id, CHECKING);
         // biome-ignore lint/performance/noAwaitInLoops: each machine is verified, then spawned, in order — one failure must stop the batch before the next spawn.
-        const ok = await verifyBeforeSpawn(target, draft.baseCwd, current);
-        if (!(ok && current())) {
+        const refused = await verifyBeforeSpawn(target, draft.baseCwd);
+        if (refused) {
+          failStart(id, refused);
           return;
         }
+        stageStart(id, continuationStageWords.starting);
         // Every machine gets spawned; `first` only remembers which one to
         // open. `first ||= spawnOne(…)` short-circuited after machine one, so
         // "Start 3 sessions" started exactly one. Each waits for the hub's
         // answer: one it refuses throws its reason, and nothing navigates.
-        const spawned = await spawnOne(target, draft);
+        const spawned = await spawnOne(id, target, asks[at]?.instanceId, draft);
         first ||= spawned;
       }
-      if (!current()) {
-        return;
-      }
-      recordModelUse(draft.harness, draft.usedModel);
-      rememberSpawn({
-        harness: draft.harness,
-        model: shownModel(draft),
-        permissionMode: draft.permissionMode,
-        effort: draft.effort,
-      });
-      rememberMachine(draft.machineIds);
-      await exitTo(first, current);
+      remember(draft);
+      startedStart(id, first);
     } catch (cause) {
-      if (!current()) {
-        return;
-      }
-      error = failureWords(cause);
-      busy = false;
+      failStart(id, failureWords(cause));
     }
   }
   /**
    * Move it: the hub moves the project to the machine and starts the session
    * there, as a job it owns; the yes said here goes with it, so it asks for
-   * none. The dialog leaves for the session as a spawn does, and its pane
+   * none. The form leaves for the session as a spawn does, and its pane
    * follows the move until the session starts (design §2, E1).
    */
-  async function startMoving(draft: SessionDraft, current: () => boolean) {
+  async function startMoving(id: string, draft: SessionDraft) {
     const ask = moveEstimated?.ask;
     const target = moveTo;
-    const id = project?.id;
-    if (!(ask && target && id)) {
+    const moved = projectId;
+    if (!(ask && target && moved)) {
+      failStart(
+        id,
+        "The move changed before it started. Open it and start it again."
+      );
       return;
     }
+    stageStart(id, continuationStageWords.starting);
+    askedFor(id);
     let started: Awaited<ReturnType<typeof startMove>>;
     try {
-      started = await startMove(id, {
+      started = await startMove(moved, {
         machineId: target,
         ...(moveAt ? { path: moveAt } : {}),
         ...(ask.key ? { approved: ask.key } : {}),
@@ -1715,15 +1879,8 @@
       moveRead = null;
       throw cause;
     }
-    recordModelUse(draft.harness, draft.usedModel);
-    rememberSpawn({
-      harness: draft.harness,
-      model: shownModel(draft),
-      permissionMode: draft.permissionMode,
-      effort: draft.effort,
-    });
-    rememberMachine(draft.machineIds);
-    await exitTo(started.targetInstanceId, current);
+    remember(draft);
+    startedStart(id, started.targetInstanceId);
   }
 
   /** Back from step 2: the form as it was. */
@@ -1764,21 +1921,24 @@
   /**
    * Continue in new session: the hub summarises the source with the chosen
    * summariser and starts the new session with this form's options, as a job
-   * it owns. The dialog follows the job's stages over the socket and leaves
-   * for the new session exactly as a spawn does once it has started.
+   * it owns. Its parked start follows the job's stages over the socket
+   * (spawn/parked), and the form, while it shows it, leaves for the new
+   * session exactly as a spawn does once it has started.
    */
   async function startContinue(
+    id: string,
     source: ContinueSource,
-    draft: SessionDraft,
-    current: () => boolean
+    draft: SessionDraft
   ) {
     const [target] = draft.machineIds;
-    const ok = await verifyBeforeSpawn(target, draft.baseCwd, current);
-    if (!(ok && current())) {
+    const refused = await verifyBeforeSpawn(target, draft.baseCwd);
+    if (refused) {
+      failStart(id, refused);
       return;
     }
     const toAttach = attachable(draft.projectId, target);
-    const id = await startContinuation(source, draft, {
+    askedFor(id);
+    const job = await startContinuation(source, {
       ...(draft.asks
         ? { asksOnly: true }
         : {
@@ -1812,40 +1972,34 @@
         ? { attachments: draft.extras.attachments }
         : {}),
     });
-    // Dismissed while the hub was starting it: the tab sees it through.
-    if (current()) {
-      job = id;
-    } else {
-      detachContinuation(id);
-    }
+    followJob(id, job);
     if (!draft.asks) {
       recordModelUse(draft.summarizer.harness, draft.summarizer.model);
     }
-    recordModelUse(draft.harness, draft.usedModel);
-    rememberSpawn({
-      harness: draft.harness,
-      model: shownModel(draft),
-      permissionMode: draft.permissionMode,
-      effort: draft.effort,
-    });
-    rememberMachine(draft.machineIds);
+    remember(draft);
   }
   /**
-   * Leave for the new session as the dialog starts to close, not after: the
-   * dialog is portaled, so its exit plays out over the page arriving, and the
-   * new tab rises from where Start was pressed (motion/share: `session:new`,
-   * handed to the session it started)
-   * while the dialog fades around it. Waiting for the exit left a moment with
-   * neither on screen.
+   * The start the form shows has started: leave for its session as the
+   * form starts to close, not after: the form is portaled, so its exit
+   * plays out over the page arriving, and the new tab rises from where
+   * Start was pressed (motion/share: `session:new`, handed to the session
+   * it started) while the form fades around it. Waiting for the exit left a
+   * moment with neither on screen. Its prompt and its start go with it.
    */
-  async function exitTo(instanceId: string, current: () => boolean) {
-    if (!current()) {
+  async function exitTo(started: ParkedStart) {
+    const { target } = started;
+    if (!target) {
       return;
     }
-    handOver("session:new", `session:${instanceId}`);
-    close();
+    handOver("session:new", `session:${target}`);
+    firstMessage.text = "";
+    firstMessage.dropAttachments();
+    keptDraft.discard();
+    dropStart(started.id);
+    submission += 1;
+    onclose();
     await tick();
-    await goto(conversationHref(instanceId, cawco.instanceIndex));
+    await goto(conversationHref(target, cawco.instanceIndex));
   }
   function keydown(event: KeyboardEvent) {
     if (!open || event.defaultPrevented || event.isComposing) {
@@ -1853,7 +2007,8 @@
     }
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
-      start();
+      // biome-ignore lint/complexity/noVoid: the start says how it ends on its row and in the form
+      void start();
     }
   }
   function bodyScroll() {
@@ -1938,7 +2093,7 @@
             class: ["select-none", sheetHead.close()],
           })}
           data-vaul-no-drag
-          onclick={close}
+          onclick={() => close()}
           type="button"
         >
           <X />
@@ -1991,7 +2146,7 @@
             {menuItems}
             onleadremove={onexitcontinue}
             onpaste={(data) => firstMessage.paste(data)}
-            onsubmit={start}
+            onsubmit={() => start()}
             bind:element={editor}
             bind:value={firstMessage.text}
           />
@@ -2278,11 +2433,11 @@
   <SessionFooter
     busy={busy || pressedFor !== null}
     {busyLabel}
-    cancellable={job !== null || pressedFor !== null}
+    cancellable={(busy && Boolean(showing?.job)) || pressedFor !== null}
     disabled={cantStart}
     failed={startFailed}
-    oncancel={job ? cancelContinue : close}
-    onstart={start}
+    oncancel={busy && showing?.job ? cancelContinue : cancel}
+    onstart={() => start()}
     {startLabel}
   />
 </div>

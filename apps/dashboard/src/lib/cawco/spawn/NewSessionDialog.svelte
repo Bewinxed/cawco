@@ -8,7 +8,7 @@
    */
   import { untrack } from "svelte";
   import { Drawer, DrawerContent } from "#lib/components/ui/drawer/index.js";
-  import type { ContinueSource, SessionDraft } from "../continue.svelte";
+  import type { ContinueSource } from "../continue.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
   import type { SpawnPrefill } from "./new-session.svelte";
 
@@ -16,7 +16,6 @@
     open,
     prefill,
     continueFrom,
-    restore,
     anchor = null,
     onclose,
     onexitcontinue,
@@ -28,8 +27,6 @@
      * of this one. Mutually exclusive with `prefill`: the source says where.
      */
     continueFrom?: ContinueSource;
-    /** Continue mode: the form a failed continuation was submitted with, opened as it was. */
-    restore?: SessionDraft;
     /** The trigger it was opened from, which the focus goes back to as it closes. */
     anchor?: HTMLElement | null;
     onclose: () => void;
@@ -90,7 +87,6 @@
       {onexitcontinue}
       {open}
       {prefill}
-      {restore}
       sheet
       bind:this={form}
     />

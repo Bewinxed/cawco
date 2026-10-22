@@ -1436,21 +1436,19 @@
        continue.svelte.ts): a popover hanging from the trigger pressed on a
        desk, the bottom sheet on a phone. -->
   <NewSessionPopover
-    anchor={continuing.source ? null : spawning.anchor}
+    anchor={spawning.anchor}
     continueFrom={continuing.source ?? undefined}
     onclose={() => {
       spawning.open = false;
       spawning.anchor = null;
+      spawning.shown = null;
       continuing.source = null;
-      continuing.restore = null;
     }}
     onexitcontinue={() => {
       spawning.open = true;
       continuing.source = null;
-      continuing.restore = null;
     }}
     open={spawning.open || continuing.source !== null}
     prefill={continuing.source ? undefined : spawning.prefill}
-    restore={continuing.restore ?? undefined}
   />
 </Overlays>
