@@ -1103,9 +1103,6 @@ export async function walk(
     if (state.hostOnly === "delegate" && !scene.split) {
       return "delegate (recorded --without-delegate)";
     }
-    if (state.hostOnly === "join" && scene.joinable === "") {
-      return "address the hub lists to join it at (its machine had loopback alone)";
-    }
     return null;
   };
   const hostOnly = (state: State) => lacks(state) !== null;

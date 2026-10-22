@@ -45,7 +45,6 @@ import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
 } from "../../../packages/core/src/claude-dirs";
-import type { JoinInfo } from "../../../packages/core/src/join";
 import { LARGE_FILE_BYTES } from "../../../packages/core/src/move";
 import { seedDecisions } from "../../decisions-preview/seed";
 import type { Machine, Reply, Seen } from "../../scratch-fleet";
@@ -1184,13 +1183,6 @@ export interface Scene {
   /** The task whose one attempt failed. */
   failed: string;
   graph: string;
-  /**
-   * The first address the hub lists for another machine to join it at
-   * (`GET /api/join`'s `addresses`); "" on a workspace's hub, whose machine
-   * has loopback alone, so a state that pairs a machine stands on a host's
-   * tape only (catalogue `hostOnly: "join"`).
-   */
-  joinable: string;
   /** The decision project's session that made the media page and, newest, the short-named page. */
   media: string;
   permission: string;
@@ -2599,9 +2591,7 @@ export async function seedScene(
   kit.note(
     `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}, ${split}, ${runner}; artifact ${artifact}; project ${project.id} with ${tasks.length + 1} tasks; tray ${tray.id}; decisions ${decisions.projectId}`
   );
-  const joinable = await joinAddressOf(fleet);
   seeded = {
-    joinable,
     chips,
     ask,
     permission,
@@ -2639,12 +2629,6 @@ export async function seedScene(
     memoryDoc: MODEL_DOC,
   };
   return seeded;
-}
-
-/** The first address the hub lists for another machine to join it at (`GET /api/join`); "" when it lists none (scene `joinable`). */
-async function joinAddressOf(fleet: KitFleet): Promise<string> {
-  const { addresses } = await fleet.api<JoinInfo>("/api/join");
-  return addresses[0]?.url ?? "";
 }
 
 /**

@@ -20,7 +20,9 @@
  *   scrim leaves it open with what was typed; × on the draft just closes
  *   it, nothing parked; the machines list's Add machine opens it on Over
  *   SSH with the typing kept; each entry point that names a way (Home's
- *   cards, the list's ways) opens it on that tab;
+ *   cards, the list's ways) opens it on that tab; the new session's
+ *   Machines chip's "Connect a machine…" opens it over the form, and ×
+ *   gives the focus back to the chip;
  * - switching tabs keeps what was typed in each, and a reload opens it on
  *   the tab it stood on with both tabs' details;
  * - the tabs and each tab's details fit at 390, 680 and 1440 in Chromium
@@ -96,7 +98,7 @@ import type { Page, Request } from "playwright-core";
 import type { AuthContext } from "ssh2";
 import type { InstallsRead } from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
-import { until } from "../../scratch-fleet";
+import { MACHINE, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import {
   handOn,
@@ -458,6 +460,7 @@ async function run(kit: Kit): Promise<void> {
     await entryTabs(kit, fleet, dashboard);
     fleet.launch("agent");
     await fleet.agentUp();
+    await chipAdds(kit, fleet, dashboard);
 
     await refusedForward(kit, fleet, dashboard, {
       pushes,
@@ -2226,6 +2229,80 @@ async function entryTabs(
       `${view}: each entry point that names a way in opens the window on its tab (Home's cards, the machines list's ways)`,
       right && opened.length === 4,
       opened.join("; ")
+    );
+    await page.close();
+  }
+}
+
+/** The new session's Machines chip. */
+const MACHINES_CHIP = '[aria-controls="session-machines-popover"]';
+
+/**
+ * The new session's Machines chip: its "Connect a machine…" opens Add
+ * machine over the session's form, on its details (Over SSH: it names no
+ * way in), the focus inside it; × closes it on the draft with nothing
+ * parked, the form still open and the focus back on the chip that asked.
+ * Run once the fleet has a machine, which the form opens on.
+ */
+async function chipAdds(
+  kit: Kit,
+  fleet: KitFleet,
+  dashboard: string
+): Promise<void> {
+  await clearInstalls(fleet);
+  const form = (view: "desk" | "phone") =>
+    view === "desk" ? "[data-ns-popover]" : "[data-session-card]";
+  for (const view of ["desk", "phone"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const page = await kit.page(view, { theme: "light" });
+    await open(
+      page,
+      `${dashboard}/session?spawn=${encodeURIComponent(MACHINE)}&cwd=${encodeURIComponent(fleet.workdir)}`,
+      `${form(view)} ${MACHINES_CHIP}`
+    );
+    await page
+      .locator(`${form(view)} ${MACHINES_CHIP}`)
+      .first()
+      .click();
+    await page
+      .locator("#session-machines-popover [data-slot=row][data-add]")
+      .filter({ visible: true })
+      .first()
+      .click();
+    const opened = await settled(page, "reach", "Reach it at");
+    const tab = await chosenTab(page);
+    const focusIn = await page.evaluate(
+      (win) => Boolean(document.activeElement?.closest(win)),
+      WINDOW
+    );
+    await page.locator(CLOSE).click();
+    await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+      timeout: 10_000,
+    });
+    await page.waitForTimeout(300);
+    const after = await page.evaluate(
+      ([chip, sheet]) => ({
+        onChip: document.activeElement?.matches(chip) ?? false,
+        focus:
+          document.activeElement?.getAttribute("aria-label") ??
+          document.activeElement?.tagName ??
+          "",
+        formOpen: Boolean(
+          document.querySelector<HTMLElement>(sheet)?.checkVisibility()
+        ),
+      }),
+      [MACHINES_CHIP, form(view)] as const
+    );
+    const parked = (await installs(fleet)).installs.length;
+    kit.check(
+      `${view}: the new session's Machines chip's "Connect a machine…" opens Add machine over the form on its details, Over SSH, the focus inside it; × closes it with nothing parked, the form still open and the focus back on the chip`,
+      opened.step === "reach" &&
+        tab === "Over SSH" &&
+        focusIn &&
+        after.onChip &&
+        after.formOpen &&
+        parked === 0,
+      JSON.stringify({ tab, focusIn, ...after, parked })
     );
     await page.close();
   }

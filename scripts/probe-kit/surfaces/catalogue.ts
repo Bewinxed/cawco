@@ -69,11 +69,9 @@ export interface State {
    * It stands on what only a host's recording holds, and is left out, with
    * a NOTE saying which, from a tape that holds none (walk.ts `lacks`):
    * `delegate`, the scene's delegate (a workspace has no user namespaces to
-   * make its workspace in; the scene's `split`); `join`, an address the
-   * hub lists for another machine to join it at (a workspace's machine has
-   * loopback alone; the scene's `joinable`, "" then).
+   * make its workspace in; the scene's `split`).
    */
-  hostOnly?: "delegate" | "join";
+  hostOnly?: "delegate";
   /**
    * The hub state it reads, when not the scene's own: one the scene moves
    * the fleet into after the main recording (scene.ts `VARIANTS`), recorded
@@ -3697,13 +3695,9 @@ export const SURFACES: Surface[] = [
         ready: { shows: `${NS_POP} [data-account-option=auto]` },
       },
       {
-        // The Machines chip's "Connect a machine…": the pairing panel in the
-        // list's place, its install command in its CopyBox. The
-        // command stands once the hub lists an address (hub join.ts
-        // `joinAddresses`: Tailscale, then each non-internal IPv4), which a
-        // host's tape holds and a workspace's (loopback alone) does not.
-        name: "machines-pair",
-        hostOnly: "join",
+        // The Machines chip's "Connect a machine…": Add machine, on its Over
+        // SSH tab, over the sheet.
+        name: "machines-add",
         act: inSheet(
           press(PROJECT_CHIP),
           (page) =>
@@ -3717,7 +3711,10 @@ export const SURFACES: Surface[] = [
               .click()
         ),
         root: "body",
-        ready: { shows: `${nsPop("machines")} code`, says: /install\.sh/ },
+        ready: {
+          shows: `${CONNECT_WINDOW}[data-step=reach] #connect-title`,
+          says: ADD_MACHINE_TITLE,
+        },
       },
       {
         // The cawco project on the machine with no checkout of it: Move &
