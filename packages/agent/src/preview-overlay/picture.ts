@@ -1135,8 +1135,21 @@ export async function cropPicture(
           }
         },
         // The copied pseudo-elements' rules, before the SVG is serialized.
-        onCreateForeignObjectSvg: (svg) =>
-          slimPseudoRules(svg, defaults, breathe),
+        // The image the library draws the part from is made in the SVG's
+        // own document (its `createImage(dataUrl, svg.ownerDocument)`) and
+        // awaited by its `load` listener. A copy in the other scheme stands
+        // in a frame with scripts off (schemes.ts), and WebKit delivers no
+        // event to a listener on a node of such a document, whoever added
+        // it: the image loads (`complete`) and its `load` is never heard,
+        // so the part waited out the library's 30 s bound and the thumbnail
+        // never came (files-panel 32). Adopted into this page's document,
+        // the image is made here, where its `load` is heard.
+        onCreateForeignObjectSvg: async (svg) => {
+          await slimPseudoRules(svg, defaults, breathe);
+          if (svg.ownerDocument !== document) {
+            document.adoptNode(svg);
+          }
+        },
         // By node type, not `instanceof`: a copy's nodes are another window's.
         filter: (node) =>
           !(
