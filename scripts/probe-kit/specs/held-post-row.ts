@@ -37,6 +37,8 @@ const APP = join(ROOT, "apps/dashboard");
 const STORIES = "src/lib/cawco/home/NeedsCard.stories.ts";
 const LONG_TARGET =
   "some-organisation-with-a-long-name/an-equally-long-repository-name#98765";
+/** A currency sign, its code, or a figure with cents. */
+const MONEY = /[$€£¥]|\bUSD\b|\d+\.\d{2}\b/;
 
 /** A port nothing holds now. */
 const freePort = async (): Promise<number> => {
@@ -200,7 +202,7 @@ const spec: Spec = {
       kit.check(
         '3: Budget: the cap\'s row reads "Reached its daily budget · Caw paused", with no currency sign or money figure anywhere in the row',
         budget?.want === "Reached its daily budget · Caw paused" &&
-          !/[$€£¥]|\bUSD\b|\d+\.\d{2}\b/.test(budget.all),
+          !MONEY.test(budget.all),
         JSON.stringify(budget)
       );
     } finally {

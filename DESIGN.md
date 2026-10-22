@@ -749,6 +749,7 @@ Logins moved into CawCo are one group: a head led by the group glyph (Solar duot
 The kit lives in `apps/dashboard/src/lib/components/ui`. Shared recipes are the `kit-*` classes in `app.css`'s components layer; everything else a component draws is the theme's utilities and variants on its own elements (`theme.css`, `variants.css`).
 
 **The Earned Count Rule.** A count on a control is drawn only above 0: a count of none says nothing. On the web and in the app alike, at 0 the count element is gone and the control's name drops it too. A figure whose 0 is itself the reading (a measurement, a share, a total the control reports rather than a number of things it opens) is not a count.
+
 ### Buttons
 Buttons: shadcn/ui button and Base UI; prominence per Apple HIG.
 
