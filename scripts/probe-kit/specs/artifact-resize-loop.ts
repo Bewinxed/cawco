@@ -489,12 +489,23 @@ const dropPin = async (page: Page): Promise<void> => {
     await send.waitFor({ state: "detached", timeout: 15_000 });
   }
   // Drawn, not only made: a pill attached but not yet drawn has no box, and
-  // `boundingBox` answers null for it at once, whatever its timeout.
+  // `boundingBox` answers null for it at once, whatever its timeout. Each
+  // draw of the pins removes every pill and makes it again (pins.ts
+  // `draw`), and the pin's state turning after Send draws them again: the
+  // face the locator found can be gone by the time it is measured, and
+  // WebKit's quads for a node no longer in the page are none (its rect 0×0,
+  // no `<svg>` round it, the face drawn anew at 20×20 a moment later). The
+  // box is read until it is read off a drawn pill.
   const face = frame.locator(
     'svg[data-cawco-pins] g[data-pin="1"] [data-face]'
   );
   await face.waitFor({ state: "visible", timeout: 5000 });
-  const pill = await face.boundingBox();
+  const pill = await until(
+    "the new pin's pill measured where it is drawn",
+    () => face.boundingBox(),
+    (box) => box !== null && box.width > 0,
+    5000
+  ).catch(() => null);
   if (!pill) {
     throw new Error("the new pin's pill has no box to press");
   }
