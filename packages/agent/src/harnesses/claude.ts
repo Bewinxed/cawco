@@ -141,6 +141,7 @@ import {
   workspaceHook,
 } from "../boundary";
 import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
+import { CLAUDE_QUIET_ENV } from "../claude-env";
 import {
   mcpConfigOffArgv,
   removeMcpConfig,
@@ -1181,6 +1182,9 @@ const sessionEnv = (
   ...(ctx.sessionCredential
     ? { [CAWCO_ENV.sessionCredential]: ctx.sessionCredential }
     : {}),
+  // Last: the silent-turn reminder stays off whatever the spec or the
+  // person's env says.
+  ...CLAUDE_QUIET_ENV,
 });
 
 /** Tools that put a question to the person: never answered for them, in any mode. */
