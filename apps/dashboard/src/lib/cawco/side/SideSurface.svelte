@@ -102,7 +102,7 @@
     /** The content stands in the well; false: on the card itself. */
     recessed?: boolean;
     /** What the card holds, its hook (`data-side-card`): the pane's own name. */
-    of?: "preview" | "task" | "file" | "plan";
+    of?: "preview" | "task" | "file";
     /**
      * A page's mode in the well (the preview's): Comment and Draw mark the
      * well's edge with a 1px seam inside its box, never a second ring;

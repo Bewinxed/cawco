@@ -8,14 +8,14 @@
    * panel with the tray row and what stands on it, or the grown ask when it
    * reaches higher; `perch`, how far Caw perched on the pill rises over its
    * top (0 with no perch, or while an ask has it stepped aside); `parked`,
-   * what stands higher than the panel and its tray row (0 with nothing);
-   * `shelf`, the delegate tray's shelf open between its row and the panel
-   * (0 shut), which the transcript makes room for and a pinned tail follows.
+   * what stands higher than the panel and its tray row (0 with nothing).
+   * What floats out of the composer (the tray's shelf and panel, the `/`
+   * and `@` menu, the recall wheel) is in none of them: a layer over the
+   * transcript's foot, never a size the transcript is told.
    */
   export interface ComposerFoot {
     parked: number;
     perch: number;
-    shelf: number;
     stack: number;
   }
 
@@ -374,7 +374,6 @@
       stack: standing,
       perch: perch && !askRaised ? perchHeight : 0,
       parked: standing - panel - lift,
-      shelf: showing ? (shelves[showing] ?? 0) : 0,
     });
   });
   /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
@@ -3087,8 +3086,6 @@
   /** The rows with an offer to stand on the tray row, and those with a tray. */
   const offered = $derived(trayRows.filter((row) => row.prompts));
   const trayed = $derived(trayRows.filter((row) => row.delegatesOf));
-  /** Each row's tray shelf as drawn, px (0 shut): the one shown is the foot's `shelf`. */
-  const shelves: Record<string, number> = $state({});
   /** The box the offers stand in: a `reflow` container. */
   let offers = $state<HTMLElement>();
   /*
@@ -3216,7 +3213,6 @@
     class="relative flex-none w-c-composer-w pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     inert={askRaised}
     {@attach measureLift}
-    style:--shelf-rise={shelves[showing] ? `${shelves[showing]}px` : null}
   >
     {#if minimized && ask && askQuestions}
       <!-- The minimized question, in the tray row's place: Caw's needs-you
@@ -3284,14 +3280,16 @@
     {#if planRing}
       <!-- The plan's chip, at the tray row's trailing end, standing on the
            tray's line: the step off the panel the delegate chips stand on.
-           On the tray's line: risen by the tray's shelf while it is open. -->
+           The slot spans the row, so the plan the chip opens (PlanPane)
+           stands over the row across the composer's width; only the chip
+           takes the pointer, and only the chip is measured. -->
       <div
         data-slot="progress-slot"
-        class="absolute bottom-(--progress-foot) end-0 z-1 flex items-end h-c-tray-row pb-c-tray-gap pointer-events-auto transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
-        {@attach measureRing}
-        style:--progress-foot="var(--shelf-rise, 0px)"
+        class="absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-c-tray-row pb-c-tray-gap pointer-events-none transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
       >
-        {@render planRing()}
+        <div class="flex pointer-events-auto" {@attach measureRing}>
+          {@render planRing()}
+        </div>
       </div>
     {/if}
     {#if trayed.length > 0}
@@ -3301,9 +3299,8 @@
            render, chips or none (app.css `--c-tray-row`, which every
            transcript keeps clear), with the tray standing on its foot: a chip
            arriving late fills room already there, and the suggestion row
-           standing on the slot never moves. The row, and the tray's shelf
-           under it while it is open: the dock grows up by the shelf, and the
-           transcript keeps the room. -->
+           standing on the slot never moves. The tray's shelf and panel
+           float over it, in none of its flow. -->
       <div
         data-slot="tray-slot"
         class="relative grid grid-cols-1 items-box-end min-h-c-tray-row transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
@@ -3322,13 +3319,7 @@
             data-composer-away={row.id !== showing || undefined}
             class="row-start-1 col-start-1 transition-exit-show data-composer-away:opacity-0 data-composer-away:invisible data-composer-away:transition-exit-hide"
           >
-            <DelegateTray
-              {held}
-              onshelf={(px) => {
-                shelves[row.id] = px;
-              }}
-              parentId={row.delegatesOf}
-            />
+            <DelegateTray {held} parentId={row.delegatesOf} />
           </div>
         {/each}
       </div>

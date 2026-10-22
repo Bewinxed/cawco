@@ -108,7 +108,6 @@
     onshown,
     bare = false,
     parkedHeight = 0,
-    shelfHeight = 0,
     latestInset,
 
     /**
@@ -151,14 +150,6 @@
      * every row in the list each time.
      */
     parkedHeight?: number;
-    /**
-     * The delegate tray's shelf open between the composer's tray row and
-     * its panel, px (0 shut). Unlike a parked card it is followed: the room
-     * past the end grows by it, and a view held at the tail stays at the
-     * tail, while a view scrolled away keeps its place. Set on the boxes
-     * that read it, as `parkedHeight` is.
-     */
-    shelfHeight?: number;
     /** Where the way back to the tail rests, up from the scroller's foot, when the pane says (a thread). */
     latestInset?: string;
   } = $props();
@@ -2073,8 +2064,6 @@
   let spare = $state(0);
   /** The room past the end for what rises past the composer (the markup). */
   let parkedRoom = $state<HTMLElement>();
-  /** The room past the end for the tray's open shelf (the markup). */
-  let shelfRoom = $state<HTMLElement>();
   /** The room under the list that clears the composer (the markup). */
   let foot = $state<HTMLElement>();
   /**
@@ -2099,17 +2088,17 @@
     return Number.parseFloat(inner?.style.height ?? "");
   }
   /**
-   * Puts `spare` on the scroll range as it stands, and the padding on the
+   * Puts `spare` on the tail's range as it stands, and the padding on the
    * page; says whether it moved. The pin calls it before it reads the height,
    * so a list that grew is whole in the frame it grew.
    *
-   * The range is the content less the box: virtua's viewport (the box's
-   * content height, `getViewportSize`) against what stands in it: the strip
-   * before the list, the list (`listHeight`), the parked room, the shelf's
-   * room and the foot. None of them is read off the layout: this runs in
-   * whatever task virtua's write landed in. The two rooms are the sizes
-   * their observer last delivered (`rooms`): read here as their computed
-   * styles, the foot's resolved block size laid the page out in the
+   * The range is where the tail stands (`tailTop`): virtua's viewport (the
+   * box's content height, `getViewportSize`) against the strip before the
+   * list, the list (`listHeight`) and the foot. The parked room past the
+   * foot is not the tail's, so it is not counted. None of them is read off
+   * the layout: this runs in whatever task virtua's write landed in. The
+   * foot is the size its observer last delivered (`rooms`): read here as its
+   * computed style, its resolved block size laid the page out in the
    * microtask behind every height virtua wrote, a whole layout per row a
    * streamed reply grew.
    *
@@ -2121,8 +2110,7 @@
     if (!(viewport > 0 && rooms.measured && Number.isFinite(height))) {
       return false;
     }
-    const { foot: clear, parked, shelf } = rooms;
-    const range = olderRoom + height + parked + shelf + clear - viewport;
+    const range = olderRoom + height + rooms.foot - viewport;
     const over = range <= 0 ? 0 : ((-range % 1) + 1) % 1;
     const next = over < 0.001 || over > 0.999 ? 0 : over;
     if (Math.abs(next - spare) <= 0.001) {
@@ -2157,65 +2145,29 @@
    * throttled 4x or 6x, 3 runs of 6).
    */
   /**
-   * The parked room's and the foot's heights, as their observer last
-   * delivered them: after a layout, never by asking for one. Each comes as
-   * the room is first laid out and whenever it resizes (the composer's
-   * clearance changing), and the list is made whole again for it.
+   * The foot's height, as its observer last delivered it: after a layout,
+   * never by asking for one. It comes as the foot is first laid out and
+   * whenever it resizes (the composer's clearance changing), and the list
+   * is made whole again for it. The parked room is not observed: it moves
+   * neither the tail nor the view.
    */
-  const rooms = { foot: 0, parked: 0, shelf: 0, measured: false };
+  const rooms = { foot: 0, measured: false };
   $effect(() => {
     const footNode = foot;
-    const parkedNode = parkedRoom;
-    const shelfNode = shelfRoom;
-    if (!(footNode && parkedNode && shelfNode)) {
+    if (!footNode) {
       return;
     }
-    const seen = new Set<Element>();
-    // biome-ignore lint/style/noRestrictedGlobals: a view at the tail follows the shelf's room by its scroll, which resizes nothing, in the delivery, so no frame paints the tail short of the end
+    // biome-ignore lint/style/noRestrictedGlobals: the foot is read in the delivery, after the layout that sized it, and a pinned tail made whole there, so no frame paints it off the end
     const sizes = new ResizeObserver((entries) => {
-      // The shelf's room moved: a view at the tail follows it, frame by
-      // frame as the shelf opens; one scrolled away keeps its place.
-      let shelf = 0;
       for (const entry of entries) {
-        const size = entry.borderBoxSize[0]?.blockSize ?? 0;
-        seen.add(entry.target);
-        if (entry.target === footNode) {
-          rooms.foot = size;
-        } else if (entry.target === shelfNode) {
-          shelf = size - rooms.shelf;
-          rooms.shelf = size;
-        } else {
-          rooms.parked = size;
-        }
+        rooms.foot = entry.borderBoxSize[0]?.blockSize ?? 0;
       }
-      rooms.measured = seen.size === 3;
-      // At the end before the shelf's room grew: the tail is followed
-      // whether or not this pane holds the pin (a pane beside the one
-      // worked in keeps where it stands, and where it stands is the end).
-      const atEnd =
-        shelf > 0 &&
-        !!scroller &&
-        scroller.scrollHeight -
-          scroller.clientHeight -
-          scroller.scrollTop -
-          shelf <=
-          0.5;
-      if ((keepWhole() && pinned()) || atEnd || (shelf > 0 && pinned())) {
+      rooms.measured = true;
+      if (keepWhole() && pinned()) {
         pinBottom();
-      } else if (
-        shelf < 0 &&
-        scroller &&
-        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <=
-          0.5
-      ) {
-        // Shut under a view at the end, the browser clamps it: its scroll
-        // event is this component's own, not the reader's (as `wholeHeight`).
-        lastWrite = scroller.scrollTop;
       }
     });
     sizes.observe(footNode);
-    sizes.observe(parkedNode);
-    sizes.observe(shelfNode);
     return () => {
       sizes.disconnect();
       rooms.measured = false;
@@ -2441,8 +2393,7 @@
     // ("↵ open at that line", docs/tom/find-and-mention-chosen.md).
     announcement = "Opened at that line.";
     if (scroller) {
-      const distance =
-        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      const distance = tailTop(scroller) - scroller.scrollTop;
       farFromLatest = distance > FAR_FROM_LATEST * scroller.clientHeight;
     }
   }
@@ -2742,6 +2693,12 @@
       return;
     }
     lastTop = scroller.scrollTop;
+    // Held open under a reader who stood in it: it gives the room back as
+    // they scroll out of it, never under them.
+    if (heldRoom > 0) {
+      const into = scroller.scrollTop - tailTop(scroller);
+      heldRoom = into > parkedHeight ? into : 0;
+    }
     // A far landing's scroll: what it left and the screen above follow.
     if (narrow) {
       catchUpRest();
@@ -2812,13 +2769,15 @@
     // however near the tail it moves. The tail is taken back at rest, and
     // only there (`onscrollend`).
     atBottom = false;
-    const distance = height - scroller.scrollTop - scroller.clientHeight;
+    const tail = tailTop(scroller);
+    const distance = tail - scroller.scrollTop;
     // Reaching the end marks where it stood; the reader is at the tail for
-    // as long as they stay at or past that mark. Rows arriving while the
-    // scroll bounces off the end move the end on, and the bounce settles
-    // short of it, at the end the reader reached.
+    // as long as they stay at or past that mark (into the parked room
+    // included). Rows arriving while the scroll bounces off the end move the
+    // end on, and the bounce settles short of it, at the end the reader
+    // reached.
     if (distance <= TAIL_SLACK) {
-      tailMark = height - scroller.clientHeight;
+      tailMark = tail;
     } else if (
       tailMark !== null &&
       scroller.scrollTop < tailMark - TAIL_SLACK
@@ -2908,6 +2867,45 @@
    */
 
   /**
+   * THE TAIL IS THE LIST'S END, NOT THE SCROLLER'S. The parked room past the
+   * end (an ask the composer grows into, an offer on its tray row) is room
+   * the reader may scroll into, never a place the view is taken: at the
+   * tail the last row stands on the foot whether a card is parked over it
+   * or not, so a card parking or leaving moves no row (owner, a7443251: "it
+   * shouldn't push the transcript up"; DESIGN.md, The Composer Layer Rule).
+   * Read after the layout the scroll height has just forced, as laid out.
+   */
+  function tailTop(node: HTMLElement): number {
+    const parked = parkedRoom?.getBoundingClientRect().height ?? 0;
+    return node.scrollHeight - node.clientHeight - parked;
+  }
+
+  /**
+   * A CARD THAT LEAVES TAKES NO ROOM FROM UNDER THE READER. The reader who
+   * scrolled into the parked room (to read the last row over the card)
+   * stands that far into it; the card going shrinks the room, and the
+   * browser would clamp the view back up by the difference, moving every
+   * row. So the room is held at where they stand (`heldRoom`) as the card
+   * leaves, and given back only as they scroll out of it (`readScroll`): the
+   * end moves with them, and nothing clamps.
+   */
+  let heldRoom = $state(0);
+  const roomHeight = $derived(Math.max(parkedHeight, heldRoom));
+  $effect.pre(() => {
+    const next = parkedHeight;
+    untrack(() => {
+      if (!(scroller && parkedRoom)) {
+        return;
+      }
+      if (next >= parkedRoom.getBoundingClientRect().height) {
+        return;
+      }
+      const into = scroller.scrollTop - tailTop(scroller);
+      heldRoom = into > next ? into : 0;
+    });
+  });
+
+  /**
    * Pin the viewport to the bottom. Called from the list's own resize (see the
    * pin below), after virtua has laid the list out and before the frame is
    * painted, so the viewport and the opening row move on the same frame.
@@ -2916,8 +2914,10 @@
     if (!scroller) {
       return;
     }
-    const bottom = scroller.scrollHeight - scroller.clientHeight;
-    if (Math.abs(scroller.scrollTop - bottom) > 0.5) {
+    const bottom = tailTop(scroller);
+    // Short of the tail, it is put there. Past it is the parked room the
+    // reader scrolled into to read the last row over a parked card: theirs.
+    if (bottom - scroller.scrollTop > 0.5) {
       const was = scroller.scrollTop;
       if (bottom - was > scroller.clientHeight) {
         // Drawn already: its rows are built first (`stageFar`), and the
@@ -3596,8 +3596,7 @@
     if (!(
       node &&
       motionOk.current &&
-      node.scrollHeight - node.clientHeight - node.scrollTop <=
-        JUMP_SMOOTH_SCREENS * node.clientHeight
+      tailTop(node) - node.scrollTop <= JUMP_SMOOTH_SCREENS * node.clientHeight
     )) {
       // Landed in the click itself, not in `land`'s next frame: a re-armed
       // `land` (the rows effect) can push that frame back one more.
@@ -3622,8 +3621,8 @@
     if (!(jumping && node)) {
       return;
     }
-    const bottom = node.scrollHeight - node.clientHeight;
-    if (Math.abs(bottom - node.scrollTop) <= 1) {
+    const bottom = tailTop(node);
+    if (bottom - node.scrollTop <= 1) {
       arrive();
       return;
     }
@@ -3640,7 +3639,7 @@
     if (jumpTarget === null) {
       return;
     }
-    const bottom = node.scrollHeight - node.clientHeight;
+    const bottom = tailTop(node);
     const top = node.scrollTop;
     if (Math.abs(top - jumpTarget) > 1 && top < bottom - 1) {
       return;
@@ -4122,17 +4121,8 @@
   <div
     aria-hidden="true"
     class="isolate h-(--parked-room) pointer-events-none"
-    style:--parked-room="{parkedHeight}px"
+    style:--parked-room="{roomHeight}px"
     bind:this={parkedRoom}
-  ></div>
-  <!-- Room for the delegate tray's open shelf, which the tail follows
-       (`shelfHeight`): the dock grows up over the foot, and a reader at the
-       tail keeps the last row clear above it. -->
-  <div
-    aria-hidden="true"
-    class="isolate h-(--shelf-room) pointer-events-none"
-    style:--shelf-room="{shelfHeight}px"
-    bind:this={shelfRoom}
   ></div>
   <!-- The foot clears the composer's standing box: the pill at one line, the
        delegate tray's row and the suggestion row on it. `--composer-clearance`
@@ -4163,7 +4153,7 @@
     data-slot="dock"
     class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
-    style:--parked-room="{parkedHeight + shelfHeight}px"
+    style:--parked-room="{parkedHeight}px"
     style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px)))"}
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->

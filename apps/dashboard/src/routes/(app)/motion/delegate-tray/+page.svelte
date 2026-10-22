@@ -8,7 +8,7 @@
    * queued behind files another item owns. Only the client's state is
    * seeded (dev's `__cawcoDebug`).
    *
-   * In the reader's theme; `?case=` (1r, 1f, 3r2f, 5f, 7r13f,
+   * In the reader's theme; `?case=` (4, 11, 1r, 1f, 3r2f, 5f, 7r13f,
    * 20r) seeds running and failed delegates instead of the twelve.
    */
   import type { SessionPulse, WorkItemSummary } from "@cawco/core";
@@ -125,6 +125,13 @@
   session.cwd = "/bench";
   session.messages = history();
   session.initialized = true;
+  // What its `/` menu lists: a skill and two built-ins.
+  session.commands = {
+    names: ["clean-copy", "compact", "review"],
+    skills: ["clean-copy"],
+    detailed: null,
+    at: now,
+  };
   debug.state.sessions[ID] = session;
   debug.state.plans[ID] = {
     rev: 1,
@@ -139,11 +146,14 @@
     },
   };
   /**
-   * `?case=` seeds the tray's cases instead (the shelf's spec,
-   * tray-shelf): running and failed delegates, in creation order, the
-   * failures spread among the running so each has later items.
+   * `?case=` seeds the tray's cases instead: running and failed delegates,
+   * in creation order, the failures spread among the running so each has
+   * later items. `4` and `11` are the composer-layers spec's (four
+   * delegates, one of them failed; eleven, three failed).
    */
   const CASES: Record<string, { running: number; failed: number }> = {
+    "4": { running: 3, failed: 1 },
+    "11": { running: 8, failed: 3 },
     "1r": { running: 1, failed: 0 },
     "1f": { running: 0, failed: 1 },
     "3r2f": { running: 3, failed: 2 },

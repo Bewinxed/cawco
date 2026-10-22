@@ -69,7 +69,7 @@
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
-  import { planProgress, planShows } from "./plan/PlanPane.svelte";
+  import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
   import {
@@ -357,7 +357,14 @@
   const planProgressNow = $derived(
     leadPlan && planShows(leadPlan) ? planProgress(leadPlan) : null
   );
-  let side = $state<ReturnType<typeof SideSplit>>();
+  /** The lead's plan its ring opens over the composer's row (PlanPane). */
+  let planOpen = $state(false);
+  // A plan with nothing left to show takes its open plan with it.
+  $effect(() => {
+    if (!planProgressNow) {
+      planOpen = false;
+    }
+  });
   /** The side surface's share of the width, in percent. */
   let sideShare = $state(0);
   /** The side surface is the bottom drawer, a task its own page; null until the pane is measured (layoutPolicy.sideDrawer). */
@@ -789,7 +796,7 @@
   });
 
   /** What the composer stands over the foot: the fade and "Jump to latest" rest on it. */
-  let foot = $state<ComposerFoot>({ stack: 0, perch: 0, parked: 0, shelf: 0 });
+  let foot = $state<ComposerFoot>({ stack: 0, perch: 0, parked: 0 });
   /**
    * Scrolled away from the tail, the way back rests on the composer's stack,
    * beside Caw; the foot's fade is solid to the higher of his top and its
@@ -831,14 +838,19 @@
    * Docked in Caw's panel, the composer has a place of its own at the foot
    * and the room ends over it (the owner's pins 17 and 22): nothing scrolls
    * under the composer or Caw on its pill, or under the line standing in its
-   * place when he can't start.
+   * place when he can't start. The place is the composer at rest, from its
+   * tokens (`composerRoom`), never its measured height: what grows out of
+   * it (an attachment's row, a longer draft, the ask it grows into, its
+   * tray's shelf, the plan) stands over the transcript's foot as it does
+   * undocked, and the transcript's box never changes for it (DESIGN.md,
+   * The Composer Layer Rule).
    */
   const reserved = $derived.by(() => {
     if (!docked) {
       return null;
     }
-    const over = writable ? foot.stack + foot.perch : offHeight;
-    return `calc(var(--space-4) + var(--safe-bottom) + ${over}px + var(--space-2))`;
+    const over = writable ? composerRoom : `${offHeight}px`;
+    return `calc(var(--space-4) + var(--safe-bottom) + ${over} + var(--space-2))`;
   });
   /**
    * Where "Jump to latest" rests, up from the transcript's foot: on the
@@ -974,10 +986,20 @@
   {#if planProgressNow}
     <PlanRing
       done={planProgressNow.done}
-      onopen={() => side?.openPlan()}
-      open={side?.planShowing() ?? false}
+      onopen={() => {
+        planOpen = !planOpen;
+      }}
+      open={planOpen}
       total={planProgressNow.total}
     />
+    {#if planOpen && lead}
+      <PlanPane
+        instanceId={lead}
+        onclose={() => {
+          planOpen = false;
+        }}
+      />
+    {/if}
   {/if}
 {/snippet}
 
@@ -1070,7 +1092,6 @@
             shown = drawn;
           }}
           parkedHeight={writable ? foot.parked : 0}
-          shelfHeight={writable ? foot.shelf : 0}
           {session}
           {visible}
         />
@@ -1113,13 +1134,11 @@
       <SideSplit
         {active}
         {phone}
-        planOf={lead}
         previewOf={lead}
         task={stages ? taskSurface : undefined}
         taskOpen={openTask !== null}
         {viewId}
         {visible}
-        bind:this={side}
         bind:share={sideShare}
       >
         {@render slide()}

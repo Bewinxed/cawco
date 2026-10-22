@@ -2618,7 +2618,7 @@ export const SURFACES: Surface[] = [
           shows: on(s.compact, '[aria-label="Compacted, show the summary"]'),
         }),
       },
-      // The plan's ring pressed: its steps in the side panel.
+      // The plan's ring pressed: its steps over the composer's row.
       {
         name: "plan",
         route: (s) => `/session/${s.planned}`,

@@ -62,7 +62,7 @@
   import { delegateHandle, rowHref } from "./links";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
-  import { planProgress, planShows } from "./plan/PlanPane.svelte";
+  import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import {
     listTasks,
@@ -156,11 +156,16 @@
   const phone = $derived(laidWidth > 0 && laidWidth < 900);
   /** The side surface is the bottom drawer, not the split; null until the pane is measured (layoutPolicy.sideDrawer). */
   const drawer = $derived(layoutPolicy.sideDrawer(laidWidth));
-  let side = $state<ReturnType<typeof SideSplit>>();
+  /** The plan its ring opens over the composer's row (PlanPane). */
+  let planOpen = $state(false);
+  // A plan with nothing left to show takes its open plan with it.
+  $effect(() => {
+    if (!planProgressNow) {
+      planOpen = false;
+    }
+  });
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
-  /** The delegate tray's open shelf: room past the end that a pinned tail follows. */
-  let shelfRoom = $state(0);
   /** The session's plan has something to show: its ring opens it (SideSplit). */
   const plan = $derived(cawco.planOf(viewId));
   const planProgressNow = $derived(
@@ -1110,7 +1115,6 @@
     },
     onfoot: (next) => {
       parkedRoom = next.parked;
-      shelfRoom = next.shelf;
     },
     get planRing() {
       return planProgressNow ? planRing : undefined;
@@ -1137,10 +1141,20 @@
   {#if planProgressNow}
     <PlanRing
       done={planProgressNow.done}
-      onopen={() => side?.openPlan()}
-      open={side?.planShowing() ?? false}
+      onopen={() => {
+        planOpen = !planOpen;
+      }}
+      open={planOpen}
       total={planProgressNow.total}
     />
+    {#if planOpen}
+      <PlanPane
+        instanceId={viewId}
+        onclose={() => {
+          planOpen = false;
+        }}
+      />
+    {/if}
   {/if}
 {/snippet}
 
@@ -1225,12 +1239,10 @@
     <SideSplit
       {active}
       phone={drawer}
-      planOf={viewId}
       task={besideStages ? besideSurface : undefined}
       taskOpen={!!beside}
       {viewId}
       {visible}
-      bind:this={side}
       bind:share={previewShare}
     >
       <div
@@ -1283,7 +1295,6 @@
                     shown = drawn;
                   }}
                   parkedHeight={writable ? parkedRoom : 0}
-                  shelfHeight={writable ? shelfRoom : 0}
                   {session}
                   {visible}
                 />

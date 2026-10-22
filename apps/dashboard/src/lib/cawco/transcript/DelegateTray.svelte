@@ -17,10 +17,12 @@
    * one failure's own chip), so a failure never takes a working slot and is
    * never counted in "+N".
    *
-   * Pressing "+N" or the failure chip opens the shelf: a block between the
-   * row and the composer's field, inside the dock, which grows upward while
-   * the transcript keeps its room (Transcript `shelfHeight`), so nothing is
-   * drawn over the log. Folded delegates are listed there; each failure is
+   * Pressing "+N" or the failure chip opens the shelf: a floating surface
+   * that rises out of the row over the transcript's foot, anchored to the
+   * row it was opened from. It is a layer of the dock, out of every flow:
+   * the row, the composer and the transcript under it never move for it,
+   * by construction (owner: "WHY WOULD ANYTHING THAT COMES OUT OF THE
+   * COMPOSER EVEN MOVE THE TRANSCRIPT"). Folded delegates are listed there; each failure is
    * a row that ends one of three ways: Retry (the same item runs again, and
    * its chip goes back to its place in the row), Replaced by (a later item
    * of this session took its work over) or Dismiss with a reason. Those are
@@ -48,6 +50,7 @@
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { stopWords } from "../accounts/switch.svelte";
   import {
     cawco,
@@ -60,8 +63,8 @@
   import { conversationHref } from "../links";
   import { markHue, sessionSprite } from "../mark";
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
+  import { popOut } from "../motion/pop.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { land } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
@@ -84,7 +87,6 @@
   let {
     parentId,
     held = false,
-    onshelf,
   }: {
     /**
      * The session whose delegates the tray shows: its own, and as its
@@ -93,8 +95,6 @@
     parentId: string;
     /** A swipe is carrying the conversation: the chips wait. */
     held?: boolean;
-    /** The shelf's height as drawn, px, frame by frame; 0 once it has shut. */
-    onshelf?: (px: number) => void;
   } = $props();
 
   /** How long a finished chip stays on screen, counted only while it is seen. */
@@ -825,13 +825,11 @@
   /** The chip that opened the shelf: focus goes back to it as it shuts. */
   let opener = "";
   /**
-   * The shelf's height as drawn, frame by frame while it unfolds: read as it
-   * mounts, and each change in the next frame (frameSize).
+   * The room the shelf may rise into, in the layout's px: from the row up
+   * to the top of the composer's dock (`roomOver`), read as it opens. What
+   * it lists past that scrolls inside it.
    */
-  let shelfPx = $state(0);
-  const measureShelf = frameSize<HTMLElement>((node) => {
-    shelfPx = node.clientHeight;
-  });
+  let shelfRoom = $state(320);
 
   function toggleShelf(
     kind: "failed" | "more",
@@ -841,6 +839,9 @@
     if (shelf === kind) {
       closeShelf(true);
       return;
+    }
+    if (root) {
+      shelfRoom = Math.max(0, roomOver(root));
     }
     shelf = kind;
     opener = key;
@@ -881,11 +882,6 @@
       opener = failKey;
     }
   });
-  $effect(() => {
-    onshelf?.(shelfPx);
-  });
-  $effect(() => () => onshelf?.(0));
-
   // An outside press closes a pinned panel, and the shelf.
   $effect(() => {
     if (!(root && ((openKey && pinned) || shelf))) {
@@ -896,16 +892,6 @@
       closeShelf(false);
     });
   });
-
-  /**
-   * The shelf's fold: open on --dur-panel, shut on --dur-exit (The Fast
-   * Exit Rule). Two transitions, not one: a bidirectional one keeps the
-   * length it was first made with, and shut over the opening's 280ms.
-   */
-  const shelfIn = (node: HTMLElement): TransitionConfig =>
-    unfold(node, { ms: dur("--dur-panel") }, { direction: "in" });
-  const shelfOut = (node: HTMLElement): TransitionConfig =>
-    unfold(node, { ms: dur("--dur-exit") }, { direction: "out" });
 
   /**
    * The list shows four rows on a desk and three on a compact screen, then
@@ -1539,7 +1525,7 @@
 
 <!-- Always laid out, so the row's width is known before its first chip. The
      row stops short of the plan's chip at its end (Composer `--ring-room`);
-     the shelf under it spans the whole composer. -->
+     the shelf over it spans the whole composer. -->
 <div
   data-slot="host"
   class="pointer-events-none pe-(--host-end)"
@@ -1550,7 +1536,7 @@
     <!-- The row of chips, standing a step off the composer's top edge: no
          surface of its own, one line, never wrapping or scrolling sideways.
          Its chip and step are the app's tray tokens, the row the composer
-         keeps. The shelf, open, stands between the row and that step. -->
+         keeps. The shelf, open, stands over the row, out of its flow. -->
     <div
       data-slot="tray"
       class="relative pb-c-tray-gap"
@@ -1647,133 +1633,138 @@
       </div>
 
       {#if shelf}
-        <!-- The shelf, between the row and the field: the dock grows up for
-             it and the transcript keeps its room, so it covers no line. -->
-        <!-- What unfolds: the step under the row, and the shelf's surface,
-             a raised card in the dock, concentric with the composer's pill. -->
-        <div
-          data-slot="shelf-slot"
-          class="me-(--slot-end) pt-c-tray-gap pointer-events-auto"
+        <!-- The shelf: the kit's floating surface (`floatingSurface`), the
+             `/` menu's family, rising out of the row it was opened from over
+             the transcript's foot, a step above the chips and across the
+             composer's whole width. Absolute in the dock's layer, in no
+             flow: opening and closing it moves nothing, the row, the
+             composer and the transcript under it included. It comes in by
+             the kit's own `@starting-style` (opacity, translate and scale
+             on one transition, --dur-pop on the drawer curve, from its
+             bottom edge) and leaves by `popOut` back down into the row
+             (--dur-exit, The Fast Exit Rule). What it holds changing size
+             (a reason field, a row leaving) tweens its height (`morph`),
+             up from its foot. -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: Escape inside the shelf (a row's reason field, then the shelf) is heard on the region; every control in it is its own button or field -->
+        <section
+          data-slot="shelf"
+          aria-label={shelf === "failed"
+            ? "Failed delegates"
+            : "More delegates"}
+          class={floatingSurface({
+            class:
+              "absolute start-0 end-(--shelf-end) bottom-(--shelf-foot) z-1 flex flex-col max-h-(--shelf-room) p-0 overflow-clip origin-bottom pointer-events-auto",
+          })}
+          data-side="top"
+          data-state="open"
+          id={shelfId}
           inert={held}
-          onoutroend={() => {
-            shelfPx = 0;
-          }}
-          style:--slot-end="calc(-1 * var(--ring-room, 0px))"
-          {@attach measureShelf}
-          in:shelfIn
-          out:shelfOut
+          onkeydown={onshelfkey}
+          style:--shelf-end="calc(-1 * var(--ring-room, 0px))"
+          style:--shelf-foot="calc(100% + var(--space-2))"
+          style:--shelf-room="{shelfRoom}px"
+          bind:this={shelfEl}
+          {@attach morph({ rows: true })}
+          out:popOut={{ side: "top" }}
         >
-          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: Escape inside the shelf (a row's reason field, then the shelf) is heard on the region; every control in it is its own button or field -->
-          <section
-            data-slot="shelf"
-            aria-label={shelf === "failed"
-              ? "Failed delegates"
-              : "More delegates"}
-            class="flex flex-col border border-border-hairline rounded-lg bg-surface-raised shadow-tile overflow-clip"
-            id={shelfId}
-            onkeydown={onshelfkey}
-            bind:this={shelfEl}
-            {@attach morph({ rows: true })}
+          <header
+            data-slot="shead"
+            class="flex items-center gap-space-2 py-space-2 pe-space-2 ps-space-4 border-b border-b-border-hairline"
           >
-            <header
-              data-slot="shead"
-              class="flex items-center gap-space-2 py-space-2 pe-space-2 ps-space-4 border-b border-b-border-hairline"
-            >
-              <h2
-                class="flex-auto min-w-0 m-0 text-size-label font-medium text-ink-strong"
-              >
-                {#if shelf === "failed"}
-                  {failures.length === 1
-                    ? "1 failure needs a decision"
-                    : `${failures.length} failures need a decision`}
-                {:else}
-                  {hidden.length === 1
-                    ? "1 more delegate"
-                    : `${hidden.length} more delegates`}
-                {/if}
-              </h2>
-              <Button
-                aria-label="Close"
-                class="touch-hit"
-                onclick={() => closeShelf(true)}
-                size="icon-sm"
-                variant="ghost"><IconClose /></Button
-              >
-            </header>
-            <ul
-              data-slot="slist"
-              class="relative m-0 p-0 list-none overflow-y-auto overscroll-contain"
-              {@attach reflow()}
-              {@attach capRows}
+            <h2
+              class="flex-auto min-w-0 m-0 text-size-label font-medium text-ink-strong"
             >
               {#if shelf === "failed"}
-                {#each failedRows as chip (chip.item.id)}
-                  {@render failRow(chip)}
-                {/each}
+                {failures.length === 1
+                  ? "1 failure needs a decision"
+                  : `${failures.length} failures need a decision`}
               {:else}
-                {#each hidden as chip (chip.item.id)}
-                  {@render moreRow(chip)}
-                {/each}
+                {hidden.length === 1
+                  ? "1 more delegate"
+                  : `${hidden.length} more delegates`}
               {/if}
-            </ul>
-            {#if shelf === "failed" && failures.length > 1}
-              <footer
-                data-slot="sfoot"
-                class="py-space-2 px-space-4 border-t border-t-border-hairline"
-              >
-                {#if allReason === null}
+            </h2>
+            <Button
+              aria-label="Close"
+              class="touch-hit"
+              onclick={() => closeShelf(true)}
+              size="icon-sm"
+              variant="ghost"><IconClose /></Button
+            >
+          </header>
+          <ul
+            data-slot="slist"
+            class="relative m-0 p-0 list-none overflow-y-auto overscroll-contain"
+            {@attach reflow()}
+            {@attach capRows}
+          >
+            {#if shelf === "failed"}
+              {#each failedRows as chip (chip.item.id)}
+                {@render failRow(chip)}
+              {/each}
+            {:else}
+              {#each hidden as chip (chip.item.id)}
+                {@render moreRow(chip)}
+              {/each}
+            {/if}
+          </ul>
+          {#if shelf === "failed" && failures.length > 1}
+            <footer
+              data-slot="sfoot"
+              class="py-space-2 px-space-4 border-t border-t-border-hairline"
+            >
+              {#if allReason === null}
+                <Button
+                  label="Dismiss all {failures.length} with one reason…"
+                  onclick={async () => {
+                    allReason = "";
+                    await tick();
+                    allField?.focus();
+                  }}
+                  size="sm"
+                  variant="ghost"
+                />
+              {:else}
+                <form
+                  data-slot="reason"
+                  class="flex flex-nowrap items-center gap-space-2 m-0 p-0"
+                  onsubmit={(event) => {
+                    event.preventDefault();
+                    // biome-ignore lint/complexity/noVoid: each row says how it went.
+                    void dismissAll();
+                  }}
+                  style:--hit-gap-x="var(--space-2)"
+                >
+                  <Input
+                    aria-label="Why all {failures.length} are no longer owed"
+                    class="flex-auto"
+                    measure="shrink"
+                    placeholder="Why these are no longer owed"
+                    bind:ref={allField}
+                    bind:value={allReason}
+                  />
+                  <!-- One control height in the row: the field's 36px. -->
                   <Button
-                    label="Dismiss all {failures.length} with one reason…"
-                    onclick={async () => {
-                      allReason = "";
-                      await tick();
-                      allField?.focus();
+                    disabled={!allReason.trim()}
+                    label="Dismiss all"
+                    pending={allPending}
+                    pendingLabel="Dismissing…"
+                    type="submit"
+                    variant="outline"
+                  />
+                  <Button
+                    label="Cancel"
+                    onclick={() => {
+                      allReason = null;
                     }}
-                    size="sm"
                     variant="ghost"
                   />
-                {:else}
-                  <form
-                    data-slot="reason"
-                    class="flex flex-nowrap items-center gap-space-2 m-0 p-0"
-                    onsubmit={(event) => {
-                      event.preventDefault();
-                      // biome-ignore lint/complexity/noVoid: each row says how it went.
-                      void dismissAll();
-                    }}
-                    style:--hit-gap-x="var(--space-2)"
-                  >
-                    <Input
-                      aria-label="Why all {failures.length} are no longer owed"
-                      class="flex-auto"
-                      measure="shrink"
-                      placeholder="Why these are no longer owed"
-                      bind:ref={allField}
-                      bind:value={allReason}
-                    />
-                    <!-- One control height in the row: the field's 36px. -->
-                    <Button
-                      disabled={!allReason.trim()}
-                      label="Dismiss all"
-                      pending={allPending}
-                      pendingLabel="Dismissing…"
-                      type="submit"
-                      variant="outline"
-                    />
-                    <Button
-                      label="Cancel"
-                      onclick={() => {
-                        allReason = null;
-                      }}
-                      variant="ghost"
-                    />
-                  </form>
-                {/if}
-              </footer>
-            {/if}
-          </section>
-        </div>
+                </form>
+              {/if}
+            </footer>
+          {/if}
+        </section>
       {/if}
 
       <!-- The house hover panel; its mousedown is swallowed so a phone's

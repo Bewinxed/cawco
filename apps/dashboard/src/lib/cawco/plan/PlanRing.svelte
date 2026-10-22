@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * How far a conversation's plan has got — the progress ring and its figure
-   * — as the control that opens the plan beside it (SideSplit). A chip on
+   * — as the control that opens the plan over the composer's row
+   * (PlanPane), and shuts it again. A chip on
    * the tray row (ui/chip, `variant: "tray"`), the delegate chips' own
    * recipe, so the row is one height on one line.
    */
@@ -18,7 +19,7 @@
   }: {
     done: number;
     total: number;
-    /** The plan is on show beside the conversation. */
+    /** The plan is open over the composer's row. */
     open: boolean;
     onopen: () => void;
   } = $props();

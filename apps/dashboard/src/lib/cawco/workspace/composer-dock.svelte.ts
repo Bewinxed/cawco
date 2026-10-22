@@ -43,7 +43,7 @@ export interface ComposerBinding {
   readonly perch?: Snippet;
   /** The field's hint, where the agent takes no `/` or `@` (a project's Caw). */
   readonly placeholder?: string;
-  /** The plan's ring, which opens it beside the conversation; none without a plan. */
+  /** The plan's ring, which opens it over the composer's row; none without a plan. */
   readonly planRing?: Snippet;
   /** What stands on the tray row above the composer: an offer to the reader. */
   prompts?: Snippet;
