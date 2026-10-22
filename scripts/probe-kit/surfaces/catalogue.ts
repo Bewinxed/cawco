@@ -2378,10 +2378,22 @@ export const SURFACES: Surface[] = [
       // The studio online and its keychain's unlock sent (`studioRouted`,
       // which stays the page's: these come last on this hub).
       {
-        // The Mac yet to answer: the unlock under way (MachineAuthStatus waiting).
+        // The Mac yet to answer: the unlock under way (MachineAuthStatus
+        // waiting), read where its act leaves it. A control no machine
+        // answers is "unanswered" after CONTROL_TIMEOUT_MS of page time
+        // (15 s, core `readWithin`), and the walk's act and stand after the
+        // press ran 13 to 16 s of it: the reduced desk pass read the form
+        // again, "Unlock studio", the unlock given up on.
         name: "unlocking",
         widths: ["desk"],
-        act: unlockStudio(),
+        act: async (page) => {
+          await unlockStudio()(page);
+          await page
+            .locator(`${UNLOCK_TILE} [data-slot=title]`)
+            .filter({ hasText: /^Unlocking / })
+            .waitFor();
+        },
+        heldFrame: true,
         root: "body",
         ready: {
           shows: `${UNLOCK_TILE} [data-slot=title]`,
