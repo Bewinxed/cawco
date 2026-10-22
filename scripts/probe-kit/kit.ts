@@ -368,6 +368,13 @@ export interface Kit {
   baselines: string;
   /** The dev server against no hub: the `/motion/` benches, which need none. */
   bench: () => Promise<string>;
+  /**
+   * The dev server against `hub`, a stub the spec stands up itself, its
+   * server render included: SvelteKit's dev guard runs there, so a relative
+   * `fetch` the render makes throws `ssr_fetch_relative_url` into its log
+   * (`$TMPDIR/probe-kit/vite-dev-<port>.err.log`). It stops when the spec ends.
+   */
+  benchFor: (hub: string) => Promise<string>;
   /** The built dashboard against no hub (built once per run): a bench a runtime spec times. */
   built: () => Promise<string>;
   /**
@@ -1029,6 +1036,13 @@ export class Run {
         console.log(`NOTE ${spec.name}: ${line}`);
       },
       bench: () => this.bench(),
+      benchFor: async (hub) => {
+        const served = this.startServer("dev", hub);
+        ends.push(async () => {
+          (await served).stop();
+        });
+        return (await served).base;
+      },
       built: () => this.builtBench(),
       builtFor: async (hub) => {
         const served = this.build().then(() =>

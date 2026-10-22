@@ -39,6 +39,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { IconChevronRight, IconWindow } from "#lib/icons.js";
+  import { browser } from "$app/env";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a
    * 2px stripe; each row is a glyph, the verb, a mono argument, and whatever the
@@ -71,9 +72,17 @@
     isVideo(path) ? machineMedia(machineId, sidecarOf(path)) : undefined;
   /** A captions file sent with no video of its own: a file, not a picture. */
   const CAPTIONS_FILE = /\.vtt$/i;
-  /** A lone captions file's text, read once per URL, for its file row. */
+  /**
+   * A lone captions file's text, read once per URL, for its file row. The
+   * browser reads it, from its own origin: the server's render has no origin
+   * to read a relative URL from, so it draws the row waiting, and hydration
+   * reads.
+   */
   const captionTexts = new Map<string, Promise<string>>();
   const captionText = (url: string): Promise<string> => {
+    if (!browser) {
+      return new Promise<string>(() => undefined);
+    }
     let text = captionTexts.get(url);
     if (!text) {
       text = fetch(url).then((answer) =>

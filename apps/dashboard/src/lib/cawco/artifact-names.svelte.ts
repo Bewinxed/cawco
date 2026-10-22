@@ -18,6 +18,7 @@
 import type { ArtifactKind, ChoiceEntry } from "@cawco/core";
 import type { Pin } from "@cawco/core/comments";
 import { SvelteMap } from "svelte/reactivity";
+import { browser } from "$app/env";
 import { findArtifact } from "./artifact-api";
 
 /** An artifact as a chip names it. */
@@ -66,9 +67,14 @@ export function releaseArtifact(id: string): void {
   read.delete(id);
 }
 
+/**
+ * The browser asks, from its own origin: the server's render has no origin
+ * to fetch a relative URL from, and these answers are this tab's, never
+ * shared across requests. It draws the chip by its label, and hydration asks.
+ */
 function askPins(id: string, instanceId: string): void {
   const key = `pins:${id}`;
-  if (asking.has(key)) {
+  if (!browser || asking.has(key)) {
     return;
   }
   asking.add(key);
@@ -95,8 +101,9 @@ function askPins(id: string, instanceId: string): void {
     });
 }
 
+/** Asks the hub what artifact `id` is, once; the browser asks ({@link askPins}). */
 function ask(id: string): void {
-  if (asking.has(id)) {
+  if (!browser || asking.has(id)) {
     return;
   }
   asking.add(id);
