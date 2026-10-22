@@ -466,15 +466,18 @@ For each mechanism: what it guarantees (SPEC or README quote), CawCo's counterpa
 
 (So the lessons do not copy a weakness.) Section 12.4 lists them. The ones that match CawCo's today: a failed run's queue is silent until the next input (matches the held-until-interrupt shape); edits during a compaction are lost; observation is convergent and drops frames; the newest commits can be lost on power failure; one storage error ends the session.
 
-## 14. Sources I could not read or read only in part
+## 14. What is not read, and whether it bears on the durability and execution-model reading
 
-- `https://cdn.jsdelivr.net/npm/pi-agents@0.38.0/docs/{usage,graphs,messaging,architecture}.md`, the links on the pi.dev page. All four returned `Target returned 404 Not Found` ("Couldn't find the requested file /docs/usage.md in pi-agents."). I read the same files from `raw.githubusercontent.com/mavam/pi-agents/main/docs/`. I did not read `profiles.md`, `configuration.md`, `hooks.md` or `design.md` of pi-agents.
-- SPEC (`docs/spec.md`, 303,145 characters), updated in the second pass: read whole were sections 5 (Tasks, 5.1 to 5.6) and 7 (Extensions, hooks, tools, system prompt, reload, code mode), plus section 2 (records, 2.1, 2.2 except lines 520 to 670 of the file, the `Conversation` interface), 4, 6 (first half), 10, 10.1 and 13. Not read: 3 (Documents), 6 (second half), 8 (built-in tasks), 9 (document observation and views), 11 (backends), 12 (API footguns), the `Conversation` interface block in 2.2. A shell hook blocked my reading of CRW's saved copy (`Blocked: memory and fleet config are written through CawCo's tools, never by editing files under ~/.claude ...`), so I read a shallow `git clone` of `earendil-works/pi` at `db774055e3ec` in scratch instead.
-- The README was read whole (68,793 characters, in slices).
-- `test/examples/*` and `packages/coding-agent/src/experimental/{durable,vacation}`: only the header of example 23 read. Claims about examples come from the README's example table and prose.
-- `https://www.npmjs.com/package/pi-durable-subagents`: CRW returned 105,430 characters, which I did not slice. I used the pi.dev search excerpt and the cloned repo's `README.md` instead; I read the install, comparison, table and "Not supported" parts and did not read all ~1,300 lines of it.
-- `@xian0x5a/pi-durable-subagents`: read only the pi.dev search excerpt.
-- `https://vercel.com/docs/agent-harnesses/{opencode,tools,security,self-hosting}`: not read.
-- Cloudflare's `/agents/harnesses/pi/extensions/` and the Pi 1.0 post (https://earendil.com/posts/pi-1-0/): not read.
-- No Hacker News thread was read; the Temporal post links one (https://news.ycombinator.com/item?id=49926686), and I only have its one-line quote from that post.
-- Third-party blogs (stackness.dev, redreamality.com) are read as Exa excerpts only, not whole pages.
+Read whole: the README (68,793 characters), the POST, the TALK transcript, TEMPORAL, VERCEL-PI, VERCEL-HARNESSES, VERCEL-CC, CF, `CHANGELOG.md` (the 1.4.0 and 1.3.0 entries), and **every section of SPEC** (303,145 characters). A shell hook blocked reading CRW's saved copy of the SPEC (`Blocked: memory and fleet config are written through CawCo's tools, never by editing files under ~/.claude ...`), so I read a shallow `git clone` of `earendil-works/pi` at `db774055e3ec` in scratch.
+
+Not read, and none of it changes what sections 12 and 13 say about durability or the execution model (each concerns integration, packaging or a third party's product):
+
+- `https://cdn.jsdelivr.net/npm/pi-agents@0.38.0/docs/{usage,graphs,messaging,architecture}.md`, the links on the pi.dev page, returned `Target returned 404 Not Found` ("Couldn't find the requested file /docs/usage.md in pi-agents."). I read the same four files from `raw.githubusercontent.com/mavam/pi-agents/main/docs/`. Not read: pi-agents' `profiles.md`, `configuration.md`, `hooks.md`, `design.md`.
+- `packages/durable/src` and `test/examples/*`, `packages/coding-agent/src/experimental/{durable,vacation}`: only the header of example 23. Claims about examples come from the README's example table and prose. Whether the code matches the spec is not checked.
+- `https://www.npmjs.com/package/pi-durable-subagents`: CRW returned 105,430 characters, which I did not slice; I used the pi.dev excerpt and the cloned repo's `README.md` (install, comparison, table and "Not supported" parts, not all ~1,300 lines).
+- `@xian0x5a/pi-durable-subagents`: the pi.dev search excerpt only.
+- `https://vercel.com/docs/agent-harnesses/{opencode,tools,security,self-hosting}`, Cloudflare's `/agents/harnesses/pi/extensions/` and the Pi 1.0 post (https://earendil.com/posts/pi-1-0/): not read.
+- The Hacker News thread the Temporal post links (https://news.ycombinator.com/item?id=49926686): only the one-line quote from that post.
+- stackness.dev and redreamality.com: Exa excerpts only.
+
+Not verified against CawCo's code: the three cases in 13.9 are read from the repo at `c9b9fe307`, not reproduced. I did not read all of `server.ts` (33,418 lines); the "found no" statements in section 13 are about the files and ranges named there.
