@@ -21,6 +21,7 @@
  * Caw edits:
  *   docs/**
  *   README.md
+ * Ship: bash scripts/ship.sh --commit {commit} --notes {notes}
  * ---
  * Anything after the block is notes for people; the hub reads none of it.
  * ```
@@ -53,6 +54,12 @@
  *   edit of a file it matches runs in a turn your words woke (on your card
  *   in any other), and an edit of any other file is refused. Given empty, it
  *   lets Caw edit nothing.
+ * - **`Ship:`**, a line at the margin with a command beside it: how the
+ *   project ships. An item whose `finish_item` asks to ship (`ship`, with its
+ *   release notes) has it run once its work landed on main, on the hub's own
+ *   machine, in the project's checkout there (ship.ts), with `{commit}` the
+ *   landed commit and `{notes}` a file of the notes. Without it nothing
+ *   ships, and such a finish_item says so.
  *
  * A gate.md that does not read is never taken for none: the item does not
  * land, and finish_item names every problem.
@@ -71,11 +78,12 @@ import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
 export const GATE_FILE = "gate.md";
 
 /**
- * What reading gate.md answers: its steps (core `DeclaredStep`) and its
- * `Caw edits:` globs (absent: it declares no list), or every problem it has.
+ * What reading gate.md answers: its steps (core `DeclaredStep`), its `Caw
+ * edits:` globs (absent: it declares no list) and its `Ship:` command
+ * (absent: it ships nothing), or every problem it has.
  */
 export type GateReading =
-  | { ok: true; steps: DeclaredStep[]; cawEdits?: string[] }
+  | { ok: true; steps: DeclaredStep[]; cawEdits?: string[]; ship?: string }
   | { ok: false; problems: string[] };
 
 /**
@@ -102,6 +110,10 @@ const LEADING = /^\.\//;
 const KEYS = ["name", "on", "needs", "timeout", "on-fail"] as const;
 /** The margin line that opens the files Caw may edit, any case. */
 const CAW_EDITS = /^caw edits:\s*(.*)$/i;
+/** The margin line that declares the ship command, any case. */
+const SHIP = /^ship:\s*(.*)$/i;
+/** The words a ship command is given: the landed commit and the notes' file. */
+const SHIP_PLACES = ["{commit}", "{notes}"] as const;
 type Key = (typeof KEYS)[number];
 
 /**
@@ -232,11 +244,39 @@ interface BlockRead {
   problems: string[];
   /** The option keys given under the last step so far. */
   seen: Set<Key>;
+  /** The `Ship:` command; undefined until its line. */
+  ship?: string;
   steps: DeclaredStep[];
 }
 
-/** One line at the margin: `Caw edits:`, which opens its section, or a step. */
+/**
+ * The `Ship:` line: the command the hub runs on its own machine, in the
+ * project's checkout there, once an item that asked to ship has landed on
+ * main (hub ship.ts), with `{commit}` and `{notes}` in its place.
+ */
+const shipLine = (read: BlockRead, command: string): void => {
+  if (read.ship !== undefined) {
+    read.problems.push("Ship: is given twice; a project ships one way.");
+    return;
+  }
+  const absent = SHIP_PLACES.filter((place) => !command.includes(place));
+  if (absent.length > 0) {
+    read.problems.push(
+      `Ship: “${command}” names no ${absent.join(" or ")}: the command takes the landed commit as {commit} and the release notes' file as {notes}.`
+    );
+    return;
+  }
+  read.ship = command;
+};
+
+/** One line at the margin: `Caw edits:`, which opens its section, `Ship:`, or a step. */
 const marginLine = (read: BlockRead, text: string): void => {
+  const ship = SHIP.exec(text);
+  if (ship) {
+    read.inCawEdits = false;
+    shipLine(read, (ship[1] ?? "").trim());
+    return;
+  }
   const opens = CAW_EDITS.exec(text);
   if (!opens) {
     read.inCawEdits = false;
@@ -305,11 +345,16 @@ export const readGate = (content: string): GateReading => {
       marginLine(read, text);
     }
   }
-  const { cawEdits, problems, steps } = read;
+  const { cawEdits, problems, ship, steps } = read;
   if (problems.length > 0) {
     return { ok: false, problems };
   }
-  return cawEdits ? { ok: true, steps, cawEdits } : { ok: true, steps };
+  return {
+    ok: true,
+    steps,
+    ...(cawEdits ? { cawEdits } : {}),
+    ...(ship ? { ship } : {}),
+  };
 };
 
 /** The project's gate as its folder holds it now. */
@@ -327,9 +372,12 @@ export const projectGate = async (projectId: string): Promise<ProjectGate> => {
   if (!reading.ok) {
     return { kind: "unreadable", problems: reading.problems };
   }
-  return reading.cawEdits
-    ? { kind: "declared", steps: reading.steps, cawEdits: reading.cawEdits }
-    : { kind: "declared", steps: reading.steps };
+  return {
+    kind: "declared",
+    steps: reading.steps,
+    ...(reading.cawEdits ? { cawEdits: reading.cawEdits } : {}),
+    ...(reading.ship ? { ship: reading.ship } : {}),
+  };
 };
 
 /** The files the project's Caw may edit, as its gate.md declares them now. */

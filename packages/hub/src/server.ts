@@ -22142,6 +22142,7 @@ export const createServer = (
     // finishes an item before the hub is up.
     designHold: (item, submission) => designVerify.hold(item, submission),
     designHeld: (itemId) => designVerify.held(itemId),
+    hubMachineId: () => ownMachineIdRead,
     lifetime,
     // Whose turn a project's Caw is in, for what he starts in it. Caw is
     // made further down; nothing starts an item before the hub is up.
@@ -30015,6 +30016,7 @@ export const createServer = (
             blocked: t.Optional(
               t.Object({ command: t.String(), error: t.String() })
             ),
+            ship: t.Optional(t.Object({ notes: t.String({ minLength: 1 }) })),
           }),
         },
         async ({ body, status, request, server }) => {

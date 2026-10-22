@@ -1,17 +1,38 @@
 /**
  * The release pipeline:
  *   bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path
- *     [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--mac-host mac] [--publish]
+ *     [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--dry-run]
  *
- * A release names its commit, and is built from exactly that commit: a
- * worktree of it at ~/.worktrees/release-<sha>, on real disk, made here and
- * removed when the build ends, whichever way. The checkout this runs from must
- * be clean (this script and what it imports are read from it), and the commit
- * must be on origin/main; either refuses the run before anything is built.
- * Without --publish nothing is published, tagged or uploaded: the signed
- * artifacts are left in --output.
+ * A release names its commit, and is built from exactly that commit: three
+ * worktrees of it under ~/.worktrees/release-<sha>…, on real disk, made here
+ * and removed when the build ends, whichever way. One builds, signs and
+ * proves; lint runs in the second and typecheck in the third, each beside
+ * the builds in a tree of its own, so no check reads a file another rewrites
+ * (SvelteKit's sync writes each route's `$types.d.ts` with a plain
+ * writeFileSync on every run, kit 3.1.0 src/core/sync/write_types). The
+ * checkout this runs from must be clean (this script and what it imports are
+ * read from it), and the commit must be on origin/main; either refuses the
+ * run before anything is built. Without --publish nothing is published,
+ * tagged or uploaded: the signed artifacts are left in --output.
+ *
+ * Everything runs at once that can: the steps are a graph (`releaseSteps`,
+ * release-graph.ts), each starting as soon as the steps it needs have ended.
+ * `--dry-run` prints that graph, with each step's expected time, and runs
+ * nothing. What waits on what, and why:
+ * - lint, typecheck and the live database's migration check gate promotion,
+ *   and Apple's notarization: nothing is submitted to Apple before they pass.
+ * - The proof build and stage 2's builds come before the proofs that run them.
+ * - The four targets compile at once, from assets prepared once; each linux
+ *   archive is made at once, each darwin bundle signed, notarized and stapled
+ *   on this host (rcodesign, sign-agent-bundle.ts) at once with the other.
+ * - With --publish, a draft release is made once the version is known, and
+ *   each archive goes up to it as soon as it is made, while the proofs run.
+ * - Promotion (the manifest signed and uploaded, the draft published) waits
+ *   for every target and every proof; then the hub is told to look.
+ * Only the run itself is one at a time: the lock below (no two release runs
+ * at once) and its queue of one.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: the owner requires one build at a time, including signing and promotion.
+import { Database } from "bun:sqlite";
 import { createPublicKey } from "node:crypto";
 import {
   cp,
@@ -27,11 +48,12 @@ import {
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { Subprocess } from "bun";
-import {
-  AGENT_BUNDLE,
-  AGENT_BUNDLE_EXECUTABLE,
-} from "../packages/core/src/agent-bundle";
+import { AGENT_BUNDLE_EXECUTABLE } from "../packages/core/src/agent-bundle";
 import { releaseTag } from "../packages/core/src/binary-distribution";
+import { readInstallation } from "../packages/core/src/binary-installation";
+import { readWithin } from "../packages/core/src/bounded";
+import { machineFetch } from "../packages/core/src/machine-key";
+import { hubDbPath } from "../packages/core/src/paths";
 import {
   type ReleaseManifest,
   signManifest,
@@ -43,10 +65,30 @@ import {
   signalGroup,
   signal as signalPid,
 } from "../packages/core/src/signal";
+import { proofInputsKey } from "./binary/proof-inputs";
+import {
+  archiveBundle,
+  notarizeBundle,
+  signBundle,
+} from "./binary/sign-agent-bundle";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { heavySlot } from "./lib/heavy-run";
-import { publishRelease } from "./publish-release";
-import { signingPem, takeSigningKey, underSigningEnv } from "./release-signing";
+import {
+  createDraft,
+  deleteDraft,
+  promoteRelease,
+  uploadAssets,
+} from "./publish-release";
+import { describeSteps, runSteps, type Step } from "./release-graph";
+import { quotaRefusal } from "./release-quota";
+import {
+  missingSecrets,
+  signingPem,
+  takeReleaseSecrets,
+  underSigningEnv,
+  writeAppleSecrets,
+} from "./release-signing";
+import { RCODESIGN_VERSION, rcodesignPath } from "./release-tools";
 
 const repo = resolve(import.meta.dir, "..");
 const argv = Bun.argv.slice(2);
@@ -57,12 +99,13 @@ function argument(name: string): string | undefined {
 const commitInput = argument("--commit");
 const channel = argument("--channel");
 const output = argument("--output");
+const publishing = argv.includes("--publish");
 if (
   !(commitInput && output && isAbsolute(output)) ||
   (channel !== "stable" && channel !== "nightly")
 ) {
   console.error(
-    "Usage: bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--mac-host mac] [--publish]"
+    "Usage: bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--dry-run]"
   );
   process.exit(2);
 }
@@ -71,6 +114,909 @@ const refuse = (why: string): never => {
   console.error(`Release refused: ${why}`);
   process.exit(2);
 };
+
+/** One release to build, as the queue keeps it. */
+interface Request {
+  channel: "stable" | "nightly";
+  commit: string;
+  /** This request, apart from any other for the same commit. */
+  id: string;
+  /** A nightly's end-user notes, carried with the request so a queued one keeps its own. */
+  notes?: string;
+  output: string;
+  tag?: string;
+}
+
+/** The arm64 userland a published linux-arm64 binary runs on here: see {@link arm64Sysroot}. */
+const ARM64_LIBC = {
+  url: "https://snapshot.debian.org/file/6ee536e6a461ca319776fac983202946f4d3dce8/libc6_2.41-12%2Bdeb13u4_arm64.deb",
+  sha256: "8784eda966b189c777a384dac5ce009e8fc9b52d006926c5a013e7fa8aa688cc",
+};
+const arm64Root = join(homedir(), ".cache", "cawco-release", "arm64-sysroot");
+const state = join(homedir(), ".cache", "cawco", "release-pipeline");
+/** Where a failed build's proof evidence outlives its staging; the newest few are kept. */
+const failedEvidence = join(homedir(), ".cache", "cawco-release");
+const KEPT_FAILURES = 5;
+/** Each proven verdict, by the inputs it stands on: `<inputs>/stage1`, and `<inputs>/stage2/<rig>` per stage 2 rig. */
+const proofVerdicts = join(
+  homedir(),
+  ".cache",
+  "cawco-release",
+  "proof-verdicts"
+);
+
+/**
+ * The memory one build reaches, in GiB: its heavy-run admission's peak (core
+ * heavy-run.ts), taken for the whole build, its proofs and compiles
+ * included, each of which takes none of its own beneath it. Built from what
+ * runs at once now: before, 17.2 GiB with lint and typecheck done before any
+ * build ("cawco-nightly-7c34d9be6.service: … 17.2G memory peak", obelisk,
+ * 2026-10-19); lint's peak (states-lint, 4.3 GB) and typecheck's (5.9 GB)
+ * now overlap it, and the seven compiles at once peaked at 10.5 GB summed
+ * (sampled every 0.5 s, 2026-10-22) where one at a time took 2.6 GB. Our
+ * call until the next run's journal line gives its measured peak: 28.
+ */
+const RELEASE_PEAK_GIB = 28;
+
+/** The three trees a build of `commit` runs in: one builds, one lints, one typechecks. */
+const treesOf = (commit: string) => {
+  const base = join(homedir(), ".worktrees", `release-${commit.slice(0, 12)}`);
+  return { build: base, lint: `${base}-lint`, typecheck: `${base}-typecheck` };
+};
+const stagingOf = (commit: string): string =>
+  join(state, `staging-${commit.slice(0, 12)}`);
+
+/** Whether a target's builds are darwin's: a signed, notarized bundle. */
+const isDarwin = (target: string): boolean => target.startsWith("darwin");
+
+/**
+ * What a step needs that an earlier step learned: filled in as the build
+ * goes, read by the steps after.
+ */
+interface Learned {
+  /** Apple's secrets as the files rcodesign reads, once written. */
+  apple?: Promise<{ apiKey: string; identity: string }>;
+  /** Whether this build's draft release exists, to remove if the build fails. */
+  drafted: boolean;
+  /** The proof inputs' key at the commit (proof-inputs.ts). */
+  inputs?: string;
+  manifest?: ReleaseManifest;
+  /** Stage 2's rigs not yet passed on these inputs, with each's check count. */
+  stage2?: { counts: Map<string, number>; todo: string[] };
+}
+
+/** A command as a step runs it: `run` below in a real build. */
+type Runner = (
+  command: string[],
+  cwd?: string,
+  capture?: boolean,
+  env?: Record<string, string>
+) => Promise<string>;
+
+/**
+ * Every step of one build of `current`, and what each waits for: the graph
+ * `runSteps` runs and `--dry-run` prints. Nothing runs while it is made.
+ */
+const releaseSteps = (
+  current: Request,
+  publish: boolean,
+  run: Runner,
+  learned: Learned,
+  secrets: ReturnType<typeof takeReleaseSecrets>
+): Step[] => {
+  const trees = treesOf(current.commit);
+  const staging = stagingOf(current.commit);
+  const proofBinary = join(staging, "cawco-proof");
+  const infoHome = join(staging, "binary-info-home");
+  const bundleFiles = join(staging, "agent-bundle");
+  const manifest = (): ReleaseManifest =>
+    learned.manifest ?? fail("the manifest is made by the version step");
+  const tag = (): string => releaseTag(manifest());
+  const archiveName = (target: string): string =>
+    `cawco-${tag()}-${target}.tar.gz`;
+  const step = (
+    name: string,
+    after: string[],
+    expect: number,
+    work: () => Promise<unknown>
+  ): Step => ({
+    name,
+    after,
+    expect,
+    run: async () => {
+      await work();
+    },
+  });
+  const tree = (which: keyof typeof trees): Step[] => [
+    // The release records (shipped.ts): typecheck's wire check and the frame
+    // read below hold this build to what is in people's hands, as tagged now.
+    step(`tree ${which}`, ["fetch"], 1.5, () =>
+      run(["git", "worktree", "add", "--detach", trees[which], current.commit])
+    ),
+    step(`install ${which}`, [`tree ${which}`], 0.4, () =>
+      run([process.execPath, "install", "--frozen-lockfile"], trees[which])
+    ),
+  ];
+  /** A target's archive made and checked: its manifest row and its `.sha256` file. */
+  const recordArchive = async (
+    target: string,
+    executable: string
+  ): Promise<void> => {
+    const archive = archiveName(target);
+    const [sha256, binarySha256] = await Promise.all(
+      [join(staging, archive), executable].map(async (path) =>
+        new Bun.CryptoHasher("sha256")
+          .update(await Bun.file(path).bytes())
+          .digest("hex")
+      )
+    );
+    manifest().artifacts.push({
+      target,
+      archive,
+      sha256: sha256 as string,
+      size: (await stat(join(staging, archive))).size,
+      binarySha256: binarySha256 as string,
+      binarySize: (await stat(executable)).size,
+    });
+    await writeFile(
+      join(staging, `${archive}.sha256`),
+      `${sha256}  ${archive}\n`
+    );
+  };
+  const targetSteps = (target: string): Step[] => {
+    const dir = join(staging, target);
+    const binary = join(dir, "cawco");
+    const compile = step(
+      `compile ${target}`,
+      ["prepare", "version"],
+      4.7,
+      async () => {
+        await mkdir(dir, { recursive: true });
+        await run(
+          [
+            process.execPath,
+            "scripts/build-binary.ts",
+            target,
+            binary,
+            manifest().version,
+            current.commit,
+            "--skip-prepare",
+          ],
+          trees.build
+        );
+      }
+    );
+    const upload: Step[] = publish
+      ? [
+          step(`upload ${target}`, [`archive ${target}`, "draft"], 5, () =>
+            uploadAssets(tag(), [
+              join(staging, archiveName(target)),
+              join(staging, `${archiveName(target)}.sha256`),
+            ])
+          ),
+        ]
+      : [];
+    if (!isDarwin(target)) {
+      return [
+        compile,
+        step(`archive ${target}`, [`compile ${target}`], 7.2, async () => {
+          await run(
+            [
+              "tar",
+              "--owner=0",
+              "--group=0",
+              "--numeric-owner",
+              "-czf",
+              join(staging, archiveName(target)),
+              "-C",
+              dir,
+              "cawco",
+            ],
+            trees.build
+          );
+          await recordArchive(target, binary);
+        }),
+        step(`run ${target}`, [`compile ${target}`, "build-info"], 3, () =>
+          runPublished(run, target, binary, infoHome, manifest())
+        ),
+        ...upload,
+      ];
+    }
+    // A darwin build ships as its own CawCo Agent.app, signed with the team's
+    // Developer ID, notarized by Apple and stapled, all on this host
+    // (sign-agent-bundle.ts), with its Info.plist from this commit.
+    return [
+      compile,
+      step(
+        `sign ${target}`,
+        [`compile ${target}`, "bundle files"],
+        3.3,
+        async () => {
+          await cp(join(bundleFiles, "Info.plist"), join(dir, "Info.plist"));
+          learned.apple ??= writeAppleSecrets(join(staging, "apple"), secrets);
+          await signBundle(run, dir, (await learned.apple).identity);
+        }
+      ),
+      step(`notarize ${target}`, [`sign ${target}`, "gate"], 80, async () => {
+        learned.apple ??= writeAppleSecrets(join(staging, "apple"), secrets);
+        await notarizeBundle(
+          run,
+          dir,
+          target,
+          manifest().version,
+          (await learned.apple).apiKey
+        );
+      }),
+      step(`archive ${target}`, [`notarize ${target}`], 8, async () => {
+        await archiveBundle(run, dir, manifest().version, archiveName(target));
+        await rename(
+          join(dir, archiveName(target)),
+          join(staging, archiveName(target))
+        );
+        await recordArchive(target, join(dir, AGENT_BUNDLE_EXECUTABLE));
+      }),
+      ...upload,
+    ];
+  };
+  const proving = [
+    "stage 1",
+    "stage 2",
+    "gate",
+    ...TARGETS.flatMap((target) => [
+      `archive ${target}`,
+      ...(isDarwin(target) ? [] : [`run ${target}`]),
+      ...(publish ? [`upload ${target}`] : []),
+    ]),
+  ];
+  return [
+    step("fetch", [], 2, () =>
+      run(["git", "fetch", "--quiet", "--tags", "origin"])
+    ),
+    ...tree("build"),
+    ...tree("lint"),
+    ...tree("typecheck"),
+    // Lint and typecheck read their own trees, beside the builds; they gate
+    // notarization and promotion, never the builds.
+    step("lint", ["install lint"], 199, () =>
+      run([process.execPath, "run", "lint"], trees.lint)
+    ),
+    step("typecheck", ["install typecheck"], 23, () =>
+      run([process.execPath, "run", "typecheck"], trees.typecheck)
+    ),
+    step("live database", ["install build"], 15, () =>
+      liveDatabase(run, trees.build, staging)
+    ),
+    step("gate", ["lint", "typecheck", "live database"], 0, async () => {
+      // Nothing to run: what notarization and promotion wait for.
+    }),
+    step("version", ["install build"], 1, async () => {
+      learned.manifest = await manifestOf(run, current, trees.build);
+      learned.inputs = await proofInputsKey(trees.build, current.commit);
+    }),
+    // The dashboard and every target-independent asset, once, for all seven compiles.
+    step("prepare", ["install build"], 36, () =>
+      run([process.execPath, "scripts/build-binary.ts", "prepare"], trees.build)
+    ),
+    step("proof build", ["prepare", "version"], 4.7, () =>
+      run(
+        [
+          process.execPath,
+          "scripts/build-binary.ts",
+          "linux-x64",
+          proofBinary,
+          manifest().version,
+          current.commit,
+          "--proof",
+          "--skip-prepare",
+        ],
+        trees.build
+      )
+    ),
+    // The hub ↔ agent contract this build speaks, as the build itself says: a joined machine installs it only when
+    // it overlaps its hub's. The proof build runs only under a scratch HOME and an isolated loopback hub
+    // (scripts/binary/proof-entry.ts), and inherits no credentials, so build-info is asked under exactly those.
+    step("build-info", ["proof build"], 0.8, async () => {
+      await mkdir(infoHome, { recursive: true });
+      const { protocol } = JSON.parse(
+        await run(
+          [
+            "env",
+            "-i",
+            `PATH=${process.env.PATH ?? ""}`,
+            `HOME=${infoHome}`,
+            "HOST=127.0.0.1",
+            "CAWCO_HUB_PORT=43456",
+            "CAWCO_HUB_URL=http://127.0.0.1:43456",
+            proofBinary,
+            "build-info",
+          ],
+          trees.build,
+          true
+        )
+      ) as Pick<ReleaseManifest, "protocol">;
+      manifest().protocol = protocol;
+    }),
+    step("stage 1", ["build-info"], 40.2, () =>
+      proveStage1(
+        run,
+        trees.build,
+        staging,
+        proofBinary,
+        learned,
+        current.commit
+      )
+    ),
+    step("stage 2 builds", ["prepare", "version"], 4.7, async () => {
+      learned.stage2 = await stage2Builds(run, trees.build, staging, learned);
+    }),
+    step("stage 2", ["stage 2 builds"], 305.8, () =>
+      proveStage2(run, trees.build, staging, learned, current.commit)
+    ),
+    step("bundle files", ["install build"], 0.3, async () => {
+      await mkdir(bundleFiles, { recursive: true });
+      await run(
+        [
+          process.execPath,
+          "-e",
+          `const { AGENT_INFO_PLIST } = await import(${JSON.stringify(join(trees.build, "packages/core/src/agent-bundle.ts"))}); await Bun.write(${JSON.stringify(join(bundleFiles, "Info.plist"))}, AGENT_INFO_PLIST);`,
+        ],
+        trees.build
+      );
+    }),
+    ...(publish
+      ? [
+          step("draft", ["version"], 2, async () => {
+            const { channel: on, commit, notes, version } = manifest();
+            await createDraft({
+              channel: on,
+              commit,
+              notes,
+              version,
+              tag: tag(),
+            });
+            learned.drafted = true;
+          }),
+        ]
+      : []),
+    ...TARGETS.flatMap(targetSteps),
+    step("promote", proving, 5, () =>
+      promote(current, publish, staging, manifest(), secrets)
+    ),
+    ...(publish
+      ? [
+          step("announce", ["promote"], 1, () => announce()),
+          // Published: the proof cache keeps this commit's stage 2 builds alone, and
+          // its image store sheds its dangling images (proof-cache-prune.sh).
+          step("prune proof cache", ["promote"], 2, () =>
+            run(
+              [
+                "bash",
+                "scripts/binary/proof-cache-prune.sh",
+                learned.inputs ??
+                  fail("the proof inputs are read by the version step"),
+              ],
+              trees.build
+            )
+          ),
+        ]
+      : []),
+  ];
+};
+
+const fail = (why: string): never => {
+  throw new Error(`Release build: ${why}`);
+};
+
+/** The version a build carries and its manifest so far: no protocol (build-info says it) and no artifact yet. */
+const manifestOf = async (
+  run: Runner,
+  current: Request,
+  checkout: string
+): Promise<ReleaseManifest> => {
+  const base = (
+    await Bun.file(join(checkout, "packages/cli/package.json")).json()
+  ).version as string;
+  // Only grows: no path installs a build whose sequence is not above the running one.
+  const sequence = Number(
+    await run(
+      ["git", "rev-list", "--first-parent", "--count", current.commit],
+      checkout,
+      true
+    )
+  );
+  let version: string;
+  let notes: string;
+  if (current.channel === "stable") {
+    if (
+      current.tag !== `v${base}` ||
+      (await run(
+        ["git", "rev-parse", `${current.tag}^{commit}`],
+        checkout,
+        true
+      )) !== current.commit
+    ) {
+      throw new Error(
+        "Stable builds require a matching vX.Y.Z tag at the input commit"
+      );
+    }
+    notes = await readFile(
+      join(checkout, "docs/releases", `${base}.md`),
+      "utf8"
+    );
+    if (!notes.trim()) {
+      throw new Error("Stable end-user release notes are empty");
+    }
+    version = base;
+  } else {
+    const { notes: given } = current;
+    if (!given?.trim()) {
+      throw new Error("Nightly builds need end-user notes: --notes <file>");
+    }
+    notes = given;
+    version = `${base}-nightly.${sequence}+${current.commit.slice(0, 12)}`;
+  }
+  return {
+    version,
+    commit: current.commit,
+    channel: current.channel,
+    sequence,
+    // How many database migrations this build carries; never installed over a newer database.
+    schemaVersion: (
+      (await Bun.file(
+        join(checkout, "packages/hub/drizzle/meta/_journal.json")
+      ).json()) as { entries: unknown[] }
+    ).entries.length,
+    protocol: { min: 0, max: 0 },
+    sessiondProtocol: SESSIOND_V1,
+    notes,
+    testSigned: false,
+    artifacts: [],
+  };
+};
+
+/**
+ * The hub's own database, migrated by this build before it ships: a copy of
+ * the live one on this host (`VACUUM INTO`, a consistent snapshot, as the
+ * update helper takes it, cli binary-apply.ts), checked by
+ * `migrations:check --db` (hub migrations-check.ts), which never writes the
+ * copy it is given. A host with no hub database has nothing to check, and
+ * says so; typecheck's own migrations:check runs over the fixture there.
+ */
+const liveDatabase = async (
+  run: Runner,
+  checkout: string,
+  staging: string
+): Promise<void> => {
+  const live = hubDbPath();
+  if (!(await Bun.file(live).exists())) {
+    console.log(
+      `No hub database on this host at ${live}: the live database's migration check does not run`
+    );
+    return;
+  }
+  await mkdir(staging, { recursive: true });
+  const copy = join(staging, "live-database.sqlite");
+  await rm(copy, { force: true });
+  const handle = new Database(live, { readonly: true });
+  try {
+    handle.run(`VACUUM INTO '${copy.replaceAll("'", "''")}'`);
+  } finally {
+    handle.close();
+  }
+  try {
+    await run(
+      [process.execPath, "run", "migrations:check", "--db", copy],
+      join(checkout, "packages/hub")
+    );
+  } finally {
+    await rm(copy, { force: true });
+  }
+};
+
+/**
+ * The arm64 userland a published linux-arm64 binary runs on here, through
+ * the host's qemu-aarch64 binfmt entry: Debian trixie's glibc, which is all
+ * a Bun binary links (libc, ld, libpthread, libdl, libm). Pinned by its
+ * snapshot.debian.org address and sha256, unpacked once.
+ */
+const arm64Sysroot = async (run: Runner): Promise<string> => {
+  if (
+    await Bun.file(join(arm64Root, "lib", "ld-linux-aarch64.so.1")).exists()
+  ) {
+    return arm64Root;
+  }
+  const response = await fetch(ARM64_LIBC.url);
+  if (!response.ok) {
+    throw new Error(`${ARM64_LIBC.url} answered ${response.status}`);
+  }
+  const deb = new Uint8Array(await response.arrayBuffer());
+  const sha256 = new Bun.CryptoHasher("sha256").update(deb).digest("hex");
+  if (sha256 !== ARM64_LIBC.sha256) {
+    throw new Error(
+      `The arm64 glibc package's sha256 is ${sha256}, not the pinned ${ARM64_LIBC.sha256}`
+    );
+  }
+  const temp = `${arm64Root}.${process.pid}`;
+  await rm(temp, { recursive: true, force: true });
+  await mkdir(temp, { recursive: true });
+  await writeFile(join(temp, "libc6.deb"), deb);
+  await run(["ar", "x", "libc6.deb"], temp);
+  await run(
+    [
+      "sh",
+      "-c",
+      "tar -xf data.tar.* && rm -f libc6.deb data.tar.* control.tar.* debian-binary && ln -s usr/lib lib",
+    ],
+    temp
+  );
+  await rm(arm64Root, { recursive: true, force: true });
+  await rename(temp, arm64Root);
+  return arm64Root;
+};
+
+/** `env`'s exit status when it cannot execute the program: here, an arm64 binary with no binfmt entry. */
+const CANNOT_EXECUTE = 126;
+
+/**
+ * A published linux binary run on this host before it is published, under a
+ * scratch HOME and nothing else of this run's environment: `--version`, and
+ * `build-info`, which must name the build's version, commit and protocol.
+ * linux-arm64 runs through the qemu-aarch64 binfmt entry on the pinned glibc
+ * above; a host without the entry cannot run it, and the release stops there.
+ */
+const runPublished = async (
+  run: Runner,
+  target: string,
+  binary: string,
+  home: string,
+  expect: Pick<ReleaseManifest, "commit" | "protocol" | "version">
+): Promise<void> => {
+  const env = [
+    "env",
+    "-i",
+    `PATH=${process.env.PATH ?? ""}`,
+    `HOME=${home}`,
+    ...(target === "linux-arm64"
+      ? [`QEMU_LD_PREFIX=${await arm64Sysroot(run)}`]
+      : []),
+  ];
+  const say = (args: string[]): Promise<string> =>
+    run([...env, binary, ...args], repo, true).catch((error: unknown) => {
+      if (String(error).includes(`exit status ${CANNOT_EXECUTE}:`)) {
+        throw new Error(
+          `The published ${target} binary cannot run on this host: it has no qemu-aarch64 binfmt entry. Install it: sudo apt install qemu-user-binfmt`,
+          { cause: error }
+        );
+      }
+      throw error;
+    });
+  const version = await say(["--version"]);
+  if (!version.includes(expect.version)) {
+    throw new Error(
+      `The published ${target} binary says ${version}, not ${expect.version}`
+    );
+  }
+  const info = JSON.parse(await say(["build-info"])) as Pick<
+    ReleaseManifest,
+    "commit" | "protocol" | "version"
+  >;
+  if (
+    info.version !== expect.version ||
+    info.commit !== expect.commit ||
+    JSON.stringify(info.protocol) !== JSON.stringify(expect.protocol)
+  ) {
+    throw new Error(
+      `The published ${target} binary's build-info ${JSON.stringify(info)} is not this build's ${JSON.stringify(expect)}`
+    );
+  }
+  console.log(`published ${target} binary ran: ${version}, build-info matches`);
+};
+
+const proven = (path: string): Promise<boolean> => Bun.file(path).exists();
+const recordProven = async (path: string, commitId: string): Promise<void> => {
+  await mkdir(resolve(path, ".."), { recursive: true });
+  await writeFile(path, `${commitId}\n`);
+};
+const inputsOf = (learned: Learned): string =>
+  learned.inputs ?? fail("the proof inputs are read by the version step");
+
+/**
+ * Stage 1 (prove-stage1.sh) on the proof build, unless it passed on these
+ * inputs; then the frames its hub sent (kept with the verdict) read with every
+ * TestFlight build installable now, on every release, since the builds in
+ * testers' hands change when the hub does not.
+ */
+async function proveStage1(
+  run: Runner,
+  checkout: string,
+  staging: string,
+  proofBinary: string,
+  learned: Learned,
+  commitId: string
+): Promise<void> {
+  const inputs = inputsOf(learned);
+  const verdict = join(proofVerdicts, inputs, "stage1");
+  const frames = join(proofVerdicts, inputs, "frames.jsonl");
+  if ((await proven(verdict)) && (await proven(frames))) {
+    console.log(
+      `Stage 1 passed on these inputs (${inputs}) before: not run again`
+    );
+  } else {
+    await run(
+      [
+        "bash",
+        "scripts/binary/prove-stage1.sh",
+        join(staging, "container-proof"),
+        proofBinary,
+      ],
+      checkout
+    );
+    await mkdir(join(proofVerdicts, inputs), { recursive: true });
+    await cp(
+      join(staging, "container-proof", "clean-binary", "frames.jsonl"),
+      frames
+    );
+    await recordProven(verdict, commitId);
+  }
+  await run(
+    [process.execPath, "packages/hub/scripts/wire-frames.ts", frames],
+    checkout
+  );
+}
+
+const RIG_LINE = /^rig (\S+):$/;
+
+/**
+ * Stage 2's builds (build-stage2.ts) for the rigs that have not passed on
+ * these inputs: none when every one has. Answers each rig's check count, as
+ * the script lists them (`PROOF_LIST`), and the rigs to run.
+ */
+async function stage2Builds(
+  run: Runner,
+  checkout: string,
+  staging: string,
+  learned: Learned
+): Promise<{ counts: Map<string, number>; todo: string[] }> {
+  const inputs = inputsOf(learned);
+  const out = join(staging, "stage2");
+  const bins = join(staging, "stage2-bins");
+  const listed = await run(
+    ["bash", "scripts/binary/prove-stage2.sh", out, bins],
+    checkout,
+    true,
+    { PROOF_LIST: "1" }
+  );
+  const counts = new Map<string, number>();
+  let rig: string | undefined;
+  for (const line of listed.split("\n")) {
+    const [, named] = RIG_LINE.exec(line) ?? [];
+    if (named) {
+      rig = named;
+      counts.set(rig, 0);
+    } else if (rig && line.startsWith("  ")) {
+      counts.set(rig, (counts.get(rig) ?? 0) + 1);
+    }
+  }
+  if (counts.size === 0) {
+    throw new Error(`prove-stage2.sh listed no rig: ${listed}`);
+  }
+  const passed = join(proofVerdicts, inputs, "stage2");
+  const done = await Promise.all(
+    [...counts.keys()].map((name) => proven(join(passed, name)))
+  );
+  const todo = [...counts.keys()].filter((_, at) => !done[at]);
+  if (todo.length === 0) {
+    console.log(
+      `Stage 2 passed on these inputs (${inputs}) before, every rig: not run again`
+    );
+    return { counts, todo };
+  }
+  if (todo.length < counts.size) {
+    console.log(
+      `Stage 2 runs the rigs that have not passed on these inputs (${inputs}): ${todo.join(", ")}`
+    );
+  }
+  await run(
+    // The prepare step prepared this checkout's assets: stage 2's builds reuse them.
+    [
+      process.execPath,
+      "scripts/binary/build-stage2.ts",
+      bins,
+      "--skip-prepare",
+    ],
+    checkout
+  );
+  return { counts, todo };
+}
+
+/**
+ * Stage 2 on its builds: a rig passes when every one of its checks says PASS;
+ * each one that does is recorded, so a stage 2 that failed runs only its
+ * failed rigs again.
+ */
+async function proveStage2(
+  run: Runner,
+  checkout: string,
+  staging: string,
+  learned: Learned,
+  commitId: string
+): Promise<void> {
+  const { counts, todo } =
+    learned.stage2 ?? fail("stage 2's rigs are read by its builds' step");
+  if (todo.length === 0) {
+    return;
+  }
+  const out = join(staging, "stage2");
+  const bins = join(staging, "stage2-bins");
+  const passed = join(proofVerdicts, inputsOf(learned), "stage2");
+  let failure: unknown;
+  await run(
+    ["bash", "scripts/binary/prove-stage2.sh", out, bins],
+    checkout,
+    false,
+    {
+      PROOF_ONLY: `^(${todo.join("|")})$`,
+    }
+  ).catch((error: unknown) => {
+    failure = error;
+  });
+  await Promise.all(
+    todo.map(async (rig) => {
+      const lines = (
+        await readFile(join(out, "rigs", rig, "verdicts.tsv"), "utf8").catch(
+          () => ""
+        )
+      )
+        .split("\n")
+        .filter(Boolean);
+      if (
+        lines.length === counts.get(rig) &&
+        lines.every((line) => line.split("\t")[1]?.startsWith("PASS"))
+      ) {
+        await recordProven(join(passed, rig), commitId);
+      }
+    })
+  );
+  // Not a release's: the proof builds and the proof key's copy, and the proof's own scratch.
+  await Promise.all(
+    [
+      bins,
+      ...["feeds", "images", "shared", "tmp"].map((name) => join(out, name)),
+    ].map((path) => rm(path, { recursive: true, force: true }))
+  );
+  if (failure) {
+    throw failure;
+  }
+}
+
+/**
+ * Every target built and every proof passed: the manifest signed, the
+ * build moved into `--output`, and with `--publish` the draft promoted. A
+ * proven build is promoted even when a newer commit was queued while it was
+ * built: that one is built next (the loop at the end of this file).
+ */
+const promote = async (
+  current: Request,
+  publish: boolean,
+  staging: string,
+  manifest: ReleaseManifest,
+  secrets: ReturnType<typeof takeReleaseSecrets>
+): Promise<void> => {
+  manifest.artifacts.sort(
+    (a, b) =>
+      TARGETS.indexOf(a.target as (typeof TARGETS)[number]) -
+      TARGETS.indexOf(b.target as (typeof TARGETS)[number])
+  );
+  await writeFile(
+    join(staging, "SHA256SUMS"),
+    manifest.artifacts.map((a) => `${a.sha256}  ${a.archive}\n`).join("")
+  );
+  const privatePem = signingPem(secrets.manifestKey);
+  const signature = signManifest(manifest, privatePem);
+  verifyManifest(
+    manifest,
+    signature,
+    createPublicKey(privatePem)
+      .export({ type: "spki", format: "pem" })
+      .toString()
+  );
+  const manifestText = JSON.stringify(manifest);
+  // The installer reads the version off the front of the signed text.
+  if (!manifestText.startsWith(`{"version":"${manifest.version}",`)) {
+    throw new Error("The manifest must begin with its version");
+  }
+  await writeFile(join(staging, "release.json"), manifestText);
+  await writeFile(join(staging, "release.json.sig"), `${signature}\n`);
+  // Not artifacts: the Info.plist the bundles were laid out with, and the
+  // Apple secrets' files, which never leave the staging.
+  await Promise.all(
+    ["agent-bundle", "apple"].map((name) =>
+      rm(join(staging, name), { recursive: true, force: true })
+    )
+  );
+  await mkdir(current.output, { recursive: true });
+  const published = join(current.output, manifest.version);
+  await rm(published, { recursive: true, force: true });
+  await rename(staging, published);
+  await writeFile(join(current.output, "release.json"), manifestText);
+  console.log(`Local artifacts ready: ${published}`);
+  if (publish) {
+    await promoteRelease(releaseTag(manifest), published, manifest);
+  }
+};
+
+/**
+ * The hub on this host told to look at its release host now (`POST
+ * /api/binary-updates/check`, as this machine), so every machine sees the
+ * release at once rather than when the hub's cached release ages out (hub
+ * binary-updates.ts `RELEASE_TTL_MS`). A host with no installation names no
+ * hub, and says so.
+ */
+/** How long the hub has to look at its release host and answer. */
+const ANNOUNCE_MS = 30_000;
+const announce = async (): Promise<void> => {
+  const installation = await readInstallation();
+  if (!installation?.hubUrl) {
+    console.log(
+      "This host has no CawCo installation naming a hub: no hub was told of the release"
+    );
+    return;
+  }
+  const { hubUrl } = installation;
+  const asked = await readWithin(ANNOUNCE_MS, async (signal) => {
+    const response = await machineFetch(`${hubUrl}/api/binary-updates/check`, {
+      method: "POST",
+      signal,
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: await response.text(),
+    };
+  });
+  if (asked.kind === "unanswered") {
+    throw new Error(
+      `The hub at ${hubUrl} did not answer the release check within ${ANNOUNCE_MS / 1000} s`
+    );
+  }
+  const { ok, status, text } = asked.value;
+  if (!ok) {
+    throw new Error(
+      `The hub at ${hubUrl} answered the release check ${status}: ${text}`
+    );
+  }
+  console.log(
+    `The hub at ${hubUrl} found ${(JSON.parse(text) as { version: string }).version}`
+  );
+};
+
+if (argv.includes("--dry-run")) {
+  const commit = commitInput.padEnd(12, "0");
+  const dry: Runner = () => Promise.resolve("");
+  console.log(
+    `bun scripts/release.ts --channel ${channel}${publishing ? " --publish" : ""}: the step graph (nothing is run)\n`
+  );
+  console.log(
+    describeSteps(
+      releaseSteps(
+        {
+          channel,
+          commit,
+          id: "dry-run",
+          output,
+          notes: "dry run",
+          tag: argument("--tag"),
+        },
+        publishing,
+        dry,
+        { drafted: false },
+        {}
+      )
+    )
+  );
+  process.exit(0);
+}
+
 const git = (...args: string[]) =>
   Bun.spawnSync(["git", ...args], {
     cwd: repo,
@@ -91,24 +1037,57 @@ const resolved = git("rev-parse", "--verify", `${commitInput}^{commit}`);
 if (resolved.exitCode !== 0) {
   refuse(`${commitInput} is not a commit here`);
 }
-const commit = resolved.stdout.toString().trim();
-if (git("merge-base", "--is-ancestor", commit, "origin/main").exitCode !== 0) {
-  refuse(`${commit} is not on origin/main`);
+const requestedCommit = resolved.stdout.toString().trim();
+if (
+  git("merge-base", "--is-ancestor", requestedCommit, "origin/main")
+    .exitCode !== 0
+) {
+  refuse(`${requestedCommit} is not on origin/main`);
 }
 await underSigningEnv(import.meta.path, argv);
 // A nightly's notes are written for the person updating; see docs/releases/README.md.
 const notesFile = argument("--notes");
 if (channel === "nightly" && !(notesFile && isAbsolute(notesFile))) {
-  throw new Error("Nightly builds need end-user notes: --notes <file>");
+  refuse("nightly builds need end-user notes: --notes <file>");
 }
 const nightlyNotes = notesFile ? await readFile(notesFile, "utf8") : undefined;
 if (channel === "nightly" && !nightlyNotes?.trim()) {
-  throw new Error("Nightly end-user release notes are empty");
+  refuse("the nightly's end-user release notes are empty");
 }
 if (Bun.version !== PINNED_BUN) {
-  throw new Error(`Release pipeline requires Bun ${PINNED_BUN}`);
+  refuse(
+    `the release pipeline requires Bun ${PINNED_BUN}, and this is ${Bun.version}: bash scripts/release-setup.sh installs it`
+  );
 }
-const signingKeyBase64 = takeSigningKey();
+const releaseSecrets = takeReleaseSecrets();
+// What the build cannot do without, before anything is queued or built.
+const missing = missingSecrets(releaseSecrets);
+if (missing.length > 0) {
+  refuse(
+    `${missing.join(", ")} missing from the release env: bash scripts/release-setup.sh --check says what is missing, and --import-secrets writes them`
+  );
+}
+const rcodesignSays = (await Bun.file(rcodesignPath()).exists())
+  ? Bun.spawnSync([rcodesignPath(), "--version"], {
+      stdout: "pipe",
+      stderr: "ignore",
+    }).stdout.toString()
+  : "";
+if (!rcodesignSays.includes(`apple-codesign ${RCODESIGN_VERSION}`)) {
+  refuse(
+    `rcodesign ${RCODESIGN_VERSION} is not at ${rcodesignPath()}: bash scripts/release-setup.sh installs it`
+  );
+}
+// No build is released unproven: without podman the container proofs cannot run.
+if (!Bun.which("podman")) {
+  refuse(
+    "podman is not on this machine, so the container proofs cannot run and nothing is released without them: bash scripts/release-setup.sh installs it"
+  );
+}
+const overQuota = await quotaRefusal();
+if (overQuota) {
+  refuse(overQuota);
+}
 
 /** A process named so a reused pid is never taken for it: pid and start time. */
 interface Proc {
@@ -117,8 +1096,9 @@ interface Proc {
 }
 /** Who holds the build lock and what it is building, for whoever finds it dead. */
 interface Holder extends Proc {
-  checkout?: string;
-  /** The process groups of the commands it is running (some run at once): everything it started. */
+  /** The trees it builds and checks in. */
+  checkouts?: string[];
+  /** The process groups of the commands it is running (many run at once): everything it started. */
   groups?: Proc[];
   staging?: string;
 }
@@ -204,6 +1184,9 @@ const signalGroupOf = async (
  * 2026-10-15, at 5 s). A command with nothing to clean ends at once.
  */
 const STOP_GRACE_MS = 180_000;
+/** Whether the group `group` names has ended, leader and members. */
+const groupEnded = async (group: Proc): Promise<boolean> =>
+  !(await startedOf(group.pid)) && (await groupMembers(group.pid)).length === 0;
 /**
  * Ends a command and everything it started: each command runs as the leader
  * of its own process group. A leader pid now held by another process means the
@@ -221,10 +1204,8 @@ async function endGroup(group: Proc | undefined): Promise<void> {
   await signalGroupOf(group, "SIGTERM");
   const deadline = performance.now() + STOP_GRACE_MS;
   while (performance.now() < deadline) {
-    if (
-      !(await startedOf(group.pid)) &&
-      (await groupMembers(group.pid)).length === 0
-    ) {
+    // biome-ignore lint/performance/noAwaitInLoops: one look at the group per 250 ms until it ends or its grace does
+    if (await groupEnded(group)) {
       return;
     }
     await Bun.sleep(250);
@@ -239,16 +1220,18 @@ const endGroups = async (groups: Proc[] | undefined): Promise<void> => {
   await Promise.all((groups ?? []).map(endGroup));
 };
 
-/** The commands this run is waiting on (the proofs run beside the compiles), so a stop can end them too. */
+/** The commands this run is waiting on (many run at once), so a stop can end them too. */
 const running = new Set<Subprocess>();
 /** Set once a SIGTERM or SIGINT has begun stopping this run. */
 let stopped: Promise<never> | undefined;
-async function run(
-  command: string[],
+/** Set while a failed build's steps are being stopped: no command starts then. */
+let abandoned: Error | undefined;
+const runCommand: Runner = async (
+  command,
   cwd = repo,
   capture = false,
-  env?: Record<string, string>
-): Promise<string> {
+  env = {}
+) => {
   if (stopped) {
     await stopped;
   }
@@ -292,169 +1275,24 @@ async function run(
     me.groups = me.groups?.filter((one) => one !== group);
     logStep(command.join(" "), started);
   }
-}
-/** Set while the steps `together` runs are being stopped: no command starts then. */
-let abandoned: Error | undefined;
-/**
- * Runs steps at once and waits for every one of them. The first to fail ends
- * every command still running (each leads its own process group) and no other
- * starts, so nothing writes into the checkout or staging once the build is
- * failing; that first error is thrown once every step has stopped.
- */
-async function together(steps: Promise<unknown>[]): Promise<void> {
-  let first: { error: unknown } | undefined;
-  await Promise.allSettled(
-    steps.map((step) =>
-      step.catch(async (error: unknown) => {
-        if (!first) {
-          first = { error };
-          abandoned = new Error(
-            "Not started: another step of this build failed"
-          );
-          await endGroups(me.groups);
-        }
-        throw error;
-      })
-    )
-  );
-  abandoned = undefined;
-  if (first) {
-    throw first.error;
-  }
-}
-/** One line per step with its seconds, so a slow release says where the time went. */
+};
+/** One line per command with its seconds, so a slow release says where the time went. */
 function logStep(what: string, started: number): void {
   const seconds = ((performance.now() - started) / 1000).toFixed(1);
   const label = what.length > 140 ? `${what.slice(0, 137)}...` : what;
   console.log(`[release] ${seconds}s ${label}`);
 }
 
-/**
- * The arm64 userland a published linux-arm64 binary runs on here, through
- * the host's qemu-aarch64 binfmt entry: Debian trixie's glibc, which is all
- * a Bun binary links (libc, ld, libpthread, libdl, libm). Pinned by its
- * snapshot.debian.org address and sha256, unpacked once.
- */
-const ARM64_LIBC = {
-  url: "https://snapshot.debian.org/file/6ee536e6a461ca319776fac983202946f4d3dce8/libc6_2.41-12%2Bdeb13u4_arm64.deb",
-  sha256: "8784eda966b189c777a384dac5ce009e8fc9b52d006926c5a013e7fa8aa688cc",
-};
-const arm64Root = join(homedir(), ".cache", "cawco-release", "arm64-sysroot");
-const arm64Sysroot = async (): Promise<string> => {
-  if (
-    await Bun.file(join(arm64Root, "lib", "ld-linux-aarch64.so.1")).exists()
-  ) {
-    return arm64Root;
-  }
-  const response = await fetch(ARM64_LIBC.url);
-  if (!response.ok) {
-    throw new Error(`${ARM64_LIBC.url} answered ${response.status}`);
-  }
-  const deb = new Uint8Array(await response.arrayBuffer());
-  const sha256 = new Bun.CryptoHasher("sha256").update(deb).digest("hex");
-  if (sha256 !== ARM64_LIBC.sha256) {
-    throw new Error(
-      `The arm64 glibc package's sha256 is ${sha256}, not the pinned ${ARM64_LIBC.sha256}`
-    );
-  }
-  const temp = `${arm64Root}.${process.pid}`;
-  await rm(temp, { recursive: true, force: true });
-  await mkdir(temp, { recursive: true });
-  await writeFile(join(temp, "libc6.deb"), deb);
-  await run(["ar", "x", "libc6.deb"], temp);
-  await run(
-    [
-      "sh",
-      "-c",
-      "tar -xf data.tar.* && rm -f libc6.deb data.tar.* control.tar.* debian-binary && ln -s usr/lib lib",
-    ],
-    temp
-  );
-  await rm(arm64Root, { recursive: true, force: true });
-  await rename(temp, arm64Root);
-  return arm64Root;
-};
-
-/** `env`'s exit status when it cannot execute the program: here, an arm64 binary with no binfmt entry. */
-const CANNOT_EXECUTE = 126;
-
-/**
- * A published linux binary run on this host before it is published, under a
- * scratch HOME and nothing else of this run's environment: `--version`, and
- * `build-info`, which must name the build's version, commit and protocol.
- * linux-arm64 runs through the qemu-aarch64 binfmt entry on the pinned glibc
- * above; a host without the entry cannot run it, and the release stops there.
- */
-const runPublished = async (
-  target: string,
-  binary: string,
-  home: string,
-  expect: Pick<ReleaseManifest, "commit" | "protocol" | "version">
-): Promise<void> => {
-  const env = [
-    "env",
-    "-i",
-    `PATH=${process.env.PATH ?? ""}`,
-    `HOME=${home}`,
-    ...(target === "linux-arm64"
-      ? [`QEMU_LD_PREFIX=${await arm64Sysroot()}`]
-      : []),
-  ];
-  const say = (args: string[]): Promise<string> =>
-    run([...env, binary, ...args], repo, true).catch((error: unknown) => {
-      if (String(error).includes(`exit status ${CANNOT_EXECUTE}:`)) {
-        throw new Error(
-          `The published ${target} binary cannot run on this host: it has no qemu-aarch64 binfmt entry. Install it: sudo apt install qemu-user-binfmt`,
-          { cause: error }
-        );
-      }
-      throw error;
-    });
-  const version = await say(["--version"]);
-  if (!version.includes(expect.version)) {
-    throw new Error(
-      `The published ${target} binary says ${version}, not ${expect.version}`
-    );
-  }
-  const info = JSON.parse(await say(["build-info"])) as Pick<
-    ReleaseManifest,
-    "commit" | "protocol" | "version"
-  >;
-  if (
-    info.version !== expect.version ||
-    info.commit !== expect.commit ||
-    JSON.stringify(info.protocol) !== JSON.stringify(expect.protocol)
-  ) {
-    throw new Error(
-      `The published ${target} binary's build-info ${JSON.stringify(info)} is not this build's ${JSON.stringify(expect)}`
-    );
-  }
-  console.log(`published ${target} binary ran: ${version}, build-info matches`);
-};
-
-const state = join(homedir(), ".cache", "cawco", "release-pipeline");
 await mkdir(state, { recursive: true });
 const queued = join(state, "queued.json");
 /** The id of the last queued request a holder finished, built or failed. */
 const finished = join(state, "finished.json");
-interface Request {
-  channel: "stable" | "nightly";
-  commit: string;
-  /** This request, apart from any other for the same commit. */
-  id: string;
-  macHost: string;
-  /** A nightly's end-user notes, carried with the request so a queued one keeps its own. */
-  notes?: string;
-  output: string;
-  tag?: string;
-}
 const request: Request = {
   id: crypto.randomUUID(),
-  commit,
+  commit: requestedCommit,
   channel,
   notes: channel === "nightly" ? nightlyNotes : undefined,
   tag: argument("--tag"),
-  macHost: argument("--mac-host") ?? "mac",
   output,
 };
 
@@ -479,9 +1317,9 @@ const pending = async (): Promise<Request | undefined> => {
 };
 const previous = await pending();
 let superseded = false;
-if (previous && previous.commit !== commit) {
+if (previous && previous.commit !== requestedCommit) {
   const ancestry = Bun.spawn(
-    ["git", "merge-base", "--is-ancestor", commit, previous.commit],
+    ["git", "merge-base", "--is-ancestor", requestedCommit, previous.commit],
     { cwd: repo, stdout: "ignore", stderr: "ignore" }
   );
   superseded = (await ancestry.exited) === 0;
@@ -490,7 +1328,7 @@ if (!superseded) {
   await writeJson(queued, request);
 }
 
-// THE LOCK: one build at a time. It names its holder by pid and that
+// THE LOCK: no two release runs at once. It names its holder by pid and that
 // process's start time (`ps -o lstart=`), so a pid reused by another process
 // after the holder died is not mistaken for it, plus what the holder is
 // building, so a run that finds it dead can clear what it left.
@@ -551,19 +1389,23 @@ const sweep = async (dirs: string[], stale: boolean): Promise<void> => {
     );
   }
 };
+/** A worktree a build made, removed as a worktree and from the disk. */
+const removeTree = async (checkout: string): Promise<void> => {
+  await Bun.spawn(["git", "worktree", "remove", "--force", checkout], {
+    cwd: repo,
+    stdout: "ignore",
+    stderr: "ignore",
+  }).exited;
+  await rm(checkout, { recursive: true, force: true });
+};
 /**
- * A checkout and staging a build left: the checkout removed as a worktree,
- * the staging with everything its proofs left (`sweep`), and every proof run
- * dir whose owner is gone: this build's rigs, ended by now.
+ * The trees and staging a build left: each tree removed as a worktree, the
+ * staging with everything its proofs left (`sweep`), and every proof run dir
+ * whose owner is gone: this build's rigs, ended by now.
  */
-const clear = async (checkout?: string, staging?: string): Promise<void> => {
-  if (checkout) {
-    await Bun.spawn(["git", "worktree", "remove", "--force", checkout], {
-      cwd: repo,
-      stdout: "ignore",
-      stderr: "ignore",
-    }).exited;
-    await rm(checkout, { recursive: true, force: true });
+const clear = async (checkouts: string[], staging?: string): Promise<void> => {
+  await Promise.all(checkouts.map(removeTree));
+  if (checkouts.length > 0) {
     await Bun.spawn(["git", "worktree", "prune"], {
       cwd: repo,
       stdout: "ignore",
@@ -578,221 +1420,22 @@ const clear = async (checkout?: string, staging?: string): Promise<void> => {
  */
 const unheldStagings = async (): Promise<string[]> => {
   const held = new Set<string>();
-  for (const n of await generations()) {
-    const holder = await readHolder(join(locks, String(n)));
-    if (holder?.staging && (await alive(holder))) {
+  const holders = await Promise.all(
+    (await generations()).map((n) => readHolder(join(locks, String(n))))
+  );
+  const live = await Promise.all(
+    holders.map((holder) => (holder ? alive(holder) : false))
+  );
+  holders.forEach((holder, at) => {
+    if (holder?.staging && live[at]) {
       held.add(holder.staging);
     }
-  }
+  });
   return (await readdir(state))
     .filter((name) => name.startsWith("staging-"))
     .map((name) => join(state, name))
     .filter((path) => !held.has(path));
 };
-/** Where a failed build's proof evidence outlives its staging; the newest few are kept. */
-const failedEvidence = join(homedir(), ".cache", "cawco-release");
-const KEPT_FAILURES = 5;
-/**
- * What the container proofs prove is made of: the product's packages, the
- * dashboard the binary embeds, the binary's build and proof scripts and the
- * dependencies. A verdict stands on the tree of exactly these at a commit
- * (`git ls-tree`), so a commit that changes none of them (the Apple app, docs,
- * the probe kit) stands on the verdict of the last that did. No version
- * string is in it: every proof build is named by the proof itself.
- */
-const PROOF_INPUTS = [
-  "packages",
-  "apps/dashboard",
-  "scripts/binary",
-  "scripts/build-binary.ts",
-  "scripts/lib",
-  "bun.lock",
-  "package.json",
-];
-/** Each proven verdict, by the inputs it stands on: `<inputs>/stage1`, and `<inputs>/stage2/<rig>` per stage 2 rig. */
-const proofVerdicts = join(
-  homedir(),
-  ".cache",
-  "cawco-release",
-  "proof-verdicts"
-);
-const proofInputs = async (
-  checkout: string,
-  commitId: string
-): Promise<string> =>
-  new Bun.CryptoHasher("sha256")
-    .update(
-      await run(
-        ["git", "ls-tree", "-r", commitId, "--", ...PROOF_INPUTS],
-        checkout,
-        true
-      )
-    )
-    .digest("hex")
-    .slice(0, 24);
-const proven = (path: string): Promise<boolean> => Bun.file(path).exists();
-const recordProven = async (path: string, commitId: string): Promise<void> => {
-  await mkdir(resolve(path, ".."), { recursive: true });
-  await writeFile(path, `${commitId}\n`);
-};
-
-/**
- * Stage 1 (prove-stage1.sh) on the proof build, unless it passed on these
- * inputs; then the frames its hub sent (kept with the verdict) read with every
- * TestFlight build installable now, on every release, since the builds in
- * testers' hands change when the hub does not.
- */
-async function proveStage1(
-  checkout: string,
-  staging: string,
-  proofBinary: string,
-  inputs: string,
-  commitId: string
-): Promise<void> {
-  const verdict = join(proofVerdicts, inputs, "stage1");
-  const frames = join(proofVerdicts, inputs, "frames.jsonl");
-  if ((await proven(verdict)) && (await proven(frames))) {
-    console.log(
-      `Stage 1 passed on these inputs (${inputs}) before: not run again`
-    );
-  } else {
-    await run(
-      [
-        "bash",
-        "scripts/binary/prove-stage1.sh",
-        join(staging, "container-proof"),
-        proofBinary,
-      ],
-      checkout
-    );
-    await mkdir(join(proofVerdicts, inputs), { recursive: true });
-    await cp(
-      join(staging, "container-proof", "clean-binary", "frames.jsonl"),
-      frames
-    );
-    await recordProven(verdict, commitId);
-  }
-  await run(
-    [process.execPath, "packages/hub/scripts/wire-frames.ts", frames],
-    checkout
-  );
-}
-
-/** Stage 2's rigs and how many checks each has, as the script lists them (`PROOF_LIST`). */
-async function stage2Rigs(
-  checkout: string,
-  out: string,
-  bins: string
-): Promise<Map<string, number>> {
-  const listed = await run(
-    ["bash", "scripts/binary/prove-stage2.sh", out, bins],
-    checkout,
-    true,
-    { PROOF_LIST: "1" }
-  );
-  const rigs = new Map<string, number>();
-  let rig: string | undefined;
-  for (const line of listed.split("\n")) {
-    const [, named] = RIG_LINE.exec(line) ?? [];
-    if (named) {
-      rig = named;
-      rigs.set(rig, 0);
-    } else if (rig && line.startsWith("  ")) {
-      rigs.set(rig, (rigs.get(rig) ?? 0) + 1);
-    }
-  }
-  if (rigs.size === 0) {
-    throw new Error(`prove-stage2.sh listed no rig: ${listed}`);
-  }
-  return rigs;
-}
-const RIG_LINE = /^rig (\S+):$/;
-
-/**
- * Stage 2: the rigs that have not passed on these inputs, from their builds
- * (build-stage2.ts, a compile, so run before the release's own) to their
- * verdicts. A rig passes when every one of its checks says PASS; each one that
- * does is recorded, so a stage 2 that failed runs only its failed rigs again.
- * Answers once the builds are made, with the run itself to wait on.
- */
-async function stage2(
-  checkout: string,
-  staging: string,
-  inputs: string,
-  commitId: string
-): Promise<{ proving: Promise<void> }> {
-  const out = join(staging, "stage2");
-  const bins = join(staging, "stage2-bins");
-  const rigs = await stage2Rigs(checkout, out, bins);
-  const passed = join(proofVerdicts, inputs, "stage2");
-  const todo: string[] = [];
-  for (const rig of rigs.keys()) {
-    if (!(await proven(join(passed, rig)))) {
-      todo.push(rig);
-    }
-  }
-  if (todo.length === 0) {
-    console.log(
-      `Stage 2 passed on these inputs (${inputs}) before, every rig: not run again`
-    );
-    return { proving: Promise.resolve() };
-  }
-  if (todo.length < rigs.size) {
-    console.log(
-      `Stage 2 runs the rigs that have not passed on these inputs (${inputs}): ${todo.join(", ")}`
-    );
-  }
-  await run(
-    // The proof build prepared this checkout's assets: stage 2's builds reuse them.
-    [
-      process.execPath,
-      "scripts/binary/build-stage2.ts",
-      bins,
-      "--skip-prepare",
-    ],
-    checkout
-  );
-  const proving = (async () => {
-    let failure: unknown;
-    await run(
-      ["bash", "scripts/binary/prove-stage2.sh", out, bins],
-      checkout,
-      false,
-      {
-        PROOF_ONLY: `^(${todo.join("|")})$`,
-      }
-    ).catch((error: unknown) => {
-      failure = error;
-    });
-    for (const rig of todo) {
-      const lines = (
-        await readFile(join(out, "rigs", rig, "verdicts.tsv"), "utf8").catch(
-          () => ""
-        )
-      )
-        .split("\n")
-        .filter(Boolean);
-      if (
-        lines.length === rigs.get(rig) &&
-        lines.every((line) => line.split("\t")[1]?.startsWith("PASS"))
-      ) {
-        await recordProven(join(passed, rig), commitId);
-      }
-    }
-    // Not a release's: the three proof builds and the proof key's copy, and the proof's own scratch.
-    await Promise.all(
-      [
-        bins,
-        ...["feeds", "images", "shared", "tmp"].map((name) => join(out, name)),
-      ].map((path) => rm(path, { recursive: true, force: true }))
-    );
-    if (failure) {
-      throw failure;
-    }
-  })();
-  return { proving };
-}
-
 /** The container proofs' folders in a build's staging: stage 1's and stage 2's. */
 const PROOF_DIRS = ["container-proof", "stage2"];
 /**
@@ -831,23 +1474,25 @@ const keepEvidence = async (
   }
   const time = new Date().toISOString().replace(/[:.]/g, "-");
   const kept = join(failedEvidence, `failed-${commitId.slice(0, 12)}-${time}`);
-  for (const name of found) {
-    const proof = join(staging, name);
-    await cp(proof, join(kept, name), {
-      recursive: true,
-      filter: async (source) => {
-        const rel = relative(proof, source);
-        if (
-          PROOF_SCRATCH.has(rel) ||
-          PROOF_SCRATCH.has(rel.split("/").at(-1) ?? "")
-        ) {
-          return false;
-        }
-        const info = await lstat(source);
-        return info.isFile() || info.isDirectory();
-      },
-    });
-  }
+  await Promise.all(
+    found.map((name) => {
+      const proof = join(staging, name);
+      return cp(proof, join(kept, name), {
+        recursive: true,
+        filter: async (source) => {
+          const rel = relative(proof, source);
+          if (
+            PROOF_SCRATCH.has(rel) ||
+            PROOF_SCRATCH.has(rel.split("/").at(-1) ?? "")
+          ) {
+            return false;
+          }
+          const info = await lstat(source);
+          return info.isFile() || info.isDirectory();
+        },
+      });
+    })
+  );
   const older = await Promise.all(
     (await readdir(failedEvidence))
       .filter((name) => name.startsWith("failed-"))
@@ -857,18 +1502,21 @@ const keepEvidence = async (
       })
   );
   older.sort((a, b) => b.time - a.time);
-  for (const { path } of older.slice(KEPT_FAILURES)) {
-    await rm(path, { recursive: true, force: true });
-  }
+  await Promise.all(
+    older
+      .slice(KEPT_FAILURES)
+      .map(({ path }) => rm(path, { recursive: true, force: true }))
+  );
   return kept;
 };
 /**
  * Takes the lock, or says it is held by a live build. A lock whose holder
  * is gone (killed, crashed, the machine rebooted) is stale: one run takes it
- * over, atomically, and clears the dead build's checkout and staging first.
+ * over, atomically, and clears the dead build's trees and staging first.
  */
 const acquire = async (): Promise<boolean> => {
   for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: each claim reads the line again after a lost race
     const seen = await generations();
     const top = seen.at(-1) ?? 0;
     const holder = top ? await readHolder(join(locks, String(top))) : undefined;
@@ -901,27 +1549,29 @@ const acquire = async (): Promise<boolean> => {
       console.log(
         `Took over a stale build lock: holder pid ${holder.pid}, started ${holder.started}, is gone`
       );
-      // What it was running outlives it and still writes into its checkout
+      // What it was running outlives it and still writes into its trees
       // and staging, which a build of the same commit uses again.
       await endGroups(holder.groups);
-      await clear(holder.checkout, holder.staging);
+      await clear(holder.checkouts ?? [], holder.staging);
     }
-    for (const n of seen) {
-      await rm(join(locks, String(n)), { recursive: true, force: true });
-    }
+    await Promise.all(
+      seen.map((n) =>
+        rm(join(locks, String(n)), { recursive: true, force: true })
+      )
+    );
     return true;
   }
 };
 
-// A stop (SIGTERM from a task stop, SIGINT) ends the command it waits on,
-// clears its own checkout and staging, and lets the lock go. Nothing starts
+// A stop (SIGTERM from a task stop, SIGINT) ends the commands it waits on,
+// clears its own trees and staging, and lets the lock go. Nothing starts
 // after it: `run` waits on it instead of spawning.
 const stop = async (signal: "SIGTERM" | "SIGINT"): Promise<never> => {
   console.log(`Release build stopped by ${signal}: clearing its work`);
   await endGroups(me.groups);
   await Promise.all([...running].map((child) => child.exited));
   try {
-    await clear(me.checkout, me.staging);
+    await clear(me.checkouts ?? [], me.staging);
   } catch (error) {
     // The next run's sweep ends what this one could not.
     console.error(
@@ -941,7 +1591,7 @@ if (!(await acquire())) {
   console.log(
     superseded
       ? `Superseded by newer queued commit ${previous?.commit}; one build is already running`
-      : `Queued ${commit}; one build is already running`
+      : `Queued ${requestedCommit}; one build is already running`
   );
   process.exit(0);
 }
@@ -953,60 +1603,6 @@ try {
   await release();
   throw error;
 }
-
-/** The version a build carries and the notes that go with it. */
-const versionAndNotes = async (
-  current: Request,
-  checkout: string
-): Promise<{ version: string; notes: string }> => {
-  const base = (
-    await Bun.file(join(checkout, "packages/cli/package.json")).json()
-  ).version as string;
-  if (current.channel === "stable") {
-    if (
-      current.tag !== `v${base}` ||
-      (await run(
-        ["git", "rev-parse", `${current.tag}^{commit}`],
-        checkout,
-        true
-      )) !== current.commit
-    ) {
-      throw new Error(
-        "Stable builds require a matching vX.Y.Z tag at the input commit"
-      );
-    }
-    const notes = await readFile(
-      join(checkout, "docs/releases", `${base}.md`),
-      "utf8"
-    );
-    if (!notes.trim()) {
-      throw new Error("Stable end-user release notes are empty");
-    }
-    return { version: base, notes };
-  }
-  if (!current.notes?.trim()) {
-    throw new Error("Nightly builds need end-user notes: --notes <file>");
-  }
-  const count = await run(
-    ["git", "rev-list", "--first-parent", "--count", current.commit],
-    checkout,
-    true
-  );
-  return {
-    version: `${base}-nightly.${count}+${current.commit.slice(0, 12)}`,
-    notes: current.notes,
-  };
-};
-
-/**
- * The memory one build reaches, in GiB: its heavy-run admission's peak
- * (core heavy-run.ts), taken for the whole build, its proofs and compiles
- * included, each of which takes none of its own beneath it. From the
- * journal, obelisk, 2026-10-19: "cawco-nightly-7c34d9be6.service: Consumed
- * 15min 31.083s CPU time over 8min 33.717s wall clock time, 17.2G memory
- * peak", and 11.8G for the next one, which failed at stage 2.
- */
-const RELEASE_PEAK_GIB = 18;
 
 /**
  * One commit, built, signed and (unless a newer one is queued) promoted, as
@@ -1024,284 +1620,41 @@ const build = async (current: Request): Promise<void> => {
   }
 };
 
-/** {@link build} under its admission. */
+/** {@link build} under its admission: its steps run as their graph says. */
 const buildAdmitted = async (current: Request): Promise<void> => {
   const building = performance.now();
-  // No build is released unproven: without podman the container proofs cannot run.
-  if (!Bun.which("podman")) {
-    throw new Error(
-      "Release build refused: podman is not on this machine, so the container proofs cannot run and nothing is released without them"
-    );
-  }
-  // On real disk, never tmpfs; `clear` removes it when the build ends.
-  const checkout = join(
-    homedir(),
-    ".worktrees",
-    `release-${current.commit.slice(0, 12)}`
-  );
-  const staging = join(state, `staging-${current.commit.slice(0, 12)}`);
-  me.checkout = checkout;
+  const trees = treesOf(current.commit);
+  const staging = stagingOf(current.commit);
+  me.checkouts = Object.values(trees);
   me.staging = staging;
   await writeHolder();
-  // The release records (shipped.ts): typecheck's wire check and the frame
-  // read below hold this build to what is in people's hands, as tagged now.
-  await run(["git", "fetch", "--quiet", "--tags", "origin"]);
-  await run(["git", "worktree", "add", "--detach", checkout, current.commit]);
   await mkdir(staging, { recursive: true });
+  const learned: Learned = { drafted: false };
   let failedClear: unknown;
   try {
-    await run([process.execPath, "install", "--frozen-lockfile"], checkout);
-    // Both only read the tree: at once.
-    await together([
-      run([process.execPath, "run", "typecheck"], checkout),
-      run([process.execPath, "run", "lint"], checkout),
-    ]);
-    const { version, notes } = await versionAndNotes(current, checkout);
-    // One compile at a time, sharing only immutable prepared assets.
-    const proofBinary = join(staging, "cawco-proof");
-    await run(
-      [
-        process.execPath,
-        "scripts/build-binary.ts",
-        "linux-x64",
-        proofBinary,
-        version,
-        current.commit,
-        "--proof",
-      ],
-      checkout
-    );
-    // Only grows: no path installs a build whose sequence is not above the running one.
-    const sequence = Number(
-      await run(
-        ["git", "rev-list", "--first-parent", "--count", current.commit],
-        checkout,
-        true
-      )
-    );
-    // How many database migrations this build carries; never installed over a newer database.
-    const schemaVersion = (
-      (await Bun.file(
-        join(checkout, "packages/hub/drizzle/meta/_journal.json")
-      ).json()) as { entries: unknown[] }
-    ).entries.length;
-    // The hub ↔ agent contract this build speaks, as the build itself says: a joined machine installs it only when
-    // it overlaps its hub's. The proof build runs only under a scratch HOME and an isolated loopback hub
-    // (scripts/binary/proof-entry.ts), and inherits no credentials, so build-info is asked under exactly those.
-    const infoHome = join(staging, "binary-info-home");
-    await mkdir(infoHome, { recursive: true });
-    const { protocol } = JSON.parse(
-      await run(
-        [
-          "env",
-          "-i",
-          `PATH=${process.env.PATH ?? ""}`,
-          `HOME=${infoHome}`,
-          "HOST=127.0.0.1",
-          "CAWCO_HUB_PORT=43456",
-          "CAWCO_HUB_URL=http://127.0.0.1:43456",
-          proofBinary,
-          "build-info",
-        ],
-        checkout,
-        true
-      )
-    ) as Pick<ReleaseManifest, "protocol">;
-    const manifest: ReleaseManifest = {
-      version,
-      commit: current.commit,
-      channel: current.channel,
-      sequence,
-      schemaVersion,
-      protocol,
-      sessiondProtocol: SESSIOND_V1,
-      notes,
-      testSigned: false,
-      artifacts: [],
-    };
-    // THE PROOFS RUN BESIDE THE RELEASE'S OWN BUILDS. One compile at a time
-    // (the owner's rule, line 2): the proof build above, then stage 2's builds,
-    // then each release target in turn, signed on the Mac as it comes. The
-    // container proofs are no compile: stage 1 runs from here on, and stage 2
-    // once its builds are made, each beside the targets' compiles and the Mac
-    // signing, which do not depend on them. Nothing is signed into a manifest
-    // until all three have ended, and a failure in any one stops the others.
-    const inputs = await proofInputs(checkout, current.commit);
-    const stage2Builds = stage2(checkout, staging, inputs, current.commit);
-    // A darwin build ships as its own CawCo Agent.app, signed with the team's
-    // Developer ID (packages/core/src/agent-bundle.ts,
-    // scripts/binary/sign-agent-bundle.sh) on the Mac, in a folder under its
-    // home, with its Info.plist from this commit; the Mac has Apple notarize it
-    // and staples the ticket to it (its wait logged on its own `[release] …s
-    // notarytool submit --wait` line), tars the bundle as signed and stapled,
-    // and checks and runs what it tarred, before the archive comes back. A
-    // bundle Apple does not accept fails the release.
-    const buildTargets = async (): Promise<void> => {
-      const mac = current.macHost;
-      const macDir = `build/cawco-agent-sign/${current.commit.slice(0, 12)}`;
-      const bundleFiles = join(staging, "agent-bundle");
-      await mkdir(bundleFiles, { recursive: true });
-      /** Each published linux binary's run, going on while the next target compiles. */
-      const runs: Promise<void>[] = [];
-      await run(
-        [
-          process.execPath,
-          "-e",
-          `const { AGENT_INFO_PLIST } = await import(${JSON.stringify(join(checkout, "packages/core/src/agent-bundle.ts"))}); await Bun.write(${JSON.stringify(join(bundleFiles, "Info.plist"))}, AGENT_INFO_PLIST);`,
-        ],
-        checkout
-      );
-      await run(["ssh", mac, `rm -rf '${macDir}' && mkdir -p '${macDir}'`]);
-      try {
-        await run([
-          "scp",
-          join(bundleFiles, "Info.plist"),
-          join(checkout, "scripts/binary/agent.entitlements"),
-          join(checkout, "scripts/binary/sign-agent-bundle.sh"),
-          `${mac}:${macDir}/`,
-        ]);
-        for (const target of TARGETS) {
-          const dir = join(staging, target);
-          await mkdir(dir, { recursive: true });
-          const binary = join(dir, "cawco");
-          const darwin = target.startsWith("darwin");
-          await run(
-            [
-              process.execPath,
-              "scripts/build-binary.ts",
-              target,
-              binary,
-              version,
-              current.commit,
-              "--skip-prepare",
-            ],
-            checkout
+    await runSteps(
+      releaseSteps(current, publishing, runCommand, learned, releaseSecrets),
+      {
+        say: (line) => console.log(line),
+        failed: async () => {
+          abandoned = new Error(
+            "Not started: another step of this build failed"
           );
-          // The tag form, so the file name carries no `+`.
-          const archive = `cawco-${releaseTag(manifest)}-${target}.tar.gz`;
-          // What the manifest's binarySha256 names: the executable as the installer and the updater find it.
-          let executable = binary;
-          if (darwin) {
-            await run(["scp", binary, `${mac}:${macDir}/cawco`]);
-            await run([
-              "ssh",
-              mac,
-              `bash --norc '${macDir}/sign-agent-bundle.sh' '${macDir}' '${target}' '${version}' '${archive}'`,
-            ]);
-            await run([
-              "scp",
-              `${mac}:${macDir}/${archive}`,
-              join(staging, archive),
-            ]);
-            await rm(binary);
-            // Unpacked here only to hash the signed executable it carries; libarchive's own pax keywords are not GNU tar's.
-            await run(
-              [
-                "tar",
-                "--warning=no-unknown-keyword",
-                "-xzf",
-                join(staging, archive),
-                "-C",
-                dir,
-                AGENT_BUNDLE,
-              ],
-              checkout
-            );
-            executable = join(dir, AGENT_BUNDLE_EXECUTABLE);
-          } else {
-            await run(
-              ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
-              checkout
-            );
-            const ran = runPublished(target, binary, infoHome, manifest);
-            // Its failure is read at `Promise.all(runs)`, after the compiles.
-            ran.catch(() => undefined);
-            runs.push(ran);
-          }
-          const sha256 = new Bun.CryptoHasher("sha256")
-            .update(await Bun.file(join(staging, archive)).bytes())
-            .digest("hex");
-          const binarySha256 = new Bun.CryptoHasher("sha256")
-            .update(await Bun.file(executable).bytes())
-            .digest("hex");
-          manifest.artifacts.push({
-            target,
-            archive,
-            sha256,
-            size: (await stat(join(staging, archive))).size,
-            binarySha256,
-            binarySize: (await stat(executable)).size,
-          });
-          await writeFile(
-            join(staging, `${archive}.sha256`),
-            `${sha256}  ${archive}\n`
-          );
-        }
-        await Promise.all(runs);
-      } finally {
-        await run(["ssh", mac, "rm", "-rf", macDir]);
-        // Not an artifact: only the archives and the manifest are published.
-        await rm(bundleFiles, { recursive: true, force: true });
+          await endGroups(me.groups);
+        },
       }
-    };
-    await together([
-      proveStage1(checkout, staging, proofBinary, inputs, current.commit),
-      stage2Builds.then(({ proving }) => proving),
-      stage2Builds.then(buildTargets),
-    ]);
-    await writeFile(
-      join(staging, "SHA256SUMS"),
-      manifest.artifacts.map((a) => `${a.sha256}  ${a.archive}\n`).join("")
     );
-    const privatePem = signingPem(signingKeyBase64);
-    const signature = signManifest(manifest, privatePem);
-    verifyManifest(
-      manifest,
-      signature,
-      createPublicKey(privatePem)
-        .export({ type: "spki", format: "pem" })
-        .toString()
-    );
-    const manifestText = JSON.stringify(manifest);
-    // The installer reads the version off the front of the signed text.
-    if (!manifestText.startsWith(`{"version":"${version}",`)) {
-      throw new Error("The manifest must begin with its version");
-    }
-    await writeFile(join(staging, "release.json"), manifestText);
-    await writeFile(join(staging, "release.json.sig"), `${signature}\n`);
-    // A proven build is promoted even when a newer commit was queued while it
-    // was built: that one is built next (the loop at the end of this file). A
-    // build skipped for the newer one left nothing published while commits
-    // kept coming.
-    await mkdir(current.output, { recursive: true });
-    const published = join(current.output, version);
-    await rename(staging, published);
-    await writeFile(
-      join(current.output, "release.json"),
-      JSON.stringify(manifest)
-    );
-    console.log(`Local artifacts ready: ${published}`);
-    if (argv.includes("--publish")) {
-      const publishing = performance.now();
-      await publishRelease(published, manifest);
-      logStep("publish", publishing);
-      // Published: the proof cache keeps this tree's stage 2 builds alone, and
-      // its image store sheds its dangling images (proof-cache-prune.sh).
-      await run(
-        [
-          "bash",
-          "scripts/binary/proof-cache-prune.sh",
-          await run(
-            ["git", "rev-parse", `${current.commit}^{tree}`],
-            checkout,
-            true
-          ),
-        ],
-        checkout
-      );
-    }
     logStep(`build of ${current.commit.slice(0, 12)}, in all`, building);
   } catch (error) {
+    if (learned.drafted && learned.manifest) {
+      // A build that did not promote leaves no draft behind it.
+      await deleteDraft(releaseTag(learned.manifest)).catch(
+        (cleanup: unknown) =>
+          console.error(
+            `Removing the draft of ${learned.manifest?.version} failed: ${cleanup instanceof Error ? cleanup.message : String(cleanup)}`
+          )
+      );
+    }
     const kept = await keepEvidence(current.commit, staging);
     if (!kept) {
       throw error;
@@ -1311,14 +1664,15 @@ const buildAdmitted = async (current: Request): Promise<void> => {
       { cause: error }
     );
   } finally {
+    abandoned = undefined;
     // A build that failed fails with its own error; the sweep's, if it fails too, is said beside it.
-    await clear(checkout, staging).catch((error: unknown) => {
+    await clear(Object.values(trees), staging).catch((error: unknown) => {
       console.error(
         `Clearing the build of ${current.commit} failed: ${error instanceof Error ? error.message : String(error)}`
       );
       failedClear = error;
     });
-    me.checkout = undefined;
+    me.checkouts = undefined;
     me.staging = undefined;
     await writeHolder();
   }
@@ -1332,6 +1686,7 @@ const buildAdmitted = async (current: Request): Promise<void> => {
 // before it succeeded or failed. Each is finished once, either way.
 try {
   let failure: unknown;
+  // biome-ignore lint/performance/noAwaitInLoops: one release run builds the queue's requests in turn; the lock is what keeps two runs from building at once
   for (let current = await pending(); current; current = await pending()) {
     if (current.id !== request.id) {
       console.log(`Building queued ${current.commit}`);

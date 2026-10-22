@@ -1445,6 +1445,12 @@ export interface WorkItemSubmission {
   findings?: { title: string; detail: string }[];
   /** The outcome in one or two sentences, shown whole wherever a report is glanced at. */
   headline: string;
+  /**
+   * Ship the work once it lands on main: the project's declared ship command
+   * (gate.md `Ship:`, ship.ts) runs on the hub's machine with these end-user
+   * release notes.
+   */
+  ship?: { notes: string };
   /** The full report: what was done, and the real output of every command that proves it. */
   summary: string;
 }

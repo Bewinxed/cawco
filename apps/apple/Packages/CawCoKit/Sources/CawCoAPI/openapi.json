@@ -35987,7 +35987,7 @@
         ]
       },
       "ProjectGate": {
-        "description": "A project's gate: `none` with no gate.md; `declared`, its steps (none\nwhen its block names none) and its `Caw edits:` globs when it lists them\n(hub lead-gate.ts); `unreadable`, what is wrong with it.",
+        "description": "A project's gate: `none` with no gate.md; `declared`, its steps (none\nwhen its block names none), its `Caw edits:` globs when it lists them\n(hub lead-gate.ts) and its `Ship:` command when it declares one (hub\nship.ts); `unreadable`, what is wrong with it.",
         "anyOf": [
           {
             "type": "object",
@@ -36023,6 +36023,9 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "ship": {
+                "type": "string"
               }
             },
             "required": [

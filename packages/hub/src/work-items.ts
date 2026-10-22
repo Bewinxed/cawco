@@ -172,6 +172,7 @@ import {
   writeFolderFiles,
 } from "./project-folder";
 import { placesChanged } from "./project-placements";
+import { shipLanded } from "./ship";
 import type { Todo } from "./task-file";
 import type { TodoChanges } from "./tasks";
 import { unwatchedMode } from "./unwatched-mode";
@@ -845,6 +846,8 @@ export interface WorkItemDeps {
    * kept at the hub goes now, in order (server.ts `releaseOwed`).
    */
   readonly finishOver: (instanceId: string) => void;
+  /** The machine the hub runs on, once read (server.ts `ownMachineIdRead`): where a project ships from (ship.ts). */
+  readonly hubMachineId: () => string | undefined;
   /**
    * THE gate on input to a session (server.ts `inputRefusal`): why a message
    * from `origin` may not reach it now, or nothing when it may.
@@ -1995,6 +1998,7 @@ export const createWorkItems = ({
   designHold,
   end,
   finishOver,
+  hubMachineId,
   itemEnded,
   lifetime,
   pauses,
@@ -6819,14 +6823,18 @@ export const createWorkItems = ({
         ? await collectOutputs(workspace, item)
         : { ok: true, line: "" };
     const failure = failureOf(landing, collected);
+    const shipped =
+      landing.kind === "done" && !failure && submission.ship
+        ? `\n\n${await shipWords(item, landing, submission.ship.notes)}`
+        : "";
     const body = finishedReport(
       submission.summary,
       landing,
       collected,
-      `${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`
+      `${await changesSince(workspace, item)}${findingsBlock(submission.findings)}${shipped}`
     );
     const lines = landingGateLines(landing);
-    const gateSaid = lines ? `\n\nLanding gate:\n${lines}` : "";
+    const gateSaid = `${lines ? `\n\nLanding gate:\n${lines}` : ""}${shipped}`;
     const ended = finish(db.workItem(item.id) ?? item, {
       ...(failure ? { state: "failed", error: failure } : { state: "done" }),
       result: body,
@@ -6838,6 +6846,43 @@ export const createWorkItems = ({
     });
     const held = reportOrHold(row, ended, body, submission.headline);
     return landedText(landing, collected, gateSaid, held);
+  };
+
+  /**
+   * What shipping a landed item said (ship.ts): its project's `Ship:`
+   * command run on the hub's machine with the landed commit and `notes`, or
+   * why it did not run.
+   */
+  const shipWords = async (
+    item: WorkItemRow,
+    landing: Extract<Landed, { kind: "done" }>,
+    notes: string
+  ): Promise<string> => {
+    const sha = landing.landed?.sha;
+    if (!(item.lands === "main" && landing.landed?.onto && sha)) {
+      return "Not shipped: only work that lands on main ships, and this item put nothing there.";
+    }
+    const declared = item.projectId
+      ? await projectGate(item.projectId)
+      : ({ kind: "none" } as const);
+    if (!(declared.kind === "declared" && declared.ship && item.projectId)) {
+      return `Not shipped: this project's ${GATE_FILE} declares no Ship: command, so the hub has nothing to ship it with. The nightly ships it.`;
+    }
+    const hub = hubMachineId();
+    const checkout = hub ? repositoryOn(item.projectId, hub) : undefined;
+    if (!checkout) {
+      return "Not shipped: the hub's machine holds no checkout of this project to run its Ship: command in. The nightly ships it.";
+    }
+    try {
+      return await shipLanded({
+        checkout,
+        command: declared.ship,
+        commit: sha,
+        notes,
+      });
+    } catch (error) {
+      return `Not shipped: ${error instanceof Error ? error.message : String(error)}`;
+    }
   };
 
   /** The paths of the workspace's changes against its target, for the steps that run `on:` some. */

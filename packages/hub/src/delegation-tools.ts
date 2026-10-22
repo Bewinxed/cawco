@@ -753,6 +753,12 @@ export function handoffTools(deps: HandoffDeps) {
           .object({ command: z.string(), error: z.string() })
           .optional()
           .describe("The exact command and error."),
+        ship: z
+          .object({ notes: z.string().trim().min(1) })
+          .optional()
+          .describe(
+            "Release it once it lands on main, with end-user notes: the project's gate.md Ship: command runs it. Your call."
+          ),
       },
       (request) => actions.finishItem(request),
       sentence

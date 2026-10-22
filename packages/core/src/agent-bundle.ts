@@ -8,11 +8,11 @@
  * requirement is its cdhash, so a bare build was a new client to TCC on every
  * update. A bundle's grant is keyed on its identifier, `dev.cawco.agent`, and
  * its designated requirement, which names that identifier and the team's
- * Developer ID (scripts/release.ts, scripts/binary/sign-agent-bundle.sh) and
+ * Developer ID (scripts/release.ts, scripts/binary/sign-agent-bundle.ts) and
  * never the code or the path. So every build is its own signed bundle,
- * `versions/<v>/CawCo Agent.app`, shipped in the release exactly as the Mac
- * signed it, and the grant follows each update; TCC shows one row, "CawCo
- * Agent".
+ * `versions/<v>/CawCo Agent.app`, shipped in the release exactly as the
+ * release signed it, and the grant follows each update; TCC shows one row,
+ * "CawCo Agent".
  *
  * A Developer ID, hardened-runtime executable signed as a bundle's main
  * executable is killed when run outside that bundle (`load code signature

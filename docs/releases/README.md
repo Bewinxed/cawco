@@ -1,15 +1,22 @@
 # Release notes
 
 Every build carries its own notes. A stable release reads `docs/releases/<version>.md`.
-A nightly takes them from a file: `bun scripts/release.ts --commit <sha> --channel nightly
---output /abs/path --notes /abs/notes.md`. Every TestFlight build takes them too:
+A nightly takes them from a file: `bash scripts/ship.sh --commit <sha> --notes /abs/notes.md`,
+which the nightly and the hub (an item whose `finish_item` asks to `ship`, through gate.md's
+`Ship:` line) both run. It starts `scripts/release.ts --publish` from a clean worktree of the
+commit as a user unit of its own and returns. Every TestFlight build takes notes too:
 `apps/apple/scripts/testflight.sh --commit <sha> --notes <file>`. To correct a build that
 has already shipped, run `testflight.sh --set-notes <build> <file>`.
 
-Both build exactly the commit they name, which must be on origin/main, each in a worktree of
-it under `~/.worktrees/release-<sha>…` that it makes and removes itself, and both refuse to
-run from a checkout with uncommitted or untracked work. Run them from any clean checkout; no
-wrapper script is needed around them.
+Both build exactly the commit they name, which must be on origin/main, in worktrees of it
+under `~/.worktrees/release-<sha>…` that they make and remove themselves, and both refuse to
+run from a checkout with uncommitted or untracked work. `bun scripts/release.ts … --dry-run`
+prints the release's step graph, what runs beside what, without running it.
+
+A release host is readied from a fresh clone by `bash scripts/release-setup.sh` (the pinned
+Bun, rcodesign, the system packages; `--check` says what is missing) and
+`bash scripts/release-setup.sh --import-secrets dir:/path` (the signing secrets, from their
+one source).
 
 What every shipped build came from is recorded as a git tag on its commit: a published
 nightly as `nightly-<count>-<commit>` (`release.ts --publish`), a TestFlight build as
