@@ -33,12 +33,9 @@
       <div class="sash sash-w" id="sashW" role="separator" aria-orientation="vertical" aria-label="Resize panel width" tabindex="0" data-edge="w"></div>
       <div class="sash sash-h" id="sashH" role="separator" aria-orientation="horizontal" aria-label="Resize graph height" tabindex="0" data-edge="h"></div>
       <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize panel" tabindex="0" data-edge="wh"></div>
-      <!-- The resize handle (html[data-handle]): one lit arm per resizable edge, and the bead design's marks. -->
-      <span class="lit" data-arm="w" aria-hidden="true"></span>
-      <span class="lit" data-arm="h" aria-hidden="true"></span>
-      <span class="bead" data-arm="w" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg></span>
-      <span class="bead" data-arm="h" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M9 6l3-3 3 3M9 18l3 3 3-3"/></svg></span>
-      <span class="bead" data-arm="wh" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19L19 5M5 14v5h5M14 5h5v5"/></svg></span>
+      <!-- The resize handle (round 28): iPadOS 26's window handle, a short arc concentric with the panel's
+           corner, at the corner that resizes it. One path; a drag morphs it into the tapered highlight. -->
+      <svg class="resize-handle" id="gripC" aria-hidden="true"><path/></svg>
       <!-- Two graphs stacked: the foot edge between them splits their heights. -->
       <div class="sash sash-s" id="sashS" role="separator" aria-orientation="horizontal" aria-label="Split the graphs' heights" tabindex="0" data-edge="s"></div>
       <span class="lit" data-arm="s" aria-hidden="true"></span>
@@ -46,8 +43,7 @@
 
     <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The kept move">
       <div class="sash sash-d" id="sashD" role="separator" aria-orientation="horizontal" aria-label="Resize the dock's height" tabindex="0" data-edge="d"></div>
-      <span class="lit" data-arm="d" aria-hidden="true"></span>
-      <span class="bead" data-arm="d" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M9 6l3-3 3 3M9 18l3 3 3-3"/></svg></span>
+      <svg class="resize-handle" id="gripD" aria-hidden="true"><path/></svg>
       <div class="dock-body" id="dockBody"></div>
     </section>
   </div>
