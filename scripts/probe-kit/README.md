@@ -102,12 +102,16 @@ scratch copy, to prove an approve on.
 
 ## Showing the owner what changed
 
-`--review <dir>` (say `.probe-review/<spec>`) writes the owner's review page
-when a capture differs from its baseline: one phone page, one decision per
-surface, "Approved look" or "New look" on the same cropped pictures
-(`review.ts`, `scripts/probe-review/README.md`). The run prints the
-`--approve` command each "New look" pick runs; the manifest carries it too.
-Open the folder with `artifact_create(kind: "preview", dir)`.
+A capture that differs from its approved baseline FAILs the run.
+`--review <dir>` (say `.probe-review/<spec>`) also writes the owner's review
+page: the new captures as candidate baselines under `<dir>/candidates/`, apart
+from the approved set, and one page grouped by surface, each capture as its
+approved baseline, its new capture and the crop of what changed, with one
+Approve or Reject per surface (`review.ts`, `scripts/probe-review/README.md`).
+Open the folder with `artifact_create(kind: "preview", dir)`; the page's
+`artifact_read` answer, saved as JSON, goes to
+`bun scripts/probe-kit/approve-review.ts <dir> <picks.json>`, which moves only
+the approved surfaces' candidates over the approved baselines.
 
 ## The style snapshot and the hub tape
 

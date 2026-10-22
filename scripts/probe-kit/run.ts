@@ -44,9 +44,9 @@
  * instead: a scratch copy, to prove an approve on.
  *
  * `--review <dir>` writes the owner's review page (review.ts,
- * `scripts/probe-review/`) when a capture differs from its baseline: one
- * decision per surface, the approved look or the new one, and prints the
- * `--approve` command each "New look" pick runs.
+ * `scripts/probe-review/`) when a capture differs from its baseline: the new
+ * captures as candidate baselines, apart from the approved set, one Approve
+ * or Reject per surface, and approve-review.ts to move the approved ones.
  *
  * What each level proves is the fleet's rule 7: state and geometry first
  * (geom.ts), motion by seeking the clock (anim.ts), regressions by pixel

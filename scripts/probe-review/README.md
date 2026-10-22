@@ -1,53 +1,83 @@
 # Probe review page
 
-How pixel baselines that differ reach the owner: one phone page of a few
-decisions, never crops in a folder. `index.html` is backlot's
-`scripts/probe-review/index.html`, unchanged; it reads `manifest.json` beside it.
+How captures that differ from their approved baselines reach the owner: one
+page, every surface on it, never crops in a folder. `index.html` reads
+`manifest.json` beside it.
 
 ## Make one
 
 ```sh
-bun scripts/probe-kit/run.ts web <spec> --review .probe-review/<spec>
+bun scripts/probe-kit/run.ts web <spec> --review <dir>
 ```
 
-When a capture differs from its approved baseline, `--review <dir>` writes
-`<dir>/index.html`, `<dir>/manifest.json` and `<dir>/img/`, and prints, per
-decision, the `--approve` command its "New look" pick runs. `.probe-review/`
-is in `.gitignore`. The parent opens the folder with
-`artifact_create(kind: "preview", dir)` and reads the picks with `artifact_read`.
+A capture that differs from its approved baseline FAILs the run. With
+`--review <dir>` the run also writes:
 
-- **One decision per surface**: a capture's name less its viewport and theme
-  (`session-card-desk-dark` and `session-card-phone-light` are one surface).
-- **Two candidates**: "Approved look" (`keep`, the baseline today) and "New
-  look" (`approve`, this run's capture). `recommended` is unset: the owner decides.
-- **The same pictures for each**: one per viewport and theme, cut to the region
-  that changed with room round it, made jpg for a phone with ffmpeg
-  (`scale='min(1024,iw)':-2`, `-q:v 3`). Hold a "New look" picture to see the
-  approved one.
+- `<dir>/candidates/web/<spec>/<entry>.png`: each new capture at full size, the
+  candidate baseline, laid out as `scripts/probe-kit/baselines/` is. The
+  approved set is not touched.
+- `<dir>/img/`: per capture, the approved baseline, the new capture and
+  pixelmatch's picture of what changed, all cut to the same region with room
+  round it, made jpg with ffmpeg (`scale='min(1024,iw)':-2`, `-q:v 3`).
+- `<dir>/changed.json`: the run's record, and `<dir>/manifest.json` from it.
+- `<dir>/index.html`: this page.
+
+A state with no approved baseline yet is a NOTE in the run and an entry on the
+page with no baseline to hold it to.
+
+Which commit on main made each surface's change is the reviewer's finding:
+write `<dir>/commits.json`, `{ "<spec>:<surface>": { "sha": "…", "subject": "…" } }`,
+then `bun scripts/probe-kit/review.ts <dir>` writes the manifest again with them.
+
+The parent opens the folder with `artifact_create(kind: "preview", dir)`.
+
+## The page
+
+- **One section per surface** (the catalogue's surface, `surfaces/catalogue.ts`),
+  with the commit that changed it.
+- **Each capture**: approved baseline, new capture, what changed. Hold the new
+  capture to see the approved one in its place.
+- **One Approve or Reject per surface**: a `data-cawco-choice="<spec>:<surface>"`
+  with `data-option="approve"` and `"reject"`, which the CawCo overlay keeps on
+  the hub, so `artifact_read` answers the picks in its `state`.
+
+## Approving
+
+Save the page's `artifact_read` answer as JSON, then:
+
+```sh
+bun scripts/probe-kit/approve-review.ts <dir> <picks.json>
+```
+
+Every approved surface's candidates move over the approved baselines; a
+rejected or unpicked surface is left as it is. A pick on a surface the
+manifest does not hold, or an option other than approve or reject, stops it
+before anything moves. `PROBE_BASELINES=<dir>` writes a scratch copy instead.
 
 ## manifest.json
 
 ```json
 {
-  "id": "tab-strip-1760600000000",
-  "title": "Tab strip: pixels that changed",
-  "decisions": [
+  "id": "surfaces-4d1159b9a",
+  "title": "Surfaces at 4d1159b9a: captures that differ from their approved baselines",
+  "base": "4d1159b9a81fafc6cec7dbcd6f81de471f401a58",
+  "surfaces": [
     {
-      "id": "tab-strip:rest",
-      "question": "Tab strip at rest: keep the approved look or take the new one?",
-      "approve": { "spec": "tab-strip", "entries": ["rest-light", "rest-dark"] },
-      "candidates": [
+      "id": "surfaces:rail",
+      "spec": "surfaces",
+      "surface": "rail",
+      "label": "Rail",
+      "commit": { "sha": "51a847eed…", "subject": "Stop jobs park on the project's rail row alone; …" },
+      "entries": [
         {
-          "id": "keep",
-          "label": "Approved look",
-          "result": "What the baseline holds today; the new drawing fails the check until it changes back.",
-          "items": [{ "label": "Light", "before": "img/tab-strip-rest-light-approved.jpg", "after": "img/tab-strip-rest-light-approved.jpg" }]
-        },
-        {
-          "id": "approve",
-          "label": "New look",
-          "result": "What the code draws now; picking it makes this the approved look.",
-          "items": [{ "label": "Light", "before": "img/tab-strip-rest-light-approved.jpg", "after": "img/tab-strip-rest-light-new.jpg" }]
+          "entry": "rail-rest-desk-light",
+          "label": "rest · desk · light",
+          "before": "img/surfaces-rail-rest-desk-light-approved.jpg",
+          "after": "img/surfaces-rail-rest-desk-light-new.jpg",
+          "diff": "img/surfaces-rail-rest-desk-light-diff.jpg",
+          "candidate": "candidates/web/surfaces/rail-rest-desk-light.png",
+          "pixels": 5120,
+          "size": null
         }
       ]
     }
@@ -55,5 +85,5 @@ is in `.gitignore`. The parent opens the folder with
 }
 ```
 
-`approve` is the probe kit's own field (the page ignores it): the entries a
-"New look" pick approves, as `--approve <spec>:<entry>,…` names them.
+`before` and `diff` are null where no baseline is approved yet; `diff` and
+`pixels` are null and `size` says `<baseline> → <capture>` where the size changed.
