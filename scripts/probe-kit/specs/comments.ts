@@ -7430,14 +7430,19 @@ const textBoxesOf = async (
       }
       const range = document.createRange();
       range.selectNodeContents(node);
+      // What the frame shows of each line: a line scrolled half out of it is clipped at its edge, not drawn over what stands beyond.
       for (const r of range.getClientRects()) {
-        if (r.width > 0 && r.bottom > 0 && r.top < innerHeight) {
+        const top = Math.max(0, r.top);
+        const bottom = Math.min(innerHeight, r.bottom);
+        const left = Math.max(0, r.left);
+        const right = Math.min(innerWidth, r.right);
+        if (bottom > top && right > left) {
           out.push({
             first: !!first?.contains(node),
-            x: r.x,
-            y: r.y,
-            w: r.width,
-            h: r.height,
+            x: left,
+            y: top,
+            w: right - left,
+            h: bottom - top,
           });
         }
       }
@@ -7457,13 +7462,59 @@ const meets = (
   b: { x: number; y: number; w: number; h: number }
 ) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
-/** One look at the Changed since you looked bar: the page scrolled to its top or its middle, the bar's box against the frame, the page's text and the pane. */
+/**
+ * One look at the Changed since you looked bar: the page scrolled to its top
+ * or its middle, the bar's box against the frame, the page's text and the
+ * pane. A new width can lay the panel out again and its frame with it, so
+ * each look takes the pane's frame as it stands, and looks again when the
+ * frame it read went away under it.
+ */
 const barLook = async (
+  on: On,
+  id: string,
+  at: string,
+  scroll: "top" | "mid"
+): Promise<BarLook> => {
+  for (let tries = 0; ; tries += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: one try, then the next once the frame went away
+    const frame = await frameHolding(on.page, id, `the changed page at ${at}`);
+    if (!frame) {
+      return { ...NO_LOOK, at, bar: "no frame" };
+    }
+    try {
+      return await barLookIn(on, frame, at, scroll);
+    } catch (error) {
+      if (tries >= 2) {
+        return { ...NO_LOOK, at, bar: String(error) };
+      }
+      await settle(on.page, 400);
+    }
+  }
+};
+
+interface BarLook {
+  above: boolean;
+  at: string;
+  bar: unknown;
+  firstOverlaps: number;
+  overflows: number;
+  overlaps: number;
+}
+
+const NO_LOOK = {
+  above: false,
+  firstOverlaps: -1,
+  overlaps: -1,
+  overflows: -1,
+} as const;
+
+const barLookIn = async (
   on: On,
   frame: Frame,
   at: string,
   scroll: "top" | "mid"
-) => {
+): Promise<BarLook> => {
+  await frame.waitForSelector("#a", { timeout: 10_000 });
   await frame.evaluate((where) => {
     const room = document.scrollingElement;
     if (room) {
@@ -7510,43 +7561,28 @@ const barLook = async (
  */
 const changesBarSweep = async (on: On, id: string) => {
   const was = on.page.viewportSize();
-  const looks: {
-    at: string;
-    above: boolean;
-    firstOverlaps: number;
-    overlaps: number;
-    overflows: number;
-    bar: unknown;
-  }[] = [];
+  const looks: BarLook[] = [];
   for (const width of SWEEP_WIDTHS) {
     // biome-ignore lint/performance/noAwaitInLoops: one width, then the next
     await on.page.setViewportSize({ width, height: 900 });
-    const frame = await frameHolding(
-      on.page,
-      id,
-      `the changed page at ${width}`
-    );
-    if (!frame) {
-      looks.push({
-        at: `${width}`,
-        above: false,
-        firstOverlaps: -1,
-        overlaps: -1,
-        overflows: -1,
-        bar: "no frame",
-      });
-      continue;
-    }
-    await settle(on.page, 400);
+    await settle(on.page, 600);
     for (const scroll of ["top", "mid"] as const) {
       // biome-ignore lint/performance/noAwaitInLoops: one scroll, then the next
-      looks.push(await barLook(on, frame, `${width} ${scroll}`, scroll));
+      looks.push(await barLook(on, id, `${width} ${scroll}`, scroll));
     }
   }
   if (was) {
     await on.page.setViewportSize(was);
   }
-  await settle(on.page, 400);
+  await settle(on.page, 600);
+  const back = await frameHolding(on.page, id, "the changed page, swept");
+  await back
+    ?.evaluate(() => {
+      if (document.scrollingElement) {
+        document.scrollingElement.scrollTop = 0;
+      }
+    })
+    .catch(() => undefined);
   const overlapTotal = looks.reduce(
     (n, one) => n + Math.max(0, one.overlaps),
     0
@@ -7565,6 +7601,7 @@ const changesBarSweep = async (on: On, id: string) => {
       overflowTotal === 0,
     `overlap total ${overlapTotal}; overflow total ${overflowTotal}; ${JSON.stringify(looks)}`
   );
+  return back;
 };
 
 const changedChecks = async (on: On) => {
@@ -7644,10 +7681,11 @@ const changedChecks = async (on: On) => {
     `contrast ${JSON.stringify(readable)}; items ${JSON.stringify(items)}; washes ${JSON.stringify(before?.washes)}; wash ${JSON.stringify(washRgb)} done ${JSON.stringify(doneRgb)}; tag ${said}`
   );
 
-  await changesBarSweep(on, id);
+  // The sweep lays the panel out at three widths and back: the steps read the frame as it stands after.
+  const held = (await changesBarSweep(on, id)) ?? frame;
 
   // A step: #b brought out and chosen, seen in the doc, its wash fading off over --dur-fade.
-  await frame.evaluate(() => {
+  await held.evaluate(() => {
     const leaving: string[] = [];
     (window as unknown as { probeLeaving: string[] }).probeLeaving = leaving;
     new MutationObserver((records) => {
@@ -7666,17 +7704,17 @@ const changedChecks = async (on: On) => {
   await on.page.locator('[data-slot="change-next"]').click();
   const stepped = await until(
     "#b looked at",
-    () => changedRead(frame),
+    () => changedRead(held),
     (read) =>
       read.seen.includes("#b") &&
       !read.washes.some((wash) => wash.anchor === "#b"),
     5000
   ).catch(() => null);
-  const leaving = await frame.evaluate(
+  const leaving = await held.evaluate(
     () => (window as unknown as { probeLeaving: string[] }).probeLeaving
   );
-  const chosen = await outlineOf(frame);
-  const b = await boxIn(frame, "#b");
+  const chosen = await outlineOf(held);
+  const b = await boxIn(held, "#b");
   const counted = (await tag.textContent().catch(() => null))?.trim();
   on.kit.check(
     'changed: a step onto #b chooses it (the outline over it), marks it seen in the doc\'s `seen`, fades its wash off over --dur-fade (200ms), and the tag reads "1 of 3"',
@@ -7691,7 +7729,7 @@ const changedChecks = async (on: On) => {
   await on.page.locator('[data-slot="change-next"]').click();
   const cleared = await until(
     "every change looked at",
-    () => changedRead(frame),
+    () => changedRead(held),
     (read) => read.seen.length === 3 && read.washes.length === 0,
     5000
   ).catch(() => null);
