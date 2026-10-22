@@ -2502,6 +2502,18 @@ export function followAccounts(follower: () => void): void {
   accountsFollower = follower;
 }
 
+/** Who takes each new accounts read as it lands (see {@link takeAccounts}). */
+let accountsTaker: ((view: AccountsView) => void) | null = null;
+
+/**
+ * Calls `taker` with each accounts read that changed what the hub said, as
+ * it is kept: the sign-ins under way in this tab take up the link or code
+ * the hub kept for them (accounts/flows.svelte.ts). One taker.
+ */
+export function takeAccounts(taker: (view: AccountsView) => void): void {
+  accountsTaker = taker;
+}
+
 /**
  * Reads the hub's accounts of every provider, their sign-ins and catalogs,
  * and the providers the fleet's machines know; a failed read keeps what was
@@ -2522,6 +2534,7 @@ export async function readAccounts(): Promise<void> {
   }
   if (view && !equal(state.accounts, view)) {
     state.accounts = view;
+    accountsTaker?.(view);
   }
   if (providers && !equal(state.accountProviders, providers)) {
     state.accountProviders = providers;

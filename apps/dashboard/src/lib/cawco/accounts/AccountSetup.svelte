@@ -91,7 +91,6 @@
     flowKey,
     heldFlow,
     pasteFlow,
-    pendingOf,
   } from "./flows.svelte";
   import KeyPanel from "./KeyPanel.svelte";
   import {
@@ -282,15 +281,6 @@
           deviceFlow(flowKey(under, machineId), ensureAccount, machineId, id);
         }
       });
-    }
-  });
-  // The accounts read since a flow was made: an idle one takes up the
-  // sign-in the hub says is under way, its same link or code.
-  $effect(() => {
-    for (const machine of machines) {
-      flowOn(machine.machineId)?.resume(
-        pendingOf(createdId, machine.machineId)
-      );
     }
   });
   /** This setup's flows let go: another row was picked, or it was cancelled. */

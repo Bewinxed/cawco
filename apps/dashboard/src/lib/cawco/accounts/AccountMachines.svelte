@@ -122,23 +122,18 @@
     }
   }
 
-  // A popover a reload opened again draws its sign-in, taken up from the
-  // hub where it was under way.
-  $effect(() => {
+  /**
+   * A popover a reload opens again draws its sign-in from its first frame:
+   * the flow is made as the page is, taken up from the hub where it was
+   * under way. Only a press opens a popover after that (`setOpen`), and an
+   * accounts read that lands later is taken up in flows.svelte.ts.
+   */
+  function reopen() {
     if (openOn !== null && !key) {
       flowOn(openOn);
     }
-  });
-
-  // The accounts read after a flow was made: an idle one takes up the
-  // sign-in the hub says is under way.
-  $effect(() => {
-    for (const machine of machines) {
-      heldFlow(flowKey(account.id, machine.machineId))?.resume(
-        pendingOf(account.id, machine.machineId)
-      );
-    }
-  });
+  }
+  reopen();
 
   const landed = (machineId: string): boolean =>
     key

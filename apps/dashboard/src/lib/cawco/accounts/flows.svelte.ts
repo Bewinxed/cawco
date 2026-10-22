@@ -6,14 +6,16 @@
  * code's wait goes on, since the hub only finishes it while someone waits),
  * and drawing it again draws the same flow, link or code as it was. A flow
  * made here takes up what the hub kept of a sign-in already under way
- * (`AccountsView.pending`), so a reload shows the same link or code again.
+ * (`AccountsView.pending`), so a reload shows the same link or code again;
+ * an idle one already made takes it up as the accounts read that carries it
+ * lands (`takeAccounts`), never from an effect of the surface that draws it.
  *
  * A setup that has not made its account yet keys its flows by `new:…`, and
  * hands them to the account's key once it is made (`adoptFlows`).
  */
 import type { PendingAccountSignin } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
-import { cawco } from "../client.svelte";
+import { cawco, takeAccounts } from "../client.svelte";
 import { DeviceFlow } from "./device.svelte";
 import { SigninFlow } from "./signin.svelte";
 
@@ -21,6 +23,14 @@ const flows = new SvelteMap<string, SigninFlow | DeviceFlow>();
 
 export const flowKey = (accountId: string, machineId: string): string =>
   `${accountId}:${machineId}`;
+
+// Each accounts read: the flow under each sign-in the hub says is under way
+// takes up its link or code (a flow already under way keeps its own).
+takeAccounts((view) => {
+  for (const pending of view.pending) {
+    flows.get(flowKey(pending.accountId, pending.machineId))?.resume(pending);
+  }
+});
 
 /** What the hub kept of a sign-in under way for the account on the machine. */
 export const pendingOf = (

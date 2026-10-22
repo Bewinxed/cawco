@@ -18,6 +18,12 @@
  * storing a login for the account's config dir; `auth status` reads it.
  * One leg per engine, Chromium and WebKit, each on an account of its own.
  *
+ * Before the code is pasted, the page is reloaded with the sign-in waiting
+ * on it: the popover opens again on the same link, the hub's pending one,
+ * drawn with its sign-in from its first frame (the flow made as the page
+ * is, not by an effect after it), its link drawn once and never redrawn,
+ * and the code pasted after the reload signs in.
+ *
  *   bun scripts/probe-kit/run.ts account-signin-lands
  */
 import { mkdir, writeFile } from "node:fs/promises";
@@ -92,7 +98,68 @@ for await (const line of console) {
 `;
 
 interface AccountsRead {
+  pending: {
+    accountId: string;
+    challenge: { url?: string };
+    machineId: string;
+  }[];
   signins: { accountId: string; machineId: string; state: string }[];
+}
+
+/** What {@link watchSignin} counted of the sign-in popover's draws since the page loaded. */
+interface SigninDraws {
+  /** Draws of the popover holding its title and no sign-in. */
+  empty: number;
+  /** Times its link was taken out. */
+  gone: number;
+  /** Draws of its sign-in with no link: the flow drawn idle before it took up the hub's link. */
+  idle: number;
+  /** Times its link was put in the page. */
+  links: number;
+}
+
+/**
+ * In the page, from before its own scripts: every DOM change, what the
+ * sign-in popover then holds. A popover reopened without its flow, or on a
+ * flow that took up the hub's link only after it drew, shows here as a draw
+ * without its sign-in, an idle draw, or its link put in more than once.
+ * (Svelte flushes an effect's write-back within the same flush, so an
+ * effect that converges in one more run draws nothing extra; that is held
+ * by the page's code, which makes the flow as the page is: no effect on it
+ * writes.)
+ */
+function watchSignin(): void {
+  const seen = { empty: 0, idle: 0, links: 0, gone: 0 };
+  (globalThis as { __signinDraws?: typeof seen }).__signinDraws = seen;
+  const LINK_SEL = 'a[href*="/oauth/authorize"]';
+  const hasLink = (node: Node) =>
+    node instanceof Element &&
+    (node.matches(LINK_SEL) || node.querySelector(LINK_SEL) !== null);
+  const links = (nodes: NodeList) =>
+    [...nodes].filter((node) => hasLink(node)).length;
+  /** What the popover holds now, if it is drawn. */
+  const look = (pop: Element) => {
+    if (!pop.querySelector('[data-slot="title"]')) {
+      return;
+    }
+    const panel = pop.querySelector('[data-slot="panel"]');
+    if (!panel) {
+      seen.empty += 1;
+    } else if (!panel.querySelector(LINK_SEL)) {
+      seen.idle += 1;
+    }
+  };
+  new MutationObserver((records) => {
+    for (const record of records) {
+      seen.links += links(record.addedNodes);
+      seen.gone += links(record.removedNodes);
+    }
+    for (const pop of document.querySelectorAll(
+      '[id^="signin-"][id$="-popover"][role="presentation"]'
+    )) {
+      look(pop);
+    }
+  }).observe(document, { childList: true, subtree: true });
 }
 
 /** An account-on-machine row's trigger: "Sign in <account> on <machine>". */
@@ -128,7 +195,7 @@ async function leg(
     provider: "anthropic",
     kind: "subscription",
   });
-  const page = await kit.page("desk", { engine });
+  const page = await kit.page("desk", { engine, init: [watchSignin] });
   const errors = errorsOf(page);
   await open(page, `${base}/config/accounts/${made.id}`, "main");
   await page.getByRole("button", { name: SIGN_IN_ON }).first().click();
@@ -137,16 +204,51 @@ async function leg(
     .getByRole("button", { name: accountsWords.signin.openLink })
     .click();
   await (await popups).close();
-  await until(
-    `${engine}: the machine's link shown`,
-    () =>
-      page
-        .getByRole("link", { name: accountsWords.signin.openLink })
-        .getAttribute("href")
-        .catch(() => null),
-    (href) => href === LINK,
-    60_000
+  const linkShown = (within: number) =>
+    until(
+      `${engine}: the machine's link shown`,
+      () =>
+        page
+          .getByRole("link", { name: accountsWords.signin.openLink })
+          .getAttribute("href")
+          .catch(() => null),
+      (href) => href === LINK,
+      within
+    );
+  await linkShown(60_000);
+
+  // A reload with the sign-in waiting on its code.
+  await page.reload();
+  const reopened = await linkShown(30_000)
+    .then(() => true)
+    .catch(() => false);
+  // Anything an effect would draw after the mount has drawn by now.
+  await page.waitForTimeout(1500);
+  const draws = await page.evaluate(
+    () => (globalThis as { __signinDraws?: SigninDraws }).__signinDraws
   );
+  const hubLink = (await fleet.api<AccountsRead>("/api/accounts")).pending.find(
+    (one) => one.accountId === made.id && one.machineId === MACHINE
+  )?.challenge.url;
+  const loopAfterReload = errors.filter((one) =>
+    one.includes("effect_update_depth_exceeded")
+  );
+  check(
+    `${engine} · a reload with the sign-in waiting on its code opens the popover again on the same link, the hub's pending one`,
+    reopened && hubLink === LINK,
+    `reopened ${reopened}; hub's link ${hubLink === LINK}`
+  );
+  check(
+    `${engine} · reopened, the popover is drawn with its sign-in from its first frame and its link drawn once, never redrawn; no effect loop`,
+    draws !== undefined &&
+      draws.empty === 0 &&
+      draws.idle === 0 &&
+      draws.links === 1 &&
+      draws.gone === 0 &&
+      loopAfterReload.length === 0,
+    `${JSON.stringify(draws)}; effect_update_depth_exceeded ${loopAfterReload.length}`
+  );
+
   const field = page.getByRole("textbox", {
     name: accountsWords.signin.codeLabel,
   });
