@@ -640,6 +640,7 @@
 @custom-variant slot-value (&[data-slot="value"]);
 @custom-variant slot-view-bar (&[data-slot="view-bar"]);
 @custom-variant slot-view-calendar (&[data-slot="view-calendar"]);
+@custom-variant slot-view-canvas (&[data-slot="view-canvas"]);
 @custom-variant slot-wall (&[data-slot="wall"]);
 @custom-variant slot-want (&[data-slot="want"]);
 @custom-variant slot-well (&[data-slot="well"]);
