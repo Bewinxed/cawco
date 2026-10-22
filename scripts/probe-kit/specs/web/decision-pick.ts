@@ -65,6 +65,10 @@
  *    390, each at ½ of the fold's held clock, then played on: the scroll
  *    stays where the reader put it on every frame, and the fold and the
  *    flight still land (L489, L491-492).
+ * 9. In WebKit at 1440, with motion and with less: Continue's foot, Change
+ *    and the decided chips' line each come in by one animation on itself
+ *    (motion/curves `appearOnMount`), never a @starting-style transition,
+ *    which WebKit sometimes skips for an element just added.
  *
  *   bun scripts/probe-kit/run.ts web decision-pick
  */
@@ -77,6 +81,7 @@ import {
   pageReach,
   startDecisionStage,
 } from "../../decision-embeds";
+import { durOf, oneEntrance, recordRuns, runsOn } from "../../entrances";
 import { traceMain } from "../../frames";
 import { type Kit, type Spec, settle } from "../../kit";
 
@@ -2562,6 +2567,85 @@ async function costLeg(
   await page.close();
 }
 
+/**
+ * 9. In WebKit, at the desk, with motion and with less: what a pick and its
+ * Continue bring onto the card comes in by one animation on itself
+ * (motion/curves `appearOnMount`), never a @starting-style transition,
+ * which WebKit sometimes skips for an element just added
+ * (bugs.webkit.org 275184). Continue's foot over --dur-morph (--dur-fade
+ * with less motion); Change, as the card moves to its decided line, over
+ * --dur-settle (--dur-fade); the decided chips' line, whose chips fly home
+ * with motion, runs nothing of its own then and fades over --dur-fade with
+ * less motion.
+ */
+async function entranceLeg(kit: Kit, url: string, reduced: boolean) {
+  const label = `WebKit 1440 ${reduced ? "reduced motion" : "with motion"}`;
+  const page = await kit.page("desk", {
+    engine: "webkit",
+    theme: "light",
+    init: [CAWCO_BRIDGE],
+  });
+  await page.emulateMedia({
+    reducedMotion: reduced ? "reduce" : "no-preference",
+  });
+  await page.addInitScript(recordRuns);
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(page, 600);
+  await toOption(page, "path", "direct");
+  await pressOn(page.locator('#decision-path [data-option="direct"]'), "desk");
+  await page.waitForSelector("#decision-path [data-slot=decision-foot]");
+  await settle(page, 600);
+  const foot = await page.evaluate(runsOn, {
+    selector: "#decision-path [data-slot=decision-foot]",
+    pseudo: null,
+  });
+  await pressOn(page.locator("#decision-path [data-continue]"), "desk");
+  await page.waitForSelector("#decision-path [data-slot=decided]");
+  await settle(page, 900);
+  const change = await page.evaluate(runsOn, {
+    selector:
+      "#decision-path [data-slot=decision-head] span:has(> [data-change])",
+    pseudo: null,
+  });
+  const decided = await page.evaluate(runsOn, {
+    selector: "#decision-path [data-slot=decided]",
+    pseudo: null,
+  });
+  const [morph, settleMs, fade] = await Promise.all(
+    ["--dur-morph", "--dur-settle", "--dur-fade"].map((token) =>
+      page.evaluate(durOf, token)
+    )
+  );
+  const footMs = reduced ? fade : morph;
+  const changeMs = reduced ? fade : settleMs;
+  kit.check(
+    `9 ${label}: Continue's foot comes in by one animation on itself over ${reduced ? "--dur-fade" : "--dur-morph"} (${footMs}ms), never @starting-style`,
+    foot.length === 1 && oneEntrance(foot[0]?.runs ?? [], footMs),
+    JSON.stringify(foot)
+  );
+  kit.check(
+    `9 ${label}: Change comes in by one animation on itself as the card moves, over ${reduced ? "--dur-fade" : "--dur-settle"} (${changeMs}ms), never @starting-style`,
+    change.length === 1 && oneEntrance(change[0]?.runs ?? [], changeMs),
+    JSON.stringify(change)
+  );
+  kit.check(
+    reduced
+      ? `9 ${label}: the decided chips' line fades in by one animation on itself over --dur-fade (${fade}ms), never @starting-style`
+      : `9 ${label}: the decided chips' line runs nothing of its own (its chips fly home), and no @starting-style`,
+    decided.length === 1 &&
+      (reduced
+        ? oneEntrance(decided[0]?.runs ?? [], fade)
+        : (decided[0]?.runs.length ?? 1) === 0),
+    JSON.stringify(decided)
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "decision-pick",
   run: async (kit: Kit) => {
@@ -2586,6 +2670,9 @@ const spec: Spec = {
       {}
     );
     try {
+      for (const reduced of [false, true]) {
+        await entranceLeg(kit, stage.pageUrl(NAME, "light"), reduced);
+      }
       for (const { view, theme, label } of LEGS) {
         const url = stage.pageUrl(NAME, theme);
         await leg(kit, url, view, theme, label);

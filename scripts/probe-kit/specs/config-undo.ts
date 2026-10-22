@@ -28,6 +28,12 @@
  * Then the trash itself, through the hub: an entry outlives a hub restart;
  * one whose name was taken again answers 409 and the new item stays; one
  * whose window ran out answers 404, in words.
+ *
+ * And in WebKit at the desk: an edit left unsaved in a new hook puts the
+ * rail's unsaved dot on its row, which comes in by one animation on itself
+ * over --dur-control (ConfigRail, motion/curves `appearOnMount`), never a
+ * @starting-style transition, which WebKit sometimes skips for an element
+ * just added.
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
@@ -36,6 +42,7 @@ import { HOOK_TEMPLATES } from "../../../packages/core/src/hooks";
 import { RULE_TEMPLATES } from "../../../packages/core/src/rules";
 import type { Reply } from "../../scratch-fleet";
 import { Clock } from "../anim";
+import { durOf, oneEntrance, recordRuns, runsOn } from "../entrances";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const SKILL = "probe-undo";
@@ -248,10 +255,37 @@ const probe = async (kit: Kit) => {
   await rulesWaiting(on);
   await connection(on);
   await toastFade(on);
+  await unsavedEntrance(on);
   await page.close();
   await trash(on);
   await served.stop(true);
 };
+
+/**
+ * In WebKit at the desk: a new hook's first field typed into and left
+ * unsaved; the rail's dot on its row comes in by one animation on itself
+ * over --dur-control, never @starting-style.
+ */
+async function unsavedEntrance({ kit, base }: On) {
+  const page = await kit.page("desk", { engine: "webkit" });
+  await page.addInitScript(recordRuns);
+  await open(page, `${base}/config/hooks/new`, "main :is(input, textarea)");
+  await page
+    .locator("main :is(input:not([type=hidden]), textarea)")
+    .first()
+    .fill("Left unsaved");
+  const dot = 'a[data-slot="row"][href="/config/hooks"] [data-slot="unsaved"]';
+  await page.locator(dot).waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(500);
+  const ms = await page.evaluate(durOf, "--dur-control");
+  const seen = await page.evaluate(runsOn, { selector: dot, pseudo: null });
+  kit.check(
+    `unsaved dot, WebKit desk: it comes in by one animation on itself over --dur-control (${ms}ms), never @starting-style`,
+    seen.length === 1 && oneEntrance(seen[0]?.runs ?? [], ms),
+    JSON.stringify(seen)
+  );
+  await page.close();
+}
 
 /** What each part of the spec works on. */
 interface On {

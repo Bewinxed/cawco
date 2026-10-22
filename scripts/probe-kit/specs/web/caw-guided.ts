@@ -38,6 +38,10 @@
  *    (1280, 390), never under the head's actions.
  * 6. New project lands on the project's page with Caw's panel open on its
  *    Setup thread.
+ * 7. In WebKit at 1440, Caw's docked panel comes in by one animation on
+ *    itself, from its side as it fades, over --dur-panel (CawFloat,
+ *    motion/curves `appearOnMount`), never a @starting-style transition,
+ *    which WebKit sometimes skips for an element just added.
  *
  * Captures for a reviewer: round2/<width>-<theme>-<first-open|sent|filed>.png.
  *
@@ -48,6 +52,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { durOf, oneEntrance, recordRuns, runsOn } from "../../entrances";
 import { contrast, type Rgb } from "../../ink";
 import { jevMock, jevOn } from "../../jev-mock";
 import { scan } from "../../journeys/scan";
@@ -1499,6 +1504,26 @@ const newProject = async (kit: Kit, setup: Setup) => {
   await page.close();
 };
 
+/** 7. Caw's docked panel comes in by one animation on itself, in WebKit at 1440. */
+const dockEntrance = async (kit: Kit, setup: Setup) => {
+  const page = await kit.page("desk", { engine: "webkit", theme: "light" });
+  await page.addInitScript(recordRuns);
+  await openPanel(page, setup.url);
+  await page.locator("[data-caw-dock]").waitFor();
+  await page.waitForTimeout(700);
+  const ms = await page.evaluate(durOf, "--dur-panel");
+  const dock = await page.evaluate(runsOn, {
+    selector: "[data-caw-dock]",
+    pseudo: null,
+  });
+  kit.check(
+    `7 WebKit 1440: Caw's docked panel comes in by one animation on itself over --dur-panel (${ms}ms), never @starting-style`,
+    dock.length === 1 && oneEntrance(dock[0]?.runs ?? [], ms),
+    JSON.stringify(dock)
+  );
+  await page.close();
+};
+
 const run = async (kit: Kit) => {
   const setup = await setUp(kit);
   try {
@@ -1507,6 +1532,7 @@ const run = async (kit: Kit) => {
         await leg(kit, setup, one, theme);
       }
     }
+    await dockEntrance(kit, setup);
     const threadId = await starterSends(kit, setup);
     await sentShots(kit, setup);
     const ids = await filedTasks(kit, setup, threadId);

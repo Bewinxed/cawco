@@ -302,26 +302,56 @@ export function appear(_node: Element) {
   };
 }
 
+/** One way an element comes in: its length and curve, and whether it rises from its side. */
+export interface Arrival {
+  easing?: `--ease-${string}`;
+  over: `--dur-${string}`;
+  /** It comes in from beside where it stands, by --pop-rise along x, as a sheet from its side. */
+  rise?: "x";
+}
+
 /**
- * `appear` for an element a library mounts in its own blocks (a Svelte Flow
- * node, the decision graph's and the Canvas view's cards): attached, it
- * fades the element in as it mounts, one Web Animation on the element
- * itself. Never by `@starting-style`, which WebKit sometimes skips for an
- * element just added (bugs.webkit.org 275184, comment 8). With reduced
- * motion it stands at once, as the stylesheet's fade it replaces did.
- * `when` says whether this mount is an arrival (the Canvas view's first
- * layout is drawn in place).
+ * An element's entrance, attached: as it mounts it comes in by one Web
+ * Animation on the element itself (`appear` by default: --dur-fade on
+ * ease-out, opacity only). Never by `@starting-style` (Tailwind's
+ * `starting:`), which WebKit sometimes skips for an element just added
+ * (bugs.webkit.org 275184, comment 8, "transitions are sometimes not
+ * applied when adding elements"). An attachment, so it runs as the element
+ * mounts whichever block mounts it (a Svelte Flow node, an `{#if}`).
+ *
+ * `motion` is how it comes in with motion, `reduced` with reduced motion,
+ * each an `Arrival` or `false` (it stands at once): the stylesheet's own
+ * `motion-safe:` and `motion-reduce:` split, kept site by site. `when` says
+ * whether this mount is an arrival at all (the Canvas view's first layout,
+ * a decision card landing in one frame); read off the page, never off
+ * state, so the entrance runs once.
  */
-export function appearOnMount(
-  when: (node: HTMLElement) => boolean = () => true
-): (node: HTMLElement) => void {
+export function appearOnMount({
+  when = () => true,
+  motion = { over: "--dur-fade" },
+  reduced = false,
+}: {
+  motion?: Arrival | false;
+  reduced?: Arrival | false;
+  when?: (node: HTMLElement) => boolean;
+} = {}): (node: HTMLElement) => void {
   return (node) => {
-    if (!(motionOk.current && when(node))) {
+    const arrival = motionOk.current ? motion : reduced;
+    if (!(arrival && when(node))) {
       return;
     }
-    node.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: dur("--dur-fade"),
-      easing: CURVE.out,
+    const from: Keyframe = { opacity: 0 };
+    const to: Keyframe = { opacity: 1 };
+    if (arrival.rise === "x") {
+      const by = Number.parseFloat(
+        getComputedStyle(node).getPropertyValue("--pop-rise")
+      );
+      from.translate = `${by}px 0`;
+      to.translate = "0 0";
+    }
+    node.animate([from, to], {
+      duration: dur(arrival.over),
+      easing: arrival.easing ? ease(arrival.easing) : CURVE.out,
     });
   };
 }

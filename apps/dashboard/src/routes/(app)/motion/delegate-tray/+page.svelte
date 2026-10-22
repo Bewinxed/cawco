@@ -16,6 +16,10 @@
    * Bypass on a connected machine whose Claude takes every mode and three
    * efforts: its mode chip opens the picker, Full Send's question in it,
    * and its effort chip the sibling the picker's surface glides to.
+   *
+   * `?at=<message id>` opens the conversation at that record, as the
+   * finder's "Where it was said" link does (`askOpenAt`): scrolled to it,
+   * and its row marked.
    */
   import {
     CAPABILITIES_NONE,
@@ -28,6 +32,7 @@
   import type { HeldPlan } from "#lib/cawco/plan.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import { askOpenAt } from "#lib/cawco/transcript/open-at.svelte.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
   import { composerBindings } from "#lib/cawco/workspace/composer-dock.svelte.js";
@@ -164,6 +169,10 @@
   debug.state.sessions[ID] = session;
   /** The details card stands over the conversation (`?details`). */
   const details = page.url.searchParams.has("details");
+  const at = page.url.searchParams.get("at");
+  if (at) {
+    askOpenAt(ID, at);
+  }
   if (details) {
     session.harness = "claude";
     session.permissionMode = "bypassPermissions";

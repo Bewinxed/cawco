@@ -41,6 +41,7 @@
  */
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { durOf, oneEntrance, recordRuns, runsOn } from "../entrances";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const respond = (request: Seen): Reply => ({
@@ -106,83 +107,6 @@ const cardHead = (page: Page, id: string) =>
     };
   }, id);
 
-declare global {
-  interface Window {
-    /** Every run the page made, as it made it (`recordRuns`). */
-    probeRuns?: {
-      duration: number;
-      kind: string;
-      target: Element | null;
-    }[];
-  }
-}
-
-/**
- * Before the page's own scripts: every run it makes, as it makes it. A Web
- * Animation as `Element.animate` makes it; a CSS transition or animation as
- * its `transitionrun` / `animationstart` says.
- */
-function recordRuns(): void {
-  const runs: NonNullable<Window["probeRuns"]> = [];
-  window.probeRuns = runs;
-  const seen = new WeakSet<Animation>();
-  const keep = (one: Animation) => {
-    if (seen.has(one)) {
-      return;
-    }
-    seen.add(one);
-    runs.push({
-      kind: one.constructor.name,
-      duration: Number(one.effect?.getTiming().duration ?? 0),
-      target: (one.effect as KeyframeEffect | null)?.target ?? null,
-    });
-  };
-  const made = Element.prototype.animate;
-  Element.prototype.animate = function animate(
-    this: Element,
-    ...args: Parameters<Element["animate"]>
-  ) {
-    const animation = made.apply(this, args);
-    keep(animation);
-    return animation;
-  };
-  const started = (event: Event) => {
-    const at = event.target instanceof Element ? event.target : null;
-    for (const animation of at?.getAnimations() ?? []) {
-      keep(animation);
-    }
-  };
-  for (const type of ["transitionrun", "animationstart"]) {
-    addEventListener(type, started, true);
-  }
-}
-
-/** Each card the graph drew, and the runs on it and on Svelte Flow's node box round it. */
-function cardRuns(): {
-  card: string;
-  runs: { kind: string; duration: number; on: string }[];
-}[] {
-  const runs = window.probeRuns ?? [];
-  return [...document.querySelectorAll("[data-slot=decision-node]")].map(
-    (card) => {
-      const box = card.closest(".svelte-flow__node");
-      return {
-        card: card.querySelector("[data-slot=name]")?.textContent?.trim() ?? "",
-        runs: runs
-          .filter(
-            (one) =>
-              one.duration > 0 && (one.target === card || one.target === box)
-          )
-          .map((one) => ({
-            kind: one.kind,
-            duration: one.duration,
-            on: one.target === card ? "card" : "node box",
-          })),
-      };
-    }
-  );
-}
-
 interface Broken {
   after?: Record<string, string[]>;
   options?: Record<string, string[]>;
@@ -222,27 +146,25 @@ async function graphEntrances(
     { timeout: 30_000 }
   );
   await graphTab.waitForTimeout(600);
-  const fade = await graphTab.evaluate(() => {
-    const said = getComputedStyle(document.documentElement)
-      .getPropertyValue("--dur-fade")
-      .trim();
-    const n = Number.parseFloat(said);
-    return said.endsWith("ms") ? n : n * 1000;
+  const fade = await graphTab.evaluate(durOf, "--dur-fade");
+  const cards = await graphTab.evaluate(runsOn, {
+    selector: "[data-slot=decision-node]",
+    pseudo: null,
   });
-  const cards = await graphTab.evaluate(cardRuns);
-  const wrong = cards.filter(
-    ({ runs }) =>
-      !(
-        runs.length === 1 &&
-        runs[0]?.on === "card" &&
-        runs[0]?.kind !== "CSSTransition" &&
-        Math.abs((runs[0]?.duration ?? 0) - fade) < 1
-      )
-  );
+  // Svelte Flow's node box round each card, where the stylesheet's
+  // @starting-style fade ran: nothing comes in there now.
+  const boxes = await graphTab.evaluate(runsOn, {
+    selector: ".svelte-flow__node-decision",
+    pseudo: null,
+  });
+  const wrong = cards.filter(({ runs }) => !oneEntrance(runs, fade));
+  const boxed = boxes.filter(({ runs }) => runs.length > 0);
   kit.check(
     `(h) in WebKit, each card new to the graph fades up by one animation on itself over --dur-fade (${fade}ms), never a @starting-style transition`,
-    cards.length > 0 && wrong.length === 0,
-    JSON.stringify(wrong.length ? wrong : cards).slice(0, 600)
+    cards.length > 0 && wrong.length === 0 && boxed.length === 0,
+    JSON.stringify(
+      wrong.length || boxed.length ? { wrong, boxed } : cards
+    ).slice(0, 600)
   );
   await graphTab.close();
 }

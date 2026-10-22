@@ -29,6 +29,7 @@
   import { MediaQuery } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { appearOnMount } from "../motion/curves.svelte";
   import { stopWork } from "../stop-work.svelte";
   import CawThread from "./CawThread.svelte";
   import type { CawLead } from "./caw-lead.svelte";
@@ -123,12 +124,17 @@
   <!-- The card recipe, its content edge to edge and clipped by its radius; it
        fills the place the page's grid gives it. It comes in as a sheet does,
        from its own side by --pop-rise as it fades, over --dur-panel on the
-       drawer curve; with less motion it only fades. -->
+       drawer curve; with less motion it only fades (`appearOnMount`, never
+       `@starting-style`, which WebKit sometimes skips). -->
   <aside
     aria-label="Caw, lead of {projectName}"
-    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile transition-[opacity,translate] duration-(--dur-panel) ease-drawer starting:opacity-0 motion-safe:starting:translate-x-(--pop-rise)"
+    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
     data-caw-dock
     {@attach dock}
+    {@attach appearOnMount({
+      motion: { over: "--dur-panel", easing: "--ease-drawer", rise: "x" },
+      reduced: { over: "--dur-panel", easing: "--ease-drawer" },
+    })}
   >
     {#key projectId}
       <CawThread {lead} {projectId} {projectName} />

@@ -45,9 +45,10 @@
 <div
   class="w-c-board-col-min"
   data-slot="task-node"
-  {@attach appearOnMount(
-    (node) => node.closest('[data-slot="view-canvas"][data-settled]') !== null
-  )}
+  {@attach appearOnMount({
+    when: (node) =>
+      node.closest('[data-slot="view-canvas"][data-settled]') !== null,
+  })}
 >
   <Handle
     id="flow-in"

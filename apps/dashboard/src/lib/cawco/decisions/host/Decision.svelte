@@ -76,7 +76,12 @@
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconPen } from "#lib/icons.js";
   import { frameObserver } from "../../frame-observer.js";
-  import { dur, ease, motionOk } from "../../motion/curves.svelte";
+  import {
+    appearOnMount,
+    dur,
+    ease,
+    motionOk,
+  } from "../../motion/curves.svelte";
   import { fold, landFold } from "../../motion/fold.svelte";
   import { morph } from "../../motion/morph.svelte";
   import { scrollOnClock } from "../../motion/scroll-on";
@@ -801,6 +806,32 @@
       noteAdd?.querySelector<HTMLElement>("button")?.focus();
     }
   }
+
+  /*
+   * What the decided line and the card's foot come in by as they mount,
+   * read off the card as they do (`data-instant`: it lands in one frame;
+   * `data-moving`: it moves to its answer): `appearOnMount`, never
+   * `@starting-style`, which WebKit sometimes skips for an element just
+   * added. The decided chips fade only with less motion (with motion they
+   * fly home); Change fades where it stands as the card moves; Continue
+   * grows out of the card's foot on its height tween.
+   */
+  const lands = (node: HTMLElement) => node.closest("[data-instant]") !== null;
+  const decidedIn = appearOnMount({
+    when: (node) => !lands(node),
+    motion: false,
+    reduced: { over: "--dur-fade" },
+  });
+  const changeIn = appearOnMount({
+    when: (node) => node.closest("[data-moving]") !== null && !lands(node),
+    motion: { over: "--dur-settle", easing: "--ease-crossfade" },
+    reduced: { over: "--dur-fade" },
+  });
+  const footIn = appearOnMount({
+    when: (node) => !lands(node),
+    motion: { over: "--dur-morph", easing: "--ease-drawer" },
+    reduced: { over: "--dur-fade" },
+  });
 </script>
 
 <article
@@ -836,9 +867,10 @@
           <!-- biome-ignore lint/a11y/useSemanticElements: a mark of the pick, named for a screen reader; no control is inside it. -->
           <span
             aria-label={`Decided: ${decidedLine}`}
-            class="flex flex-wrap items-center gap-space-2 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:in-data-leaving:opacity-0 motion-reduce:starting:opacity-0 group-data-instant/card:transition-none"
+            class="flex flex-wrap items-center gap-space-2 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:in-data-leaving:opacity-0 group-data-instant/card:transition-none"
             data-slot="decided"
             role="group"
+            {@attach decidedIn}
           >
             {#each chips as chip (chip.id)}
               <span
@@ -859,7 +891,8 @@
             {/each}
           </span>
           <span
-            class="transition-opacity duration-(--dur-settle) ease-crossfade in-data-leaving:opacity-0 group-data-moving/card:starting:opacity-0 motion-reduce:duration-(--dur-fade) motion-reduce:ease-out group-data-instant/card:transition-none"
+            class="transition-opacity duration-(--dur-settle) ease-crossfade in-data-leaving:opacity-0 motion-reduce:duration-(--dur-fade) motion-reduce:ease-out group-data-instant/card:transition-none"
+            {@attach changeIn}
           >
             <Button
               data-change
@@ -982,10 +1015,7 @@
     </div>
     {#if pick.picked}
       <!-- Continue grows out of the card's foot on its height tween (morph) and folds shut with the body. -->
-      <div
-        class="flex justify-end group-data-instant/card:transition-none motion-safe:transition-opacity motion-safe:duration-(--dur-morph) motion-safe:ease-drawer motion-safe:starting:opacity-0 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:starting:opacity-0"
-        data-slot="decision-foot"
-      >
+      <div class="flex justify-end" data-slot="decision-foot" {@attach footIn}>
         <Button
           aria-keyshortcuts="Enter"
           data-continue

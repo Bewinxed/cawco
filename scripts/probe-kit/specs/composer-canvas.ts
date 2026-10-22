@@ -77,12 +77,22 @@
  * 20. The field emptied as a person empties it (typed, select all, delete)
  *    reads empty to every reader of the draft: one line tall with its
  *    placeholder, Send off, no draft kept for a reload, ↑ starts recall.
+ * 21. In WebKit at the desk, a canvas opened by ⌘⇧D: each top corner's
+ *    grip comes in by one animation on itself over --dur-grow (CanvasGrip,
+ *    motion/curves `appearOnMount`), never a @starting-style transition,
+ *    which WebKit sometimes skips for an element just added.
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
+import {
+  durOf,
+  runsOn as entranceRunsOn,
+  oneEntrance,
+  recordRuns,
+} from "../entrances";
 import { type Box, box } from "../geom";
 import {
   COMPOSER,
@@ -596,11 +606,39 @@ const probe = async (kit: Kit) => {
   await phoneCheck(on, "tablet", 768);
   // A docked canvas about 500px wide under a finger: the iPad's panel width.
   await phoneCheck(on, "tablet", 516);
+  await gripEntrance(on);
   kit.check(
     "the page said no error",
     on.said.length === 0,
     on.said.slice(0, 6).join(" | ") || "none"
   );
+};
+
+/**
+ * 21. In WebKit at the desk, a canvas opened by ⌘⇧D: each top corner's grip
+ * comes in by one animation on itself over --dur-grow, never @starting-style.
+ */
+const gripEntrance = async (on: On) => {
+  const { kit, base, session } = on;
+  const page = await kit.page("desk", { engine: "webkit" });
+  await page.addInitScript(recordRuns);
+  await open(page, `${base}/session/${session}`, FIELD);
+  await settle(page);
+  await page.focus(FIELD);
+  await page.keyboard.press("Control+Shift+KeyD");
+  await page.locator(CORNER_LEFT).waitFor({ timeout: 15_000 });
+  await page.waitForTimeout(700);
+  const grow = await page.evaluate(durOf, "--dur-grow");
+  const grips = await page.evaluate(entranceRunsOn, {
+    selector: `${CORNER_LEFT}, ${CORNER_RIGHT}`,
+    pseudo: null,
+  });
+  kit.check(
+    `21: WebKit desk, each top corner's grip comes in by one animation on itself over --dur-grow (${grow}ms), never @starting-style`,
+    grips.length === 2 && grips.every(({ runs }) => oneEntrance(runs, grow)),
+    JSON.stringify(grips)
+  );
+  await page.close();
 };
 
 /** The Send/Stop button and the glyph carriers it swaps. */
