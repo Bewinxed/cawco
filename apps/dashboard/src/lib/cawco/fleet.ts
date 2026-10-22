@@ -33,7 +33,7 @@ import {
   skillsWords,
 } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
-import { hubFailure } from "#lib/cawco/hub-read.js";
+import { awayOf, hubFailure } from "#lib/cawco/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
@@ -311,7 +311,10 @@ async function send<T>(
 ): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
-    throw new Error(`Could not ${attempt}. ${await said(response)}.`);
+    throw (
+      (await awayOf(response)) ??
+      new Error(`Could not ${attempt}. ${await said(response)}.`)
+    );
   }
   return (await response.json()) as T;
 }
@@ -1026,8 +1029,11 @@ export async function peekMemory(
     body: JSON.stringify({ machineId }),
   });
   if (!response.ok) {
-    throw new Error(
-      `Could not read this machine's memory. ${await said(response)}.`
+    throw (
+      (await awayOf(response)) ??
+      new Error(
+        `Could not read this machine's memory. ${await said(response)}.`
+      )
     );
   }
   if (response.status === 204) {
@@ -1167,8 +1173,11 @@ export async function peekHook(
     body: JSON.stringify({ machineId, id }),
   });
   if (!response.ok) {
-    throw new Error(
-      `Could not read this machine's script. ${await said(response)}.`
+    throw (
+      (await awayOf(response)) ??
+      new Error(
+        `Could not read this machine's script. ${await said(response)}.`
+      )
     );
   }
   if (response.status === 204) {

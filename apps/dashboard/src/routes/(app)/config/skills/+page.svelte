@@ -54,7 +54,9 @@
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
   import { clock } from "#lib/cawco/home/home-state.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import MachineAway from "#lib/cawco/MachineAway.svelte";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
+  import { MachineWait } from "#lib/cawco/machine-wait.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -274,12 +276,17 @@
     }
   }
 
+  /** A fetch whose source machine went away (an adopted skill): said in place, asked again once it is back. */
+  const waits = new MachineWait();
+
   async function refetchSkill(row: FleetSkillMeta) {
     busy[row.name] = true;
     delete rowFaults[row.name];
     try {
       // A fetch the hub could not make stands on the row as its hub fault.
-      landedSkill(await refreshSkill(row.name));
+      landedSkill(
+        await waits.run(`skill:${row.name}`, () => refreshSkill(row.name))
+      );
     } catch (err) {
       refusedOn(row.name, err, () => refetchSkill(row));
     } finally {
@@ -336,7 +343,7 @@
         const next =
           fault.scope === "skills"
             ? // biome-ignore lint/performance/noAwaitInLoops: one at a time, so the count is right
-              await refreshSkill(fault.key)
+              await waits.run("all", () => refreshSkill(fault.key))
             : await refreshPlugin(fault.key);
         if (next.error) {
           still += 1;
@@ -555,6 +562,7 @@
       />
     {/if}
     <RowFault again={refetchAll} reason={refetchProblem} />
+    <MachineAway away={waits.away("all")} />
     {#if skills.length + plugins.length > 0}
       <Button
         disabled={hubDown() !== null}
@@ -679,6 +687,7 @@
                 again={rowFaults[row.name]?.again}
                 reason={rowFaults[row.name]?.reason}
               />
+              <MachineAway away={waits.away(`skill:${row.name}`)} />
               <RowFaults
                 hub={hubBroken.filter(
                   (fault) => fault.scope === "skills" && fault.key === row.name

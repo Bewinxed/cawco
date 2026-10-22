@@ -10,6 +10,8 @@
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import MachineAway from "#lib/cawco/MachineAway.svelte";
+  import { MachineWait } from "#lib/cawco/machine-wait.svelte.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -363,6 +365,8 @@
   let settling = $state<Record<string, "adopt" | "push">>({});
   /** Per machine, why its last settle was refused: said under its row. */
   let settleFailed = $state<Record<string, string>>({});
+  /** Compares and settles whose machine went away: said in place, asked again once it is back. */
+  const waits = new MachineWait();
 
   const applied = $derived(
     machines.filter((row) => memoryStateOf(row, path)?.state === "applied")
@@ -384,7 +388,9 @@
     peeking[machine.machineId] = true;
     delete unread[machine.machineId];
     try {
-      const set = await peekMemory(machine.machineId);
+      const set = await waits.run(`peek:${machine.machineId}`, () =>
+        peekMemory(machine.machineId)
+      );
       copies[machine.machineId] = main
         ? (set?.content ?? null)
         : (set?.docs.find((doc) => doc.path === path)?.content ?? null);
@@ -399,9 +405,11 @@
     settling[machine.machineId] = "adopt";
     delete settleFailed[machine.machineId];
     try {
-      const landed = main
-        ? await adoptMemory(machine.machineId)
-        : await adoptMemoryDoc(machine.machineId, path);
+      const landed = await waits.run(`settle:${machine.machineId}`, () =>
+        main
+          ? adoptMemory(machine.machineId)
+          : adoptMemoryDoc(machine.machineId, path)
+      );
       // Its row turns "In sync" on the machine's next report.
       stored(landed);
       text = landed.content;
@@ -420,7 +428,9 @@
     delete settleFailed[machine.machineId];
     try {
       // Its row turns "In sync" on the machine's next report.
-      await pushMemory(machine.machineId, main ? undefined : path);
+      await waits.run(`settle:${machine.machineId}`, () =>
+        pushMemory(machine.machineId, main ? undefined : path)
+      );
       comparing = null;
       delete copies[machine.machineId];
     } catch (caught) {
@@ -804,6 +814,7 @@
                 {/if}
               </div>
               <RowFault reason={settleFailed[machine.machineId]} />
+              <MachineAway away={waits.away(`settle:${machine.machineId}`)} />
               {#if drifted && item?.detail}
                 <pre
                   class="max-h-c-detail-max overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
@@ -819,7 +830,11 @@
                     class="relative flex flex-col"
                     {@attach morph()}
                   >
-                    {#if peeking[machine.machineId]}
+                    {#if waits.away(`peek:${machine.machineId}`)}
+                      <MachineAway
+                        away={waits.away(`peek:${machine.machineId}`)}
+                      />
+                    {:else if peeking[machine.machineId]}
                       <p
                         data-slot="note"
                         class="mark-line flex items-center gap-space-2 type-meta max-w-c-measure text-ink-muted"

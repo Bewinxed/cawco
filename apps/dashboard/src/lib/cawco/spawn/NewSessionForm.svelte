@@ -19,7 +19,7 @@
   } from "@cawco/core";
   import type { Bounded } from "@cawco/core/bounded";
   import { tick, untrack } from "svelte";
-  import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
+  import { awayOf, failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
   import {
     Alert,
     AlertDescription,
@@ -87,6 +87,8 @@
   import { type FleetSnapshot, inspectMachine } from "../fleet";
   import { newId } from "../id";
   import { conversationHref } from "../links";
+  import MachineAway from "../MachineAway.svelte";
+  import { awayWords, MachineWait } from "../machine-wait.svelte";
   import { loadModelWindows, models } from "../models.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
@@ -306,6 +308,11 @@
   /** Why Start held back before anything was sent (a file uploading, a form that doesn't hold); "" otherwise. */
   let error = $state("");
   let unreadable = $state(false);
+  /**
+   * The estimate and the folder checks whose machine went away: said in
+   * place, and asked again once it is back.
+   */
+  const waits = new MachineWait();
   /** A machine that did not answer the folder check in time, in its sentence; "" when none. */
   let unanswered = $state("");
   let missingMachines = $state<string[]>([]);
@@ -856,6 +863,13 @@
     if (unanswered) {
       return unanswered;
     }
+    // A folder check whose machine went away waits for it, and says so here.
+    const away = machineIds
+      .map((id) => waits.away(`location:${id}`))
+      .find((one) => one !== null);
+    if (away) {
+      return awayWords(away, Date.now());
+    }
     if (!locationUnverified && missingMachines.length) {
       const names = missingMachines.map(
         (id) =>
@@ -1235,16 +1249,18 @@
     const asked = carry;
     const current = () => request === submission && asked === carry;
     try {
-      const [response] = await Promise.all([
-        fetch(
-          `/api/instances/${encodeURIComponent(instanceId)}/continue${asked === "asks" ? "?asks=true" : ""}`
-        ),
+      const [sized] = await Promise.all([
+        waits.run("estimate", async () => {
+          const response = await fetch(
+            `/api/instances/${encodeURIComponent(instanceId)}/continue${asked === "asks" ? "?asks=true" : ""}`
+          );
+          if (!response.ok) {
+            throw (await awayOf(response)) ?? (await hubRefusal(response));
+          }
+          return (await response.json()) as NonNullable<typeof estimate>;
+        }),
         loadModelWindows(),
       ]);
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      const sized = (await response.json()) as NonNullable<typeof estimate>;
       if (current()) {
         estimate = sized;
       }
@@ -1545,7 +1561,7 @@
     path: string
   ): Promise<Bounded<boolean>> {
     const [, missing] = await Promise.all([
-      inspectMachine(id, path),
+      waits.run(`location:${id}`, () => inspectMachine(id, path)),
       machineFs(id, "list", path).then(
         (read): Bounded<boolean> => {
           switch (read.kind) {
@@ -2318,6 +2334,7 @@
           <p aria-live="polite" class="type-meta m-0 text-ink-muted num">
             {sizing}
           </p>
+          <MachineAway away={waits.away("estimate")} />
         </div>
       {/if}
       <div

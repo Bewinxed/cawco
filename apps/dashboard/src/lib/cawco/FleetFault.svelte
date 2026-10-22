@@ -40,6 +40,8 @@
     readToolchain,
     SCOPE_NOUN,
   } from "./fleet-faults";
+  import MachineAway from "./MachineAway.svelte";
+  import { MachineWait } from "./machine-wait.svelte";
   import { appear, CURVE, dur } from "./motion/curves.svelte";
   import { fold } from "./motion/fold.svelte";
   import OsMark from "./OsMark.svelte";
@@ -78,6 +80,8 @@
   const shown = $derived(group.faults.slice(0, NAMED));
   const extra = $derived(group.faults.length - shown.length);
 
+  /** A fetch or a settle whose machine went away: said in place, asked again once it is back. */
+  const waits = new MachineWait();
   let busy = $state(false);
   let actFailed = $state(false);
   /** What the remedy came to, said under its button. */
@@ -150,7 +154,7 @@
       for (const fault of group.faults) {
         if (fault.scope === "skills") {
           // biome-ignore lint/performance/noAwaitInLoops: rows are re-resolved one at a time, in order, so the final count is right
-          if ((await refreshSkill(fault.key)).error) {
+          if ((await waits.run("act", () => refreshSkill(fault.key))).error) {
             stillFailing += 1;
           }
         } else if (
@@ -201,13 +205,15 @@
     result = null;
     try {
       if (way === "adopt") {
-        await adoptSkill(name, group.machineId);
+        const { machineId } = group;
+        await waits.run("act", () => adoptSkill(name, machineId));
         result = {
           tone: "done",
           text: `The fleet now keeps ${machineName}'s copy.`,
         };
       } else {
-        await pushSkill(name, group.machineId);
+        const { machineId } = group;
+        await waits.run("act", () => pushSkill(name, machineId));
         result = {
           tone: "done",
           text: `${machineName} takes the fleet's copy.`,
@@ -508,6 +514,7 @@
             >
           {/if}
         </div>
+        <MachineAway away={waits.away("act")} />
         {#if result}
           <p
             data-slot="result"
