@@ -129,9 +129,8 @@ const said = (called: Called | undefined) => {
   if (!called) {
     return "not called";
   }
-  return called.refused
-    ? called.text
-    : JSON.stringify(called.answer).slice(0, 900);
+  // The answer as the agent read it: words by default, the record's JSON when detailed.
+  return called.text.slice(0, 900);
 };
 
 /** The fleet, two projects, and the calls every leg makes. */
