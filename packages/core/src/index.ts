@@ -1395,10 +1395,10 @@ export interface InstanceRow {
   /**
    * The account a person moved it to that it moves to at its next launch,
    * as the hub keeps it (its `owed_moves`), until the move lands: what it
-   * waits on, its turn's end or its machine connected again. Absent when it
-   * owes none.
+   * waits on, its turn's end, the background work its process holds ending,
+   * or its machine connected again. Absent when it owes none.
    */
-  owedMove?: { accountId: string; waits: "turn" | "machine" };
+  owedMove?: { accountId: string; waits: "turn" | "work" | "machine" };
   /**
    * The session that started this one (`delegate`, `start_session`, a
    * workflow's supervisor), which every rail nests it under; absent on a
@@ -1429,6 +1429,15 @@ export interface InstanceRow {
   seenAt?: string | number | Date | null;
   /** The harness's own session id, once the session has named itself. */
   sessionId: string | null;
+  /**
+   * The session is stopped at its account's limit (or on its refused
+   * sign-in), in words, as the hub's at-limit controller holds it (hub
+   * at-limit.ts `stall`): what happened and when it carries on; `until`,
+   * epoch ms, the moment it does. Absent while it runs. Its row, its head and
+   * its transcript show it as an error with the way out: another account
+   * from its menu.
+   */
+  stalled?: { until?: number; words: string };
   status: InstanceStatus;
   /**
    * The thread with its project's Caw this session works for, when Caw's

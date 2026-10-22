@@ -1100,12 +1100,14 @@ export const namedAccount = (
 /**
  * Why a session at its account's limit waits for the reset rather than
  * moving: it is a fork (it reads its origin's cache, on its origin's
- * account), moving is switched off, no other account has room, the reset
- * comes sooner than re-reading its context elsewhere is worth. `work` is
- * history only: lines a hub stored while a delegate's work could be set to
- * carry on after its own account's reset, never moved, still read.
+ * account), moving is switched off, no other account has room, an account
+ * has room but re-reading this session's context there would take more of
+ * it than the hub gives moves (`room`, the account named), the reset comes
+ * sooner than re-reading its context elsewhere is worth. `work` is history
+ * only: lines a hub stored while a delegate's work could be set to carry on
+ * after its own account's reset, never moved, still read.
  */
-export type WaitReason = "fork" | "off" | "full" | "soon" | "work";
+export type WaitReason = "fork" | "off" | "full" | "room" | "soon" | "work";
 
 /**
  * Where the compaction after an at-limit move stands ({@link AccountMove}
@@ -1165,6 +1167,12 @@ export type AccountMove =
        * at `until`. Absent: `until` is `account`'s own reset.
        */
       frees?: NamedAccount;
+      /**
+       * With `why` `room`: the account with the most room left, which the
+       * hub's admission kept it off, and that room in percent of its 5-hour
+       * window: a person may still move it there.
+       */
+      room?: { account: NamedAccount; leftPct: number };
       /** The earliest moment an account takes it again, epoch ms: the line counts down to it. */
       until: number;
       why: WaitReason;
@@ -1326,9 +1334,31 @@ const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
   fork: () => "A fork stays on the account its origin's cache is on",
   off: () => "Moving to another account at the limit is switched off",
   full: () => "No other account has room for it",
+  room: (tokens) =>
+    `Another account has room, but re-reading ${tokens} there would take more than half of what it has left`,
   soon: (tokens) =>
     `The reset comes sooner than re-reading ${tokens} elsewhere is worth`,
   work: () => "Its work item carries on here after the reset",
+};
+
+/**
+ * Why a held session waits, under its line: the account with room the
+ * hub's admission kept it off, by name and room; else the account that
+ * frees first and takes it; else the reason alone.
+ */
+const waitingDetail = (
+  move: Extract<AccountMove, { kind: "waiting" }>
+): string => {
+  const tokens = tokenWords(move.tokens);
+  const then = move.frees
+    ? ` · it moves to ${move.frees.name} when that resets, before ${move.account.name} does`
+    : "";
+  if (move.why === "room" && move.room) {
+    return `${move.room.account.name} has ${Math.round(move.room.leftPct)}% left, but re-reading ${tokens} there would take more than half of it${then}`;
+  }
+  return move.frees
+    ? `No account has room for it now${then}`
+    : WAIT_WHY[move.why](tokens);
 };
 
 /** A stop (Caw off) in words at `now`: it counts down to its account's reset, then asks for a message. */
@@ -1456,9 +1486,7 @@ export const accountMoveWords = (
           left > 0
             ? `Waiting for ${next.name} to reset · ${spanWords(left)}`
             : `Continued on ${next.name}`,
-        detail: move.frees
-          ? `No account has room for it now · it moves to ${move.frees.name} when that resets, before ${move.account.name} does`
-          : WAIT_WHY[move.why](tokenWords(move.tokens)),
+        detail: waitingDetail(move),
       };
     }
     case "stopped":

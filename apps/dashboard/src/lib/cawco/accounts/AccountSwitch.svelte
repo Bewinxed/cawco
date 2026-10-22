@@ -10,8 +10,8 @@
    * signed in — a picker of them. Picking one moves the session whole
    * (switch.svelte.ts): no confirm, the card's feedback line says it is
    * moving and when it landed, and picking the other one moves it back.
-   * While a move waits the chip shows the account it is moving to
-   * (`shownAccount`), as the session's row does; another pick replaces it,
+   * While a move waits the chip and the list's check show the account it is
+   * moving to (`shownAccount`), as the session's row does; another pick replaces it,
    * and the account it runs on calls it off. Only while this tab's ask is on
    * its way to the hub does it take no picks.
    */
@@ -102,11 +102,14 @@
         role="listbox"
       >
         {#each accounts as account (account.id)}
-          {@const current = account.id === instance.accountId}
+          <!-- The pick is the selected option from the moment it is made:
+               the account it is moving to, as the chip shows it, never the
+               one it is leaving. -->
+          {@const picked = account.id === shown?.id}
           {@const going = account.id === target}
           <button
             data-slot="option"
-            aria-selected={current}
+            aria-selected={picked}
             class="group press-tint transition-control mark-line select-none grid min-h-c-btn-h w-full grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-c-btn-h-lg"
             data-account-option={account.id}
             disabled={going}

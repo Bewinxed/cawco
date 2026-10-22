@@ -2518,7 +2518,7 @@ export const owedMoves = sqliteTable("owed_moves", {
   byHand: integer("by_hand", { mode: "boolean" }).notNull().default(false),
   /** The line written once it lands; null for none. */
   move: text("move", { mode: "json" }).$type<AccountMove>(),
-  waits: text("waits").$type<"turn" | "machine">().notNull(),
+  waits: text("waits").$type<"turn" | "work" | "machine">().notNull(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

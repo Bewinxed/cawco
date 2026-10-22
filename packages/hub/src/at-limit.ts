@@ -133,7 +133,14 @@ export type AtLimitDecision =
    * own reset, or `frees`'s when that comes sooner), else the next look
    * when none was named.
    */
-  | { action: "wait"; frees?: string; until: number; why: WaitReason }
+  | {
+      action: "wait";
+      frees?: string;
+      /** With `why` `room`: the account with room admission kept it off. */
+      room?: Room;
+      until: number;
+      why: WaitReason;
+    }
   | {
       action: "move";
       /** It files its open items and is compacted natively once there. */
@@ -141,6 +148,16 @@ export type AtLimitDecision =
       sameOrganization: boolean;
       targetId: string;
     };
+
+/**
+ * An account with room that admission (admission.ts) kept a held session
+ * off: its re-read would take more of that room than moves get. `leftPct`:
+ * what its 5-hour window has left, percent.
+ */
+export interface Room {
+  account: Account;
+  leftPct: number;
+}
 
 /** Another account that takes the session again at `at`, though none has room now. */
 export interface Frees {
@@ -616,6 +633,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       kind: "waiting",
       account: namedAccount(current, accounts),
       ...(frees ? { frees: namedAccount(frees, accounts) } : {}),
+      ...(decision.room
+        ? {
+            room: {
+              account: namedAccount(decision.room.account, accounts),
+              leftPct: decision.room.leftPct,
+            },
+          }
+        : {}),
       until: decision.until,
       why: decision.why,
       tokens: row.contextTokens,
@@ -681,6 +706,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       fork: "a fork stays on the account its origin's cache is on",
       off: "moving to another account at the limit is switched off",
       full: "no other account it may run on has plan room for it now",
+      room: "no account with plan room admits its re-read now",
       soon: `${named} resets${reset === null ? "" : ` at ${clockWords(reset)}`}, sooner than re-reading its context elsewhere is worth`,
       work: "its work item carries on here",
     };
@@ -1104,11 +1130,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
-   * One decision for `row` off `current`: held when no account has room, or
-   * moved whole. A move the target failed (its account's dir, not the
-   * session's process: {@link Kept.target}) tries the next account with room
-   * at once, in the same decision, and the session is held only when none is
-   * left. A move its process kept from going is held as it was.
+   * One decision for `row` off `current`: held when no account takes it, or
+   * moved whole. A target that fails it, its account's dir (not the
+   * session's process: {@link Kept.target}) or admission (its re-read would
+   * take more of the target's room than moves get, admission.ts), is passed
+   * over at once for the next account with room, in the same decision; the
+   * session is held only when none is left, and its line then names the
+   * account with room admission kept it off ({@link Room}), never "no other
+   * account has room". A move its process kept from going is held as it was.
    */
   const decideAndMove = async (
     row: LimitRow,
@@ -1116,20 +1145,34 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     cause: Cause
   ): Promise<void> => {
     const skip = new Set<string>();
+    let room: Room | undefined;
     for (;;) {
       // biome-ignore lint/performance/noAwaitInLoops: each try follows the one before it failed
-      const failed = await tryOnce(row, current, cause, skip);
+      const failed = await tryOnce(row, current, cause, skip, room);
       if (!failed) {
         return;
       }
-      console.info(
-        `[at-limit] ${ports.named(row)} couldn't move to ${accountNameAmong(failed.target, db.accounts.list())} (${failed.why}), so the same decision tries the next account with room now.`
-      );
       skip.add(failed.target.id);
+      const named = accountNameAmong(failed.target, db.accounts.list());
+      if (failed.leftPct === undefined) {
+        console.info(
+          `[at-limit] ${ports.named(row)} couldn't move to ${named} (${failed.why}), so the same decision tries the next account with room now.`
+        );
+        continue;
+      }
+      if (!room || failed.leftPct > room.leftPct) {
+        room = { account: failed.target, leftPct: failed.leftPct };
+      }
+      if (roomSaid.get(row.id) !== failed.target.id) {
+        roomSaid.set(row.id, failed.target.id);
+        console.info(
+          `[at-limit] ${ports.named(row)} isn't moved to ${named}, though it has room: ${failed.why}. The same decision tries the next account with room now.`
+        );
+      }
     }
   };
 
-  /** The target each session was last said to have no room for, so a held one's line is said once a target. */
+  /** The target each session was last said not to be admitted to, so a held one's line is said once a target. */
   const roomSaid = new Map<string, string>();
 
   /** What waiting costs `row` on `current`, as a move's line says it beside what moving costs. */
@@ -1178,52 +1221,24 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
-   * `row` would move to `target`, but `target` has no room left for its
-   * re-read after the moves admitted there already: it stays held on
-   * `current` (until its own reset, each look deciding again), one whose
-   * sign-in was refused held as such, one on extra usage left going there.
+   * A decision that keeps `row` where it is: held there, or, on extra usage,
+   * left going. One no account was left to take after admission kept it off
+   * `room`'s account is held for that reason, its line naming that account
+   * and its room: a person may still move it there.
    */
-  const notAdmitted = (
-    row: LimitRow,
-    current: Account,
-    target: Account,
-    words: string,
-    cause: Cause,
-    now: number
-  ): void => {
-    if (cause === "credits") {
-      stillOnExtraUsage(row, current, "full");
-      return;
-    }
-    if (cause === "refused") {
-      holdRefused(row, current);
-    } else {
-      hold(row, current, {
-        action: "wait",
-        until: holdUntil(row, current, now),
-        why: "full",
-      });
-    }
-    if (roomSaid.get(row.id) === target.id) {
-      return;
-    }
-    roomSaid.set(row.id, target.id);
-    const accounts = db.accounts.list();
-    const from = accountNameAmong(current, accounts);
-    console.info(
-      `[at-limit] ${ports.named(row)} stays held on ${from}, not moved to ${accountNameAmong(target, accounts)}: ${words}. ${waitSide(row, current, false, cause, now)}, and it waits for the next account with room, or ${from}'s reset, whichever the next look finds first.`
-    );
-  };
-
-  /** A decision that keeps `row` where it is: held there, or, on extra usage, left going. */
   const waits = (
     row: LimitRow,
     current: Account,
-    decision: Extract<AtLimitDecision, { action: "wait" }> | undefined,
+    waited: Extract<AtLimitDecision, { action: "wait" }> | undefined,
     cause: Cause,
-    now: number
+    now: number,
+    room: Room | undefined
   ): void => {
     settling.delete(row.id);
+    const decision =
+      waited?.why === "full" && room
+        ? { ...waited, why: "room" as const, room }
+        : waited;
     if (cause === "credits") {
       stillOnExtraUsage(row, current, decision?.why);
       return;
@@ -1231,6 +1246,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!decision) {
       holdRefused(row, current);
       return;
+    }
+    if (room && db.atLimit.hold(row.id)?.until !== decision.until) {
+      const from = accountNameAmong(current, db.accounts.list());
+      console.info(
+        `[at-limit] ${ports.named(row)} stays held on ${from}: ${waitSide(row, current, false, cause, now)}, but no account with room admits its re-read now. It waits for the next account with room, or ${from}'s reset, whichever the next look finds first.`
+      );
     }
     if (
       decision.why === "soon" &&
@@ -1244,19 +1265,24 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   /**
    * One try of {@link decideAndMove}, never to an account in `skip`: held,
    * left to settle, moved, or kept by its process (held as it was). The
-   * target and why when the target's part failed, so another account may
-   * take it.
+   * target and why when the target's part failed or admission kept it off
+   * the target (`leftPct`: the room the target has left), so another
+   * account may take it. `room`: the account with the most room admission
+   * kept it off in this decision so far, which a hold names.
    */
   const tryOnce = async (
     row: LimitRow,
     current: Account,
     cause: Cause,
-    skip: ReadonlySet<string>
-  ): Promise<{ target: Account; why: string } | undefined> => {
+    skip: ReadonlySet<string>,
+    room: Room | undefined
+  ): Promise<
+    { leftPct?: number; target: Account; why: string } | undefined
+  > => {
     const now = Date.now();
     const decision = decideFor(row, current, now, cause, skip);
     if (!decision || decision.action === "wait") {
-      waits(row, current, decision, cause, now);
+      waits(row, current, decision, cause, now, room);
       return undefined;
     }
     const target = db.accounts.get(decision.targetId);
@@ -1270,9 +1296,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       now
     );
     if (!verdict.ok) {
-      settling.delete(row.id);
-      notAdmitted(row, current, target, verdict.words, cause, now);
-      return undefined;
+      return { target, why: verdict.words, leftPct: verdict.leftPct };
     }
     // Reserved now, before any await, so a second decision meanwhile counts it.
     ports.admission.charge(row, target, verdict);

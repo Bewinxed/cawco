@@ -12,10 +12,10 @@ import { SESSION_WINDOW_MS } from "./placement";
  * the target's cold cache, or read from it when the cache carries) plus an
  * allowance for its next real turn, in dollars, against the target's 5-hour
  * window measured in dollars per percent from that account's own history
- * (forecast.ts `usdPerPercent`). A move goes only while the window's reading
- * plus everything already admitted plus this one stays under
- * {@link ADMIT_CEILING_PCT}; the rest stay where they are for the next
- * account with room, or their own account's reset.
+ * (forecast.ts `usdPerPercent`). A move goes only while everything already
+ * admitted plus this one takes no more than {@link ADMIT_SHARE} of the room
+ * the window has left; the rest try the next account with room, or wait for
+ * their own account's reset.
  *
  * The target's measured state is its reading plus the spend `turn_usage`
  * recorded there since that reading (a Claude turn that reached the model
@@ -41,16 +41,19 @@ import { SESSION_WINDOW_MS } from "./placement";
 export const NEXT_TURN_ALLOWANCE_USD = 0.42;
 
 /**
- * The most of a target's 5-hour window its reading and the admitted
- * sessions' re-reads and allowances may take: half, leaving the other half
- * for their work. On 2026-10-20 the fleet's work spent $136.87 in 43 turns
- * on c6b14b4e in 19 minutes (05:20–05:39Z), about 53% of a window measured
- * at $2.56 a percent (e8b553ef: $58.79 took it to 23%, 06:10–06:14Z); at
- * 50% the admitted sessions keep that much room to work before the window
- * stops them mid-turn again. The constant is this session's call from those
- * rows.
+ * The share of a target's room (what its 5-hour window has left: 100% less
+ * its reading and the spend recorded since) the admitted sessions' re-reads
+ * and allowances may take: half, leaving the other half for their work. On
+ * a fresh window that is the half of it the herd rule was set from: on
+ * 2026-10-20 the fleet's work spent $136.87 in 43 turns on c6b14b4e in 19
+ * minutes (05:20–05:39Z), about 53% of a window measured at $2.56 a percent
+ * (e8b553ef: $58.79 took it to 23%, 06:10–06:14Z). Of the room left, never
+ * of the whole window: a ceiling at 50% of the window called an account at
+ * 72% full, and a session waited 3h 44m on its own reset beside it
+ * (2026-10-22 10:16, "past the 50% admission ceiling"). The share is this
+ * session's call from those rows.
  */
-export const ADMIT_CEILING_PCT = 50;
+export const ADMIT_SHARE = 0.5;
 
 /** How far back an account's dollars per percent is measured: a weekly window and a day, as the forecast reads. */
 const LOOKBACK_MS = 8 * 24 * 3_600_000;
@@ -67,7 +70,10 @@ export interface Projected {
 
 /** One admission's answer: whether it fits, and the numbers a journal line says. */
 export interface Verdict {
+  /** The most of the target's 5-hour window, percent, its reading and the admitted moves may reach. */
   ceilingPct: number;
+  /** What the target's 5-hour window has left, percent: 100 less its reading and the spend recorded since (when priced). */
+  leftPct: number;
   ok: boolean;
   /** The target's 5-hour window already admitted, percent; null when unmeasured. */
   pendingPct: number | null;
@@ -304,7 +310,8 @@ export const createAdmission = (db: DbShape) => {
     const spentUsd = spentSince(target.id, window, now);
     const reRead = `re-reading ${kWords(projected.tokens)} ${carries ? "from its carried cache" : "into a cold cache"} costs ${usdWords(projected.reReadUsd)}, plus ${usdWords(projected.allowanceUsd)} for its next turn`;
     const base = {
-      ceilingPct: ADMIT_CEILING_PCT,
+      ceilingPct: window.percent + (100 - window.percent) * ADMIT_SHARE,
+      leftPct: Math.max(0, 100 - window.percent),
       perPct,
       projected,
       usedPct: window.percent,
@@ -327,14 +334,18 @@ export const createAdmission = (db: DbShape) => {
     const thisPct = cost / perPct;
     const pendingPct = pendingUsd / perPct;
     const spentPct = spentUsd / perPct;
-    const after = window.percent + spentPct + pendingPct + thisPct;
-    const ok = after <= ADMIT_CEILING_PCT;
+    const read = window.percent + spentPct;
+    const ceilingPct = read + Math.max(0, 100 - read) * ADMIT_SHARE;
+    const after = read + pendingPct + thisPct;
+    const ok = after <= ceilingPct;
     return {
       ...base,
+      ceilingPct,
+      leftPct: Math.max(0, 100 - read),
       ok,
       pendingPct,
       thisPct,
-      words: `${reRead}, ≈${thisPct.toFixed(1)}% of ${named}'s 5-hour window at $${perPct.toFixed(2)} a percent; ${named} reads ${Math.round(window.percent)}%, ${spentPct.toFixed(1)}% recorded since that reading and ${pendingPct.toFixed(1)}% already admitted, so this takes it to ${after.toFixed(1)}%, ${ok ? "under" : "past"} the ${ADMIT_CEILING_PCT}% admission ceiling`,
+      words: `${reRead}, ≈${thisPct.toFixed(1)}% of ${named}'s 5-hour window at $${perPct.toFixed(2)} a percent; ${named} reads ${Math.round(window.percent)}%, ${spentPct.toFixed(1)}% recorded since that reading and ${pendingPct.toFixed(1)}% already admitted, so this takes it to ${after.toFixed(1)}%, ${ok ? "under" : "past"} its admission ceiling of ${ceilingPct.toFixed(1)}% (half the room it has left goes to moves)`,
     };
   };
 

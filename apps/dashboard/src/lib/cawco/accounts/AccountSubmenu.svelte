@@ -14,7 +14,7 @@
   import { IconAccounts } from "#lib/icons.js";
   import type { InstanceRow } from "../client.svelte";
   import { hueVar, nameOf } from "./model.svelte";
-  import { moveTo, movingTo, switchable } from "./switch.svelte";
+  import { moveTo, movingTo, shownAccount, switchable } from "./switch.svelte";
 
   let { instance }: { instance: InstanceRow } = $props();
 
@@ -30,12 +30,13 @@
       <span>Account</span>
     </ContextMenu.SubTrigger>
     <ContextMenu.SubContent min="standard">
-      <!-- Its value is the account the session runs on, always: a pick asks
-           for the move (moveTo, which leaves the current one alone) and the
-           check follows the session once it has moved. -->
+      <!-- Its value is the account the session's row shows: the one it is
+           moving to from the moment it is picked, else the one it runs on.
+           A pick asks for the move (moveTo, which leaves the current one
+           alone), and picking the one it runs on calls the move off. -->
       <ContextMenu.RadioGroup
         bind:value={
-          () => instance.accountId ?? "",
+          () => shownAccount(instance) ?? "",
           (id) => {
             moveTo(instance, id);
           }

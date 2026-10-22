@@ -22,7 +22,7 @@
  * Legs:
  * - herd: one look at the holds. Every session admitted onto ROOM fits: its
  *   reading plus the admitted sessions' projected re-reads and next-turn
- *   allowances stay under the 50% ceiling; at least one stays held; W waits
+ *   allowances take no more than half the room ROOM has left (its 55% ceiling); at least one stays held; W waits
  *   on SOON, its own reset inside its cache's life.
  * - affinity: ROOM's reading climbs to 45% with the admitted sessions
  *   running there, cold, and THIRD signs in fresh; the rebalance pass that
@@ -53,8 +53,12 @@ const CONTEXT = 900_000;
 const MODEL = "claude-opus-5-5";
 const MACHINE = "machine-admission";
 const HOUR = 3_600_000;
-/** admission.ts: the ceiling and the next-turn allowance, as the brief and its rows set them. */
-const CEILING_PCT = 50;
+/**
+ * admission.ts: the ceiling and the next-turn allowance, as the brief and
+ * its rows set them. The admitted moves take at most half the room ROOM has
+ * left: read at 10%, its ceiling is 10% + 90% / 2.
+ */
+const CEILING_PCT = 10 + (100 - 10) / 2;
 const ALLOWANCE_USD = 0.42;
 const PER_PCT_USD = 2.56;
 

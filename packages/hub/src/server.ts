@@ -8981,6 +8981,12 @@ export const createServer = (
    */
   const finalMessage = new Map<string, string[]>();
   /**
+   * The tokens each Claude session's latest top-level request sent (its
+   * uncached input plus cache reads and writes), by session: its context as
+   * it stood, taken at its turn's result (keep-alive.ts `keepAliveResult`).
+   */
+  const lastRequestContext = new Map<string, number>();
+  /**
    * Sessions whose turn in flight their account's limit refused: Claude Code
    * said `rejected` with no extra usage to fall back on, or ended the turn on
    * its `rate_limit` error. Its end is the at-limit controller's to answer,
@@ -9388,9 +9394,13 @@ export const createServer = (
    * task, no wake-up its resume would not bring back), for a move that
    * relaunches it with its conversation; one that holds any of those is
    * kept `running`, and its move waits for its next turn's end. Without
-   * `stop`, a session whose process runs stays where it is. A row with no conversation yet, or of another harness, has
-   * nothing of Claude's to carry. Answers the rows that moved, and why each
-   * other did not.
+   * `stop`, a session whose process runs stays where it is. With
+   * `endLater` (and `stop`), work its process holds for later (a background
+   * task) does not keep it: the move ends that work, and the session is told
+   * on its new account what ended ({@link tellEndedByMove}), as a move does
+   * once its wait for that work is over ({@link endLaterNow}). A row with no
+   * conversation yet, or of another harness, has nothing of Claude's to
+   * carry. Answers the rows that moved, and why each other did not.
    */
   const moveRowsToAccount = async (
     machineId: string,
@@ -9400,7 +9410,8 @@ export const createServer = (
       sessionId?: string | null;
     }[],
     accountId: string | null,
-    stop = false
+    stop = false,
+    endLater = false
   ): Promise<{ kept: Map<string, Kept>; moved: string[] }> => {
     const requests: CarrySessionRequest[] = rows.flatMap((row) =>
       row.harness === "claude" && row.sessionId
@@ -9410,7 +9421,7 @@ export const createServer = (
               sessionId: row.sessionId,
               accountId,
               ...(stop ? { stop: true } : {}),
-              ...(stop && endLaterNow.has(row.id)
+              ...(stop && (endLater || endLaterNow.has(row.id))
                 ? { endLater: true as const }
                 : {}),
             },
@@ -16624,13 +16635,21 @@ export const createServer = (
     // first read before that is declared). A move of the hub's own
     // (rebalance's, the at-limit controller's) says itself when it lands.
     const owed = new Map(db.owedMoves.list());
+    // Each session stopped at its limit, in the at-limit controller's words:
+    // its row, head and transcript show the stop as an error.
+    const stalled = new Set(stalledNow());
     const board = withKeepAlive(
       withDelegates(damagedRecords.overlay(withSessionPresence(listed)))
     ).map((row) => {
       const one = owed.get(row.id);
-      return one?.to === undefined || !one.byHand
-        ? row
-        : { ...row, owedMove: { accountId: one.to, waits: one.waits } };
+      const stall = stalled.has(row.id) ? stallOf(row.id) : undefined;
+      return {
+        ...row,
+        ...(one?.to !== undefined && one.byHand
+          ? { owedMove: { accountId: one.to, waits: one.waits } }
+          : {}),
+        ...(stall ? { stalled: stall } : {}),
+      };
     });
     // Law `running-session-machine-connected` (core invariant.ts), paired
     // with the overlay above: checked on the rows as they leave for a reader,
@@ -17295,6 +17314,7 @@ export const createServer = (
       row.runningDelegates,
       row.keepAlive,
       "owedMove" in row ? row.owedMove : null,
+      "stalled" in row ? row.stalled : null,
     ]);
   // Seeded from the board as the hub boots: every dashboard connects after
   // this and is handed a snapshot at least this fresh, so the first publish
@@ -19638,6 +19658,42 @@ export const createServer = (
       : `${title} can't move from ${fromName} to ${toName} yet: it is inside a turn, and ${fromName} is at its limit until ${clockWords(resets)}, so the limit will refuse that turn. It moves as soon as the turn ends and carries on on ${toName}; if ${toName} is at its limit by then, it is held until ${toName} resets.`;
   };
 
+  /** The line a person's move of `row` to `account` writes once it lands; null for a row on no account. */
+  const askedMove = (row: StoredRow, account: Account): AccountMove | null => {
+    const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
+    const accounts = db.accounts.list();
+    return from
+      ? {
+          kind: "moved",
+          asked: true,
+          from: namedAccount(from, accounts),
+          to: namedAccount(account, accounts),
+          sameOrganization: cacheCarries(from, account),
+          tokens: row.contextTokens,
+          window: null,
+          resetsAt: null,
+        }
+      : null;
+  };
+
+  /**
+   * What `instanceId` is stopped by, as the at-limit controller holds it:
+   * its account's limit, or its refused sign-in; undefined while nothing
+   * holds it. No turn of it runs then, so a person's pick moves it now, and
+   * work its process holds for later doesn't keep it: Claude Code restores
+   * no background Bash or monitor task on resume and notes the ended ones in
+   * the transcript (code.claude.com/docs/en/sessions: "Background Bash and
+   * monitor tasks aren't"), so the move ends them, the session is told on
+   * the new account what ended, and it carries on past what stopped it.
+   */
+  const stoppedBy = (instanceId: string): "limit" | "signin" | undefined => {
+    const held = db.atLimit.hold(instanceId);
+    if (!held) {
+      return;
+    }
+    return held.until === null ? "signin" : "limit";
+  };
+
   /**
    * Moves `row` to `account` because a person asked, the line "Moved to …"
    * written as it moves. Its data is carried into the account's dir first
@@ -19663,23 +19719,11 @@ export const createServer = (
       }
     | { refusal: string }
   > => {
-    const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
-    const accounts = db.accounts.list();
-    const move: AccountMove | null = from
-      ? {
-          kind: "moved",
-          asked: true,
-          from: namedAccount(from, accounts),
-          to: namedAccount(account, accounts),
-          sameOrganization: cacheCarries(from, account),
-          tokens: row.contextTokens,
-          window: null,
-          resetsAt: null,
-        }
-      : null;
+    const move = askedMove(row, account);
     const running = !["sleeping", "stopping", "stopped", "error"].includes(
       row.status
     );
+    const stopped = stoppedBy(row.id);
     const title = sessionName(row);
     const fromName = accountWords(row.accountId);
     const toName = accountNameAmong(account, db.accounts.list());
@@ -19710,12 +19754,14 @@ export const createServer = (
       row.machineId,
       [row],
       account.id,
-      running
+      running,
+      stopped !== undefined
     );
     const why = kept.get(row.id);
     if (why?.running) {
       return owe(
-        `${title} can't move from ${fromName} to ${toName} yet: ${why.why}. ${keptNextWords(why, toName)}`
+        `${title} can't move from ${fromName} to ${toName} yet: ${why.why}. ${keptNextWords(why, toName)}`,
+        why.later ? "work" : "turn"
       );
     }
     if (why) {
@@ -19725,8 +19771,9 @@ export const createServer = (
     }
     db.atLimit.dropHold(row.id);
     publishInstances(row.machineId);
+    publishStalls();
     if (running) {
-      relaunchOnAccount(row.id);
+      relaunchOnAccount(row.id, stopped);
     }
     if (move) {
       noteAtLimit(row, move);
@@ -19768,11 +19815,15 @@ export const createServer = (
    * into that account's server. A person's move it owes ({@link
    * owedMoves}) is carried first, its process ended at rest for it,
    * and its row names the account only once its data is there; one whose
-   * carry cannot happen stays on its account and in place. `carry`: the turn
-   * that ended was refused at its account's limit, so once relaunched it is
-   * told to carry on, and answers there what that turn was asked.
+   * carry cannot happen stays on its account and in place. `carry`: its
+   * turn was refused at its account's limit (or on its sign-in), so once
+   * relaunched it is told to carry on, and answers there what that turn was
+   * asked.
    */
-  const relaunchOnAccount = (instanceId: string, carry?: "limit"): void => {
+  const relaunchOnAccount = (
+    instanceId: string,
+    carry?: "limit" | "signin"
+  ): void => {
     const going = takeUpOwedMove(instanceId, carry);
     if (going !== undefined) {
       // The carry runs on its own; the relaunch follows it.
@@ -19828,7 +19879,10 @@ export const createServer = (
   ): void => {
     const away = !(why.running || registry.agent(stored.machineId));
     if (mine && why.running) {
-      owedMoves.set(stored.id, { ...owed, waits: "turn" });
+      owedMoves.set(stored.id, {
+        ...owed,
+        waits: why.later ? "work" : "turn",
+      });
     } else if (mine && away) {
       owedMoves.set(stored.id, { ...owed, waits: "machine" });
     } else if (mine) {
@@ -19854,12 +19908,14 @@ export const createServer = (
    * return; one whose carry cannot happen stays where it is, the move
    * dropped. A move asked meanwhile replaces it, and only its own outcome
    * clears it. A second ask while it is carried joins that carry
-   * ({@link owedCarries}). Undefined when it owes no move to an account, or
-   * its machine is away: nothing was taken up.
+   * ({@link owedCarries}). A person's move of a session stopped at its limit
+   * ends the work its process holds for later rather than waiting for it, as
+   * {@link moveByHand} does. Undefined when it owes no move to an account,
+   * or its machine is away: nothing was taken up.
    */
   const takeUpOwedMove = (
     instanceId: string,
-    carry?: "limit"
+    carry?: "limit" | "signin"
   ): Promise<void> | undefined => {
     const inFlight = owedCarries.get(instanceId);
     if (inFlight !== undefined) {
@@ -19878,7 +19934,13 @@ export const createServer = (
     /** The record is still this move's: no newer ask replaced it. */
     const still = () => owedMoves.get(stored.id)?.to === to;
     transcripts.noteRelaunch(stored.id);
-    const carried = moveRowsToAccount(stored.machineId, [stored], to, true)
+    const carried = moveRowsToAccount(
+      stored.machineId,
+      [stored],
+      to,
+      true,
+      owed.byHand === true && stoppedBy(stored.id) !== undefined
+    )
       .then(({ kept }) => {
         const why = kept.get(stored.id);
         if (why) {
@@ -19890,6 +19952,7 @@ export const createServer = (
         }
         db.atLimit.dropHold(stored.id);
         publishInstances(stored.machineId);
+        publishStalls();
         if (owed.move) {
           noteAtLimit(stored, owed.move);
         }
@@ -31591,9 +31654,17 @@ export const createServer = (
                         break;
                       }
                       recordTurnUsage(row, neutral, true);
+                      // A ping is one request: its usage is the context.
                       db.updateKeepAlive(
                         row.id,
-                        keepAliveResult(row, neutral, true)
+                        keepAliveResult(
+                          row,
+                          neutral,
+                          true,
+                          neutral.cache
+                            ? keepAliveUsage(neutral).input
+                            : undefined
+                        )
                       );
                       // A keep-alive's cost is the session's, not a thread's.
                       if (typeof neutral.total_cost_usd === "number") {
@@ -32230,6 +32301,24 @@ export const createServer = (
                   // Claude Code ending the turn on its account's limit.
                   if ((neutral as { error?: string }).error === "rate_limit") {
                     limitRefused.add(message.instanceId);
+                  } else {
+                    // The context this request sent: the session's own, as
+                    // the turn's result (a sum over its requests) can't say.
+                    const { usage } = neutral.message as {
+                      usage?: {
+                        cache_creation_input_tokens?: number;
+                        cache_read_input_tokens?: number;
+                        input_tokens?: number;
+                      };
+                    };
+                    if (typeof usage?.input_tokens === "number") {
+                      lastRequestContext.set(
+                        message.instanceId,
+                        usage.input_tokens +
+                          (usage.cache_read_input_tokens ?? 0) +
+                          (usage.cache_creation_input_tokens ?? 0)
+                      );
+                    }
                   }
                   const text = neutral.message.content
                     .filter((block) => block.type === "text")
@@ -32294,8 +32383,14 @@ export const createServer = (
                   if (cacheRow?.harness === "claude") {
                     db.updateKeepAlive(
                       cacheRow.id,
-                      keepAliveResult(cacheRow, neutral, false)
+                      keepAliveResult(
+                        cacheRow,
+                        neutral,
+                        false,
+                        lastRequestContext.get(cacheRow.id)
+                      )
                     );
+                    lastRequestContext.delete(cacheRow.id);
                     // Real turns re-arm from their own request clock.
                     detach(keepAliveScheduler.wake(), "keepalive wake");
                     if (cacheRow.keepAliveEnabled) {

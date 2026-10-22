@@ -36,7 +36,19 @@
   import { unfold } from "../motion/fold.svelte";
   import type { Row } from "./rows";
 
-  let { row }: { row: Extract<Row, { kind: "account" }> } = $props();
+  let {
+    row,
+    stop,
+  }: {
+    row: Extract<Row, { kind: "account" }>;
+    /**
+     * The session is stopped at its account's limit now and this is its
+     * newest account line: the stop and its way out, as an error
+     * (switch.svelte.ts `stopWords`). The line reads in the failure ink and
+     * the sentence stands under it at every width; undefined, it is history.
+     */
+    stop?: string;
+  } = $props();
 
   /** How often a counting row reads the clock: its words are in minutes. */
   const TICK_MS = 15_000;
@@ -99,13 +111,14 @@
 
 <div
   data-open={open || undefined}
+  data-stopped={stop ? true : undefined}
   class="group/move @container mt-space-3 mb-space-1"
 >
   <!-- A button, so a keyboard and a finger can bring in the second line, as
        a pointer does by hovering. -->
   <button
     aria-expanded={open}
-    class="select-none peer/line flex items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted focus-inset touch-hit"
+    class="select-none peer/line flex items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted group-data-stopped/move:text-status-fail-ink focus-inset touch-hit"
     onclick={() => {
       open = !open;
     }}
@@ -150,6 +163,17 @@
   >
     <span class="fold-item">{words.detail}</span>
   </p>
+  {#if stop}
+    <!-- The stop is an error: what happened and the way out, at every
+         width, never behind a hover. -->
+    <p
+      data-slot="stop"
+      class="text-center type-meta text-status-fail-ink wrap-anywhere"
+      role="alert"
+    >
+      {stop}
+    </p>
+  {/if}
   {#if open && row.brief !== null}
     <div
       data-slot="transcript-brief"

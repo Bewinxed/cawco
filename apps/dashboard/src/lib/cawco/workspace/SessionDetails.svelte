@@ -17,7 +17,7 @@
   import Link from "~icons/solar/link-bold-duotone";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
-  import { movingTo, movingWords } from "../accounts/switch.svelte";
+  import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
   import {
     answeredOr,
     cawco,
@@ -397,9 +397,10 @@
   }
   function failure(slot: Slot) {
     // A refused move is moveTo's toast, the one place the menu and the card
-    // both say it.
+    // both say it. Stopped at its account's limit, the account line is the
+    // error and its way out: the picker right above it.
     if (slot === "account") {
-      return null;
+      return row ? (stopWords(row) ?? null) : null;
     }
     if (slot === "permission" && relaunchFailure) {
       return relaunchFailure;

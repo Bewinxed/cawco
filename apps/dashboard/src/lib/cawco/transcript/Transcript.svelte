@@ -43,6 +43,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconChat } from "#lib/icons.js";
   import { browser } from "$app/env";
+  import { stopWords } from "../accounts/switch.svelte";
   import {
     cawco,
     faultMessage,
@@ -1044,6 +1045,19 @@
     }
   });
   const rows = $derived(built.rows);
+  /**
+   * While the session is stopped at its account's limit, its newest account
+   * line is that stop, drawn as an error with its way out
+   * (switch.svelte.ts `stopWords`); every older one stays history.
+   */
+  const stop = $derived.by(() => {
+    const instance = cawco.instanceIndex.byId.get(session.instanceId);
+    const words = instance ? stopWords(instance) : undefined;
+    const key = words
+      ? rows.findLast((one) => one.kind === "account")?.key
+      : undefined;
+    return words && key ? { key, words } : undefined;
+  });
   const cache = untrack(() => {
     // A pane with no saved sizes and no rows has `undefined` on both sides of
     // the first-row match, so the saved entry is checked on its own first.
@@ -4042,7 +4056,10 @@
                 {row}
               />
             {:else if row.kind === "account"}
-              <AccountMoveDivider {row} />
+              <AccountMoveDivider
+                {row}
+                stop={stop?.key === row.key ? stop.words : undefined}
+              />
             {:else if row.kind === "subagent"}
               <Subagent branch={row.branch} spawn={row.spawn} />
             {:else if row.kind === "delegate"}

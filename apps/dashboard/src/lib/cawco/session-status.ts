@@ -31,8 +31,14 @@ export function statusWord(
   if (instance?.status === "stopping") {
     return STOPPING_LABEL;
   }
+  if (instance?.stalled) {
+    return STALLED_LABEL;
+  }
   return instance?.status === "stopped" ? STOPPED_LABEL : STATUS_WORD[status];
 }
+
+/** A session stopped at its account's limit, in one status word. */
+export const STALLED_LABEL = "Stopped at its limit";
 
 /**
  * A session's status, one rule for every row that draws its mark. `done`:
@@ -46,7 +52,9 @@ export function sessionStatus(
   if (!instance) {
     return "idle";
   }
-  if (isFailed(instance)) {
+  // Stopped at its account's limit: an error until it moves or its account
+  // resets, whatever its process is doing.
+  if (isFailed(instance) || instance.stalled) {
     return "fail";
   }
   if (isStale(instance)) {

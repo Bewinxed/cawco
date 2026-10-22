@@ -48,6 +48,7 @@
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import { stopWords } from "../accounts/switch.svelte";
   import {
     cawco,
     dismissWorkItem,
@@ -623,9 +624,11 @@
     if (chip.item.machinePaused) {
       return chip.item.machinePaused;
     }
-    // Its account's limit stopped it: where or when it continues, by itself.
+    // Its account's limit stopped it: where or when it continues, by itself,
+    // and the way out its row says (switch.svelte.ts `stopWords`).
     if (chip.item.stalled) {
-      return chip.item.stalled;
+      const row = cawco.instanceIndex.byId.get(chip.item.instanceId);
+      return (row && stopWords(row)) ?? chip.item.stalled;
     }
     switch (chip.tone) {
       case "needs":
@@ -1258,7 +1261,7 @@
     data-flip-enter={entry === "fade" ? undefined : "own"}
     data-fly={flies || undefined}
     data-key={item.id}
-    data-status={tone}
+    data-status={chip.item.stalled ? "failed" : tone}
     onblur={() => {
       focusedKey = null;
     }}
@@ -1501,9 +1504,10 @@
       >
       <!-- A folded delegate's state gives way before its title does. -->
       <span
-        class="flex-initial ms-auto text-size-meta text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis status-needs:text-status-attn-ink"
+        class="flex-initial ms-auto text-size-meta text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis status-needs:text-status-attn-ink status-failed:text-status-fail-ink"
         data-delegate-tray-tone={tone}
-        data-status={tone}>{stateWords(chip)}</span
+        data-status={chip.item.stalled ? "failed" : tone}
+        >{stateWords(chip)}</span
       >
       <span
         aria-hidden="true"

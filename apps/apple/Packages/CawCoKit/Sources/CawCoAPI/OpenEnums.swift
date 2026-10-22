@@ -4092,6 +4092,7 @@ public enum OpenEnums {
     public enum InstanceRowWaits: OpenEnum {
         case machine
         case turn
+        case work
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -4099,6 +4100,7 @@ public enum OpenEnums {
             switch rawValue {
             case "machine": self = .machine
             case "turn": self = .turn
+            case "work": self = .work
             default: self = .unrecognized(rawValue)
             }
         }
@@ -4107,6 +4109,7 @@ public enum OpenEnums {
             switch self {
             case .machine: "machine"
             case .turn: "turn"
+            case .work: "work"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -4115,7 +4118,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.machine, .turn]
+        public static let allCases: [Self] = [.machine, .turn, .work]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -8199,6 +8202,7 @@ public enum OpenEnums {
         case fork
         case full
         case off
+        case room
         case soon
         case work
         /// A value this app does not know: a newer hub's.
@@ -8209,6 +8213,7 @@ public enum OpenEnums {
             case "fork": self = .fork
             case "full": self = .full
             case "off": self = .off
+            case "room": self = .room
             case "soon": self = .soon
             case "work": self = .work
             default: self = .unrecognized(rawValue)
@@ -8220,6 +8225,7 @@ public enum OpenEnums {
             case .fork: "fork"
             case .full: "full"
             case .off: "off"
+            case .room: "room"
             case .soon: "soon"
             case .work: "work"
             case let .unrecognized(rawValue): rawValue
@@ -8230,7 +8236,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.fork, .full, .off, .soon, .work]
+        public static let allCases: [Self] = [.fork, .full, .off, .room, .soon, .work]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

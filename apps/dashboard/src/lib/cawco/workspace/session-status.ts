@@ -16,6 +16,7 @@ import Working from "~icons/solar/refresh-circle-bold-duotone";
 import { STOPPED_LABEL, STOPPING_LABEL } from "../activity";
 import { cawco, isFailed, isStale } from "../client.svelte";
 import { type NamedSession, sessionAnswer } from "../session-names.svelte";
+import { STALLED_LABEL } from "../session-status";
 import { runIdOf } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 
@@ -76,6 +77,9 @@ export function stepSessionStatus(
   const row = cawco.instanceIndex.byId.get(sessionId);
   if (row && isFailed(row)) {
     return { label: "Failed", icon: Failed, tone: "failed" };
+  }
+  if (row?.stalled) {
+    return { label: STALLED_LABEL, icon: Failed, tone: "failed" };
   }
   if (row && isStale(row)) {
     return { label: "Unreachable", icon: Unknown, tone: "quiet" };
