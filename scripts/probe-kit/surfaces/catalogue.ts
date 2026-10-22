@@ -12,9 +12,11 @@
  * against the same tape ("dev").
  */
 import type { Locator, Page, WebSocketRoute } from "playwright-core";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
 import { COMPOSER_FIELD } from "../kit";
+import { exactly, startsWith } from "../words";
 import {
   ANSWERED_PIN,
   commentPins,
@@ -163,7 +165,7 @@ const BOARD = "[data-slot=board]";
 const CAW_COMPOSER = '[aria-label="Message Caw"]';
 /** The words a state is told by, where its element is not enough (each state's `says`). */
 const SIGN_IN_UNFINISHED = /^Sign-in didn't finish/;
-const START_SIGN_IN = /^Start sign-in/;
+const START_SIGN_IN = startsWith(accountsWords.device.start);
 const GROWN_DRAFT =
   /Wrap the chip's label at the badge\.\s*Keep the count whole\.\s*Then measure it on a phone\./;
 const CATCHING_UP_LINE = /^Catching up…$/;
@@ -503,7 +505,15 @@ const INSPECTOR_ROW = "aside[aria-label=Inspector] li[data-prop]";
 /** The machines popover's trigger, Connect a machine's, and the routing's Fill first card. */
 const MACHINES = /machine/;
 const ADD_MACHINE = /^Add machine$/;
-const FILL_FIRST = /^Fill first/;
+const FILL_FIRST = (() => {
+  const strategy = accountsWords.strategies.find(
+    (one) => one.id === "fill-first"
+  );
+  if (!strategy) {
+    throw new Error("accountsWords.strategies has no fill-first strategy");
+  }
+  return startsWith(strategy.label);
+})();
 /** The project's ⋯ menu. */
 const MORE_FOR_CAWCO = /More for cawco/;
 /**
@@ -2260,13 +2270,13 @@ const EDITORS: Record<string, State[]> = {
       act: async (page) => {
         await toKeyStep(page);
         await page
-          .getByRole("textbox", { name: "API key" })
+          .getByRole("textbox", { name: accountsWords.key.label })
           .fill("probe-302-key");
-        await press("Send key")(page);
-        await page.getByText("Key sent").first().waitFor();
+        await press(accountsWords.key.send)(page);
+        await page.getByText(accountsWords.key.sent).first().waitFor();
       },
       root: "body",
-      ready: { shows: "span", says: /^Key sent$/ },
+      ready: { shows: "span", says: exactly(accountsWords.key.sent) },
     },
   ],
 };

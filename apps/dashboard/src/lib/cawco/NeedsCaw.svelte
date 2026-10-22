@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { cawHeadWords } from "@cawco/core";
   import { home } from "./home/home-state.svelte";
 
   /**
@@ -10,14 +11,14 @@
   export function cawQuiet(): string {
     switch (home.status) {
       case "connected":
-        return "All caught up";
+        return cawHeadWords.caughtUp;
       case "reading":
-        return "Reading the fleet";
+        return cawHeadWords.reading;
       case "connecting":
       case "unreachable":
         break;
     }
-    return "Waiting for the hub";
+    return cawHeadWords.waiting;
   }
 </script>
 
@@ -116,12 +117,10 @@
   const quiet = $derived(cawQuiet());
   /** "· 2 notices" after what he says, while any notice stands. */
   const noticeWords = $derived(
-    noticeCount > 0
-      ? ` · ${noticeCount} ${noticeCount === 1 ? "notice" : "notices"}`
-      : ""
+    noticeCount > 0 ? cawHeadWords.notices(noticeCount) : ""
   );
   const label = $derived(
-    `${count > 0 ? `Needs you, ${count}` : quiet}${noticeWords}`
+    `${count > 0 ? cawHeadWords.needs(count) : quiet}${noticeWords}`
   );
 
   /* ── The count ─────────────────────────────────────────────────────── */
@@ -177,7 +176,7 @@
   const arcSlots = $derived(slots(arcCount));
   const lapSlots = $derived(slots(lapCount));
   const tipText = $derived(
-    `${count > 0 ? `${count} need you` : quiet}${noticeWords}`
+    `${count > 0 ? cawHeadWords.needsTip(count) : quiet}${noticeWords}`
   );
 
   /** A point on the rim, `deg` clockwise from 12 o'clock. */

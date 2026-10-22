@@ -12,7 +12,7 @@
    * viewport is a phone's, so the panel's own phone rules apply. Every
    * switch is in the URL, so a script opens any state directly.
    */
-  import { machineLabel } from "@cawco/core";
+  import { cawHeadWords, machineLabel } from "@cawco/core";
   import type { BinaryUpdateState } from "@cawco/core/binary-updates";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
   import { barGlass, glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
@@ -378,7 +378,11 @@
           }
         }
       >
-        <CawPanel {feed} onchoose={() => undefined} quiet="All caught up" />
+        <CawPanel
+          {feed}
+          onchoose={() => undefined}
+          quiet={cawHeadWords.caughtUp}
+        />
       </HangCard>
     {/key}
   </Popover.Root>

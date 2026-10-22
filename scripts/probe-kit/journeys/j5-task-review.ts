@@ -26,9 +26,9 @@ import {
   type Reply,
   type Seen,
 } from "../../scratch-fleet";
+import { caw } from "../caw-head";
 import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
 import type { KitFleet } from "../kit";
-import { caw } from "./j1-check-in";
 import { callsInOrder, listedAs, say } from "./mock";
 import {
   type Data,

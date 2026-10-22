@@ -75,6 +75,7 @@ import {
 } from "../../../packages/hub/src/fleet-choices";
 import { applySetupPicks } from "../../../packages/hub/src/setup";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
+import { caw } from "../caw-head";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 import { natPmpStandIn, upnpGatewayStandIn } from "../router-stand-ins";
 import { engineStandIn } from "../runtime-stand-in";
@@ -257,8 +258,6 @@ const cloudflareStandIn = () => {
 
 /** An address a router's network hands out. */
 const PRIVATE_V4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
-/** Caw's head, by what it says of Needs you. */
-const NEEDS_HEAD = /^Needs you, \d+|^All caught up/;
 /** The certificate's and the start's failure on a machine with no container runtime. */
 const NO_RUNTIME =
   /could not start on .+: it runs in a container, and this machine has no container runtime/;
@@ -468,8 +467,7 @@ const stepSays = async (
 
 /** Caw's Needs you panel opened, and whether the relay's row stands in it with its meta line. */
 const needsRow = async (page: Page) => {
-  const head = page.getByRole("button", { name: NEEDS_HEAD }).first();
-  await head.click();
+  await caw(page).click();
   await settle(page, 400);
   const read = await page.evaluate(() => {
     const row = document.querySelector('[data-kind="relay"]');

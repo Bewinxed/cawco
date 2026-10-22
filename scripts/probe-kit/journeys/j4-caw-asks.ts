@@ -14,9 +14,9 @@
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Seen } from "../../scratch-fleet";
+import { caw, cawSays, needsCount, ZERO } from "../caw-head";
 import type { KitFleet } from "../kit";
 import { pendingAsks } from "./asks";
-import { caw, cawSays, ZERO } from "./j1-check-in";
 import { say } from "./mock";
 import { eventually, type Journey, type Leg, shows } from "./suite";
 
@@ -26,7 +26,7 @@ const VOICE = "Which voice for the launch post?";
 const TONE = "Which tone for the replies?";
 const PLAIN = "Plain";
 const WARM = "Warm";
-const TWO_NEED = /^Needs you, 2(\D|$)/;
+const TWO_NEED = needsCount(2);
 const QUESTION = /^Question from Caw/;
 const FIRST_OF_TWO = /1 of 2/;
 const SECOND_OF_TWO = /2 of 2/;
