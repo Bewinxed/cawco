@@ -1791,13 +1791,19 @@ body { margin: 0; padding: var(--space-5); font: var(--type-body); background: v
 .crop[data-demo="corner"] .win { inline-size: 320px; block-size: 260px; }
 .crop[data-demo="dock"] .win { inline-size: 320px; block-size: 140px; }
 .win iframe { position: absolute; border: 0; inset-inline-start: 0; inset-block-start: 0; }
+/* The drawn pointer: it comes in at the grip, rides the drag, and goes when it lets go. Its hot spot (the
+   glyph's centre) stands on the grip's own hit area. */
+.cursor { position: absolute; inline-size: 20px; block-size: 20px; margin: -10px 0 0 -10px; pointer-events: none; opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+.cursor[data-on] { opacity: 1; }
+.cursor[data-drag] { transition: opacity var(--dur-control) var(--ease-out), translate 800ms cubic-bezier(0.33, 1, 0.68, 1); }
+.cursor[data-back] { transition: opacity var(--dur-control) var(--ease-out), translate 500ms cubic-bezier(0.33, 1, 0.68, 1); }
 figcaption { font: var(--type-meta); color: var(--ink-muted); }
 figcaption b { font-weight: var(--weight-strong); color: var(--ink-strong); }
 </style>
 </head>
 <body>
-<div class="row" data-theme="light"><figure class="crop" data-demo="corner" data-theme="light"><div class="win"><iframe src="page.html#demo=corner" title="The panel's corner, by day" width="1440" height="900"></iframe></div><figcaption><b>The panel's corner</b> · <span class="step">At rest</span></figcaption></figure><figure class="crop" data-demo="dock" data-theme="light"><div class="win"><iframe src="page.html#demo=dock" title="The dock's top edge, by day" width="1440" height="900"></iframe></div><figcaption><b>The dock's top edge</b> · <span class="step">At rest</span></figcaption></figure></div>
-<div class="row" data-theme="dark"><figure class="crop" data-demo="corner" data-theme="dark"><div class="win"><iframe src="page.html#demo=corner&theme=dark" title="The panel's corner, at night" width="1440" height="900"></iframe></div><figcaption><b>The panel's corner</b> · <span class="step">At rest</span></figcaption></figure><figure class="crop" data-demo="dock" data-theme="dark"><div class="win"><iframe src="page.html#demo=dock&theme=dark" title="The dock's top edge, at night" width="1440" height="900"></iframe></div><figcaption><b>The dock's top edge</b> · <span class="step">At rest</span></figcaption></figure></div>
+<div class="row" data-theme="light"><figure class="crop" data-demo="corner" data-theme="light"><div class="win"><iframe src="page.html#demo=corner" title="The panel's corner, by day" width="1440" height="900"></iframe><svg class="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7L7.6 5.4l11 11L21 14v7h-7l2.4-2.4-11-11L3 10z" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" transform="rotate(90 12 12)"/></svg></div><figcaption><b>The panel's corner</b> · <span class="step">At rest</span></figcaption></figure><figure class="crop" data-demo="dock" data-theme="light"><div class="win"><iframe src="page.html#demo=dock" title="The dock's top edge, by day" width="1440" height="900"></iframe><svg class="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l5 5.5h-3.4v10H17l-5 5.5L7 17h3.4V7H7z" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg></div><figcaption><b>The dock's top edge</b> · <span class="step">At rest</span></figcaption></figure></div>
+<div class="row" data-theme="dark"><figure class="crop" data-demo="corner" data-theme="dark"><div class="win"><iframe src="page.html#demo=corner&theme=dark" title="The panel's corner, at night" width="1440" height="900"></iframe><svg class="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7L7.6 5.4l11 11L21 14v7h-7l2.4-2.4-11-11L3 10z" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" transform="rotate(90 12 12)"/></svg></div><figcaption><b>The panel's corner</b> · <span class="step">At rest</span></figcaption></figure><figure class="crop" data-demo="dock" data-theme="dark"><div class="win"><iframe src="page.html#demo=dock&theme=dark" title="The dock's top edge, at night" width="1440" height="900"></iframe><svg class="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l5 5.5h-3.4v10H17l-5 5.5L7 17h3.4V7H7z" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg></div><figcaption><b>The dock's top edge</b> · <span class="step">At rest</span></figcaption></figure></div>
 <script>
 // Where each window holds its anchor at rest: the corner low and left (a drag takes it 40px left and 30px
 // down, its highlight 136px up and right), the dock's edge low in the middle (a drag lifts it 40px).
@@ -1808,6 +1814,15 @@ addEventListener("message", (e) => {
   if (!f || !d.step) return;
   f.querySelector(".step").textContent = d.step === "drag" && d.demo === "dock" ? "Dragging it taller" : WORDS[d.step] || d.step;
   if (!f.dataset.placed && d.step === "rest") { const [ax, ay] = AT[d.demo], fr = f.querySelector("iframe"); fr.style.left = Math.round(ax - d.x) + "px"; fr.style.top = Math.round(ay - d.y) + "px"; f.dataset.placed = ""; }
+  // The drawn pointer: on the grip (the corner's square 6px in from the corner, the dock's band on its edge),
+  // then the same travel as the drag (the corner 40px out and 30px down, the dock's edge 40px up), back on reset.
+  const c = f.querySelector(".cursor"), [ax, ay] = AT[d.demo], grip = d.demo === "corner" ? [ax + 6, ay - 6] : [ax, ay], move = d.demo === "corner" ? "-40px 30px" : "0 -40px";
+  c.style.left = grip[0] + "px"; c.style.top = grip[1] + "px";
+  delete c.dataset.drag; delete c.dataset.back;
+  if (d.step === "pointing") { c.style.translate = "0 0"; c.dataset.on = ""; }
+  else if (d.step === "drag") { c.dataset.drag = ""; c.style.translate = move; }
+  else if (d.step === "reset") { delete c.dataset.on; c.dataset.back = ""; c.style.translate = "0 0"; }
+  else if (d.step === "rest" || d.step === "yours") { delete c.dataset.on; c.style.translate = "0 0"; }
 });
 </script>
 </body></html>
