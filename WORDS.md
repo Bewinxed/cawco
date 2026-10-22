@@ -232,6 +232,9 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   operator's anxiety ("the run is paused and holds its place").
 - **Inline, near the problem**: an error on a field sits at that field; a machine error sits at that
   machine's rows; a fleet error sits in the connection band that already carries the retry countdown.
+- **Kept until acted on**: a failure of work that outlives its surface (an install, a spawn, an upload,
+  a sign-in) is said where that work is parked and stands, its details kept, until the operator acts
+  on it; never in a toast that leaves on a timer (DESIGN.md, The Work Outlives Its Surface Rule).
 
 **Examples that satisfy it:**
 
