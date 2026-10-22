@@ -387,6 +387,7 @@ export type TokenSize =
   | "size.c-tray-chip"
   | "size.c-inline-chip-line"
   | "size.c-inline-chip-pad"
+  | "size.c-inline-chip-label"
   | "size.c-peek-glyph"
   | "size.c-tray-gap"
   | "size.c-tray-row"

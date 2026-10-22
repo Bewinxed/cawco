@@ -53,6 +53,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
+  type CanvasEntry,
   canvasOutline,
   excalidrawFile,
   NO_SCREEN,
@@ -183,6 +184,7 @@ import {
   cssEscape,
   htmlChanges,
   pictureChanges,
+  sceneChanges,
 } from "./page-changes";
 import { picturePath, thumbnailPath } from "./sync";
 
@@ -2426,6 +2428,43 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * What an agent's update to canvas `row` changed (page-changes.ts
+   * `sceneChanges`, from the scene `before` it and as it stands now), marked
+   * under the canvas's next scene version (`meta.sceneVersion`). A canvas's
+   * looks are kept by its scene version, not its revision: an update draws
+   * into the live scene every screen holds, and moving the revision would
+   * load the panel's frame again under the person for every batch the agent
+   * draws. What the last update changed that the person hasn't looked at yet
+   * is carried into the new set, so a turn of several updates marks all of
+   * them; one changed again is marked once, as it stands now.
+   */
+  const markSceneChanges = (row: ArtifactRow, before: CanvasEntry[]) => {
+    const items = sceneChanges(before, canvasEntries(docs, row.id));
+    if (items.length === 0) {
+      return;
+    }
+    docs.transact(row.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      const was = meta.get("changes") as ArtifactChanges | undefined;
+      const seen = new Set(
+        was ? (seenOf(doc).get(String(was.revision)) ?? []) : []
+      );
+      const fresh = new Set(items.map((item) => item.anchor));
+      const carried = (was?.items ?? []).filter(
+        (item) => !(seen.has(item.anchor) || fresh.has(item.anchor))
+      );
+      const version = (Number(meta.get("sceneVersion")) || 0) + 1;
+      meta.set("sceneVersion", version);
+      const changes: ArtifactChanges = {
+        revision: version,
+        at: new Date().toISOString(),
+        items: [...carried, ...items].slice(0, CHANGES_LIMIT),
+      };
+      meta.set("changes", changes);
+    });
+  };
+
+  /**
    * A made page's files written for `row`: one made again under its name
    * is its next revision, and what that changed is marked
    * ({@link markChanges}).
@@ -3831,7 +3870,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `One call deletes at most ${CANVAS_LIMITS.deletePerCall} elements.`
         );
       }
+      const before = canvasEntries(docs, row.id);
       const { deleted, missing } = deleteElements(docs, row.id, change.delete);
+      markSceneChanges(row, before);
       return {
         ...readCanvas(
           db.get(row.id) as ArtifactRow,
@@ -3844,9 +3885,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
     }
     // Replacing what the person changed since the session last read it.
-    const present = new Set(
-      canvasEntries(docs, row.id).map((entry) => entry.el.id)
-    );
+    const before = canvasEntries(docs, row.id);
+    const present = new Set(before.map((entry) => entry.el.id));
     const underYou =
       "elements" in change
         ? personChangedAfter(row, row.deliveredSeq, present).filter((id) =>
@@ -3854,6 +3894,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           )
         : [];
     const wrote = await draw(row, change);
+    markSceneChanges(row, before);
     return {
       ...readCanvas(
         db.get(row.id) as ArtifactRow,

@@ -301,6 +301,11 @@ export function seePin(doc: Doc, pin: string, at: string): void {
 export interface ArtifactChanges {
   at: string;
   items: ChangedItem[];
+  /**
+   * What the person's looks at them are kept by (the doc's `seen`): a page's
+   * revision; a canvas's scene version (`meta.sceneVersion`), which each of
+   * the agent's updates moves while the canvas stays the one live scene.
+   */
   revision: number;
 }
 

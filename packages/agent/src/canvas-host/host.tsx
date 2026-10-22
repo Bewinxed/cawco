@@ -33,6 +33,7 @@ import {
   heardFromHost,
   toHost as postToHost,
 } from "../preview-overlay/host-origin";
+import { Changes } from "./changes";
 import { Icon } from "./icons";
 import { guardImages } from "./images";
 import { tokenMs } from "./motion";
@@ -575,6 +576,9 @@ function Host() {
           swappedFrom={tool === "eraser" ? swappedFrom : null}
           tool={tool}
         />
+      ) : null}
+      {api && hold && !EMBEDDED ? (
+        <Changes api={api} doc={hold.doc} key={hold.generation} />
       ) : null}
       {unlinkedShown ? <Unlinked why={unlinkedBecause(hold)} /> : null}
       {!(unlinked || EMBEDDED) && empty ? <Empty onDraw={draw} /> : null}

@@ -696,6 +696,10 @@ const runOn = async (kit: Kit, on: On) => {
     () => changedChecks(on),
     // The Work Outlives Its Surface Rule on the composer.
     () => draftChecks(on),
+    // Changed since you looked, on a canvas.
+    () => canvasChangedChecks(on, id),
+    // A long name holds its line.
+    () => longNameChecks(on),
     // Last: it loads the desk again, which gives the split its kept width.
     () => keyOpenChecks(on),
   ]) {
@@ -7738,6 +7742,586 @@ const draftChecks = async (on: On) => {
     `pill ${JSON.stringify(still)}; composer before ${!noComposer}; after ${JSON.stringify(fromReload)}`
   );
   await on.page.keyboard.press("Escape");
+};
+
+/*
+ * Changed since you looked, on a canvas: the agent's updates mark their
+ * elements under the canvas's scene version; the canvas page washes them in
+ * the scene's coordinates and steps through them with the same tag.
+ */
+
+/** The canvas in the panel, by its artifact. */
+const canvasFrameOf = (screen: Page, id: string, what: string) =>
+  until(
+    what,
+    async () => {
+      const sel = `[data-slot="canvas-stage"][data-artifact="${id}"] iframe`;
+      if ((await screen.locator(sel).count()) === 0) {
+        return null;
+      }
+      const frame = await (
+        await screen.locator(sel).first().elementHandle()
+      )?.contentFrame();
+      if (!frame) {
+        return null;
+      }
+      let ready = false;
+      try {
+        ready = await frame.evaluate(
+          () =>
+            "cawcoCanvasProbe" in window &&
+            !!document.querySelector(".canvas-host .excalidraw")
+        );
+      } catch {
+        return null;
+      }
+      return ready ? frame : null;
+    },
+    Boolean,
+    60_000
+  ).catch(() => null) as Promise<Frame | null>;
+
+/** What the canvas's doc says of its changes and the looks at them, its washes in the view's px, its elements' boxes there, and its tag. */
+const canvasChangesRead = (frame: Frame) =>
+  frame.evaluate(() => {
+    const { doc } = (
+      window as unknown as {
+        cawcoArtifact: {
+          doc: {
+            getMap: (n: string) => {
+              get: (k: string) => unknown;
+              toJSON: () => Record<string, string[]>;
+            };
+          };
+        };
+      }
+    ).cawcoArtifact;
+    const probe = (
+      window as unknown as {
+        cawcoCanvasProbe: {
+          api: {
+            getAppState: () => {
+              scrollX: number;
+              scrollY: number;
+              selectedElementIds: Record<string, boolean>;
+              zoom: { value: number };
+            };
+            getSceneElements: () => {
+              height: number;
+              id: string;
+              isDeleted?: boolean;
+              width: number;
+              x: number;
+              y: number;
+            }[];
+          };
+        };
+      }
+    ).cawcoCanvasProbe;
+    const changes = doc.getMap("meta").get("changes") as {
+      items: { anchor: string; kind: string; label: string }[];
+      revision: number;
+    } | null;
+    const state = probe.api.getAppState();
+    const zoom = state.zoom.value;
+    const boxes = Object.fromEntries(
+      probe.api
+        .getSceneElements()
+        .filter((el) => !el.isDeleted)
+        .map((el) => [
+          el.id,
+          {
+            x: (el.x + state.scrollX) * zoom,
+            y: (el.y + state.scrollY) * zoom,
+            w: el.width * zoom,
+            h: el.height * zoom,
+          },
+        ])
+    );
+    const washes = [
+      ...document.querySelectorAll("svg[data-canvas-changes] [data-change]"),
+    ].map((shape) => ({
+      anchor: shape.getAttribute("data-change") ?? "",
+      tag: shape.tagName,
+      fill: getComputedStyle(shape).fill,
+      pointer: getComputedStyle(shape).pointerEvents,
+      box: (() => {
+        const r = (shape as SVGGraphicsElement).getBBox();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      })(),
+    }));
+    return {
+      changes,
+      sceneVersion: doc.getMap("meta").get("sceneVersion") as number | null,
+      seen: changes
+        ? (doc.getMap("seen").toJSON()[String(changes.revision)] ?? [])
+        : [],
+      washes,
+      boxes,
+      selected: Object.keys(state.selectedElementIds).filter(
+        (key) => state.selectedElementIds[key]
+      ),
+      tag:
+        document
+          .querySelector('[data-slot="changes-tag"] [data-slot="change-count"]')
+          ?.textContent?.trim() ?? null,
+    };
+  });
+
+/** WCAG 2 contrast of the canvas's ink over its ground with the change wash over both, by day and by night, in the canvas page's own tokens. */
+const canvasInkUnderWash = (frame: Frame) =>
+  frame.evaluate(() => {
+    const paint = document.createElement("canvas").getContext("2d", {
+      willReadFrequently: true,
+    });
+    if (!paint) {
+      return null;
+    }
+    const pixel = (...layers: string[]) => {
+      paint.clearRect(0, 0, 1, 1);
+      for (const layer of layers) {
+        paint.fillStyle = layer;
+        paint.fillRect(0, 0, 1, 1);
+      }
+      const [r = 0, g = 0, b = 0] = paint.getImageData(0, 0, 1, 1).data;
+      return { r, g, b };
+    };
+    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+      const lin = (c: number) => {
+        const v = c / 255;
+        return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const root = document.documentElement;
+    const was = root.style.colorScheme;
+    const out: Record<string, number> = {};
+    for (const scheme of ["light", "dark"] as const) {
+      root.style.colorScheme = scheme;
+      const probe = document.createElement("span");
+      probe.style.color = "var(--ink-strong)";
+      probe.style.background = "var(--surface-raised)";
+      probe.style.borderColor = "var(--c-change-wash)";
+      probe.style.borderStyle = "solid";
+      document.body.append(probe);
+      const own = getComputedStyle(probe);
+      const ink = own.color;
+      const ground = own.backgroundColor;
+      const wash = own.borderTopColor;
+      probe.remove();
+      const text = lum(pixel(ground, ink, wash));
+      const under = lum(pixel(ground, wash));
+      out[scheme === "light" ? "day" : "night"] =
+        Math.round(
+          ((Math.max(text, under) + 0.05) / (Math.min(text, under) + 0.05)) *
+            100
+        ) / 100;
+    }
+    root.style.colorScheme = was;
+    return out;
+  });
+
+/**
+ * Canvas (5, on a canvas): two agent updates (Beta's label rewritten,
+ * Delta put in; then Gamma taken out) mark their elements under the scene
+ * version, the second carrying what the first marked; coming back, Beta and
+ * Delta wear the wash on their own boxes, the ink 4.5:1 through it, and it
+ * pans and zooms with the scene; the tag counts three and steps through
+ * them, each seen in the doc, a selection a look too, the wash fading over
+ * `--dur-fade`; every stop seen, the tag leaves, and a reload washes nothing.
+ */
+const canvasChangedChecks = async (on: On, pageId: string) => {
+  const { origin } = new URL(on.page.url());
+  const labelled = (key: string, x: number, y: number, text: string) => ({
+    type: "rectangle",
+    id: key,
+    x,
+    y,
+    width: 160,
+    height: 60,
+    label: { text },
+  });
+  const made = await on.call(CREATE, {
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
+    name: "changed-canvas",
+    elements: [
+      labelled("a", 40, 40, "Alpha stays"),
+      labelled("b", 40, 160, "Beta first"),
+      { type: "ellipse", id: "g", x: 280, y: 40, width: 120, height: 80 },
+    ],
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  await canvasFrameOf(on.page, id, "the canvas in the panel");
+  await on.call(UPDATE, {
+    id,
+    elements: [
+      labelled("b", 40, 160, "Beta again"),
+      labelled("c", 40, 280, "Delta new"),
+    ],
+  });
+  await on.call(UPDATE, { id, delete: ["g"] });
+  // Coming back to it.
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  await restSplit(on);
+  const frame = await canvasFrameOf(on.page, id, "the canvas after a reload");
+  if (!frame) {
+    on.kit.check("canvas changed: the canvas is in the panel", false, "none");
+    return;
+  }
+  const before = await until(
+    "the canvas's washes",
+    () => canvasChangesRead(frame),
+    (read) => read.washes.length === 2,
+    15_000
+  ).catch(() => null);
+  const items = before?.changes?.items ?? [];
+  const placed = (before?.washes ?? []).every((wash) => {
+    const el = before?.boxes[wash.anchor];
+    return !!el && near(wash.box, el, 1) && wash.pointer === "none";
+  });
+  const contrast = await canvasInkUnderWash(frame);
+  on.kit.check(
+    "canvas changed: two agent updates mark Beta, Delta and the gone ellipse under the scene version (2, the second carrying the first's); coming back, Beta and Delta wear the wash (c-change-wash) on their own boxes, taking no press, the ink 4.5:1 or better through it by day and by night; the canvas's tag reads \"3 changed since you looked\"",
+    JSON.stringify(
+      items.map((item) => [
+        item.kind,
+        item.anchor.startsWith("removed:") ? "removed" : item.anchor,
+      ])
+    ) ===
+      JSON.stringify([
+        ["canvas", "b"],
+        ["canvas", "c"],
+        ["removed", "removed"],
+      ]) &&
+      before?.sceneVersion === 2 &&
+      before.changes?.revision === 2 &&
+      JSON.stringify(before.washes.map((wash) => wash.anchor).sort()) ===
+        JSON.stringify(["b", "c"]) &&
+      placed &&
+      (contrast?.day ?? 0) >= 4.5 &&
+      (contrast?.night ?? 0) >= 4.5 &&
+      before.tag === "3 changed since you looked",
+    `items ${JSON.stringify(items)}; version ${before?.sceneVersion}; washes ${JSON.stringify(before?.washes)}; boxes ${JSON.stringify(before?.boxes)}; contrast ${JSON.stringify(contrast)}; tag ${before?.tag}`
+  );
+
+  // Panned and zoomed, the wash stays on its element.
+  await frame.evaluate(() => {
+    const { api } = (
+      window as unknown as {
+        cawcoCanvasProbe: {
+          api: {
+            getAppState: () => { scrollX: number; scrollY: number };
+            updateScene: (scene: object) => void;
+          };
+        };
+      }
+    ).cawcoCanvasProbe;
+    const state = api.getAppState();
+    api.updateScene({
+      appState: {
+        scrollX: state.scrollX + 120,
+        scrollY: state.scrollY + 40,
+        zoom: { value: 1.5 },
+      },
+    });
+  });
+  const moved = await until(
+    "the washes after a pan and a zoom",
+    () => canvasChangesRead(frame),
+    (read) =>
+      read.washes.length === 2 &&
+      read.washes.every((wash) => {
+        const el = read.boxes[wash.anchor];
+        return !!el && near(wash.box, el, 1);
+      }),
+    5000
+  ).catch(() => null);
+  on.kit.check(
+    "canvas changed: panned and zoomed (1.5), each wash stands on its element's box as the view draws it now (±1px)",
+    !!moved,
+    JSON.stringify(moved?.washes)
+  );
+
+  // A step: Beta (the first in reading order) brought out, selected, seen, its wash fading over --dur-fade.
+  await frame.evaluate(() => {
+    const leaving: string[] = [];
+    (window as unknown as { probeLeaving: string[] }).probeLeaving = leaving;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && node.hasAttribute("data-leaving")) {
+            leaving.push(getComputedStyle(node).animationDuration);
+          }
+        }
+      }
+    }).observe(document.querySelector("svg[data-canvas-changes]") as Element, {
+      childList: true,
+    });
+  });
+  await frame.locator('[data-slot="change-next"]').click();
+  const stepped = await until(
+    "Beta looked at",
+    () => canvasChangesRead(frame),
+    (read) => read.seen.includes("b"),
+    5000
+  ).catch(() => null);
+  const leaving = await frame.evaluate(
+    () => (window as unknown as { probeLeaving: string[] }).probeLeaving
+  );
+  on.kit.check(
+    'canvas changed: a step onto Beta selects it, marks it seen in the doc\'s seen, fades its wash off over --dur-fade (0.2s), and the tag reads "1 of 3"',
+    !!stepped &&
+      stepped.selected.includes("b") &&
+      !stepped.washes.some((wash) => wash.anchor === "b") &&
+      leaving.includes("0.2s") &&
+      stepped.tag === "1 of 3",
+    `seen ${JSON.stringify(stepped?.seen)}; selected ${JSON.stringify(stepped?.selected)}; washes ${JSON.stringify(stepped?.washes.map((wash) => wash.anchor))}; leaving ${JSON.stringify(leaving)}; tag ${stepped?.tag}`
+  );
+
+  // The person selecting Delta has looked at it.
+  await frame.evaluate(() => {
+    const { api } = (
+      window as unknown as {
+        cawcoCanvasProbe: { api: { updateScene: (scene: object) => void } };
+      }
+    ).cawcoCanvasProbe;
+    api.updateScene({ appState: { selectedElementIds: { c: true } } });
+  });
+  const selected = await until(
+    "Delta looked at by selecting it",
+    () => canvasChangesRead(frame),
+    (read) => read.seen.includes("c") && read.washes.length === 0,
+    5000
+  ).catch(() => null);
+  await frame.locator('[data-slot="change-next"]').click();
+  await frame.locator('[data-slot="change-next"]').click();
+  const cleared = await until(
+    "every canvas change looked at",
+    () => canvasChangesRead(frame),
+    (read) => read.seen.length === 3 && read.tag === null,
+    5000
+  ).catch(() => null);
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const again = await canvasFrameOf(on.page, id, "the canvas, all seen");
+  await settle(on.page, 1500);
+  const still = again ? await canvasChangesRead(again) : null;
+  on.kit.check(
+    "canvas changed: selecting Delta is a look at it; every stop stepped onto, all three are seen and the tag leaves; coming back washes nothing and draws no tag",
+    !!selected &&
+      !!cleared &&
+      !!still &&
+      still.washes.length === 0 &&
+      still.tag === null,
+    `selected ${JSON.stringify(selected?.seen)}; cleared ${JSON.stringify(cleared?.seen)}; after ${JSON.stringify(still && { washes: still.washes, tag: still.tag })}`
+  );
+  // A page in front again for the legs after, which read its Comments.
+  await on.call(SHOW, { id: pageId });
+  await frameHolding(on.page, pageId, "the comments page in front again");
+};
+
+/*
+ * A long name holds its line: every inline chip's label stops at
+ * `c-inline-chip-label` with an ellipsis, its whole name its text.
+ */
+
+/** The long card's link in a create's answer. */
+const LONG_CARD_LINK = /\[[^\]]*\]\(cawco:decision\/[0-9a-f-]+\/long\)/;
+/** Forty words, as a long name runs. */
+const FORTY_WORDS = Array.from(
+  { length: 40 },
+  (_, i) =>
+    [
+      "launch",
+      "page",
+      "review",
+      "for",
+      "the",
+      "spring",
+      "release",
+      "and",
+      "its",
+      "copy",
+    ][i % 10]
+).join(" ");
+/** The longest name an artifact takes (core `ARTIFACT_NAME`: 63 characters), unbroken. */
+const LONGEST_NAME =
+  "a-name-that-runs-to-every-character-an-artifact-name-may-hold-x";
+
+/** Each chip in the agent's message on `screen`: its box, its label's, its line's, its name and whether its label is cut. */
+const chipsRead = (screen: Page, ids: Record<string, string>) =>
+  screen.evaluate((wanted) => {
+    const scroller = document.querySelector('[data-slot="transcript"]');
+    return {
+      chips: Object.fromEntries(
+        Object.entries(wanted).map(([kind, selector]) => {
+          const chip = [...document.querySelectorAll(selector)].at(-1);
+          const label = chip?.querySelector('[data-slot="label"]');
+          const line = chip?.closest("p, li");
+          const r = chip?.getBoundingClientRect();
+          const l = label?.getBoundingClientRect();
+          const p = line?.getBoundingClientRect();
+          return [
+            kind,
+            chip && r && l && p
+              ? {
+                  chip: { x: r.x, w: r.width, right: r.right },
+                  label: l.width,
+                  line: { x: p.x, right: p.right },
+                  cut: !!label && label.scrollWidth > label.clientWidth + 0.5,
+                  name:
+                    chip.getAttribute("aria-label") ??
+                    chip.textContent?.trim() ??
+                    "",
+                }
+              : null,
+          ];
+        })
+      ),
+      spills: !!scroller && scroller.scrollWidth > scroller.clientWidth + 1,
+      pageSpills:
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth + 1,
+    };
+  }, ids);
+
+/**
+ * Chip labels (2): a 40-word decision question, a 40-word session title, a
+ * pin on 40 words and the longest artifact name, each named by the agent,
+ * at 1440 and at 390: every chip stands inside its line, its label at most
+ * `c-inline-chip-label` (240px) and cut with an ellipsis, its whole name
+ * its accessible name, and nothing spills.
+ */
+const longNameChecks = async (on: On) => {
+  const { origin } = new URL(on.page.url());
+  const decided = await on.call(CREATE, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the long one",
+    name: "long-question",
+    program: `root = Decisions("A long question", [long])
+long = Decision("long", "${FORTY_WORDS}?", [yes, no], "It runs long.")
+yes = Option("yes", "Yes", "It holds.", true, [], "Nothing.")
+no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
+  });
+  const did = decided.match(ANSWERED_ID)?.[1] ?? "";
+  const cardLink = decided.match(LONG_CARD_LINK)?.[0] ?? "";
+  const longPage = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: LONGEST_NAME,
+    html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;font:18px/1.6 system-ui}main{padding:24px}</style></head><body><main><p id="long">${FORTY_WORDS}.</p></main></body></html>`,
+  });
+  const pid = longPage.match(ANSWERED_ID)?.[1] ?? "";
+  // A pin on the forty words.
+  const frame = await frameHolding(on.page, pid, "the long page in the pane");
+  const pane = await on.page.locator(FRAME).boundingBox();
+  if (frame && pane) {
+    await on.page
+      .locator(
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+      )
+      .click();
+    await pageInComment(frame, true);
+    const words = await boxIn(frame, "#long");
+    await commentAt(
+      on,
+      pane.x + words.x + words.w * 0.3,
+      pane.y + words.y + words.h / 2,
+      "This runs long."
+    );
+    await interactTab(on).click();
+  }
+  const pinned = frame ? pinNumbered((await docOf(frame)).pins, 1) : undefined;
+  // The session's own title, forty words, as the owner names it.
+  const renamed = await on.page.evaluate(
+    async ({ session, title }) =>
+      (
+        await fetch(`/api/instances/${session}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title }),
+        })
+      ).status,
+    { session: on.session, title: FORTY_WORDS }
+  );
+  await agentSays(
+    on,
+    `Long names: ${cardLink}, [${LONGEST_NAME}](cawco:artifact/${pid}), [the words](cawco:pin/${pid}/1) and [this session](cawco:session/${on.session}).`
+  );
+  const selectors = {
+    card: `[data-decision-chip="${did}/long"]`,
+    artifact: `[data-artifact-chip="${pid}"]`,
+    pin: `[data-pin-chip="${pid}/1"]`,
+    session: `[data-session-chip="${on.session}"]`,
+  };
+  const held = (
+    read: Awaited<ReturnType<typeof chipsRead>>,
+    names: Record<string, string>
+  ) =>
+    Object.entries(read.chips).every(([kind, chip]) => {
+      const name = names[kind] ?? "";
+      return (
+        !!chip &&
+        chip.chip.x >= chip.line.x - 0.5 &&
+        chip.chip.right <= chip.line.right + 0.5 &&
+        chip.label <= 240.5 &&
+        chip.cut &&
+        chip.name.includes(name)
+      );
+    }) &&
+    !read.spills &&
+    !read.pageSpills;
+  const full = {
+    card: `${FORTY_WORDS}?`,
+    artifact: LONGEST_NAME,
+    pin: pinned ? pinName(pinned as unknown as Pin) : "∅",
+    session: FORTY_WORDS,
+  };
+  await on.page
+    .locator(selectors.pin)
+    .last()
+    .waitFor({ timeout: 60_000 })
+    .catch(() => undefined);
+  const desk = await until(
+    "the long chips at 1440",
+    () => chipsRead(on.page, selectors),
+    (read) => Object.values(read.chips).every(Boolean),
+    20_000
+  ).catch(() => chipsRead(on.page, selectors));
+  on.kit.check(
+    "chip labels (1440): a 40-word decision question, a 40-word session title, a pin on 40 words and the longest artifact name each draw as a chip inside its line, its label at most c-inline-chip-label (240px) and cut with an ellipsis, its whole name its accessible name; nothing spills",
+    renamed === 200 && held(desk, full),
+    `rename ${renamed}; ${JSON.stringify(desk)}`
+  );
+  const phone = await on.kit.page("phone");
+  await open(phone, `${origin}/session/${on.session}`, COMPOSER);
+  await phone
+    .locator('[data-side-card="preview"] button[data-slot="close"]')
+    .click({ timeout: 10_000 })
+    .catch(() => undefined);
+  await phone
+    .locator(selectors.pin)
+    .last()
+    .waitFor({ timeout: 30_000 })
+    .catch(() => undefined);
+  const small = await until(
+    "the long chips at 390",
+    () => chipsRead(phone, selectors),
+    (read) => Object.values(read.chips).every(Boolean),
+    20_000
+  ).catch(() => chipsRead(phone, selectors));
+  on.kit.check(
+    "chip labels (390): the same four chips each stand inside their line, labels at most 240px and cut, whole names their accessible names; nothing spills",
+    held(small, full),
+    JSON.stringify(small)
+  );
+  await phone.close();
+  // Closing the phone's sheet closed the panel for every view: a page in front again for the legs after.
+  await on.call(SHOW, { id: pid });
+  await frameHolding(on.page, pid, "the long page in front again");
 };
 
 const spec: Spec = { name: "comments", run };

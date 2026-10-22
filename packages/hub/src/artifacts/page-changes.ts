@@ -18,6 +18,7 @@
  * `#decision-<id>`, and each taken out, a removed stop with its question.
  */
 import { createHash } from "node:crypto";
+import type { CanvasElement, CanvasEntry } from "@cawco/core/canvas";
 import {
   ANCHOR_IDENTITIES,
   CHANGES_LIMIT,
@@ -438,6 +439,94 @@ export function htmlChanges(
     label: node.parent ? labelOf(node) : "Whole page",
   }));
   return [...items, ...removed].slice(0, CHANGES_LIMIT);
+}
+
+/** An element's fields that move with no change the person would see: its version stamps. */
+const STAMPS = new Set(["version", "versionNonce", "updated", "seed"]);
+
+/** An element as the scene diff compares it: everything but its stamps. */
+const sceneSig = (el: CanvasElement): string =>
+  JSON.stringify(
+    Object.entries(el)
+      .filter(([key]) => !STAMPS.has(key))
+      .sort(([a], [b]) => a.localeCompare(b))
+  );
+
+/** Words an element type is called by, where it has no words of its own. */
+const SCENE_WORDS: Record<string, string> = {
+  arrow: "Arrow",
+  diamond: "Diamond",
+  ellipse: "Ellipse",
+  frame: "Frame",
+  freedraw: "Drawing",
+  image: "Picture",
+  line: "Line",
+  rectangle: "Rectangle",
+  text: "Text",
+};
+
+/**
+ * What an agent's update to a canvas changed, from the scene before and
+ * after it (core canvas.ts `CanvasEntry`), by element id: each element put
+ * in or changed, told at the shape a changed label stands in, and each
+ * taken out, a removed stop with its words. Its stamps moving alone is no
+ * change.
+ */
+export function sceneChanges(
+  before: readonly CanvasEntry[],
+  after: readonly CanvasEntry[]
+): ChangedItem[] {
+  const live = (entries: readonly CanvasEntry[]) =>
+    new Map(
+      entries
+        .filter((entry) => !entry.el.isDeleted)
+        .map((entry) => [entry.el.id, entry.el])
+    );
+  const was = live(before);
+  const now = live(after);
+  /** An element's words: its own text, its label's, else what it is. */
+  const elementWords = (el: CanvasElement, all: Map<string, CanvasElement>) => {
+    const label = el.boundElements?.find((one) => one.type === "text");
+    const words = (
+      el.text ??
+      (label ? all.get(label.id)?.text : undefined) ??
+      ""
+    )
+      .replace(SPACES, " ")
+      .trim();
+    if (!words) {
+      return SCENE_WORDS[el.type] ?? "Element";
+    }
+    return words.length > LABEL_CHARS
+      ? `${words.slice(0, LABEL_CHARS - 1).trimEnd()}…`
+      : words;
+  };
+  const told = new Set<string>();
+  const items: ChangedItem[] = [];
+  for (const [id, el] of now) {
+    const old = was.get(id);
+    if (old && sceneSig(old) === sceneSig(el)) {
+      continue;
+    }
+    // A label's change is its shape's.
+    const at = el.containerId && now.has(el.containerId) ? el.containerId : id;
+    if (told.has(at)) {
+      continue;
+    }
+    told.add(at);
+    const shown = now.get(at) ?? el;
+    items.push({ kind: "canvas", anchor: at, label: elementWords(shown, now) });
+  }
+  for (const [id, el] of was) {
+    if (!(now.has(id) || (el.containerId && was.has(el.containerId)))) {
+      items.push({
+        kind: "removed",
+        anchor: `removed:${id}`,
+        label: elementWords(el, was),
+      });
+    }
+  }
+  return items.slice(0, CHANGES_LIMIT);
 }
 
 /** A file's bytes as a fingerprint: what tells a picture drawn again from the same one. */

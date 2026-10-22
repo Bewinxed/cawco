@@ -4953,6 +4953,15 @@
         }
       }
     },
+    "c-inline-chip-label": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "The most an inline chip's label stands across (a session, a pin, a decision card, an artifact named in running text): past it the label ends in an ellipsis, its whole name in the chip's accessible name and its peek or card. A 40-word name never takes a line by itself. Our call: about 30 characters of the label role, the most a line of chat reads as one name. Web only.",
+      "$extensions": { "dev.cawco": { "platforms": ["web"] } }
+    },
     "c-peek-glyph": {
       "$type": "dimension",
       "$value": "{size.icon-md}",
