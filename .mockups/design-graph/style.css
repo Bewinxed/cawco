@@ -1,0 +1,573 @@
+/* The design graph mockup, round 22 (every screen), on CawCo's tokens (tokens.css above it, built from
+   design/tokens). Every size, ink, radius, duration and curve is a token. The values in :root below are the
+   designs' own and have no token yet; each is listed as a finding in the report. */
+@layer mockup {
+:root {
+  color-scheme: light dark;
+  -webkit-tap-highlight-color: transparent;
+  /* resize-handle-design.md, "New, in the JSON first". */
+  --c-edge-grip-len: 36px;
+  --c-edge-hit: var(--space-3);
+  --c-edge-lit-fade: var(--c-edge-grip-len);
+  /* fable-timeline-design.md: "Name column 280px". */
+  --dock-name-w: 280px;
+  /* fable-timeline-design.md: "ew-resize on the 8px handle zones". */
+  --bar-handle-zone: 8px;
+  /* responsive-design.md, "Proposed tokens". The breakpoints (bp-short 560, bp-desk-wide 1800, bp-ultra
+     2450) live in app.js's BP, which sets html[data-screen]; a media query can't read a custom property. */
+  --c-graph-panel-w: 448px;
+  --c-graph-panel-w-wide: 800px;
+  /* r22 ruling call 3: the dock's ceiling leaves the page this much, its head and first field readable. */
+  --c-page-h-floor: 240px;
+  /* The kit's floating-surface pad (its menu), and One Target's gap round a bare element (the r21 ruling);
+     neither has a token yet. */
+  --c-floating-pad: 6px;
+  --c-target-gap: 2px;
+  --c-graph-drawer-stop: 45dvh;
+  --c-review-max-w: 2000px;
+  /* Phone landscape's collapsed sheet: "Hide collapses it to a 32px edge tab". */
+  --c-edge-tab-w: 32px;
+  /* The panel's width; a dragged width is set on html's own style and wins. */
+  --panel-w: var(--c-graph-panel-w);
+  /* One component from bp-ultra up: the whole layout stands in a 2000px column, centred, the gutter either
+     side. A percentage, so each fixed box resolves it against the viewport it stands in. */
+  --gutter: max(0px, (100% - var(--c-review-max-w)) / 2);
+  --gutter-start: var(--gutter);
+  --gutter-end: var(--gutter);
+}
+/* One component under review: the wide panel from bp-desk-wide. Two or more on screen at once: the 448 panel
+   with the graphs stacked, or twice it with them side by side, and no 2000 cap (all-components-design.md). */
+html:is([data-screen="wide"], [data-screen="ultrawide"]):not([data-multi]) { --panel-w: var(--c-graph-panel-w-wide); }
+html[data-multi] { --panel-default: var(--c-graph-panel-w); --panel-w: var(--panel-default); }
+html[data-multi][data-graphs="row"] { --panel-default: calc(2 * var(--c-graph-panel-w)); }
+/* Every component at once (the r23 values ruling, call 2): the review block (the pages row and its margins,
+   the panel and its margins) stands centred. The end gutter is fixed by the panel's default width, so a
+   dragged panel keeps its trailing edge and the pages shift by the drag, wrapping only once the start gutter
+   is spent. --row-w (the pages' row, from app.js) and its 18px margins either side; the panel's likewise. */
+html[data-multi] {
+  --gutter-end: max(0px, (100% - (var(--row-w) + 2 * var(--space-5)) - (var(--panel-default) + 2 * var(--space-5))) / 2);
+  --gutter-start: max(0px, 100% - var(--gutter-end) - (var(--row-w) + 2 * var(--space-5)) - (var(--panel-w) + 2 * var(--space-5)));
+}
+/* More components than fit a row: the pages wrap and the block fills the pane. */
+html[data-multi][data-wrapped] { --gutter-end: 0px; --gutter-start: 0px; }
+* { box-sizing: border-box; }
+body { margin: 0; min-block-size: 100dvh; font: var(--type-body); background: var(--surface-recess); color: var(--ink-strong); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+button { font: inherit; color: inherit; }
+
+/* ---- The page under the tool: the component being judged ----
+   It owns the room left of the panel and above the dock, and scrolls inside it, so the dock never covers it
+   and nothing the tool does moves it. */
+.page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: var(--gutter-start) calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: max(var(--space-8), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-8); display: grid; justify-items: center; align-content: start; }
+/* The pages: one row of 600px pages a margin apart, the spare width the recess; more than fit wrap. */
+.pages { inline-size: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: var(--space-5); }
+.stage-wrap { position: relative; flex: 0 1 auto; inline-size: min(100%, 600px); container: page / inline-size; }
+.stage-wrap[hidden] { display: none; }
+.frame { padding: var(--space-6); border: 1px solid var(--border-control); border-radius: calc(var(--mock-radius, 8px) + var(--space-1)); background: var(--surface-raised); box-shadow: var(--shadow-tile); }
+.frame label { display: block; margin: 0 0 var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
+.field { margin-block-end: var(--space-3); min-inline-size: 0; }
+.input { min-block-size: var(--c-input-h); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); overflow-wrap: anywhere; }
+.input.tall { min-block-size: calc(2 * var(--c-input-h) - var(--space-2)); }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.line { margin: 0 0 var(--space-3); text-wrap: pretty; }
+.line.read { font-weight: var(--weight-strong); }
+.line.muted { color: var(--ink-muted); }
+.line.fail { color: var(--status-fail-ink); }
+.field .line { margin: var(--space-1) 0 0; }
+.actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); }
+.actions .note { font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
+/* A narrow page (a phone) gives the caption its own line over the buttons, rather than two squeezed beside
+   them (the r24 review). */
+@container page (width < 440px) { .actions .note { grid-column: 1 / -1; } .actions .btn { grid-row: 2; grid-column: 2; } .actions .btn.primary { grid-column: 3; } }
+.btn { display: inline-flex; align-items: center; min-block-size: var(--c-btn-h-sm); padding: 0 var(--space-4); border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); color: var(--ink-strong); font: var(--type-button); white-space: nowrap; }
+.btn.primary { background: var(--action-solid); border-color: var(--action-solid); color: var(--on-action); }
+.done { padding: var(--space-5); border-radius: var(--radius-md); background: var(--surface-recess); }
+.rlist { border: 1px solid var(--border-control); border-radius: calc(var(--mock-radius, 8px) + var(--space-1)); background: var(--surface-raised); box-shadow: var(--shadow-tile); }
+.rrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-row) var(--space-3); align-items: center; padding: var(--mock-row-pad, 12px) var(--space-4); border-block-end: 1px solid var(--border-hairline); }
+.rrow:last-child { border-block-end: 0; }
+.rrow b { font-weight: var(--weight-strong); }
+.rmeta { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); }
+.rstatus { grid-column: 1; font: var(--type-label); font-weight: var(--weight-body); }
+.rstatus.fail { color: var(--status-fail-ink); }
+.rstatus.muted { color: var(--ink-muted); }
+.ractions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: var(--space-2); }
+.dot { display: inline-block; block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: var(--action-solid); vertical-align: middle; }
+
+/* Change marks (clarity §3 B, the owner's pick): while a hover previews a state that differs from the kept one,
+   a wash over every value that came in or changed, and one where a value went, at its old box. */
+.marks { position: absolute; inset: 0; pointer-events: none; }
+.wash { position: absolute; opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+/* The wash is the fill; a 1px edge in its own hue's mark ink carries it at 3:1 against the field (the diff
+   tints alone are 1.2:1). data-ok and data-bad are success-9's and error-9's hues; error-9 itself measures
+   2.99:1 on its wash at night. */
+.wash.add { background: var(--diff-add-bg); box-shadow: inset 0 0 0 1px var(--data-ok); }
+.wash.del { background: var(--diff-del-bg); box-shadow: inset 0 0 0 1px var(--data-bad); }
+.wash.in { opacity: 1; }
+
+/* ---- The tool: the house floating panel ---- */
+.tool { position: fixed; z-index: var(--layer-dock); color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-overlay); font: var(--type-label); font-weight: var(--weight-body); }
+.tool :focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.panel { inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2); }
+/* One row over the graph: the components' tabs, then the graph's zoom and Hide at the trailing end. */
+/* It wraps (zoom and Hide to a line of their own, at the end) before the tabs would be cut. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
+.bar-end { display: flex; align-items: center; gap: var(--space-1); margin-inline-start: auto; flex: none; }
+.graph { position: relative; flex: 0 1 auto; min-block-size: 0; block-size: var(--graph-h, 520px); overflow: auto; overscroll-behavior: contain; cursor: grab; border-radius: calc(var(--radius-panel) - var(--space-2)); background: var(--surface-well); border: 1px solid var(--border-well); }
+.graph.panning { cursor: grabbing; }
+.zoomer { position: relative; margin: 0 auto; }
+.world { position: absolute; inset-inline-start: 0; inset-block-start: 0; transform-origin: 0 0; }
+/* A machine: a statechart's parallel region, dashed, its name at its top. Its corner holds a node 8px in,
+   so its radius is the node's plus that gap (The Concentric Rule). */
+.region { position: absolute; padding: var(--space-2); border: 1px dashed var(--border-card); border-radius: var(--radius-panel); }
+/* A machine's name labels its region, a step under the states it holds: meta at 400, muted. */
+.region-name { inline-size: 0; min-inline-size: 100%; margin: 0; padding: 0 var(--space-1) var(--space-2); font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
+.regionBody { position: relative; }
+.world svg { position: absolute; inset-inline-start: 0; inset-block-start: 0; overflow: visible; pointer-events: none; }
+.world svg polyline { fill: none; stroke: var(--border-contrast); stroke-width: var(--c-graph-edge); transition: stroke var(--dur-control) var(--ease-out), stroke-width var(--dur-control) var(--ease-out); }
+.world svg polyline.dash { stroke-dasharray: 4 3; }
+.world svg polyline.kept { stroke: var(--brand-solid); stroke-width: var(--c-block-drop-line); }
+.world svg text { paint-order: stroke; stroke: var(--surface-well); stroke-width: 4px; stroke-linejoin: round; font: var(--type-meta); fill: var(--ink-muted); }
+.world svg .disc { fill: var(--brand-ink-strong); }
+/* A state: three tiers and one meaning for coral (clarity §1). */
+.node { position: absolute; inline-size: var(--node-w, 168px); display: flex; flex-direction: column; gap: var(--space-row); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); cursor: pointer; transition: var(--transition-control); }
+.node b { font: var(--type-label); color: var(--ink-strong); }
+.node p { margin: 0; font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
+@media (hover: hover) { .node:not(.kept, .cur):hover { background: var(--surface-hover); } }
+/* A previewed state peeks on every pointer: a hover, or a finger's held press (the r24 review). */
+.node.peek:not(.kept, .cur) { background: var(--surface-hover); }
+.node.cur { background: var(--surface-pressed); border-color: var(--border-contrast); }
+.node.kept { background: var(--selected-bg); border-color: var(--brand-solid); box-shadow: var(--selected-shadow); }
+.node.kept b { color: var(--selected-ink); }
+/* A state's fill fades between tiers; its words never do. The darker ink comes in at once, the lighter only
+   once the fill has finished, so no frame sets an ink on a fill it doesn't hold 4.5:1 on. */
+.node b, .node p { transition: color 0s linear var(--dur-control); }
+.node.cur b, .node:is(.kept, .cur) p { transition: color 0s; }
+.world[data-instant] :is(.node b, .node p) { transition: none; }
+@media (prefers-reduced-motion: reduce) { .node b, .node p { transition: none; } }
+.node.kept p, .node.cur p { color: var(--ink-row); }
+.vars { display: flex; flex-direction: column; gap: var(--space-1); margin-block-start: var(--space-2); }
+.var { all: unset; display: block; padding: var(--space-row) var(--space-2); border-radius: var(--radius-xs); font: var(--type-meta); color: var(--ink-row); border: 1px solid var(--border-control); background: var(--surface-raised); cursor: pointer; transition: var(--transition-control); }
+@media (hover: hover) { .var:not(.kept, .cur):hover { background: var(--surface-hover); } }
+.var.peek:not(.kept, .cur) { background: var(--surface-hover); }
+/* A chip's tier is the chip's own fill, edge and ink, faded over --transition-control (the ruling: the
+   mid-fade frame is accepted house-wide; no clip-path wipe). */
+.var.kept { background: var(--chip-chosen-bg); border-color: var(--chip-chosen-bg); color: var(--chip-chosen-ink); }
+.var.cur { background: var(--surface-pressed); border-color: var(--border-contrast); color: var(--ink-strong); }
+/* A graph drawn anew (a tab, a resize, a relayout) takes its tiers at once: only a change of state on a graph
+   already drawn fades between them. */
+.world[data-instant] :is(.node, .var) { transition: none; }
+.var:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+
+/* The zoom group: 24px items 2px in, so 5px + 2px + the 1px edge = the group's 8px (The Concentric Rule);
+   the pad is derived, never --space-row. */
+.zoom { display: flex; align-items: center; gap: var(--space-row); padding: calc(var(--radius-sm) - var(--radius-xs) - 1px); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); }
+.zoom output { min-inline-size: 4ch; text-align: center; font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.icon-btn { all: unset; box-sizing: border-box; display: grid; place-items: center; inline-size: var(--c-btn-h-xs); block-size: var(--c-btn-h-xs); border-radius: var(--radius-xs); color: var(--ink-row); cursor: pointer; transition: var(--transition-control); }
+.icon-btn svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
+/* Hide: the kit's sm icon button (30px, the input's radius, the button outline), its glyph at --icon-md. */
+.hide-btn { inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); border: 1px solid var(--border-button-outline); color: var(--ink-row); }
+.hide-btn svg { inline-size: var(--icon-md); block-size: var(--icon-md); }
+@media (hover: hover) { .icon-btn:hover { background: var(--surface-hover); } }
+.icon-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+
+/* A graph's section: its name in the label role and its own zoom group over it (shown with every graph on
+   screen); below the line, the toolbar's tabs pick the one section shown. */
+.graphs { display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; }
+.gsec { display: flex; flex-direction: column; min-block-size: 0; }
+html:not([data-multi]) .gsec:not([data-current]) { display: none; }
+html:not([data-multi]) .gsec-head { display: none; }
+.gsec-head { display: flex; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
+.gsec-name { flex: 1 1 auto; min-inline-size: 0; margin: 0; padding-inline-start: var(--space-1); font: var(--type-label); color: var(--ink-strong); overflow-wrap: anywhere; text-wrap: balance; }
+html[data-multi] .toolbar :is(#tabs, .bar-end > .zoom) { display: none; }
+html[data-multi] .graphs { gap: var(--space-4); }
+/* Stacked: the panel stands the pane's height and the two graphs share it, split by the first one's foot. */
+html[data-graphs="stack"] .panel { block-size: calc(100dvh - 2 * var(--space-5)); }
+html[data-graphs="stack"] .graphs { flex: 1 1 auto; }
+html[data-graphs="stack"] .gsec:first-child { flex: none; }
+html[data-graphs="stack"] .gsec:first-child .graph { flex: none; block-size: var(--split-h, 240px); }
+html[data-graphs="stack"] .gsec:last-child { flex: 1 1 0; }
+html[data-graphs="stack"] .gsec:last-child .graph { flex: 1 1 auto; block-size: auto; }
+/* Its grips are the width edge and the split edge: no foot edge, no corner (the r23 values ruling, call 3). */
+html[data-graphs="stack"] :is(.sash-h, .edge-pill-h, .sash-c, .corner-l) { display: none; }
+/* Side by side past bp-ultra: each graph its own column at the panel's graph height. */
+html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-3); }
+/* The dials start clear of the corner's L: its 6px inset and 12px legs, then --space-2, less the panel's own
+   pad and edge, so no label's first letter stands under the L's curve. */
+.dials { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; column-gap: var(--space-3); row-gap: var(--space-1); align-items: center; padding: var(--space-2) 0 0 calc(var(--c-corner-grip-inset) + var(--c-corner-grip-leg) + var(--space-2) - var(--space-2) - 1px); }
+.dial { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
+.dial span:first-child { color: var(--ink-row); }
+.dial output { font: var(--type-meta); text-align: end; font-variant-numeric: tabular-nums; color: var(--ink-muted); }
+.dial input[type="range"] { inline-size: 100%; margin: 0; accent-color: var(--ink-solid); }
+
+/* ---- Resizing the panel: marked edges (resize-handle-design.md) ----
+   Hit bands straddle the edge and take no room: 4px outside, the 1px border, 6px of the 7px padding. */
+.sash { position: absolute; z-index: 4; touch-action: none; }
+.sash:focus-visible { outline: none; }
+.sash-w { inset-block: var(--radius-panel); inset-inline-start: calc(-1 * (var(--space-1) + 1px)); inline-size: var(--c-edge-hit); cursor: ew-resize; }
+.sash-h { inset-inline: var(--radius-panel); inset-block-end: calc(-1 * (var(--space-1) + 1px)); block-size: var(--c-edge-hit); cursor: ns-resize; }
+.sash-c { inset-inline-start: calc(-1 * (var(--space-1) + 1px)); inset-block-end: calc(-1 * (var(--space-1) + 1px)); inline-size: calc(var(--radius-panel) + var(--space-1)); block-size: calc(var(--radius-panel) + var(--space-1)); cursor: nesw-resize; }
+/* The split between stacked graphs: a band across the panel in the gap under the first graph (top set by
+   app.js), its pill centred on it. */
+.sash-s { inset-inline: var(--radius-panel); block-size: var(--c-edge-hit); cursor: ns-resize; }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-s { block-size: var(--c-side-divider-hit); }
+.edge-pill-s { block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
+/* The dock's height edge: the same band on its top border. */
+.sash-d { inset-inline: var(--radius-panel); inset-block-start: calc(-1 * (var(--space-1) + 1px)); block-size: var(--c-edge-hit); cursor: ns-resize; }
+/* Touch (any-pointer: coarse, set by app.js as html[data-input]): 44px bands straddling each edge. */
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-w { inset-block: calc(var(--c-side-divider-hit) / 2); inset-inline-start: calc(-0.5px - var(--c-side-divider-hit) / 2); inline-size: var(--c-side-divider-hit); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-h { inset-inline: calc(var(--c-side-divider-hit) / 2); inset-block-end: calc(-0.5px - var(--c-side-divider-hit) / 2); block-size: var(--c-side-divider-hit); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-d { inset-inline: calc(var(--c-side-divider-hit) / 2); inset-block-start: calc(-0.5px - var(--c-side-divider-hit) / 2); block-size: var(--c-side-divider-hit); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline-start: calc(-0.5px - var(--c-side-divider-hit) / 2); inset-block-end: calc(-0.5px - var(--c-side-divider-hit) / 2); inline-size: var(--c-side-divider-hit); block-size: var(--c-side-divider-hit); }
+/* Touch without a hover pointer has no corner: the width edge and the foot are the two grips. */
+html[data-input="touch"] :is(.sash-c, .corner-l) { display: none; }
+/* The edge marks at rest: a pill centred on each straight edge's run and on its 1px border; the corner's L,
+   6px in and concentric. Their ink holds 3:1 on the panel and on the page under it (border-row-outline). */
+.edge-pill, .corner-l { position: absolute; z-index: 5; pointer-events: none; transition: background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out); }
+.edge-pill { border-radius: var(--radius-pill); background: var(--border-row-outline); }
+.edge-pill-w { inline-size: var(--c-grabber-h); block-size: var(--c-edge-grip-len); inset-inline-start: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-block-start: calc(50% - var(--c-edge-grip-len) / 2); }
+.edge-pill-h { block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-block-end: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
+.edge-pill-d, .edge-pill-top { block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-block-start: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
+/* The L's stroke is an inset spread, not a border: Chromium snaps border widths to whole device pixels
+   (1.5px draws 1px at 1x), and a spread keeps the token's 1.5px at every ratio. Its ::before is the L's box
+   grown by the stroke, its top and end edges clipped away, so the legs are 12px. */
+.corner-l { --l-ink: var(--border-row-outline); inline-size: var(--c-corner-grip-leg); block-size: var(--c-corner-grip-leg); inset-inline-start: calc(var(--c-corner-grip-inset) - 1px); inset-block-end: calc(var(--c-corner-grip-inset) - 1px); border-end-start-radius: calc(var(--radius-panel) - var(--c-corner-grip-inset)); }
+.corner-l::before { content: ""; position: absolute; inset-inline-start: 0; inset-block-end: 0; inline-size: calc(var(--c-corner-grip-leg) + var(--c-corner-grip-stroke)); block-size: calc(var(--c-corner-grip-leg) + var(--c-corner-grip-stroke)); border-end-start-radius: inherit; box-shadow: inset 0 0 0 var(--c-corner-grip-stroke) var(--l-ink); clip-path: inset(var(--c-corner-grip-stroke) var(--c-corner-grip-stroke) 0 0); transition: box-shadow var(--dur-control) var(--ease-out); }
+@media (hover: hover) {
+  .panel:has(.sash-w:hover, .sash-c:hover) .edge-pill-w,
+  .panel:has(.sash-h:hover, .sash-c:hover) .edge-pill-h,
+  .dock:has(.sash-d:hover) .edge-pill-d,
+  .panel:has(.sash-s:hover) .edge-pill-s { background: var(--ink-muted); }
+  .panel:has(.sash-c:hover) .corner-l { --l-ink: var(--ink-muted); }
+}
+.panel:is([data-resizing="w"], [data-resizing="wh"]) .edge-pill-w,
+.panel:is([data-resizing="h"], [data-resizing="wh"]) .edge-pill-h,
+.dock[data-resizing] .edge-pill-d,
+.panel[data-resizing="s"] .edge-pill-s { background: var(--ink-muted); }
+/* The split is inside the panel, off its outline: it lights its pill, not the outline. */
+.panel[data-resizing="s"]::after { opacity: 0; }
+.panel[data-resizing="wh"] .corner-l { --l-ink: var(--ink-muted); }
+.panel:has(.sash-w:focus-visible) .edge-pill-w,
+.panel:has(.sash-h:focus-visible) .edge-pill-h,
+.dock:has(.sash-d:focus-visible) .edge-pill-d,
+.panel:has(.sash-s:focus-visible) .edge-pill-s,
+.panel:has(.sash-c:focus-visible) .corner-l { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+/* The lit edge: the panel's own outline re-stroked on its border and radius (an inset 1.5px spread, which no
+   pixel ratio snaps), masked to the arm under the
+   pointer and faded to nothing over --c-edge-lit-fade at each end. It sits on the border box, so it is
+   inset from the padding box by the 1px border plus half the stroke's extra width. The mask stays on the
+   arm last lit (data-edge) so a fade-out never shows the whole outline. */
+.panel::after, .dock::after { content: ""; position: absolute; z-index: 3; pointer-events: none; inset: calc(-1px - (var(--c-corner-grip-stroke) - 1px) / 2); border-radius: calc(var(--radius-panel) + (var(--c-corner-grip-stroke) - 1px) / 2); box-shadow: inset 0 0 0 var(--c-corner-grip-stroke) var(--lit-ink, var(--border-row-outline)); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); mask: var(--edge-mask, none); mask-composite: var(--edge-mask-op, intersect); }
+@media (hover: hover) { .panel:has(.sash-w:hover, .sash-h:hover, .sash-c:hover)::after, .dock:has(.sash-d:hover)::after { opacity: 1; transition-delay: var(--dur-pop); } }
+.panel[data-resizing], .dock[data-resizing] { --lit-ink: var(--ink-muted); }
+.panel[data-resizing]::after, .dock[data-resizing]::after { opacity: 1; transition: none; }
+/* Touch without hover has no lit edge: the pill darkens on press, and that is all. */
+html[data-input="touch"] :is(.panel, .dock)::after { display: none; }
+.panel[data-edge="w"] { --edge-mask:
+  linear-gradient(to right, #000 calc(var(--radius-panel) + var(--c-corner-grip-stroke)), transparent 0),
+  linear-gradient(to bottom, transparent, #000 var(--c-edge-lit-fade), #000 calc(100% - var(--c-edge-lit-fade)), transparent); }
+.panel[data-edge="h"] { --edge-mask:
+  linear-gradient(to top, #000 calc(var(--radius-panel) + var(--c-corner-grip-stroke)), transparent 0),
+  linear-gradient(to right, transparent, #000 var(--c-edge-lit-fade), #000 calc(100% - var(--c-edge-lit-fade)), transparent); }
+.dock { --edge-mask:
+  linear-gradient(to bottom, #000 calc(var(--radius-panel) + var(--c-corner-grip-stroke)), transparent 0),
+  linear-gradient(to right, transparent, #000 var(--c-edge-lit-fade), #000 calc(100% - var(--c-edge-lit-fade)), transparent); }
+.panel[data-edge="wh"] { --edge-mask:
+  radial-gradient(circle at 0 100%, #000 calc(var(--radius-panel) + var(--c-edge-lit-fade)), transparent calc(var(--radius-panel) + 2 * var(--c-edge-lit-fade))),
+  linear-gradient(to right, #000 calc(var(--radius-panel) + var(--c-corner-grip-stroke)), transparent 0),
+  linear-gradient(to top, #000 calc(var(--radius-panel) + var(--c-corner-grip-stroke)), transparent 0);
+  --edge-mask-op: intersect, add; }
+/* A drag holds its cursor on the document, so it stays when the pointer outruns the band. */
+html[data-resizing] * { user-select: none; }
+html[data-resizing="w"], html[data-resizing="w"] * { cursor: ew-resize !important; }
+html:is([data-resizing="h"], [data-resizing="d"], [data-resizing="s"]), html:is([data-resizing="h"], [data-resizing="d"], [data-resizing="s"]) * { cursor: ns-resize !important; }
+html[data-resizing="wh"], html[data-resizing="wh"] * { cursor: nesw-resize !important; }
+html[data-scrubbing], html[data-scrubbing] * { cursor: ew-resize !important; user-select: none; }
+html[data-dragging], html[data-dragging] * { cursor: grabbing !important; user-select: none; }
+html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !important; }
+
+/* Show: the way back once the panel is hidden. */
+.show { position: fixed; z-index: var(--layer-dock); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); display: inline-flex; align-items: center; gap: var(--space-2); block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-raised); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
+.show svg { inline-size: var(--icon-md); block-size: var(--icon-md); color: var(--ink-muted); }
+.show[hidden] { display: none; }
+@media (hover: hover) { .show:hover { background: var(--surface-hover); } }
+.show:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+
+/* ---- The dock: the kept move's clips over time, an editor ---- */
+/* The dock at the foot, under the page column. Its height is its rows' until its top edge is dragged
+   (--dock-h), between its floor (head, ruler, one row) and the room; the page column takes what is left. */
+.dock { container: dock / inline-size; inset-inline-start: calc(var(--gutter-start) + var(--space-5)); inset-inline-end: calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); inset-block-end: var(--space-5); block-size: var(--dock-h, auto); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-3) var(--space-4) var(--space-4); }
+.dock-body { display: contents; }
+.dock-head { display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-btn-h); margin-block-end: var(--space-2); }
+.dock-title { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); color: var(--ink-strong); overflow-wrap: anywhere; }
+.edits { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.ghost-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border-radius: var(--radius-md); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
+@media (hover: hover) { .ghost-btn:hover { background: var(--surface-hover); } }
+.ghost-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.tl { position: relative; flex: 1 1 auto; overflow: hidden auto; overscroll-behavior: contain; min-block-size: 0; }
+.tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
+/* The ruler row: the transport and the readout in the name column, the time over the lanes. */
+.ruler-row { position: sticky; inset-block-start: 0; z-index: 3; align-items: center; min-block-size: var(--c-btn-h-sm); background: var(--surface-raised); border-block-end: 1px solid var(--border-hairline); padding-block-end: var(--space-2); }
+.transport { display: flex; align-items: center; gap: var(--space-1); min-inline-size: 0; }
+/* Play and Loop: the kit's sm icon button (30px, the input's radius, the button outline, a 16px glyph). */
+.tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); border: 1px solid var(--border-button-outline); background: var(--surface-raised); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
+.tbtn svg { grid-area: 1 / 1; inline-size: var(--icon-md); block-size: var(--icon-md); transition: opacity var(--dur-control) var(--ease-out), scale var(--dur-control) var(--ease-out), filter var(--dur-control) var(--ease-out); }
+.tbtn .i-play { translate: 1px 0; }
+.tbtn .i-pause, .tbtn[data-playing] .i-play { opacity: 0; scale: var(--pop-scale); filter: blur(var(--c-recall-cross-blur)); }
+.tbtn[data-playing] .i-pause { opacity: 1; scale: 1; filter: none; }
+.tbtn[aria-pressed="true"] { background: var(--surface-pressed); }
+@media (hover: hover) { .tbtn:not([aria-pressed="true"]):hover { background: var(--surface-hover); } }
+.tbtn:active { scale: var(--press-scale); }
+.readout { margin-inline-start: var(--space-2); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; color: var(--ink-muted); white-space: nowrap; }
+.readout b { font-weight: var(--weight-body); color: var(--ink-strong); }
+.ruler { position: relative; block-size: var(--c-pill-h); cursor: ew-resize; touch-action: none; user-select: none; }
+.ruler span { position: absolute; inset-block-start: 0; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ruler i { position: absolute; inset-block-end: 0; inline-size: 1px; block-size: var(--space-1); background: var(--ink-subtle); }
+/* A clip's row: its name and readouts, then its lane; hairlines between rows. */
+.clip { position: relative; min-block-size: var(--c-row-h-two); padding-block: var(--space-2); border-block-end: 1px solid var(--border-hairline); }
+.clip:last-child { border-block-end: 0; }
+.clip-name { min-inline-size: 0; cursor: pointer; }
+.clip-name p { margin: 0; padding-inline-end: var(--space-2); font: var(--type-label); color: var(--ink-strong); text-wrap: pretty; }
+.clip-name p span { font-weight: var(--weight-body); color: var(--ink-muted); }
+.readouts { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-block-start: var(--space-1); }
+/* The Badge (DESIGN.md Badges): 20px, 5px radius, the recess, no edge. A token's name in mono, its value in
+   meta. A free value is the value alone with a dashed edge; one mark means free everywhere. */
+.badge { display: inline-flex; align-items: center; gap: var(--space-1); block-size: var(--c-badge-h); padding-inline: var(--space-2); border-radius: var(--radius-xs); background: var(--surface-recess); font: var(--type-meta); line-height: 1; color: var(--ink-muted); white-space: nowrap; flex: none; }
+.badge code { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-strong); }
+.badge svg { inline-size: 16px; block-size: 10px; flex: none; color: var(--ink-muted); overflow: visible; }
+.badge.free { outline: 1px dashed var(--border-row-outline); outline-offset: -1px; }
+.badge.changed { background: var(--selected-bg); }
+.badge.changed, .badge.changed code { color: var(--ink-strong); }
+.badge.changed svg { color: var(--ink-strong); }
+.badge.values { white-space: normal; flex: 0 1 auto; }
+.readouts-break { flex-basis: 100%; block-size: 0; }
+/* The lane is the row: no band. Bars, ghosts and tails sit on the bare row. */
+.lane { position: relative; block-size: var(--c-pill-h); user-select: none; touch-action: none; }
+.bar { position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); background: var(--surface-fill); box-shadow: inset 0 0 0 1px var(--border-row-outline); cursor: grab; outline-offset: var(--focus-ring-offset); transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
+.bar[data-zone] { cursor: ew-resize; }
+.bar::before, .bar::after { content: ""; position: absolute; inset-block: var(--space-2); inline-size: var(--c-block-drop-line); border-radius: var(--radius-pill); background: var(--ink-muted); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+.bar::before { inset-inline-start: var(--space-1); }
+.bar::after { inset-inline-end: var(--space-1); }
+@media (hover: hover) {
+  .dock:not([data-view="original"]) .bar:hover { background: var(--surface-fill-strong); }
+  .dock:not([data-view="original"]) .bar:hover::before, .dock:not([data-view="original"]) .bar:hover::after { opacity: 1; }
+}
+.bar[aria-pressed="true"] { background: var(--selected-bg); box-shadow: inset 0 0 0 1px var(--brand-solid); }
+.bar[aria-pressed="true"]::before, .bar[aria-pressed="true"]::after { background: var(--brand-solid); opacity: 1; }
+/* A spring's bar runs on into its settle tail: square at its end and open there, its top and bottom edges
+   carried on by the tail, so the two read as one shape fading out (no notch where they meet). */
+.bar.spring { border-start-end-radius: 0; border-end-end-radius: 0; box-shadow: inset 0 1px 0 0 var(--bar-edge, var(--border-row-outline)), inset 0 -1px 0 0 var(--bar-edge, var(--border-row-outline)), inset 1px 0 0 0 var(--bar-edge, var(--border-row-outline)); }
+.bar.spring[aria-pressed="true"] { --bar-edge: var(--brand-solid); }
+.lane.rescaling .bar, .lane.rescaling .ghost, .lane.rescaling .tail { transition: left var(--dur-reveal) var(--ease-in-out), width var(--dur-reveal) var(--ease-in-out), background-color var(--dur-control) var(--ease-out); }
+.ghost { position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); border: 1px dashed var(--border-contrast); pointer-events: none; }
+.tail { --tail-fill: var(--surface-fill); --tail-edge: var(--border-row-outline); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); background: linear-gradient(to right, var(--tail-edge), transparent) top / 100% 1px no-repeat, linear-gradient(to right, var(--tail-edge), transparent) bottom / 100% 1px no-repeat, linear-gradient(to right, var(--tail-fill), transparent); pointer-events: none; }
+.bar[aria-pressed="true"] + .tail { --tail-fill: var(--selected-bg); --tail-edge: var(--brand-solid); }
+.dock[data-view="original"] .bar { background: none; box-shadow: none; border: 1px dashed var(--border-contrast); cursor: default; }
+.dock[data-view="original"] .bar::before, .dock[data-view="original"] .bar::after { opacity: 0; }
+.dock[data-view="original"] .ghost, .dock[data-view="original"] .tail { display: none; }
+/* Drawn over the lanes, under nothing that takes a press. */
+/* The move's end to the ruler's end: one area behind every row and the ruler. Its fill alone is a 1.2:1 step,
+   so its start, the move's end, is drawn in the 3:1 edge ink. */
+.end-area { position: absolute; inset-block: 0; inset-inline-end: 0; background: var(--surface-recess-deep); pointer-events: none; }
+.tie { position: absolute; inline-size: 1px; background: var(--border-contrast); pointer-events: none; }
+/* A tie (fable-timeline-design.md): a hairline from the anchor's edge to this bar's start, a foot at each
+   end. The feet are centred on the hairline, so it reads as a measure between two bars, not a box's side. */
+.tie::before, .tie::after { content: ""; position: absolute; inset-inline-start: calc((1px - var(--space-1) - 1px) / 2); block-size: 1px; inline-size: calc(var(--space-1) + 1px); background: var(--border-contrast); }
+.tie::before { inset-block-start: 0; }
+.tie::after { inset-block-end: 0; }
+/* The playhead: the graph disc's twin on the ruler's tick line, a coral hairline down through the rows. */
+.playhead { position: absolute; inset-block: 0; inline-size: 0; z-index: 4; pointer-events: none; }
+.playhead::before { content: ""; position: absolute; inset-block-start: calc(var(--ph-y, 0px) - var(--c-block-drop-dot) / 2); inset-inline-start: calc(var(--c-block-drop-dot) / -2); inline-size: var(--c-block-drop-dot); block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: var(--brand-ink-strong); }
+.playhead::after { content: ""; position: absolute; inset-block: var(--ph-y, 0px) 0; inset-inline-start: -0.5px; inline-size: 1px; background: var(--brand-ink-strong); }
+.snap { position: absolute; inset-block: 0; inline-size: 1px; z-index: 2; background: var(--border-contrast); pointer-events: none; }
+.tick { position: absolute; inline-size: 1px; block-size: var(--space-1); background: var(--border-contrast); pointer-events: none; }
+.marquee { position: absolute; z-index: 2; background: var(--selection); border: 1px solid var(--focus-ring); pointer-events: none; }
+/* The drag pill is the Badge (20px, --radius-xs, meta) lifted onto the raised surface; a free value keeps
+   the Badge's dashed edge. */
+.drag-pill { position: absolute; z-index: 4; pointer-events: none; translate: -50% 0; }
+.drag-pill .badge { background: var(--surface-raised); box-shadow: var(--shadow-tile); }
+.lanes-col { grid-column: 2; }
+
+/* ---- Floating surfaces: the clip popover, its menus, the tooltip ---- */
+.pop { position: fixed; z-index: var(--layer-float); inline-size: var(--c-pop-w); display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); font: var(--type-label); color: var(--ink-strong); overflow: hidden; }
+.pop-head { display: flex; align-items: baseline; gap: var(--space-2); min-block-size: var(--c-btn-h-sm); align-items: center; }
+.pop-head p { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); text-wrap: pretty; }
+.pop-head p span { font-weight: var(--weight-body); color: var(--ink-muted); }
+.pop-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: var(--space-3); row-gap: var(--space-2); align-items: start; }
+.pop-label { align-self: center; font: var(--type-meta); color: var(--ink-muted); cursor: ew-resize; touch-action: none; user-select: none; }
+.pop-cell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-inline-size: 0; }
+.pop-sub { flex-basis: 100%; font: var(--type-meta); color: var(--ink-muted); }
+/* The Input's sm size: 30px, the input's own 10px radius, raised, a control edge; its value in mono figures,
+   its unit in meta 4px after. The badge at its end stands 5px in, so 5px + 5px = 10px (The Concentric Rule). */
+.fld { position: relative; display: flex; align-items: center; gap: var(--space-1); flex: 1 1 auto; min-inline-size: 0; block-size: var(--c-btn-h-sm); padding-inline: var(--space-3) calc(var(--space-1)); border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-xs); transition: var(--transition-control); }
+.fld:has(input:focus-visible) { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.fld input { all: unset; flex: 1 1 auto; min-inline-size: 0; inline-size: 4ch; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; color: var(--ink-strong); caret-color: var(--brand-solid); }
+.fld input:focus-visible { outline: none; }
+.fld .unit { font: var(--type-meta); color: var(--ink-muted); margin-inline-end: auto; }
+.fld .badge { margin-inline-start: auto; }
+.fld.free { border-style: dashed; border-color: var(--border-row-outline); }
+.fld.num { flex: 0 1 auto; inline-size: var(--c-number-field-w); padding-inline-end: var(--space-2); }
+.fld:has(input:disabled) { opacity: 0.5; }
+html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size: var(--text-field-floor); }
+.fld.trigger { cursor: pointer; padding-inline-end: var(--space-2); gap: var(--space-2); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); color: var(--ink-strong); text-align: start; }
+.fld.trigger svg.glyph { inline-size: 16px; block-size: 10px; color: var(--ink-muted); overflow: visible; flex: none; }
+.fld.trigger .chev { inline-size: var(--icon-sm); block-size: var(--icon-sm); color: var(--ink-muted); margin-inline-start: auto; flex: none; }
+.fld.trigger:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.anchor-btn { all: unset; box-sizing: border-box; display: grid; place-items: center; flex: none; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); color: var(--ink-muted); cursor: pointer; transition: var(--transition-control); }
+.anchor-btn svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
+@media (hover: hover) { .anchor-btn:hover, .fld.trigger:hover { background: var(--surface-hover); } }
+.anchor-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.arrow { font: var(--type-meta); color: var(--ink-muted); }
+.sent { font: var(--type-meta); color: var(--ink-muted); }
+/* The kit's DropdownMenu (the r21 ruling): a 12px surface, its 1px edge and the kit popover's 6px pad round
+   5px (--radius-xs) items: 5 + 6 + 1 = 12 (The Concentric Rule). */
+.menu { position: fixed; z-index: calc(var(--layer-float) + 1); min-inline-size: 12rem; display: flex; flex-direction: column; padding: var(--c-floating-pad); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); max-block-size: calc(100dvh - 2 * var(--space-5)); overflow-y: auto; overscroll-behavior: contain; }
+.mi { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-menu-item-h); padding: 0 var(--space-8) 0 var(--c-row-inset); border-radius: var(--radius-xs); font: var(--type-label); font-weight: var(--weight-body); color: var(--ink-strong); cursor: default; position: relative; transition: var(--transition-control); }
+.mi code { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); }
+.mi svg.glyph { inline-size: 16px; block-size: 10px; color: var(--ink-muted); overflow: visible; flex: none; }
+.mi[data-highlighted] { background: var(--surface-hover); }
+.mi[aria-checked="true"]::after { content: ""; position: absolute; inset-inline-end: calc(var(--c-row-inset) + (var(--icon-md) - var(--c-block-drop-dot)) / 2); inline-size: var(--c-block-drop-dot); block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: currentColor; }
+.mi-sep { block-size: 1px; margin: var(--space-1) calc(-1 * var(--c-floating-pad)); background: var(--border-hairline); }
+.tip { position: fixed; z-index: var(--layer-toast); max-inline-size: 16rem; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--ink-solid); color: var(--on-ink); font: var(--type-meta); pointer-events: none; opacity: 0; scale: 0.96; transition: opacity var(--dur-menu) var(--ease-out), scale var(--dur-menu) var(--ease-out); }
+.tip[data-on] { opacity: 1; scale: 1; }
+
+/* ---- transitions.dev, its variables on our motion tokens ---- */
+:root {
+  --panel-open-dur: var(--dur-panel);
+  --panel-close-dur: var(--dur-exit);
+  --panel-translate-y: 16px;
+  --panel-blur: 2px;
+  --panel-ease: var(--ease-out);
+  --text-soft-dur: var(--dur-fade);
+  --text-soft-blur: 2px;
+  --text-soft-ease: var(--ease-crossfade);
+}
+.dock { --panel-translate-y: 40px; }
+
+/* Panel reveal (07-panel-reveal.md), verbatim */
+.t-panel-slide {
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity   var(--panel-close-dur) var(--panel-ease),
+    filter    var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity   var(--panel-open-dur) var(--panel-ease),
+    filter    var(--panel-open-dur) var(--panel-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-panel-slide { transition: none !important; }
+}
+
+/* The kit's Segmented control (DESIGN.md, Segmented controls and tabs): a recess-deep groove holding a lifted
+   thumb (--surface-lift) that glides with position and size together over --dur-pop on --ease-in-out. Its 7px
+   thumb (--radius-well) stands 3px (--c-segmented-pad) in a 10px groove (The Concentric Rule); segments are 30px, label weight at line-height 1, muted until chosen; a press tints, never scales.
+   Used by the components' tabs and by Original | Edited. */
+.t-tabs { position: relative; display: inline-flex; align-items: center; padding: var(--c-segmented-pad); border-radius: var(--radius-md); background: var(--surface-recess-deep); min-inline-size: 0; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; }
+.t-tab { position: relative; z-index: 1; flex: none; appearance: none; border: 0; background: transparent; block-size: var(--c-btn-h-sm); padding: 0 var(--c-segment-pad-x); border-radius: var(--radius-well); font: var(--type-label); line-height: 1; color: var(--ink-muted); cursor: pointer; transition: color var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.t-tab[aria-selected="true"] { color: var(--ink-strong); }
+@media (hover: hover) { .t-tab:not([aria-selected="true"]):hover { color: var(--ink-strong); } }
+.t-tab:not([aria-selected="true"]):active { background: var(--press-fill); }
+.t-tab:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.t-tabs-pill { position: absolute; z-index: 0; inset-block-start: var(--c-segmented-pad); inset-inline-start: 0; block-size: var(--c-btn-h-sm); inline-size: 0; border-radius: var(--radius-well); background: var(--surface-lift); box-shadow: var(--shadow-raised); pointer-events: none; transition: transform var(--dur-pop) var(--ease-in-out), width var(--dur-pop) var(--ease-in-out); }
+@media (prefers-reduced-motion: reduce) { .t-tabs-pill { transition: none; } }
+/* A strip that scrolls fades the edge with more to scroll (the house edge fade). */
+.t-tabs[data-fade="end"] { mask-image: linear-gradient(to right, #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+.t-tabs[data-fade="start"] { mask-image: linear-gradient(to left, #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+.t-tabs[data-fade="both"] { mask-image: linear-gradient(to right, transparent, #000 var(--c-edge-fade-len-phone), #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+
+/* Text swap soft (34-text-swap-soft.md): the cross-fade alone, its width transition dropped, so a readout
+   changing never moves what stands beside it. */
+.t-text-soft { display: inline-grid; justify-items: var(--text-soft-align, start); }
+.t-text-soft > span { grid-area: 1 / 1; white-space: pre; transition: filter var(--text-soft-dur) var(--text-soft-ease), opacity var(--text-soft-dur) var(--text-soft-ease); }
+.t-text-soft-new { opacity: 0; filter: blur(var(--text-soft-blur)); }
+.t-text-soft.is-swapping .t-text-soft-old { opacity: 0; filter: blur(var(--text-soft-blur)); }
+.t-text-soft.is-swapping .t-text-soft-new { opacity: 1; filter: blur(0); }
+@media (prefers-reduced-motion: reduce) { .t-text-soft > span { transition: none !important; } }
+.t-text-soft.is-wrap { display: grid; }
+.t-text-soft.is-wrap > span { white-space: normal; }
+
+/* ---- Every screen (responsive-design.md). app.js measures the pane, not the device, and sets three
+   attributes on html: data-screen (the class), data-layout (desk | drawer | sheet) and data-input (fine |
+   touch | touch-hover). ---- */
+/* At a desk the wrapper draws nothing: the panel and the dock stand on their own. */
+.tools { display: contents; }
+.sheet-head { display: none; }
+
+/* A row narrower than a name column and a usable lane stacks: its name and readouts, then the lane across
+   the dock's whole width. Lines that run down through the rows at a desk (the move's end, the playhead,
+   a tie) are drawn inside each lane instead, so none crosses a name. */
+@container dock (width < 440px) {
+  .tl { --rows: stacked; }
+  .tl-row { grid-template-columns: minmax(0, 1fr); }
+  .ruler-row { row-gap: var(--space-2); }
+  .lane { margin-block-start: var(--space-2); }
+  .clip-name p { padding-inline-end: 0; }
+  .end-area { display: none; }
+  .playhead::after { display: none; }
+  .lane::before, .ruler::before { content: ""; position: absolute; inset-block: 0; inset-inline: var(--end-x, 100%) 0; background: var(--surface-recess-deep); pointer-events: none; }
+  .lane::after { content: ""; position: absolute; z-index: 1; inset-block: 0; inset-inline-start: calc(var(--ph-x, 0px) - 0.5px); inline-size: 1px; background: var(--brand-ink-strong); pointer-events: none; }
+}
+/* Stacked rows open a clip's editor inline, under its row (HIG: no popovers in compact views). */
+.pop.inline { position: relative; z-index: auto; inline-size: auto; margin-block: 0 var(--space-3); box-shadow: none; }
+
+/* Touch: every target is at least the touch floor, its own box grown by a transparent layer where it
+   draws smaller; hover-only marks never stick. */
+html:is([data-input="touch"], [data-input="touch-hover"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .anchor-btn) { position: relative; touch-action: manipulation; }
+html:is([data-input="touch"], [data-input="touch-hover"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .anchor-btn)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+html:is([data-input="touch"], [data-input="touch-hover"]) :is(.node, .var) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* Native scroll; a pinch is the graph's own zoom. */
+html:is([data-input="touch"], [data-input="touch-hover"]) .graph { touch-action: pan-x pan-y; cursor: auto; }
+/* A lane keeps vertical scrolling for the page's finger; a sideways drag is the bar's. */
+html:is([data-input="touch"], [data-input="touch-hover"]) .lane { touch-action: pan-y; }
+/* Zoom buttons from tablet up; a phone pinches. */
+html:is([data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom { display: none; }
+
+/* ---- Compact: the drawer (phone and tablet portrait) and the side sheet (short panes). One surface, two
+   faces under the segmented control; no grips. ---- */
+html:not([data-layout="desk"]) .tools { position: fixed; z-index: var(--layer-dock); display: flex; flex-direction: column; color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); font: var(--type-label); font-weight: var(--weight-body); }
+html:not([data-layout="desk"]) .sheet-head { position: relative; display: flex; align-items: center; gap: var(--space-2); flex: none; block-size: var(--c-sheet-inspector-head-h); padding-inline: var(--space-1) var(--space-2); }
+/* The title sits a step inside the head, clear of the grabber on its top edge; the whole head is the drag
+   and tap surface, so the title needs no 44px box of its own. */
+.sheet-title { all: unset; box-sizing: border-box; display: block; flex: 1 1 auto; min-inline-size: 0; block-size: var(--c-btn-h); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); line-height: var(--c-btn-h); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.sheet-title b { font-weight: var(--weight-strong); color: var(--ink-strong); }
+.sheet-title:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.faces { flex: none; overflow: visible; }
+html:not([data-layout="desk"]) .tools > .tool { position: relative; inset: auto; z-index: auto; inline-size: auto; block-size: auto; max-block-size: none; flex: 1 1 auto; min-block-size: 0; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; transform: none; opacity: 1; filter: none; pointer-events: auto; transition: none; will-change: auto; }
+html:not([data-layout="desk"]) .tools > .tool::after { display: none; }
+html:not([data-layout="desk"]) .tools[data-face="graph"] > .dock,
+html:not([data-layout="desk"]) .tools[data-face="move"] > .panel { display: none; }
+html:not([data-layout="desk"]) :is(.sash, .edge-pill-w, .edge-pill-h, .edge-pill-d, .corner-l, #hide) { display: none; }
+html:not([data-layout="desk"]) .panel { padding-block-start: 0; }
+html:not([data-layout="desk"]) :is(.graphs, .gsec[data-current], .graph) { flex: 1 1 auto; }
+html:not([data-layout="desk"]) .graph { block-size: auto; }
+html:not([data-layout="desk"]) .dock { padding-block-start: 0; }
+
+/* The drawer: the house bottom drawer, three stops (head, peek, full). The page takes the room above it. */
+html[data-layout="drawer"] .tools { inset-inline: 0; inset-block-end: 0; block-size: var(--drawer-h, var(--c-graph-drawer-stop)); border-block-end: 0; border-start-start-radius: var(--radius-panel); border-start-end-radius: var(--radius-panel); box-shadow: var(--shadow-drawer); padding-block-end: env(safe-area-inset-bottom, 0px); transition: block-size var(--dur-panel) var(--ease-drawer); }
+html[data-layout="drawer"] .page { inset: 0 0 var(--dock-room, 0px) 0; padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--c-screen-margin) var(--space-5); transition: inset-block-end var(--dur-panel) var(--ease-drawer); }
+html[data-layout="drawer"][data-drawer-drag] :is(.tools, .page) { transition: none; }
+html[data-layout="drawer"] .sheet-head { cursor: grab; touch-action: none; }
+html[data-layout="drawer"] :is(#sheetHide, .show) { display: none; }
+@media (prefers-reduced-motion: reduce) { html[data-layout="drawer"] :is(.tools, .page) { transition: none; } }
+
+/* The side sheet: from the trailing edge at half the pane. Hide folds it to an edge tab. */
+html[data-layout="sheet"] .tools { inset-block: var(--c-screen-margin); inset-inline-end: max(var(--c-screen-margin), env(safe-area-inset-right, 0px)); inline-size: calc(50% - var(--c-screen-margin)); border-radius: var(--radius-panel); box-shadow: var(--shadow-overlay); overflow: hidden; }
+html[data-layout="sheet"] .page { inset: 0 50% 0 0; padding: var(--space-5) var(--space-5) var(--space-5) max(var(--space-5), env(safe-area-inset-left, 0px)); }
+html[data-layout="sheet"] .edge-pill-top { display: none; }
+html[data-layout="sheet"][data-tools="hidden"] .tools { display: none; }
+html[data-layout="sheet"][data-tools="hidden"] .page { inset-inline-end: var(--c-edge-tab-w); }
+/* Physical insets: in vertical writing the tab's own inline axis runs down the screen. */
+html[data-layout="sheet"] .show { writing-mode: vertical-rl; inset: 50% 0 auto auto; translate: 0 -50%; block-size: var(--c-edge-tab-w); padding: var(--space-3) 0; border-inline-end: 0; border-start-end-radius: 0; border-end-end-radius: 0; }
+}

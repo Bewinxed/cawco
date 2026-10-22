@@ -1,0 +1,52 @@
+<body>
+  <!-- The pages under review: one per component, drawn by app.js. Below the line where they all fit, the tabs
+       show one; from there they stand in one row (all-components-design.md). -->
+  <main class="page" id="page"><div class="pages" id="pages"></div></main>
+
+  <!-- The tool. At a desk its two surfaces stand apart (the panel at the side, the dock at the foot) and this
+       wrapper draws nothing; on a phone, a portrait tablet or a short window it is one drawer or side sheet,
+       its head naming the kept state and switching between the two faces. -->
+  <div class="tools" id="tools" data-face="graph" data-stop="peek">
+    <header class="sheet-head" id="sheetHead">
+      <span class="edge-pill edge-pill-top" aria-hidden="true"></span>
+      <button class="sheet-title" id="sheetTitle" type="button"><b>Design graph</b> · <span id="sheetState"></span></button>
+      <div class="t-tabs faces" id="faces" role="tablist" aria-label="Show"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-face="graph">Graph</button><button class="t-tab" role="tab" data-face="move">Move</button></div>
+      <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph" data-icon="eyeClosed"></button>
+    </header>
+
+    <aside class="tool panel t-panel-slide" id="panel" data-open="true" aria-label="Design graph">
+      <div class="toolbar">
+        <div class="t-tabs" id="tabs" role="tablist" aria-label="Components"><span class="t-tabs-pill" aria-hidden="true"></span></div>
+        <div class="bar-end">
+          <div class="zoom" role="group" aria-label="Zoom">
+            <button class="icon-btn" id="zoomOut" aria-label="Zoom out" data-tip="Zoom out (⌘ scroll)" data-icon="zoomOut"></button>
+            <output id="zoomLevel" aria-live="polite">100%</output>
+            <button class="icon-btn" id="zoomIn" aria-label="Zoom in" data-tip="Zoom in (⌘ scroll)" data-icon="zoomIn"></button>
+            <button class="icon-btn" id="zoomFit" aria-label="Fit" data-tip="Fit" data-icon="fit"></button>
+          </div>
+          <button class="icon-btn hide-btn" id="hide" aria-label="Hide graph" data-tip="Hide graph (H)" data-icon="eyeClosed"></button>
+        </div>
+      </div>
+      <!-- One section per component: its name, its own zoom and Fit, its graph and its dials. -->
+      <div class="graphs" id="graphs"></div>
+      <div class="sash sash-w" id="sashW" role="separator" aria-orientation="vertical" aria-label="Resize panel width" tabindex="0" data-edge="w"></div>
+      <div class="sash sash-h" id="sashH" role="separator" aria-orientation="horizontal" aria-label="Resize graph height" tabindex="0" data-edge="h"></div>
+      <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize panel" tabindex="0" data-edge="wh"></div>
+      <span class="edge-pill edge-pill-w" aria-hidden="true"></span>
+      <span class="edge-pill edge-pill-h" aria-hidden="true"></span>
+      <span class="corner-l" aria-hidden="true"></span>
+      <!-- Two graphs stacked: the foot edge between them splits their heights. -->
+      <div class="sash sash-s" id="sashS" role="separator" aria-orientation="horizontal" aria-label="Split the graphs' heights" tabindex="0" data-edge="s"></div>
+      <span class="edge-pill edge-pill-s" aria-hidden="true"></span>
+    </aside>
+
+    <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The kept move">
+      <div class="sash sash-d" id="sashD" role="separator" aria-orientation="horizontal" aria-label="Resize the dock's height" tabindex="0" data-edge="d"></div>
+      <span class="edge-pill edge-pill-d" aria-hidden="true"></span>
+      <div class="dock-body" id="dockBody"></div>
+    </section>
+  </div>
+  <button class="show" id="show" type="button" data-tip="Show graph (H)" hidden><span data-icon="eye"></span><span class="show-label">Show graph</span></button>
+
+  <div class="tip" id="tip" role="tooltip"></div>
+<script>
