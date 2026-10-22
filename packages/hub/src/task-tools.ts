@@ -329,7 +329,7 @@ export const ownsParameter = () =>
   z
     .array(z.string())
     .describe(
-      "Globs of the repository's files the work owns, from its root, like ['src/theme/**']. Two live items whose globs overlap in one repository never run at once: the later waits, queued. Overlap is judged on each glob's part before its first wildcard, so it errs towards waiting."
+      "Globs of the repository's files the work owns, from its root, like ['src/theme/**']. Two live items whose globs overlap in one repository never run at once: the later waits, queued."
     );
 
 /** A group of work items under one parent: `delegate`'s and the task tools' one shape. */
@@ -340,7 +340,7 @@ export const groupParameter = () =>
     .min(1)
     .max(64)
     .describe(
-      "Work that belongs together, like 'theme': items in one group under one parent report once, together, when all have ended (each one's summary and where it landed); a failure still reports at once."
+      "Work that belongs together, like 'theme': items in one group under one parent report once, together, when all have ended; a failure still reports at once."
     );
 
 /**
@@ -587,7 +587,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests), `spec` your spec (markdown: what you build, how, and why); returns your plan. A task's to-dos: tick, untick, add or reword by id (td-3) or position (2.1) on your work item's task (an operator's session names any); all land together. Every compaction lists them.",
+      "Two scopes. Your plan: `steps` replaces your step list, `spec` your spec (markdown: what you build, how, and why); returns your plan. A task's to-dos: tick, untick, add or reword by id (td-3) or position (2.1) on your work item's task (an operator's session names any); all land together. Every compaction lists them.",
       {
         steps: z
           .array(stepParameter())

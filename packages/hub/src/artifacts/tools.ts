@@ -141,9 +141,8 @@ const mermaid = z
 export const artifactCreate = {
   name: "artifact_create",
   description:
-    "Open something in the person's panel for them to act on. `does` says what: pick, judge, try or draw; `ask` " +
-    "says it in one line in their words, which heads the panel while it loads and until they act. The `show` skill " +
-    "chooses both and the kind before you build. A pick is a page with `program` (decision-page skill). A judgement " +
+    "Open something in the person's panel for them to act on; `ask` heads the panel until they act. The `show` skill " +
+    "chooses `does`, `ask` and the kind before you build. A pick is a page with `program` (decision-page skill). A judgement " +
     "is a component canvas: `file`, its CSF 3 states file, every story drawn live (component-canvas skill); or a " +
     "preview or page when the whole surface is judged. A try is a preview at `path`: a server on `port` (in a " +
     "workspace `serve` is its command, which CawCo runs there with PORT and keeps up) or a folder (`dir`). A drawing " +

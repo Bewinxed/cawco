@@ -4,6 +4,7 @@ import {
   type LandsMode,
   REFERENCE_GUIDANCE,
 } from "@cawco/core";
+import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -157,7 +158,6 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
 const HANDOFF_DESCRIPTION =
   "Send a message to another session on the fleet: guide one of your delegates while its work item runs, or brief a session that already owns the work. " +
   "An idle target starts on it at once; a busy one reads it at its next step, its running command kept going. " +
-  "For new standalone work, delegate instead. " +
   "A message to your own delegate after it reports reopens its work item in its session, on its cached transcript; prefer a fresh delegate unless that session is warm and holds context the task needs. " +
   "A cold target (cache expired; never your parent) whose workspace has uncommitted changes gets it; " +
   "one with only unpushed commits is refused once, naming delegate's `from`; otherwise Jev decides when the hub has it, and that is final. " +
@@ -180,15 +180,15 @@ const handoffShape = () => ({
 /**
  * `inputs` of delegate and handoff (core handed-input.ts): a path, or what
  * the hub holds by name, each landing as a file in the receiver's
- * `$TMPDIR/inputs/`. The schema is the loose shape, its kinds in words: the
- * hub checks each entry against the core's own (work-items.ts `readInputs`).
+ * `$TMPDIR/inputs/`. Shown open; the hub checks each entry strictly
+ * (work-items.ts `readInputs`).
  */
 const inputsParameter = () =>
   z
-    .array(z.union([z.string(), z.record(z.string(), z.string())]))
+    .array(handedInputSchema(false))
     .optional()
     .describe(
-      'Files for its $TMPDIR/inputs/: a path, or by id what the hub holds: {report}, {artifact} (a preview gets a pass), {pins: artifact}, {find: ref}, {attachment: id or "Picture 2"}, {assets: item}, {text, name}, {blob: base64, name}.'
+      'Files for its $TMPDIR/inputs/: a path, or by id what the hub holds (an artifact as its files and picture, a preview with a pass). attachment: an id or a name like "Picture 2"; blob: base64.'
     );
 
 /** `handoff`'s call: the message, with the inputs of a session that may delegate. */
@@ -199,7 +199,7 @@ const handed =
     message,
     inputs,
   }: {
-    inputs?: (string | Record<string, string>)[];
+    inputs?: HandedInput[];
     message: string;
     target: string;
   }) => ({
@@ -592,7 +592,7 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             'The machine the session runs on: its hostname as the fleet shows it (e.g. "Omars-MacBook-Pro", ' +
               '"obelisk-of-light"; list_sessions ends with the machines online now) or its machineId. ' +
-              "Omit to run it on this session's machine. An unknown or offline machine is refused."
+              "Omit to run it on this session's machine."
           ),
         prompt: z
           .string()
@@ -671,27 +671,23 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "delegate",
       "Run a task as a SUB-AGENT: a new temporary fleet session with its own fresh context (or, with `fork`, a copy of this one), which reports back once its work clears the hub's landing gate: its report quotes the output of the commands that prove the work.\n\n" +
-        "Use this for SUBSTANTIAL bounded work that must report back: multi-file implementation, a sweep that would take dozens of reads across a codebase, builds or deploys with verification loops, browser audits, evidence you must interpret across many files or logs. A delegate answers those in its own fresh context and hands back conclusions.\n\n" +
+        "Use this for SUBSTANTIAL bounded work that must report back: multi-file implementation, a sweep that would take dozens of reads across a codebase, builds or deploys with verification loops, browser audits, evidence you must interpret across many files or logs.\n\n" +
         "Run menial work yourself (git, grep, reading a few files, a log, a restart, the reads a brief needs): a delegate for it costs more than the task, its report more than the output.\n\n" +
         "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
         "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, the commands whose output proves the work, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` (list_delegate_types) over raw harness/model. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
-        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, every shell command of the delegate inside its boundary. It writes only its clone, its scratch folder and the workspaces' cache, reads no credentials or keys, has no service manager, reaches another machine only through a delegate there, and signals only its own processes. The workspace is cut on this session's machine unless `machine` names another. Without `workspace` the item gets a new one; with it, the item is the follow-up there: under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
-        "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A follow-up whose session is cold is checked as handoff checks a cold target. " +
-        "To finish an ended delegate's committed work in a fresh session, delegate with `from`: a new workspace cut at that workspace's branch head, its commits included.\n\n" +
-        "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own.",
+        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, every shell command of the delegate inside its boundary. It writes only its clone, its scratch folder and the workspaces' cache, reads no credentials or keys, has no service manager, reaches another machine only through a delegate there, and signals only its own processes. " +
+        "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to it, or delegate with its `workspace` to file the follow-up as its own item; a cold one is checked as handoff checks a cold target. " +
+        "To finish an ended delegate's committed work in a fresh session, delegate with `from`.\n\n" +
+        "Set `fork: true` when the work needs what this conversation already holds.",
       {
-        prompt: z
-          .string()
-          .describe(
-            "The full brief. Unless it is a fork, the delegate cannot see this conversation."
-          ),
+        prompt: z.string().describe("The full brief."),
         title: sessionTitle(),
         type: z
           .string()
           .optional()
           .describe(
-            "A named delegate type, from list_delegate_types (the live catalog the call uses). Sets harness/model/effort/skills " +
+            "A named delegate type, from list_delegate_types. Sets harness/model/effort/skills " +
               "for you; an explicit harness/model/skills below still overrides what the type says. " +
               "Default: Jev's pick when the hub has Jev, else 'medium'; with a harness other than medium's and no type, `model` is required."
           ),
@@ -700,14 +696,13 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe(
             "Which runtime runs the delegate. 'opencode' with model 'opencode-go/deepseek-v4-pro' " +
-              "delegates to DeepSeek. Default: the type's harness. Overrides `type`'s harness when both are set."
+              "delegates to DeepSeek."
           ),
         model: z
           .string()
           .optional()
           .describe(
-            "Model id for the harness, e.g. opencode-go/deepseek-v4.1-flash. Omit for the type's " +
-              "own model. Overrides `type`'s model when both are set."
+            "Model id for the harness, e.g. opencode-go/deepseek-v4.1-flash."
           ),
         account: accountParameter(),
         cwd: z
@@ -723,13 +718,13 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe(
             "The machine the work item runs on: its hostname as the fleet shows it (list_sessions ends with those online) or machineId; " +
-              "this session's when omitted. An unknown or offline machine is refused."
+              "this session's when omitted."
           ),
         skills: z
           .array(z.string())
           .optional()
           .describe(
-            "Skills the delegate loads before the prompt, as if /skill-name were typed there, on any harness. Overrides `type`'s skills."
+            "Skills the delegate loads before the prompt, as if /skill-name were typed there, on any harness."
           ),
         workspace: z
           .string()
@@ -758,15 +753,15 @@ export function handoffTools(deps: HandoffDeps) {
           .boolean()
           .optional()
           .describe(
-            "Let the delegate spawn delegates and sessions of its own. Default false, a leaf that does the work itself and reports here, " +
-              'unless its type is marked "may delegate by default"; a value here wins. Set true only for an orchestrator that must fan out.'
+            "Let the delegate spawn delegates and sessions of its own. Default false, " +
+              'unless its type is marked "may delegate by default". Set true only for an orchestrator that must fan out.'
           ),
         inputs: inputsParameter(),
         lands: z
           .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
           .optional()
           .describe(
-            "Where the work goes once the delegate finishes. 'main' (default): the hub rebases the delegate's commits onto the repository's default branch, runs its landing gate (install, lint, typecheck, the iOS build when the app changed) and pushes. " +
+            "Where the work goes once the delegate finishes. 'main' (default): the hub rebases the delegate's commits onto the repository's default branch, runs its landing gate and pushes. " +
               "'branch': the hub pushes them, as they are, to cawco/<task or item> on origin. " +
               "'pr': that, then a pull request against the default branch (or the one already open for that branch); the report carries its link. " +
               "'none': nothing is pushed, for work that is not commits (a report, a draft); name its files or folders in `outputs`."

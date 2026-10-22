@@ -40,18 +40,30 @@ const fileName = z
   .max(200)
   .regex(ONE_COMPONENT, "a file name, with no folder");
 
-/** One entry of `inputs`, every kind the hub resolves. */
-export const HANDED_INPUT = z.union([
-  z.string().min(1),
-  z.strictObject({ report: ref }),
-  z.strictObject({ artifact: ref }),
-  z.strictObject({ pins: ref }),
-  z.strictObject({ find: ref }),
-  z.strictObject({ attachment: ref, session: ref.optional() }),
-  z.strictObject({ assets: ref }),
-  z.strictObject({ text: z.string(), name: fileName }),
-  z.strictObject({ blob: z.string(), name: fileName }),
-]);
+/**
+ * One entry of `inputs`, every kind the hub resolves. `strict`: an object
+ * with a key it does not name is refused, as the hub checks every entry
+ * ({@link HANDED_INPUT}). Open, it is the shape a tool shows a harness:
+ * OpenCode's input repair deletes the keys a schema with
+ * `additionalProperties: false` does not name (hub delegation-tools.ts `tool`).
+ */
+export const handedInputSchema = (strict: boolean) => {
+  const shape = strict ? z.strictObject : z.object;
+  return z.union([
+    z.string().min(1),
+    shape({ report: ref }),
+    shape({ artifact: ref }),
+    shape({ pins: ref }),
+    shape({ find: ref }),
+    shape({ attachment: ref, session: ref.optional() }),
+    shape({ assets: ref }),
+    shape({ text: z.string(), name: fileName }),
+    shape({ blob: z.string(), name: fileName }),
+  ]);
+};
+
+/** What the hub checks every entry against. */
+export const HANDED_INPUT = handedInputSchema(true);
 
 export type HandedInput = z.infer<typeof HANDED_INPUT>;
 

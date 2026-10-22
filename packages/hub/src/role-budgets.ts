@@ -304,6 +304,12 @@ import type { Tasks } from "./tasks";
  * sentences and the artifact tools' one `id`, about 225 tokens for the
  * worker, the delegate and the lead (worker 27,776, delegate 10,215, lead
  * 18,580 measured beside `outputs`). Raised deliberately, by that, for each.
+ * 2026-10-22: delegate's and handoff's `inputs` show every kind they take
+ * (core handed-input.ts), 278 tokens each. They fit the same budgets: what
+ * delegate's description said its parameters say again, the `owns` and
+ * `group` words three tools share, and what find's and todo_write's schemas
+ * already list were cut (worker 27,743, delegate 10,102, lead 18,558
+ * measured; `--tools <role>` lists them per tool).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_805,
@@ -347,6 +353,8 @@ const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
 
 export interface RoleSize {
   budget: number;
+  /** Each listed tool's own tokens, by the same measure, largest first. */
+  byTool: { name: string; tokens: number }[];
   role: SessionRole;
   tokens: number;
   tools: number;
@@ -548,6 +556,12 @@ export const measureRoles = (): RoleSize[] => {
         tools: tools.length,
         tokens: estimateTokens(JSON.stringify(tools).length),
         budget: ROLE_TOOL_BUDGET[role],
+        byTool: tools
+          .map((tool) => ({
+            name: tool.name,
+            tokens: estimateTokens(JSON.stringify(tool).length),
+          }))
+          .toSorted((a, b) => b.tokens - a.tokens),
       };
     });
   } finally {
