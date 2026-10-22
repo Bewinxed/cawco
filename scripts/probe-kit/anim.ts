@@ -53,6 +53,8 @@ import { frames } from "./kit";
 
 /** One caught run, as the protocol describes it. */
 export interface Run {
+  /** Its delay before it moves, ms. */
+  delay: number;
   easing: string;
   /** Delay plus duration: where it stands whole, ms. */
   end: number;
@@ -101,6 +103,7 @@ const runOf = (one: Described): Run => {
     name: one.name,
     type: one.type,
     easing: s?.easing ?? "",
+    delay: s?.delay ?? 0,
     start: one.startTime ? one.startTime : null,
     // The protocol sends `iterations` only when it is finite.
     loop: s !== undefined && s.iterations === undefined,
@@ -148,6 +151,10 @@ export class Clock {
   private readonly held = new Map<string, Promise<Place>>();
   /** The catch's `within` while the clock holds; null while it runs. */
   private within: string | null = null;
+  /** Whether the catch leaves loops running and off the clock (an enter or an exit has none). */
+  private noLoops: boolean;
+  /** Whether the catch keeps only runs on an element `within` itself names. */
+  private own: boolean;
   private readonly page: Page;
   private readonly cdp: CDPSession;
   runs: Run[] = [];
@@ -155,6 +162,8 @@ export class Clock {
   private constructor(page: Page, cdp: CDPSession) {
     this.page = page;
     this.cdp = cdp;
+    this.noLoops = false;
+    this.own = false;
     cdp.on("Animation.animationStarted", (event: { animation: Described }) => {
       this.started.push(event.animation);
       if (this.within !== null) {
@@ -174,7 +183,8 @@ export class Clock {
    * ran, and whether the pause beat that end was the host's load.
    */
   private hold(run: Described, within: string): void {
-    if (runOf(run).end <= 0) {
+    const caught = runOf(run);
+    if (caught.end <= 0 || (this.noLoops && caught.loop)) {
       return;
     }
     this.cdp
@@ -208,14 +218,21 @@ export class Clock {
    * inside `within` (a selector), frame by frame until one has (a component
    * may start its run a frame after it is placed), then one frame more for
    * any started beside it; those stand at their first frame. Throws when it
-   * started none there within `ms`, every held run let go.
+   * started none there within `ms`, every held run let go. With `loops:
+   * false` a loop (a spinner's turn) is neither held nor kept: an enter or
+   * an exit read has none, and the page may restart one the clock paused.
+   * With `own: true` only runs on an element `within` itself names count
+   * as inside it, none on what lies within that element.
    */
   async catchRuns(
     action: () => Promise<unknown>,
     within: string,
-    ms = 3000
+    ms = 3000,
+    { loops = true, own = false }: { loops?: boolean; own?: boolean } = {}
   ): Promise<Run[]> {
     this.within = within;
+    this.noLoops = !loops;
+    this.own = own;
     const from = this.started.length;
     let read = from;
     const kept: Run[] = [];
@@ -234,7 +251,8 @@ export class Clock {
           // A run of no length (a 0ms transition) is over as it starts: the
           // page drops it at once, and it never stands on the clock.
           // biome-ignore lint/performance/noAwaitInLoops: each run is placed in turn
-          if ((await this.held.get(one.id))?.inside && run.end > 0) {
+          const place = await this.held.get(one.id);
+          if (place?.inside && run.end > 0 && !(this.noLoops && run.loop)) {
             keep(kept, transitions, one, run);
           }
         }
@@ -317,8 +335,8 @@ export class Clock {
     const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
       objectId,
       functionDeclaration:
-        "function (sel) { const t = this instanceof Element ? this : this.element; return { own: window === window.top, inside: window.kitInside(t, sel) }; }",
-      arguments: [{ value: within }],
+        "function (sel, own) { const t = this instanceof Element ? this : this.element; return { own: window === window.top, inside: own ? t.matches(sel) : window.kitInside(t, sel) }; }",
+      arguments: [{ value: within }, { value: this.own }],
       returnByValue: true,
     })) as { result: { value: Place } };
     return result.value;
@@ -416,6 +434,31 @@ export class Clock {
     return result.value;
   }
 
+  /**
+   * A caught run's target as `tag[slot]`, else `tag[data-…]` with each of
+   * its data attributes (its host's, for a pseudo-element's run); "" when
+   * its node no longer resolves.
+   */
+  async targetOf(run: Run): Promise<string> {
+    const resolved =
+      run.node === undefined
+        ? null
+        : ((await this.cdp
+            .send("DOM.resolveNode", { backendNodeId: run.node })
+            .catch(() => null)) as { object: { objectId?: string } } | null);
+    const objectId = resolved?.object.objectId;
+    if (!objectId) {
+      return "";
+    }
+    const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
+      objectId,
+      functionDeclaration:
+        "function () { const t = this instanceof Element ? this : this.element; const slot = t.getAttribute('data-slot'); return t.localName + (slot ? '[' + slot + ']' : t.getAttributeNames().filter((a) => a.startsWith('data-')).map((a) => '[' + a + ']').join('')); }",
+      returnByValue: true,
+    })) as { result: { value: string } };
+    return result.value;
+  }
+
   /** The clock's length: the named run's end (its first by that name), or the longest run's. */
   length(of?: string): number {
     const named = of ? this.runs.find((one) => one.name === of) : undefined;
@@ -503,6 +546,8 @@ export class Clock {
   /** Lets the clock run again: every held run plays out from where it stands. */
   async release(): Promise<void> {
     this.within = null;
+    this.noLoops = false;
+    this.own = false;
     const ids = [...this.held.keys()];
     this.held.clear();
     for (const id of ids) {

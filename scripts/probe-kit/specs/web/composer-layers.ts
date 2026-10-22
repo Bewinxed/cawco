@@ -7,10 +7,9 @@
  *   bun scripts/probe-kit/run.ts web composer-layers
  *
  * Each surface the composer owns is opened and closed while its runs are
- * held and seeked through 0, ¼, ½, ¾ and 1 (Chromium: the DevTools
- * protocol's Animation domain, anim.ts; WebKit, which has none: each run
- * the page starts held through Web Animations and its `currentTime` set),
- * and read again once it has settled. At every one of those, the
+ * held and seeked through 0, ¼, ½, ¾ and 1 (kit.ts `readMotion`: Chromium's
+ * DevTools Animation domain, the page's own held clock in WebKit), and read
+ * again once it has settled. At every one of those, the
  * transcript scroller's box, its `scrollTop` and the last message row in
  * its view are what they were before the open, to a hundredth of a pixel.
  * The surface's own runs share one start, one length and one easing.
@@ -27,13 +26,15 @@
  * `LAYERS_SURFACES=<part>,…` only the surfaces whose name holds one.
  */
 import type { Page } from "playwright-core";
-import { Clock } from "../../anim";
 import {
   COMPOSER,
   type Engine,
   frames,
   type Kit,
+  type MotionRead,
+  type MotionRun,
   open,
+  readMotion,
   type Spec,
   settle,
   type View,
@@ -107,26 +108,6 @@ function differs(then: Reading, now: Reading | null): string {
   return out.join(", ");
 }
 
-/** One held run, engine-neutral. */
-interface Held {
-  easing: string;
-  end: number;
-  name: string;
-  /** Its start: the protocol's start time (Chromium), the frame it was caught on (WebKit). */
-  start: number | null;
-}
-
-/** A clock over the surface's own runs: Chromium's Animation domain, or WebKit's Web Animations. */
-interface SurfaceClock {
-  catchRuns: (
-    action: () => Promise<unknown>,
-    within: string
-  ) => Promise<Held[]>;
-  oneClock: () => string[];
-  release: () => Promise<void>;
-  seek: (fraction: number) => Promise<void>;
-}
-
 /**
  * A control's colour easing to its state (a button's hover ink) is that
  * control's feedback, not the surface's motion: it never stands on the
@@ -134,186 +115,80 @@ interface SurfaceClock {
  */
 const COLOUR = /(^|-)color$|^fill$|^stroke$/;
 
-async function protocolClock(page: Page): Promise<SurfaceClock> {
-  const clock = await Clock.on(page);
-  return {
-    async catchRuns(action, within) {
-      const runs = await clock.catchRuns(action, within);
-      // Its loops (a running dot's beat, a spinner) have no end to share.
-      clock.runs = runs.filter(
-        (one) =>
-          !(
-            one.loop ||
-            one.scroll ||
-            (one.type === "CSSTransition" && COLOUR.test(one.name))
-          )
-      );
-      return clock.runs.map((one) => ({
-        name: `${one.type} ${one.name}`,
-        end: one.end,
-        easing: one.easing,
-        start: one.start,
-      }));
-    },
-    oneClock: () => clock.oneClock().faults,
-    release: () => clock.release(),
-    seek: (fraction) => clock.seek(fraction),
-  };
-}
+/**
+ * A control's own answer to being pressed (a button's scale on `:active`),
+ * as its colour, is that control's, not the surface's: a transition on an
+ * element the read names a button or a link (kit.ts `MotionRun.target`).
+ */
+const PRESSED = /^(button|a)(\[|$)/;
 
-declare global {
-  interface Window {
-    __layersClock?: {
-      done: boolean;
-      held: { run: Animation; end: number; easing: string; frame: number }[];
-    };
+/** The surface's own runs of a read: none of a control's feedback (its colour, its press). */
+const surfaceRuns = (runs: readonly MotionRun[]): MotionRun[] =>
+  runs.filter(
+    (one) =>
+      !(
+        one.type === "CSSTransition" &&
+        (COLOUR.test(one.name) || PRESSED.test(one.target))
+      )
+  );
+
+/** A run in words: its kind, name, element, start, length and curve. */
+const said = (one: MotionRun): string =>
+  `${one.type} ${one.name} on ${one.target} ${one.start ?? "no start"}+${Math.round(one.end)}ms ${one.easing}`;
+
+/**
+ * One clock: every run shares the first's start time, length and easing.
+ * A fault per run off it, or with no start time to compare.
+ */
+function oneClock(runs: readonly MotionRun[]): string[] {
+  const [first] = runs;
+  if (!first) {
+    return ["no caught run"];
   }
+  return runs.flatMap((one) =>
+    one.start === null ||
+    first.start === null ||
+    Math.abs(one.start - first.start) > 0.5 ||
+    Math.abs(one.end - first.end) > 0.5 ||
+    one.easing !== first.easing
+      ? [`${said(one)} against ${said(first)}`]
+      : []
+  );
 }
 
 /**
- * WebKit's clock: a frame loop started before the action holds every run
- * that starts inside `within` as it is first listed, then puts each at its
- * first frame. A run of no length (Svelte's dummy before its keyframes) and
- * a loop are let go.
+ * Opens or closes a surface on the held clock (kit.ts `readMotion`), the
+ * transcript read at every fraction; throws, saying how the surface stands
+ * and every run on it, where the action started no run inside `within`.
  */
-function waapiClock(page: Page): SurfaceClock {
-  let held: Held[] = [];
-  return {
-    async catchRuns(action, within) {
-      await page.evaluate(
-        ([sel, colour]) => {
-          const seen = new Set(window.kitRuns());
-          const clock: NonNullable<Window["__layersClock"]> = {
-            done: false,
-            held: [],
-          };
-          window.__layersClock = clock;
-          const tint = new RegExp(colour);
-          /** Its end, when it is the surface's own motion; null to let it go. */
-          const endOf = (run: Animation): number | null => {
-            const end = Number(run.effect?.getComputedTiming().endTime ?? 0);
-            const target = (run.effect as KeyframeEffect | null)?.target;
-            const property =
-              run instanceof CSSTransition ? run.transitionProperty : "";
-            // A control's own answer to being pressed (a button's scale on
-            // `:active`), as its colour, is that control's, not the surface's.
-            const pressed =
-              run instanceof CSSTransition &&
-              target instanceof Element &&
-              target.closest("button, a, [role=button]") !== null;
-            const own =
-              Number.isFinite(end) &&
-              end > 0 &&
-              !tint.test(property) &&
-              !pressed &&
-              window.kitInside(target, sel);
-            return own ? end : null;
-          };
-          let frame = 0;
-          let after = 0;
-          const hold = () => {
-            for (const run of window
-              .kitRuns()
-              .filter((one) => !seen.has(one))) {
-              seen.add(run);
-              const end = endOf(run);
-              if (end !== null) {
-                run.pause();
-                const easing = String(run.effect?.getTiming().easing ?? "");
-                clock.held.push({ run, end, easing, frame });
-              }
-            }
-          };
-          const look = () => {
-            frame += 1;
-            hold();
-            after += clock.held.length > 0 ? 1 : 0;
-            if (after < 2 && frame <= 180) {
-              requestAnimationFrame(look);
-              return;
-            }
-            for (const one of clock.held) {
-              one.run.currentTime = 0;
-            }
-            clock.done = true;
-          };
-          requestAnimationFrame(look);
-        },
-        [within, COLOUR.source] as const
-      );
-      await action();
-      await page.waitForFunction(() => window.__layersClock?.done === true, {
-        timeout: 10_000,
-      });
-      held = await page.evaluate(() =>
-        (window.__layersClock?.held ?? []).map((one) => {
-          const named = one.run as Animation & {
-            transitionProperty?: string;
-            animationName?: string;
-          };
-          return {
-            name: `${one.run.constructor.name} ${named.transitionProperty ?? named.animationName ?? one.run.id}`,
-            end: one.end,
-            easing: one.easing,
-            start: one.frame,
-          };
-        })
-      );
-      if (held.length === 0) {
-        // Whether the surface is there, and every run on it as it stands:
-        // an entrance the engine never ran, or one the catch missed.
-        const there = await page.evaluate((sel) => {
-          const els = [...document.querySelectorAll(sel)];
-          return els.map((el) => ({
-            opacity: getComputedStyle(el).opacity,
-            scale: getComputedStyle(el).scale,
-            runs: el.getAnimations({ subtree: true }).map((run) => {
-              const named = run as Animation & { transitionProperty?: string };
-              return `${run.constructor.name} ${named.transitionProperty ?? ""} ${run.playState} ${Math.round(Number(run.currentTime ?? -1))}`;
-            }),
-          }));
-        }, within);
-        throw new Error(
-          `no animation started inside ${within}: ${JSON.stringify(there)}`
-        );
-      }
-      return held;
-    },
-    oneClock() {
-      const [first] = held;
-      if (!first) {
-        return ["no caught run"];
-      }
-      return held.flatMap((one) =>
-        one.start !== first.start ||
-        Math.abs(one.end - first.end) > 0.5 ||
-        one.easing !== first.easing
-          ? [
-              `${one.name} frame ${one.start} ${one.end}ms ${one.easing} against ${first.name} frame ${first.start} ${first.end}ms ${first.easing}`,
-            ]
-          : []
-      );
-    },
-    async release() {
-      await page.evaluate(() => {
-        for (const one of window.__layersClock?.held ?? []) {
-          one.run.play();
-        }
-        window.__layersClock = undefined;
-      });
-      held = [];
-    },
-    async seek(fraction) {
-      await page.evaluate((f) => {
-        const all = window.__layersClock?.held ?? [];
-        const length = Math.max(0, ...all.map((one) => one.end));
-        for (const one of all) {
-          one.run.currentTime = Math.min(one.end, length * f);
-        }
-      }, fraction);
-      await frames(page);
-    },
-  };
+async function held(
+  page: Page,
+  action: () => Promise<unknown>,
+  within: string
+): Promise<MotionRead<Reading | null>> {
+  const motion = await readMotion(page, action, within, {
+    fractions: FRACTIONS,
+    read: () => page.evaluate(reading, LOG),
+  });
+  if (motion.runs.length === 0) {
+    // Whether the surface is there, and every run on it as it stands:
+    // an entrance the engine never ran, or one the read missed.
+    const there = await page.evaluate((sel) => {
+      const els = [...document.querySelectorAll(sel)];
+      return els.map((el) => ({
+        opacity: getComputedStyle(el).opacity,
+        scale: getComputedStyle(el).scale,
+        runs: el.getAnimations({ subtree: true }).map((run) => {
+          const named = run as Animation & { transitionProperty?: string };
+          return `${run.constructor.name} ${named.transitionProperty ?? ""} ${run.playState} ${Math.round(Number(run.currentTime ?? -1))}`;
+        }),
+      }));
+    }, within);
+    throw new Error(
+      `no animation started inside ${within} (read by ${motion.by}): ${JSON.stringify(there)}`
+    );
+  }
+  return motion;
 }
 
 /** One surface the composer owns: how it is found, opened and closed. */
@@ -520,22 +395,19 @@ const SURFACES: Surface[] = [
   },
 ];
 
-/** Reads the transcript at every fraction of the clock, and settled; the faults, in words. */
+/** The transcript at every fraction of the clock, and settled, against `before`; the faults, in words. */
 async function through(
   page: Page,
-  clock: SurfaceClock,
+  motion: MotionRead<Reading | null>,
   before: Reading
 ): Promise<string[]> {
   const faults: string[] = [];
-  for (const f of FRACTIONS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one point of the clock at a time
-    await clock.seek(f);
-    const diff = differs(before, await page.evaluate(reading, LOG));
+  for (const { fraction, value } of motion.at) {
+    const diff = differs(before, value);
     if (diff) {
-      faults.push(`${f * 100}%: ${diff}`);
+      faults.push(`${fraction * 100}%: ${diff}`);
     }
   }
-  await clock.release();
   await settle(page, 400);
   const diff = differs(before, await page.evaluate(reading, LOG));
   if (diff) {
@@ -552,11 +424,14 @@ interface Leg {
   width: number;
 }
 
-/** The runs a clock held, in words: each kind, length and easing once. */
-const runsOf = (list: Held[]): string =>
+/** The runs a read held, in words: each kind, length and easing once. */
+const runsOf = (list: readonly MotionRun[]): string =>
   [
     ...new Set(
-      list.map((one) => `${one.name} ${Math.round(one.end)}ms ${one.easing}`)
+      list.map(
+        (one) =>
+          `${one.type} ${one.name} ${Math.round(one.end)}ms ${one.easing}`
+      )
     ),
   ].join(" + ");
 
@@ -568,7 +443,6 @@ const runsOf = (list: Held[]): string =>
 async function measure(
   kit: Kit,
   page: Page,
-  clock: SurfaceClock,
   surface: Surface,
   what: string,
   thrown: string[]
@@ -579,12 +453,10 @@ async function measure(
     return;
   }
   const within = await surface.within(page);
-  const opened = await clock.catchRuns(() => surface.open(page), within);
-  const openClock = clock.oneClock();
-  const openFaults = await through(page, clock, before);
-  const closed = await clock.catchRuns(() => surface.close(page), within);
-  const closeClock = clock.oneClock();
-  const closeFaults = await through(page, clock, before);
+  const opening = await held(page, () => surface.open(page), within);
+  const openFaults = await through(page, opening, before);
+  const closing = await held(page, () => surface.close(page), within);
+  const closeFaults = await through(page, closing, before);
   const faults = [
     ...openFaults.map((one) => `open ${one}`),
     ...closeFaults.map((one) => `close ${one}`),
@@ -594,15 +466,17 @@ async function measure(
     faults.length === 0,
     faults.slice(0, 6).join("; ") || `last row ${before.last?.id ?? "none"}`
   );
-  const said = `open ${runsOf(opened)}; close ${runsOf(closed)}`;
-  const clockFaults = [...openClock, ...closeClock];
+  const opened = surfaceRuns(opening.runs);
+  const closed = surfaceRuns(closing.runs);
+  const runs = `open ${runsOf(opened)}; close ${runsOf(closed)} (read by ${opening.by})`;
+  const clockFaults = [...oneClock(opened), ...oneClock(closed)];
   if (surface.staged) {
-    kit.note(`${what}: staged, not one clock: ${surface.staged} (${said})`);
+    kit.note(`${what}: staged, not one clock: ${surface.staged} (${runs})`);
   } else {
     kit.check(
       `${what}: its open and its close each run on one clock`,
       clockFaults.length === 0,
-      clockFaults.slice(0, 4).join("; ") || said
+      clockFaults.slice(0, 4).join("; ") || runs
     );
   }
   kit.check(
@@ -725,8 +599,6 @@ async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
   await open(page, `${base}${BENCH}?case=${at.count}`, LOG, 120_000);
   await page.waitForSelector(`${LOG} [data-message]`, { timeout: 30_000 });
   await settle(page, 800);
-  const clock =
-    at.engine === "chromium" ? await protocolClock(page) : waapiClock(page);
   // What the page threw while a surface opened and closed: that surface's
   // failure, quoted, never a transcript that silently went. Uncaught
   // exceptions only: the bench has no hub, and the client's own reads of it
@@ -762,7 +634,7 @@ async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
       if (absent) {
         kit.note(`${what}: not here (${absent})`);
       } else {
-        await measure(kit, page, clock, surface, what, thrown);
+        await measure(kit, page, surface, what, thrown);
       }
     } catch (error) {
       kit.check(
@@ -770,7 +642,6 @@ async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
         false,
         [String(error).split("\n")[0], ...thrown.slice(0, 2)].join(" | ")
       );
-      await clock.release().catch(() => undefined);
       await page.keyboard.press("Escape").catch(() => undefined);
       await settle(page, 400).catch(() => undefined);
     }

@@ -52,8 +52,11 @@ import {
   COMPOSER,
   type Engine,
   type Kit,
+  kitsOwnMessage,
+  type MotionRun,
   open,
   ROOT,
+  readMotion,
   type Spec,
   THEMES,
   type Theme,
@@ -151,7 +154,7 @@ const watch = (page: Page) => {
   const seen: string[] = [];
   errors.set(page, seen);
   page.on("console", (message) => {
-    if (message.type() === "error") {
+    if (message.type() === "error" && !kitsOwnMessage(message.text())) {
       seen.push(message.text());
     }
   });
@@ -869,10 +872,6 @@ const reviewLegs = async (
     ids.many,
     slowReads.hold
   );
-  await recordIntros(
-    slow,
-    '[data-files-region="artifacts"] [data-files-scroll]'
-  );
   await slow.locator("[data-files-control]").click();
   await slow.locator("[data-glass-card-frame='files-pop']").waitFor();
   const opened = Date.now();
@@ -896,10 +895,20 @@ const reviewLegs = async (
       "[data-glass-card-frame='files-pop'] [data-files-head-count]"
     ).length,
   }));
-  slowReads.release();
-  await slow.locator("[data-files-card]").first().waitFor({ timeout: 15_000 });
-  await slow.waitForTimeout(400);
-  const arrival = await introsOf(slow);
+  // The read's arrival, as the kit reads motion: each run's length.
+  const arriving = await readMotion(
+    slow,
+    async () => {
+      slowReads.release();
+      await slow
+        .locator("[data-files-card]")
+        .first()
+        .waitFor({ timeout: 15_000 });
+    },
+    '[data-files-region="artifacts"] [data-files-scroll]',
+    { ms: 15_000 }
+  );
+  const arrival = lengths(arriving.runs);
   const crossMs = await durationOf(slow, "--dur-control");
   kit.check(
     "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read takes the skeleton's place in one cross-fade over --dur-control (crossIn)",
@@ -911,7 +920,7 @@ const reviewLegs = async (
       pastGrace.attachmentsWait &&
       pastGrace.counts === 0 &&
       arrival.includes(crossMs),
-    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)} (--dur-control ${crossMs})`
+    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)}, read by ${arriving.by} (--dur-control ${crossMs}): ${JSON.stringify(arriving.runs)}`
   );
   await slow.close();
 
@@ -1426,32 +1435,9 @@ const durationOf = async (page: Page, token: string): Promise<number> => {
     : Number.parseFloat(said) * 1000;
 };
 
-/**
- * Records the durations of the animations each element matching `selector`
- * runs as it mounts, read a frame after it is added (a 120ms intro is
- * gone before a later read).
- */
-const recordIntros = (page: Page, selector: string) =>
-  page.evaluate((sel) => {
-    const seen: number[] = [];
-    (window as unknown as { __intros: number[] }).__intros = seen;
-    new MutationObserver(() => {
-      for (const el of document.querySelectorAll(sel)) {
-        if ((el as HTMLElement).dataset.introRead) {
-          continue;
-        }
-        (el as HTMLElement).dataset.introRead = "1";
-        requestAnimationFrame(() => {
-          for (const one of el.getAnimations()) {
-            seen.push(one.effect?.getTiming().duration as number);
-          }
-        });
-      }
-    }).observe(document.body, { childList: true, subtree: true });
-  }, selector);
-
-const introsOf = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __intros: number[] }).__intros);
+/** Each ended run's length, ms, as a token reads (`durationOf`): whole. */
+const lengths = (runs: readonly MotionRun[]) =>
+  runs.filter((one) => one.ended).map((one) => Math.round(one.end));
 
 /**
  * The third review round's legs (light):
@@ -1813,6 +1799,20 @@ const roundThree = async (
   // 32. The pages no pane had a picture of are drawn unseen by Files, and
   // kept by the hub; neither is shown in the session's panel for it.
   const drawn = await openSession(kit, base, "desk", "light", ids.many);
+  // What each unseen page's frame says to Files (page-thumbs.ts), so a
+  // picture that never comes is read where it stopped.
+  await drawn.evaluate(() => {
+    const w = window as unknown as { probeSaid: string[] };
+    w.probeSaid = [];
+    window.addEventListener("message", (event) => {
+      const data = event.data as { error?: unknown; type?: unknown } | null;
+      if (typeof data?.type === "string" && data.type.startsWith("cawco:")) {
+        w.probeSaid.push(
+          `+${Math.round(performance.now())} ${data.type}${data.error ? ` (${String(data.error)})` : ""}`
+        );
+      }
+    });
+  });
   await drawn.locator("[data-files-control]").click();
   await drawn.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
   const pictured = await until(
@@ -1860,7 +1860,11 @@ const roundThree = async (
     pictured !== null &&
       kept.length === UNPICTURED.length &&
       kept.every((one) => one.thumbnail && !one.shown),
-    `cards ${JSON.stringify(pictured)}; hub ${JSON.stringify(kept)}`
+    `cards ${JSON.stringify(pictured)}; hub ${JSON.stringify(kept)}; the frames said ${(
+      await drawn.evaluate(
+        () => (window as unknown as { probeSaid: string[] }).probeSaid
+      )
+    ).join(", ")}`
   );
   await drawn.close();
 
@@ -1874,21 +1878,26 @@ const roundThree = async (
     ids.none,
     emptiedReads.hold
   );
-  await recordIntros(emptied, "[data-files-empty]");
   await emptied.locator("[data-files-control]").click();
   await emptied
     .locator("[data-files-wait]")
     .first()
     .waitFor({ timeout: 10_000 });
-  emptiedReads.release();
-  await emptied.locator("[data-files-empty]").waitFor({ timeout: 15_000 });
-  await emptied.waitForTimeout(400);
-  const emptyIntro = await introsOf(emptied);
+  const emptying = await readMotion(
+    emptied,
+    async () => {
+      emptiedReads.release();
+      await emptied.locator("[data-files-empty]").waitFor({ timeout: 15_000 });
+    },
+    "[data-files-empty]",
+    { ms: 15_000 }
+  );
+  const emptyIntro = lengths(emptying.runs);
   const emptyCross = await durationOf(emptied, "--dur-control");
   kit.check(
     "31: the skeleton gives its place to the empty state in one cross-fade over --dur-control",
     emptyIntro.includes(emptyCross),
-    `intros ${JSON.stringify(emptyIntro)} (--dur-control ${emptyCross})`
+    `intros ${JSON.stringify(emptyIntro)}, read by ${emptying.by} (--dur-control ${emptyCross}): ${JSON.stringify(emptying.runs)}`
   );
   await emptied.close();
 };

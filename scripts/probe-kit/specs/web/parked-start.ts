@@ -51,7 +51,14 @@
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen } from "../../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import {
+  handOn,
+  type Kit,
+  open,
+  readMotion,
+  type Spec,
+  settle,
+} from "../../kit";
 
 /** The form on a desk: the popover. */
 const DESK_FORM = "[data-ns-popover]";
@@ -217,34 +224,38 @@ async function rowIn(page: Page, state: string, timeout = 60_000) {
  * and the form leaves.
  */
 async function escapeIntoRow(kit: Kit, page: Page, label: string) {
-  await page.keyboard.press("Escape");
-  const flew = await page
-    .waitForFunction(
-      (popover) => {
-        const card = document.querySelector<HTMLElement>(popover);
-        return (
-          card?.getAnimations().some((run) => {
-            const frames =
-              (run.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
-            const last = frames.at(-1);
-            return (
-              last !== undefined &&
-              String(last.opacity) === "0" &&
-              String(last.transform).includes("scale(")
-            );
-          }) ?? false
-        );
-      },
-      FORM,
-      { timeout: 2000, polling: 16 }
-    )
-    .then(
-      () => true,
-      () => false
+  // Its end read where it ends: held at fraction 1.
+  const flight = await readMotion(
+    page,
+    () => page.keyboard.press("Escape"),
+    FORM,
+    {
+      fractions: [1],
+      read: () =>
+        page.evaluate((popover) => {
+          const card = document.querySelector<HTMLElement>(popover);
+          const style = card ? getComputedStyle(card) : null;
+          return {
+            opacity: style?.opacity ?? "",
+            transform: style?.transform ?? "",
+          };
+        }, FORM),
+    }
+  );
+  /** Whether a computed transform scales (a matrix whose x scale is not 1). */
+  const scales = (transform: string) => {
+    const x = Number(transform.match(MATRIX)?.[1].split(",")[0]);
+    return Number.isFinite(x) && Math.abs(x - 1) > 0.01;
+  };
+  const flew =
+    flight.runs.length > 0 &&
+    flight.at.some(
+      ({ value }) => value.opacity === "0" && scales(value.transform)
     );
   kit.check(
-    `${label}: Esc mid-start closes the form into its row (a flight on the form to the row's box, fading out)`,
-    flew
+    `${label}: Esc mid-start closes the form into its row (a flight on the form to the row's box, fading out; read by ${flight.by})`,
+    flew,
+    JSON.stringify(flight)
   );
   await page.waitForSelector(FORM, { state: "detached", timeout: 15_000 });
 }
@@ -639,262 +650,42 @@ async function openSpawnLink(page: Page, spawnLink: string) {
 }
 
 /**
+ * The drawer's exit `action` starts: a run of some length on the sheet
+ * itself (`drawer-content`, the kit's DrawerContent) that plays to its
+ * end, read as the kit reads motion (kit.ts `readMotion`).
+ */
+async function sheetExit(page: Page, action: () => Promise<unknown>) {
+  const read = await readMotion(page, action, PHONE_FORM);
+  return {
+    by: read.by,
+    runs: read.runs,
+    ran: read.runs.some(
+      (run) => run.target === "div[drawer-content]" && run.ended
+    ),
+  };
+}
+
+/**
  * The sheet closed by its own Close mid-start: the drawer's exit runs on the
  * sheet (an animation on it, read from the engine), and the sheet leaves.
  */
 async function closeSheet(kit: Kit, page: Page, label: string) {
-  await page
-    .locator(`${PHONE_FORM} button[aria-label="Close"]`)
-    .filter({ visible: true })
-    .first()
-    .tap();
-  const exited = await page
-    .waitForFunction(
-      (sheet) => {
-        const card = document.querySelector<HTMLElement>(sheet);
-        return (
-          card
-            ?.getAnimations()
-            .some((run) => run.playState === "running" || run.pending) ?? false
-        );
-      },
-      PHONE_FORM,
-      { timeout: 2000, polling: 16 }
-    )
-    .then(
-      () => true,
-      () => false
-    );
+  const exit = await sheetExit(page, () =>
+    page
+      .locator(`${PHONE_FORM} button[aria-label="Close"]`)
+      .filter({ visible: true })
+      .first()
+      .tap()
+  );
   kit.check(
-    `${label}: the sheet's Close mid-start runs the drawer's exit on the sheet (getAnimations)`,
-    exited
+    `${label}: the sheet's Close mid-start runs the drawer's exit on the sheet (read by ${exit.by})`,
+    exit.ran,
+    JSON.stringify(exit.runs)
   );
   await page.waitForSelector(PHONE_FORM, {
     state: "detached",
     timeout: 15_000,
   });
-}
-
-/**
- * A finger on the sheet and a cursor resting beside it, as an engine lets
- * the probe drive them.
- */
-interface Hand {
-  /** The resting cursor moved to a point; it stays there as the page moves under it. */
-  cursor: (x: number, y: number) => Promise<void>;
-  done: () => Promise<void>;
-  down: (x: number, y: number) => Promise<void>;
-  /** Whether the finger sends a touch `pointerout` as it leaves the grabber. */
-  fingerLeaves: boolean;
-  move: (x: number, y: number) => Promise<void>;
-  up: () => Promise<void>;
-}
-
-/** Chromium: raw touch through CDP, and Playwright's own mouse as the cursor. */
-async function touchHand(page: Page): Promise<Hand> {
-  const cdp = await page.context().newCDPSession(page);
-  const touch = async (
-    type: "touchStart" | "touchMove" | "touchEnd",
-    points: { x: number; y: number }[]
-  ) => {
-    await cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
-  };
-  return {
-    down: (x, y) => touch("touchStart", [{ x, y }]),
-    move: (x, y) => touch("touchMove", [{ x, y }]),
-    up: () => touch("touchEnd", []),
-    cursor: (x, y) => page.mouse.move(x, y),
-    done: () => cdp.detach(),
-    // Chromium sends a held finger none: the hold leg hears nothing.
-    fingerLeaves: false,
-  };
-}
-
-/** The synthesized finger's pointer id, as an engine numbers a touch. */
-const FINGER = 21;
-
-/**
- * WebKit: Playwright drives no touch drag there (its touchscreen only
- * taps), so the finger is PointerEvents made in the page: `pointerType:
- * "touch"`, primary, one pointer id from down through every move to up,
- * sent where vaul's capture sends them. Not an iOS finger: it proves the
- * patch's logic in WebKit's engine, not iOS's touch input.
- *
- * WebKit captures only a pointer it made (setPointerCapture on any other
- * id throws; the engine's own answer is noted), so the hand keeps vaul's
- * capture of the finger itself. On its first move the finger sends a touch
- * `pointerout` from the grabber, the event iOS sends as a finger leaves an
- * element (huntabyte/vaul-svelte#123). The cursor is a mouse pointer (id
- * 1) at a point: after every move of the finger the point is hit-tested
- * again, and when the sheet has slid another element under it the cursor
- * says so as an engine does (a mouse `pointerout` from the element it left,
- * a `pointerover` on the new one); moved, it sends a `pointermove` there.
- */
-async function syntheticHand(kit: Kit, page: Page, label: string) {
-  const refusal = await page.evaluate(
-    ({ sheet, finger }) => {
-      const state = {
-        captured: null as Element | null,
-        finger: { x: 0, y: 0 },
-        left: false as boolean,
-        cursor: null as { x: number; y: number } | null,
-        under: null as Element | null,
-      };
-      const grabber = () =>
-        document.querySelector(`${sheet} [data-slot="drawer-grabber"]`);
-      let refused = "nothing: it took the capture";
-      try {
-        (grabber() ?? document.body).setPointerCapture(finger);
-      } catch (error) {
-        refused = error instanceof DOMException ? error.name : String(error);
-      }
-      const proto = Element.prototype;
-      const set = proto.setPointerCapture;
-      const has = proto.hasPointerCapture;
-      const release = proto.releasePointerCapture;
-      proto.setPointerCapture = function (this: Element, id: number) {
-        if (id === finger) {
-          state.captured = this;
-          return;
-        }
-        set.call(this, id);
-      };
-      proto.hasPointerCapture = function (this: Element, id: number) {
-        return id === finger ? state.captured === this : has.call(this, id);
-      };
-      proto.releasePointerCapture = function (this: Element, id: number) {
-        if (id === finger) {
-          state.captured = null;
-          return;
-        }
-        release.call(this, id);
-      };
-      const send = (at: Element, type: string, init: PointerEventInit) =>
-        at.dispatchEvent(
-          new PointerEvent(type, {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            ...init,
-          })
-        );
-      const touch = (extra: PointerEventInit = {}): PointerEventInit => ({
-        pointerId: finger,
-        pointerType: "touch",
-        isPrimary: true,
-        clientX: state.finger.x,
-        clientY: state.finger.y,
-        width: 20,
-        height: 20,
-        pressure: 0.5,
-        button: 0,
-        buttons: 1,
-        ...extra,
-      });
-      const mouse = (extra: PointerEventInit = {}): PointerEventInit => ({
-        pointerId: 1,
-        pointerType: "mouse",
-        isPrimary: true,
-        clientX: state.cursor?.x ?? 0,
-        clientY: state.cursor?.y ?? 0,
-        button: -1,
-        buttons: 0,
-        ...extra,
-      });
-      /** The cursor's point hit-tested again: a new element under it is said. */
-      const recheck = () => {
-        if (!state.cursor) {
-          return;
-        }
-        const now = document.elementFromPoint(state.cursor.x, state.cursor.y);
-        if (!now || now === state.under) {
-          return;
-        }
-        if (state.under?.isConnected) {
-          send(state.under, "pointerout", mouse({ relatedTarget: now }));
-        }
-        send(now, "pointerover", mouse({ relatedTarget: state.under }));
-        state.under = now;
-      };
-      const target = () => state.captured ?? grabber();
-      (window as unknown as { probeHand: unknown }).probeHand = {
-        down(x: number, y: number) {
-          const at = grabber();
-          if (!at) {
-            return;
-          }
-          state.finger = { x, y };
-          state.left = false;
-          send(at, "pointerdown", touch());
-        },
-        move(x: number, y: number) {
-          const at = target();
-          if (!at) {
-            return;
-          }
-          state.finger = { x, y };
-          send(at, "pointermove", touch());
-          if (!state.left) {
-            state.left = true;
-            // Where a finger that slipped off the 6px grabber stands: just
-            // below its edge. Not the point under the finger now, which is
-            // the grabber again (the sheet follows the finger): sent with
-            // that as its related target, WebKit delivered it to no
-            // listener, not even one on the window.
-            const edge = at.getBoundingClientRect();
-            send(
-              at,
-              "pointerout",
-              touch({
-                relatedTarget:
-                  document.elementFromPoint(x, edge.bottom + 4) ??
-                  at.parentElement,
-              })
-            );
-          }
-          recheck();
-        },
-        up() {
-          const at = target();
-          if (at) {
-            send(at, "pointerup", touch({ pressure: 0, buttons: 0 }));
-          }
-          state.captured = null;
-        },
-        cursor(x: number, y: number) {
-          state.cursor = { x, y };
-          recheck();
-          if (state.under) {
-            send(state.under, "pointermove", mouse());
-          }
-        },
-      };
-      return refused;
-    },
-    { sheet: PHONE_FORM, finger: FINGER }
-  );
-  kit.note(
-    `${label}: WebKit's own answer to setPointerCapture for a pointer it did not make: ${refusal}`
-  );
-  // Each call runs in the page, where the hand above lives.
-  const drive = (verb: "down" | "move" | "up" | "cursor", x = 0, y = 0) =>
-    page.evaluate(
-      ({ how, at, to }) =>
-        (
-          window as unknown as {
-            probeHand: Record<string, (x: number, y: number) => void>;
-          }
-        ).probeHand[how](at, to),
-      { how: verb, at: x, to: y }
-    );
-  return {
-    down: (x, y) => drive("down", x, y),
-    move: (x, y) => drive("move", x, y),
-    up: () => drive("up"),
-    cursor: (x, y) => drive("cursor", x, y),
-    done: async () => undefined,
-    fingerLeaves: true,
-  } satisfies Hand;
 }
 
 /**
@@ -909,7 +700,7 @@ async function syntheticHand(kit: Kit, page: Page, label: string) {
  * sheet. Neither is the finger's, and neither moves or ends the drag
  * (patches/vaul-svelte, the pressing pointer's drag).
  */
-async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
+async function swipeSheet(kit: Kit, page: Page, label: string) {
   const grab = await page.evaluate((sheet) => {
     const card = document.querySelector<HTMLElement>(sheet);
     const grabber = card?.querySelector('[data-slot="drawer-grabber"]');
@@ -927,6 +718,8 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
   if (!grab) {
     return;
   }
+  const hand = await handOn(page);
+  kit.note(`${label}: the finger's pointer capture: ${hand.capture}`);
   // Every frame from the touch's start, read in the page itself: whether
   // the sheet is drawn, its state, its running animations and transform,
   // the body's lock; and each pointer event, as vaul hears them.
@@ -935,15 +728,6 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
     (window as unknown as { swipeLog: unknown[] }).swipeLog = log;
     const started = performance.now();
     const now = () => Math.round(performance.now() - started);
-    const kind = (run: Animation): string => {
-      if (run instanceof CSSAnimation) {
-        return run.animationName;
-      }
-      if (run instanceof CSSTransition) {
-        return `transition:${run.transitionProperty}`;
-      }
-      return "waapi";
-    };
     const name = (node: EventTarget | null): string | null => {
       if (!(node instanceof Element)) {
         return null;
@@ -969,12 +753,6 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
         sheet: card ? getComputedStyle(card).transform : null,
       };
     };
-    // An animation the engine says it started or ended, and whether it ran
-    // on the sheet itself.
-    const ran = (event: AnimationEvent) => ({
-      animation: event.animationName,
-      isSheet: event.target === document.querySelector(sheet),
-    });
     for (const type of [
       "pointerdown",
       "pointermove",
@@ -985,8 +763,6 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
       "lostpointercapture",
       "touchend",
       "touchcancel",
-      "animationstart",
-      "animationend",
     ]) {
       window.addEventListener(
         type,
@@ -1001,7 +777,6 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
             at: now(),
             event: type,
             ...(pointer ? told(pointer) : {}),
-            ...(event instanceof AnimationEvent ? ran(event) : {}),
           });
         },
         { capture: true }
@@ -1014,11 +789,6 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
         at: now(),
         drawn: card !== null,
         state: card?.dataset.state ?? null,
-        runs:
-          card
-            ?.getAnimations()
-            .filter((run) => run.playState === "running" || run.pending)
-            .map(kind) ?? [],
         transform: card ? getComputedStyle(card).transform : null,
         body: document.body.style.pointerEvents || null,
         drawer: document.body.dataset.drawer ?? null,
@@ -1037,6 +807,11 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
   await hand.down(grab.x, grab.y);
   for (let step = 1; step <= steps; step += 1) {
     await hand.move(grab.x, grab.y + (distance * step) / steps);
+    // The finger slips off the 6px grabber as it first moves, where the
+    // engine's own touch says so (huntabyte/vaul-svelte#123).
+    if (step === 1) {
+      await hand.leave?.();
+    }
     // Halfway, the cursor moves onto the sheet's body where it stands now,
     // well below the finger. Three quarters in, it leaves the sheet for the
     // screen's top, over the overlay: a mouse `pointerout` from the sheet
@@ -1066,27 +841,8 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
       event: "probe: release",
     });
   });
-  // The exit read as it runs, as well as in the frames: watched from
-  // before the finger lifts.
-  const polledExit = page
-    .waitForFunction(
-      (sheet) => {
-        const card = document.querySelector<HTMLElement>(sheet);
-        return (
-          card?.dataset.state === "closed" &&
-          card
-            .getAnimations()
-            .some((run) => run.playState === "running" || run.pending)
-        );
-      },
-      PHONE_FORM,
-      { timeout: 2000, polling: 16 }
-    )
-    .then(
-      () => true,
-      () => false
-    );
-  await hand.up();
+  // The exit the finger's lift starts, read as the kit reads motion.
+  const exit = await sheetExit(page, () => hand.up());
   await page.waitForSelector(PHONE_FORM, {
     state: "detached",
     timeout: 15_000,
@@ -1095,35 +851,14 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
   const log = (await page.evaluate(
     () => (window as unknown as { swipeLog: unknown[] }).swipeLog
   )) as {
-    animation?: string;
     drawn?: boolean;
     event?: string;
-    isSheet?: boolean;
     kind?: string;
     onSheet?: boolean;
     sheet?: string | null;
-    runs?: string[];
     state?: string | null;
     transform?: string | null;
   }[];
-  // Or the engine's own word that it ran an animation on the closed sheet
-  // and ended it: headless WebKit drew no frame for 194ms after a release,
-  // longer than the whole exit, and its page ran no poll in it either.
-  const afterRelease = log.slice(
-    log.findIndex((frame) => frame.event === "probe: release")
-  );
-  const exitEvents = ["animationstart", "animationend"].every((type) =>
-    afterRelease.some((frame) => frame.event === type && frame.isSheet === true)
-  );
-  const exited =
-    exitEvents ||
-    (await polledExit) ||
-    log.some(
-      (frame) =>
-        frame.drawn === true &&
-        frame.state === "closed" &&
-        (frame.runs?.length ?? 0) > 0
-    );
   // The exit leaves from where the finger left the sheet: its first closed
   // frame stands no higher than its last dragged one (no jump back up).
   const lift = (frame: { transform?: string | null } | undefined): number => {
@@ -1162,7 +897,7 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
   kit.check(
     `${label}: the sheet follows the finger until it lifts, the finger's ${fingerOuts} touch pointerout(s) and a resting cursor's ${cursorOuts} pointerout(s) and ${cursorMoves} move(s) on the dragged sheet ending and moving nothing: no closed frame before the release, never a step back, and it stood at the finger's travel when it lifted (translateY ${lift(lastHeld)} of ${Math.round(distance)}px)`,
     released > 0 &&
-      (fingerOuts > 0 || !hand.fingerLeaves) &&
+      (fingerOuts > 0 || hand.leave === undefined) &&
       cursorOuts > 0 &&
       cursorMoves > 0 &&
       held.every((frame) => frame.state !== "closed") &&
@@ -1171,17 +906,18 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
     JSON.stringify(heldAt)
   );
   kit.check(
-    `${label}: swiped down past its threshold mid-start, the sheet runs the drawer's exit (getAnimations in every frame from the touch, or the sheet's own animationstart and animationend)`,
-    exited,
-    JSON.stringify(
-      log.filter(
+    `${label}: swiped down past its threshold mid-start, the sheet runs the drawer's exit (read by ${exit.by})`,
+    exit.ran,
+    JSON.stringify({
+      exit: exit.runs,
+      log: log.filter(
         (frame, at) =>
           frame.event !== undefined ||
           at === 0 ||
           JSON.stringify({ ...frame, at: 0 }) !==
             JSON.stringify({ ...log[at - 1], at: 0 })
-      )
-    )
+      ),
+    })
   );
   await hand.done();
 }
@@ -1194,12 +930,7 @@ async function swipeSheet(kit: Kit, page: Page, label: string, hand: Hand) {
  * from the grabber, held; the events the sheet hears are logged, so a
  * `pointerout` that ends the drag early is named.
  */
-async function holdThroughResize(
-  kit: Kit,
-  page: Page,
-  label: string,
-  hand: Hand
-) {
+async function holdThroughResize(kit: Kit, page: Page, label: string) {
   // vaul takes no drag in the half second after a sheet opens
   // (use-drawer-root `shouldDrag`, "Allow scrolling when animating").
   await page.waitForTimeout(700);
@@ -1220,6 +951,7 @@ async function holdThroughResize(
     kit.check(`${label}: the sheet has its grabber to hold`, false);
     return;
   }
+  const hand = await handOn(page);
   await hand.cursor(grab.x, 1);
   await page.evaluate(() => {
     const heard: string[] = [];
@@ -1267,6 +999,9 @@ async function holdThroughResize(
   await hand.down(grab.x, grab.y);
   for (let step = 1; step <= 12; step += 1) {
     await hand.move(grab.x, grab.y + step * 8);
+    if (step === 1) {
+      await hand.leave?.();
+    }
     await page.waitForTimeout(40);
   }
   await settle(page, 100);
@@ -1436,7 +1171,7 @@ async function phoneLegs(
   const beforeSwipe = new Set(instances());
   hold.spawn = { ms: 8000, refuse: false };
   await pressStart(page);
-  await swipeSheet(kit, page, `${label} (swipe)`, await touchHand(page));
+  await swipeSheet(kit, page, `${label} (swipe)`);
   await rowIn(page, "running", 10_000);
   await settle(page, 200);
   const [swipedRow] = await readRows(page);
@@ -1477,12 +1212,7 @@ async function phoneLegs(
 
   // The visible area changing under a finger holding the sheet.
   await openSpawnLink(page, spawnLink);
-  await holdThroughResize(
-    kit,
-    page,
-    `${label} (held through a resize)`,
-    await touchHand(page)
-  );
+  await holdThroughResize(kit, page, `${label} (held through a resize)`);
   await page
     .locator(`${PHONE_FORM} button[aria-label="Close"]`)
     .filter({ visible: true })
@@ -1741,7 +1471,7 @@ async function projectLegs(
 
 /**
  * The swipe and the hold on WebKit's engine, at 390, with the synthesized
- * finger and cursor (`syntheticHand`): the sheet swiped down mid-start
+ * finger and cursor (kit.ts `handOn`): the sheet swiped down mid-start
  * follows the finger until it lifts, parks the start as its running row,
  * and a sheet held partway keeps its place while the visible area changes.
  */
@@ -1762,12 +1492,7 @@ async function webkitLegs(
   const before = new Set(instances());
   hold.spawn = { ms: 8000, refuse: false };
   await pressStart(page);
-  await swipeSheet(
-    kit,
-    page,
-    `${label} (swipe)`,
-    await syntheticHand(kit, page, `${label} (swipe)`)
-  );
+  await swipeSheet(kit, page, `${label} (swipe)`);
   await rowIn(page, "running", 10_000);
   await settle(page, 200);
   const [row] = await readRows(page);
@@ -1791,12 +1516,7 @@ async function webkitLegs(
     .click();
 
   await openSpawnLink(page, spawnLink);
-  await holdThroughResize(
-    kit,
-    page,
-    `${label} (held through a resize)`,
-    await syntheticHand(kit, page, `${label} (held)`)
-  );
+  await holdThroughResize(kit, page, `${label} (held through a resize)`);
   await page
     .locator(`${PHONE_FORM} button[aria-label="Close"]`)
     .filter({ visible: true })

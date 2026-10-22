@@ -850,7 +850,7 @@
           type="button"
         >
           <IconSearch class="flex-none size-icon-md" />
-          <span class="overflow-clip text-ellipsis whitespace-nowrap"
+          <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
             >Search sessions, projects, machines</span
           >
         </button>

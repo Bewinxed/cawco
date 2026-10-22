@@ -133,6 +133,42 @@ export const COMPOSER = `form[data-slot="cin"] ${COMPOSER_FIELD}`;
 /** The browser engines a page runs on. */
 export type Engine = "chromium" | "webkit" | "firefox";
 
+const ENGINES: readonly Engine[] = ["chromium", "webkit", "firefox"];
+
+/**
+ * The engine a page opens on where its spec names none: `PROBE_ENGINE`
+ * (`PROBE_ENGINE=webkit bun scripts/probe-kit/run.ts web <spec>`), so a
+ * spec written on Chromium runs whole on another engine; Chromium unset. A
+ * page whose spec names its engine keeps it.
+ */
+const RUN_ENGINE: Engine = (() => {
+  const named = process.env.PROBE_ENGINE;
+  if (named === undefined || named === "") {
+    return "chromium";
+  }
+  if (!(ENGINES as readonly string[]).includes(named)) {
+    throw new Error(
+      `PROBE_ENGINE=${named} is no engine the kit runs (${ENGINES.join(", ")})`
+    );
+  }
+  return named as Engine;
+})();
+
+/**
+ * Whether a console message is the kit's own doing, none of the page's.
+ * WebKit runs a context's init scripts (`addInitScript`: the theme,
+ * `installRuns`, a spec's `init`) in every frame as that frame's own
+ * scripts, and a frame sandboxed without `allow-scripts` blocks them and
+ * says so as a console error; Chromium sets them in where no sandbox
+ * reaches and says nothing. The product's one such frame holds no script
+ * of its own (preview-overlay schemes.ts `blankFrame`: `sandbox=
+ * "allow-same-origin"`, `srcdoc` "<!doctype html>"), so this message from
+ * a srcdoc frame is the kit's scripts turned away, never the page's.
+ */
+export const kitsOwnMessage = (text: string): boolean =>
+  text ===
+  "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.";
+
 export interface PageOptions {
   /**
    * A browser of its own, by name, for a page traced while another page is:
@@ -1058,23 +1094,24 @@ export class Run {
       },
       page: async (view, options = {}) => {
         const v = VIEWS[view];
+        const engine = options.engine ?? RUN_ENGINE;
         const browser = await this.browser(
-          options.engine ?? "chromium",
-          options.engine === "webkit" ? options.webkit : undefined,
+          engine,
+          engine === "webkit" ? options.webkit : undefined,
           options.oneProcess,
           options.browser,
           options.wholeRaster,
           options.hostRules,
           options.scrollbars
         );
-        const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
+        const phoneAgent = PHONE_AGENT[engine];
         const context = await browser.newContext({
           viewport: { width: v.width, height: v.height },
           deviceScaleFactor: options.scale ?? SCALE,
           hasTouch: v.touch,
           // Gecko has no mobile viewport mode in Playwright ("isMobile is
           // not supported in Firefox"): a touch screen at the size alone.
-          isMobile: v.touch && options.engine !== "firefox",
+          isMobile: v.touch && engine !== "firefox",
           colorScheme: options.theme ?? "light",
           ...networkOf(options),
           ...(v.touch && v.width < PHONE_MAX_WIDTH && phoneAgent
@@ -1121,7 +1158,7 @@ export class Run {
           kit.check(
             `${view}: the page points as its device does`,
             false,
-            `${options.engine ?? "chromium"} does not match ${missed.join(" ")}`
+            `${engine} does not match ${missed.join(" ")}`
           );
         }
         return page;
@@ -1792,4 +1829,781 @@ async function uncovered(
   throw new Error(
     `${named}: the page around its frame covers it: ${cover}, for ${UNCOVER_MS / 1000}s`
   );
+}
+
+/** One run a motion read caught. */
+export interface MotionRun {
+  /** Its delay before it moves, ms. */
+  delay: number;
+  /**
+   * The curve it moves on: its timing's easing, or, where that is linear,
+   * its first keyframe's (an engine carries a CSS transition's curve on one
+   * of the two).
+   */
+  easing: string;
+  /** Where it stands whole: its delay plus every iteration, ms; Infinity for a loop. */
+  end: number;
+  /** Whether it played to its end once let go (its `finished`). */
+  ended: boolean;
+  /**
+   * Where its clock stood as the read held it: 0 when no frame of it played
+   * first. The page's held clock reads it; the DevTools clock pauses each
+   * run as the protocol reports it starting, and gives none.
+   */
+  heldAt: number | null;
+  /** Its last keyframe's values (a CSS animation's, a Web Animation's), where the page's held clock read it. */
+  last?: Record<string, string>;
+  /** A CSS animation's name, a CSS transition's property, a Web Animation's id (else its keyframes' properties). */
+  name: string;
+  /** Its start on the document's timeline, ms, once it played; null where none was given. */
+  start: number | null;
+  /**
+   * Its element, as `tag[slot]`, else `tag[data-…]` with each of its data
+   * attributes (a pseudo-element's run, its host's).
+   */
+  target: string;
+  type: "CSSAnimation" | "CSSTransition" | "WebAnimation";
+}
+
+/** A motion an action started, read as the proof rule reads motion. */
+export interface MotionRead<T> {
+  /** `read` at each fraction asked, every run held there. */
+  at: { fraction: number; value: T }[];
+  /**
+   * The clock it was read on: the DevTools Animation domain's (`clock`,
+   * Chromium), or one the page holds itself (`held`, WebKit and Firefox,
+   * which Playwright gives no Animation domain).
+   */
+  by: "clock" | "held";
+  /** Every run of some length the action started inside `within`; none when it started none. */
+  runs: MotionRun[];
+}
+
+export interface MotionOptions<T> {
+  /** Fractions of the clock to seek and `read` at. */
+  fractions?: number[];
+  /** How long the action has to start its runs, and they to end once let go, ms. */
+  ms?: number;
+  /** The run whose length the fractions are of; the longest unset. */
+  of?: string;
+  /**
+   * Only runs on an element `within` itself names, none on what lies
+   * inside it: a read whose page runs on while held (a card's padding
+   * held at 0 changed how SideSheet made its clip) holds no more than it
+   * reads.
+   */
+  own?: boolean;
+  /** What to read at each fraction. */
+  read?: () => Promise<T>;
+}
+
+/** Each page's one clock (anim.ts), made at its first read. */
+const clocks = new WeakMap<Page, Promise<import("./anim").Clock>>();
+
+/** Whether a page is drawn by Chromium, the one engine with the Animation domain. */
+const onChromium = (page: Page) =>
+  page.context().browser()?.browserType().name() === "chromium";
+
+/**
+ * The enter or exit a page runs when `action` happens, inside what `within`
+ * names (a selector), read the way the fleet's proof rule reads motion: on
+ * a held clock, paused and sought, never by watching frames for it.
+ * Headless WebKit drew no frame for 194ms after a sheet's release
+ * (parked-start), longer than the whole exit, and a loaded machine took
+ * 330-446ms a frame (artifact-resize-loop): a frame loop or a
+ * `getAnimations()` poll finds nothing there.
+ *
+ * Each run the action starts inside `within` is held at its start, every
+ * run is sought to each of `fractions` (of the run named `of`, else the
+ * longest; each held at its own end once past it) with `read` taken there,
+ * and then all are let go to play out, `ended` once each has finished.
+ * On Chromium the clock is the DevTools Animation domain's (anim.ts
+ * `Clock`). Elsewhere the page holds it (artifact-resize-loop's scrub,
+ * 7fca29883): a CSS transition or animation is held from a
+ * MutationObserver's callback (a microtask after the write that makes it,
+ * before any frame: `getAnimations()` there makes the run and returns it),
+ * a Web Animation as `Element.animate` returns it; a run already under way
+ * as the read begins is none of its motion and is left alone. Held is a
+ * playback rate
+ * of 0: the run stays `running` and its start time resolves on the frame
+ * that starts it, as the page's own runs' do (a page that reads one run to
+ * start another, SideSheet's clip, reads it unchanged), its clock at 0
+ * however long frames take. Once each has started and two frames pass with
+ * no new run, all are paused there (`heldAt`) and sought.
+ *
+ * A run of no length is never held: Svelte opens every transition with one
+ * and builds the real keyframes in its `onfinish` (anim.ts `hold`), so held,
+ * the transition would never run.
+ *
+ *   const shut = await readMotion(page, () => close.click(), SHEET);
+ *   kit.check("it runs its exit", shut.runs.some((run) => run.ended));
+ */
+export async function readMotion<T = undefined>(
+  page: Page,
+  action: () => Promise<unknown>,
+  within: string,
+  options: MotionOptions<T> = {}
+): Promise<MotionRead<T>> {
+  const ms = options.ms ?? 3000;
+  return onChromium(page)
+    ? await clockRead(page, action, within, ms, options)
+    : await heldRead(page, action, within, ms, options);
+}
+
+/** Runs let go, played out: each one's own `finished`, given `ms`, not a frame watched for it. */
+const playedOut = <T>(ms: number, finished: () => Promise<T>) =>
+  readWithin(ms, finished);
+
+/** The Chromium read: caught, sought, read, let go, played out. */
+async function clockRead<T>(
+  page: Page,
+  action: () => Promise<unknown>,
+  within: string,
+  ms: number,
+  options: MotionOptions<T>
+): Promise<MotionRead<T>> {
+  let made = clocks.get(page);
+  if (!made) {
+    made = import("./anim").then(({ Clock }) => Clock.on(page));
+    clocks.set(page, made);
+  }
+  const clock = await made;
+  let caught: import("./anim").Run[];
+  try {
+    caught = (
+      await clock.catchRuns(action, within, ms, {
+        loops: false,
+        own: options.own,
+      })
+    ).filter((run) => !run.scroll);
+  } catch (error) {
+    if (String(error).includes("no animation started inside")) {
+      return { by: "clock", runs: [], at: [] };
+    }
+    throw error;
+  }
+  // Each run's element, named while it is still caught.
+  const targets = await Promise.all(caught.map((run) => clock.targetOf(run)));
+  const at: MotionRead<T>["at"] = [];
+  const { read } = options;
+  try {
+    if (read) {
+      for (const fraction of options.fractions ?? []) {
+        // biome-ignore lint/performance/noAwaitInLoops: one fraction of the clock at a time
+        await clock.seek(fraction, options.of);
+        at.push({ fraction, value: await read() });
+      }
+    }
+    // The page's own Animation for each caught run, kept while it is still
+    // held (a run that finishes leaves `getAnimations()`), so each one's own
+    // `finished` says whether it played to its end, whatever another did.
+    await page.evaluate(keepCaught, within);
+  } finally {
+    // A read that threw leaves no run held for the next read to find.
+    await clock.release();
+  }
+  const letGo = await playedOut(ms, () =>
+    page.evaluate(() => window.kitCaught?.finished() ?? [])
+  );
+  const ends = letGo.kind === "answered" ? [...letGo.value] : [];
+  /** The first unclaimed page run on the same element by the same name. */
+  const playedTo = (target: string, name: string) => {
+    const found = ends.findIndex(
+      (one) => one.target === target && one.name === name
+    );
+    return found < 0 ? false : (ends.splice(found, 1)[0]?.ended ?? false);
+  };
+  return {
+    by: "clock",
+    at,
+    runs: caught.map((run, index) => ({
+      type: run.type,
+      name: run.name,
+      target: targets[index] ?? "",
+      start: run.start,
+      delay: run.delay,
+      end: run.loop ? Number.POSITIVE_INFINITY : run.end,
+      easing: run.easing,
+      heldAt: null,
+      ended: playedTo(targets[index] ?? "", run.name),
+    })),
+  };
+}
+
+/** The read where Playwright gives no Animation domain: the page holds the clock. */
+async function heldRead<T>(
+  page: Page,
+  action: () => Promise<unknown>,
+  within: string,
+  ms: number,
+  options: MotionOptions<T>
+): Promise<MotionRead<T>> {
+  await page.evaluate(holdMotion, { within, own: options.own ?? false });
+  const at: MotionRead<T>["at"] = [];
+  let caught: Omit<MotionRun, "ended">[] = [];
+  try {
+    await action();
+    caught = await page.evaluate(
+      (wait) => window.kitHeld?.started(wait) ?? [],
+      ms
+    );
+    const { read } = options;
+    if (read && caught.length > 0) {
+      for (const fraction of options.fractions ?? []) {
+        // biome-ignore lint/performance/noAwaitInLoops: one fraction of the clock at a time
+        await page.evaluate(
+          ({ share, named }) => window.kitHeld?.seek(share, named),
+          { share: fraction, named: options.of }
+        );
+        // Two frames, as the DevTools clock's seek waits (anim.ts `seek`):
+        // what the page draws from its runs each frame (a ResizeObserver, a
+        // frame callback) has drawn from them where they now stand.
+        await frames(page);
+        at.push({ fraction, value: await read() });
+      }
+    }
+  } finally {
+    // Every run let go to play on, the page's own hooks gone: a page that
+    // navigated away has none to let go.
+    await page.evaluate(() => window.kitHeld?.letGo()).catch(() => undefined);
+  }
+  const played = await playedOut(ms, () =>
+    page.evaluate(() => window.kitHeld?.finished() ?? [])
+  );
+  const ends = played.kind === "answered" ? played.value : [];
+  return {
+    by: "held",
+    at,
+    runs: caught.map((run, index) => ({ ...run, ended: ends[index] ?? false })),
+  };
+}
+
+declare global {
+  interface Window {
+    /** The clock read's caught runs as the page holds them (kit.ts `keepCaught`). */
+    kitCaught?: {
+      finished: () => Promise<
+        { ended: boolean; name: string; target: string }[]
+      >;
+    };
+    /** A motion read's clock, held by the page itself (kit.ts `readMotion`), while it reads. */
+    kitHeld?: {
+      letGo: () => void;
+      seek: (fraction: number, of?: string) => void;
+      started: (ms: number) => Promise<Omit<MotionRun, "ended">[]>;
+      /** Whether each run `started` told played to its end, in its order. */
+      finished: () => Promise<boolean[]>;
+    };
+  }
+}
+
+/**
+ * Keeps, in the page, each run the DevTools clock holds paused inside
+ * `within` (its Animation, its element and name as the read names them),
+ * so once let go each one's own `finished` is read: a finished run leaves
+ * `getAnimations()`. Run with `page.evaluate` before the clock lets go.
+ */
+function keepCaught(within: string): void {
+  const describe = (el: Element | null | undefined) => {
+    if (!el) {
+      return "";
+    }
+    const slot = el.getAttribute("data-slot");
+    const data = el
+      .getAttributeNames()
+      .filter((name) => name.startsWith("data-"))
+      .map((name) => `[${name}]`)
+      .join("");
+    return `${el.localName}${slot ? `[${slot}]` : data}`;
+  };
+  const nameOf = (run: Animation) => {
+    if (run instanceof CSSAnimation) {
+      return run.animationName;
+    }
+    return run instanceof CSSTransition ? run.transitionProperty : run.id;
+  };
+  const kept = window
+    .kitRuns()
+    .filter(
+      (run) =>
+        run.playState === "paused" &&
+        (run.timeline === null || run.timeline instanceof DocumentTimeline) &&
+        Number.isFinite(run.effect?.getComputedTiming().endTime) &&
+        window.kitInside((run.effect as KeyframeEffect | null)?.target, within)
+    )
+    .map((run) => ({
+      run,
+      name: nameOf(run),
+      target: describe((run.effect as KeyframeEffect | null)?.target),
+    }));
+  window.kitCaught = {
+    finished: () =>
+      Promise.all(
+        kept.map(({ run, name, target }) =>
+          run.finished.then(
+            () => ({ name, target, ended: true }),
+            () => ({ name, target, ended: false })
+          )
+        )
+      ),
+  };
+}
+
+/**
+ * Holds, in the page, every run of some length that starts inside
+ * `within` from now on, at its start: run with `page.evaluate` before the
+ * action (kit.ts `readMotion`).
+ */
+function holdMotion({ own, within }: { own: boolean; within: string }): void {
+  window.kitHeld?.letGo();
+  const held = new Set<Animation>();
+  let caught: Animation[] = [];
+  /** The caught runs once let go, whose own ends `finished` reads. */
+  let letGone: Animation[] = [];
+  /** A keyframe's own keys, which are no values it draws. */
+  const unvalued = ["offset", "easing", "composite", "computedOffset"];
+  /** Where a run stands whole: its delay, every iteration and its end delay. */
+  const lengthOf = (run: Animation) =>
+    Number(run.effect?.getComputedTiming().endTime ?? 0);
+  const inside = (run: Animation) => {
+    const target = (run.effect as KeyframeEffect | null)?.target;
+    return own
+      ? (target?.matches(within) ?? false)
+      : window.kitInside(target, within);
+  };
+  // Where the document's clock stood as the read began: a run already
+  // under way then (a band's arrival still easing in) is none of the
+  // action's motion, and held, it would never end.
+  const armedAt = Number(document.timeline.currentTime ?? 0);
+  const fresh = (run: Animation) =>
+    run.startTime === null || Number(run.startTime) >= armedAt;
+  /** A run on time: one a scroller drives (`animation-timeline`) has no length in ms. */
+  const timed = (run: Animation) =>
+    run.timeline === null || run.timeline instanceof DocumentTimeline;
+  const hold = (runs: Animation[]) => {
+    for (const run of runs) {
+      const length = lengthOf(run);
+      // No length (Svelte's dummy) and no end (a loop) are no motion to hold.
+      if (
+        !held.has(run) &&
+        run.playState === "running" &&
+        fresh(run) &&
+        timed(run) &&
+        length > 0 &&
+        Number.isFinite(length) &&
+        inside(run)
+      ) {
+        run.playbackRate = 0;
+        held.add(run);
+      }
+    }
+  };
+  // A microtask after each write to the page, before any frame: asked
+  // there, `getAnimations()` makes the run the write starts and returns it.
+  const watch = new MutationObserver(() => hold(window.kitRuns()));
+  watch.observe(document.documentElement, {
+    attributes: true,
+    childList: true,
+    subtree: true,
+  });
+  const { animate } = Element.prototype;
+  Element.prototype.animate = function (
+    this: Element,
+    ...args: Parameters<Element["animate"]>
+  ) {
+    const run = animate.apply(this, args);
+    hold([run]);
+    return run;
+  };
+  const nameOf = (run: Animation) => {
+    if (run instanceof CSSAnimation) {
+      return run.animationName;
+    }
+    if (run instanceof CSSTransition) {
+      return run.transitionProperty;
+    }
+    const keyframes =
+      run.effect instanceof KeyframeEffect ? run.effect.getKeyframes() : [];
+    return (
+      run.id ||
+      [...new Set(keyframes.flatMap((frame) => Object.keys(frame)))]
+        .filter((key) => !unvalued.includes(key))
+        .join(",")
+    );
+  };
+  const typeOf = (run: Animation): MotionRun["type"] => {
+    if (run instanceof CSSAnimation) {
+      return "CSSAnimation";
+    }
+    return run instanceof CSSTransition ? "CSSTransition" : "WebAnimation";
+  };
+  const describe = (el: Element | null | undefined) => {
+    if (!el) {
+      return "";
+    }
+    const slot = el.getAttribute("data-slot");
+    const data = el
+      .getAttributeNames()
+      .filter((name) => name.startsWith("data-"))
+      .map((name) => `[${name}]`)
+      .join("");
+    return `${el.localName}${slot ? `[${slot}]` : data}`;
+  };
+  /** A held run as the read gives it, its clock where it was held. */
+  const told = (
+    run: Animation,
+    heldAt: number | null
+  ): Omit<MotionRun, "ended"> => {
+    const effect = run.effect as KeyframeEffect | null;
+    const timing = effect?.getComputedTiming();
+    const keyframes = effect?.getKeyframes() ?? [];
+    const curve = String(effect?.getTiming().easing ?? "");
+    const final = keyframes.at(-1);
+    return {
+      type: typeOf(run),
+      name: nameOf(run),
+      target: describe(effect?.target),
+      start: run.startTime === null ? null : Number(run.startTime),
+      delay: Number(timing?.delay ?? 0),
+      end: lengthOf(run),
+      easing:
+        curve === "linear" ? String(keyframes[0]?.easing ?? curve) : curve,
+      heldAt,
+      ...(final
+        ? {
+            last: Object.fromEntries(
+              Object.entries(final)
+                .filter(([key]) => !unvalued.includes(key))
+                .map(([key, value]) => [key, String(value)])
+            ),
+          }
+        : {}),
+    };
+  };
+  const stop = () => {
+    watch.disconnect();
+    Element.prototype.animate = animate;
+  };
+  window.kitHeld = {
+    /**
+     * Once every held run has started (its start time resolved) and two
+     * frames have passed with no new run held, or at `ms`: each paused
+     * where it was held, and told.
+     */
+    started: async (ms) => {
+      const deadline = performance.now() + ms;
+      let seen = -1;
+      let quiet = 0;
+      // Two frames with no new run: a page that starts one run from
+      // another's start (SideSheet's clip from vaul's move) may do it in a
+      // frame callback that runs after this one's.
+      while (quiet < 2 && performance.now() <= deadline) {
+        const going = [...held].filter((run) => run.playState === "running");
+        const ready =
+          going.length > 0 && going.every((run) => run.startTime !== null);
+        quiet = ready && going.length === seen ? quiet + 1 : 0;
+        seen = ready ? going.length : -1;
+        // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until every run has started, each held at 0 meanwhile
+        await new Promise((done) => requestAnimationFrame(done));
+      }
+      caught = [...held].filter(
+        (run) => run.playState === "running" && run.startTime !== null
+      );
+      return caught.map((run) => {
+        const heldAt =
+          run.currentTime === null ? null : Number(run.currentTime);
+        run.pause();
+        return told(run, heldAt);
+      });
+    },
+    seek: (fraction, of) => {
+      const named = of ? caught.find((run) => nameOf(run) === of) : undefined;
+      const longest = named
+        ? lengthOf(named)
+        : Math.max(
+            0,
+            ...caught.map(lengthOf).filter((one) => Number.isFinite(one))
+          );
+      for (const run of caught) {
+        run.currentTime = Math.min(lengthOf(run), longest * fraction);
+      }
+    },
+    // Once: a later read lets this one go as it begins, and a run played
+    // again from its end rewinds to its start (`play()`'s auto-rewind) and
+    // runs its whole motion a second time.
+    letGo: () => {
+      stop();
+      for (const run of held) {
+        run.playbackRate = 1;
+      }
+      for (const run of caught) {
+        // Sought to its end, it ends there, as the DevTools clock's run does.
+        if (Number(run.currentTime ?? 0) >= lengthOf(run)) {
+          run.finish();
+        } else {
+          run.play();
+        }
+      }
+      held.clear();
+      letGone = [...letGone, ...caught];
+      caught = [];
+    },
+    finished: () =>
+      Promise.all(
+        letGone.map((run) =>
+          run.finished.then(
+            () => true,
+            () => false
+          )
+        )
+      ),
+  };
+}
+
+/**
+ * A finger on the page and a mouse cursor resting beside it, as the engine
+ * lets a probe drive them (`handOn`).
+ */
+export interface Hand {
+  /** How the finger's pointer capture is kept: the engine's own, or the hand's where the engine refuses a pointer it did not make. */
+  capture: string;
+  /** The resting cursor moved to a point; it stays there as the page moves under it. */
+  cursor: (x: number, y: number) => Promise<void>;
+  done: () => Promise<void>;
+  /** The finger down on whatever stands at the point. */
+  down: (x: number, y: number) => Promise<void>;
+  /**
+   * The finger leaves the element it pressed: its touch `pointerout`, as
+   * iOS sends one mid-drag (huntabyte/vaul-svelte#123). Absent where the
+   * engine's own touch is driven (Chromium sends a held finger none).
+   */
+  leave?: () => Promise<void>;
+  move: (x: number, y: number) => Promise<void>;
+  up: () => Promise<void>;
+}
+
+/** The synthesized finger's pointer id, as an engine numbers a touch. */
+const FINGER = 21;
+
+/**
+ * The page's hand. On Chromium, raw touch through CDP
+ * (`Input.dispatchTouchEvent`) and Playwright's own mouse as the cursor:
+ * the engine's own input. Elsewhere, Playwright drives no touch drag
+ * (WebKit's touchscreen only taps), so the finger is PointerEvents made in
+ * the page: `pointerType: "touch"`, primary, one pointer id from down
+ * through every move to up, each sent where the pointer's capture sends it.
+ * That proves a page's logic in the engine, not the platform's touch input.
+ *
+ * An engine captures only a pointer it made (setPointerCapture on any other
+ * id throws, its answer in `capture`), so this hand keeps the finger's
+ * capture itself. The cursor is a mouse pointer (id 1) at a point: after
+ * every move of the finger the point is hit-tested again, and when the
+ * page has put another element under it the cursor says so as an engine
+ * does (a `pointerout` from the element it left, a `pointerover` on the
+ * new one); moved, it sends a `pointermove` there.
+ *
+ * Every boundary event the hand sends names another element as its related
+ * target, never its own target: WebKit delivers a `pointerout` whose
+ * related target is its target to no listener at all, not one on the
+ * window (parked-start), so a hand that sent one would test nothing.
+ */
+export async function handOn(page: Page): Promise<Hand> {
+  return onChromium(page) ? await touchHand(page) : await madeHand(page);
+}
+
+async function touchHand(page: Page): Promise<Hand> {
+  const cdp = await page.context().newCDPSession(page);
+  const touch = async (
+    type: "touchStart" | "touchMove" | "touchEnd",
+    points: { x: number; y: number }[]
+  ) => {
+    await cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
+  };
+  return {
+    capture: "the engine's own",
+    cursor: (x, y) => page.mouse.move(x, y),
+    done: () => cdp.detach(),
+    down: (x, y) => touch("touchStart", [{ x, y }]),
+    move: (x, y) => touch("touchMove", [{ x, y }]),
+    up: () => touch("touchEnd", []),
+  };
+}
+
+declare global {
+  interface Window {
+    /** The synthesized hand's verbs (kit.ts `handOn`). */
+    kitHand?: Record<
+      "cursor" | "down" | "move",
+      (x: number, y: number) => void
+    > &
+      Record<"leave" | "up", () => void>;
+  }
+}
+
+async function madeHand(page: Page): Promise<Hand> {
+  const capture = await page.evaluate(makeHand, FINGER);
+  const drive = (verb: "cursor" | "down" | "move", x: number, y: number) =>
+    page.evaluate(({ how, at, to }) => window.kitHand?.[how](at, to), {
+      how: verb,
+      at: x,
+      to: y,
+    });
+  return {
+    capture: `the hand's: the engine refused it (${capture})`,
+    cursor: (x, y) => drive("cursor", x, y),
+    done: async () => undefined,
+    down: (x, y) => drive("down", x, y),
+    leave: () => page.evaluate(() => window.kitHand?.leave()),
+    move: (x, y) => drive("move", x, y),
+    up: () => page.evaluate(() => window.kitHand?.up()),
+  };
+}
+
+/** Builds the synthesized hand in the page; answers the engine's refusal of a capture. */
+function makeHand(finger: number): string {
+  const state = {
+    captured: null as Element | null,
+    pressed: null as Element | null,
+    finger: { x: 0, y: 0 },
+    cursor: null as { x: number; y: number } | null,
+    under: null as Element | null,
+  };
+  let refused = "nothing: it took the capture";
+  try {
+    document.body.setPointerCapture(finger);
+  } catch (error) {
+    refused = error instanceof DOMException ? error.name : String(error);
+  }
+  const proto = Element.prototype;
+  const { hasPointerCapture, releasePointerCapture, setPointerCapture } = proto;
+  proto.setPointerCapture = function (this: Element, id: number) {
+    if (id === finger) {
+      state.captured = this;
+      return;
+    }
+    setPointerCapture.call(this, id);
+  };
+  proto.hasPointerCapture = function (this: Element, id: number) {
+    return id === finger
+      ? state.captured === this
+      : hasPointerCapture.call(this, id);
+  };
+  proto.releasePointerCapture = function (this: Element, id: number) {
+    if (id === finger) {
+      state.captured = null;
+      return;
+    }
+    releasePointerCapture.call(this, id);
+  };
+  const send = (at: Element, type: string, init: PointerEventInit) =>
+    at.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        ...init,
+      })
+    );
+  /** A boundary event, its related target never its own target (else its parent). */
+  const boundary = (
+    type: "pointerout" | "pointerover",
+    at: Element,
+    other: Element | null,
+    init: PointerEventInit
+  ) =>
+    send(at, type, {
+      ...init,
+      relatedTarget: other === at ? at.parentElement : other,
+    });
+  const touch = (extra: PointerEventInit = {}): PointerEventInit => ({
+    pointerId: finger,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: state.finger.x,
+    clientY: state.finger.y,
+    width: 20,
+    height: 20,
+    pressure: 0.5,
+    button: 0,
+    buttons: 1,
+    ...extra,
+  });
+  const mouse = (): PointerEventInit => ({
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+    clientX: state.cursor?.x ?? 0,
+    clientY: state.cursor?.y ?? 0,
+    button: -1,
+    buttons: 0,
+  });
+  /** The cursor's point hit-tested again: a new element under it is said. */
+  const recheck = () => {
+    if (!state.cursor) {
+      return;
+    }
+    const now = document.elementFromPoint(state.cursor.x, state.cursor.y);
+    if (!now || now === state.under) {
+      return;
+    }
+    if (state.under?.isConnected) {
+      boundary("pointerout", state.under, now, mouse());
+    }
+    boundary("pointerover", now, state.under, mouse());
+    state.under = now;
+  };
+  /** Where the finger's events go: its capture, else what it pressed. */
+  const target = () => state.captured ?? state.pressed;
+  window.kitHand = {
+    cursor(x, y) {
+      state.cursor = { x, y };
+      recheck();
+      if (state.under) {
+        send(state.under, "pointermove", mouse());
+      }
+    },
+    down(x, y) {
+      const at = document.elementFromPoint(x, y);
+      if (!at) {
+        return;
+      }
+      state.finger = { x, y };
+      state.pressed = at;
+      send(at, "pointerdown", touch());
+    },
+    leave() {
+      const at = target();
+      if (!at) {
+        return;
+      }
+      // Where a finger that slipped off its element stands: just past its
+      // foot, not the point under the finger, which a page that follows the
+      // finger (a dragged sheet) keeps on the element itself.
+      const edge = at.getBoundingClientRect();
+      boundary(
+        "pointerout",
+        at,
+        document.elementFromPoint(state.finger.x, edge.bottom + 4),
+        touch()
+      );
+    },
+    move(x, y) {
+      const at = target();
+      if (!at) {
+        return;
+      }
+      state.finger = { x, y };
+      send(at, "pointermove", touch());
+      recheck();
+    },
+    up() {
+      const at = target();
+      if (at) {
+        send(at, "pointerup", touch({ pressure: 0, buttons: 0 }));
+      }
+      state.captured = null;
+      state.pressed = null;
+    },
+  };
+  return refused;
 }

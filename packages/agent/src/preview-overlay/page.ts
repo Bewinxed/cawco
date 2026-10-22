@@ -2636,7 +2636,16 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
     // Asked as `cawco:capture`, answered as `cawco:captured`: a host in this
     // same window hears its ask and this answer, and neither is the other.
-    "cawco:capture": async () => post("cawco:captured", await thumbnail()),
+    // A picture that throws is answered too, with why: unanswered, the host
+    // waits out its bound for a picture that never comes.
+    "cawco:capture": async () =>
+      post(
+        "cawco:captured",
+        await thumbnail().catch((reason: unknown) => ({
+          png: null,
+          error: `The page's picture failed: ${reason instanceof Error ? reason.message : String(reason)}`,
+        }))
+      ),
     // Its conversation's tab off screen, and back (hold.ts): this document
     // and every same-origin frame in it, which the pane hears as `cawco:held`.
     "cawco:hold": () => holdPage(true),

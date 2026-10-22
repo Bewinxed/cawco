@@ -6,6 +6,10 @@
  *   bun scripts/probe-kit/run.ts <spec>… [--approve <spec>[:<entry>,…]] [--review <dir>] [--<option> <value>…]
  *   bun scripts/probe-kit/run.ts journeys [name…] [--engine chromium|webkit|firefox] [--size phone|tablet|desk]
  *
+ * `PROBE_ENGINE=webkit` (or `firefox`) before either of the first two opens
+ * every page a spec does not pin to an engine on that engine (kit.ts
+ * `RUN_ENGINE`): a spec written on Chromium, run whole on another.
+ *
  * Every other `--<option> <value>` is the specs' own, never a spec name: it
  * stays in `process.argv` for a spec to read (browser-relay's `--machine`
  * and `--address`, browser-stream's `--address`), and a spec run in a

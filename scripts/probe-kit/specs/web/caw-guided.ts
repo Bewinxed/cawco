@@ -56,6 +56,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  readMotion,
   type Spec,
   settle,
   THEMES,
@@ -1009,6 +1010,48 @@ const withSocket = async (page: Page) => {
     });
 };
 
+/**
+ * The head's and each filed card's run while the clock holds it, in the
+ * page's order: its delay, length and curve, and each card sought through
+ * its own run (its delay, then its length): its opacity at its start,
+ * middle and end.
+ */
+function uncovering(sel: string) {
+  const of = (el: Element | null) => {
+    const [run] = el?.getAnimations() ?? [];
+    const t = run?.effect?.getTiming();
+    return run && t
+      ? {
+          run,
+          delay: Number(t.delay),
+          duration: Number(t.duration),
+          easing: String(t.easing),
+        }
+      : null;
+  };
+  const head = of(document.querySelector(`${sel} [data-tasks-head]`));
+  const cards = [
+    ...document.querySelectorAll(`${sel} [data-slot=filed-task]`),
+  ].map((card) => {
+    const timed = of(card);
+    if (!timed) {
+      return null;
+    }
+    const { run, ...timing } = timed;
+    const at = (fraction: number) => {
+      run.currentTime = timing.delay + timing.duration * fraction;
+      return Number(getComputedStyle(card).opacity);
+    };
+    return { ...timing, start: at(0), middle: at(0.5), end: at(0.999) };
+  });
+  return {
+    head: head
+      ? { delay: head.delay, duration: head.duration, easing: head.easing }
+      : null,
+    cards,
+  };
+}
+
 /** 4. A reply filing three tasks, landing live: the stagger, and nothing left running after it. */
 const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
   const ids: string[] = [];
@@ -1025,15 +1068,22 @@ const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
   const reply = await withSocket(page);
   await openPanel(page, setup.url);
   await settle(page, 500);
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Animation.enable");
-  await cdp.send("Animation.setPlaybackRate", { playbackRate: 0 });
-  reply(threadId, ids);
-  await page
-    .locator(`${PANEL} [data-slot=filed-task]`)
-    .nth(2)
-    .waitFor({ timeout: 20_000 });
-  const timing = await page.evaluate((sel) => {
+  // The arrival as the kit reads motion (kit.ts `readMotion`): every run
+  // the reply starts in the panel, its delay, length and curve, the clock
+  // held while each card is sought through its own run.
+  const arrival = await readMotion(
+    page,
+    async () => {
+      reply(threadId, ids);
+      await page
+        .locator(`${PANEL} [data-slot=filed-task]`)
+        .nth(2)
+        .waitFor({ timeout: 20_000 });
+    },
+    PANEL,
+    { fractions: [0], read: () => page.evaluate(uncovering, PANEL), ms: 20_000 }
+  );
+  const step = await page.evaluate((sel) => {
     const probe = document.createElement("div");
     probe.style.transitionDuration = "var(--dur-stagger), var(--dur-cascade)";
     document.body.append(probe);
@@ -1044,31 +1094,23 @@ const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
           Number.parseFloat(each) * (each.trim().endsWith("ms") ? 1 : 1000)
       );
     probe.remove();
-    const cards0 = document.querySelectorAll(
+    const cards = document.querySelectorAll(
       `${sel} [data-slot=filed-task]`
     ).length;
-    const step = Math.min(stagger, cascade / (cards0 + 1));
-    const head = document.querySelector(`${sel} [data-tasks-head]`);
-    const cards = [
-      ...document.querySelectorAll(`${sel} [data-slot=filed-task]`),
-    ];
-    const of = (el: Element | null) => {
-      const run = el?.getAnimations()[0];
-      const t = run?.effect?.getTiming();
-      return t
-        ? {
-            delay: Number(t.delay),
-            duration: Number(t.duration),
-            easing: String(t.easing),
-          }
-        : null;
-    };
-    return { step, head: of(head), cards: cards.map(of) };
+    return Math.min(stagger, cascade / (cards + 1));
   }, PANEL);
+  const held = arrival.at[0]?.value;
+  const timing = {
+    by: arrival.by,
+    step,
+    head: held?.head ?? null,
+    cards: held?.cards ?? [],
+  };
   const steps = timing.cards.map((each) => each?.delay ?? -1);
   kit.check(
-    "filed: the head and then each card start one step apart on one clock (--dur-pop)",
+    `filed: the head and then each card start one step apart on one clock (--dur-pop; read by ${arrival.by})`,
     timing.head?.delay === 0 &&
+      steps.length === FILED.length &&
       steps.every(
         (delay, at) => Math.abs(delay - (at + 1) * timing.step) < 0.5
       ) &&
@@ -1077,37 +1119,22 @@ const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
       ),
     JSON.stringify(timing)
   );
-  // Seek each to the middle of its own run, then to its end: rising in.
-  const mid = await page.evaluate((sel) => {
-    const cards = [
-      ...document.querySelectorAll(`${sel} [data-slot=filed-task]`),
-    ];
-    return cards.map((card) => {
-      const [run] = card.getAnimations();
-      const t = run?.effect?.getTiming();
-      if (!(run && t)) {
-        return null;
-      }
-      const at = (fraction: number) => {
-        run.currentTime = Number(t.delay) + Number(t.duration) * fraction;
-        return Number(getComputedStyle(card).opacity);
-      };
-      return { start: at(0), middle: at(0.5), end: at(0.999) };
-    });
-  }, PANEL);
+  // Each card sought to its own run's start, middle and end: rising in.
+  const mid = held?.cards;
   kit.check(
     "filed: each card is uncovered (opacity 0 at its start, part-way at its middle, whole by its end)",
-    mid.every(
-      (at) =>
-        at !== null &&
-        at.start === 0 &&
-        at.middle > 0 &&
-        at.middle < 1 &&
-        at.end > 0.99
-    ),
+    mid !== undefined &&
+      mid.length === FILED.length &&
+      mid.every(
+        (at) =>
+          at !== null &&
+          at.start === 0 &&
+          at.middle > 0 &&
+          at.middle < 1 &&
+          at.end > 0.99
+      ),
     JSON.stringify(mid)
   );
-  await cdp.send("Animation.setPlaybackRate", { playbackRate: 1 });
   await settle(page, 600);
   const after = await page.evaluate((sel) => {
     const words = (el: Element | null | undefined) =>

@@ -56,6 +56,29 @@ J4, J5 and J8 start Caw's session or delegates, which run inside workspace
 boundaries: those journeys run only where a boundary can start (the host,
 outside every workspace), as `apple-gate` and `caw-asks` do.
 
+## Motion on every engine, and a hand
+
+`readMotion(page, action, within, { fractions, read })` (kit.ts) reads the
+enter or exit `action` starts inside `within` on a held clock, on any engine:
+each run held at its start, sought to each fraction with `read` taken there,
+then let go to play out (`ended`). Chromium holds it through the DevTools
+Animation domain (`anim.ts` `Clock`); WebKit and Firefox, which Playwright
+gives none, hold it in the page: a MutationObserver catches a transition's
+write before any frame and sets its `playbackRate` to 0, `Element.animate`
+is wrapped so a Web Animation starts at 0, and once every run has started
+they are paused, sought and played on. A spec never waits frames for a run to
+begin or polls `getAnimations()` for one to end: on a slow frame the whole
+motion is over before the poll sees it.
+
+`handOn(page)` is a finger and a resting mouse cursor: raw touch through CDP
+on Chromium, PointerEvents made in the page elsewhere (Playwright drives no
+touch drag in WebKit), the finger's capture kept by the hand. A boundary
+event it sends never names its own target as its related target: WebKit
+delivers such a `pointerout` to no listener.
+
+`PROBE_ENGINE=webkit` (or `firefox`) runs every page a spec does not pin to
+an engine on that engine.
+
 ## A pinned WebKit
 
 WebKit pages run on the build this playwright-core expects, or the one
