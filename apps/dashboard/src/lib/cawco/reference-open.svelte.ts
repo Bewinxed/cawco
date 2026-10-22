@@ -13,6 +13,7 @@ import { showArtifact } from "./artifact-api";
 import { artifactNamed, askOpen, type OpenAt } from "./artifact-names.svelte";
 import { cawco, revealPreview } from "./client.svelte";
 import { failureClause } from "./hub-read";
+import { refusals } from "./refusals.svelte";
 
 /** The address of artifact `id`'s own tab, opening at `at`. */
 const ownTab = (id: string, at: OpenAt): string => {
@@ -60,27 +61,39 @@ export async function openReference(
   }
 }
 
+/** Where an artifact's refused open is said: its Needs-you row and its notice (refusals.svelte.ts). */
+export const artifactOpenKey = (id: string): string => `artifact-open:${id}`;
+
 /**
- * Artifact `id` in session `instanceId`'s panel, opened at `at`: what a
- * Needs-you row's address asks (`?artifact=<id>&stop=…`, core
- * `artifactStopHref`), wherever it is followed from. A refusal is said in a
- * toast.
+ * Artifact `id` in session `instanceId`'s panel, opened at `at`: a
+ * Needs-you row's or notice's press, and its address
+ * (`?artifact=<id>&stop=…`, core `artifactStopHref`) wherever it is
+ * followed from. The hub's refusal is kept at {@link artifactOpenKey}, where
+ * the row says it with Try again (never a toast), and answered; null once
+ * it opened, which takes a refusal said before away.
  */
 export async function openArtifactIn(
   instanceId: string,
   id: string,
   at: OpenAt
-): Promise<void> {
+): Promise<string | null> {
+  const key = artifactOpenKey(id);
   askOpen(id, at);
   const panel = cawco.previews[instanceId];
   if (panel?.state === "open" && panel.artifact.id === id) {
     revealPreview(instanceId);
-    return;
+    refusals.delete(key);
+    return null;
   }
   try {
     await showArtifact(instanceId, id);
     revealPreview(instanceId);
+    refusals.delete(key);
+    return null;
   } catch (error) {
-    toast.error(failureWords(error));
+    const name = artifactNamed(id)?.name ?? "The artifact";
+    const reason = `${name} was not opened: ${failureClause(error)}. The panel stays as it was.`;
+    refusals.set(key, { reason, asked: { instanceId, id, at } });
+    return reason;
   }
 }

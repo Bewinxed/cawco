@@ -138,7 +138,9 @@
   import OsMark from "../OsMark.svelte";
   import { allowHere, person, skipHere } from "../person.svelte";
   import { sendArtifact } from "../preview/artifact-doc";
-  import { openArtifactIn } from "../reference-open.svelte";
+  import RowFault from "../RowFault.svelte";
+  import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
+  import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import { capLine } from "../usage";
@@ -428,7 +430,7 @@
   function chosen(): void {
     onchoose();
     if (item.kind === "artifact") {
-      // biome-ignore lint/complexity/noVoid: its refusal is its own toast
+      // biome-ignore lint/complexity/noVoid: a refusal is kept where its row says it (artifactOpenKey)
       void openArtifactIn(item.instanceId, item.artifactId, item.stop);
     }
   }
@@ -1085,6 +1087,14 @@
           />
         </div>
       {/if}
+      <!-- A press (or its address) the hub refused: said on the row, over
+           its cover, with Try again, kept through a reload. -->
+      <RowFault
+        again={chosen}
+        class="relative col-start-2 col-end-4 row-5 mt-space-2"
+        data-needs-card-refused
+        reason={refusals.reason(artifactOpenKey(item.artifactId))}
+      />
     {:else if item.kind === "action" && call}
       <!-- The exact call: when, through which account, the tool, the arguments. -->
       <!-- An approved action: its reason, then the call (when, through, tool)

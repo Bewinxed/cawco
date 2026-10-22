@@ -692,7 +692,7 @@ export const workspace = {
           )?.leadInstanceId
         : urlId;
     if (browser && holder && artifact) {
-      // biome-ignore lint/complexity/noVoid: its refusal is its own toast
+      // biome-ignore lint/complexity/noVoid: a refusal is kept where its row says it (artifactOpenKey)
       void openArtifactIn(
         holder,
         artifact,

@@ -25,7 +25,9 @@
     IconWindow,
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
-  import { openArtifactIn } from "../reference-open.svelte";
+  import RowFault from "../RowFault.svelte";
+  import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
+  import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import NoticeRow from "./NoticeRow.svelte";
@@ -58,7 +60,7 @@
   function opened(): void {
     onchoose();
     if (notice.instanceId) {
-      // biome-ignore lint/complexity/noVoid: its refusal is its own toast
+      // biome-ignore lint/complexity/noVoid: a refusal is kept where its row says it (artifactOpenKey)
       void openArtifactIn(notice.instanceId, notice.artifactId, notice.stop);
     }
   }
@@ -102,4 +104,9 @@
       >{words}</span
     >
   {/if}
+  <RowFault
+    again={opened}
+    data-artifact-notice-refused
+    reason={refusals.reason(artifactOpenKey(notice.artifactId))}
+  />
 </NoticeRow>
