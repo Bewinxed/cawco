@@ -165,11 +165,17 @@
   });
 
   // A popover whose content changes (a list arrives, an error appears)
-  // tweens to its new height instead of jumping.
+  // tweens to its new height instead of jumping: once it has come in. What
+  // settles in it while it comes in (a list read the frame after it opens)
+  // is part of that one entrance (`popIn`), never a size tween a frame
+  // behind it. A site that draws its own surface (`child`, HangCard) or a
+  // card that hangs has no `popIn` here, and tweens from the first.
   // svelte-ignore state_referenced_locally: how it morphs is set once, by its site
   const resize = morph(morphs);
+  let entered = $state(false);
+  const tweens = $derived(entered || !!callerChild || motion === "hang");
   $effect(() => {
-    if (ref) {
+    if (ref && tweens) {
       return resize(ref);
     }
   });
@@ -223,6 +229,12 @@
             <div
               {...own(snippet.props)}
               style:pointer-events={pressable(snippet.open)}
+              onintroend={() => {
+                entered = true;
+              }}
+              onintrostart={() => {
+                entered = false;
+              }}
               in:popIn|global={{ hangs: motion === "hang" }}
             >
               {@render children?.()}

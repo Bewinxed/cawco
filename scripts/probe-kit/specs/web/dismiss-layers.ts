@@ -314,8 +314,12 @@ declare global {
         easing: string;
         kind: string;
         start: number | null;
+        /** The surface's `data-state` as the run started: a closing one's run is its exit. */
+        state: string | null;
         target: Element | null;
       }[];
+      /** Set by the read: the watch stops. */
+      stop?: boolean;
     };
     /** What of the press on the picked control bubbled to the document. */
     probeSeen?: string[];
@@ -502,7 +506,9 @@ const KIT_SURFACE = [
 
 /**
  * From now on, every run the page starts, as it is first listed, with its
- * target: a frame loop, for two seconds. Nothing is held.
+ * target and that target's `data-state` then: a frame loop, until the read
+ * stops it (an act that opens Files and its float takes seconds). Nothing
+ * is held.
  */
 function watchEntrances(): void {
   const seen = new Set(document.getAnimations());
@@ -520,18 +526,20 @@ function watchEntrances(): void {
       }
       seen.add(run);
       const timing = run.effect?.getTiming();
+      const target = (run.effect as KeyframeEffect | null)?.target ?? null;
       watch.runs.push({
+        state: target?.getAttribute("data-state") ?? null,
         kind: run.constructor.name,
         duration: Number(timing?.duration ?? 0),
         easing: String(timing?.easing ?? ""),
         start: run.startTime === null ? null : Number(run.startTime),
-        target: (run.effect as KeyframeEffect | null)?.target ?? null,
+        target,
       });
     }
-    if (frame < 120) {
-      requestAnimationFrame(look);
-    } else {
+    if (watch.stop || frame > 1800) {
       watch.done = true;
+    } else {
+      requestAnimationFrame(look);
     }
   };
   requestAnimationFrame(look);
@@ -546,7 +554,13 @@ function entrances(surface: string): {
   slot: string;
   runs: { duration: number; easing: string; kind: string }[];
 }[] {
-  const runs = window.probeEntrances?.runs ?? [];
+  const watch = window.probeEntrances;
+  if (watch) {
+    watch.stop = true;
+  }
+  // A closing surface's runs (`data-closed`, a menu leaving as what it
+  // opened comes up) are its exit, not its entrance.
+  const runs = (watch?.runs ?? []).filter((run) => run.state !== "closed");
   const surfaces = new Map<Element, typeof runs>();
   for (const run of runs) {
     const at = run.target?.closest(surface);
@@ -601,11 +615,14 @@ async function openState(on: Leg, watch = false): Promise<void> {
 /** 4: each kit floating surface the act brought on came in by one `popIn`. */
 async function entered(kit: Kit, on: Leg): Promise<void> {
   const { page, label } = on;
-  const pop = await page.evaluate(() =>
-    Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--dur-pop")
-    )
-  );
+  // The token as the stylesheet says it (`0.26s` or `260ms`), in ms.
+  const pop = await page.evaluate(() => {
+    const said = getComputedStyle(document.documentElement)
+      .getPropertyValue("--dur-pop")
+      .trim();
+    const n = Number.parseFloat(said);
+    return said.endsWith("ms") ? n : n * 1000;
+  });
   const seen = await page.evaluate(entrances, KIT_SURFACE);
   if (seen.length === 0) {
     kit.note(`${label}: brings no kit floating surface onto the page`);
