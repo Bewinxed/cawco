@@ -195,10 +195,17 @@ function waapiClock(page: Page): SurfaceClock {
             const target = (run.effect as KeyframeEffect | null)?.target;
             const property =
               run instanceof CSSTransition ? run.transitionProperty : "";
+            // A control's own answer to being pressed (a button's scale on
+            // `:active`), as its colour, is that control's, not the surface's.
+            const pressed =
+              run instanceof CSSTransition &&
+              target instanceof Element &&
+              target.closest("button, a, [role=button]") !== null;
             const own =
               Number.isFinite(end) &&
               end > 0 &&
               !tint.test(property) &&
+              !pressed &&
               window.kitInside(target, sel);
             return own ? end : null;
           };
@@ -607,9 +614,70 @@ const surfacesRead = (): Surface[] => {
     : SURFACES.filter((one) => parts.some((part) => one.name.includes(part)));
 };
 
+/**
+ * With `LAYERS_TRACE_RO=1`: every ResizeObserver delivery, with the box it
+ * reported and where its observer was made, and on a "ResizeObserver loop"
+ * error the deliveries of the 50ms before it, logged as `RO-TRACE …`. What
+ * names the observer that resized a box inside its own delivery.
+ */
+function traceObservers(): void {
+  const Native = window.ResizeObserver;
+  const log: { at: number; made: string; boxes: string[] }[] = [];
+  const box = (el: Element) =>
+    `${el.tagName.toLowerCase()}${el.getAttribute("data-slot") ? `[${el.getAttribute("data-slot")}]` : ""}.${String(el.getAttribute("class") ?? "").slice(0, 40)}`;
+  window.ResizeObserver = class extends Native {
+    constructor(callback: ResizeObserverCallback) {
+      const made = (new Error("where this observer was made").stack ?? "")
+        .split("\n")
+        .slice(1, 4)
+        .join(" < ");
+      super((entries, observer) => {
+        log.push({
+          at: performance.now(),
+          made,
+          boxes: entries.map(
+            (entry) =>
+              `${box(entry.target)} ${Math.round(entry.contentRect.width)}x${Math.round(entry.contentRect.height)}`
+          ),
+        });
+        if (log.length > 300) {
+          log.shift();
+        }
+        callback(entries, observer);
+      });
+    }
+  };
+  addEventListener("error", (event: ErrorEvent) => {
+    if (String(event.message).includes("ResizeObserver loop")) {
+      // What was left undelivered is delivered in the next frame: the
+      // deliveries just after the error name it.
+      const from = log.length;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          console.warn(
+            `RO-TRACE after ${JSON.stringify(
+              log
+                .slice(from, from + 10)
+                .map((one) => ({ ...one, boxes: one.boxes.slice(0, 6) }))
+            )}`
+          );
+        })
+      );
+    }
+  });
+}
+
 async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
   const name = `${at.engine} ${at.width} · ${at.count} delegates · ${at.place}`;
   const page = await kit.page(at.view, { engine: at.engine });
+  if (process.env.LAYERS_TRACE_RO === "1") {
+    await page.addInitScript(traceObservers);
+    page.on("console", (line) => {
+      if (line.text().startsWith("RO-TRACE")) {
+        kit.note(`${name}: ${line.text().slice(0, 3000)}`);
+      }
+    });
+  }
   await open(page, `${base}${BENCH}?case=${at.count}`, LOG, 120_000);
   await page.waitForSelector(`${LOG} [data-message]`, { timeout: 30_000 });
   await settle(page, 800);
@@ -621,14 +689,19 @@ async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
   // (work items, delegate events) log their 503s whatever is open.
   const thrown: string[] = [];
   page.on("pageerror", (error) => {
-    thrown.push(String(error.stack ?? error).slice(0, 400));
+    // WebKit hands some errors over with an empty stack: the name and
+    // message always go first.
+    thrown.push(
+      `${error.name}: ${error.message} ${error.stack ?? ""}`.slice(0, 600)
+    );
   });
   for (const surface of surfacesRead()) {
     const what = `${name} · ${surface.name}`;
-    thrown.length = 0;
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one surface at a time, on one page
       await place(page, at.place);
+      // What the spec's own jump set off is not the surface's: counted from here.
+      thrown.length = 0;
       const absent = await surface.present(page);
       if (absent) {
         kit.note(`${what}: not here (${absent})`);
@@ -663,6 +736,21 @@ async function place(page: Page, where: Leg["place"]): Promise<void> {
     [LOG, where] as const
   );
   await settle(page, 600);
+  // The jump brings rows virtua has only estimated into its range: it
+  // measures them, the range grows, more mount (inokawa/virtua#470), and the
+  // view settles over several frames. "Before" is read once it reads the
+  // same twice running, never mid-settle.
+  let was = "";
+  for (let tries = 0; tries < 50; tries += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: one reading per frame pair, until two agree
+    const now = JSON.stringify(await page.evaluate(reading, LOG));
+    if (now === was) {
+      return;
+    }
+    was = now;
+    await frames(page);
+    await page.waitForTimeout(100);
+  }
 }
 
 const VIEW_AT: [View, number][] = [
