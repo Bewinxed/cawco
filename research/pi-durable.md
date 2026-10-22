@@ -2,6 +2,8 @@
 
 Researched 2026-10-22. Facts and quotes only; no recommendation. Items marked **[inference]** are mine, not a source's.
 
+**Frame (the owner, verbatim, relayed in the last hand-off):** "when mentioning pi durable, i didn't mean it as a harness to be integrated, but your thoughts on its durablility and execution model". Pi Durable is read here as prior art for how CawCo's own work should be durable. Sections 0 to 11 are the facts as first gathered, written when integration was the question; sections 12 and 13 are the durability and execution-model reading, with CawCo's own code beside each mechanism. Section 13 is the one to read first.
+
 Short names for sources:
 
 - **README**: https://github.com/earendil-works/pi/blob/main/packages/durable/README.md
@@ -213,7 +215,7 @@ Pi Durable runs its own agent loop. It does not drive Claude Code or OpenCode as
 
 ## 11. Spec deep read: tasks, ownership, abort, tools, storage, outside waits
 
-SPEC section numbers below, from `packages/durable/docs/spec.md` at pi commit `db774055e3ec` (2026-10-22). Sections 5 and 7 were read whole, plus 2 (records, `HarnessOptions`, public surface), 4, 6 (first half), 10, 10.1 and 13. Unread parts are in section 12.
+SPEC section numbers below, from `packages/durable/docs/spec.md` at pi commit `db774055e3ec` (2026-10-22). Sections 5 and 7 were read whole, plus 2 (records, `HarnessOptions`, public surface), 4, 6 (first half), 10, 10.1 and 13. Unread parts are in section 14.
 
 ### 11.1 What a task's checkpoint holds
 
@@ -321,7 +323,150 @@ Consequence for a "wait for a person's pick on a page, or another system's event
 
 Neither is from Earendil. Neither is `pi-agents`, which is a third package (mavam) and the only one of the three documented to run on `@earendil-works/pi-durable` ("Agents run inside your Pi process on pi-durable", docs/architecture.md).
 
-## 12. Sources I could not read or read only in part
+## 12. Spec read, last pass: documents, built-in tasks, the Conversation interface, footguns
+
+SPEC sections 3 (Documents), 8 (Built-in tasks), 9, 11, 12 and the `Conversation` interface block of 2.2 read whole, with the rest of 1, 2 and 6 that earlier passes skipped. The whole spec is now read; only the code under `packages/durable/src` and the examples are not.
+
+### 12.1 Documents (SPEC 3)
+
+- A document is "mutable JSON state represented by Chord operations and occasional complete bases" (1). It has scope `session | conversation | task`; conversation documents declare `history: "latest" | "rewindable"` and `fork: "asOf" | "current" | "initial"` (3.1).
+- Lifetime follows scope. "Task documents are current-only, are never copied by a conversation fork, and retire atomically when their task becomes terminal." Session documents are current-only and survive close and reopen (3.1).
+- `checkpointWhen` is mandatory with no default: "A definition that never checkpoints may create an unbounded replay tail. That is a definition bug, not a backend heuristic." (3.5)
+- Versioning is access-driven, not swept: "Harness open does not sweep ordinary documents." A newer stored version than the token rejects access; an older one needs `migrate` (3.6).
+- A fork is a copy by policy: `asOf` is "parent value at `E`'s commit", `current` the committed parent value at fork time, `initial` none (3.7). "Publications and watches are convergence mechanisms, not audit streams." (3.7)
+- Writes are drafts inside a commit: "Draft reads, draft writes, and all `Tx` operations reject after the callback settles." Values must be strict JSON (3.4).
+
+### 12.2 Built-in tasks (SPEC 8)
+
+- Three kinds only: `pi.generation` ("prepare system prompt and tools, request or poll model, retry, classify response"), `pi.tool`, `pi.compaction` (8).
+- Generation is a phase machine with a full checkpoint per phase: `prepare | request | retry | poll | tools` (8.3). The request's model, thinking level, stream options and cutoff are pinned in the checkpoint: "These stay fixed for this request attempt; a retry prepares again." (8.3)
+- A cut-off request leaves a partial in `pi.live` that recovery converts: "converts a committed partial left in `pi.live` by an interrupted attempt into an aborted `pi.assistant` entry." Aborted and error messages are kept out of later requests: "Exclude model-less entries and assistant messages with `aborted`, `error`, or `deferred` stop reasons from future provider requests." (2.1 rule 9)
+- Retries and provider polls are durable sleeps: "append the error entry and sleep ... until `until = now + retryDelayMs(policy, attempt)` at `retry`" (8.3).
+- Tool task: intent is committed before execution, "One commit then records intent: it moves to `execute` with the final arguments and the tool's replay policy" (8.4). `execute` is "reached only by recovery". It reruns when both stored and current policy are `safe`; "Otherwise it commits an `interrupted` error result from the slot's durable partial output ... and ends `failed`" (8.4).
+- A tool call ending `failed` or `aborted` is cancellation intent: "Ending `failed`, like `aborted`, records cancellation intent ..., so conversations the call owns, which nothing supervises any more, are aborted." (8.4)
+- A tool round is a `waiting` task on `allSettled` over the round's tool tasks; the generation resumes only when all are terminal (8.3, 8.5). The generation's abort handler "runs only after its tool tasks are terminal" and "`abortTask()` on the generation therefore aborts its whole round." (8.5)
+- Usage is a ledger written in the same commit as the entry: "Failed and aborted attempts count." A fork starts at zero "so no spend is counted twice" (8.6).
+- Compaction is a task whose summary is placed as a write submission with request ID `compaction:<taskId>`; "Raw history stays in storage." A summary cutting before the active range start is stale and settles `stale` (6, 8.7).
+
+### 12.3 The Conversation interface (SPEC 2.2)
+
+`Conversation` has `submit`, `agent`, `configure`, `commit`, `context({ at })`, `entries(query, limit, cursor)`, `fork(at, options)`, `compact`, `reset`, `abort({ background })`, `waitForIdle`, `viewState`, `watch`. `context({ at })` returns the context "as `fork(at)` would start with". `entries()` is a cursor scan of "fork-aware stored history". `viewState` and `watch` are read-only. A host cannot complete a task through it.
+
+### 12.4 The footguns that show a weakness of the model itself (SPEC 12)
+
+Integration-only items (draft revocation, memo prefixing, reserved `pi.` names, resource disposal, selection edits) are left out. These follow from the model:
+
+- **A failed run leaves its inbox queued and silent.** "Queued follow-ups wait in `pi.inbox`, and their `wait()` does not settle, until the next input or queued write's boundary places them or the host withdraws them." The default `afterFailedRun` is `keep` (6, 12).
+- **Edits placed during a compaction are lost.** "An application edit placed while it summarizes ... is lost when the summary cuts past its target ... Place such writes before compacting." (12)
+- **A held outcome extends with new work.** "Owned work holds its owner ... interrogating a subagent while its tool is completing extends the hold. Esc or a host timeout ends it." (12)
+- **Abort handlers cannot start owned work.** "an abort handler cannot create owned children, because its task is abort-marked" (12, 5.5).
+- **One mutation line.** "Never await models, tools, processes, network calls, humans ... inside [a commit]." A read inside a commit "never resolves ... the hang is intermittent." (12)
+- **Observation is convergent, not complete.** Watches and event streams keep at most 100 frames or batches and then replace the undelivered part with a snapshot, "so intermediate committed states may be omitted" (9.2, 9.4, 12).
+- **One storage error ends the session.** "Neither the Session nor the Harness retries anything"; the call that hit it rejects, every pending wait rejects with `SessionFailed`, and the Session closes itself (10.1).
+- **The newest commits can be lost to power or host failure** on SQLite (WAL, `synchronous = NORMAL`) and on JSONL without `fsync` (README, 11.3, 12).
+- **A rerun is not the first run.** "a tool rerun after recovery builds its environment again, with the conversation's current `cwd`, which may differ from the first attempt's." (12)
+- **Exactly-once delivery is not exactly-once effect.** "Exactly-once delivery doesn't guarantee exactly-once side effects" (pi-agents docs/messaging.md); the spec's effect sandwich says the same: "Reopening in an intent phase means the effect may have happened." (5.2)
+- **An undefined schema key cannot be renamed.** "Value migration cannot rename a kind; a kind change requires explicit copy and retirement." (12)
+
+## 13. The execution model as design lessons
+
+For each mechanism: what it guarantees (SPEC or README quote), CawCo's counterpart today (repo path:line, read at `c9b9fe307`), and where CawCo loses or duplicates what the mechanism would keep. "Found no" means my grep or reading of the named files found none; I did not read every path in `server.ts` (33,418 lines).
+
+### 13.1 Commit before anything is shown
+
+- **Pi Durable:** "All visible progress is durable. There is no volatile publication path." (SPEC 1, invariant 3). "A document update is published only after its storage commit succeeds." (invariant 2). README: "committed to storage before anything is shown."
+- **CawCo today:**
+  - Sends: "every change is stored here before any screen hears of it, so a reload and a hub restart read the same record the live stream carried" (`packages/hub/src/db/schema.ts:1752-1758`, table `sent_messages` at `:1768`).
+  - Artifact docs: a person's update is checked (`packages/hub/src/artifacts/sync.ts:601-607`), stored with `deps.db.append` (`packages/hub/src/artifacts/docs.ts:193`), and only then sent to the other clients (`docs.ts:197-201`).
+  - Finish and landing: the submission and `landingSince` are written before the gate's first step (`packages/hub/src/work-items.ts:7846`, comment at `:7785-7790`).
+- **Gaps (code facts):**
+  - Marks' pictures are held in hub memory until the Send: `held = new Map(...)` and `delivering = new Set()` (`packages/hub/src/artifacts/service.ts:2867-2872`).
+  - What a move ended with a session's process is kept in `endedByMove`, a `Map` in hub memory (`packages/hub/src/server.ts:9490`); `tellEndedByMove` reads and deletes it (`:9558-9561`).
+  - `finishing` and `lastTurns` are "In memory: after a hub restart a landing's `landingSince` holds alone." (`work-items.ts:2064-2075`).
+
+### 13.2 A checkpoint at every step
+
+- **Pi Durable:** "every step of a run is a task that stores a checkpoint before it moves on" (POST). "each durable checkpoint is a full replacement" and a phase that does not change its checkpoint faults (SPEC 5.1).
+- **CawCo today:**
+  - Workflow engine: each `w.*` call is an `Activity` "named by its sequence: performed once, then answered from storage on every replay" (`packages/hub/src/workflows/engine.ts:9-12`). Each handler run is a recorded turn `turn/<k>` (`:23-28`, `:401`). A run's engine is one execution keyed by run id, `idempotencyKey: ({ runId }) => runId` (`:202`).
+  - Compaction after a move: the stage `filing` then `compacting` is a stored row with fresh uuids (`server.ts:24173-24182` `putCompaction`), advanced with `patchCompaction` (`:24279`).
+  - Landing: stored submission plus `landingSince`; on a machine's register the landing "runs again from the first, on the stored submission" (`work-items.ts:7885-7899` `resumeLandings`).
+  - Waits: `resumeWaits()` re-arms stored waits at startup (`work-items.ts:7376-7384`).
+- **Gaps (code facts):**
+  - Workflow `exec` has no replay policy. It runs the command through `deps.command(...)` (`packages/hub/src/workflows/runtime.ts:1256-1270`). A grep of `engine.ts`, `runtime.ts` and `steps.ts` for replay-safe, twice or re-run finds only the "re-run from a step" feature (`engine.ts:133-134`, `:264`), not a crash-recovery rule. What a command cut by a hub crash does on replay follows Effect's `Activity`; I did not test it.
+  - The compaction step's end arrives as an in-memory `turnEnded` argument: the `result` frame calls `advanceCompaction(cacheRow.id, true)` (`server.ts:32655-32657`). Recovery re-derives it from the stored send record and `turnOpenAt` (`:24245-24270`) and runs at a machine's register (`:31078-31086`), not at hub start by itself.
+
+### 13.3 The ownership tree and bottom-up abort
+
+- **Pi Durable:** "Tasks and conversations form one ownership tree." "Abort flows down" and "Abort order is bottom-up. An abort invocation of a task starts only once its ordinary owned work is no longer live" (SPEC 5.5). Owner edges are immutable (5.5). `background: true` is the boundary that survives (5.4).
+- **CawCo today:**
+  - A work item has `parentInstanceId` (`work-items.ts:713`), which routes reports and decides who may reopen (`:1204-1210`, "A rule, the supervisor, a workflow or any other session is refused" at `:9-11`). A group reports once when every item has ended (`:24-25`).
+  - The session rule is a one-way follow: "a live item follows its session's life" (`work-items.ts:2592-2606` `followSessions`).
+  - A stop ends one session: `endSession` calls `lifecycle.endSession`, `stopCompaction` and `sessionEnding` (`server.ts:14495-14510`); a stop owed to an away machine is stored as intent, `oweStop` and `lifecycle.oweEndSession` (`server.ts:14533-14540`, `packages/hub/src/session-lifecycle.ts:219`).
+  - A project's stop loops over its sessions (`server.ts:14551-14562`).
+- **Gaps (code facts):** I found no code that cascades one session's stop to the items it delegated, and no outcome that records a held "completing" state. Owner and child are an attribute (`parentInstanceId`), not a tree the abort walks. The stored, reconciled stop intent (`oweStop`) is the counterpart of Pi's durable abort mark.
+
+### 13.4 `completing` while owned work drains
+
+- **Pi Durable:** "A task finishes only after its ordinary owned work drained": a terminal outcome while owned work is live is stored as `completing` and becomes `terminal` once that work ends; "A terminal receipt guarantees that the task's ordinary owned work drained" (SPEC 5.5, 5.4).
+- **CawCo today:** a hold in memory plus a stored landing marker. `lastTurns` and `finishing` hold a finishing item's senders "until the turn is over" (`work-items.ts:2064-2088`); an item is `done` "only when its session calls `finish_item` and its work passes the hub's landing gate ... and lands" (`:15-18`). A compaction holds every other send: `heldAtLimit` (`server.ts:8618-8626`).
+- **Gap (code fact):** the hold is the same shape as `completing` but each one is its own mechanism, and one of them failed on 2026-10-22 (13.8 below).
+
+### 13.5 Exactly-once submissions by `requestId`
+
+- **Pi Durable:** "A `requestId` makes a submission exactly-once, so a client that retries after a crash gets the original submission back instead of asking twice." (POST). SPEC 6: "`requestId` deduplicates within one conversation before any write".
+- **CawCo today:** a send is keyed by its own uuid, the table's primary key (`schema.ts:1768-1772`), and read back with `sendRecord(uuid)` (`packages/hub/src/db/index.ts:8863`). Compaction steps carry stored uuids and are resent only when no record exists: `if (!sent) { compactionSend(...) }` (`server.ts:24250-24255`). A workflow run is one execution per run id (`engine.ts:202`). A handed-back send is only owed again if its hand-off is still current (`server.ts:5653-5661`, `:5710-5715`).
+- **Gap (code fact):** Pi derives the request id from the creating task (`subagent:<taskId>`, `compaction:<taskId>`) so a rerun reuses it (SPEC 7.3, 8.7). CawCo's step uuids are generated at the start of the step and stored with it (`server.ts:24173-24180`), which gives the same result for steps that reach the store.
+
+### 13.6 A resumed call that is "safe" reruns; one that is not is reported as interrupted
+
+- **Pi Durable:** "A tool call that was cut off reruns if it is safe to; otherwise the model is told it was interrupted." (POST). The interrupted result carries "the durable partial output" and stored policy cannot be upgraded by a later declaration (SPEC 7.3: "a current-safe declaration never upgrades stored unsafe"). TEMPORAL (pi-temporal) states the same rule as "Outcome unknown": "It tells the model to check the current state before deciding whether to issue a fresh call."
+- **CawCo today:**
+  - A turn cut by a restart is handed back to the session as a message: `resumeCutTurn` sends the cut turn once through the ordinary send path and records it, so "a register or a hub that sees the same cut turn again sends nothing" (`server.ts:24500-24545`; `handTurnBack` at `:24326`).
+  - A send no process took is "owed to the session's next process" (`server.ts:5668-5693`), stored with `db.holdSend` (`:5684`); the schema's `held` and `owed` columns keep it across restarts (`schema.ts:1802-1820`).
+  - A background task or wake-up cut by an account move is ended and the session is told what ended (`server.ts:9558-9577`; the words at `:9616`).
+- **Gap (code fact):** there is no per-call replay policy anywhere; the decision is made per turn and per send, and the record of what a move ended is in memory (13.1).
+
+### 13.7 One process owning the storage
+
+- **Pi Durable:** "One process owns a storage at a time; there is no cross-process locking." (README); TEMPORAL names the cost: "Recovering on another machine requires access to the surviving storage and a new process to reopen it."
+- **CawCo today:** one hub per database file: `<db>.lock` taken before the database opens, stale on a dead pid or boot (`packages/hub/src/db-lock.ts:1-22`). The workflow engine runs "one hub process owns every shard" with `runnerStorage: "memory"` (`engine.ts:954-962`, `SingleRunner`). The machine side keeps a child process alive through its own daemon: sessiond "owns the child, the pipe and the buffer, and understands nothing about what flows through them" (`packages/sessiond/src/server.ts:1-17`), with a replay ring of 8 MiB per child whose overflow is "an announced `reset`" (`:81-82`).
+- **Gap (code fact):** this is the same single-owner model. Neither side has a takeover by a second process.
+
+### 13.8 An aborted partial answer kept in the transcript
+
+- **Pi Durable:** "A model request that was cut off is sent again; the partial answer stays in the transcript, marked as aborted." (POST); excluded from later requests (SPEC 2.1 rule 9) and counted in usage (8.6).
+- **CawCo today:** the transcript is the harness's own, not the hub's. A stop "writes its own line in the session's transcript, who stopped it and what starts it again, so its process going is never read as a failure" (`server.ts:14490-14494`). Each at-limit outcome is "one line in its transcript saying what it cost" (`packages/hub/src/at-limit.ts:46-47`). I did not read how a Claude Code partial is stored on a cut turn.
+
+### 13.9 Today's three cases, from the repo
+
+**A. A background command lost when a session resumes on another account.**
+
+- The code says why: what a move ends is "each background task, by its id, description and the last of its output, and the one-time wake-ups, none of which Claude Code brings back on resume." (`server.ts:9551-9557`).
+- The move waits for that work up to `RESTART_WAIT_CAP_MS` (`server.ts:9498-9519`, `:9535-9537`), then carries with `endLater` and the work "ends with the process" (`:9415-9421`, `:9528-9549`; agent side `packages/agent/src/session.ts:1967`, `:2190-2201`).
+- The record of what ended lives in `endedByMove` (`:9490`), a hub-memory `Map`, and is delivered once and deleted (`:9558-9561`). A hub restart between the carry and the new process's first turn drops it. **[inference from the Map's lifetime; not tested]**
+- Pi Durable's model would keep the record, not the process: a not-replay-safe call is reported `interrupted` with its stored output (SPEC 8.4), and "the harness also operates on an external environment ... File systems don't work like this" (TALK). Its own spec does not resume a killed process either.
+
+**B. A filing turn's end lost, which held messages until an interrupt.**
+
+- What the repo records (`server.ts:8605-8617`; commit `023525a98`): after a move with compaction, `heldAtLimit` held every send, the compaction's own steps included, so a filing send its machine handed back owed "was never released (obelisk, 2026-10-22 11:57-12:14, freed only by an interrupt)". The session moved at 11:57:34 and waited until an interrupt at 12:14:59.
+- The fix is in the tree: `heldAtLimit` exempts `COMPACTION_ORIGIN` while a compaction stands (`server.ts:8618-8621`), and `stepEnded` releases an owed step through `releaseOne` (`:24256-24259`).
+- The brief's cause, a hub restart, is not what the commit message or comment names; they name the hold and a machine handing the send back. I found the restart-shaped risk in a different place: the end-of-turn signal is memory-only (`server.ts:32655-32657`) and recovery needs a machine register (`:31078-31086`).
+- Pi Durable's model keeps it differently: the step is a task with a stored phase, a queued item waits in `pi.inbox` and is placed at a boundary on the Session line (SPEC 6), so there is no second hold over the same send. Its spec has the same stuck-queue shape after a failed run (12.4 above).
+
+**C. Pins sent but never stored at the hub.**
+
+- A pin is a write to the artifact's Yjs doc. The hub applies it only when `updateProblem` is null; otherwise it closes the socket with code 4400 and the update is not applied (`sync.ts:601-607`, `REFUSED` at `:84`, file header `:17-20`).
+- The page then clears its own device copy: "the device's copy of it cleared first so it never comes back" (`packages/agent/src/preview-overlay/artifact.ts:447-460`).
+- An accepted update is stored before anyone else hears it (`docs.ts:193`). Pictures of the marks wait in a hub-memory map until the Send (`service.ts:2867-2871`); a Send is refused while another is on its way, tracked in memory (`:2872`, `:5860-5865`).
+- I did not reproduce a pin lost without a refusal. The code shows two losses: a refused update discarded on the device, and held pictures in memory.
+- Pi Durable's counterpart: `submit()` "durably admits your input and returns a `Submission`" and a rejected write is an error returned to the caller, not a closed socket plus a deleted local copy (README, SPEC 2.2). The model drops nothing silently on the write path.
+
+### 13.10 Where Pi Durable's own model loses work
+
+(So the lessons do not copy a weakness.) Section 12.4 lists them. The ones that match CawCo's today: a failed run's queue is silent until the next input (matches the held-until-interrupt shape); edits during a compaction are lost; observation is convergent and drops frames; the newest commits can be lost on power failure; one storage error ends the session.
+
+## 14. Sources I could not read or read only in part
 
 - `https://cdn.jsdelivr.net/npm/pi-agents@0.38.0/docs/{usage,graphs,messaging,architecture}.md`, the links on the pi.dev page. All four returned `Target returned 404 Not Found` ("Couldn't find the requested file /docs/usage.md in pi-agents."). I read the same files from `raw.githubusercontent.com/mavam/pi-agents/main/docs/`. I did not read `profiles.md`, `configuration.md`, `hooks.md` or `design.md` of pi-agents.
 - SPEC (`docs/spec.md`, 303,145 characters), updated in the second pass: read whole were sections 5 (Tasks, 5.1 to 5.6) and 7 (Extensions, hooks, tools, system prompt, reload, code mode), plus section 2 (records, 2.1, 2.2 except lines 520 to 670 of the file, the `Conversation` interface), 4, 6 (first half), 10, 10.1 and 13. Not read: 3 (Documents), 6 (second half), 8 (built-in tasks), 9 (document observation and views), 11 (backends), 12 (API footguns), the `Conversation` interface block in 2.2. A shell hook blocked my reading of CRW's saved copy (`Blocked: memory and fleet config are written through CawCo's tools, never by editing files under ~/.claude ...`), so I read a shallow `git clone` of `earendil-works/pi` at `db774055e3ec` in scratch instead.
