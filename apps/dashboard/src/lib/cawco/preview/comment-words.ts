@@ -4,6 +4,9 @@
  * its own until its parity with the rail (core words/artifacts.ts holds the
  * words both say).
  */
+/** A reason's own full stop, which the line that quotes it puts back. */
+const FINAL_STOP = /\.$/;
+
 export const commentWords = {
   // The composer at the element.
   composeHint: { full: "What should change?", short: "What should change?" },
@@ -47,6 +50,12 @@ export const commentWords = {
   note: "Add a note for the agent",
   send: "Send",
   sendCount: (n: number) => `Send ${n}`,
+  // One comment's own Send, and a Send of it no one took.
+  sendAgain: "Send again",
+  sendComment: (n: number) => `Send comment ${n}`,
+  sendCommentAgain: (n: number) => `Send comment ${n} again`,
+  notSent: (why: string) => `Not sent: ${why.replace(FINAL_STOP, "")}.`,
+  notOnHub: "it hasn't reached the hub yet, and is kept on this device",
   // Changed since you looked: the tag over the page, and what a screen reader hears.
   changedSince: (n: number) => `${n} changed since you looked`,
   changeOf: (k: number, n: number) => `${k} of ${n}`,

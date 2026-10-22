@@ -12226,10 +12226,11 @@ export const createServer = (
    * person's own words do (core `byPerson`): a stopped or sleeping one is
    * started again. One that takes no input any more (its conversation gone,
    * its finished work's workspace archived or taken over by a later item)
-   * has ended: the marks wake the project's Caw instead, as the projects
-   * plan's §5.8 says for a page whose writer ended ("wakes the session that
-   * wrote the page, or Caw if it has ended"). Outside a project there is no
-   * Caw, and the send records why it was not taken.
+   * has ended: the marks go to whoever can act on them, the session that
+   * delegated it while that one takes input, else the project's Caw, as the
+   * projects plan's §5.8 says for a page whose writer ended ("wakes the
+   * session that wrote the page, or Caw if it has ended"). With neither,
+   * the send records why it was not taken.
    *
    * Answers whether someone took them: a send the session accepted, or Caw
    * woken. When no one did (the send refused, Caw's wake refused), the
@@ -12247,7 +12248,22 @@ export const createServer = (
         kind: "system",
         name: ARTIFACT_ORIGIN,
       });
-      return refused && artifact.projectId && lead
+      if (!refused) {
+        return marksToSession(instance, artifact, delivery);
+      }
+      const parent = instance.parentInstanceId
+        ? db.getInstancesByIds([instance.parentInstanceId])[0]
+        : undefined;
+      if (
+        parent &&
+        !inputRefusal(parent.id, { kind: "system", name: ARTIFACT_ORIGIN })
+      ) {
+        return marksToSession(parent, artifact, {
+          ...delivery,
+          text: `${delivery.text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${refused.reason.replace(CLOSING_STOP, "")}), so these come to you, the session that delegated it: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
+        });
+      }
+      return artifact.projectId && lead
         ? marksToCaw(
             lead,
             instance,

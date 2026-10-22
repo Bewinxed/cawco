@@ -396,7 +396,7 @@ const MARK_ID_MAX = 100;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
 
-const SEND_SHAPE = "Send takes JSON: { text? }.";
+const SEND_SHAPE = "Send takes JSON: { text?, pins? }.";
 
 const PICTURES_SHAPE = "Pictures take JSON: { pictures, url? }.";
 
@@ -414,6 +414,21 @@ const sendBodyProblem = (body: unknown): string | null => {
     !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
   ) {
     return `text is a string of at most ${CHOICE_LIMITS.note} characters.`;
+  }
+  const { pins } = body;
+  if (
+    pins !== undefined &&
+    !(
+      Array.isArray(pins) &&
+      pins.length > 0 &&
+      pins.length <= COMMENT_LIMITS.pins &&
+      pins.every(
+        (pin) =>
+          typeof pin === "string" && pin.length > 0 && pin.length <= MARK_ID_MAX
+      )
+    )
+  ) {
+    return `pins is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
   }
   return null;
 };
@@ -544,14 +559,13 @@ export const artifactSend =
     if (problem) {
       return new Response(problem, { status: 400 });
     }
-    const { text } = body as SendBody;
+    const { text, pins } = body as SendBody;
     try {
       return Response.json(
-        await send(
-          instanceId,
-          artifactId,
-          text?.trim() ? { text: text.trim() } : {}
-        )
+        await send(instanceId, artifactId, {
+          ...(text?.trim() ? { text: text.trim() } : {}),
+          ...(pins ? { pins } : {}),
+        })
       );
     } catch (error) {
       if (error instanceof ArtifactRefusal) {

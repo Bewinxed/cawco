@@ -19,10 +19,14 @@
    * back in meta, after its speaker's glyph (the agent's ghost in the line's
    * ink, the person's in the brand ink), in the strong ink while unread,
    * "Working on it…" while the agent works on it, "Unsent" in the brand ink
-   * while the session hasn't heard it, and nothing for a comment sent and
-   * unanswered (its filled pill says so). On hover or focus the age gives
-   * way to Resolve; none under a finger. Its foot, while anything is
-   * unsent: the note for the agent and Send with the count.
+   * while the session hasn't heard it ("Not sent: why" in the fail ink once
+   * a Send of it reached no one), and nothing for a comment sent and
+   * unanswered (its filled pill says so). An unsent comment's own Send (Send
+   * again after a failed one) stands under its row's end, on a desk and
+   * under a finger alike: one press sends it alone. On hover or focus the
+   * age gives way to Resolve; none under a finger. Its foot, while anything
+   * is unsent: the note for the agent and Send with the count, which sends
+   * them all.
    *
    * Until the pane holds the doc nothing is counted or claimed empty (The
    * Claim Of Nothing Rule): the rows' plain surface inside
@@ -86,6 +90,7 @@
     unread,
     unsent,
     sending = false,
+    pinsSending = new Set(),
     layout = "beside",
     onopen,
     onhover,
@@ -94,6 +99,8 @@
     onpage,
     onresolve,
     onsend,
+    onsendpin,
+    whyNotSent = () => null,
     filter = $bindable("open"),
     sort = $bindable("newest"),
     scroll = $bindable(0),
@@ -116,6 +123,8 @@
     unsent: number;
     /** The Send is on its way. */
     sending?: boolean;
+    /** The comments whose own Send is on its way. */
+    pinsSending?: ReadonlySet<string>;
     /** Beside the page, or the well's foot sheet. */
     layout?: "beside" | "sheet";
     /** Opens a comment's thread; `via` says whether a key or a press opened it. */
@@ -128,6 +137,10 @@
     onpage: () => void;
     onresolve: (id: string, resolved: boolean) => void;
     onsend: () => void;
+    /** A comment's own Send: it alone goes. */
+    onsendpin: (id: string) => void;
+    /** Why an unsent comment hasn't reached the session, in words, when a Send of it failed or it stands only on the page; null when it is simply unsent. */
+    whyNotSent?: (pin: Pin) => string | null;
     filter?: "open" | "resolved";
     sort?: RailSort;
     scroll?: number;
@@ -216,7 +229,7 @@
   /** What a row says on its line 3, if anything. */
   const backOf = (pin: Pin) => {
     if (markState(pin) === "unsent") {
-      return { kind: "unsent" as const };
+      return { kind: "unsent" as const, why: whyNotSent(pin) };
     }
     if (live.has(pin.id)) {
       return { kind: "live" as const };
@@ -339,8 +352,18 @@
         {/if}
         {#if back?.kind === "unsent"}
           <span
-            class={["mt-space-1 type-meta", ink(washed, "text-brand-ink")]}
-            data-line="back">{said.unsent}</span
+            class={[
+              "mt-space-1 type-meta",
+              back.why
+                ? [
+                    "line-clamp-2 text-pretty wrap-anywhere",
+                    ink(washed, "text-status-fail-ink"),
+                  ]
+                : ink(washed, "text-brand-ink"),
+            ]}
+            data-line="back"
+            data-not-sent={back.why ? "" : undefined}
+            >{back.why ? said.notSent(back.why) : said.unsent}</span
           >
         {:else if back?.kind === "live"}
           <span
@@ -384,6 +407,27 @@
         {/if}
       </span>
     </button>
+    {#if back?.kind === "unsent"}
+      <!-- Its own Send, one press, on a desk and under a finger alike: it alone goes. -->
+      <div class="flex justify-end px-space-2 pb-space-1">
+        <Button
+          aria-label={back.why
+            ? said.sendCommentAgain(pin.number)
+            : said.sendComment(pin.number)}
+          data-slot="pin-send"
+          onclick={() => onsendpin(pin.id)}
+          pending={sending || pinsSending.has(pin.id)}
+          size="sm"
+          variant="secondary"
+        >
+          <PendingContent
+            icon={IconSend}
+            pending={sending || pinsSending.has(pin.id)}
+          />
+          <span>{back.why ? said.sendAgain : said.send}</span>
+        </Button>
+      </div>
+    {/if}
     {#if !coarse.current}
       <span
         class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--dur-control) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"

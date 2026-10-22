@@ -233,13 +233,16 @@
  * The captures for the reviewer (light and dark, desk and 390) are written
  * under `.probe/commenting/`; nothing here opens them.
  */
+import { Database } from "bun:sqlite";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import type { Pin } from "../../../packages/core/src/comments";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
+import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { pinName } from "../../../packages/core/src/pin-name";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
@@ -696,10 +699,19 @@ const runOn = async (kit: Kit, on: On) => {
     () => changedChecks(on),
     // The Work Outlives Its Surface Rule on the composer.
     () => draftChecks(on),
+    // A pin stays on its element while a page draws it again.
+    () => redrawChecks(on),
+    // A comment's own Send, and why one wasn't sent.
+    () => pinSendChecks(on),
+    // Delete, one press in the thread's head.
+    () => deleteHeadChecks(on),
     // Changed since you looked, on a canvas.
     () => canvasChangedChecks(on, id),
     // A long name holds its line.
     () => longNameChecks(on),
+    // Nothing of the person's is lost: a refused write, a hub restart before Send.
+    () => refusedChecks(on),
+    () => restartChecks(on),
     // Last: it loads the desk again, which gives the split its kept width.
     () => keyOpenChecks(on),
   ]) {
@@ -2808,7 +2820,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
     ([, number]) => number === target
   )?.[0];
   const card = on.page.locator(`[data-pin-card="${target}"]`);
-  // The head holds the name and what acts on the pin (Resolve, ⋯, Close) on its row; the foot is the chat composer as the reply.
+  // The head holds the name and what acts on the pin (Resolve, Delete, ⋯, Close) on its row; the foot is the chat composer as the reply.
   const parts = await card.evaluate((el) => {
     const head = el.querySelector('[data-slot="head"]');
     const named = [...(head?.querySelectorAll("button[aria-label]") ?? [])].map(
@@ -2830,18 +2842,18 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
     };
   });
   on.kit.check(
-    "c: the thread's head holds Resolve, its ⋯ and Close on one row with the name; its foot is the chat composer, Attach and the Reply glyph",
+    "c: the thread's head holds Resolve, Delete comment, its ⋯ and Close on one row with the name; its foot is the chat composer, Attach and the Reply glyph",
     parts.named[0] === "Resolve" &&
+      parts.named[1] === "Delete comment" &&
       parts.named.at(-1) === "Close" &&
-      parts.named.length === 3 &&
+      parts.named.length === 4 &&
       new Set(parts.tops).size === 1 &&
       parts.composer &&
       parts.foot.includes("Attach a file or image") &&
       parts.foot.includes("Reply"),
     JSON.stringify(parts)
   );
-  await card.locator('[data-slot="head"] button[aria-label]').nth(1).click();
-  await on.page.getByRole("menuitem", { name: "Delete comment" }).click();
+  await card.locator('[data-slot="head"] [data-slot="delete"]').click();
   const ask = card.locator('[data-ask="delete"]');
   const asked = await ask
     .waitFor({ timeout: 3000 })
@@ -2866,7 +2878,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const cardLeft = await card.count();
   const kept = Object.entries(before).filter(([id]) => id !== doomed);
   on.kit.check(
-    "c: Delete asks in the thread itself (no blocking dialog); confirming removes the pin from the doc and its pill from the page, closes its thread, and every other pin keeps its number",
+    "c: Delete, one press in the head, asks in the thread itself (no blocking dialog); confirming removes the pin from the doc and its pill from the page, closes its thread, and every other pin keeps its number",
     asked &&
       blocking === 0 &&
       !!doomed &&
@@ -5588,7 +5600,14 @@ const insertChecks = async (on: On) => {
     Boolean,
     15_000
   ).catch(() => false);
-  await settle(on.page, 1000);
+  // A pin no anchor finds is moved aside once it has stood missing a while (overlay absent.ts, 2 s).
+  await until(
+    "the reworded card's pin moved aside",
+    async () => !!(await docOf(frame)).pins[charlie ?? ""]?.movedAt,
+    Boolean,
+    6000
+  ).catch(() => false);
+  await settle(on.page, 300);
   /** Where each pin stands now: the heading its disc is on, or moved, as the page and its doc have it. */
   const standsOn = await frame.evaluate(
     (ids) => {
@@ -7742,6 +7761,996 @@ const draftChecks = async (on: On) => {
     `pill ${JSON.stringify(still)}; composer before ${!noComposer}; after ${JSON.stringify(fromReload)}`
   );
   await on.page.keyboard.press("Escape");
+};
+
+/**
+ * A page that draws its panel again from a template, as the owner's
+ * design-graph mockup's app.js rebuilds its panels: emptied, then filled two
+ * frames later, every 400 ms. Each row's value reads the same words, so only
+ * its place names it. `probeRedraw.stop()` empties it for good; `back()`
+ * fills it once.
+ */
+const REDRAW_PAGE = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  main { display: grid; grid-template-columns: 1fr 320px; gap: 24px; padding: 24px; }
+  .node { padding: 12px; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 12px; }
+  .row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #ddd; }
+</style></head>
+<body><main>
+  <section id="graph"><div class="node">Routines view</div><div class="node">Create routine form</div></section>
+  <aside id="panel"></aside>
+</main>
+<script>
+  const panel = document.getElementById("panel");
+  const rows = ["Name", "When", "At", "Time zone"];
+  const fill = () => {
+    panel.innerHTML = rows
+      .map((label) => '<div class="row"><span class="label">' + label + '</span><span class="value">Not set</span></div>')
+      .join("");
+  };
+  const redraw = () => {
+    panel.replaceChildren();
+    requestAnimationFrame(() => requestAnimationFrame(fill));
+  };
+  fill();
+  const timer = setInterval(redraw, 400);
+  window.probeRedraw = {
+    stop: () => {
+      clearInterval(timer);
+      panel.replaceChildren();
+    },
+    back: () => fill(),
+  };
+</script>
+</body></html>`;
+/** The value the redraw leg pins: the second row's, whose words every row's value reads. */
+const REDRAWN = "#panel .row:nth-child(2) .value";
+
+/** Whether pin `number`'s pill stands on `selector`'s box now (its tail within it, ±2px); null while either is not drawn. */
+const pillOn = (frame: Frame, number: number, selector: string) =>
+  frame.evaluate(
+    ({ n, sel }) => {
+      const g = document.querySelector(
+        `svg[data-cawco-pins] g[data-pin="${n}"]`
+      );
+      const face = g?.querySelector("[data-face]");
+      const el = document.querySelector(sel);
+      if (!(g && face && el)) {
+        return null;
+      }
+      const r = face.getBoundingClientRect();
+      const tail = g.getAttribute("data-tail") ?? "bottom-start";
+      const x = tail.endsWith("end") ? r.right : r.left;
+      const y = tail.startsWith("top") ? r.top : r.bottom;
+      const box = el.getBoundingClientRect();
+      return (
+        x >= box.left - 2 &&
+        x <= box.right + 2 &&
+        y >= box.top - 2 &&
+        y <= box.bottom + 2
+      );
+    },
+    { n: number, sel: selector }
+  );
+
+/**
+ * A pin stays on its element while that element is in the page (the
+ * owner's "elements i select still dismiss saying element is gone"): on a
+ * page that draws its panel again every 400 ms (empty for two frames each
+ * time), a comment pressed on a row's value and written over three redraws
+ * stands on that row's value, by its place in the panel; through 4 s of
+ * redraws it is never moved aside and its pill stands on the value. The
+ * panel emptied for good, it is said gone only once it has stood missing a
+ * while (2 s), its row "Element gone"; the panel back, the pin is on its
+ * element again, out of the tray.
+ */
+const redrawChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "redraw",
+    html: REDRAW_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const frame = await frameHolding(
+    on.page,
+    id,
+    "the redrawing page in the pane"
+  );
+  if (!frame) {
+    on.kit.check("redraw: the page is in the pane", false, made.slice(0, 300));
+    return;
+  }
+  await frame.waitForSelector(REDRAWN);
+  await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  // Pressed while it stands, then written over three of its redraws.
+  const value = await until(
+    "the second row's value drawn",
+    () => screenBox(on, frame, REDRAWN).catch(() => undefined),
+    Boolean,
+    5000
+  );
+  await commentAt(on, value.x + value.w * 0.3, value.y + value.h / 2, null);
+  await settle(on.page, 1300);
+  await on.page
+    .locator(COMPOSE)
+    .getByRole("combobox")
+    .fill("The When row reads wrong.");
+  await on.page.keyboard.press("Enter");
+  const written = await until(
+    "the redraw page's pin",
+    async () => pinNumbered((await docOf(frame)).pins, 1),
+    Boolean,
+    10_000
+  ).catch(() => undefined);
+  const anchor = written?.anchor as
+    { box?: { w: number }; selector?: string; text?: string } | undefined;
+  on.kit.check(
+    "redraw: a comment pressed on the second row's value and written over three redraws stands on that row's value by its place in the panel (#panel's second row), its box the value's",
+    anchor?.selector === "#panel > div:nth-of-type(2) > span:nth-of-type(2)" &&
+      anchor.text === "Not set" &&
+      (anchor.box?.w ?? 0) > 0,
+    JSON.stringify(anchor)
+  );
+  await on.page.keyboard.press("Escape");
+
+  // 4 s of redraws: never moved aside, and its pill on the value whenever the value stands.
+  const watched: { moved: boolean; on: boolean | null }[] = [];
+  const until4 = Date.now() + 4000;
+  while (Date.now() < until4) {
+    // biome-ignore lint/performance/noAwaitInLoops: one read every 150 ms, in order
+    const pin = pinNumbered((await docOf(frame)).pins, 1);
+    watched.push({
+      moved: !!pin?.movedAt,
+      on: await pillOn(frame, 1, REDRAWN),
+    });
+    await settle(on.page, 150);
+  }
+  const drawnOn = watched.filter((one) => one.on !== null);
+  on.kit.check(
+    "redraw: through 4 s of the panel drawn again (empty two frames in every 400 ms) the pin is never moved aside, and whenever its value stands its pill stands on it",
+    watched.length > 10 &&
+      watched.every((one) => !one.moved) &&
+      drawnOn.length > 5 &&
+      drawnOn.every((one) => one.on === true),
+    `reads ${watched.length}; moved ${watched.filter((one) => one.moved).length}; drawn ${drawnOn.length}, off its value ${drawnOn.filter((one) => one.on === false).length}`
+  );
+
+  // Gone for good: said gone only after a while.
+  const emptied = Date.now();
+  await frame.evaluate(() =>
+    (
+      window as unknown as { probeRedraw: { stop: () => void } }
+    ).probeRedraw.stop()
+  );
+  const moved = await until(
+    "the pin moved aside",
+    async () => pinNumbered((await docOf(frame)).pins, 1),
+    (pin) => !!pin?.movedAt,
+    10_000
+  ).catch(() => undefined);
+  const after = Date.now() - emptied;
+  const row = (await rowsOf(on)).locator(
+    '[data-slot="pin-row"][data-pin-row="1"][data-moved]'
+  );
+  await row.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const said = (
+    await row
+      .locator('[data-slot="title"]')
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  on.kit.check(
+    "redraw: the panel emptied for good, the pin is moved aside only once its element has stood missing for 2 s, its row saying Element gone",
+    !!moved?.movedAt && after >= 1800 && said === "Element gone",
+    `moved after ${after} ms; row ${JSON.stringify(said)}`
+  );
+
+  // Back: the pin is on its element again.
+  await frame.evaluate(() =>
+    (
+      window as unknown as { probeRedraw: { back: () => void } }
+    ).probeRedraw.back()
+  );
+  const back = await until(
+    "the pin out of the tray",
+    async () => pinNumbered((await docOf(frame)).pins, 1),
+    (pin) => !!pin && !pin.movedAt,
+    8000
+  ).catch(() => undefined);
+  await settle(on.page, 300);
+  on.kit.check(
+    "redraw: its element drawn back, the pin comes out of the moved tray and its pill stands on the value again",
+    !!back && !back.movedAt && (await pillOn(frame, 1, REDRAWN)) === true,
+    `movedAt ${String(back?.movedAt)}; on ${await pillOn(frame, 1, REDRAWN)}`
+  );
+  await shutList(on);
+};
+
+/** A second session's tool call, as {@link setUp}'s `call` makes the first's: its own numbers, past the first's. */
+let callsIn = 90_000;
+const callIn = async (
+  on: On,
+  to: string,
+  tool: string,
+  input: object
+): Promise<string> => {
+  callsIn += 1;
+  const marker = String(callsIn);
+  asks.set(marker, { name: tool, input });
+  await on.fleet.send(to, `PROBE-CALL:${marker}`);
+  return (await until(
+    `the ${tool} call (${marker})`,
+    () => answered.get(marker),
+    Boolean,
+    180_000
+  )) as string;
+};
+
+/** A reason's own full stop, which the "Not sent:" line puts back. */
+const FULL_STOP = /\.$/;
+
+/** A plain page of two paragraphs for a comment's own Send. */
+const SEND_PAGE = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; font: 18px/1.6 system-ui; } main { padding: 24px; } p { width: 60%; margin: 0 0 48px; }</style></head>
+<body><main>
+  <p id="one">The first paragraph, which goes on its own.</p>
+  <p id="two">The second paragraph, which goes from its thread.</p>
+</main></body></html>`;
+
+/**
+ * A comment's own Send (the owner's "no option to trigger resend?"): two
+ * comments written, each row in the rail says Unsent with its own Send; one
+ * press on the first's sends it alone (one delivery naming it, not the
+ * other), its row no longer Unsent; the second's thread offers its Send,
+ * which sends it. A writer whose conversation is gone (outside a project,
+ * no one to take its marks): a comment's own Send reaches no one, and the
+ * pin says why ("Not sent: …") with Send again, in its row and in its
+ * thread; its conversation back, Send again sends it and the line goes.
+ */
+const pinSendChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "pin-send",
+    html: SEND_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const frame = await frameHolding(
+    on.page,
+    id,
+    "the pin-send page in the pane"
+  );
+  if (!frame) {
+    on.kit.check(
+      "pin send: the page is in the pane",
+      false,
+      made.slice(0, 300)
+    );
+    return;
+  }
+  await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  for (const [selector, words] of [
+    ["#one", "Send this one on its own."],
+    ["#two", "Send this one from its thread."],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one comment, then the next
+    const b = await screenBox(on, frame, selector);
+    await commentAt(on, b.x + b.w * 0.3, b.y + b.h / 2, words);
+  }
+  await on.page.keyboard.press("Escape");
+  const pinsNow = async () => (await docOf(frame)).pins;
+  const both = await until(
+    "both comments in the doc",
+    pinsNow,
+    (pins) => !!pinNumbered(pins, 1) && !!pinNumbered(pins, 2),
+    10_000
+  ).catch(pinsNow);
+  const first = pinNumbered(both, 1);
+  const second = pinNumbered(both, 2);
+  const rail = await rowsOf(on);
+  const rowOf = (n: number) =>
+    rail.locator(`li:has([data-slot="pin-row"][data-pin-row="${n}"])`);
+  const sendsBefore = await rail.locator('[data-slot="pin-send"]').count();
+  const heardBefore = heard.length;
+  await rowOf(1).locator('[data-slot="pin-send"]').click();
+  const oneSent = await until(
+    "pin 1 sent alone",
+    pinsNow,
+    (pins) => !!pinNumbered(pins, 1)?.sentAt,
+    DELIVERY_MS
+  ).catch(pinsNow);
+  const delivered = await until(
+    "the delivery of pin 1",
+    () =>
+      heard
+        .slice(heardBefore)
+        .find((one) => NOTICE.test(one.last) && one.last.includes("pin-send")),
+    Boolean,
+    DELIVERY_MS
+  ).catch(() => undefined);
+  await settle(on.page, 400);
+  on.kit.check(
+    "pin send: each unsent comment's row offers its own Send; one press on the first's sends it alone, one delivery naming it and not the other, its row no longer Unsent nor offering Send, the other's still",
+    sendsBefore === 2 &&
+      !!pinNumbered(oneSent, 1)?.sentAt &&
+      !pinNumbered(oneSent, 2)?.sentAt &&
+      !!delivered &&
+      !!first &&
+      !!second &&
+      delivered.last.includes(first.id) &&
+      !delivered.last.includes(second.id) &&
+      (await rowOf(1).locator('[data-slot="pin-send"]').count()) === 0 &&
+      (await rowOf(1)
+        .locator('[data-line="back"]')
+        .textContent()
+        .catch(() => "")) !== "Unsent" &&
+      (await rowOf(2).locator('[data-slot="pin-send"]').count()) === 1,
+    `sends ${sendsBefore}; delivered ${JSON.stringify(delivered?.last.slice(0, 300))}; pins ${JSON.stringify(Object.values(oneSent).map((pin) => [pin.number, !!pin.sentAt]))}`
+  );
+  await rowOf(2).locator('[data-slot="pin-row"]').click();
+  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="2"]');
+  await card.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const cardSaid = (
+    await card
+      .locator('[data-slot="unsent"] p')
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  await card.locator('[data-slot="pin-send"]').click();
+  const twoSent = await until(
+    "pin 2 sent from its thread",
+    pinsNow,
+    (pins) => !!pinNumbered(pins, 2)?.sentAt,
+    DELIVERY_MS
+  ).catch(pinsNow);
+  await settle(on.page, 400);
+  on.kit.check(
+    "pin send: the second's thread says Unsent with its own Send; one press sends it, and the line goes",
+    cardSaid === "Unsent" &&
+      !!pinNumbered(twoSent, 2)?.sentAt &&
+      (await card.locator('[data-slot="unsent"]').count()) === 0,
+    `said ${JSON.stringify(cardSaid)}; sent ${String(pinNumbered(twoSent, 2)?.sentAt)}`
+  );
+  await card
+    .getByRole("button", { name: "Close", exact: true })
+    .click()
+    .catch(() => undefined);
+  await shutList(on);
+  await pageOnlyChecks(on, id);
+
+  // A writer no one stands behind: its conversation is gone and it is in no project.
+  const writer = await on.fleet.spawn("claude", "Gone writer", on.fleet.repo);
+  const gonePage = await callIn(on, writer, CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "not-sent",
+    html: SEND_PAGE,
+  });
+  const goneId = gonePage.match(ANSWERED_ID)?.[1] ?? "";
+  const conversation = (gone: boolean) => {
+    const db = new Database(on.fleet.env.CAWCO_DB_PATH as string);
+    try {
+      db.exec("PRAGMA busy_timeout = 15000");
+      db.query(
+        "UPDATE instances SET last_error = ?, last_error_kind = ? WHERE id = ?"
+      ).run(
+        gone ? CLAUDE_CONVERSATION_GONE : null,
+        gone ? "conversation-gone" : null,
+        writer
+      );
+    } finally {
+      db.close();
+    }
+  };
+  conversation(true);
+  const { origin } = new URL(on.page.url());
+  const tab = await on.kit.page("desk");
+  const there: On = { ...on, page: tab, session: writer };
+  await open(tab, `${origin}/session/${writer}`, "[data-artifact-trigger]");
+  const goneFrame = await frameHolding(tab, goneId, "the gone writer's page");
+  if (!goneFrame) {
+    on.kit.check(
+      "pin send: the gone writer's page is shown",
+      false,
+      gonePage.slice(0, 300)
+    );
+    await tab.close();
+    return;
+  }
+  await goneFrame.waitForSelector("#one");
+  await tab.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(goneFrame, true);
+  const g = await screenBox(there, goneFrame, "#one");
+  await commentAt(there, g.x + g.w * 0.3, g.y + g.h / 2, "Who takes this one?");
+  await tab.keyboard.press("Escape");
+  const goneRail = await rowsOf(there);
+  const goneRow = goneRail.locator(
+    'li:has([data-slot="pin-row"][data-pin-row="1"])'
+  );
+  await goneRow.locator('[data-slot="pin-send"]').click();
+  const failed = await until(
+    "the pin saying it wasn't sent",
+    async () => pinNumbered((await docOf(goneFrame)).pins, 1),
+    (pin) => !!pin?.notSent,
+    DELIVERY_MS
+  ).catch(() => undefined);
+  await settle(tab, 400);
+  const rowSays = (
+    await goneRow
+      .locator("[data-not-sent]")
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  const again = (
+    await goneRow
+      .locator('[data-slot="pin-send"]')
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  await goneRow.locator('[data-slot="pin-row"]').click();
+  const goneCard = tab.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  await goneCard.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const cardSays = (
+    await goneCard
+      .locator("[data-not-sent] p")
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  const why = (failed?.notSent as { why?: string } | undefined)?.why ?? "";
+  on.kit.check(
+    "pin send: a comment's own Send no one takes (the writer's conversation gone, no project) leaves it unsent with why on the pin; its row and its thread say \"Not sent: …\" in words, each with Send again",
+    !!why &&
+      !failed?.sentAt &&
+      rowSays === `Not sent: ${why.replace(FULL_STOP, "")}.` &&
+      again === "Send again" &&
+      cardSays === rowSays &&
+      (
+        await goneCard.locator('[data-slot="pin-send"]').textContent()
+      )?.trim() === "Send again",
+    `why ${JSON.stringify(why)}; row ${JSON.stringify(rowSays)} / ${JSON.stringify(again)}; card ${JSON.stringify(cardSays)}`
+  );
+  // Its conversation back: Send again sends it, and the line goes.
+  conversation(false);
+  await goneCard.locator('[data-slot="pin-send"]').click();
+  const resent = await until(
+    "the pin sent on Send again",
+    async () => pinNumbered((await docOf(goneFrame)).pins, 1),
+    (pin) => !!pin?.sentAt && !pin.notSent,
+    DELIVERY_MS
+  ).catch(() => undefined);
+  await settle(tab, 400);
+  on.kit.check(
+    "pin send: with someone to take it, Send again sends it: stamped sent, its reason cleared, and the thread's line gone",
+    !!resent?.sentAt &&
+      !resent.notSent &&
+      (await goneCard.locator('[data-slot="unsent"]').count()) === 0,
+    `sentAt ${String(resent?.sentAt)}; notSent ${JSON.stringify(resent?.notSent)}`
+  );
+  await tab.close();
+};
+
+/** The page's doc socket on its preview origin (overlay artifact.ts): what a dropped link closes. */
+const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/;
+
+/**
+ * A comment the hub never got (the owner's two "Unsent" pins with no record
+ * at the hub): written while the page's link to the hub is down, it stands
+ * only on the page; its row says why it isn't sent, in words, with Send
+ * again, and so does its thread; it stays through a reload (kept on the
+ * device); with the link back, Send again takes it to the hub and sends it.
+ */
+const pageOnlyChecks = async (on: On, id: string) => {
+  const { origin } = new URL(on.page.url());
+  const tab = await on.kit.page("desk");
+  const link: { down: boolean } = { down: true };
+  await tab.routeWebSocket(PAGE_SOCKET, (ws) => {
+    if (link.down) {
+      ws.close({ code: 1011, reason: "The probe dropped the page's link." });
+      return;
+    }
+    ws.connectToServer();
+  });
+  const there: On = { ...on, page: tab };
+  await open(tab, `${origin}/session/${on.session}`, COMPOSER);
+  const frame = await frameHolding(tab, id, "the pin-send page, its link down");
+  if (!frame) {
+    on.kit.check("page only: the page is shown", false, "not shown");
+    await tab.close();
+    return;
+  }
+  await frame.waitForSelector("#two");
+  await tab.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  const b = await screenBox(there, frame, "#two");
+  await commentAt(
+    there,
+    b.x + b.w * 0.6,
+    b.y + b.h / 2,
+    "Written with the link down."
+  );
+  await tab.keyboard.press("Escape");
+  const rowSays = async () => {
+    const rail = await rowsOf(there);
+    const row = rail.locator('li:has([data-slot="pin-row"][data-pin-row="3"])');
+    return {
+      said:
+        (
+          await row
+            .locator("[data-not-sent]")
+            .textContent()
+            .catch(() => null)
+        )?.trim() ?? null,
+      send:
+        (
+          await row
+            .locator('[data-slot="pin-send"]')
+            .textContent()
+            .catch(() => null)
+        )?.trim() ?? null,
+    };
+  };
+  const down = await until(
+    "the page-only comment's row saying why",
+    rowSays,
+    (now) => !!now.said,
+    8000
+  ).catch(rowSays);
+  // What the hub holds, as the desk's own page (its link up) has it.
+  const desk = await frameHolding(on.page, id, "the pin-send page on the desk");
+  const heldBefore = desk ? !!pinNumbered((await docOf(desk)).pins, 3) : true;
+  // Through a reload, still down: kept on the device.
+  await open(tab, `${origin}/session/${on.session}`, COMPOSER);
+  const again = await frameHolding(tab, id, "the pin-send page after a reload");
+  const kept = again
+    ? await until(
+        "the page-only comment back after a reload",
+        async () => pinNumbered((await docOf(again)).pins, 3),
+        Boolean,
+        10_000
+      ).catch(() => undefined)
+    : undefined;
+  const afterReload = await until(
+    "its row after the reload",
+    rowSays,
+    (now) => !!now.said,
+    10_000
+  ).catch(rowSays);
+  on.kit.check(
+    'page only: a comment written while the page\'s link is down stands only on the page; its row says "Not sent: …" why, with Send again, and it stays through a reload',
+    !heldBefore &&
+      !!down.said?.startsWith("Not sent: ") &&
+      down.send === "Send again" &&
+      !!kept &&
+      !!afterReload.said?.startsWith("Not sent: ") &&
+      afterReload.send === "Send again",
+    `before ${JSON.stringify(down)}; on the hub ${heldBefore}; after a reload ${JSON.stringify(afterReload)}; kept ${!!kept}`
+  );
+  // The link back: Send again takes it to the hub, then to the session.
+  link.down = false;
+  const rail = await rowsOf(there);
+  await rail
+    .locator(
+      'li:has([data-slot="pin-row"][data-pin-row="3"]) [data-slot="pin-send"]'
+    )
+    .click();
+  const sent = again
+    ? await until(
+        "the page-only comment sent",
+        async () => pinNumbered((await docOf(again)).pins, 3),
+        (pin) => !!pin?.sentAt,
+        DELIVERY_MS
+      ).catch(() => undefined)
+    : undefined;
+  on.kit.check(
+    "page only: with its link back, Send again takes the comment to the hub and sends it",
+    !!sent?.sentAt,
+    `sentAt ${String(sent?.sentAt)}`
+  );
+  await tab.close();
+};
+
+/** A comment's pin written straight into the page's doc, as a page can: its one entry `text`. */
+const writePin = (frame: Frame, number: number, text: string) =>
+  frame.evaluate(
+    ({ n, words }) => {
+      const { doc } = (
+        window as unknown as {
+          cawcoArtifact: {
+            doc: {
+              getMap: (name: string) => {
+                set: (k: string, v: unknown) => void;
+              };
+            };
+          };
+        }
+      ).cawcoArtifact;
+      const id = `probe-refused-${n}`;
+      const at = new Date().toISOString();
+      doc.getMap("pins").set(id, {
+        id,
+        number: n,
+        kind: "comment",
+        anchor: { selector: "#one", source: null, text: "The first paragraph" },
+        at,
+        by: "person",
+        elements: [],
+        thread: [{ id: `${id}-1`, by: "person", text: words, at }],
+      });
+      return id;
+    },
+    { n: number, words: text }
+  );
+
+/** Pin `n`'s row in the rail: its "Not sent" line and its Send, as drawn. */
+const notSentRow = async (on: On, n: number) => {
+  const rail = await rowsOf(on);
+  const row = rail.locator(
+    `li:has([data-slot="pin-row"][data-pin-row="${n}"])`
+  );
+  return {
+    said:
+      (
+        await row
+          .locator("[data-not-sent]")
+          .textContent()
+          .catch(() => null)
+      )?.trim() ?? null,
+    send:
+      (
+        await row
+          .locator('[data-slot="pin-send"]')
+          .textContent()
+          .catch(() => null)
+      )?.trim() ?? null,
+  };
+};
+
+/**
+ * A refused write keeps the comment (research/pi-durable.md §13.9 C): a
+ * comment the hub won't keep (its words past what an entry holds) is never
+ * let go when the page starts again from the hub's doc; its row says why in
+ * the hub's words with Send again, through a reload; Send again writes it
+ * once more, and refused again it is still kept, saying why.
+ */
+const refusedChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "refused",
+    html: SEND_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const frame = await frameHolding(on.page, id, "the refused page in the pane");
+  if (!frame) {
+    on.kit.check("refused: the page is shown", false, made.slice(0, 300));
+    return;
+  }
+  await frame.waitForSelector("#one");
+  const pinId = await writePin(frame, 1, "x".repeat(2001));
+  const told = await until(
+    "the refused comment's row saying why",
+    () => notSentRow(on, 1),
+    (now) => !!now.said,
+    15_000
+  ).catch(() => notSentRow(on, 1));
+  const onHub = !!(await docOf(frame)).pins[pinId];
+  await shutList(on);
+  const { origin } = new URL(on.page.url());
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const back = await frameHolding(
+    on.page,
+    id,
+    "the refused page after a reload"
+  );
+  const afterReload = back
+    ? await until(
+        "the refused comment's row after a reload",
+        () => notSentRow(on, 1),
+        (now) => !!now.said,
+        15_000
+      ).catch(() => notSentRow(on, 1))
+    : { said: null, send: null };
+  on.kit.check(
+    'refused: a comment the hub refuses is kept on the device, never let go: its row says "Not sent: …" in the hub\'s words with Send again, and still after a reload; the hub holds none of it',
+    !onHub &&
+      !!told.said?.startsWith("Not sent: ") &&
+      told.send === "Send again" &&
+      afterReload.said === told.said &&
+      afterReload.send === "Send again",
+    `first ${JSON.stringify(told)}; after a reload ${JSON.stringify(afterReload)}; on the hub ${onHub}`
+  );
+  // Send again: written once more, refused once more, still kept and saying why.
+  await (
+    await rowsOf(on)
+  )
+    .locator(
+      'li:has([data-slot="pin-row"][data-pin-row="1"]) [data-slot="pin-send"]'
+    )
+    .click();
+  await settle(on.page, 4000);
+  const again = await until(
+    "the comment kept after Send again",
+    () => notSentRow(on, 1),
+    (now) => !!now.said,
+    15_000
+  ).catch(() => notSentRow(on, 1));
+  on.kit.check(
+    "refused: Send again writes it once more; refused again, it is still kept with why and Send again",
+    !!again.said?.startsWith("Not sent: ") && again.send === "Send again",
+    JSON.stringify(again)
+  );
+  // Its thread's Delete lets it go from the device.
+  await (
+    await rowsOf(on)
+  )
+    .locator('[data-slot="pin-row"][data-pin-row="1"]')
+    .click();
+  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  await card.locator('[data-slot="delete"]').click();
+  await card
+    .locator('[data-ask="delete"]')
+    .getByRole("button", { name: "Delete comment" })
+    .click();
+  const left = await until(
+    "the refused comment's row gone",
+    async () =>
+      (await on.page
+        .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="1"]`)
+        .count()) === 0,
+    Boolean,
+    8000
+  ).catch(() => false);
+  const kept = await (
+    (await frameHolding(on.page, id, "the refused page after its delete")) ??
+    frame
+  ).evaluate((aid) => localStorage.getItem(`cawco-refused-pins:${aid}`), id);
+  on.kit.check(
+    "refused: its thread's Delete lets the refused comment go: its row leaves and the device keeps none of it",
+    left && kept === null,
+    `row gone ${left}; kept ${String(kept).slice(0, 120)}`
+  );
+  await shutList(on);
+};
+
+/**
+ * A hub restart between the marking and the Send keeps the marks'
+ * pictures (research/pi-durable.md §13.9 C): a comment's picture reaches
+ * the hub's disk as soon as the page posts it; the hub stops and starts;
+ * Send then delivers the comment with its picture.
+ */
+const restartChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "restart-keeps",
+    html: SEND_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const frame = await frameHolding(on.page, id, "the restart page in the pane");
+  if (!frame) {
+    on.kit.check("restart: the page is shown", false, made.slice(0, 300));
+    return;
+  }
+  await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  const b = await screenBox(on, frame, "#one");
+  await commentAt(
+    on,
+    b.x + b.w * 0.3,
+    b.y + b.h / 2,
+    "Keep my picture through a restart."
+  );
+  await on.page.keyboard.press("Escape");
+  const marks = join(
+    dirname(on.fleet.env.CAWCO_DB_PATH as string),
+    "artifacts",
+    id,
+    "marks"
+  );
+  const pin = await until(
+    "the comment in the doc",
+    async () => pinNumbered((await docOf(frame)).pins, 1),
+    Boolean,
+    10_000
+  ).catch(() => undefined);
+  const onDisk = await until(
+    "its picture on the hub's disk",
+    () =>
+      existsSync(marks) &&
+      readdirSync(marks).some(
+        (name) => name === `${encodeURIComponent(pin?.id ?? "")}.png`
+      ),
+    Boolean,
+    15_000
+  ).catch(() => false);
+  const saidBefore = on.said.length;
+  await on.fleet.stop("hub");
+  on.fleet.launch("hub");
+  await on.fleet.hubUp();
+  const { origin } = new URL(on.page.url());
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const back = await frameHolding(
+    on.page,
+    id,
+    "the restart page after the hub's restart"
+  );
+  // The hub down a moment, on purpose: the page's failed requests and sockets then are the restart's, not an error of the pages.
+  const during = on.said.splice(saidBefore);
+  on.said.push(...during.filter((line) => !HUB_DOWN.test(line)));
+  const heardBefore = heard.length;
+  const row = (await rowsOf(on)).locator(
+    'li:has([data-slot="pin-row"][data-pin-row="1"]) [data-slot="pin-send"]'
+  );
+  await row.click({ timeout: 30_000 });
+  const delivered = await until(
+    "the delivery after the restart",
+    () =>
+      heard
+        .slice(heardBefore)
+        .find(
+          (one) => NOTICE.test(one.last) && one.last.includes("restart-keeps")
+        ),
+    Boolean,
+    DELIVERY_MS * 2
+  ).catch(() => undefined);
+  const pictures = delivered?.body.match(IMAGE_BLOCK)?.length ?? 0;
+  const sent = back ? pinNumbered((await docOf(back)).pins, 1) : undefined;
+  on.kit.check(
+    "restart: a comment's picture is on the hub's disk once the page posts it; after the hub stops and starts, Send delivers the comment with its picture",
+    onDisk && !!delivered && pictures >= 1 && !!sent?.sentAt,
+    `on disk ${onDisk}; delivered ${!!delivered}; pictures ${pictures}; sentAt ${String(sent?.sentAt)}`
+  );
+  await shutList(on);
+};
+
+/** What a page says while the hub is down for a restart: a failed request or socket to it. */
+const HUB_DOWN =
+  /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established/;
+
+/** The thread head's controls by their names, and each one's top. */
+const threadHead = (card: Locator) =>
+  card.evaluate((el) => {
+    const head = el.querySelector('[data-slot="head"]');
+    const buttons = [...(head?.querySelectorAll("button[aria-label]") ?? [])];
+    return {
+      named: buttons.map((button) => button.getAttribute("aria-label") ?? ""),
+      tops: buttons.map((button) =>
+        Math.round(button.getBoundingClientRect().top)
+      ),
+    };
+  });
+
+/**
+ * Delete is one press in the thread's head (the owner's "deleting the
+ * thread shouldn't be two clicks hidden"): Resolve, Delete comment, ⋯ and
+ * Close stand on the head's row; ⋯ keeps Copy link alone; one press on
+ * Delete asks in the card itself ("Delete comment N?", no dialog, DESIGN.md
+ * A thread beside its pin), and its confirm deletes the pin. On the desk,
+ * and on the phone's foot sheet.
+ */
+const deleteHeadChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "delete-head",
+    html: SEND_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const frame = await frameHolding(on.page, id, "the delete page in the pane");
+  if (!frame) {
+    on.kit.check("delete: the page is in the pane", false, made.slice(0, 300));
+    return;
+  }
+  await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  for (const selector of ["#one", "#two"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one comment, then the next
+    const b = await screenBox(on, frame, selector);
+    await commentAt(on, b.x + b.w * 0.3, b.y + b.h / 2, "Delete me.");
+  }
+  await on.page.keyboard.press("Escape");
+  await on.page.locator(`${PANE} [role='tab'][aria-keyshortcuts='V']`).click();
+  await pageInComment(frame, false);
+  const pinsNow = async () => (await docOf(frame)).pins;
+  /** Pin `n`'s thread, its head read, Delete pressed once, its ask confirmed: what each step showed. */
+  const deleteOne = async (screen: Page, where: Frame, n: number) => {
+    const card = await openThread({ ...on, page: screen }, where, n);
+    const head = await threadHead(card);
+    await card
+      .locator(`[data-slot="head"] button[aria-label="More for comment ${n}"]`)
+      .click()
+      .catch(() => undefined);
+    const menu = await screen
+      .getByRole("menuitem")
+      .allTextContents()
+      .catch(() => [] as string[]);
+    await screen.keyboard.press("Escape");
+    await card.locator('[data-slot="delete"]').click();
+    const ask = card.locator('[data-ask="delete"]');
+    const asked = await ask
+      .waitFor({ timeout: 3000 })
+      .then(() => ask.textContent())
+      .catch(() => null);
+    const blocking = await screen.evaluate(
+      () =>
+        document.querySelectorAll("dialog[open], [aria-modal='true']").length
+    );
+    const pin = pinNumbered(await pinsNow(), n);
+    await ask.getByRole("button", { name: "Delete comment" }).click();
+    const left = await until(
+      `pin ${n} deleted`,
+      pinsNow,
+      (pins) => !pinNumbered(pins, n),
+      5000
+    ).catch(pinsNow);
+    return {
+      head,
+      menu: menu.map((item) => item.trim()),
+      asked: asked?.includes(`Delete comment ${n}?`) ?? false,
+      blocking,
+      deleted: !!pin && !pinNumbered(left, n),
+    };
+  };
+  const desk = await deleteOne(on.page, frame, 1);
+  on.kit.check(
+    'delete (desk): the thread\'s head holds Resolve, Delete comment, ⋯ and Close on one row; ⋯ keeps Copy link alone; one press on Delete asks in the card ("Delete comment 1?", no dialog), and its confirm deletes the pin',
+    JSON.stringify(desk.head.named.filter((name) => name !== "")) ===
+      JSON.stringify([
+        "Resolve",
+        "Delete comment",
+        "More for comment 1",
+        "Close",
+      ]) &&
+      new Set(desk.head.tops).size === 1 &&
+      JSON.stringify(desk.menu) === JSON.stringify(["Copy link"]) &&
+      desk.asked &&
+      desk.blocking === 0 &&
+      desk.deleted,
+    JSON.stringify(desk)
+  );
+
+  const phone = await on.kit.page("phone");
+  const { origin } = new URL(on.page.url());
+  await open(phone, `${origin}/session/${on.session}`, COMPOSER);
+  const onPhone = await frameHolding(phone, id, "the delete page on the phone");
+  if (!onPhone) {
+    on.kit.check(
+      "delete (phone): the page is on the phone",
+      false,
+      "not shown"
+    );
+    await phone.close();
+    return;
+  }
+  await onPhone.waitForSelector("#two");
+  await settle(phone, 600);
+  const small = await deleteOne(phone, onPhone, 2);
+  const target = await phone
+    .locator('[data-slot="pin-card"] [data-slot="delete"]')
+    .boundingBox()
+    .catch(() => null);
+  on.kit.check(
+    "delete (phone): the thread's sheet holds Delete comment in its head; one tap asks in the sheet (no dialog), and its confirm deletes the pin",
+    small.head.named.includes("Delete comment") &&
+      JSON.stringify(small.menu) === JSON.stringify(["Copy link"]) &&
+      small.asked &&
+      small.blocking === 0 &&
+      small.deleted,
+    `${JSON.stringify(small)}; delete box after ${JSON.stringify(target)}`
+  );
+  await phone.close();
 };
 
 /*

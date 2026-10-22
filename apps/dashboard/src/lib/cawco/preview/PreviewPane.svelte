@@ -1193,13 +1193,13 @@
    * resolve), each stroke group no comment stands on. Drawn only above 0.
    */
   const unsentCount = $derived(
-    view
+    (view
       ? Object.values(view.choices).filter(
           (entry) => !view?.sentAt || entry.at > view.sentAt
-        ).length +
-          pins.filter(pinUnsent).length +
-          view.looseInk
-      : 0
+        ).length + view.looseInk
+      : 0) +
+      // Every unsent comment, one only the page holds yet among them: the person's words are never left without a Send.
+      pins.filter(pinUnsent).length
   );
   /** The pane's own width, px: the rail's room is the pane's, not the window's. */
   let paneW = $state(0);
@@ -1335,6 +1335,67 @@
       failure = { message: failureWords(error), again: null };
     } finally {
       sending = false;
+    }
+  }
+  /** The comments whose own Send is on its way. */
+  let pinsSending = $state.raw<ReadonlySet<string>>(new Set());
+  /**
+   * Why comment `id` hasn't reached the session, in words, when it is
+   * owed for a reason: a Send of it no one took (the hub's `notSent`), or
+   * it stands only in the page's doc, which hasn't reached the hub (what
+   * closed its link, else that it hasn't yet), kept on the device meanwhile.
+   */
+  const notSentWhy = (pin: Pin): string | null =>
+    pin.notSent?.why ??
+    (onlyOnPage(pin.id) ? (linkDown ?? commentWords.notOnHub) : null);
+  /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its own Send says it didn't. Our call. */
+  const REACH_HUB_MS = 10_000;
+  /** A reason's own full stop, which the sentence that quotes it puts back. */
+  const REASON_STOP = /\.$/;
+  /** Resolves once the pane's doc holds comment `id` (the page's link carried it to the hub); rejects, saying why, when it doesn't within {@link REACH_HUB_MS}. */
+  const reachedHub = (id: string) =>
+    new Promise<void>((resolve, reject) => {
+      const started = Date.now();
+      const look = setInterval(() => {
+        if (view?.pins.some((pin) => pin.id === id)) {
+          clearInterval(look);
+          resolve();
+        } else if (Date.now() - started > REACH_HUB_MS) {
+          clearInterval(look);
+          reject(
+            new Error(
+              `This comment hasn't reached the hub: ${(linkDown ?? commentWords.notOnHub).replace(REASON_STOP, "")}. It's kept on this device: Send again once its link is back.`
+            )
+          );
+        }
+      }, 200);
+    });
+  /**
+   * A comment's own Send (its row's, its thread's): it alone goes, as the
+   * page's Send would carry it, with its pictures first. One only the page
+   * holds yet has its link opened again first, and goes once it is on the
+   * hub. A Send no one took says why on the pin itself (the hub's
+   * `notSent`, which the doc brings back) as well as in the band over the
+   * page.
+   */
+  async function sendPin(id: string) {
+    if (!artifact || sending || pinsSending.has(id)) {
+      return;
+    }
+    pinsSending = new Set([...pinsSending, id]);
+    try {
+      if (onlyOnPage(id)) {
+        // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
+        post({ type: "cawco:resend-pin", id });
+        relink();
+        await reachedHub(id);
+      }
+      await picturesFirst();
+      await sendArtifact(instanceId, artifact.id, "", [id]);
+    } catch (error) {
+      failure = { message: failureWords(error), again: null };
+    } finally {
+      pinsSending = new Set([...pinsSending].filter((one) => one !== id));
     }
   }
   let sentSeen: string | null | undefined;
@@ -2471,6 +2532,29 @@
       case "cawco:delete-result":
         heardPageWrite(message.type, message);
         break;
+      case "cawco:page-pins":
+        // The pins the page holds while its link isn't synced (a reload's, given back by the device among them): those the pane's doc lacks stand as the page's.
+        for (const pin of Array.isArray(message.pins) ? message.pins : []) {
+          const one = pin as Partial<Pin> | null;
+          const id = one?.id;
+          if (
+            !(typeof id === "string" && one) ||
+            view?.pins.some((held) => held.id === id)
+          ) {
+            continue;
+          }
+          // One the hub refused breaks a bound by its nature (the hub's reason says which): it is listed whole, so its words stay in reach.
+          if (
+            one.notSent &&
+            typeof one.number === "number" &&
+            Array.isArray(one.thread)
+          ) {
+            pagePins = { ...pagePins, [id]: one as Pin };
+          } else {
+            pageSays(id, pin);
+          }
+        }
+        break;
       case "cawco:sync":
         // The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood, or at once when lost to silence.
         pageLost = message.state === "lost" ? lostWhy(message.error) : null;
@@ -3165,8 +3249,11 @@
     onresolve={(id, resolved) => resolvePin(resolved, id)}
     onretry={relink}
     onsend={sendAll}
+    onsendpin={sendPin}
     open={openPin}
+    whyNotSent={notSentWhy}
     {pins}
+    {pinsSending}
     {sending}
     {unread}
     unsent={unsentCount}
@@ -3682,11 +3769,18 @@
           onreply={(text) => reply(text)}
           onresolve={(resolved) => resolvePin(resolved)}
           onring={(on) => post({ type: "cawco:composer-ring", on })}
+          onsend={() => {
+            if (cardPin) {
+              sendPin(cardPin.id);
+            }
+          }}
           parent={cardParent?.id === cardPin.id ? cardParent.name : null}
           pin={cardPin}
           placing={placing === cardPin.id}
           problem={cardError}
           sending={replying}
+          sendingPin={sending || pinsSending.has(cardPin.id)}
+          whyNotSent={notSentWhy(cardPin)}
         />
       </PinFloat>
     {/if}

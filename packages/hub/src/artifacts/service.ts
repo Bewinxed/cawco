@@ -168,6 +168,7 @@ import {
   weightSaid,
 } from "./component";
 import type { ArtifactDocs } from "./docs";
+import { heldPictures } from "./held-pictures";
 import {
   type ArtifactAsked,
   type ArtifactFacts,
@@ -1258,7 +1259,7 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     { refused: string; status: ArtifactRefusal["status"] } | undefined
   >;
-  /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
+  /** Whether a session has ended: it takes no input now, so its marks go to its parent, else its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
   /**
    * Whether a session's asks are over for good (Needs you's rule 4): it
@@ -2099,6 +2100,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const answerable = (instance: InstanceRow): ArtifactRow[] => [
     ...db.ofInstance(instance.id),
+    // Its delegates' that have ended: their marks come to it (server.ts `deliverArtifactMarks`).
+    ...[...deps.tree(instance)].flatMap((id) => {
+      const delegate = id === instance.id ? undefined : deps.instance(id);
+      return delegate?.parentInstanceId === instance.id && deps.ended(delegate)
+        ? db.ofInstance(id)
+        : [];
+    }),
     ...deps
       .ledProjects(instance)
       .flatMap((projectId) =>
@@ -2153,8 +2161,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Whether the session is the one the artifact's marks go to: its writer,
-   * or its project's lead once the writer has ended. What it reads of them
-   * counts as heard.
+   * or, once the writer has ended, the writer's parent or its project's
+   * lead. What it reads of them counts as heard.
    */
   const takes = (instance: InstanceRow, row: ArtifactRow): boolean => {
     if (row.instanceId === instance.id) {
@@ -3109,13 +3117,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * back to {@link MARKS_QUIET_MS} from now, never past
    * {@link MARKS_LONGEST_MS} from the burst's first. The page posts its
    * pictures of the marks it just made beside the doc (sync.ts
-   * `artifactPictures`); they wait here for the Send.
+   * `artifactPictures`); they wait for the Send on disk, beside the
+   * artifact's own files ({@link held}), so a hub restart between the
+   * marking and the Send keeps them.
    */
   const bursts = new Map<string, { first: number; timer: HubTimer }>();
-  const held = new Map<
-    string,
-    { pictures: Map<string, string>; url?: string }
-  >();
+  const held = heldPictures(deps.root);
   const delivering = new Set<string>();
   const marked = (id: string) => {
     const now = Date.now();
@@ -3210,22 +3217,75 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * What a Send carries of an artifact's doc: with `body.pins` (a comment's
+   * own Send) those comments alone, no picks and no note; else every pick
+   * since the last Send, every mark the session hasn't heard, and the note.
+   * Refused when it would carry nothing.
+   */
+  const sendOwes = (
+    doc: Doc,
+    state: Record<string, ChoiceEntry>,
+    body: SendBody
+  ) => {
+    const { sentAt } = metaOf(doc);
+    const only = body.pins ? new Set(body.pins) : undefined;
+    const picked =
+      !only &&
+      Object.values(state).some((entry) => !sentAt || entry.at > sentAt);
+    const all = marksOwed(doc);
+    const owed = all.owed.filter((pin) => !only || only.has(pin.id));
+    const marks = owed.length + (only ? 0 : all.loose.length) > 0;
+    const note = only ? null : body.text?.trim() || null;
+    if (only && !marks) {
+      throw new ArtifactRefusal(
+        409,
+        "Nothing new to send on this comment: the session has heard all of it."
+      );
+    }
+    if (!(picked || marks || note)) {
+      throw new ArtifactRefusal(
+        409,
+        "Nothing new to send: every pick and comment here has gone to the session."
+      );
+    }
+    return { only, picked, marks, note };
+  };
+
+  /**
+   * A Send no one took, said on each pin it carried (core `Pin.notSent`): the
+   * pin says why, wherever it is shown, and offers Send again until a
+   * delivery carries it ({@link stampDelivered} clears it).
+   */
+  const notSent = (id: string, owed: Pin[], why: string) => {
+    if (owed.length === 0) {
+      return;
+    }
+    const at = new Date().toISOString();
+    docs.transact(id, "hub", (live) => {
+      const livePins = live.getMap("pins");
+      for (const pin of owed) {
+        const now = livePins.get(pin.id) as Pin | undefined;
+        if (now) {
+          livePins.set(pin.id, { ...now, notSent: { at, why } });
+        }
+      }
+    });
+  };
+
+  /**
    * What went is let go of the held pictures, and what is gone from the doc;
    * a pin not sent yet keeps its own for its Send.
    */
   const letGoPictures = (id: string, went: string[], standing: Set<string>) => {
-    const kept = held.get(id);
-    if (!kept) {
-      return;
-    }
     const gone = new Set(went);
-    for (const mark of kept.pictures.keys()) {
+    for (const mark of held.marks(id)) {
       if (gone.has(mark) || !standing.has(mark)) {
-        kept.pictures.delete(mark);
+        held.letGo(id, mark);
       }
     }
-    if (kept.pictures.size === 0) {
-      held.delete(id);
+    // Nothing held now: its address goes with them, the last delivery's standing in.
+    if (held.marks(id).length === 0) {
+      held.drop(id);
     }
   };
 
@@ -3279,7 +3339,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** Where the person marked artifact `id`: the page's address the page last said, else the last delivery's, else its own route. */
   const addressOf = (id: string, doc: Doc): string =>
-    held.get(id)?.url ??
+    held.url(id) ??
     (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
     routeOf(id);
 
@@ -3289,10 +3349,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * the page drew round it.
    */
   const loosePictures = (row: ArtifactRow, loose: InkGroup[]) => {
-    const kept = held.get(row.id);
     const canvas = row.kind === "canvas" ? pictureOf(row.id) : null;
     const pictureOfGroup = (group: InkGroup) =>
-      row.kind === "canvas" ? null : (kept?.pictures.get(group.id) ?? null);
+      row.kind === "canvas" ? null : held.picture(row.id, group.id);
     return {
       canvas,
       pictureOfGroup,
@@ -3334,30 +3393,33 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const deliverMarks = async (
     id: string,
-    send: { note: string | null } | null
+    send: { note: string | null; only?: ReadonlySet<string> } | null
   ): Promise<MarksOutcome | "nothing"> => {
     const row = db.get(id);
     const instance = row ? holder(row) : undefined;
     if (!(row && instance)) {
-      held.delete(id);
+      held.drop(id);
       return "nothing";
     }
     const doc = docs.doc(id);
     const all = marksOwed(doc);
     const { pins, groups } = all;
-    const owed = send ? all.owed : [];
-    const loose = send ? all.loose : [];
+    const only = send?.only;
+    // One comment's own Send carries that comment alone: no other pin, no loose ink.
+    const owed = send
+      ? all.owed.filter((pin) => !only || only.has(pin.id))
+      : [];
+    const loose = send && !only ? all.loose : [];
     const errors = errorsOwed(row, doc);
     const saves = savesOwed(row, doc);
     if (owed.length + loose.length + errors.length + saves.length === 0) {
       return "nothing";
     }
-    const kept = held.get(id);
     const url = addressOf(id, doc);
     const { canvas, pictureOfGroup, ahead } = loosePictures(row, loose);
     const { images, attachments, carried } = carryAttachments(
       owed,
-      (pin) => kept?.pictures.get(pin.id),
+      (pin) => held.picture(id, pin.id) ?? undefined,
       ahead
     );
     const marks = [
@@ -3381,6 +3443,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       console.warn(
         `[artifacts] ${id}: the person's marks reached no one, and stay owed: ${outcome.reason}`
       );
+      notSent(id, owed, outcome.reason);
       return outcome;
     }
     stampDelivered(
@@ -6398,8 +6461,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * The page's pictures of the marks the person just made there (core
      * `MarkPictures`), each a crop round one mark, by the pin's or the
-     * stroke group's id: the next delivery carries the ones it delivers. A
-     * later post replaces a mark's picture.
+     * stroke group's id, kept on disk ({@link heldPictures}): the next
+     * delivery carries the ones it delivers. A later post replaces a mark's
+     * picture.
      */
     pictures: (
       instanceId: string,
@@ -6407,17 +6471,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       body: MarkPictures
     ): { held: number } => {
       const row = own(sessionOf(instanceId), id);
-      const kept: { pictures: Map<string, string>; url?: string } = held.get(
-        row.id
-      ) ?? { pictures: new Map() };
-      for (const picture of body.pictures) {
-        kept.pictures.set(picture.mark, picture.png);
-      }
-      if (body.url) {
-        kept.url = body.url;
-      }
-      held.set(row.id, kept);
-      return { held: kept.pictures.size };
+      // On disk before the page hears it was held: a restart keeps it for the Send.
+      held.hold(row.id, body);
+      return { held: held.marks(row.id).length };
     },
 
     /**
@@ -6443,7 +6499,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * there are picks, or a note with nothing else. The note is kept as
      * `sentText` for `artifact_read`. A Send while one is on its way, or
      * with nothing new, is refused; one no one took says why, and what it
-     * carried stays owed.
+     * carried stays owed, each pin of it saying why ({@link notSent}).
+     * With `body.pins`, a comment's own Send: those comments alone go, no
+     * picks and no note, and the page's Send time stands.
      */
     send: async (
       instanceId: string,
@@ -6454,19 +6512,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const row = own(instance, id);
       const doc = docs.doc(row.id);
       const state = stateOf(doc);
-      const { sentAt } = metaOf(doc);
-      const picked = Object.values(state).some(
-        (entry) => !sentAt || entry.at > sentAt
-      );
-      const { owed, loose } = marksOwed(doc);
-      const marks = owed.length + loose.length > 0;
-      const note = body.text?.trim() || null;
-      if (!(picked || marks || note)) {
-        throw new ArtifactRefusal(
-          409,
-          "Nothing new to send: every pick and comment here has gone to the session."
-        );
-      }
+      const { only, picked, marks, note } = sendOwes(doc, state, body);
       if (delivering.has(row.id)) {
         throw new ArtifactRefusal(
           409,
@@ -6479,7 +6525,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           await deps.sending(instance, row, state);
         }
         if (marks) {
-          const outcome = await deliverMarks(row.id, { note });
+          const outcome = await deliverMarks(row.id, {
+            note,
+            ...(only ? { only } : {}),
+          });
           if (outcome !== "nothing" && !outcome.ok) {
             throw new ArtifactRefusal(
               503,
@@ -6492,6 +6541,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
       } finally {
         delivering.delete(row.id);
+      }
+      if (only) {
+        // Not the page's Send: its picks stay owed, its Send time stands.
+        return { choices: state, ...metaOf(doc) };
       }
       const at = new Date().toISOString();
       docs.transact(row.id, "hub", (live) => {

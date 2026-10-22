@@ -161,6 +161,8 @@ const routePageLink = (page: Page) =>
       pageLink.open.delete(ws);
     });
   });
+/** The mode menu's Comment, its shortcut after it. */
+const COMMENT_ITEM = /^Comment/;
 const LATER_WORDS = "And one more word after you read it.";
 /** The delivery routed to Caw: the writer's page, a pin's id, and that it comes to him. */
 const ROUTED =
@@ -693,8 +695,20 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   const comment = page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
-  await comment.focus();
-  await page.keyboard.press("c");
+  // The annotation counts on Send even while it stands only on the page, so
+  // the head may fold its mode into one button: C reaches the pane anyway.
+  if (await comment.isVisible().catch(() => false)) {
+    await comment.focus();
+    await page.keyboard.press("c");
+  } else {
+    // The mode folded into one button: it opens the three, and Comment is one of them.
+    await page
+      .locator(
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label^="Mode: "]'
+      )
+      .click();
+    await page.getByRole("menuitemradio", { name: COMMENT_ITEM }).click();
+  }
   await pageInComment(frame);
   await frame.locator("#b").scrollIntoViewIfNeeded();
   await settle(page, 300);

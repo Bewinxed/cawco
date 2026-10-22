@@ -162,6 +162,12 @@ let ringed = false;
 let drafting: {
   chain: Element[];
   chosen: number;
+  /**
+   * Each of the chain's elements as a pin would hold it, read at the press:
+   * what the comment stands on however the page draws its element again
+   * while it is written ({@link draftEl}).
+   */
+  named: ReturnType<typeof named>[];
   /** Its composer is closed and its words kept: the pill stays, pressable, and nothing is chosen. */
   parked?: boolean;
   /** Where on its first target it stands, as fractions of its box: a draft brought back after a reload keeps its place however the page lays out. */
@@ -235,10 +241,8 @@ function drawsBox(el: Element): boolean {
 
 /** The one target drawn: the chosen pin's element, else the element under the pointer in Comment mode; and its label in Comment mode. */
 function paint() {
-  const drafted =
-    drafting && !drafting.parked
-      ? (drafting.chain[drafting.chosen] ?? null)
-      : null;
+  // The draft's element as the page holds it now: drawn again, the one there takes its outline.
+  const drafted = drafting && !drafting.parked ? draftEl() : null;
   const pinned =
     pinEl?.isConnected && (!commenting() || composing() || pinLeads)
       ? pinEl
@@ -335,6 +339,7 @@ const pins: Pins = startPins({
   locate,
   outline,
   post,
+  redraft: () => (draftEl() ? draftTarget() : null),
   reopenDraft: () => reopenDraft(),
   waiting,
 });
@@ -449,6 +454,7 @@ function tellLink(link: Link) {
     ...(link.error ? { error: link.error } : {}),
     ...(link.silent ? { silent: true } : {}),
   });
+  tellPagePins();
 }
 
 /** How long a burst of doc changes (typing a note) is gathered into one word to the host. Our call. */
@@ -467,7 +473,31 @@ function tellDoc() {
   docTelling = setTimeout(() => {
     docTelling = null;
     post("cawco:doc");
+    tellPagePins();
   }, DOC_TOLD_MS);
+}
+
+/**
+ * While the page's link to the hub isn't synced, the pins this page holds
+ * (`cawco:page-pins`): one written meanwhile, or given back by the device
+ * after a reload, may stand only here; and always the comments the hub
+ * refused, each with its reason (artifact.ts `refused`). The host lists
+ * each with why it isn't sent and its Send, so the person's words are
+ * never out of reach.
+ */
+function tellPagePins() {
+  const refused = artifact.refused();
+  const linked = artifact.link().state === "synced";
+  if (!artifact.keeps() || (linked && refused.length === 0)) {
+    return;
+  }
+  post("cawco:page-pins", {
+    pins: [
+      ...(linked ? [] : Object.values(artifact.doc().getMap("pins").toJSON())),
+      // The hub refused these: each carries its reason (`notSent`).
+      ...refused,
+    ],
+  });
 }
 
 function ready() {
@@ -1863,7 +1893,7 @@ function tellDraft() {
     chosen: drafting.chosen,
     chain: inked
       ? [{ anchor: inked.anchor, elements: inked.elements, ink: true }]
-      : drafting.chain.map(named),
+      : drafting.named,
     // What the host keeps to bring it back after a reload.
     ...(point ? { point } : {}),
     ...(inked ? { inkId: inked.id } : {}),
@@ -1909,8 +1939,10 @@ function restoreDraft(message: HostMessage) {
   const r = el.getBoundingClientRect();
   const fx = Number(target?.point?.x);
   const fy = Number(target?.point?.y);
+  const chain = group ? [el] : chainOf(el);
   drafting = {
-    chain: group ? [el] : chainOf(el),
+    chain,
+    named: group ? [] : chain.map(named),
     chosen: 0,
     x: r.left + (Number.isFinite(fx) ? fx : 0.5) * r.width,
     y: r.top + (Number.isFinite(fy) ? fy : 0.5) * r.height,
@@ -1937,9 +1969,31 @@ function restoreDraft(message: HostMessage) {
   paint();
 }
 
+/**
+ * The chosen element of the comment being written, as the page holds it
+ * now: its own while it stands in the page; once the page has drawn it
+ * again (a panel rebuilt, a list re-rendered), the one its anchor, read at
+ * the press, finds now, which takes its place; null while none stands there.
+ */
+function draftEl(): Element | null {
+  const el = drafting?.chain[drafting.chosen];
+  if (!(drafting && el)) {
+    return null;
+  }
+  if (el.isConnected || drafting.ink) {
+    return el;
+  }
+  const atPress = drafting.named[drafting.chosen];
+  const found = atPress ? (locate(atPress.anchor)?.el ?? null) : null;
+  if (found) {
+    drafting.chain[drafting.chosen] = found;
+  }
+  return found;
+}
+
 /** The chosen target of the comment being written, as pins.ts draws its hollow pill. */
 function draftTarget(): DraftTarget | null {
-  const el = drafting?.chain[drafting.chosen];
+  const el = draftEl();
   if (!(drafting && el)) {
     return null;
   }
@@ -1967,7 +2021,16 @@ function draftTarget(): DraftTarget | null {
  * well's corner, never beside its pill, until the page scrolled.
  */
 function startDraft(el: Element, x: number, y: number) {
-  drafting = { chain: chainOf(el), chosen: 0, x, y };
+  const chain = chainOf(el);
+  drafting = {
+    chain,
+    named: chain.map(named),
+    chosen: 0,
+    x,
+    y,
+    // Where on it the press landed, kept as its fractions: the pill stays there as the page scrolls or draws it again.
+    ...(el === el.ownerDocument.body ? {} : { point: pins.pointOn(el, x, y) }),
+  };
   tellDraft();
   pins.draft(draftTarget());
   paint();
@@ -1983,6 +2046,7 @@ function composeInk(target: DraftTarget, elements: PinnedElement[] | string[]) {
   }
   drafting = {
     chain: [target.el],
+    named: [],
     chosen: 0,
     x: 0,
     y: 0,
@@ -2005,6 +2069,34 @@ function endDraft() {
 }
 
 /**
+ * What the comment being written stands on as it is written: its element
+ * as the page holds it now ({@link draftEl}), read afresh; while the page
+ * holds none (drawing it again), as it was read at the press, which its
+ * pin's anchor finds once it is back. An ink group's Comment stands on its
+ * ink.
+ */
+function draftWritten(
+  at: NonNullable<typeof drafting>,
+  atPress: ReturnType<typeof named> | undefined
+): CommentTarget | null {
+  if (at.ink) {
+    return { anchor: at.ink.anchor, elements: at.ink.elements, ink: at.ink.id };
+  }
+  const point = at.chosen === 0 ? at.point : undefined;
+  const el = draftEl();
+  if (el) {
+    return {
+      anchor: anchorOf(el),
+      elements: [describe(el)],
+      ...(el === el.ownerDocument.body
+        ? {}
+        : { point: point ?? pins.pointOn(el, at.x, at.y) }),
+    };
+  }
+  return atPress ? { ...atPress, ...(point ? { point } : {}) } : null;
+}
+
+/**
  * The host's words for the comment being written (`cawco:comment`): its pin
  * and first entry in one write (core `commentOn`), answered as
  * `cawco:comment-result` with the pin, or the refusal's sentence, the
@@ -2017,8 +2109,9 @@ async function writeDraft(message: HostMessage) {
       ? (message.attachments as CommentAttachment[])
       : [],
   };
-  const el = drafting?.chain[drafting.chosen];
-  if (!(drafting && el)) {
+  const at = drafting;
+  const target = at && draftWritten(at, at.named[at.chosen]);
+  if (!(at && target)) {
     post("cawco:comment-result", {
       ok: false,
       error:
@@ -2031,16 +2124,6 @@ async function writeDraft(message: HostMessage) {
     return;
   }
   await artifact.whenKnown();
-  const at = drafting;
-  const target: CommentTarget = at.ink
-    ? { anchor: at.ink.anchor, elements: at.ink.elements, ink: at.ink.id }
-    : {
-        anchor: anchorOf(el),
-        elements: [describe(el)],
-        ...(el === el.ownerDocument.body
-          ? {}
-          : { point: pins.pointOn(el, at.x, at.y) }),
-      };
   const pin = commentOn(artifact.doc(), target, said);
   if (typeof pin === "string") {
     post("cawco:comment-result", { ok: false, error: pin });
@@ -2534,7 +2617,8 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       ),
     "cawco:delete": (message) =>
       personWrite(message, "cawco:delete-result", (pin) =>
-        deletePin(artifact.doc(), pin)
+        // One the hub refused stands only in the device's keep: it goes from there.
+        artifact.letGoRefused(pin) ? null : deletePin(artifact.doc(), pin)
       ),
     // A Send is about to go: the pictures of what is unheard reach the hub first, answered once they have.
     "cawco:pictures-now": async () => {
@@ -2554,6 +2638,12 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         drafting.parked = true;
         pins.draft(draftTarget());
         paint();
+      }
+    },
+    // A comment the hub refused, sent again (its Send again): written into the doc once more.
+    "cawco:resend-pin": (message) => {
+      if (typeof message.id === "string" && artifact.resend(message.id)) {
+        tellPagePins();
       }
     },
     // A draft the host kept across a reload: brought back at its target.

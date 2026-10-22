@@ -232,6 +232,7 @@
       onresolve={noop}
       onretry={noop}
       onsend={noop}
+      onsendpin={noop}
       open="pin-1"
       {pins}
       unread={new Set()}

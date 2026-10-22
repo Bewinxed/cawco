@@ -19,11 +19,13 @@
    * A comment's thread, as a card beside its pin (the owner's pick; DESIGN.md,
    * A thread beside its pin). Its head: the pin's pill, what it stands on
    * (a press scrolls the page to it and lights its element), Resolve or
-   * Reopen, ⋯ (Copy link; Pin it somewhere else while its element is gone;
-   * Delete comment) and Close, each the `sm` ghost. Under it, in meta, the
+   * Reopen, Delete comment, ⋯ (Copy link; Pin it somewhere else while its
+   * element is gone) and Close, each the `sm` ghost. Under it, in meta, the
    * element's nearest parent ("on Routine form"; none for the whole page);
    * then the line saying its element is gone, or that it stands resolved,
-   * each with its way back. Then the thread, the one part that scrolls: the
+   * each with its way back; then, while the session hasn't heard it, "Unsent"
+   * with its own Send ("Not sent: why" with Send again once a Send of it
+   * reached no one). Then the thread, the one part that scrolls: the
    * transcript's own turns (turn/: Turn, Well, Who), the person's words in
    * the reader's well and the agent's bare under its mark and the session's
    * name, each speaker line ending in its turn's age at rest, a later
@@ -79,7 +81,10 @@
     problem,
     draft,
     sending = false,
+    sendingPin = false,
+    whyNotSent = null,
     onreply,
+    onsend,
     onresolve,
     ondelete,
     onplace,
@@ -107,7 +112,13 @@
     draft: ComposerDraft;
     /** The reply is on its way: the glyph is the spinner. */
     sending?: boolean;
+    /** Its own Send, or the page's, is on its way. */
+    sendingPin?: boolean;
+    /** Why it hasn't reached the session, in words, when a Send of it failed or it stands only on the page; null when it is simply unsent. */
+    whyNotSent?: string | null;
     onreply: (text: string, extras: SendExtras) => void;
+    /** Its own Send: it alone goes to the session. */
+    onsend: () => void;
     onresolve: (resolved: boolean) => void;
     /** Deletes the pin once the person confirmed; rejects with the refusal's sentence. */
     ondelete: () => Promise<void>;
@@ -358,6 +369,17 @@
       variant="ghost"
     />
   {/if}
+  <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
+  <Button
+    data-box
+    aria-label={said.deleteComment}
+    data-slot="delete"
+    icon={IconTrash}
+    onclick={askDelete}
+    size="icon-sm"
+    title={said.deleteComment}
+    variant="ghost"
+  />
   <span class="flex flex-none" data-box>
     <RowMenu
       actions={[
@@ -375,12 +397,6 @@
               },
             ]
           : []),
-        {
-          destructive: true,
-          icon: IconTrash,
-          label: said.deleteComment,
-          onselect: askDelete,
-        },
       ]}
       label={`comment ${pin.number}`}
     />
@@ -433,6 +449,36 @@
       label={said.reopen}
       onclick={() => onresolve(false)}
       pad="none"
+      size="sm"
+      variant="link"
+    />
+  </div>
+{/if}
+{#if markState(pin) === "unsent"}
+  <!-- The session hasn't heard it: its own Send, one press; why a Send of it reached no one, with Send again. -->
+  <div
+    data-slot="unsent"
+    data-not-sent={whyNotSent ? "" : undefined}
+    class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+  >
+    <p
+      class={[
+        "m-0 min-w-0 text-pretty wrap-anywhere",
+        whyNotSent ? "text-status-fail-ink" : "text-brand-ink",
+      ]}
+      role="status"
+    >
+      {whyNotSent ? said.notSent(whyNotSent) : said.unsent}
+    </p>
+    <Button
+      aria-label={whyNotSent
+        ? said.sendCommentAgain(pin.number)
+        : said.sendComment(pin.number)}
+      data-slot="pin-send"
+      label={whyNotSent ? said.sendAgain : said.send}
+      onclick={onsend}
+      pad="none"
+      pending={sendingPin}
       size="sm"
       variant="link"
     />

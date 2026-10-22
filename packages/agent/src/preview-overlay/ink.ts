@@ -30,7 +30,8 @@
  * content changes round it or a transition ends, after a re-publish; and
  * never while nothing changes.
  * The element is found as a pin's is (core comments.ts `findAnchor`); a
- * page's group whose element is gone goes to `moved`. Its pins are pins.ts's.
+ * page's group whose element stands missing for a while (absent.ts) goes to
+ * `moved`. Its pins are pins.ts's.
  *
  * On a canvas the pen draws the canvas's own freedraw (Excalidraw), so this
  * layer stays off; the canvas's page tells the overlay where a stroke ended
@@ -46,6 +47,7 @@ import {
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { getStroke } from "perfect-freehand";
 import type { Map as YMap } from "yjs";
+import { absences } from "./absent";
 import { artifact } from "./artifact";
 import { clipOf, framesOf, frameWindows, rectOf, sizesIn } from "./frames";
 import { newId } from "./id";
@@ -897,9 +899,11 @@ export function startInk(deps: InkDeps): Ink {
     (artifact.kind() === "page" || artifact.kind() === "component") &&
     document.readyState !== "loading";
 
-  /** Whether a group no anchor finds is gone, not waiting on a frame still loading. */
+  /** Whether a group no anchor finds is missing, not waiting on a frame still loading. */
   const goneFrom = (group: InkGroup) =>
     !("selector" in group.anchor && deps.waiting(group.anchor));
+  /** How long each group has stood missing: one is gone only after a while, drawn again then. */
+  const absent = absences(() => draw());
 
   function draw() {
     for (const node of [...layer.children]) {
@@ -926,9 +930,12 @@ export function startInk(deps: InkDeps): Ink {
       group,
       el: "selector" in group.anchor ? deps.locate(group.anchor)?.el : null,
     }));
-    const gone = located
-      .filter(({ group, el }) => !el && goneFrom(group))
+    // Missing for a while, not for one read of a page drawing itself again (absent.ts).
+    const missing = located.filter(({ group, el }) => !el && goneFrom(group));
+    const gone = missing
+      .filter(({ group }) => absent.missed(group.id))
       .map(({ group }) => group);
+    absent.keep(missing.map(({ group }) => group.id));
     const found: InkGroup[] = [];
     const standing = new Set<Element>();
     for (const { group, el } of located) {

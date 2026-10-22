@@ -166,19 +166,24 @@ export const artifactSyncPath = (artifactId: string): string =>
  * The person's Send (the head's Send, the rail's): everything of the page
  * the session hasn't heard goes with one press, their note first, through
  * the hub's send on the dashboard's own origin, the one a page's
- * `cawco.send` reaches on its preview origin.
+ * `cawco.send` reaches on its preview origin. With `pins`, a comment's own
+ * Send: those comments alone go.
  */
 export async function sendArtifact(
   instanceId: string,
   artifactId: string,
-  note = ""
+  note = "",
+  pins?: string[]
 ): Promise<void> {
   const response = await fetch(
     `/api/instances/${encodeURIComponent(instanceId)}/artifacts/${encodeURIComponent(artifactId)}/send`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(note.trim() ? { text: note.trim() } : {}),
+      body: JSON.stringify({
+        ...(note.trim() ? { text: note.trim() } : {}),
+        ...(pins ? { pins } : {}),
+      }),
     }
   );
   if (!response.ok) {

@@ -16,8 +16,10 @@
  * IndexedDB provider): what the person marks while the link is down stays
  * through a reload and goes to the hub as the socket syncs again (the hub
  * asks for what it lacks on every open, artifacts/sync.ts). A write the hub
- * refused is cleared from the device with the doc that held it. A browser
- * that keeps no IndexedDB keeps nothing on the device.
+ * refused is cleared from the device with the doc that held it; the
+ * person's comments in it the hub doesn't hold are kept aside on the
+ * device with its reason, never let go ({@link artifact.refused}). A
+ * browser that keeps no IndexedDB keeps nothing on the device.
  */
 import {
   CHOICE_LIMITS,
@@ -26,7 +28,7 @@ import {
   changedEntry,
   choiceEntryProblem,
 } from "@cawco/core/choices";
-import type { MarkPictures } from "@cawco/core/comments";
+import type { MarkPictures, Pin } from "@cawco/core/comments";
 import {
   ARTIFACT_GONE,
   deviceDocName,
@@ -371,6 +373,62 @@ const replaceDoc = () => {
   handed();
 };
 
+/**
+ * The person's comments the hub refused (a write it would not keep, its
+ * close's reason), kept on the device apart from the doc, per artifact: the
+ * host lists each with why and Send again ({@link artifact.resend}), and a
+ * reload keeps them. A browser that keeps no storage keeps them in memory.
+ */
+const REFUSED_KEY = (id: string) => `cawco-refused-pins:${id}`;
+let refusedPins: Pin[] = [];
+/** A refusal's comments, until the hub's doc is in to tell which it doesn't hold. */
+let refusing: { pins: Record<string, Pin>; why: string } | null = null;
+const storeRefused = () => {
+  if (!joined) {
+    return;
+  }
+  try {
+    if (refusedPins.length > 0) {
+      localStorage.setItem(REFUSED_KEY(joined.id), JSON.stringify(refusedPins));
+    } else {
+      localStorage.removeItem(REFUSED_KEY(joined.id));
+    }
+  } catch {
+    // No storage here: they stand in memory for this page's life.
+  }
+};
+const loadRefused = (id: string) => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(REFUSED_KEY(id)) ?? "[]");
+    refusedPins = Array.isArray(raw) ? (raw as Pin[]) : [];
+  } catch {
+    refusedPins = [];
+  }
+};
+/** The hub's doc is in after a refusal: each of the person's comments it doesn't hold is kept aside with the hub's reason. */
+const keepRefused = () => {
+  if (!refusing) {
+    return;
+  }
+  const { pins, why } = refusing;
+  refusing = null;
+  const held = doc.getMap("pins");
+  const at = new Date().toISOString();
+  const lost = Object.values(pins).filter(
+    (pin) => pin.by === "person" && !held.has(pin.id)
+  );
+  if (lost.length === 0) {
+    return;
+  }
+  const ids = new Set(lost.map((pin) => pin.id));
+  refusedPins = [
+    ...refusedPins.filter((pin) => !ids.has(pin.id)),
+    ...lost.map((pin) => ({ ...pin, notSent: { at, why } })),
+  ];
+  storeRefused();
+  watchers?.ink();
+};
+
 const connect = () => {
   if (!(syncPath && joined)) {
     return;
@@ -424,6 +482,7 @@ const connect = () => {
       return;
     }
     linked({ state: "synced", error: null });
+    keepRefused();
     if (!synced) {
       synced = true;
       whenSynced();
@@ -450,7 +509,13 @@ const connect = () => {
     }
     // What this page wrote the hub would not keep: start again from the
     // hub's, the device's copy of it cleared first so it never comes back.
+    // The person's comments in it are never let go: once the hub's doc is
+    // in, each it doesn't hold is kept aside with the hub's reason.
     const refusedCopy = kept;
+    refusing = {
+      pins: doc.getMap("pins").toJSON() as Record<string, Pin>,
+      why: event.reason || "The hub didn't keep it.",
+    };
     replaceDoc();
     watchers?.refused(event.reason);
     (refusedCopy?.clearData() ?? Promise.resolve())
@@ -515,6 +580,7 @@ export const artifact = {
     joined = { id: raw.id, kind: raw.kind, name: raw.name.slice(0, 200) };
     syncPath = sync as string;
     status = "joined";
+    loadRefused(joined.id);
     keepOnDevice();
     connect();
     handed();
@@ -535,6 +601,36 @@ export const artifact = {
 
   /** The doc as it is now: the ink (ink.ts) reads and writes its `ink`, `moved` and `pins`. */
   doc: (): Doc => doc,
+
+  /** The person's comments the hub refused, each with its reason (`notSent`), kept on the device. */
+  refused: (): Pin[] => refusedPins,
+
+  /** Refused comment `id` let go of the device's keep (the person deleted it); false when no such comment is kept. */
+  letGoRefused: (id: string): boolean => {
+    if (!refusedPins.some((one) => one.id === id)) {
+      return false;
+    }
+    refusedPins = refusedPins.filter((one) => one.id !== id);
+    storeRefused();
+    return true;
+  },
+
+  /**
+   * Refused comment `id` written into the doc again, for the hub to take
+   * (its Send again): it leaves the device's keep; refused once more, it is
+   * kept again with the new reason. False when no such comment is kept.
+   */
+  resend: (id: string): boolean => {
+    const pin = refusedPins.find((one) => one.id === id);
+    if (!pin) {
+      return false;
+    }
+    const { notSent: _why, ...again } = pin;
+    refusedPins = refusedPins.filter((one) => one.id !== id);
+    storeRefused();
+    doc.transact(() => doc.getMap("pins").set(id, again));
+    return true;
+  },
 
   /** Whether there is a doc to keep ink in: the host named the artifact, or the hub embedded it. */
   keeps: () => status === "joined" || seeded !== null,

@@ -11,7 +11,9 @@
  * delivers everything the session hasn't heard as one message carrying the
  * pins themselves ({@link pinSection}, {@link inkSection}) and the person's
  * note, then stamps each pin `sentAt` and `heard` ({@link pinSaid}), each
- * entry and stroke group `sentAt`. An entry's pictures, texts and files are
+ * entry and stroke group `sentAt`. One comment goes alone by its own Send
+ * ({@link SendBody} `pins`). A Send no one took marks each pin it carried
+ * `notSent`, with why, until a delivery carries it. An entry's pictures, texts and files are
  * stored on the hub by reference ({@link CommentAttachment}).
  *
  * A pin is placed again after every revision of the page by its anchor, in
@@ -20,9 +22,10 @@
  * still reads its text, else the one that reads it), then its selector (one
  * by identity as it is, one of places only while its element still reads
  * its text, or its text and more as it streams on), then the first element
- * holding its text; none of them,
- * and it waits in the moved tray (`movedAt`) until the person places it
- * again. A mark on the page as a whole stands on its body ({@link wholePage}),
+ * holding its text; none of them for a while (a page drawing a part of
+ * itself again has it back within it), and it waits in the moved tray
+ * (`movedAt`) until its anchor finds its element again or the person places
+ * it again. A mark on the page as a whole stands on its body ({@link wholePage}),
  * which every revision has: it never waits there.
  *
  * Every entry is a plain JSON value in its map.
@@ -109,8 +112,14 @@ export interface MarkPictures {
   url?: string;
 }
 
-/** What the page's `cawco.send(text)` carries beside the doc: its words. */
+/**
+ * What a Send carries beside the doc: the person's note (the page's
+ * `cawco.send(text)`, the rail's note) and, for one comment's own Send,
+ * that comment alone by its pin's id. With no `pins`, everything the
+ * session hasn't heard goes.
+ */
 export interface SendBody {
+  pins?: string[];
   text?: string;
 }
 
@@ -251,6 +260,12 @@ export interface Pin {
   kind: "annotation" | "comment";
   /** Its element is gone from the page since then; it waits in the moved tray. */
   movedAt?: string;
+  /**
+   * The last Send that carried it reached no one: when, and why in words
+   * (the hub's reason). The hub writes it; the next delivery that carries
+   * the pin clears it ({@link pinHeard}).
+   */
+  notSent?: { at: string; why: string };
   /** In order of creation, per artifact, from 1. */
   number: number;
   /** Where on its element a tapped pin stands: fractions of the element's box. */
@@ -578,8 +593,10 @@ export const pinHeard = (current: Pin, sent: Pin, at: string): Pin => {
       .filter((entry) => entry.by === "person")
       .map((entry) => [entry.id, entry.text])
   );
+  // Heard: a failed Send's reason goes with it.
+  const { notSent: _failed, ...standing } = current;
   return {
-    ...current,
+    ...standing,
     sentAt: current.sentAt ?? at,
     heard: pinSaid(sent),
     thread: current.thread.map((entry) =>

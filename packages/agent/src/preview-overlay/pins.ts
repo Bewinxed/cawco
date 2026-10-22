@@ -28,11 +28,17 @@
  *
  * Every pin is placed again from its anchor whenever the page changes (core
  * `findAnchor`: source file:line, then selector, then text). A page's pin
- * whose element none of them finds goes to the moved tray (`movedAt`) until
- * the person places it again. A pin on the page as a whole stands on its
- * body (core `wholePage`), whatever the page says now, and never goes there;
- * nor does one kept on a page-sized container (core `findAnchor`'s `page`),
- * which stands on the body again, out of the tray if it was put there.
+ * whose element none of them finds for a while (absent.ts: a page drawing
+ * a part of itself again has it back within it) goes to the moved tray
+ * (`movedAt`) until its anchor finds its element again or the person places
+ * it again. A pin on the page as a whole stands on its body (core
+ * `wholePage`), whatever the page says now, and never goes there; nor does
+ * one kept on a page-sized container (core `findAnchor`'s `page`), which
+ * stands on the body again.
+ *
+ * The comment being written follows its element the same way: when the
+ * page draws it again, its pill stands on the one its anchor, read at the
+ * press, finds now (PinsDeps `redraft`).
  *
  * Resting on a pin chooses its element (the overlay's one target) and asks
  * the host for its peek; a press on it opens its thread in the host. The
@@ -51,6 +57,7 @@ import {
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import type { Map as YMap } from "yjs";
+import { absences } from "./absent";
 import { artifact } from "./artifact";
 import { clipOf, rectOf } from "./frames";
 import { newId } from "./id";
@@ -124,6 +131,12 @@ export interface PinsDeps {
    */
   outline: (el: Element | null, lead?: boolean) => void;
   post: (type: string, payload?: object) => void;
+  /**
+   * The comment being written, its element no longer in the page (the page
+   * drew it again): its target on the element its anchor, read at the
+   * press, finds now; null while none stands there.
+   */
+  redraft: () => DraftTarget | null;
   /** The parked draft's pill pressed: its composer opens again. */
   reopenDraft: () => void;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
@@ -467,10 +480,9 @@ export function startPins(deps: PinsDeps): Pins {
    * The anchors whose element is found under another selector or text now
    * (a revision moved or reworded it), written back so the next look finds
    * it by its selector. One that still reads as it was is left alone: a
-   * write here draws the pins again. A moved pin its anchor now reads as on
-   * the page as a whole (core `findAnchor`'s `page`: one kept on the
-   * page-sized container a press in the page's padding named) stands on the
-   * page again, out of the moved tray: the page is always there.
+   * write here draws the pins again. A moved pin whose anchor finds its
+   * element again (the page drew it back, a revision restored it) stands on
+   * the page again, out of the moved tray.
    */
   const reanchor = (pins: Pin[]) => {
     const moves: Pin[] = [];
@@ -479,9 +491,6 @@ export function startPins(deps: PinsDeps): Pins {
         continue;
       }
       const found = deps.locate(pin.anchor);
-      if (pin.movedAt && found?.by !== "page") {
-        continue;
-      }
       const now = found && deps.anchorOf(found.el);
       if (now && (pin.movedAt || changedAnchor(pin.anchor, now))) {
         const { movedAt: _moved, ...rest } = pin;
@@ -821,9 +830,11 @@ export function startPins(deps: PinsDeps): Pins {
     });
   };
 
-  /** Whether a pin no anchor finds is gone, not waiting on a frame still loading. */
+  /** Whether a pin no anchor finds is missing, not waiting on a frame still loading. */
   const goneFrom = (pin: Pin) =>
     !("selector" in pin.anchor && deps.waiting(pin.anchor));
+  /** How long each pin has stood missing: one is gone only after a while, the page drawn again then. */
+  const absent = absences(() => draw());
 
   /** Stacks the pills that meet ({@link meetingGroups}, {@link drawStack}). */
   const stack = (into: SVGSVGElement, drawn: DrawnPill[], paint: Paint) => {
@@ -842,9 +853,13 @@ export function startPins(deps: PinsDeps): Pins {
     }
   };
 
-  /** Places each pin on the page, drawing a pill for each its frames show; answers those that are gone. */
+  /**
+   * Places each pin on the page, drawing a pill for each its frames show;
+   * answers those that are gone: no anchor finds them, no frame they stand
+   * in is loading, and they have stood so for a while ({@link absences}).
+   */
   const placeAll = (all: Pin[], paint: Paint): Pin[] => {
-    const gone: Pin[] = [];
+    const missing: Pin[] = [];
     // A resolved pin stands on the page only while its thread is open.
     const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
     const drawn: DrawnPill[] = [];
@@ -852,9 +867,7 @@ export function startPins(deps: PinsDeps): Pins {
     for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
       const where = standing(pin);
       if (!where) {
-        if (goneFrom(pin)) {
-          gone.push(pin);
-        }
+        missing.push(pin);
         continue;
       }
       const pill = pillAt(where, pillWidth(String(pin.number), paint), paint);
@@ -870,7 +883,14 @@ export function startPins(deps: PinsDeps): Pins {
     }
     stack(layer, drawn, paint);
     stack(fixed, drawnFixed, paint);
-    return gone;
+    return goneOf(missing);
+  };
+
+  /** Of the pins no anchor finds now, those gone: no frame they stand in loading, and missing a while ({@link absences}). */
+  const goneOf = (missing: Pin[]): Pin[] => {
+    const waited = missing.filter(goneFrom);
+    absent.keep(waited.map((pin) => pin.id));
+    return waited.filter((pin) => absent.missed(pin.id));
   };
 
   /** The comment being written, drawn as its hollow pill with no number. */
@@ -890,8 +910,15 @@ export function startPins(deps: PinsDeps): Pins {
             shown: true,
           }
         : null;
-    } else if (drafted.el.isConnected) {
-      where = standingOn(drafted.el, drafted.point);
+    } else {
+      // The page drew its element again: the pill stands on the one there now.
+      const now = drafted.el.isConnected ? null : deps.redraft();
+      if (now) {
+        drafted = { ...now };
+      }
+      if (drafted.el.isConnected) {
+        where = standingOn(drafted.el, drafted.point);
+      }
     }
     if (!where) {
       drafted.standing = undefined;

@@ -39905,6 +39905,22 @@
             "description": "Its element is gone from the page since then; it waits in the moved tray.",
             "type": "string"
           },
+          "notSent": {
+            "description": "The last Send that carried it reached no one: when, and why in words\n(the hub's reason). The hub writes it; the next delivery that carries\nthe pin clears it ({@link pinHeard}).",
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "why"
+            ]
+          },
           "number": {
             "description": "In order of creation, per artifact, from 1.",
             "type": "number"
