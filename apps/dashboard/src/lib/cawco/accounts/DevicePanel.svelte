@@ -6,6 +6,9 @@
    * is left to enter it. Expired: the well dims and Start again mints a new
    * one. Signed in: a check draws itself beside who it signed in as.
    *
+   * A row whose sign-in is not made yet has no flow and stands idle: its
+   * Start makes it (`start`).
+   *
    * The well arrives as a transcript row does: its place opens, then its
    * content fades up 3px into it.
    */
@@ -22,22 +25,31 @@
     flow,
     machine,
     online,
-  }: { flow: DeviceFlow; machine: string; online: boolean } = $props();
+    start,
+  }: {
+    /** The machine's sign-in, once one is made. */
+    flow: DeviceFlow | undefined;
+    machine: string;
+    online: boolean;
+    /** Start sign-in (and Start again): mints a code, making the flow first where none is. */
+    start: () => void;
+  } = $props();
 
   const words = accountsWords.device;
 
   /** The code as it is read out: in fours. */
+  const phase = $derived(flow?.phase ?? "idle");
   const groups = $derived(
-    (flow.code ?? "").replace(/[^\da-z]/gi, "").match(/.{1,4}/g) ?? []
+    (flow?.code ?? "").replace(/[^\da-z]/gi, "").match(/.{1,4}/g) ?? []
   );
-  const left = $derived(Math.max(0, flow.expiresAt - flow.now));
+  const left = $derived(flow ? Math.max(0, flow.expiresAt - flow.now) : 0);
   const clock = $derived(
     words.countdown(
       Math.floor(left / 60_000),
       Math.floor((left % 60_000) / 1000)
     )
   );
-  const shown = $derived(flow.phase === "waiting" || flow.phase === "expired");
+  const shown = $derived(phase === "waiting" || phase === "expired");
 
   /** Its place opens (--dur-morph), then what it holds fades up 3px (--dur-menu). */
   function openPlace(node: HTMLElement): TransitionConfig {
@@ -68,7 +80,7 @@
 </script>
 
 <div class="flex min-w-0 flex-col gap-space-2">
-  {#if flow.phase === "signed-in"}
+  {#if flow?.phase === "signed-in"}
     <p
       class="type-meta flex items-center gap-space-2 text-ink-row"
       role="status"
@@ -85,11 +97,11 @@
     {#if shown}
       <div
         data-slot="well"
-        data-dim={flow.phase === "expired" || undefined}
+        data-dim={phase === "expired" || undefined}
         class="flex items-center rounded-sm bg-code-bg px-space-4 py-space-3 transition-[opacity] duration-(--dur-fade) ease-out data-dim:opacity-50"
         in:openPlace
       >
-        <span class="sr-only">{words.said(flow.code ?? "")}</span>
+        <span class="sr-only">{words.said(flow?.code ?? "")}</span>
         <span
           data-slot="code"
           aria-hidden="true"
@@ -102,7 +114,7 @@
       </div>
     {/if}
     <div data-slot="row" class="flex flex-wrap items-center gap-space-2">
-      {#if flow.phase === "waiting"}
+      {#if flow?.phase === "waiting"}
         <CopyButton size="sm" text={flow.code ?? ""} variant="outline"
           >{words.copy}</CopyButton
         >
@@ -117,25 +129,25 @@
         />
       {:else if online}
         <Button
-          label={flow.phase === "idle" || flow.phase === "starting"
+          label={phase === "idle" || phase === "starting"
             ? words.start
             : words.again}
-          onclick={() => flow.start()}
-          pending={flow.phase === "starting"}
+          onclick={start}
+          pending={phase === "starting"}
           pendingLabel={words.starting}
           size="sm"
           variant="outline"
         />
       {/if}
     </div>
-    {#if flow.phase === "waiting"}
+    {#if phase === "waiting"}
       <p class="type-meta text-ink-muted">
         {words.enterWithin}
         <span data-slot="num" class="num">{clock}</span>
       </p>
-    {:else if flow.phase === "expired"}
+    {:else if phase === "expired"}
       <p class="type-meta text-ink-muted">{words.expired}</p>
-    {:else if flow.phase === "mismatch"}
+    {:else if flow?.phase === "mismatch"}
       <p
         class="mark-line type-meta flex items-start gap-space-1 text-status-attn-ink"
         role="alert"
@@ -149,7 +161,7 @@
         <span>{words.mismatch(machine, flow.email)}</span>
       </p>
     {/if}
-    {#if flow.problem}
+    {#if flow?.problem}
       <p class="type-meta text-status-fail-ink" role="alert">{flow.problem}</p>
     {/if}
   {/if}

@@ -24,6 +24,12 @@
  * is, not by an effect after it), its link drawn once and never redrawn,
  * and the code pasted after the reload signs in.
  *
+ * Add an account, the same way, per engine: Claude picked, the machine's
+ * row stands idle with Sign in before any sign-in is made (the press makes
+ * it); its link comes back after a reload (the setup taken up again makes
+ * the sign-in the hub kept); the code pasted then signs in, and the row
+ * says so, with no effect loop and no console error.
+ *
  *   bun scripts/probe-kit/run.ts account-signin-lands
  */
 import { mkdir, writeFile } from "node:fs/promises";
@@ -161,6 +167,9 @@ function watchSignin(): void {
     }
   }).observe(document, { childList: true, subtree: true });
 }
+
+/** The setup's provider row for Claude. */
+const CLAUDE_ROW = /^Claude$/;
 
 /** An account-on-machine row's trigger: "Sign in <account> on <machine>". */
 const SIGN_IN_ON = new RegExp(`^${accountsWords.machines.signIn} .+ on `);
@@ -335,6 +344,70 @@ async function leg(
   );
 }
 
+/** One engine's setup: Claude added, signed in by a pasted code through a reload. */
+async function setupLeg(kit: Kit, base: string, engine: Engine): Promise<void> {
+  const { check } = kit;
+  const page = await kit.page("desk", { engine });
+  const errors = errorsOf(page);
+  await open(page, `${base}/config/accounts/new`, "[data-choice]");
+  await page
+    .locator("[data-choice]")
+    .filter({
+      has: page.locator("[data-slot=plabel]", { hasText: CLAUDE_ROW }),
+    })
+    .first()
+    .click();
+  const rows = page.locator("[data-slot=machines]");
+  const signIn = rows.getByRole("button", {
+    name: accountsWords.setup.signIn,
+    exact: true,
+  });
+  const idle = await signIn
+    .first()
+    .waitFor({ timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  const popups = page.context().waitForEvent("page");
+  await signIn.first().click();
+  await (await popups).close();
+  const link = rows.getByRole("link", { name: accountsWords.signin.openLink });
+  const shown = (within: number) =>
+    until(
+      `${engine}: the setup's link shown`,
+      () => link.getAttribute("href").catch(() => null),
+      (href) => href === LINK,
+      within
+    );
+  await shown(60_000);
+  await page.reload();
+  const back = await shown(30_000)
+    .then(() => true)
+    .catch(() => false);
+  check(
+    `${engine} · setup: the machine's row stands idle with Sign in before any sign-in is made, and its link comes back after a reload`,
+    idle && back,
+    `idle Sign in ${idle}; link after reload ${back}`
+  );
+  await rows.locator("[data-account-setup-code]").fill(CODE);
+  await rows
+    .getByRole("button", { name: accountsWords.signin.done, exact: true })
+    .click();
+  const said = await rows
+    .getByText(accountsWords.setup.signedIn, { exact: true })
+    .first()
+    .waitFor({ timeout: 60_000 })
+    .then(() => true)
+    .catch(() => false);
+  const loop = errors.filter((one) =>
+    one.includes("effect_update_depth_exceeded")
+  );
+  check(
+    `${engine} · setup: the code pasted after the reload signs the row in; no effect loop, no console error`,
+    said && loop.length === 0 && errors.length === 0,
+    `signed in ${said}; ${errors.map((one) => one.slice(0, 200)).join(" | ") || "no errors"}`
+  );
+}
+
 const spec: Spec = {
   name: "account-signin-lands",
   async run(kit) {
@@ -370,6 +443,8 @@ const spec: Spec = {
     const base = await fleet.dashboard();
     await leg(kit, fleet, base, "chromium");
     await leg(kit, fleet, base, "webkit");
+    await setupLeg(kit, base, "chromium");
+    await setupLeg(kit, base, "webkit");
   },
 };
 

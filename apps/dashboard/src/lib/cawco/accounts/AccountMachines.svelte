@@ -292,7 +292,12 @@
                       {online}
                     />
                   {:else if flow instanceof DeviceFlow}
-                    <DevicePanel {flow} machine={name} {online} />
+                    <DevicePanel
+                      {flow}
+                      machine={name}
+                      {online}
+                      start={() => flow.start()}
+                    />
                   {/if}
                 </div>
               </NsPopover>

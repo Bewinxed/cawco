@@ -267,22 +267,33 @@
   const account = $derived(
     cawco.accounts?.accounts.find((one) => one.id === accountId) ?? null
   );
-  $effect.pre(() => {
-    const kind = choice?.signin;
-    const under = root;
+  /**
+   * The machine's sign-in under this setup, made when there is none. Made
+   * by the press that starts it (a row with none yet draws idle), and by a
+   * setup taken up again for each sign-in the hub kept for its account;
+   * never by an effect.
+   */
+  const pasteFor = (machineId: string): SigninFlow =>
+    pasteFlow(flowKey(root, machineId), ensureAccount, machineId, createdId);
+  const deviceFor = (machineId: string): DeviceFlow =>
+    deviceFlow(flowKey(root, machineId), ensureAccount, machineId, createdId);
+
+  /** A setup taken up again shows each link or code the hub kept for its account. */
+  function takeUpPending() {
     const id = createdId;
-    for (const machine of machines) {
-      const { machineId } = machine;
-      untrack(() => {
-        if (kind === "paste-code") {
-          pasteFlow(flowKey(under, machineId), ensureAccount, machineId, id);
-        }
-        if (kind === "device-code") {
-          deviceFlow(flowKey(under, machineId), ensureAccount, machineId, id);
-        }
-      });
+    const kind = choice?.signin;
+    for (const one of cawco.accounts?.pending ?? []) {
+      if (id === null || one.accountId !== id) {
+        continue;
+      }
+      if (kind === "paste-code") {
+        pasteFor(one.machineId);
+      } else if (kind === "device-code") {
+        deviceFor(one.machineId);
+      }
     }
-  });
+  }
+  takeUpPending();
   /** This setup's flows let go: another row was picked, or it was cancelled. */
   function dropFlows() {
     for (const machine of machines) {
@@ -920,8 +931,11 @@
           {@const done = doneOn(machine.machineId)}
           {@const paste = pasteOn(machine.machineId)}
           {@const device = deviceOn(machine.machineId)}
-          {@const block = paste ? harnessBlockOf(machine, "claude") : null}
-          {#if device}
+          {@const block =
+            choice?.signin === "paste-code"
+              ? harnessBlockOf(machine, "claude")
+              : null}
+          {#if choice?.signin === "device-code"}
             <li
               class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
               data-device
@@ -935,7 +949,12 @@
                 class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-setup/setup:pt-space-2"
                 style:--area="controls"
               >
-                <DevicePanel flow={device} machine={name} {online} />
+                <DevicePanel
+                  flow={device}
+                  machine={name}
+                  {online}
+                  start={() => deviceFor(machine.machineId).start()}
+                />
               </div>
               <span
                 class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
@@ -952,11 +971,14 @@
                 {/if}
               </span>
             </li>
-          {:else if paste}
+          {:else}
             <!-- One control per machine: Sign in opens Claude Code's link in
                  a new tab and opens the row onto the link, the paste field
-                 and Done. Continue is how a machine is skipped. -->
-            {@const asked = paste.phase !== "idle" || paste.url !== null}
+                 and Done. Continue is how a machine is skipped. A row with
+                 no sign-in made yet stands idle until Sign in makes it. -->
+            {@const asked =
+              paste !== undefined &&
+              (paste.phase !== "idle" || paste.url !== null)}
             <li
               class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-paste:grid-areas-(--mrow-areas-stack) data-paste:grid-cols-(--mrow-cols-two)"
               data-paste
@@ -976,7 +998,7 @@
                     aria-hidden="true"
                     class="size-icon-sm text-status-done-glyph"
                   /><span>{words.signedIn}</span>
-                {:else if paste.phase === "mismatch" || state === "mismatch"}
+                {:else if paste?.phase === "mismatch" || state === "mismatch"}
                   <IconWarningTriangle
                     aria-hidden="true"
                     class="size-icon-sm"
@@ -987,7 +1009,7 @@
                   <Button
                     data-box
                     label={words.signIn}
-                    onclick={() => paste.open()}
+                    onclick={() => pasteFor(machine.machineId).open()}
                     size="sm"
                     variant="outline"
                   />
@@ -1008,7 +1030,7 @@
                     {online}
                   />
                 </div>
-              {:else if asked && !done}
+              {:else if paste && asked && !done}
                 <div
                   data-slot="controls"
                   class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
@@ -1063,7 +1085,7 @@
                   />
                 </div>
               {/if}
-              {#if paste.problem}
+              {#if paste?.problem}
                 <p
                   data-slot="row-problem"
                   class="col-(--area) row-(--area) type-meta text-status-fail-ink"
@@ -1073,7 +1095,7 @@
                 >
                   {paste.problem}
                 </p>
-              {:else if paste.phase === "mismatch"}
+              {:else if paste?.phase === "mismatch"}
                 <p
                   data-slot="row-warn"
                   class="col-(--area) row-(--area) type-meta text-status-attn-ink"
