@@ -7,7 +7,8 @@ import type { KeeperReading } from "../keepers";
 import { parseProcId, procIdFor } from "../proc-id";
 import { readAccountSoon } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
-import { PiProfile } from "./pi-services";
+import { toolGate } from "../tools";
+import { PI_SPEC, PiProfile } from "./pi-services";
 import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
 
 /** A session on an account: each turn's end reads the account's windows shortly after. */
@@ -50,6 +51,13 @@ export class PiHarness extends PiProfile implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession> {
+    // THE VERSION FLOOR: no pi session starts beside a pi CLI that reads the
+    // shared `~/.pi/agent/` files by other rules (core PI_VERSION_FLOOR), on
+    // a start, a wake or a relaunch alike.
+    const gate = await toolGate(PI_SPEC);
+    if (gate.refused) {
+      throw new Error(gate.words);
+    }
     // pi's sign-in check is the machine's store's; a session on an account
     // runs its provider from the account's one credential.
     if (!spec.accountDir) {

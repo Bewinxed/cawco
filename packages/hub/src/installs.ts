@@ -201,13 +201,14 @@ export interface InstallsDeps {
   /** An install's outcome, for the person wherever they are (push.ts). */
   readonly outcome: (install: Install) => void;
   /**
-   * Brings the joined machine's Claude Code to the oldest CawCo runs: asks
-   * the machine what it has, and runs the catalog's install of `claude`
-   * there when it is missing or older (server.ts). Each line it says goes
-   * into the install's output; it answers whether Claude Code now runs, and
-   * the machine's words.
+   * Brings the joined machine's harness CLIs to versions CawCo runs: asks
+   * the machine what it has, and runs the catalog's install of Claude Code
+   * when it is missing or too old, and of OpenCode and pi when they are
+   * there at a version CawCo doesn't run (server.ts). Each line it says goes
+   * into the install's output; it answers whether they all run now, and the
+   * machine's words.
    */
-  readonly readyClaude: (
+  readonly readyHarnesses: (
     machineId: string,
     say: (line: string) => void
   ) => Promise<{ ok: boolean; said: string }>;
@@ -489,15 +490,15 @@ export const createInstalls = (deps: InstallsDeps) => {
     changed();
   };
 
-  /** The installs whose Claude Code step runs now, by id: the step's work. */
+  /** The installs whose harnesses step runs now, by id: the step's work. */
   const readying = new Map<string, Promise<void>>();
 
   /**
-   * The machine is listed online: its Claude Code is brought to the oldest
-   * CawCo runs (`readyClaude`), and only then is the install joined. A
-   * machine whose Claude Code could not be brought up fails at this step in
-   * the machine's words; it is in the fleet all the same. Asked again while
-   * it runs, it answers the same work.
+   * The machine is listed online: its harness CLIs are brought to versions
+   * CawCo runs (`readyHarnesses`), and only then is the install joined. A
+   * machine one of them could not be brought up on fails at this step in the
+   * machine's words; it is in the fleet all the same. Asked again while it
+   * runs, it answers the same work.
    */
   const ready = (entry: Kept): Promise<void> => {
     const { install } = entry;
@@ -506,14 +507,14 @@ export const createInstalls = (deps: InstallsDeps) => {
       return running;
     }
     const { machineId } = install;
-    mark(entry, "claude");
+    mark(entry, "harnesses");
     const say = (line: string) => take(entry, `${INSTALL_STEP_PREFIX}${line}`);
     const work = (
       machineId
-        ? deps.readyClaude(machineId, say)
+        ? deps.readyHarnesses(machineId, say)
         : Promise.resolve({
             ok: false,
-            said: "The hub doesn't know which machine joined, so its Claude Code wasn't checked.",
+            said: "The hub doesn't know which machine joined, so its Claude Code, OpenCode and pi weren't checked.",
           })
     )
       .then(({ ok, said }) => {
@@ -743,7 +744,7 @@ export const createInstalls = (deps: InstallsDeps) => {
 
   /**
    * An exit of 0 waits out the hub's grace for the machine to come online,
-   * then its Claude Code step ({@link ready}), which a Stop cuts short.
+   * then its harnesses step ({@link ready}), which a Stop cuts short.
    */
   const settle = async (
     entry: Kept,
@@ -911,7 +912,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     // machine's forward stays either way.
     if (
       install.machineId &&
-      (install.state === "joined" || install.problemStep === "claude")
+      (install.state === "joined" || install.problemStep === "harnesses")
     ) {
       deps.tunnels.joined(tunnel.id, install.machineId);
     } else if (tunnel.fresh) {
@@ -1139,22 +1140,50 @@ export const createInstalls = (deps: InstallsDeps) => {
       (entry) => entry.code === code && entry.install.state === "running"
     );
 
+  /**
+   * A lost install whose machine the fleet lists online did join: it goes
+   * on from there, through its harnesses step like any other add. The lost
+   * outcome it was told as is taken back, and its own end is told in its
+   * place. The machine its own signals named (the join wait naming its code,
+   * the installer's `joined as`) proves it ran, whether the fleet knew that
+   * machine before or not; one found only by its target's name proves it
+   * only when the fleet did not already list it.
+   */
+  const takeBackLost = (entry: Kept): void => {
+    const { install } = entry;
+    const machine = machineOf(install.machineId);
+    const found =
+      machine ?? (install.target ? returningFor(install.target) : undefined);
+    const proven = machine
+      ? machine.online
+      : found?.online && found.machineId !== install.returning;
+    if (!(found && proven)) {
+      return;
+    }
+    install.machineId = found.machineId;
+    install.hostname = found.hostname;
+    Object.assign(install, {
+      state: "running",
+      problem: null,
+      problemStep: null,
+      endedAt: null,
+    } satisfies Partial<Install>);
+    deps.settled(install.id);
+    console.log(
+      `[installs] ${install.id}: lost, and ${found.hostname} is online: its harnesses step runs`
+    );
+    detach(ready(entry), "lost machine install's harnesses step");
+  };
+
   /** Looks at the fleet for each install that waits on it. */
   deps.lifetime.every(LOOK_MS, () => {
     for (const entry of kept.values()) {
       const { install } = entry;
-      const machine = machineOf(install.machineId);
       if (install.state === "lost") {
-        // A lost install whose machine the fleet lists online did join.
-        const found =
-          machine ??
-          (install.target ? returningFor(install.target) : undefined);
-        if (found?.online && found.machineId !== install.returning) {
-          install.machineId = found.machineId;
-          end(entry, "joined");
-        }
+        takeBackLost(entry);
         continue;
       }
+      const machine = machineOf(install.machineId);
       if (
         install.state === "running" &&
         install.route === "command" &&
@@ -1162,7 +1191,7 @@ export const createInstalls = (deps: InstallsDeps) => {
         !readying.has(install.id)
       ) {
         install.hostname = machine.hostname;
-        detach(ready(entry), "machine install's Claude Code step");
+        detach(ready(entry), "machine install's harnesses step");
       }
     }
   });
@@ -1439,7 +1468,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       }
       mark(entry, "listed");
       deps.lifetime.after(INSTALL_GRACE_MS, () => {
-        // Online by now, it is on its Claude Code step, which ends it.
+        // Online by now, it is on its harnesses step, which ends it.
         if (install.state === "running" && !readying.has(install.id)) {
           end(
             entry,

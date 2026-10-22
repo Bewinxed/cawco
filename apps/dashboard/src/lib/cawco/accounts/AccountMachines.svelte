@@ -19,7 +19,7 @@
    *
    * A machine whose Claude Code CawCo refuses (too old, or none) offers no
    * sign-in that can't succeed: the popover holds why and Update Claude Code
-   * in its place (ClaudeBlock), the row says so, and an update in flight
+   * in its place (HarnessBlock), the row says so, and an update in flight
    * parks on the row. Once it lands the popover offers the sign-in, saying
    * which Claude Code is there now.
    */
@@ -35,13 +35,13 @@
   import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   import { IconLogout, IconWarningTriangle } from "#lib/icons.js";
-  import ClaudeBlock from "../ClaudeBlock.svelte";
+  import HarnessBlock from "../HarnessBlock.svelte";
   import {
-    claudeWords as blockWords,
-    claudeBlockOf,
+    harnessWords as blockWords,
+    harnessBlockOf,
     landedOn,
-    settleClaude,
-  } from "../claude-block.svelte";
+    settleHarness,
+  } from "../harness-block.svelte";
   import Check from "./Check.svelte";
   import DevicePanel from "./DevicePanel.svelte";
   import { DeviceFlow } from "./device.svelte";
@@ -152,7 +152,7 @@
       return;
     }
     // The Claude Code this tab brought up has done its work: said no more.
-    settleClaude(on);
+    settleHarness(on, "claude");
     const timer = setTimeout(() => setOpen(on, false), dur("--dur-hold"));
     return () => clearTimeout(timer);
   });
@@ -201,9 +201,9 @@
       {@const word = online ? state : "offline"}
       {@const flow = heldFlow(flowKey(account.id, machine.machineId))}
       {@const open = openOn === machine.machineId}
-      {@const block = claude ? claudeBlockOf(machine) : null}
+      {@const block = claude ? harnessBlockOf(machine, "claude") : null}
       {@const parked = open ? null : parkedWord(machine.machineId)}
-      {@const landed = claude ? landedOn(machine) : undefined}
+      {@const landed = claude ? landedOn(machine, "claude") : undefined}
       <li
         class="col-span-full grid min-h-c-btn-h-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:border-t not-first:border-t-border-hairline"
         data-flip
@@ -265,7 +265,7 @@
                       }}
                     />
                   {:else if block}
-                    <ClaudeBlock
+                    <HarnessBlock
                       {block}
                       machineId={machine.machineId}
                       {online}

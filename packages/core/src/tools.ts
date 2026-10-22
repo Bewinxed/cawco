@@ -162,6 +162,21 @@ export const OPENCODE_VERSION = "2.0.29";
  */
 export const CLAUDE_VERSION_FLOOR = "2.1.301";
 
+/**
+ * The oldest pi CLI CawCo runs a pi session beside (agent tools.ts
+ * `toolGate`), and the floor of its catalog entry. CawCo's pi sessions run on
+ * the pi library the agent embeds (`@earendil-works/pi-coding-agent` 1.3.0,
+ * packages/agent/package.json), which reads the same `~/.pi/agent/` files
+ * (`auth.json`, `settings.json`, `models.json`) the person's `pi` writes.
+ * Two releases changed what those files mean, pi's CHANGELOG: 1.0.3
+ * "Renamed the Azure provider from `azure-openai-responses` to `azure`.
+ * Rename the provider key in `auth.json` …, in `models.json`, and in
+ * `settings.json`", and 1.3.0 "`models.json` overrides of the `kimi-coding`
+ * base URL must now include `/v1`". A pi older than 1.3.0 reads and writes
+ * them by other rules than CawCo's sessions do.
+ */
+export const PI_VERSION_FLOOR = "1.3.0";
+
 const VERSION_PARTS = /^(\d+)\.(\d+)\.(\d+)/;
 
 /** Whether `version` (`x.y.z`, anything after it ignored) is older than `than`. */
@@ -222,7 +237,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
   },
   {
     id: "opencode",
-    name: "opencode",
+    name: "OpenCode",
     homepage: "https://opencode.ai",
     // OpenCode 2.0's package (`@opencode/cli`) has two bins, `opencode` and
     // `opencode2` (npm view @opencode/cli@2.0.28 bin); 1.x never had
@@ -300,6 +315,39 @@ export const TOOL_CATALOG: ToolSpec[] = [
     ],
   },
   {
+    id: "pi",
+    name: "pi",
+    homepage: "https://pi.dev",
+    bin: "pi",
+    versionCommand: "pi --version",
+    minVersion: PI_VERSION_FLOOR,
+    // Where pi's installer links `pi` (pi.dev/install.sh read 2026-10-22,
+    // `select_managed_path_bin_dir`: "$managed_agent_dir/bin"|"$HOME/.local/bin"
+    // …), for a daemon whose PATH lacks it.
+    wellKnownPaths: ["~/.local/bin/pi", "~/.pi/agent/bin/pi"],
+    // As Claude Code's: pi's own updater first, then its installer. pi's
+    // docs/quickstart.md (1.3.0): "curl -fsSL https://pi.dev/install.sh |
+    // sh … The installer pins all dependencies and updates Pi with `pi
+    // update`", and "`pi update` cannot update a Nix installation", so the
+    // version is read again after it. With no terminal the installer goes on
+    // unasked ("No terminal detected; continuing without confirmation.", its
+    // `choose_pi_action`), as the daemon runs it.
+    install: [
+      {
+        label: "pi update",
+        platforms: ["linux", "darwin", "win32"],
+        needs: "pi",
+        command: "pi update",
+      },
+      {
+        label: "curl script",
+        platforms: ["linux", "darwin"],
+        needs: "curl",
+        command: "curl -fsSL https://pi.dev/install.sh | sh",
+      },
+    ],
+  },
+  {
     id: "antigravity",
     name: "Antigravity CLI",
     homepage: "https://antigravity.google",
@@ -342,6 +390,26 @@ export const TOOL_CATALOG: ToolSpec[] = [
 
 export const toolSpec = (id: string): ToolSpec | undefined =>
   TOOL_CATALOG.find((spec) => spec.id === id);
+
+/**
+ * Whether `version` is one CawCo runs of `spec`: its one version
+ * ({@link ToolSpec.exactVersion}), else its floor or newer
+ * ({@link ToolSpec.minVersion}); no version said is none it runs. The one
+ * rule the agent's version gate (tools.ts `toolGate`) and the dashboard's
+ * blocks (harness-block.svelte.ts) judge a version by.
+ */
+export const toolRuns = (
+  spec: ToolSpec,
+  version: string | undefined
+): boolean => {
+  if (!version) {
+    return false;
+  }
+  if (spec.exactVersion) {
+    return version === spec.exactVersion;
+  }
+  return !(spec.minVersion && olderThan(version, spec.minVersion));
+};
 
 /**
  * Each catalog tool this build runs at one version only, that version by id:

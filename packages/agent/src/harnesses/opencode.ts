@@ -57,7 +57,6 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   machineLabel,
   mcpFleetState,
-  OPENCODE_VERSION,
   opencodeSignInFaultWords,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -71,7 +70,6 @@ import {
   workspaceSpillDir,
   xdgDataHome,
 } from "@cawco/core/paths";
-import { hostEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
 import type {
@@ -119,7 +117,7 @@ import { readAccountSoon } from "../provider-usage";
 import { fenced } from "../restart";
 import type { SessiondClient } from "../sessiond-client";
 import { listStandIns } from "../stand-ins";
-import { installAdviceText, onToolsMoved, sawTool } from "../tools";
+import { onToolsMoved, toolGate } from "../tools";
 import { workspaceRefs } from "../workspace-records";
 import {
   hashText,
@@ -138,6 +136,7 @@ import {
   notAnswered,
   notFound,
   OPENCODE_BIN,
+  OPENCODE_SPEC,
   type OpencodeClient,
   opencodeBinary,
   opencodeClient,
@@ -479,10 +478,6 @@ const assertOpencodeKey = (key: string, what: string): void => {
     );
   }
 };
-
-/** What `opencode --version` says, as a version: 2.0.28 prints `opencode v2.0.28`. */
-const VERSION = /\d+\.\d+\.\d+\S*/;
-const versionOf = (said: string): string | undefined => VERSION.exec(said)?.[0];
 
 /**
  * The port announcement, parsed agent-side: sessiond hands back the child's
@@ -1756,39 +1751,22 @@ export class OpencodeHarness implements Harness {
     }
   }
 
-  /** Poll the installed CLI every 30s; upgrading it does not replace sessiond's server. */
+  /**
+   * The machine's OpenCode, through the catalog's version gate (tools.ts
+   * `toolGate`: missing, or not OPENCODE_VERSION, refuses the start in its
+   * sentence, with its fix). Read at most every 30 s; upgrading it does not
+   * replace sessiond's server.
+   */
   #installedVersion(): Promise<string> {
     if (!this.#versionProbe || Date.now() - this.#versionProbedAt >= 30_000) {
       this.#versionProbedAt = Date.now();
-      this.#versionProbe = (async () => {
-        // What each probe finds is the tool probe's news too (tools.ts
-        // `sawTool`): a hand upgrade this sees reaches the hub's tool row now.
-        const binary = await opencodeBinary();
-        if (!binary) {
-          sawTool("opencode", "missing");
-          throw new Error(
-            `${OPENCODE_BIN} not found: CawCo runs OpenCode ${OPENCODE_VERSION} (${await installAdviceText("opencode")})`
-          );
+      // The server API and the plugin are OPENCODE_VERSION's: no other release starts.
+      this.#versionProbe = toolGate(OPENCODE_SPEC).then((gate) => {
+        if (gate.refused || !gate.version) {
+          throw new Error(gate.words);
         }
-        const ran = await Bun.$`${binary} --version`
-          .env(hostEnvironment())
-          .quiet()
-          .nothrow();
-        const version = versionOf(ran.stdout.toString());
-        sawTool("opencode", version ?? "unsaid");
-        if (ran.exitCode !== 0 || !version) {
-          throw new Error(
-            `opencode version probe failed: ${ran.stdout.toString()}${ran.stderr.toString()}`
-          );
-        }
-        // The server API and the plugin are OPENCODE_VERSION's: no other release starts.
-        if (version !== OPENCODE_VERSION) {
-          throw new Error(
-            `${binary} is OpenCode ${version}; CawCo runs OpenCode ${OPENCODE_VERSION} (${await installAdviceText("opencode")})`
-          );
-        }
-        return version;
-      })();
+        return gate.version;
+      });
     }
     return this.#versionProbe;
   }
@@ -2772,10 +2750,10 @@ export class OpencodeHarness implements Harness {
 
   async detect(): Promise<HarnessReport> {
     probeStarted();
-    const installed = (await opencodeBinary()) !== undefined;
-    const version = installed
-      ? await this.#installedVersion().catch(() => undefined)
-      : undefined;
+    // The version gate's own word on it: the start's refusal, typed.
+    const gate = await toolGate(OPENCODE_SPEC);
+    const installed = gate.refused !== "not-installed";
+    const { version } = gate;
     // The catalog the machine reports, so a picker lists OpenCode's models
     // with no OpenCode session running: the machine's server is started for
     // it when none runs. One that cannot be read says why instead.
@@ -2792,13 +2770,17 @@ export class OpencodeHarness implements Harness {
             }
           )
       : {};
-    const reason = this.authReason;
+    // An OpenCode at another version is the machine's word on OpenCode; one
+    // not there is no fault.
+    const reason =
+      (gate.refused === "version" ? gate.words : undefined) ?? this.authReason;
     return {
       harness: "opencode",
       installed,
       ...(version ? { version } : {}),
       auth: installed ? "authenticated" : "unauthenticated",
       ...(reason ? { authReason: reason } : {}),
+      ...(gate.refused ? { refused: gate.refused } : {}),
       capabilities: OPENCODE_CAPABILITIES,
       ...read,
       ...(this.signInFaults.length > 0

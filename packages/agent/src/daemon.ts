@@ -1929,23 +1929,33 @@ const attach = (
     };
     // An install this agent ran, or a harness finding its binary at another
     // version than it last did (tools.ts `toolsMoved`): the tools are probed
-    // again and sent now, not at the next connect, and so is Claude's
-    // report, whose word on the version gate (`refused`) is what stands
-    // between a sign-in or a start and the machine's Claude Code: an update
-    // the dashboard pressed clears it here, not at the next minute's read.
-    // No other harness's: its `detect` may start its server, and a version
-    // moving is no reason to start one. A burst is read once, a second on.
+    // again and sent now, not at the next connect, and so is the report of
+    // each harness whose word on its version gate (`refused`) may be what
+    // just moved: Claude's always (its `detect` starts nothing), and any
+    // other whose last report was refused, which an install pressed in the
+    // dashboard is there to clear. An OpenCode that runs is not read again
+    // here: its `detect` may start its server, and a version moving is no
+    // reason to start one. A burst is read once, a second on.
     let toolsSoon: ReturnType<typeof setTimeout> | undefined;
     const reportTools = async (): Promise<void> => {
-      const claude = harnesses().find((adapter) => adapter.kind === "claude");
-      const [tools, claudeReport] = await Promise.all([
+      const again = harnesses().filter(
+        (adapter) =>
+          adapter.kind === "claude" ||
+          reportedHarnesses.some(
+            (report) => report.harness === adapter.kind && report.refused
+          )
+      );
+      const [tools, ...reports] = await Promise.all([
         readPart("tools", probeTools),
-        claude ? readHarness(claude) : undefined,
+        ...again.map(readHarness),
       ]);
-      if (claudeReport) {
-        keepReport(claudeReport);
+      const read = reports.filter(
+        (report): report is MachineHarnessReport => report !== undefined
+      );
+      for (const report of read) {
+        keepReport(report);
       }
-      if ((tools || claudeReport) && socket.readyState === WebSocket.OPEN) {
+      if ((tools || read.length > 0) && socket.readyState === WebSocket.OPEN) {
         send(socket, {
           verb: "heartbeat",
           machineId: identity.machineId,
@@ -1953,7 +1963,7 @@ const attach = (
             at: Date.now(),
             instances: supervisor.instanceIds,
             ...(tools ? { tools } : {}),
-            ...(claudeReport ? { harnesses: [claudeReport] } : {}),
+            ...(read.length > 0 ? { harnesses: read } : {}),
           } satisfies HeartbeatPayload,
         });
       }

@@ -44,14 +44,15 @@ export const SSH_STEPS = [
   "install",
   "agent",
   "listed",
-  "claude",
+  "harnesses",
 ] as const;
 
 /**
- * The steps of an install by a command: the three the hub can see, then
- * Claude Code brought up to the oldest CawCo runs.
+ * The steps of an install by a command: the three the hub can see, then the
+ * machine's harness CLIs brought to versions CawCo runs (hub installs.ts
+ * `ready`).
  */
-export const COMMAND_STEPS = ["run", "install", "listed", "claude"] as const;
+export const COMMAND_STEPS = ["run", "install", "listed", "harnesses"] as const;
 
 export type InstallStep =
   (typeof SSH_STEPS)[number] | (typeof COMMAND_STEPS)[number];
@@ -128,8 +129,8 @@ export type InstallProblem =
   | { kind: "check"; check: InstallCheck; said: string; user: string | null }
   /**
    * A step failed for another reason (a checksum, no build, a command in the
-   * way); on the `claude` step, the machine joined and its Claude Code could
-   * not be brought to the oldest CawCo runs, said in the machine's words.
+   * way); on the `harnesses` step, the machine joined and a harness CLI on it
+   * could not be brought to a version CawCo runs, said in the machine's words.
    */
   | { kind: "step"; said: string }
   /** Everything ran, but the hub never listed the machine online. */
@@ -140,7 +141,7 @@ export type InstallProblem =
 /**
  * `running` while it goes; `failed`, `stopped` and `lost` stand until the
  * person acts on them; `joined` once the fleet lists the machine online and
- * its Claude Code runs.
+ * its harness CLIs run.
  */
 export type InstallState = "running" | "failed" | "stopped" | "lost" | "joined";
 
@@ -283,7 +284,7 @@ const SSH_STEP_WORDS: Record<InstallStep, string> = {
   install: "Installing",
   agent: "Starting the agent",
   listed: "Waiting for the hub to list it",
-  claude: "Bringing Claude Code up to date",
+  harnesses: "Bringing Claude Code, OpenCode and pi up to date",
   run: "Waiting for the command to run on it",
 };
 

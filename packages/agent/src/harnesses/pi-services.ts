@@ -16,7 +16,12 @@ import type {
   NeutralSessionInfo,
   SessionMessage,
 } from "@cawco/core";
-import { CONTROL_MODEL_CATALOG, CONTROL_PI_DEFAULT_MODEL } from "@cawco/core";
+import {
+  CONTROL_MODEL_CATALOG,
+  CONTROL_PI_DEFAULT_MODEL,
+  type ToolSpec,
+  toolSpec,
+} from "@cawco/core";
 import { piAgentDir, piMemoryFile, piSkillsDir } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type {
@@ -37,7 +42,7 @@ import {
 import { heldSkills, skillDrift, skillRecords } from "../fleet";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import { probeStarted } from "../probe-count";
-import { resolveBin } from "../tools";
+import { toolGate } from "../tools";
 import {
   hashText,
   readSidecar,
@@ -49,6 +54,13 @@ import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiCredential, type PiCredentialState } from "./pi-auth";
 import { piMcpEntry, piMcpList } from "./pi-mcp";
 import { piOpenTurns } from "./pi-sessiond";
+
+const PI_TOOL = toolSpec("pi");
+if (!PI_TOOL) {
+  throw new Error("The tool catalog names no pi");
+}
+/** The pi CLI's catalog entry: its version gate (tools.ts `toolGate`) reads it. */
+export const PI_SPEC: ToolSpec = PI_TOOL;
 
 const PI_SKILLS = piSkillsDir();
 const PI_MEMORY = piMemoryFile();
@@ -514,7 +526,10 @@ export class PiProfile {
 
   async detect(): Promise<HarnessReport> {
     probeStarted();
-    const installed = resolveBin("pi") !== undefined;
+    // The version gate's word on the machine's pi (tools.ts `toolGate`): the
+    // start's refusal, typed, which the dashboard puts where it blocks.
+    const gate = await toolGate(PI_SPEC);
+    const installed = gate.refused !== "not-installed";
     // One that cannot be read says why instead.
     const read = installed
       ? await modelCatalog().then(
@@ -537,11 +552,17 @@ export class PiProfile {
     if (!installed) {
       this.auth = "unauthenticated";
     }
+    // A pi too old is the machine's word on pi; one not there is no fault.
+    const reason =
+      (gate.refused === "version" ? gate.words : undefined) ??
+      credential?.reason;
     return {
       harness: "pi",
       installed,
+      ...(gate.version ? { version: gate.version } : {}),
       auth: this.auth,
-      ...(credential?.reason ? { authReason: credential.reason } : {}),
+      ...(reason ? { authReason: reason } : {}),
+      ...(gate.refused ? { refused: gate.refused } : {}),
       capabilities: PI_CAPABILITIES,
       ...read,
       ...(names ? { modelNames: names } : {}),

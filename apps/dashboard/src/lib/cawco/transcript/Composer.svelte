@@ -103,9 +103,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronUp, IconSend, IconStop } from "#lib/icons.js";
-  import ClaudeBlock from "../ClaudeBlock.svelte";
   import { handBack, stages } from "../canvas/stage.svelte";
-  import { claudeBlockOf, relaunchUnblocked } from "../claude-block.svelte";
   import {
     cawco,
     readOlderPage,
@@ -118,6 +116,14 @@
   import MentionField from "../find/MentionField.svelte";
   import { readAs } from "../find/mention.svelte";
   import { mcpSignInIntent, signInToMcp } from "../fleet";
+  import HarnessBlock from "../HarnessBlock.svelte";
+  import {
+    forgetRelaunch,
+    harnessBlockOf,
+    relaunchRefusalOf,
+    relaunchUnblocked,
+    retryRelaunch,
+  } from "../harness-block.svelte";
   import CawFace from "../home/CawFace.svelte";
   import { hubSeam } from "../hub-seam";
   import { newId } from "../id";
@@ -1238,27 +1244,55 @@
     highlight = entries[next].id;
   }
 
-  /**
-   * This Claude session's start was refused for its machine's Claude Code
-   * (claude-block.svelte.ts): the refusal stands over the field with its
-   * fix, Update Claude Code, and once that lands the session starts again
-   * with nothing more to press (`relaunchUnblocked`).
-   */
-  const claudeStart = $derived.by(() => {
+  /** This session's row, while its start failed. */
+  const failedRow = $derived.by(() => {
     const row = recallOf ? cawco.instanceIndex.byId.get(recallOf) : undefined;
-    if (!(row && row.status === "error" && row.harness === "claude")) {
+    return row?.status === "error" && row.harness !== null ? row : undefined;
+  });
+  /**
+   * This session's start was refused for its machine's harness CLI
+   * (harness-block.svelte.ts): the refusal stands over the field with its
+   * fix (Update Claude Code, Update pi, Install OpenCode 2.0.29), and once
+   * that lands the session starts again with nothing more to press
+   * (`relaunchUnblocked`).
+   */
+  const harnessStart = $derived.by(() => {
+    const row = failedRow;
+    if (!row?.harness) {
       return null;
     }
     const machine = cawco.machines.find(
       (one) => one.machineId === row.machineId
     );
-    const block = machine ? claudeBlockOf(machine) : null;
+    const block = machine ? harnessBlockOf(machine, row.harness) : null;
     return machine && block ? { machine, block } : null;
   });
-  // Any session this tab saw refused whose machine's Claude Code now runs
-  // goes again, whichever composer is on screen.
+  /** A start again after its harness was brought up that was refused: said here, with Retry. */
+  const relaunchRefused = $derived(
+    recallOf && failedRow ? relaunchRefusalOf(recallOf) : undefined
+  );
+  let retrying = $state(false);
+  async function retryStart(): Promise<void> {
+    if (!recallOf || retrying) {
+      return;
+    }
+    retrying = true;
+    try {
+      await retryRelaunch(recallOf);
+    } finally {
+      retrying = false;
+    }
+  }
+  // Any session this tab saw refused whose machine's harness now runs goes
+  // again, whichever composer is on screen.
   $effect(() => {
     relaunchUnblocked(cawco.machines);
+  });
+  // A session that went on some other way has no refusal left to say.
+  $effect(() => {
+    if (recallOf && !failedRow) {
+      forgetRelaunch(recallOf);
+    }
   });
 
   let sendBlock = $state("");
@@ -3325,17 +3359,36 @@
          back stands on the line that says what failed, after its words.
          While the canvas stands, it stands in the grown shape over the
          field, above its surface. -->
-    {#if claudeStart && recallOf}
+    {#if harnessStart && recallOf}
       <div
-        data-slot="claude-block"
+        data-slot="start-block"
         class="pointer-events-auto px-space-3 group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         transition:unfold
       >
-        <ClaudeBlock
-          block={claudeStart.block}
-          machineId={claudeStart.machine.machineId}
-          online={claudeStart.machine.status === "online"}
+        <HarnessBlock
+          block={harnessStart.block}
+          machineId={harnessStart.machine.machineId}
+          online={harnessStart.machine.status === "online"}
           relaunch={recallOf}
+        />
+      </div>
+    {:else if relaunchRefused}
+      <!-- Its harness was brought up, and its start again was refused: the
+           machine's words, and the way on. -->
+      <div
+        data-slot="relaunch-error"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail-ink text-size-meta font-normal wrap-anywhere group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        role="alert"
+        transition:unfold
+      >
+        <p class="min-w-0">{relaunchRefused}</p>
+        <Button
+          label="Retry"
+          onclick={retryStart}
+          pending={retrying}
+          pendingLabel="Starting…"
+          size="sm"
+          variant="ghost"
         />
       </div>
     {:else if sendNotice}

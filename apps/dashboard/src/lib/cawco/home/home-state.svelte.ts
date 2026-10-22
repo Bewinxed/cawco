@@ -37,7 +37,6 @@ import {
 } from "@cawco/core";
 import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
-import { claudeBlockOf, claudeWords } from "../claude-block.svelte";
 import {
   type BlockedRequest,
   type BoardRow,
@@ -49,6 +48,7 @@ import {
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence } from "../convergence";
 import { machineFaults } from "../fleet-faults";
+import { harnessBlocksOf, harnessWords } from "../harness-block.svelte";
 import { hubAuth } from "../hub-auth.svelte";
 import {
   catalogTitle,
@@ -834,11 +834,15 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (machine.status !== "online") {
     return "unreachable";
   }
-  // Claude Code refused here (too old, none): nothing Claude starts on it
-  // until it is brought up, from its row in Configure → CLI tools.
-  const claude = claudeBlockOf(machine);
-  if (claude) {
-    return claudeWords.row(claude);
+  // A harness CLI refused here: nothing of it starts on the machine until it
+  // is brought up, from its block or Configure → CLI tools. Each one said:
+  // one never hides another. Claude Code is every machine's, so its absence
+  // is said; an OpenCode or pi the person never put on is not a fault.
+  const blocked = harnessBlocksOf(machine).filter(
+    (block) => block.harness === "claude" || block.kind === "version"
+  );
+  if (blocked.length > 0) {
+    return blocked.map(harnessWords.row).join(" · ");
   }
   // Every harness's sign-in words: one never hides another's.
   const signIn = [

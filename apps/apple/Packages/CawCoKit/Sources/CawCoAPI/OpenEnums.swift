@@ -3944,8 +3944,8 @@ public enum OpenEnums {
     /// `#/components/schemas/InstallStep`.
     public enum InstallStep: OpenEnum {
         case agent
-        case claude
         case fetch
+        case harnesses
         case install
         case key
         case listed
@@ -3958,8 +3958,8 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "agent": self = .agent
-            case "claude": self = .claude
             case "fetch": self = .fetch
+            case "harnesses": self = .harnesses
             case "install": self = .install
             case "key": self = .key
             case "listed": self = .listed
@@ -3973,8 +3973,8 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .agent: "agent"
-            case .claude: "claude"
             case .fetch: "fetch"
+            case .harnesses: "harnesses"
             case .install: "install"
             case .key: "key"
             case .listed: "listed"
@@ -3989,7 +3989,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.agent, .claude, .fetch, .install, .key, .listed, .path, .run, .signIn]
+        public static let allCases: [Self] = [.agent, .fetch, .harnesses, .install, .key, .listed, .path, .run, .signIn]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

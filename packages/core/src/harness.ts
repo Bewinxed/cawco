@@ -26,6 +26,16 @@ import { CLAUDE_PROVIDER } from "./accounts";
 export type HarnessKind = "claude" | "opencode" | "pi";
 
 /**
+ * Each harness's CLI, by its tool catalog id (core tools.ts `TOOL_CATALOG`):
+ * what installing or updating the harness puts on a machine.
+ */
+export const HARNESS_TOOL: Record<HarnessKind, string> = {
+  claude: "claude",
+  opencode: "opencode",
+  pi: "pi",
+};
+
+/**
  * How long one part of a machine's report may take before the agent gives
  * it up for this beat (agent daemon.ts `readPart`), a harness's report among
  * them. Longer than the slowest read that answers (a Claude account's probe
@@ -1549,12 +1559,14 @@ export interface HarnessReport {
    */
   modelsUnread?: string;
   /**
-   * Claude only: why the machine's version gate refuses every start of its
-   * Claude Code (agent claude-version.ts `ClaudeRefused`), its sentence in
-   * {@link authReason}: `not-installed`, or `version` (older than core's
-   * `CLAUDE_VERSION_FLOOR`, or no version said). Absent when it runs. Where
-   * the dashboard puts the refusal in place of what it blocks, with the
-   * catalog's install of `claude` as its one press (`ClaudeBlock`).
+   * Why the machine refuses every start of this harness's CLI, its sentence
+   * in {@link authReason}: `not-installed`, or `version` (not a version the
+   * harness's catalog entry runs: below Claude Code's or pi's floor, not
+   * OpenCode's one version, or no version said). Claude's gate is agent
+   * claude-version.ts `claudeToStart`; OpenCode's and pi's tools.ts
+   * `toolGate`. Absent when it runs. Where the dashboard puts the refusal in
+   * place of what it blocks, with the catalog's install of the harness's
+   * tool ({@link HARNESS_TOOL}) as its one press (`HarnessBlock`).
    */
   refused?: "not-installed" | "version";
   /**

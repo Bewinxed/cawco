@@ -1,23 +1,24 @@
 <script lang="ts">
   /**
-   * A machine's Claude Code refused, in place of what it blocks (a sign-in,
-   * a session's start, the machine's tool row): why, in the machine's own
-   * sentence, and its one fix as a press, Update Claude Code (Install, with
-   * none there). The update is the hub's tool cell (claude-block.svelte.ts),
-   * so its progress and its outcome come back after a reload, on every
-   * dashboard, and go on when this is closed. A failed update says why in
-   * the machine's words, and the press reads Retry. Nothing here once the
-   * machine's Claude Code runs: the surface it stood in goes on.
+   * A machine's harness CLI refused (Claude Code, OpenCode or pi), in place
+   * of what it blocks (Claude Code's sign-in, a session's start): why, in the
+   * machine's own sentence, and its one fix as a press, Update Claude Code,
+   * Update pi, Install OpenCode 2.0.29 (Install, with none there). The fix
+   * is the hub's tool cell (harness-block.svelte.ts), so its progress and
+   * its outcome come back after a reload, on every dashboard, and go on when
+   * this is closed. A failed one says why in the machine's words, and the
+   * press reads Retry. Nothing here once the harness runs: the surface it
+   * stood in goes on.
    */
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconDownload, IconWarningTriangle } from "#lib/icons.js";
-  import {
-    type ClaudeBlock,
-    fixClaude,
-    claudeWords as words,
-  } from "./claude-block.svelte";
   import { didntAnswer } from "./client.svelte";
+  import {
+    fixHarness,
+    type HarnessBlock,
+    harnessWords as words,
+  } from "./harness-block.svelte";
   import { failureWords } from "./hub-read";
   import { TRY_AGAIN } from "./unanswered";
 
@@ -27,7 +28,7 @@
     online,
     relaunch,
   }: {
-    block: ClaudeBlock;
+    block: HarnessBlock;
     machineId: string;
     online: boolean;
     /** A session whose refused start goes again, with nothing to press, once this lands. */
@@ -48,10 +49,10 @@
     asking = true;
     refused = null;
     try {
-      const read = await fixClaude(machineId, relaunch);
+      const read = await fixHarness(machineId, block.harness, relaunch);
       if (read.kind === "unanswered") {
         refused = didntAnswer(machineId, read, {
-          outcome: `whether Claude Code is on ${block.name} now isn't known`,
+          outcome: `whether ${block.spec.name} is on ${block.machine} now isn't known`,
           again: TRY_AGAIN,
         });
       }
@@ -64,7 +65,8 @@
 </script>
 
 <div
-  data-slot="claude-block"
+  data-slot="harness-block"
+  data-harness={block.harness}
   data-phase={block.fix.phase}
   class="flex min-w-0 flex-col gap-space-2"
 >

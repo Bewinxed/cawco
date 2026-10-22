@@ -29,7 +29,7 @@
  * - a forced failure says the Problem's words on the row and in the window,
  *   never as a toast;
  * - the command route's three steps tick from the hub's fetch and join, and
- *   its Claude Code step (installs.ts `ready`) ends it joined;
+ *   its harnesses step (installs.ts `ready`) ends it joined;
  * - the window's flight into its row, scrubbed at 0, 0.5 and 1;
  * - in WebKit, focusing each Reach field moves nothing inside the drawer;
  * - (1) a press outside, × and Esc each park a failed install: it stays on
@@ -1256,12 +1256,12 @@ async function walk(
     (one) => one.id === commandId
   );
   kit.check(
-    `${leg}: the command route's three steps tick from the hub's fetch and join signals`,
+    `${leg}: the command route's steps tick from the hub's fetch and join signals, and its harnesses step ends it joined`,
     fetched.includes(`CODE='${code}'`) &&
       JSON.stringify(afterFetch) === JSON.stringify(["run✓", "install…"]) &&
       afterJoin?.state === "joined" &&
       afterJoin.steps.map((one) => one.step).join(",") ===
-        "run,install,listed,claude",
+        "run,install,listed,harnesses",
     `after the fetch ${JSON.stringify(afterFetch)}; after the join ${afterJoin?.state} ${JSON.stringify(afterJoin?.steps.map((one) => one.step))}`
   );
   await page.focus(`${WINDOW} [data-slot=close]`);

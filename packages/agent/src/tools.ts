@@ -6,7 +6,7 @@
  */
 
 import { existsSync, realpathSync } from "node:fs";
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { platform } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type {
@@ -16,7 +16,7 @@ import type {
   ToolSpec,
   ToolStatus,
 } from "@cawco/core";
-import { olderThan, TOOL_CATALOG, toolSpec } from "@cawco/core";
+import { olderThan, TOOL_CATALOG, toolRuns, toolSpec } from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
@@ -395,14 +395,12 @@ export const installAdvice = async (
       return { refusal: refused };
     }
   }
-  const method =
-    at?.method ??
-    spec.install.find((one) =>
-      one.platforms.includes(platform() as ToolPlatform)
-    );
+  // The method an install here would run: the copy's own, else the first
+  // this machine can run (its `needs` present), as `install` picks.
+  const method = at?.method ?? spec.install.find(eligible);
   return method
     ? { command: commandOf(method, want) }
-    : { refusal: `${spec.name} has no install command for ${platform()}` };
+    : { refusal: `${spec.name}: ${noMethod(spec).detail}` };
 };
 
 /** {@link installAdvice} as words to put in a sentence: the command, or why there is none. */
@@ -428,6 +426,75 @@ const probeVersion = async (
     .env(toolEnv());
   const said = `${ran.stdout.toString()}${ran.stderr.toString()}`;
   return said.match(VERSION_PATTERN)?.[0];
+};
+
+/**
+ * Whether a harness CLI the catalog holds may start here: the version gate
+ * OpenCode's and pi's sessions go through (Claude Code's is its own,
+ * claude-version.ts). Its binary as {@link toolBinary} finds it, and the
+ * version that binary says, read once per file (its real path, mtime and
+ * size: an update moves or rewrites it) so a start does not wait on a
+ * `--version` each time. `refused` and its sentence when it is missing or
+ * not a version the catalog runs (its floor, or its one version), in the
+ * error formula with its fix: the press that installs it (dashboard
+ * HarnessBlock).
+ */
+export interface ToolGate {
+  path?: string;
+  refused?: "not-installed" | "version";
+  version?: string;
+  /** The refusal's sentence; set with `refused`. */
+  words?: string;
+}
+
+/** The version each binary said, by `<real path>:<mtime>:<size>`. */
+const gateReads = new Map<string, Promise<string | undefined>>();
+
+/** What `spec` runs, in words: "2.0.29", "1.3.0 or newer". */
+const wanted = (spec: ToolSpec): string =>
+  spec.exactVersion ??
+  (spec.minVersion
+    ? `${spec.minVersion} or newer`
+    : "a version that says itself");
+
+export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
+  const path = await toolBinary(spec);
+  if (!path) {
+    sawTool(spec.id, "missing");
+    return {
+      refused: "not-installed",
+      words: `${spec.name} isn't installed on this machine, so CawCo can't start a ${spec.name} session there. Install ${spec.name}, and CawCo runs it as soon as it's on.`,
+    };
+  }
+  const file = await realpath(path).catch(() => path);
+  const { mtimeMs, size } = await stat(file).catch(() => ({
+    mtimeMs: 0,
+    size: 0,
+  }));
+  const key = `${file}:${mtimeMs}:${size}`;
+  let read = gateReads.get(key);
+  if (!read) {
+    read = probeVersion(spec, path);
+    gateReads.set(key, read);
+  }
+  const version = await read;
+  if (!version) {
+    // Not kept: the next start asks again.
+    gateReads.delete(key);
+  }
+  sawTool(spec.id, version ?? "unsaid");
+  if (toolRuns(spec, version)) {
+    return { path, ...(version ? { version } : {}) };
+  }
+  const update = spec.exactVersion
+    ? `Install ${spec.name} ${spec.exactVersion}`
+    : `Update ${spec.name}`;
+  return {
+    path,
+    ...(version ? { version } : {}),
+    refused: "version",
+    words: `${spec.name} ${version ?? "(it said no version)"} on this machine isn't one CawCo runs (${wanted(spec)}), so no ${spec.name} session starts there. ${update} on this machine, and CawCo runs it again: nothing was started.`,
+  };
 };
 
 /**
@@ -498,7 +565,7 @@ export const probeTools = async (): Promise<ToolStatus[]> => {
  * the person. While one runs the tool is reported as `installing`; one that
  * ended while the probe read is read again.
  */
-const installing = new Set<string>();
+const installing = new Map<string, Promise<ToolStatus>>();
 const installEnded = new Map<string, number>();
 
 /** One catalog tool, as {@link probeTools} reports it. */
@@ -641,15 +708,20 @@ export const installTool = async (
       at: Date.now(),
     };
   }
-  installing.add(spec.id);
-  try {
-    // A tool CawCo is built against goes on at its one version, whatever is pinned.
-    return await install(spec, spec.exactVersion ?? version);
-  } finally {
+  // One install of a tool at a time: a second ask while one runs (a press
+  // in the dashboard while an add brings the machine up) answers with it.
+  const running = installing.get(spec.id);
+  if (running) {
+    return await running;
+  }
+  // A tool CawCo is built against goes on at its one version, whatever is pinned.
+  const work = install(spec, spec.exactVersion ?? version).finally(() => {
     installing.delete(spec.id);
     installEnded.set(spec.id, Date.now());
     toolsMoved();
-  }
+  });
+  installing.set(spec.id, work);
+  return await work;
 };
 
 /** A tool {@link putOnPins} moved: from the version it said (when it said one) to `to`, with `method`. */

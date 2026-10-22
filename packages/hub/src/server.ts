@@ -92,6 +92,7 @@ import type {
   SpawnPayload,
   ThreadNote,
   ThreadSummary,
+  ToolSpec,
   ToolState,
   ToolStatus,
   TranscriptAnswer,
@@ -232,6 +233,7 @@ import {
   FRESH_START,
   forkNotice,
   GENERATE_IMAGE,
+  HARNESS_TOOL,
   HARNESSES,
   HOOK_TEMPLATES,
   type HomeCredential,
@@ -1219,8 +1221,8 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
 /**
- * How long a tool install the hub runs itself (a joined machine's Claude
- * Code, `readyClaude`) may take to answer: the dashboard's own install wait
+ * How long a tool install the hub runs itself (a joined machine's harness
+ * CLIs, `readyHarnesses`) may take to answer: the dashboard's own install wait
  * (dashboard config.ts `INSTALL_TIMEOUT_MS`), so the two never disagree.
  */
 const TOOL_INSTALL_MS = 300_000;
@@ -6508,7 +6510,7 @@ export const createServer = (
     outcome: (install) => push.install(install),
     settled: (id) => push.installSettled(id),
     // Stands further down, beside the installs a tool policy sends.
-    readyClaude: (machineId, say) => readyClaude(machineId, say),
+    readyHarnesses: (machineId, say) => readyHarnesses(machineId, say),
     // Read when an add asks, once the hub has started: both stand further down.
     offered: () => binaryUpdates.offered(),
     heard: (record) => {
@@ -17911,81 +17913,145 @@ export const createServer = (
 
   /**
    * ADDING A MACHINE LEAVES IT READY (installs.ts `ready`): a machine that
-   * just joined is asked what tools it has, and its Claude Code is installed
-   * when missing or updated when older than core's `CLAUDE_VERSION_FLOOR`
-   * (the catalog's `claude`: its own updater, else the official installer),
-   * so it joins able to start sessions and sign accounts in. Answers whether
-   * Claude Code runs there now, in words; `say` takes each step's line.
+   * just joined is asked what tools it has, then each harness CLI is brought
+   * to a version CawCo runs, one at a time, through the catalog's install
+   * (`installAwaited`): Claude Code installed when missing or updated when
+   * older than core's `CLAUDE_VERSION_FLOOR`; OpenCode and pi, which a
+   * machine runs only when its person put them there, updated when they are
+   * there at a version CawCo doesn't run. So it joins able to start sessions
+   * and sign accounts in. Answers whether they all run there now, in words;
+   * `say` takes each step's line.
    */
-  const readyClaude = async (
+  const readyHarnesses = async (
     machineId: string,
     say: (line: string) => void
   ): Promise<{ ok: boolean; said: string }> => {
     const name = machineName(machineId);
     const fix =
-      "It is in the fleet: update Claude Code from its row in Configure → CLI tools.";
-    const runsOn = (version: string | undefined): string =>
-      `Claude Code${version ? ` ${version}` : ""} runs on ${name}.`;
-    say(`asking ${name} which Claude Code it has`);
-    const has = await claudeToolOn(machineId);
-    if ("said" in has) {
-      return { ok: false, said: `${has.said} ${fix}` };
+      "It is in the fleet: bring it up from its row in Configure → CLI tools.";
+    say(`asking ${name} which Claude Code, OpenCode and pi it has`);
+    const tools = await toolsOn(machineId);
+    if ("said" in tools) {
+      return { ok: false, said: `${tools.said} ${fix}` };
+    }
+    const runs: string[] = [];
+    const failed: string[] = [];
+    for (const harness of HARNESS_KINDS) {
+      // biome-ignore lint/performance/noAwaitInLoops: one install at a time on a machine, each told before the next
+      const brought = await readyHarness(machineId, harness, tools, say);
+      if ("runs" in brought) {
+        runs.push(brought.runs);
+      } else if ("failed" in brought) {
+        failed.push(brought.failed);
+      }
+    }
+    if (failed.length > 0) {
+      return { ok: false, said: `${failed.join(" ")} ${fix}` };
+    }
+    return {
+      ok: true,
+      said: `${runs.length > 0 ? runs.join(", ") : "Nothing to bring up"} on ${name}.`,
+    };
+  };
+
+  /** Each harness, in the order a machine's are brought up: Claude Code first, which every machine runs. */
+  const HARNESS_KINDS: HarnessKind[] = ["claude", "opencode", "pi"];
+
+  /**
+   * One harness on a joined machine (`readyHarnesses`): what runs, brought
+   * up when it needs it, or why not, in words; nothing to say for an
+   * OpenCode or pi the machine doesn't have (only Claude Code is put on
+   * unasked) or whose build's catalog lacks it.
+   */
+  const readyHarness = (
+    machineId: string,
+    harness: HarnessKind,
+    tools: ToolStatus[],
+    say: (line: string) => void
+  ): Promise<{ runs: string } | { failed: string } | { skipped: true }> => {
+    const spec = toolSpec(HARNESS_TOOL[harness]);
+    const has = tools.find((tool) => tool.id === HARNESS_TOOL[harness]);
+    if (!(spec && has)) {
+      // A build whose catalog lacks it: Claude Code is what every machine
+      // runs, so its absence fails the step; the others are not asked.
+      return Promise.resolve(
+        harness === "claude"
+          ? {
+              failed: `${machineName(machineId)} runs a CawCo build that doesn't manage Claude Code, so it wasn't checked. Update CawCo there from Configure → Updates.`,
+            }
+          : { skipped: true }
+      );
     }
     if (has.state === "installed") {
-      return { ok: true, said: runsOn(has.version) };
+      return Promise.resolve({
+        runs: `${spec.name}${has.version ? ` ${has.version}` : ""}`,
+      });
     }
+    if (has.state === "missing" && harness !== "claude") {
+      return Promise.resolve({ skipped: true });
+    }
+    return bringTool(machineId, spec, has, say);
+  };
+
+  /**
+   * One harness CLI put on a machine (`readyHarnesses`): installed when
+   * missing, else updated. What runs now, or why not, in words.
+   */
+  const bringTool = async (
+    machineId: string,
+    spec: ToolSpec,
+    has: ToolStatus,
+    say: (line: string) => void
+  ): Promise<{ runs: string } | { failed: string }> => {
+    const name = machineName(machineId);
     const verb = has.state === "missing" ? "install" : "update";
     say(
       verb === "install"
-        ? `installing Claude Code on ${name}`
-        : `updating Claude Code${has.version ? ` ${has.version}` : ""} on ${name}`
+        ? `installing ${spec.name} on ${name}`
+        : `updating ${spec.name}${has.version ? ` ${has.version}` : ""} on ${name}`
     );
-    const answer = await installAwaited(machineId, "claude");
+    const answer = await installAwaited(machineId, spec.id);
     if (answer.kind === "unanswered") {
       return {
-        ok: false,
-        said: `${name} didn't answer while Claude Code was being put on (${silentWords(machineId, answer)}), so whether it finished isn't known. ${fix}`,
+        failed: `${name} didn't answer while ${spec.name} was being put on (${silentWords(machineId, answer)}), so whether it finished isn't known.`,
       };
     }
     const status = peekToolStatus({ result: answer.value.result });
     if (status?.state === "installed") {
-      return { ok: true, said: runsOn(status.version) };
+      say(
+        `${spec.name}${status.version ? ` ${status.version}` : ""} runs on ${name}`
+      );
+      return {
+        runs: `${spec.name}${status.version ? ` ${status.version}` : ""}`,
+      };
     }
     const why =
       status?.detail ?? answer.value.error ?? "the machine didn't say why";
-    return {
-      ok: false,
-      said: `Claude Code didn't ${verb} on ${name}: ${why} ${fix}`,
-    };
+    return { failed: `${spec.name} didn't ${verb} on ${name}: ${why}` };
   };
 
   /**
-   * The machine's Claude Code, as its tool probe finds it (`listTools`): its
-   * catalog row, or why there is none to read, in words.
+   * The machine's tools, as its tool probe finds them (`listTools`), or why
+   * they could not be read, in words.
    */
-  const claudeToolOn = async (
+  const toolsOn = async (
     machineId: string
-  ): Promise<ToolStatus | { said: string }> => {
+  ): Promise<ToolStatus[] | { said: string }> => {
     const name = machineName(machineId);
     const listed = await callAgent(machineId, "listTools", [], READ_TIMEOUT_MS);
     if (listed.kind === "unanswered") {
       return {
-        said: `${name} didn't say which Claude Code it has (${silentWords(machineId, listed)}).`,
+        said: `${name} didn't say which tools it has (${silentWords(machineId, listed)}).`,
       };
     }
     if (!listed.value.ok) {
       return {
-        said: `${name} didn't say which Claude Code it has (${listed.value.error ?? "its agent refused the ask"}).`,
+        said: `${name} didn't say which tools it has (${listed.value.error ?? "its agent refused the ask"}).`,
       };
     }
-    const tools = Array.isArray(listed.value.result)
+    return Array.isArray(listed.value.result)
       ? listed.value.result.filter(isToolStatus)
       : [];
-    return (
-      tools.find((tool) => tool.id === "claude") ?? {
-        said: `${name} runs a CawCo build that doesn't manage Claude Code, so it wasn't checked. Update CawCo there from Configure → Updates.`,
-      }
-    );
   };
 
   /**

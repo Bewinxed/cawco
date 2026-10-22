@@ -12,8 +12,8 @@
    *
    * Over SSH the output's last line stands in a one-line well, with Open
    * output and Stop install under it; by a command, the line itself with
-   * Copy command, and how the hub hears of it. Stop asks in the page under
-   * the footer, with what stopping leaves on the machine.
+   * Copy command (the steps above say what follows it). Stop asks in the
+   * page under the footer, with what stopping leaves on the machine.
    */
   import type { Install } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -174,10 +174,6 @@
         lines={[install.command]}
       />
     {/if}
-    <p class="m-0 type-meta text-pretty text-ink-muted">
-      Its terminal shows each check; the hub hears from it when the install
-      finishes.
-    </p>
     <div class="flex justify-end">
       <Button onclick={askStop} variant="destructive">Stop install</Button>
     </div>

@@ -264,7 +264,20 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       ? { reason: runtimeMissing() }
       : await foundRuntimeFacts(runtime);
   const reach = await publicAddressItem();
-  const opencodeAdvice = await installAdvice("opencode");
+  // What the install action runs here for each harness CLI (tools.ts
+  // `installAdvice`): the way its copy got here, or the first way this
+  // machine can run, or why there is none.
+  const [claudeAdvice, opencodeAdvice, piAdvice] = await Promise.all([
+    installAdvice("claude"),
+    installAdvice("opencode"),
+    installAdvice("pi"),
+  ]);
+  const adviceOf = (
+    advice: Awaited<ReturnType<typeof installAdvice>>
+  ): Pick<MachineCapability, "installCommand" | "reason"> =>
+    "command" in advice
+      ? { installCommand: advice.command }
+      : { installCommand: "", reason: advice.refusal };
   const items: MachineCapability[] = [
     {
       id: "git",
@@ -277,26 +290,20 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       id: "claude",
       available: !!claude,
       path: claude,
-      // Claude Code's native installer for macOS, Linux and WSL
-      // (https://code.claude.com/docs/en/setup).
-      installCommand: "curl -fsSL https://claude.ai/install.sh | bash",
+      ...adviceOf(claudeAdvice),
       ...(claude ? {} : { reason: CLAUDE_NOT_INSTALLED }),
     },
     {
       id: "opencode",
       available: !!opencode,
       path: opencode,
-      // The command the install action runs here: the way this machine's
-      // OpenCode got here, or none and why.
-      ...("command" in opencodeAdvice
-        ? { installCommand: opencodeAdvice.command }
-        : { installCommand: "", reason: opencodeAdvice.refusal }),
+      ...adviceOf(opencodeAdvice),
     },
     {
       id: "pi",
       available: !!resolveBin("pi"),
       path: resolveBin("pi"),
-      installCommand: "npm install -g @earendil-works/pi-coding-agent",
+      ...adviceOf(piAdvice),
     },
     {
       id: "node",

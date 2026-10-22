@@ -13,7 +13,7 @@
  * `FormAlreadySettledError`, …), and a request that never reached the server
  * as a `ClientError` with reason `Transport`.
  */
-import { toolSpec } from "@cawco/core";
+import { type ToolSpec, toolSpec } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { toolBinary } from "../tools";
@@ -62,6 +62,9 @@ export const OPENCODE_BIN = OPENCODE_TOOL.bin;
  */
 export const opencodeBinary = (): Promise<string | undefined> =>
   toolBinary(OPENCODE_TOOL);
+
+/** OpenCode's catalog entry, which its version gate reads (tools.ts `toolGate`). */
+export const OPENCODE_SPEC: ToolSpec = OPENCODE_TOOL;
 
 /** Where one server listens and the password it was launched with. */
 export interface ServerAddress {
