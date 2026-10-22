@@ -51,6 +51,7 @@
  *   bun scripts/probe-kit/run.ts artifact-needs
  */
 import { readFileSync } from "node:fs";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import {
@@ -61,10 +62,7 @@ import {
   reasonLine,
   unparked,
 } from "../../../packages/core/src/artifact-needs";
-import {
-  CLAUDE_CONVERSATION_GONE,
-  type Envelope,
-} from "../../../packages/core/src/index";
+import type { Envelope } from "../../../packages/core/src/index";
 import {
   HARNESSES,
   type Harness,
@@ -717,9 +715,59 @@ const supersededAndNotNow = async (at: At, session: string) => {
   return id;
 };
 
-/** Rule 4: its session ended, it is one notice. */
+/** Removes every transcript file of `conversation` under `home`; how many it removed (plan-changes' own). */
+const removeTranscript = async (
+  home: string,
+  conversation: string
+): Promise<number> => {
+  if (!conversation) {
+    return 0;
+  }
+  let removed = 0;
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of await readdir(dir, { withFileTypes: true }).catch(
+      () => []
+    )) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // biome-ignore lint/performance/noAwaitInLoops: a walk, one folder at a time
+        await walk(path);
+      } else if (entry.name === `${conversation}.jsonl`) {
+        await rm(path);
+        removed += 1;
+      }
+    }
+  };
+  await walk(home);
+  return removed;
+};
+
+/** One column of the session's row on the hub. */
+const rowSays = (fleet: KitFleet, session: string, column: string): string =>
+  String(
+    fleet.query<Record<string, unknown>>(
+      `SELECT ${column} AS value FROM instances WHERE id = ?`,
+      session
+    )[0]?.value ?? ""
+  );
+
+/**
+ * Rule 4: its session ended, it is one notice. The session's conversation
+ * is gone as it goes in life: stopped, its transcript removed, then woken
+ * by a message, whose resume finds nothing (agent claude.ts
+ * `conversationGone`), which the hub records (`processFailed`).
+ */
 const ended = async (at: At, session: string) => {
   const { fleet, kit } = at;
+  // A conversation of its own first: a turn.
+  const spokeAt = Date.now();
+  await fleet.send(session, "PROBE-HELLO say hello");
+  await until(
+    "its first turn's end",
+    () => turnEndedAt(fleet, session),
+    (end) => end > spokeAt,
+    120_000
+  );
   const id = await create(fleet, session, {
     kind: "page",
     does: "pick",
@@ -730,23 +778,35 @@ const ended = async (at: At, session: string) => {
   const page = await ownTab(at, id);
   const stood = await lineIs(fleet, id, "0 of 2 picked");
   await page.close();
-  // Its conversation gone, as the hub records Claude Code's refusal to resume it.
-  fleet.write(
-    "UPDATE instances SET last_error = ?, last_error_kind = 'conversation-gone' WHERE id = ?",
-    CLAUDE_CONVERSATION_GONE,
-    session
+  await fleet.stopSession(session);
+  await until(
+    "the session stopped",
+    () => rowSays(fleet, session, "status"),
+    (status) => status === "stopped",
+    60_000
   );
+  const conversation = rowSays(fleet, session, "session_id");
+  const removed = await removeTranscript(fleet.home, conversation);
+  await fleet.send(session, "PROBE-WAKE are you there");
+  const gone = await until(
+    "its resume finding the conversation gone",
+    () => rowSays(fleet, session, "last_error_kind"),
+    (kind) => kind === "conversation-gone",
+    120_000
+  ).catch(() => rowSays(fleet, session, "last_error_kind"));
   const left = await lineIs(fleet, id, null);
   const notice = await noticeOf(fleet, id);
   const words = notice
     ? notice.parts.map((part) => noticePartWords(part, notice.name)).join(" · ")
     : null;
   kit.check(
-    "rule 4, its session ended: it leaves Needs you and is one notice, 'Claude Code ended; 2 picks on pairing never made'",
+    "rule 4, its session ended (stopped, its transcript gone, its resume finding nothing): it leaves Needs you and is one notice, 'Claude Code ended; 2 picks on pairing never made'",
     stood !== null &&
+      removed > 0 &&
+      gone === "conversation-gone" &&
       left === null &&
       words === "Claude Code ended; 2 picks on pairing never made",
-    `stood ${stood}; left ${left}; notice ${words}`
+    `stood ${stood}; transcripts removed ${removed}; the hub's record ${gone}; left ${left}; notice ${words}`
   );
 };
 
