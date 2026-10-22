@@ -11,7 +11,7 @@
    * skeleton rows.
    */
   import { configureWords } from "@cawco/core";
-  import { onDestroy, type Snippet, untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { appear, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -103,15 +103,19 @@
     })
   );
   // Leaving the section for another page is acting on what it said; a
-  // reload is not, and keeps it.
-  const here = sectionOf(page.url.pathname);
-  onDestroy(() => {
-    if (sectionOf(page.url.pathname) === here) {
-      return;
-    }
-    for (const said of unrestoredOn(here, () => undefined)) {
-      refusals.delete(said.key);
-    }
+  // reload is not, and keeps it. A teardown runs in the browser only: on
+  // the server there is no leaving, and no page to read after the render.
+  $effect(() => {
+    const here = untrack(() => sectionOf(page.url.pathname));
+    return () =>
+      untrack(() => {
+        if (sectionOf(page.url.pathname) === here) {
+          return;
+        }
+        for (const said of unrestoredOn(here, () => undefined)) {
+          refusals.delete(said.key);
+        }
+      });
   });
   /** Rows read, nothing wrong, the hub up: the size worth keeping. */
   const settled = $derived(ready && !problem && cawco.hub === "connected");

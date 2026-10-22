@@ -3746,6 +3746,7 @@
          hub refused, kept through a reload. -->
     <div
       data-slot="failure"
+      data-pane-failure
       class="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
       role="alert"
       transition:appear

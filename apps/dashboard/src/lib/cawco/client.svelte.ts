@@ -110,6 +110,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  accountsWords,
   CAWCO_SCRATCH_TAG,
   CONTROL_SUPPORTED_COMMANDS,
   capHolds,
@@ -3738,15 +3739,19 @@ const detailsOpen = new SvelteMap<string, number>();
 
 /** Marks `sessionId`'s details card as standing, until the returned release. */
 export function holdDetails(sessionId: string): () => void {
-  detailsOpen.set(sessionId, (detailsOpen.get(sessionId) ?? 0) + 1);
-  return () => {
-    const left = (detailsOpen.get(sessionId) ?? 1) - 1;
-    if (left > 0) {
-      detailsOpen.set(sessionId, left);
-    } else {
-      detailsOpen.delete(sessionId);
-    }
-  };
+  // Called from the card's effect: the count is written, never tracked there.
+  untrack(() => {
+    detailsOpen.set(sessionId, (detailsOpen.get(sessionId) ?? 0) + 1);
+  });
+  return () =>
+    untrack(() => {
+      const left = (detailsOpen.get(sessionId) ?? 1) - 1;
+      if (left > 0) {
+        detailsOpen.set(sessionId, left);
+      } else {
+        detailsOpen.delete(sessionId);
+      }
+    });
 }
 
 /** A reason's closing stop, dropped so it sits inside the sentence. */
@@ -3891,17 +3896,38 @@ export function settingFault(
   return said ? faultOf(instanceId, said) : null;
 }
 
+/**
+ * What each control command asked, by command id, from its submit: the
+ * ledger lets a record's envelope go once it settles, before its failure
+ * is noted, and Try again needs the machine and the argument.
+ */
+const controlAsks = new Map<string, { arg?: unknown; machineId: string }>();
+
+/** Keeps what a control command asked, dropping what settled long ago. */
+function rememberControlAsk(
+  commandId: string,
+  machineId: string,
+  arg?: unknown
+): void {
+  for (const known of [...controlAsks.keys()]) {
+    if (!streamState.commands[known]) {
+      controlAsks.delete(known);
+    }
+  }
+  controlAsks.set(commandId, { arg, machineId });
+}
+
 function sayCommandFault(record: CommandRecord): void {
-  const { envelope } = record;
-  const [arg] = ((envelope?.payload as { args?: unknown[] } | undefined)
-    ?.args ?? []) as unknown[];
+  const asked = controlAsks.get(record.commandId);
+  controlAsks.delete(record.commandId);
   refusals.set(commandKey(record.sessionId, record.kind), {
     reason: failureNotice(record),
     asked: {
       at: Date.now(),
-      arg,
+      arg: asked?.arg,
       kind: record.kind,
-      machineId: envelope?.machineId,
+      machineId:
+        asked?.machineId ?? instanceIndex.byId.get(record.sessionId)?.machineId,
     } satisfies CommandAsked,
   });
 }
@@ -4199,6 +4225,14 @@ export function submitCommand<K extends CommandKind>(
   const settlesAt = SETTLES_AT[kind];
   // A new command answers what was said of the last ones.
   clearCommandFaults(instanceId);
+  if (SETTINGS_KINDS.has(kind) || kind === "interrupt") {
+    const { model, effort, mode } = intent as Partial<
+      CommandIntents["set-model"] &
+        CommandIntents["set-effort"] &
+        CommandIntents["set-permission-mode"]
+    >;
+    rememberControlAsk(commandId, machineId, model ?? effort ?? mode);
+  }
 
   // REGISTERED BEFORE ANYTHING THAT CAN FAIL, and that ordering is the whole
   // point of these two lines being here rather than after the submit.
@@ -7368,7 +7402,7 @@ export function harnessDidntAnswer(
   { harness, after }: HarnessUnanswered
 ): string {
   return catalogWords.harnessDidntAnswer(
-    harness,
+    accountsWords.harnesses[harness] ?? harness,
     machineName(machineId),
     Math.round(after / 1000)
   );
@@ -7383,7 +7417,7 @@ export function harnessCouldntList(
   { harness, error }: HarnessFailed
 ): string {
   return catalogWords.harnessCouldntList(
-    harness,
+    accountsWords.harnesses[harness] ?? harness,
     machineName(machineId),
     error
   );

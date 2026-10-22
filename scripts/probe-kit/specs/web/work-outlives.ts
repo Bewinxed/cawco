@@ -176,6 +176,8 @@ async function reload(page: Page): Promise<void> {
 
 /** The dashboard's socket as the spec holds it. */
 interface Socket {
+  /** Drops the socket under the page, as a hub restart does: it reconnects and reads again. */
+  drop: () => Promise<void>;
   /** While set, a `listSessions` answer leaves this harness out with this error. */
   listFails: { harness: string; error: string } | null;
   /** While set, the page's interrupts are refused by the hub in these words. */
@@ -255,6 +257,9 @@ async function socketOf(page: Page): Promise<Socket> {
       current?.send(
         JSON.stringify({ verb: "frames", machineId: "hub", payload })
       ),
+    drop: async () => {
+      await current?.close();
+    },
     refuseInterrupt: null,
     listFails: null,
   };
@@ -1422,6 +1427,8 @@ const seedPages = (page: Page, instanceId: string, names: string[]) =>
   );
 
 const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts$/;
+/** The session's own tab in its pane's strip, whose menu holds Copy link. */
+const SESSION_TAB = '[data-session-tabs] [data-slot="tab"]:visible';
 
 async function artifactMenuLeg(
   kit: Kit,
@@ -1517,7 +1524,7 @@ async function artifactMenuLeg(
     .locator(`[data-artifact-row][data-artifact="${older}"]`)
     .first()
     .click();
-  const paneLine = '[data-slot="failure"]';
+  const paneLine = "[data-pane-failure]";
   await until(
     async () => (await textOf(page, paneLine)).includes("held by"),
     10_000
@@ -1651,9 +1658,9 @@ async function copyLeg(kit: Kit, page: Page, base: string, instanceId: string) {
       });
     }
   });
-  const tab = page.locator('[data-slot="tab"]:visible').first();
+  const tab = page.locator(SESSION_TAB).first();
   await tab.waitFor({ state: "visible", timeout: 30_000 });
-  await tab.dispatchEvent("contextmenu", { button: 2 });
+  await tab.click({ button: "right" });
   const item = page.getByRole("menuitem", { name: "Copy link" }).first();
   await item.waitFor({ state: "visible", timeout: 10_000 });
   await item.click();
@@ -1675,9 +1682,9 @@ async function copyLeg(kit: Kit, page: Page, base: string, instanceId: string) {
   await page.keyboard.press("Escape");
   // Its menu opened again after a reload says it again under the item.
   await reload(page);
-  const again = page.locator('[data-slot="tab"]:visible').first();
+  const again = page.locator(SESSION_TAB).first();
   await again.waitFor({ state: "visible", timeout: 30_000 });
-  await again.dispatchEvent("contextmenu", { button: 2 });
+  await again.click({ button: "right" });
   await page
     .getByRole("menuitem", { name: "Copy link" })
     .first()
@@ -1697,7 +1704,8 @@ async function behindLeg(
   kit: Kit,
   page: Page,
   base: string,
-  instanceId: string
+  instanceId: string,
+  socket: Socket
 ) {
   await page.goto(`${base}/session/${instanceId}`, {
     waitUntil: "domcontentloaded",
@@ -1714,11 +1722,7 @@ async function behindLeg(
     })
   );
   // The socket drops: the catch-up read on reconnecting is refused.
-  await page.evaluate(() =>
-    (
-      globalThis as unknown as { __cawcoSocket?: WebSocket }
-    ).__cawcoSocket?.close()
-  );
+  await socket.drop();
   const line = '[data-slot="behind"]';
   const saidLong = await until(
     async () => (await textOf(page, line)).includes("schedule"),
@@ -1765,7 +1769,7 @@ async function behindLeg(
         box.behindOverflow <= 0 &&
         box.pOverflow <= 0 &&
         box.pageOverflow <= 0,
-      JSON.stringify(box)
+      JSON.stringify({ box, said: await textOf(page, line) })
     );
   }
   await page.unroute("**/api/instances/*/transcript*");
@@ -1846,14 +1850,31 @@ const spec: Spec = {
         ["artifact menu", () => artifactMenuLeg(k, page, base, chat, pass, n)],
         ["catalogue", () => catalogueLeg(k, page, base, socket)],
         ["copy", () => copyLeg(k, page, base, chat)],
-        ["behind", () => behindLeg(k, page, base, chat)],
+        ["behind", () => behindLeg(k, page, base, chat, socket)],
       ];
+      // What the page threw, said with a leg that did not run to its end.
+      const thrown: string[] = [];
+      page.on("pageerror", (error) => thrown.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() === "error") {
+          thrown.push(message.text());
+        }
+      });
+      const only = process.env.WORK_OUTLIVES_LEGS?.split(",").filter(Boolean);
       for (const [name, leg] of legs) {
+        if (only?.length && !only.includes(name)) {
+          continue;
+        }
+        thrown.length = 0;
         try {
           // biome-ignore lint/performance/noAwaitInLoops: one leg after another, on one page
           await leg();
         } catch (error) {
-          k.check(`${name}: ran to its end`, false, String(error));
+          k.check(
+            `${name}: ran to its end`,
+            false,
+            `${String(error)} ${JSON.stringify({ url: page.url(), thrown: thrown.slice(-8) })}`
+          );
         }
       }
       await tallyToasts(page);
