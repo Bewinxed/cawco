@@ -505,44 +505,54 @@ const KIT_SURFACE = [
   .join(", ");
 
 /**
- * From now on, every run the page starts, as it is first listed, with its
- * target and that target's `data-state` then: a frame loop, until the read
- * stops it (an act that opens Files and its float takes seconds). Nothing
- * is held.
+ * From now on, every run the page starts, recorded as it is made, with its
+ * target and that target's `data-state` then: a Web Animation as
+ * `Element.animate` makes it (Svelte's transitions), a CSS transition or
+ * animation as its `transitionrun`/`animationstart` says. Read as made, not
+ * polled: on a page busy for longer than a run lasts (WebKit, mid-act) a
+ * frame's poll found it already finished and gone. Nothing is held.
  */
 function watchEntrances(): void {
-  const seen = new Set(document.getAnimations());
   const watch: NonNullable<Window["probeEntrances"]> = {
     done: false,
     runs: [],
   };
   window.probeEntrances = watch;
-  let frame = 0;
-  const look = () => {
-    frame += 1;
-    for (const run of document.getAnimations()) {
-      if (seen.has(run)) {
-        continue;
-      }
-      seen.add(run);
-      const timing = run.effect?.getTiming();
-      const target = (run.effect as KeyframeEffect | null)?.target ?? null;
-      watch.runs.push({
-        state: target?.getAttribute("data-state") ?? null,
-        kind: run.constructor.name,
-        duration: Number(timing?.duration ?? 0),
-        easing: String(timing?.easing ?? ""),
-        start: run.startTime === null ? null : Number(run.startTime),
-        target,
-      });
+  const seen = new WeakSet<Animation>();
+  const keep = (run: Animation) => {
+    if (watch.stop || seen.has(run)) {
+      return;
     }
-    if (watch.stop || frame > 1800) {
-      watch.done = true;
-    } else {
-      requestAnimationFrame(look);
+    seen.add(run);
+    const timing = run.effect?.getTiming();
+    const target = (run.effect as KeyframeEffect | null)?.target ?? null;
+    watch.runs.push({
+      state: target?.getAttribute("data-state") ?? null,
+      kind: run.constructor.name,
+      duration: Number(timing?.duration ?? 0),
+      easing: String(timing?.easing ?? ""),
+      start: run.startTime === null ? null : Number(run.startTime),
+      target,
+    });
+  };
+  const made = Element.prototype.animate;
+  Element.prototype.animate = function animate(
+    this: Element,
+    ...args: Parameters<Element["animate"]>
+  ) {
+    const run = made.apply(this, args);
+    keep(run);
+    return run;
+  };
+  const started = (event: Event) => {
+    const at = event.target instanceof Element ? event.target : null;
+    for (const run of at?.getAnimations() ?? []) {
+      keep(run);
     }
   };
-  requestAnimationFrame(look);
+  for (const type of ["transitionrun", "animationstart"]) {
+    document.addEventListener(type, started, true);
+  }
 }
 
 /**

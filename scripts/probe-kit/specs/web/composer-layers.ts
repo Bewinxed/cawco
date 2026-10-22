@@ -560,19 +560,38 @@ async function oneAtATime(kit: Kit, page: Page, name: string): Promise<void> {
     );
     return;
   }
-  const standing = () =>
-    page.evaluate(() => ({
-      plan: document.querySelectorAll('section[data-slot="plan"]').length,
-      shelf: document.querySelectorAll('section[data-slot="shelf"]').length,
-    }));
+  const count = () => ({
+    plan: document.querySelectorAll('section[data-slot="plan"]').length,
+    shelf: document.querySelectorAll('section[data-slot="shelf"]').length,
+  });
+  // Once the one that gave way has played its exit and gone: what is
+  // asserted is that it closes, never how fast an engine plays it.
+  const standing = async (alone: "plan" | "shelf") => {
+    await page
+      .waitForFunction(
+        (one) => {
+          const plan = document.querySelectorAll(
+            'section[data-slot="plan"]'
+          ).length;
+          const shelf = document.querySelectorAll(
+            'section[data-slot="shelf"]'
+          ).length;
+          return one === "plan" ? shelf === 0 : plan === 0;
+        },
+        alone,
+        { timeout: 3000 }
+      )
+      .catch(() => undefined);
+    return page.evaluate(count);
+  };
   await page.locator(RING).click();
   await settle(page, 500);
   await page.locator(opener).first().click();
   await settle(page, 500);
-  const shelfOver = await standing();
+  const shelfOver = await standing("shelf");
   await page.locator(RING).click();
   await settle(page, 500);
-  const planOver = await standing();
+  const planOver = await standing("plan");
   await page.locator(RING).click();
   await settle(page, 500);
   kit.check(
@@ -628,9 +647,11 @@ async function leg(kit: Kit, base: string, at: Leg): Promise<void> {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one surface at a time, on one page
       await place(page, at.place);
-      // What the spec's own jump set off is not the surface's: counted from here.
-      thrown.length = 0;
       const absent = await surface.present(page);
+      // What the spec's own setting up set off (its jump, a scroll into the
+      // parked room: virtua's measure-and-mount, inokawa/virtua#470) is not
+      // the surface's: counted from here.
+      thrown.length = 0;
       if (absent) {
         kit.note(`${what}: not here (${absent})`);
       } else {
