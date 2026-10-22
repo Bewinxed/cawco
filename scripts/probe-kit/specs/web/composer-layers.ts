@@ -35,6 +35,8 @@
  * width its rows set (±0.5px) inside the viewport; the question's height
  * is one run, the picker's edge moving with it (under its cap, its last row
  * as far from its edge as at rest; at its cap, it scrolls inside itself).
+ * Asked, the question fits: nothing in the picker scrolls, and every mode
+ * row and the question's buttons stand inside the picker and the viewport.
  */
 import type { Page } from "playwright-core";
 import {
@@ -996,21 +998,62 @@ async function modePicker(
   const asked = await step("Full Send asked", () =>
     page.locator(`${PICKER} [data-perm="fullSend"]`).click()
   );
+  // Full Send's question fits in the picker (owner's brief, 2026-10-22):
+  // nothing in it scrolls, and every mode row and the question's buttons
+  // stand inside the picker's box and the viewport.
   const ask = await page.evaluate(
     ([sel, surface]) => {
       const el = document.querySelector<HTMLElement>(sel);
       const box = document.querySelector<HTMLElement>(surface);
+      const edge = box?.getBoundingClientRect();
+      const scrolled = [
+        ...(box ? [box, ...box.querySelectorAll<HTMLElement>("*")] : []),
+      ].filter(
+        (one) =>
+          one.scrollTop > 0 ||
+          (["auto", "scroll"].includes(getComputedStyle(one).overflowY) &&
+            one.scrollHeight - one.clientHeight > 0.5)
+      );
+      const outside = [
+        ...(box?.querySelectorAll<HTMLElement>(`[data-perm], ${sel} button`) ??
+          []),
+      ].flatMap((one) => {
+        const r = one.getBoundingClientRect();
+        return edge &&
+          r.top >= edge.top - 0.5 &&
+          r.bottom <= edge.bottom + 0.5 &&
+          r.top >= -0.5 &&
+          r.bottom <= window.innerHeight + 0.5
+          ? []
+          : [
+              `${one.dataset.perm ?? one.textContent?.trim()} ${r.top.toFixed(1)}…${r.bottom.toFixed(1)}`,
+            ];
+      });
       return {
         ask: el?.getBoundingClientRect().height ?? 0,
+        /** Each text block of the question by its height: what a line of copy costs. */
+        parts: [...(el?.querySelectorAll<HTMLElement>("h2, h3, p") ?? [])].map(
+          (one) => one.getBoundingClientRect().height.toFixed(1)
+        ),
         surface: box?.clientHeight ?? 0,
         scroll: box?.scrollHeight ?? 0,
+        scrolled: scrolled.map(
+          (one) =>
+            `${one.tagName.toLowerCase()}${one.dataset.slot ? `[${one.dataset.slot}]` : ""} ${one.clientHeight}/${one.scrollHeight}`
+        ),
+        outside,
+        edge: edge
+          ? `${edge.top.toFixed(1)}…${edge.bottom.toFixed(1)}`
+          : "none",
         viewport: window.innerHeight,
       };
     },
     [PICKER_ASK, PICKER] as const
   );
-  kit.note(
-    `${name}: the question stands ${ask.ask.toFixed(1)}px tall in a picker ${asked.picker?.width.toFixed(1)}px wide; the picker shows ${ask.surface}px of its ${ask.scroll}px (viewport ${ask.viewport}px tall)${ask.scroll > ask.surface ? ": it scrolls inside itself" : ""}`
+  kit.check(
+    `${name} · Full Send asked: the question fits, nothing in the picker scrolls, and every mode row and its buttons stand inside the picker and the viewport`,
+    ask.ask > 0 && ask.scrolled.length === 0 && ask.outside.length === 0,
+    `question ${ask.ask.toFixed(1)}px (text ${ask.parts.join(" + ")}) in a picker ${asked.picker?.width.toFixed(1)}px wide showing ${ask.surface}px of ${ask.scroll}px at ${ask.edge} (viewport ${ask.viewport}px)${ask.scrolled.length ? `; scrolls: ${ask.scrolled.join(", ")}` : ""}${ask.outside.length ? `; outside: ${ask.outside.join(", ")}` : ""}`
   );
   await step("Cancel", () =>
     page.locator(`${PICKER_ASK} [data-ask-cancel]`).click()

@@ -128,7 +128,11 @@ export function modeRefusal(
 
 /** What a person reads before Full Send applies, and while it stands chosen. */
 export interface FullSendCopy {
-  /** The confirmation's paragraphs: what it does beyond Bypass, what still stops, where to use it. */
+  /**
+   * The confirmation's two sentences: what it approves, and what still
+   * reaches the person. It stands inside the mode picker and fits there
+   * unscrolled at a phone's 390 px (probe-kit composer-layers).
+   */
   confirm: string[];
   /** Said under the confirmation when switching restarts a running session. */
   restarts: string;
@@ -136,9 +140,8 @@ export interface FullSendCopy {
   warning: string;
 }
 
-/** Where Full Send belongs, on every harness. */
-const USE_IT_WHERE =
-  "Use it where changed or lost files can be recovered: committed or backed-up work, or a throwaway workspace.";
+/** What still reaches the person in Full Send, on every harness. */
+const STILL_ASKS = "Questions still reach you; denied tools never run.";
 
 /** Said when switching into Full Send starts a running session again. */
 const RESTARTS =
@@ -148,29 +151,26 @@ const RESTARTS =
  * Full Send's words, for the harnesses it is offered on: it approves every
  * ask that is an approval (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS
  * FULL SEND"), CawCo's own admin writes included (hub admin-asks.ts). The
- * safety checks named are the ones Claude Code still raises in its bypass
- * mode.
+ * safety checks are the ones Claude Code still raises in its bypass mode.
  */
 const FULL_SEND: Partial<Record<HarnessKind, FullSendCopy>> = {
   claude: {
     confirm: [
-      "Full Send approves everything that would stop for you: Claude Code's own safety checks (a shell -c script it cannot check, cd combined with git, a write to a protected path), plan approval, the ask rules in your Claude Code settings (permissions.ask), and CawCo's fleet changes such as memory, skills, hooks and MCP servers. Each runs without anyone seeing it first.",
-      "Questions Claude asks still come to you. Tools your fleet denies still never run.",
-      USE_IT_WHERE,
+      "Approves without asking: safety checks, plan approval, your ask rules, and fleet changes like memory, skills, hooks and MCP servers.",
+      STILL_ASKS,
     ],
     restarts: RESTARTS,
     warning:
-      "Safety checks, plan approval, your ask rules and CawCo's fleet changes are approved for you, so they run unseen. Pick Bypass to have them ask you again.",
+      "Safety checks, plan approval, your ask rules and fleet changes run without asking you. Pick Bypass to have them ask again.",
   },
   opencode: {
     confirm: [
-      "Bypass already allows OpenCode's permission asks. Full Send also approves CawCo's fleet changes, such as memory, skills, hooks and MCP servers, so they run without anyone seeing them first.",
-      "Questions OpenCode asks still come to you. Tools your fleet denies still never run.",
-      USE_IT_WHERE,
+      "Approves without asking, fleet changes like memory, skills, hooks and MCP servers included.",
+      STILL_ASKS,
     ],
     restarts: RESTARTS,
     warning:
-      "CawCo's fleet changes are approved for you, so they run unseen. Pick Bypass to have them ask you again.",
+      "Fleet changes run without asking you. Pick Bypass to have them ask again.",
   },
 };
 
