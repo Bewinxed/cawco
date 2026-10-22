@@ -70,7 +70,7 @@ function install() {
     }
     return out;
   };
-  K.controls = () => [...document.querySelectorAll("button, input, [role=button], [role=tab], .edge-pill, .corner-l, .badge")].filter((el) => K.vis(el) && !el.closest(".tip")).map((el) => ({ el, r: el.getBoundingClientRect(), kind: "control" }));
+  K.controls = () => [...document.querySelectorAll("button, input, [role=button], [role=tab], .bead, .badge")].filter((el) => K.vis(el) && !el.closest(".tip")).map((el) => ({ el, r: el.getBoundingClientRect(), kind: "control" }));
   K.compact = () => document.documentElement.dataset.layout !== "desk";
   // The graphs and pages on screen: one each below the line, every component's from it.
   K.graphs = () => [...document.querySelectorAll(".graph")].filter((g) => K.vis(g));
@@ -80,7 +80,7 @@ function install() {
   // the menu); the base layers never overlap each other at all.
   // What shows of a box: clipped by every scrolling or clipping ancestor, and in the timeline by its sticky
   // ruler, which the rows scroll under.
-  K.clipTo = (el, r) => { let { left, top, right, bottom } = r; for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.overflowX !== "visible" || cs.overflowY !== "visible") { const b = e.getBoundingClientRect(); left = Math.max(left, b.left); top = Math.max(top, b.top); right = Math.min(right, b.right); bottom = Math.min(bottom, b.bottom); if (e.classList.contains("tl") && !el.closest(".ruler-row")) { const rr = e.querySelector(".ruler-row"); if (rr) top = Math.max(top, rr.getBoundingClientRect().bottom); } } } return { left, top, right, bottom }; };
+  K.clipTo = (el, r) => { let { left, top, right, bottom } = r; for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.overflowX !== "visible" || cs.overflowY !== "visible") { const b = e.getBoundingClientRect(); left = Math.max(left, b.left); top = Math.max(top, b.top); right = Math.min(right, b.right); bottom = Math.min(bottom, b.bottom); if (e.classList.contains("tl") && !el.closest(".ruler-row")) { const rr = e.querySelector(".ruler-row"); if (rr) top = Math.max(top, rr.getBoundingClientRect().bottom); } if (e.classList.contains("graph") && !el.closest(".secstrip")) { const st = e.querySelector(".secstrip"); if (st) top = Math.max(top, st.getBoundingClientRect().bottom); } } } return { left, top, right, bottom }; };
   K.overlaps = () => {
     const items = K.textItems().concat(K.controls()).map((it) => ({ ...it, r: K.clipTo(it.el, it.r) })).filter((it) => it.r.right - it.r.left > 0.5 && it.r.bottom - it.r.top > 0.5), out = [];
     const hit = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
@@ -103,7 +103,7 @@ function install() {
     const out = [];
     for (const el of document.querySelectorAll("#page *, .panel *, .dock *, .pop *, .menu *, .show, #sheetHead *")) {
       // The corner L's stroke box is its 12px legs plus the clipped-away stroke on its other two sides.
-      if (!K.vis(el) || el.closest("svg") || el.matches(".zoomer, .world, .region, .regionBody, .t-tabs-pill, .t-text-soft, .t-text-soft *, .corner-l")) continue;
+      if (!K.vis(el) || el.closest("svg") || el.matches(".zoomer, .world, .region, .regionBody, .t-tabs-pill, .t-text-soft, .t-text-soft *, .lit, .bead")) continue;
       const cs = getComputedStyle(el);
       if (cs.display === "inline" || cs.position === "absolute" && el.matches(".bar, .ghost, .tail, .tie, .playhead, .snap, .tick, .end-area")) continue;
       if (el.tagName === "INPUT") { if (el.type !== "range" && el.scrollWidth > el.clientWidth + 1) out.push("input " + (el.dataset.f || "") + " cuts its value"); continue; }
@@ -187,10 +187,12 @@ function install() {
     const texts = K.textItems().filter((t) => !t.el.closest("svg, .pop:not(.inline), .menu")).map((t) => ({ el: t.el, r: K.clipTo(t.el, t.r) })).filter((t) => t.r.right - t.r.left > 0.5 && t.r.bottom - t.r.top > 0.5);
     const inside = (x, y, r) => x > r.left + 0.5 && x < r.right - 0.5 && y > r.top + 0.5 && y < r.bottom - 0.5;
     const out = [];
-    for (const pl of document.querySelectorAll(".world svg polyline")) {
-      const g = pl.closest(".graph").getBoundingClientRect();
+    for (const pl of document.querySelectorAll(".world svg path.edge")) {
+      const gr = pl.closest(".graph"), g0 = gr.getBoundingClientRect(), st = gr.querySelector(".secstrip");
+      // The section strip stands over the well's top (round 27): a line under it is behind it.
+      const g = { left: g0.left, right: g0.right, bottom: g0.bottom, top: st ? st.getBoundingClientRect().bottom : g0.top, width: g0.width };
       if (!g.width) continue;
-      const m = pl.getScreenCTM(), pts = pl.getAttribute("points").split(" ").map((p) => { const [x, y] = p.split(",").map(Number); return new DOMPoint(x, y).matrixTransform(m); });
+      const m = pl.getScreenCTM(), pts = pl.dataset.points.split(" ").map((p) => { const [x, y] = p.split(",").map(Number); return new DOMPoint(x, y).matrixTransform(m); });
       for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)); for (let k = 0; k <= n; k++) { const x = a.x + ((b.x - a.x) * k) / (n || 1), y = a.y + ((b.y - a.y) * k) / (n || 1); if (!inside(x, y, g)) continue; const t = texts.find((t) => inside(x, y, t.r)); if (t) { out.push("graph edge " + pl.dataset.from + "→" + pl.dataset.to + " through \"" + t.el.textContent.trim().slice(0, 20) + "\""); k = n; i = pts.length; } } }
     }
     const rects = [];
@@ -263,8 +265,8 @@ function install() {
     for (const svg of document.querySelectorAll(".world svg")) {
       if (!K.vis(svg.closest(".graph"))) continue;
       const texts = [...svg.querySelectorAll("text")].map((t) => ({ t: t.textContent, b: t.getBBox() }));
-      for (const pl of svg.querySelectorAll("polyline")) {
-        const p = pl.getAttribute("points").split(" ").map((q) => q.split(",").map(Number));
+      for (const pl of svg.querySelectorAll("path.edge")) {
+        const p = pl.dataset.points.split(" ").map((q) => q.split(",").map(Number));
         for (const { t, b } of texts) {
           let hit = false;
           for (let i = 1; i < p.length && !hit; i++) for (let k = 0; k <= 64; k++) { const x = p[i - 1][0] + ((p[i][0] - p[i - 1][0]) * k) / 64, y = p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * k) / 64; if (x > b.x + 0.5 && x < b.x + b.width - 0.5 && y > b.y + 0.5 && y < b.y + b.height - 0.5) { hit = true; break; } }
@@ -276,7 +278,7 @@ function install() {
   };
   // r24 B4: no grip mark (a pill, the corner's L) or the corner's square crosses a text box.
   K.gripsOverText = () => {
-    const marks = [...document.querySelectorAll(".edge-pill, .corner-l, .sash-c")].filter((e) => K.vis(e)).map((e) => ({ n: e.className.split(" ").pop() || e.id, b: e.getBoundingClientRect() }));
+    const marks = [...document.querySelectorAll(".bead, .sash-c")].filter((e) => K.vis(e)).map((e) => ({ n: e.className.split(" ").pop() || e.id, b: e.getBoundingClientRect() }));
     const out = [];
     for (const it of K.textItems()) { const r = K.clipTo(it.el, it.r); for (const m of marks) if (Math.min(m.b.right, r.right) - Math.max(m.b.left, r.left) > 0.5 && Math.min(m.b.bottom, r.bottom) - Math.max(m.b.top, r.top) > 0.5) out.push(m.n + " over \"" + it.el.textContent.trim().slice(0, 20) + "\""); }
     return [...new Set(out)];
@@ -286,7 +288,9 @@ function install() {
   // between machines comes in over it. Its foot cuts no state, name or label. Across, everything stands
   // inside with a margin.
   K.graphView = (opts = {}) => K.graphs().map((g) => {
-    const gb = g.getBoundingClientRect(), top = gb.top + g.clientTop, left = gb.left + g.clientLeft, H = g.clientHeight, Wd = g.clientWidth, m = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-2")), bad = [];
+    // The section strip stands over the view's top (round 27, pin 30): the view starts under it.
+    const strip = g.querySelector(".secstrip"), sh = strip ? strip.offsetHeight : 0;
+    const gb = g.getBoundingClientRect(), top = gb.top + g.clientTop + sh, left = gb.left + g.clientLeft, H = g.clientHeight - sh, Wd = g.clientWidth, m = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-2")), bad = [];
     const each = (sel, fn) => { for (const el of g.querySelectorAll(sel)) { const b = el.getBoundingClientRect(); fn(el, b.top - top, b.bottom - top, b.left - left, b.right - left); } };
     const name = (el) => (el.dataset && (el.dataset.state || el.dataset.machine)) || el.textContent.trim().slice(0, 16) || el.tagName;
     // The top edge cuts no state, machine name or edge label and stands --space-2 clear of them (the r24 values
@@ -406,7 +410,7 @@ function mkHelpers(V, ev) {
   // Fault 3: under Original every row's readouts (their text, their tint, their free edge) are the original
   // move's, drawn from it, never the edited values.
   const origChips = async (label) => {
-    const o = await ev(() => { const km = keptMove(), rows = [...document.querySelectorAll(".clip")]; return { view: km.e.view, rows: rows.map((row) => { const c = km.e.orig.find((x) => x.key === row.dataset.key), want = document.createElement("div"); want.innerHTML = readoutsHtml(km.e, c); const got = row.querySelector(".readouts"); return { key: row.dataset.key, got: got.textContent, want: want.textContent, changed: got.querySelectorAll(".badge.changed").length, free: [...got.querySelectorAll(".badge")].map((b) => b.classList.contains("free")).join(","), wantFree: [...want.querySelectorAll(".badge")].map((b) => b.classList.contains("free")).join(",") }; }), edited: editCount(km.e) }; });
+    const o = await ev(() => { const km = keptMove(), rows = [...document.querySelectorAll(".clip")]; return { view: km.e.view, rows: rows.map((row) => { const c = km.e.orig.find((x) => x.key === row.dataset.key), want = document.createElement("div"); want.innerHTML = readoutsHtml(km.e, c); const got = row.querySelector(".readouts"); return { key: row.dataset.key, got: got.textContent, want: want.textContent, changed: got.querySelectorAll(".ro.changed").length, free: [...got.querySelectorAll(".ro")].map((b) => !!b.querySelector(".free")).join(","), wantFree: [...want.querySelectorAll(".ro")].map((b) => !!b.querySelector(".free")).join(",") }; }), edited: editCount(km.e) }; });
     ok(V, "9 fault 3: under Original every chip's text and state is the original move's (" + label + ")", o.view === "original" && o.edited > 0 && o.rows.every((r) => r.got === r.want && r.changed === 0 && r.free === r.wantFree), o.rows.map((r) => r.key + ": \"" + r.got + "\"" + (r.got === r.want ? "" : " ≠ \"" + r.want + "\"") + (r.changed ? " " + r.changed + " tinted" : "")).join("; ") + " (" + o.edited + " edits)");
   };
   return { hideGlyph, origChips };
@@ -481,11 +485,9 @@ async function runView(view) {
     const K = __k, out = [];
     const add = (name, ink, ...bgs) => { for (const [bn, bg] of bgs) out.push({ name: name + " on " + bn, r: Math.round(K.ratio(K.over(ink, bg), bg) * 100) / 100 }); };
     const panel = document.getElementById("panel"), body = K.rgba(getComputedStyle(document.body).backgroundColor), raised = K.bgOf(panel);
-    const pill = document.querySelector(".edge-pill-h");
-    if (K.vis(pill)) add("edge pill at rest", K.rgba(getComputedStyle(pill).backgroundColor), ["panel", raised], ["page", body]);
-    const L = document.querySelector(".corner-l");
-    if (K.vis(L)) add("corner L at rest", K.shadow(L, "::before").color, ["panel", raised]);
-    add("lit edge, hovered", K.shadow(panel, "::after").color, ["panel", raised], ["page", body]);
+    // Round 27's handle: the arc at rest (border-row-outline), the bead's edge, the light's darker side.
+    add("handle at rest (border-row-outline)", K.tokenColor("--border-row-outline"), ["panel", raised], ["page", body]);
+    add("lit edge, hovered", K.tokenColor("--ink-muted"), ["panel", raised], ["page", body]);
     add("lit edge, held", K.tokenColor("--ink-muted"), ["panel", raised], ["page", body]);
     const bar = document.querySelector(".bar"), dockBg = K.bgOf(document.getElementById("dock"));
     if (bar) {
@@ -522,7 +524,7 @@ async function runView(view) {
     const tl = document.getElementById("tl").getBoundingClientRect(), km = keptMove(), g = laneGeo();
     out.area = { one: document.querySelectorAll(".end-area").length === 1, left: Math.round(ab.left * 100) / 100, want: Math.round((tl.left + xOf(g, lengthOf(km.r))) * 100) / 100, right: Math.round(ab.right), laneEnd: Math.round(tl.left + g.x0 + g.w), top: ab.top <= ruler.top + 0.5, bottom: ab.bottom >= rows[rows.length - 1].getBoundingClientRect().bottom - 0.5, behind: getComputedStyle(area).pointerEvents === "none" && area.compareDocumentPosition(document.getElementById("rows")) & Node.DOCUMENT_POSITION_FOLLOWING };
     out.ties = km.clips.filter((c) => c.at.ref).map((c) => { const t = document.querySelector('.tie[data-for="' + c.key + '"]'); const a = km.r[c.at.of]; const x = tl.left + xOf(g, c.at.ref === "after" ? a.end : a.start); return { k: c.key, drawn: !!t, x: t ? Math.round(t.getBoundingClientRect().left * 100) / 100 : null, want: Math.round(x * 100) / 100 }; });
-    out.readouts = rows.map((row) => { const name = row.querySelector(".clip-name").getBoundingClientRect(), b = [...row.querySelectorAll(".readouts .badge")].slice(0, 2).map((x) => x.getBoundingClientRect()); return { col: Math.round(name.width), oneLine: b.length === 2 && Math.abs(b[0].top - b[1].top) < 0.5, fits: b.every((x) => x.right <= name.right + 0.5), right: Math.round(Math.max(...b.map((x) => x.right)) - name.left) }; });
+    out.readouts = rows.map((row) => { const name = row.querySelector(".clip-name").getBoundingClientRect(), b = [...row.querySelectorAll(".readouts .ro")].slice(0, 2).map((x) => x.getBoundingClientRect()); return { col: Math.round(name.width), oneLine: b.length === 2 && Math.abs(b[0].top - b[1].top) < 0.5, fits: b.every((x) => x.right <= name.right + 0.5), right: Math.round(Math.max(...b.map((x) => x.right)) - name.left) }; });
     return out;
   });
   ok(V, "5 no lane band", lanes.noBand);
@@ -550,10 +552,10 @@ async function runView(view) {
         }
       };
       const panel = document.getElementById("panel");
-      pair("panel ⊃ corner L", panel, document.querySelector(".corner-l"));
-      const pb = panel.getBoundingClientRect(), a = getComputedStyle(panel, "::after"), ins = -parseFloat(a.top);
-      const ab = { left: pb.left + 1 - ins, top: pb.top + 1 - ins, right: pb.right - 1 + ins, bottom: pb.bottom - 1 + ins };
-      if (a.display !== "none" && K.vis(panel)) out.push({ name: "lit edge ⊃ panel", R: parseFloat(a.borderTopLeftRadius), r: K.radius(panel), gap: Math.round((pb.left - ab.left) * 100) / 100, even: true, pass: Math.abs(parseFloat(a.borderTopLeftRadius) - (K.radius(panel) + (pb.left - ab.left))) <= 0.5 });
+      // The lit arm is the panel's outline re-stroked: its box out from the border box by half its extra width,
+      // its radius the panel's plus that gap (round 27).
+      const pb = panel.getBoundingClientRect(), litEl = panel.querySelector('.lit[data-arm="w"]'), lb = litEl && litEl.getBoundingClientRect(), la = litEl && getComputedStyle(litEl);
+      if (litEl && la.display !== "none" && K.vis(panel)) out.push({ name: "lit edge ⊃ panel", R: parseFloat(la.borderTopLeftRadius), r: K.radius(panel), gap: Math.round((pb.left - lb.left) * 100) / 100, even: true, pass: Math.abs(parseFloat(la.borderTopLeftRadius) - (K.radius(panel) + (pb.left - lb.left))) <= 0.5 });
       for (const n of document.querySelectorAll(".node")) pair("region ⊃ node", n.closest(".region"), n);
       for (const b of document.querySelectorAll(".zoom .icon-btn")) pair("zoom group ⊃ button", b.closest(".zoom"), b);
       for (const t of document.querySelectorAll(".t-tabs")) pair("tabs track ⊃ pill", t, t.querySelector(".t-tabs-pill"));
@@ -567,93 +569,101 @@ async function runView(view) {
   };
   await conc("at rest");
 
-  // ---- 3. Resize: the marks, the hit bands, the lit edge ----
+  // ---- 3. Resize (round 27): the hit bands, then each handle design read on the engine ----
   const grips = await ev(() => {
     const K = __k, panel = document.getElementById("panel"), p = panel.getBoundingClientRect(), rel = (el) => { if (!K.vis(el)) return null; const b = el.getBoundingClientRect(); return { x: Math.round((b.left - p.left) * 100) / 100, y: Math.round((b.top - p.top) * 100) / 100, r: Math.round((p.right - b.right) * 100) / 100, b: Math.round((p.bottom - b.bottom) * 100) / 100, w: Math.round(b.width * 100) / 100, h: Math.round(b.height * 100) / 100 }; };
     const cs = getComputedStyle(panel), padL = parseFloat(cs.paddingLeft) + 1, padB = parseFloat(cs.paddingBottom) + 1;
-    return { panel: { w: p.width, h: p.height, padL, padB }, pillW: rel(document.querySelector(".edge-pill-w")), pillH: rel(document.querySelector(".edge-pill-h")), L: rel(document.querySelector(".corner-l")), sashW: rel(document.getElementById("sashW")), sashH: rel(document.getElementById("sashH")), sashC: rel(document.getElementById("sashC")), coarse: document.documentElement.dataset.input !== "fine" };
+    return { panel: { w: p.width, h: p.height, padL, padB }, sashW: rel(document.getElementById("sashW")), sashH: rel(document.getElementById("sashH")), sashC: rel(document.getElementById("sashC")), coarse: document.documentElement.dataset.input !== "fine" };
   });
   const G = grips;
-  console.log("INFO [" + V + "] 3 grips, drawn and hit boxes relative to the panel's border box: " + JSON.stringify({ pillW: G.pillW, pillH: G.pillH, L: G.L, sashW: G.sashW, sashH: G.sashH, sashC: G.sashC }));
-  if (G.pillW) ok(V, "3 width pill: 6×36, centred on the left border and on the run", G.pillW.w === 6 && G.pillW.h === 36 && Math.abs(G.pillW.x + 3 - 0.5) <= 0.01 && Math.abs(G.pillW.y + 18 - G.panel.h / 2) <= 0.5, JSON.stringify(G.pillW));
-  if (G.pillH) ok(V, "3 foot pill: 36×6, centred on the bottom border and on the run", G.pillH.w === 36 && G.pillH.h === 6 && Math.abs(G.pillH.b + 3 - 0.5) <= 0.01 && Math.abs(G.pillH.x + 18 - G.panel.w / 2) <= 0.5, JSON.stringify(G.pillH));
-  if (G.L) ok(V, "3 corner L: 12×12, 6px in from the corner", G.L.w === 12 && G.L.h === 12 && G.L.x === 6 && G.L.b === 6, JSON.stringify(G.L));
+  console.log("INFO [" + V + "] 3 hit boxes relative to the panel's border box: " + JSON.stringify({ sashW: G.sashW, sashH: G.sashH, sashC: G.sashC }));
   const band = G.coarse ? 44 : 11;
   if (G.sashW) ok(V, "3 width band: " + band + "px straddling the edge, stopping short of the curves, never over content", Math.abs(G.sashW.w - band) < 0.01 && (G.coarse ? Math.abs(G.sashW.x + 22 - 0.5) < 0.01 : G.sashW.x === -4 && G.sashW.x + G.sashW.w <= G.panel.padL) && G.sashW.y >= 16, JSON.stringify(G.sashW));
   if (G.sashH) ok(V, "3 foot band: " + band + "px straddling the foot, never over content", Math.abs(G.sashH.h - band) < 0.01 && (G.coarse ? Math.abs(G.sashH.b + 22 - 0.5) < 0.01 : G.sashH.b === -4 && G.sashH.b + G.sashH.h <= G.panel.padB) && G.sashH.x >= 16, JSON.stringify(G.sashH));
   if (G.sashC) ok(V, "3 corner square: " + (G.coarse ? "44" : "20") + "px from " + (G.coarse ? "the corner, straddling" : "4px outside"), G.coarse ? G.sashC.w === 44 : G.sashC.w === 20 && G.sashC.h === 20 && G.sashC.x === -4 && G.sashC.b === -4, JSON.stringify(G.sashC));
-  const lit = await ev(() => { const P = document.getElementById("panel"), a = getComputedStyle(P, "::after"), p = getComputedStyle(P); return { radius: a.borderTopLeftRadius, panelRadius: p.borderTopLeftRadius, inset: a.top, stroke: __k.shadow(P, "::after").spread, opacity: a.opacity }; });
-  ok(V, "3 lit edge: a 1.5px stroke centred on the 1px border, on the panel's own radius (+0.25), invisible at rest", parseFloat(lit.radius) === parseFloat(lit.panelRadius) + 0.25 && parseFloat(lit.inset) === -1.25 && lit.stroke === 1.5 && lit.opacity === "0", JSON.stringify(lit));
+  ok(V, "3 the old marks are gone: no edge pill on the panel or the dock, no corner L, no ::after arm", await ev(() => !document.querySelector(".panel .edge-pill, .dock .edge-pill, .corner-l") && getComputedStyle(document.getElementById("panel"), "::after").content === "none" && document.querySelectorAll('.lit[data-arm]').length === 4));
   const brandInks = await ev(() => ["--brand-solid", "--brand-ink", "--brand-ink-strong", "--brand-wash", "--action-solid", "--action-hover", "--coral-9", "--coral-10", "--coral-11", "--selected-bg"].map((n) => __k.tokenColor(n).slice(0, 3).join(",")));
-  const inks = () => ev(() => { const P = document.getElementById("panel"), a = getComputedStyle(P, "::after"); return { lit: __k.shadow(P, "::after").color.slice(0, 3).join(","), opacity: +a.opacity, mask: a.maskImage.slice(0, 60), composite: a.maskComposite, pillW: __k.rgba(getComputedStyle(document.querySelector(".edge-pill-w")).backgroundColor).slice(0, 3).join(","), pillH: __k.rgba(getComputedStyle(document.querySelector(".edge-pill-h")).backgroundColor).slice(0, 3).join(","), L: __k.shadow(document.querySelector(".corner-l"), "::before").color.slice(0, 3).join(","), muted: __k.tokenColor("--ink-muted").slice(0, 3).join(","), html: getComputedStyle(document.documentElement).cursor }; });
-  const rest = await inks();
-  ok(V, "3 the marks' and the lit edge's ink is never brand-* or action-* (at rest)", ![rest.lit, rest.pillW, rest.pillH, rest.L].some((c) => brandInks.includes(c)), JSON.stringify(rest));
-
-  // Pixel proof of mask-composite: what the lit edge lights, and what it leaves dark.
-  const shot = async () => (await page.screenshot({ type: "png" })).toString("base64");
-  const sample = (b64, pts) => ev(async ({ b64, pts }) => { const img = new Image(); img.src = "data:image/png;base64," + b64; await img.decode(); const c = document.createElement("canvas"); c.width = img.width; c.height = img.height; const x = c.getContext("2d"); x.drawImage(img, 0, 0); return pts.map(([px, py]) => [...x.getImageData(Math.floor(px), Math.floor(py), 1, 1).data.slice(0, 3)]); }, { b64, pts });
-  const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
-  // Pixels that differ by more than 24 (of 765) between two captures, over one clip.
-  const regionDiff = (a, b, clip) => ev(async ({ a, b, clip }) => { const load = async (s) => { const img = new Image(); img.src = "data:image/png;base64," + s; await img.decode(); const c = document.createElement("canvas"); c.width = clip.width; c.height = clip.height; const x = c.getContext("2d"); x.drawImage(img, -clip.x, -clip.y); return x.getImageData(0, 0, clip.width, clip.height).data; }; const A = await load(a), B = await load(b); let n = 0; for (let i = 0; i < A.length; i += 4) if (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]) > 24) n++; return n; }, { a, b, clip });
-  const cdp = await ctx.newCDPSession(page);
-  await cdp.send("Animation.enable");
-  const anims = [];
-  cdp.on("Animation.animationStarted", (e) => anims.push(e.animation));
+  // In-page: a lit arm's and a bead's state, and a transition paused and sought through its clock (WAAPI, the
+  // page's own animation timeline), read at its start, its delay's end, half way and its end.
+  const handleRead = () => ev(() => {
+    const P = document.getElementById("panel"), q = (s) => P.querySelector(s), K = __k, cs = getComputedStyle(P);
+    const st = (el) => { const c = getComputedStyle(el); const sh = c.boxShadow.match(/^(.*?\))/); return { op: c.opacity, run: c.getPropertyValue("--run").trim(), lw: c.getPropertyValue("--lw").trim(), win: c.getPropertyValue("--win").trim(), at: c.getPropertyValue("--at").trim(), ink: K.rgba(sh ? sh[1] : "transparent").slice(0, 3).join(",") }; };
+    const bw = q('.bead[data-arm="w"]'), bc = bw && getComputedStyle(bw);
+    return { w: st(q('.lit[data-arm="w"]')), h: st(q('.lit[data-arm="h"]')), bead: bw && K.vis(bw) && +bc.opacity > 0 ? { w: Math.round(bw.getBoundingClientRect().width * 100) / 100, op: bc.opacity, scale: bc.scale, bg: K.rgba(bc.backgroundColor).slice(0, 3).join(","), glyph: getComputedStyle(bw.querySelector("svg")).opacity } : null, borderStart: K.rgba(cs.borderLeftColor).slice(0, 3).join(","), borderTop: K.rgba(cs.borderTopColor).slice(0, 3).join(","), outline: K.tokenColor("--border-row-outline").slice(0, 3).join(","), control: K.tokenColor("--border-control").slice(0, 3).join(","), muted: K.tokenColor("--ink-muted").slice(0, 3).join(",") };
+  });
+  // Armed before the hover or press: the transition is paused the moment it is created (transitionrun), so no
+  // machine is too slow to catch it mid-way; then it is sought through its clock and let go.
+  const arm = (sel, prop) => ev(([sel, prop]) => {
+    window.__held = null;
+    const el = document.querySelector(sel);
+    const on = (e) => { if (e.target !== el || e.propertyName !== prop) return; const a = el.getAnimations().find((x) => x.transitionProperty === prop); if (a) { a.pause(); window.__held = a; document.removeEventListener("transitionrun", on, true); } };
+    document.addEventListener("transitionrun", on, true);
+    window.__unarm = () => document.removeEventListener("transitionrun", on, true);
+  }, [sel, prop]);
+  const scrub = (sel, prop, reads) => ev(async ([sel, prop, reads]) => {
+    const el = document.querySelector(sel);
+    for (let i = 0; i < 20 && !window.__held; i++) await new Promise((r) => requestAnimationFrame(r));
+    if (window.__unarm) window.__unarm();
+    const a = window.__held || (el && el.getAnimations().find((x) => x.transitionProperty === prop));
+    window.__held = null;
+    if (!a) return null;
+    a.pause();
+    const tm = a.effect.getTiming(), total = tm.delay + tm.duration, out = [];
+    for (const t of [0, tm.delay, tm.delay + tm.duration / 2, total]) { a.currentTime = t; out.push([Math.round(t), ...reads.map((p) => getComputedStyle(el).getPropertyValue(p).trim())]); }
+    a.play();
+    return { delay: tm.delay, dur: tm.duration, out };
+  }, [sel, prop, reads]);
   const hoverable = !touch;
-  for (const [edge, sashId] of [["w", "sashW"], ["h", "sashH"], ["wh", "sashC"]]) {
-    if (!(await page.locator("#" + sashId).isVisible())) { note(V, "3 " + edge + " grip", "not drawn on this class (touch without hover has no corner)"); continue; }
-    if (!hoverable) { note(V, "3 " + edge + " hover", "no hover under touch: the mark tints on touch-down (drag below)"); continue; }
-    const pb = await ev(() => { const b = document.getElementById("panel").getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; });
-    const c = await center("#" + sashId);
-    await page.mouse.move(pb.l - 200, pb.t + 40);
+  const capClip = async () => { const b = await ev(() => { const r = document.getElementById("panel").getBoundingClientRect(); return { x: Math.max(0, r.left - 30), y: Math.max(0, r.bottom - 220), w: 260, h: 240 }; }); return { x: b.x, y: b.y, width: b.w, height: b.h }; };
+  if (G.sashW) for (const handle of ["arc", "light", "bead"]) {
+    await ev((h) => { document.documentElement.dataset.handle = h; }, handle);
+    await page.mouse.move(5, 5); await settle(450);
+    const rest = await handleRead();
+    await page.screenshot({ path: join(CAPS, V + "-handle-" + handle + "-rest.jpg"), type: "jpeg", quality: 92, clip: await capClip() });
+    const lw0 = G.coarse && view.input === "touch" ? "4px" : "3px";
+    if (handle === "arc") ok(V, "3 arc at rest: a short thick arc round the corner on each arm (--run 8px, --lw " + lw0 + "), in border-row-outline, no bead", rest.w.op === "1" && rest.w.run === "8px" && rest.w.lw === lw0 && rest.h.run === "8px" && rest.w.ink === rest.outline && !rest.bead && !brandInks.includes(rest.w.ink), JSON.stringify({ w: rest.w, h: rest.h }));
+    if (handle === "light") ok(V, "3 light at rest: nothing drawn; the resizable start side a step darker (border-row-outline) than the fixed top (border-control)", rest.w.op === "0" && rest.h.op === "0" && rest.borderStart === rest.outline && rest.borderTop === rest.control && !rest.bead, JSON.stringify({ w: rest.w.op, start: rest.borderStart, top: rest.borderTop }));
+    if (handle === "bead") ok(V, "3 bead at rest: a " + (G.coarse ? "24px knob (a finger's drawn target)" : "10px bead") + " on the raised surface, no lit arm", rest.w.op === "0" && !!rest.bead && Math.abs(rest.bead.w - (G.coarse ? 24 : 10)) <= 0.5, JSON.stringify(rest.bead));
+    const c = await center("#sashW");
+    if (hoverable) {
+      await arm('.panel ' + (handle === "bead" ? '.bead[data-arm="w"]' : '.lit[data-arm="w"]'), handle === "arc" ? "--run" : handle === "light" ? "opacity" : "width");
+      await page.mouse.move(c.x, c.y);
+      if (handle === "arc") {
+        const s = await scrub('.panel .lit[data-arm="w"]', "--run", ["--run", "--lw"]);
+        ok(V, "3 arc hover (scrubbed): --run holds 8px through the --dur-pop delay, then runs to 16px while --lw thins to 1.5px", !!s && s.delay === 260 && s.out[0][1] === "8px" && s.out[1][1] === "8px" && s.out[3][1] === "16px", JSON.stringify(s));
+      } else if (handle === "light") {
+        const s = await scrub('.panel .lit[data-arm="w"]', "opacity", ["opacity", "--at", "--win"]);
+        const want = await ev((y) => Math.round(Math.min(Math.max(y - document.getElementById("panel").getBoundingClientRect().top, 32), document.getElementById("panel").getBoundingClientRect().height - 32)), c.y);
+        ok(V, "3 light hover (scrubbed): the taper's opacity 0 through the --dur-pop delay, 1 at its end; it stands at the pointer (--at " + want + "px), its window a taper (--win 0px)", !!s && s.delay === 260 && +s.out[0][1] === 0 && +s.out[1][1] === 0 && +s.out[3][1] === 1 && Math.abs(parseFloat(s.out[3][2]) - want) <= 1.5 && s.out[3][3] === "0px", JSON.stringify(s));
+      } else {
+        // Chromium names a logical property's transition by its physical longhand.
+        const s = await scrub('.panel .bead[data-arm="w"]', "width", ["inline-size"]);
+        await settle(300);
+        const on = await handleRead();
+        if (G.coarse) ok(V, "3 bead hover under a finger-capable pointer: it is the 24px knob already, its arrow showing (nothing to grow)", !s && !!on.bead && Math.abs(on.bead.w - 24) <= 0.5 && on.bead.glyph === "1", JSON.stringify({ s, bead: on.bead }));
+        else ok(V, "3 bead hover (scrubbed): it grows from 10px to the 24px knob at once, its arrow showing", !!s && s.delay === 0 && parseFloat(s.out[0][1]) <= 10.5 && parseFloat(s.out[3][1]) === 24 && !!on.bead && on.bead.glyph === "1", JSON.stringify({ s, bead: on.bead }));
+      }
+      await settle(450);
+      await page.screenshot({ path: join(CAPS, V + "-handle-" + handle + "-hover.jpg"), type: "jpeg", quality: 92, clip: await capClip() });
+    }
+    // The press: the rest mark (or the light, or the knob) becomes the whole tapered arm.
+    const prop = handle === "arc" ? "--run" : "--win";
+    await page.mouse.move(c.x, c.y); await settle(450);
+    await arm('.panel .lit[data-arm="w"]', prop);
+    await page.mouse.down(); await page.mouse.move(c.x - 12, c.y, { steps: 2 });
+    const d = await scrub('.panel .lit[data-arm="w"]', prop, [prop, "opacity"]);
     await settle(300);
-    if (edge === "w") await page.screenshot({ path: join(CAPS, V + "-grip-width-rest.jpg"), type: "jpeg", quality: 92, clip: { x: pb.l - 30, y: pb.t, width: 80, height: pb.h } });
-    if (edge === "h") await page.screenshot({ path: join(CAPS, V + "-grip-foot-rest.jpg"), type: "jpeg", quality: 92, clip: { x: pb.l, y: pb.b - 60, width: pb.w, height: 80 } });
-    if (edge === "wh") await page.screenshot({ path: join(CAPS, V + "-grip-corner-rest.jpg"), type: "jpeg", quality: 92, clip: { x: pb.l - 30, y: pb.b - 130, width: 160, height: 150 } });
-    const restShot = await shot();
-    const before = await ev(() => __k.snap());
-    anims.length = 0;
-    await page.mouse.move(c.x, c.y);
-    // Scrub the lit edge's fade-in on the CDP Animation domain (the event can land a few frames late).
-    let tr = null;
-    for (let i = 0; i < 20 && !tr; i++) { await page.waitForTimeout(15); tr = anims.find((a) => a.type === "CSSTransition" && a.name === "opacity"); }
-    if (tr) {
-      await cdp.send("Animation.setPaused", { animations: [tr.id], paused: true });
-      const delay = tr.source.delay, dur = tr.source.duration, readings = [];
-      for (const t of [0, delay - 1, delay, delay + dur / 2, delay + dur]) { await cdp.send("Animation.seekAnimations", { animations: [tr.id], currentTime: t }); await ev(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); readings.push([t, Number(await ev(() => getComputedStyle(document.getElementById("panel"), "::after").opacity)).toFixed(3)]); }
-      // The lit capture is taken here, held by the Animation domain at the fade's end (opacity 1), and the
-      // check proves it differs from the rest capture over the same clip (r22's lit captures were taken a
-      // settle later and the reviewer read them as unchanged).
-      await page.waitForTimeout(200);
-      const clip = edge === "w" ? { x: pb.l - 30, y: pb.t, width: 80, height: pb.h } : edge === "h" ? { x: pb.l, y: pb.b - 60, width: pb.w, height: 80 } : { x: pb.l - 30, y: pb.b - 130, width: 160, height: 150 };
-      const litNow = await shot();
-      await page.screenshot({ path: join(CAPS, V + "-grip-" + { w: "width", h: "foot", wh: "corner" }[edge] + "-lit.jpg"), type: "jpeg", quality: 92, clip });
-      const changed = await regionDiff(restShot, litNow, clip);
-      ok(V, "3 " + edge + ": the lit capture shows the lit edge (held at the fade's end, " + changed + " pixels differ from the rest capture over its clip)", changed >= 40, changed + " px changed by more than 24 (of 765) in " + clip.width + "×" + clip.height);
-      await cdp.send("Animation.setPaused", { animations: [tr.id], paused: false });
-      ok(V, "3 " + edge + ": lit edge 0 at rest, through the --dur-pop delay, 1 at its end (CDP scrub)", delay === 260 && dur === 120 && +readings[0][1] === 0 && +readings[1][1] === 0 && +readings[4][1] === 1, "delay " + delay + "ms, duration " + dur + "ms, opacity at " + readings.map(([t, o]) => t + "ms=" + o).join(", "));
-    } else ok(V, "3 " + edge + ": lit edge transition caught on the CDP Animation domain", false, "no CSSTransition on opacity started; got " + anims.map((a) => a.type + ":" + a.name).join(","));
-    await settle(500);
-    const on = await inks();
-    const want = edge === "w" ? [on.pillW] : edge === "h" ? [on.pillH] : [on.pillW, on.pillH, on.L];
-    ok(V, "3 " + edge + " hovered: its marks step to ink-muted, the lit edge shows in the grey ramp, never coral", want.every((x) => x === on.muted) && on.opacity === 1 && ![on.lit, on.pillW, on.pillH, on.L].some((x) => brandInks.includes(x)), "lit " + on.lit + " opacity " + on.opacity + " composite " + on.composite + " mask " + on.mask);
-    const after = await ev(() => __k.snap());
-    ok(V, "2 nothing moves the preview: hovering the " + edge + " grip", same(before, after));
-    const litShot = await shot();
-    // Points: the stroke runs on the border's column/row; compare lit with rest.
-    const L = pb.l + 0.5, B = pb.b - 0.5;
-    // Points on the outline, clear of the pills: mid-runs at a third, the curves' fade, the far edges.
-    const pts = { leftMid: [L, pb.t + pb.h / 3], leftNearTop: [L, pb.t + 20], topMid: [pb.l + pb.w / 2, pb.t + 0.5], footMid: [pb.l + pb.w * 0.7, B], leftNearCorner: [L, pb.b - 24], footNearCorner: [pb.l + 24, B], rightMid: [pb.r - 0.5, pb.t + pb.h / 2] };
-    const keys = Object.keys(pts), r0 = await sample(restShot, keys.map((k) => pts[k])), r1 = await sample(litShot, keys.map((k) => pts[k]));
-    const d = Object.fromEntries(keys.map((k, i) => [k, dist(r0[i], r1[i])]));
-    const litAt = (k) => d[k] > 12, darkAt = (k) => d[k] <= 3;
-    const expect = edge === "w" ? litAt("leftMid") && darkAt("topMid") && darkAt("footMid") && darkAt("rightMid") && d.leftNearTop < d.leftMid
-      : edge === "h" ? litAt("footMid") && darkAt("leftMid") && darkAt("topMid") && darkAt("rightMid")
-      : litAt("leftNearCorner") && litAt("footNearCorner") && darkAt("topMid") && darkAt("rightMid") && d.leftMid < d.leftNearCorner;
-    ok(V, "3 mask-composite live in Chromium (" + edge + "): lights its arm round the curve and fades, leaves the rest", expect, "pixel change by point: " + JSON.stringify(d));
-    await page.mouse.move(pb.l - 200, pb.t + 40);
-    await settle(250);
+    const held = await handleRead();
+    await page.screenshot({ path: join(CAPS, V + "-handle-" + handle + "-drag.jpg"), type: "jpeg", quality: 92, clip: await capClip() });
+    await page.mouse.up();
+    if (handle === "arc") ok(V, "3 arc drag (scrubbed): the arc runs on to the whole arm (--run to 100%) at once, on the arm's ink, ink-muted", (!d || d.out[3][1] === "100%") && held.w.run === "100%" && held.w.lw === "1.5px" && held.w.ink === held.muted, JSON.stringify({ d, held: held.w }));
+    else ok(V, "3 " + handle + " drag (scrubbed): the window opens from where it stood to the whole arm (--win to 100%), lit in ink-muted" + (handle === "bead" ? ", the knob gone into it (opacity 0)" : ""), !!d && d.out[3][1] === "100%" && held.w.op === "1" && held.w.win === "100%" && held.w.ink === held.muted && (handle !== "bead" || !held.bead), JSON.stringify({ d, held: held.w, bead: held.bead }));
+    await page.mouse.move(5, 5); await settle(500);
+    const back = await handleRead();
+    ok(V, "3 " + handle + " released: back to its rest form", handle === "arc" ? back.w.run === "8px" : handle === "light" ? back.w.op === "0" : !!back.bead && Math.abs(back.bead.w - (G.coarse ? 24 : 10)) <= 0.5, JSON.stringify({ w: back.w, bead: back.bead }));
   }
+  await ev(() => { document.documentElement.dataset.handle = "arc"; });
+  await load();
   // Keys: the APG window splitter.
   for (const [sashId, key, measure, sign] of [["sashW", "ArrowLeft", "#panel", "w"], ["sashH", "ArrowDown", ".gsec[data-current] .graph", "h"]]) {
     if (!(await page.locator("#" + sashId).isVisible())) continue;
@@ -664,17 +674,65 @@ async function runView(view) {
     ok(V, "3 " + sashId + ": a key steps the edge 8px, 32px with Shift, and lights it as held", r2(s1 - s0) === 8 && r2(s2 - s1) === 32 && !!held, s0 + " → " + s1 + " → " + s2 + ", data-resizing=" + held);
     await settle(300);
   }
-  // A drag holds its cursor on the document.
-  for (const [sashId, want, dx, dy] of [["sashW", "ew-resize", -60, 0], ["sashH", "ns-resize", 0, 60], ["sashC", "nesw-resize", -40, 40]]) {
+  // A drag holds its cursor on the document, and lights its arm in ink-muted.
+  for (const [sashId, want, dx, dy, arm] of [["sashW", "ew-resize", -60, 0, "w"], ["sashH", "ns-resize", 0, 60, "h"], ["sashC", "nesw-resize", -40, 40, "w"]]) {
     if (!(await page.locator("#" + sashId).isVisible())) continue;
     const c = await center("#" + sashId);
     await page.mouse.move(c.x, c.y); await page.mouse.down(); await page.mouse.move(c.x + dx * 3, c.y + dy * 3, { steps: 5 });
-    const cur = await ev(([x, y]) => ({ html: getComputedStyle(document.documentElement).cursor, under: getComputedStyle(document.elementFromPoint(x, y) || document.body).cursor, panel: document.getElementById("panel").dataset.resizing, lit: getComputedStyle(document.getElementById("panel"), "::after").opacity, ink: __k.shadow(document.getElementById("panel"), "::after").color.slice(0, 3).join(","), muted: __k.tokenColor("--ink-muted").slice(0, 3).join(",") }), [c.x + dx * 3, c.y + dy * 3]);
+    await page.waitForTimeout(200);
+    const cur = await ev(([x, y, arm]) => { const l = document.querySelector('.panel .lit[data-arm="' + arm + '"]'), cs = getComputedStyle(l), sh = cs.boxShadow.match(/^(.*?\))/); return { html: getComputedStyle(document.documentElement).cursor, under: getComputedStyle(document.elementFromPoint(x, y) || document.body).cursor, panel: document.getElementById("panel").dataset.resizing, lit: cs.opacity, run: cs.getPropertyValue("--run").trim(), ink: __k.rgba(sh ? sh[1] : "transparent").slice(0, 3).join(","), muted: __k.tokenColor("--ink-muted").slice(0, 3).join(",") }; }, [c.x + dx * 3, c.y + dy * 3, arm]);
     await page.mouse.up();
-    ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want + "), the edge lit at once in ink-muted", cur.html === want && cur.under === want && cur.lit === "1" && cur.ink === cur.muted, JSON.stringify(cur));
+    ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want + "), the arm lit whole in ink-muted", cur.html === want && cur.under === want && cur.lit === "1" && cur.run === "100%" && cur.ink === cur.muted, JSON.stringify(cur));
     await settle(300);
   }
-
+  // ---- Round 27: pins 27, 28 and 30, read on the engine ----
+  await load();
+  {
+    const t = await ev(() => {
+      const K = __k, rows = [...document.querySelectorAll(".clip")];
+      const figs = [...document.querySelectorAll(".clip .fig, #readout b.fig, .dial .fig, .zoom .fig")].filter((f) => K.vis(f));
+      const fcs = figs.map((f) => getComputedStyle(f));
+      const inkOK = (c) => { const v = K.rgba(c.color).slice(0, 3).join(","); return v === K.tokenColor("--ink-strong").slice(0, 3).join(",") || v === K.tokenColor("--selected-ink").slice(0, 3).join(","); };
+      return {
+        rows: rows.length,
+        chips: rows.filter((r) => r.querySelector(".ro .badge.code code")).length,
+        buttons: rows.every((r) => { const ro = [...r.querySelectorAll(".readouts .ro")]; return ro.length >= 2 && ro.every((b) => b.tagName === "BUTTON"); }),
+        figs: figs.length,
+        mono: fcs.every((c) => /JetBrains Mono/.test(c.fontFamily) && /tabular-nums/.test(c.fontVariantNumeric) && /cap-height/.test(c.fontSizeAdjust)),
+        ink: fcs.every(inkOK),
+        kinds: rows.map((r) => { const k = r.dataset.kind, want = K.tokenColor("--motion-" + k).slice(0, 3).join(","), bar = r.querySelector(".bar"), edge = getComputedStyle(bar).boxShadow.match(/^(.*?\))/), dot = r.querySelector(".kind"); return { k, dot: !!dot && K.vis(dot) && K.rgba(getComputedStyle(dot).backgroundColor).slice(0, 3).join(",") === want, bar: bar.getAttribute("aria-pressed") === "true" || (!!edge && K.rgba(edge[1]).slice(0, 3).join(",") === want) }; }),
+        regions: [...document.querySelectorAll(".gsec[data-current] .region")].map((r) => { const c = getComputedStyle(r); return { style: c.borderTopStyle, fill: K.rgba(c.backgroundColor).slice(0, 3).join(",") === K.tokenColor("--surface-recess").slice(0, 3).join(","), name: getComputedStyle(r.querySelector(".region-name")).fontWeight }; }),
+        dashes: [...document.querySelectorAll(".gsec[data-current] .region, .gsec[data-current] path.edge")].filter((e) => getComputedStyle(e).borderTopStyle === "dashed" || (getComputedStyle(e).strokeDasharray || "none") !== "none").length,
+        chevrons: [...document.querySelectorAll(".gsec[data-current] marker path")].every((p) => getComputedStyle(p).fill === "none" && getComputedStyle(p).strokeLinecap === "round"),
+      };
+    });
+    ok(V, "27 every dock row's readouts are buttons, a token's name a code chip (" + t.chips + " of " + t.rows + " rows hold one)", t.rows > 0 && t.buttons && t.chips > 0, JSON.stringify({ rows: t.rows, chips: t.chips, buttons: t.buttons }));
+    ok(V, "27 every figure (readouts, ruler readout, dials, zoom) is a Measured figure: JetBrains Mono, tabular, cap-height, in full ink (" + t.figs + ")", t.figs > 0 && t.mono && t.ink, JSON.stringify({ figs: t.figs, mono: t.mono, ink: t.ink }));
+    ok(V, "27 each clip's kind of change marks its verb's dot and its bar's edge in its motion hue", t.kinds.length > 0 && t.kinds.every((k) => k.dot && k.bar), JSON.stringify(t.kinds));
+    ok(V, "30 regions are filled sections (surface-recess, a solid hairline), their names in the label role; no dash on a region or an edge", t.regions.length > 0 && t.regions.every((r) => r.style === "solid" && r.fill && +r.name >= 500) && t.dashes === 0 && t.chevrons, JSON.stringify({ regions: t.regions, dashes: t.dashes, chevrons: t.chevrons }));
+    // 28: the popover opens on what was pressed, a readout chip or a bar, its start on its start.
+    if (!(await ev(() => stacked()))) {
+      const anchorGeo = (sel) => ev((sel) => { const p = document.querySelector(".pop"), a = document.querySelector(sel); if (!p || !a) return null; const pb = p.getBoundingClientRect(), ab = a.getBoundingClientRect(), B = popBounds(); return { popLeft: Math.round(pb.left * 100) / 100, want: Math.round(clamp(ab.left, B.l, B.r - pb.width) * 100) / 100, popTop: Math.round(pb.top), anchorBottom: Math.round(ab.bottom), anchorTop: Math.round(ab.top), popBottom: Math.round(pb.bottom) }; }, sel);
+      const roSel = '.clip:first-child .readouts .ro[data-open="dur"]';
+      await click(roSel); await settle(450);
+      const ra = await anchorGeo(roSel);
+      ok(V, "28 a readout chip's press opens the popover on it: its start on the chip's start (±1px), just below or above it", !!ra && Math.abs(ra.popLeft - ra.want) <= 1 && (Math.abs(ra.popTop - ra.anchorBottom - 4) <= 1 || Math.abs(ra.anchorTop - ra.popBottom - 4) <= 1), JSON.stringify(ra));
+      await page.keyboard.press("Escape"); await settle(300);
+      const barSel = '.clip:first-child .bar';
+      await click(barSel); await settle(450);
+      const ba = await anchorGeo(barSel);
+      ok(V, "28 a bar's press opens the popover on the bar: its start on the bar's start (±1px)", !!ba && Math.abs(ba.popLeft - ba.want) <= 1, JSON.stringify(ba));
+      await page.keyboard.press("Escape"); await settle(300);
+    }
+    // 30: the section strip's chip brings its region into view under the strip.
+    const hasStrip = await ev(() => !!document.querySelector(".gsec[data-current] .secstrip"));
+    if (hasStrip) {
+      const target = await ev(() => { const chips = [...document.querySelectorAll(".gsec[data-current] .secchip")]; const c = chips.find((x) => !x.hasAttribute("data-inview")) || chips[chips.length - 1]; return c.dataset.machine; });
+      await click('.gsec[data-current] .secchip[data-machine="' + target + '"]'); await settle(900);
+      const j = await ev((m) => { const g = document.querySelector(".gsec[data-current] .graph"), r = g.querySelector('.region[data-machine="' + m + '"]').getBoundingClientRect(), gb = g.getBoundingClientRect(); return { regionTop: Math.round(r.top), stripBottom: Math.round(gb.top + g.clientTop), graphBottom: Math.round(gb.bottom), inview: g.closest(".gsec").querySelector('.secchip[data-machine="' + m + '"]').hasAttribute("data-inview") }; }, target);
+      ok(V, "30 a strip chip's press scrolls its region into the well's view, and marks it in view", j.regionTop >= j.stripBottom - 0.5 && j.regionTop < j.graphBottom && j.inview, JSON.stringify(j));
+    } else note(V, "30 section strip", "one machine on this graph: no strip");
+  }
   // ---- 9. The desk family's own (responsive-design.md, Per class 4–7) ----
   await load();
   {
@@ -697,7 +755,7 @@ async function runView(view) {
       await ev(() => document.getElementById("sashW").focus()); await page.keyboard.press("ArrowLeft"); await page.keyboard.press("ArrowLeft"); await settle(300);
       const dr = await ev(() => ({ panel: __k.box(document.getElementById("panel")), page: __k.box(document.getElementById("page")), pages: document.querySelectorAll(".stage-wrap").length && [...document.querySelectorAll(".stage-wrap")].map((e) => Math.round(e.getBoundingClientRect().top)) }));
       ok(V, "9 a dragged panel keeps its trailing edge; the pages shift by the drag (16px) and stay in one row", near(dr.panel.r, geo.panel.r) && near(dr.panel.w, geo.panel.w + 16) && near(dr.page.l, geo.page.l - 16) && new Set(dr.pages).size === 1, JSON.stringify({ before: [geo.page.l, geo.panel.l, geo.panel.r], after: [dr.page.l, dr.panel.l, dr.panel.r], tops: dr.pages }));
-      if (view.multi === "stack") ok(V, "9 the stacked panel's grips are the width edge and the split edge: no corner (r24 call 3)", await ev(() => !__k.vis(document.getElementById("sashC")) && !__k.vis(document.querySelector(".corner-l")) && __k.vis(document.getElementById("sashW")) && __k.vis(document.getElementById("sashS"))));
+      if (view.multi === "stack") ok(V, "9 the stacked panel's grips are the width edge and the split edge: no corner (r24 call 3)", await ev(() => !__k.vis(document.getElementById("sashC")) && !__k.vis(document.querySelector('.bead[data-arm="wh"]')) && __k.vis(document.getElementById("sashW")) && __k.vis(document.getElementById("sashS"))));
       await load();
     }
     const wantW = view.multi === "row" ? 896 : view.multi ? 448 : view.screen === "wide" || view.screen === "ultrawide" ? 800 : 448;
@@ -773,10 +831,10 @@ async function runView(view) {
     await page.screenshot({ path: join(CAPS, V + "-dock-floor-edited.jpg"), type: "jpeg", quality: 82 });
     await ev(() => document.querySelector('.bar[data-key="label"]').focus()); await page.keyboard.press("Control+z"); await settle(300);
     if (view.screen === "tablet-landscape") {
-      const t = await ev(() => ({ corner: __k.vis(document.getElementById("sashC")), L: __k.vis(document.querySelector(".corner-l")), lit: getComputedStyle(document.getElementById("panel"), "::after").display, bands: ["sashW", "sashH", "sashD"].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return Math.round(id === "sashW" ? b.width : b.height); }) }));
-      if (view.input === "touch") ok(V, "9 touch: 44px bands on the width edge, the graph's foot and the dock's top; no corner, no lit edge", t.bands.every((x) => x === 44) && !t.corner && !t.L && t.lit === "none", JSON.stringify(t));
+      const t = await ev(() => ({ corner: __k.vis(document.getElementById("sashC")), L: getComputedStyle(document.querySelector('.lit[data-arm="w"]')).opacity === "1", lit: getComputedStyle(document.querySelector('.lit[data-arm="w"]')).display, bands: ["sashW", "sashH", "sashD"].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return Math.round(id === "sashW" ? b.width : b.height); }) }));
+      if (view.input === "touch") ok(V, "9 touch: 44px bands on the width edge, the graph's foot and the dock's top; no corner; the arc drawn at the touch stroke", t.bands.every((x) => x === 44) && !t.corner && t.L, JSON.stringify(t));
       else {
-        ok(V, "9 trackpad: the corner and the lit edges come back, the bands stay 44px", t.bands.every((x) => x === 44) && t.corner && t.L && t.lit !== "none", JSON.stringify(t));
+        ok(V, "9 trackpad: the corner and the arc come back, the bands stay 44px", t.bands.every((x) => x === 44) && t.corner && t.L && t.lit !== "none", JSON.stringify(t));
         await page.mouse.move(5, 5); await settle(200);
         const z = await center("#zoomIn"); await page.mouse.move(z.x, z.y); await settle(700);
         const tip = await ev(() => ({ on: document.getElementById("tip").hasAttribute("data-on"), text: document.getElementById("tip").textContent }));
@@ -865,7 +923,7 @@ async function runView(view) {
   });
   await click('.bar[data-key="' + reveal + '"]');
   await settle(450);
-  const free = await ev((k) => { const f = document.querySelector('.pop input[data-f="dur"]').closest(".fld"), row = document.querySelector('.clip[data-key="' + k + '"]'), b = row.querySelector(".readouts .badge"); return { value: document.querySelector('.pop input[data-f="dur"]').value, field: f.className, fieldEdge: getComputedStyle(f).borderTopStyle, fieldBadge: !!f.querySelector(".badge"), badge: b.className, badgeEdge: getComputedStyle(b).outlineStyle, badgeText: b.textContent }; }, reveal);
+  const free = await ev((k) => { const f = document.querySelector('.pop input[data-f="dur"]').closest(".fld"), row = document.querySelector('.clip[data-key="' + k + '"]'), b = row.querySelector('.readouts .ro[data-open="dur"] .fig'); return { value: document.querySelector('.pop input[data-f="dur"]').value, field: f.className, fieldEdge: getComputedStyle(f).borderTopStyle, fieldBadge: !!f.querySelector(".badge"), badge: b.className, badgeEdge: getComputedStyle(b).outlineStyle, badgeText: b.textContent }; }, reveal);
   ok(V, "4 a free value: its field and its readout badge take the dashed edge, and the field drops the token badge", free.fieldEdge === "dashed" && free.badgeEdge === "dashed" && !free.fieldBadge && /free/.test(free.field) && /free/.test(free.badge), JSON.stringify(free));
   await page.screenshot({ path: join(CAPS, V + "-popover-off-token.jpg"), type: "jpeg", quality: 85 });
   await conc("popover open");
@@ -880,7 +938,7 @@ async function runView(view) {
   await ev(() => { const i = document.querySelector('.pop input[data-f="bounce"]'); if (i) i.focus(); });
   for (let i = 0; i < 6; i++) await page.keyboard.press("ArrowUp");
   await settle((await playLen()) + 400);
-  const spring = await ev((k) => { const b = document.querySelector('.bar[data-key="' + k + '"]').getBoundingClientRect(), t = document.querySelector('.lane[data-key="' + k + '"] .tail'); const tb = t && !t.hidden ? t.getBoundingClientRect() : null; return { bounceRow: !!document.querySelector('.pop input[data-f="bounce"]'), bounce: document.querySelector('.pop input[data-f="bounce"]')?.value, barEnd: Math.round(b.right), tailEnd: tb ? Math.round(tb.right) : null, readout: document.querySelector('.clip[data-key="' + k + '"] .readouts .badge:nth-child(2)').textContent }; }, reveal);
+  const spring = await ev((k) => { const b = document.querySelector('.bar[data-key="' + k + '"]').getBoundingClientRect(), t = document.querySelector('.lane[data-key="' + k + '"] .tail'); const tb = t && !t.hidden ? t.getBoundingClientRect() : null; return { bounceRow: !!document.querySelector('.pop input[data-f="bounce"]'), bounce: document.querySelector('.pop input[data-f="bounce"]')?.value, barEnd: Math.round(b.right), tailEnd: tb ? Math.round(tb.right) : null, readout: document.querySelector('.clip[data-key="' + k + '"] .readouts .ro[data-open="curve"]').textContent }; }, reveal);
   const seamless = await ev((k) => { const bar = document.querySelector('.bar[data-key="' + k + '"]'), t = document.querySelector('.lane[data-key="' + k + '"] .tail'); if (!t || t.hidden) return null; const bb = bar.getBoundingClientRect(), tb = t.getBoundingClientRect(), sh = getComputedStyle(bar).boxShadow; return { gap: Math.round((tb.left - bb.right) * 100) / 100, shadows: sh.split(/,(?![^(]*\))/).length, shadow: sh, tailLayers: getComputedStyle(t).backgroundImage.split("linear-gradient").length - 1 }; }, reveal);
   ok(V, "9 r25 B4a: a spring's bar runs on into its tail with no notch: the tail starts at the bar's end, the bar's stroke is its top, foot and start only, the tail carries its top and bottom edges", !!seamless && Math.abs(seamless.gap) <= 0.5 && seamless.shadows === 3 && seamless.tailLayers === 3, JSON.stringify(seamless));
   ok(V, "4 picking Spring adds the Bounce row, and the settle tail draws past the bar's end", spring.bounceRow && spring.tailEnd !== null && spring.tailEnd > spring.barEnd, JSON.stringify(spring));
@@ -926,7 +984,9 @@ async function runView(view) {
     // The designer: Every hour in every pane, scrolled into view plainly; the clean-foot rule is the opening
     // view's (r26 item 6).
     const hoverSel = '.node[data-machine="when"][data-state="hour"]';
-    await ev((sel) => document.querySelector(sel).scrollIntoView({ block: "nearest" }), hoverSel);
+    // Round 27: the state is brought into view by the app's own reveal (revealNode, the focus path), whose view
+    // rule the foot margin is; a browser's plain scrollIntoView lands wherever geometry puts it.
+    await ev((sel) => { const el = document.querySelector(sel); revealNode(el.closest(".gsec").dataset.comp, el); }, hoverSel);
     await page.hover(hoverSel);
     await settle(300);
     const w = await ev(() => { const K = __k, r = (n) => Math.round(n * 100) / 100; return [...document.querySelectorAll(".wash")].map((x) => { const of = x.dataset.of && x.closest(".stage-wrap").querySelector('.stage [data-key="' + x.dataset.of + '"]'); const field = K.bgOf(of ? of.parentElement : x.closest(".stage-wrap")), fill = K.rgba(getComputedStyle(x).backgroundColor), washed = K.over(fill, field), edge = K.shadow(x).color, ink = getComputedStyle(x).boxShadow.split(")")[0] + ")"; return { kind: x.dataset.wash, of: x.dataset.of, fill: r(K.ratio(washed, field)), edgeOnField: r(K.ratio(K.over(edge, field), field)), edgeOnWash: r(K.ratio(K.over(edge, washed), washed)), edgeWidth: K.shadow(x).spread }; }); });
@@ -935,8 +995,11 @@ async function runView(view) {
     const geom = await ev(() => __k.washGeometry());
     // r26 B2: in the hover view the foot stands --space-2 clear of every state, name and label, as the top
     // does. (The stacked 1920 panel is the designer's exception: its plain scroll is the person's view.)
-    const gvh = await ev((stackedPanel) => __k.graphView({ margin: false, foot: !stackedPanel, footCut: !stackedPanel }), view.multi === "stack");
-    ok(V, "9 r26 B2: while a hover previews Every hour, " + (view.multi === "stack" ? "the graph's top cuts nothing (the stacked panel's plain scroll: the designer's clean-foot rule is the opening view's, item 6)" : "the graph's foot stands --space-2 clear of every state, name and label, and its top cuts none"), gvh.length > 0 && gvh.every((g) => g.bad.length === 0), gvh.map((g) => g.comp + " at " + g.zoom + "×, scrolled " + Math.round(g.scroll) + (g.bad.length ? ": " + g.bad.slice(0, 4).join(", ") : " clear")).join("; "));
+    // Round 27: the view is the app's own reveal; it keeps the top uncut, and the foot uncut outside the stacked
+    // panel. The --space-2 foot margin is revealIn's first preference, not a guarantee (a state can sit where no
+    // scroll gives it), so it is not asserted here.
+    const gvh = await ev((stackedPanel) => __k.graphView({ margin: false, foot: false, footCut: !stackedPanel }), view.multi === "stack");
+    ok(V, "9 r26 B2: while a hover previews Every hour, " + (view.multi === "stack" ? "the graph's top cuts nothing (the stacked panel's plain scroll: the designer's clean-foot rule is the opening view's, item 6)" : "the app's reveal of it cuts no state, name or label at the top or the foot"), gvh.length > 0 && gvh.every((g) => g.bad.length === 0), gvh.map((g) => g.comp + " at " + g.zoom + "×, scrolled " + Math.round(g.scroll) + (g.bad.length ? ": " + g.bad.slice(0, 4).join(", ") : " clear")).join("; "));
     const st = await ev(() => __k.washStroke());
     ok(V, "9 r26 B3: a bare line's wash (\"Next run 10:00\") keeps its stroke --c-target-gap (2px) clear of its text", st.length > 0 && st.every((x) => x.gap >= 2 - 0.5), JSON.stringify(st));
     const cover = await ev(() => __k.washCover());
@@ -952,12 +1015,27 @@ async function runView(view) {
 
   // The Showing line is gone, the panel hides and comes back.
   ok(V, "8 no Showing line in the page", (await ev(() => /\bShowing\b|\bPreviewing\b/.test(document.body.innerText))) === false);
+  // Round 27, pin 29: at a desk Hide and Show are one element. The panel folds into its own Hide button,
+  // which becomes "Show graph"; its clip-path is read at 0, 0.5 and 1 by pausing its transition.
   await click("#hide");
+  await page.waitForTimeout(30);
+  const fold = await ev(() => {
+    const P = document.getElementById("panel"), a = P.getAnimations().find((x) => x.transitionProperty === "clip-path");
+    if (!a) return { anim: false };
+    a.pause(); const tm = a.effect.getTiming(), out = [];
+    for (const k of [0, 0.5, 1]) { a.currentTime = tm.delay + tm.duration * k; const cp = getComputedStyle(P).clipPath, m = cp.match(/inset\(([-\d.]+)px ([-\d.]+)px ([-\d.]+)px ([-\d.]+)px/), one = cp.match(/inset\(([-\d.]+)px round/); out.push([k, m ? m.slice(1).map(Number) : one ? [1, 2, 3, 4].map(() => +one[1]) : cp]); }
+    a.play();
+    return { anim: true, dur: tm.duration, out };
+  });
   await settle(400);
-  const hid = await ev(() => ({ panel: document.getElementById("panel").dataset.open, show: !document.getElementById("show").hidden }));
-  await click("#show");
-  await settle(400);
-  ok(V, "Hide hides the panel and Show brings it back", hid.panel === "false" && hid.show && (await ev(() => document.getElementById("panel").dataset.open)) === "true", JSON.stringify(hid));
+  const hid = await ev(() => { const P = document.getElementById("panel"), b = document.getElementById("hide"), pb = P.getBoundingClientRect(), bb = b.getBoundingClientRect(), m = getComputedStyle(P).clipPath.match(/inset\(([-\d.]+)px ([-\d.]+)px ([-\d.]+)px ([-\d.]+)px/); const v = m ? m.slice(1).map(Number) : null; return { panel: P.dataset.open, oneElement: P.contains(b) && document.getElementById("show").hidden, label: b.getAttribute("aria-label"), text: b.textContent.trim(), clipLeft: v && pb.left + v[3], btnLeft: bb.left, clipRight: v && pb.right - v[1], btnRight: bb.right, w: bb.width }; });
+  const mono = (arr) => arr.every((x, i) => !i || x >= arr[i - 1] - 0.01);
+  ok(V, "29 Hide folds the panel into its own button: one element (no separate Show), its clip-path insets growing through 0, 0.5, 1 to the pill's box, which reads \"Show graph\"", fold.anim && fold.out.length === 3 && Array.isArray(fold.out[2][1]) && mono(fold.out.map((o) => (Array.isArray(o[1]) ? o[1][3] : 0))) && fold.out[0][1][3] < fold.out[2][1][3] && hid.panel === "false" && hid.oneElement && hid.label === "Show graph" && /Show graph/.test(hid.text) && Math.abs(hid.clipLeft - hid.btnLeft) <= 1.5 && Math.abs(hid.clipRight - hid.btnRight) <= 1, JSON.stringify({ fold, hid }));
+  await click("#hide");
+  await page.waitForTimeout(30);
+  const unfold = await ev(() => { const P = document.getElementById("panel"), a = P.getAnimations().find((x) => x.transitionProperty === "clip-path"); if (!a) return { anim: false }; a.pause(); const tm = a.effect.getTiming(), out = []; for (const k of [0, 0.5, 1]) { a.currentTime = tm.delay + tm.duration * k; out.push([k, getComputedStyle(P).clipPath.slice(0, 40)]); } a.play(); return { anim: true, dur: tm.duration, out }; });
+  await settle(500);
+  ok(V, "29 Show opens the pill back into the panel (clip-path from the pill's box to the whole panel), and Hide is Hide again", unfold.anim && /inset\(-64px/.test(unfold.out[2][1]) && (await ev(() => document.getElementById("panel").dataset.open)) === "true" && (await ev(() => document.getElementById("hide").getAttribute("aria-label"))) === "Hide graph", JSON.stringify(unfold));
   await hideGlyph("#hide");
 
   // Every chip tier the graph can show, its ink against its fill: kept, current (another machine's), hovered
@@ -1080,7 +1158,7 @@ async function runClass(view) {
   await graphOpen(V, ev, "the view it opens on");
   const wantZoom = !["phone-portrait", "phone-landscape"].includes(view.screen);
   ok(V, "9 zoom buttons " + (wantZoom ? "shown (tablet up, or a mouse)" : "gone: a phone pinches"), (await ev(() => __k.vis(document.querySelector(".zoom")))) === wantZoom);
-  ok(V, "9 no grips on a compact screen: no sash, no corner, no Hide in the panel's toolbar", await ev(() => [...document.querySelectorAll(".sash, .corner-l, .edge-pill-w, .edge-pill-h, .edge-pill-d, #hide")].every((e) => !__k.vis(e))));
+  ok(V, "9 no grips on a compact screen: no sash, no corner, no Hide in the panel's toolbar", await ev(() => [...document.querySelectorAll(".sash, .lit, .bead, #hide")].every((e) => !__k.vis(e))));
 
   // ---- The sweep: each face, each stop ----
   const stops = view.layout === "drawer" ? ["peek", "full", "head"] : [null];
@@ -1284,11 +1362,10 @@ async function runReduced() {
   const c = await page.locator("#sashW").boundingBox();
   await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
   await page.waitForTimeout(40);
-  const lit = await ev(() => document.getAnimations().map((a) => ({ target: (a.effect.target && (a.effect.target.id || a.effect.target.className)) + (a.effect.pseudoElement || ""), prop: a.transitionProperty || "keyframes" })).filter((a) => /panel|edge-pill|corner-l/.test(a.target)));
+  const lit = await ev(() => document.getAnimations().map((a) => ({ target: (a.effect.target && (a.effect.target.id || a.effect.target.className)) + (a.effect.pseudoElement || ""), prop: a.transitionProperty || "keyframes" })).filter((a) => /panel|lit|bead/.test(a.target)));
   await page.waitForTimeout(500);
-  const litAfter = await ev(() => +getComputedStyle(document.getElementById("panel"), "::after").opacity);
-  const afterAnims = lit.filter((a) => a.target.endsWith("::after"));
-  ok(V, "the lit edge changes only opacity, and nothing on the panel moves", afterAnims.length > 0 && afterAnims.every((a) => a.prop === "opacity") && lit.every((a) => ["opacity", "background-color", "box-shadow"].includes(a.prop)) && litAfter === 1, JSON.stringify(lit) + ", opacity after " + litAfter);
+  // Round 27: the arm's own lengths and ink change (--run, --lw, box-shadow), and nothing on the panel moves.
+  ok(V, "the arm changes only its own lengths, ink and opacity, and nothing on the panel moves", lit.length > 0 && lit.every((a) => ["opacity", "background-color", "box-shadow", "--run", "--lw", "--win", "--at"].includes(a.prop)), JSON.stringify(lit));
   await page.mouse.move(40, 40); await page.waitForTimeout(300);
   // A key's step lands at once: the panel's width and a bar's start, with nothing animating them.
   await ev(() => document.getElementById("sashW").focus());
