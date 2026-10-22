@@ -1440,15 +1440,16 @@ export async function buttonNames(scope: Locator): Promise<string[]> {
 }
 
 /**
- * Puts the page on a still clock: every infinite animation running is
- * paused at its start, and every finite one is waited on until it lands.
+ * Puts the page on a still clock: every looping animation running (endless,
+ * or a set count of loops) is paused at its start, and every one-shot run is
+ * waited on until it lands.
  */
 export async function settle(page: Page, ms = 150): Promise<void> {
-  // An infinite run (a working glyph's breath) never lands, so a look after
-  // the wait would catch it mid-loop, a different frame each time: it is
-  // paused at currentTime 0 instead, the product's motion left as designed
-  // and the frame read the same on every look. One started after this (a
-  // row mounted later) is paused by the next settle.
+  // A looping run (a working glyph's breath, a needs-you dot's three echoes,
+  // which outlast the wait) would be caught mid-loop, a different frame each
+  // time: it is paused at currentTime 0 instead, the product's motion left
+  // as designed and the frame read the same on every look. One started after
+  // this (a row mounted later) is paused by the next settle.
   // A finite run still going after 10s will not land: named, as a failure,
   // never waited on for ever. A run lands when it finishes or stops running:
   // one paused after the wait began (a faded cover's skeleton holds still)
@@ -1462,19 +1463,21 @@ export async function settle(page: Page, ms = 150): Promise<void> {
       const end = (run: Animation) =>
         Number(run.effect?.getComputedTiming().endTime ?? 0);
       const finite = (run: Animation) => Number.isFinite(end(run));
+      /** A run that repeats: endless, or a set count of loops (a needs-you dot's three echoes, motion/echo). */
+      const repeats = (run: Animation) =>
+        end(run) === Number.POSITIVE_INFINITY ||
+        Number(run.effect?.getComputedTiming().iterations ?? 1) > 1;
       // On the document's clock only: a scroll-driven run's end is a
       // percentage (NaN here), it moves with its scroller, never on its own.
       const loops = running.filter(
-        (one) =>
-          one.timeline instanceof DocumentTimeline &&
-          end(one) === Number.POSITIVE_INFINITY
+        (one) => one.timeline instanceof DocumentTimeline && repeats(one)
       );
       for (const run of loops) {
         run.pause();
         run.currentTime = 0;
       }
       const waits = running
-        .filter(finite)
+        .filter((run) => finite(run) && !loops.includes(run))
         .map((run) => ({ run, settled: false }));
       (window as unknown as { __kitWaits: typeof waits }).__kitWaits = waits;
       /** Resolves once `run` no longer runs (paused, idle), read each frame. */
