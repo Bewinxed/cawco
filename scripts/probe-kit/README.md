@@ -196,4 +196,8 @@ workspace and on the host, with no wrapper.
 Logs, journal excerpts and transcripts a spec's delegate needs go in the
 `delegate` call's `inputs` (absolute paths on the parent's machine): they are
 copied into the delegate's `$TMPDIR/inputs/` before its first turn. Credential
-stores, secret files and the host's logs are refused; 64 MiB in all.
+stores, secret files and the host's logs are refused; 64 MiB in all. What the
+hub already holds goes by name, with no file written for it (core
+handed-input.ts): `{ report }`, `{ artifact }`, `{ pins }`, `{ find }`,
+`{ attachment }`, `{ assets }`, `{ text, name }`, `{ blob, name }`
+(`handed-inputs` proves each).

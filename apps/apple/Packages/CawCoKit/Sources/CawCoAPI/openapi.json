@@ -28718,10 +28718,10 @@
               "string"
             ]
           },
-          "edges": {
+          "state": {
             "type": "object"
           },
-          "state": {
+          "edges": {
             "type": "object"
           },
           "loops": {
@@ -28775,6 +28775,9 @@
                 "kind": {
                   "$ref": "#/components/schemas/WorkflowEffectKind"
                 },
+                "seq": {
+                  "type": "number"
+                },
                 "args": {
                   "type": "object"
                 },
@@ -28784,9 +28787,6 @@
                 },
                 "failure": {
                   "$ref": "#/components/schemas/WorkflowFailure"
-                },
-                "seq": {
-                  "type": "number"
                 }
               },
               "required": [
@@ -28907,10 +28907,10 @@
                   "string"
                 ]
               },
-              "edges": {
+              "state": {
                 "type": "object"
               },
-              "state": {
+              "edges": {
                 "type": "object"
               },
               "loops": {
@@ -31707,9 +31707,6 @@
             "type": "string",
             "format": "date-time"
           },
-          "state": {
-            "$ref": "#/components/schemas/WorkspaceState"
-          },
           "base": {
             "type": "string"
           },
@@ -31718,6 +31715,9 @@
               "null",
               "number"
             ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkspaceState"
           },
           "ports": {
             "type": "array",

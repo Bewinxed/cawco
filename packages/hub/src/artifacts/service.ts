@@ -426,6 +426,20 @@ const capturesRefused = (n: number): string =>
 const NOT_SERVED =
   'A preview of a port in a workspace names what serves it: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }. CawCo runs it in the workspace and keeps it up for as long as the preview and the workspace last; a server started in your own shell ends with it.';
 
+/**
+ * One file of an artifact handed to another session (hub handed-inputs.ts):
+ * its bytes, or, for a preview's pass, the bytes made for the session it is
+ * handed to once that session stands.
+ */
+export interface HandedArtifactFile {
+  bytes: Buffer | ((receiver: InstanceRow) => Buffer);
+  name: string;
+}
+
+/** A value as a JSON file a session reads. */
+const jsonFile = (value: unknown): Buffer =>
+  Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+
 /** An entry as `artifact_read` answers it. */
 type ReadEntry = ChoiceEntry & { earlierRevision?: true };
 
@@ -2807,6 +2821,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     } catch {
       return null;
     }
+  };
+
+  /**
+   * An artifact's latest picture, light where it keeps two: a canvas's own;
+   * a page's or preview's kept thumbnail, else its ink picture; null when it
+   * has none.
+   */
+  const latestPicture = (row: ArtifactRow): Buffer | null => {
+    if (row.kind !== "canvas" && keptThumbnail(row.id)) {
+      try {
+        return readFileSync(thumbnailPath(deps.root, row.id, "light"));
+      } catch {
+        // Its file went since it was kept: its ink picture, when it has one.
+      }
+    }
+    return pictureBytes(row.id);
   };
 
   /**
@@ -5263,6 +5293,107 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           marked(row.id);
         }
       }
+    },
+
+    /**
+     * Artifact `id` as the files a session hands another (hub
+     * handed-inputs.ts), for a session that reads it as `artifact_read` does
+     * ({@link readTarget}), each named `artifact-<name>.<ext>`, and none of
+     * it the owner's read:
+     * - a page: its HTML, its program when a decision page, and its picks
+     *   and notes as JSON;
+     * - a preview: its source, picks and stage as JSON with a pass into it,
+     *   minted when it is written for the session it is handed to, whose
+     *   browser alone it lets in;
+     * - a canvas: its scene (`.excalidraw`) and outline;
+     * - a component canvas: its stories, stage, picks and what its stage
+     *   drew, read as `artifact_read` with `render` and `png` reads it, its
+     *   frames as drawn the picture, and `states`, the states files for the
+     *   caller to read from its workspace;
+     * and the latest picture of any that has one.
+     */
+    handed: async (
+      instanceId: string,
+      id: string
+    ): Promise<{
+      files: HandedArtifactFile[];
+      row: ArtifactRow;
+      states: { files: string[]; workspace: string } | null;
+    }> => {
+      const instance = sessionOf(instanceId);
+      const row = readTarget(instance, id);
+      const base = `artifact-${row.name}`;
+      const files: HandedArtifactFile[] = [];
+      let drawn: Buffer | null = null;
+      let states: { files: string[]; workspace: string } | null = null;
+      if (row.kind === "browser") {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is a browser: nothing of it is a file. Hand what it shows as a preview, or its URL as text.`
+        );
+      }
+      if (row.kind === "canvas") {
+        const { file, outline } = canvasFile(row.id);
+        files.push(
+          { name: `${base}.excalidraw`, bytes: jsonFile(file) },
+          { name: `${base}.md`, bytes: Buffer.from(`${outline}\n`) }
+        );
+      } else if (row.kind === "page") {
+        const program = programOf(row);
+        files.push(
+          {
+            name: `${base}.html`,
+            bytes: readFileSync(join(deps.root, row.id, "index.html")),
+          },
+          ...(program === undefined
+            ? []
+            : [{ name: `${base}.oui`, bytes: Buffer.from(program) }]),
+          { name: `${base}.json`, bytes: jsonFile(read(row, undefined, false)) }
+        );
+      } else if (row.kind === "preview") {
+        // Refused now, in its words, when it has no address to open: the
+        // pass the receiver gets is minted once its session stands.
+        deps.browse(instance, row);
+        const stands = {
+          ...read(row, undefined, false),
+          source: row.source,
+          machine: machineOf(row),
+        };
+        files.push({
+          name: `${base}.json`,
+          bytes: (receiver) => {
+            const pass = deps.browse(receiver, row);
+            return jsonFile({
+              ...stands,
+              pass: {
+                ...pass,
+                how: `Load url once in your own browser tool: it lets that browser into ${row.name}${pass.expiresAt ? ` until expiresAt or your session ends; artifact_browse { id: "${row.id}" } gives you a fresh one` : ""}.`,
+              },
+            });
+          },
+        });
+      } else {
+        const sheet = sheetOf(row);
+        const { png, ...answer } = await readSheet(row, undefined, false, {
+          render: true,
+          png: true,
+        });
+        drawn = png ? Buffer.from(png, "base64") : null;
+        states = sheet && { files: sheet.files, workspace: sheet.workspace };
+        files.push({
+          name: `${base}.json`,
+          bytes: jsonFile({
+            ...answer,
+            files: sheet?.files ?? [],
+            sheet: docs.doc(row.id).getMap("meta").get("sheet") ?? null,
+          }),
+        });
+      }
+      const picture = drawn ?? latestPicture(row);
+      if (picture) {
+        files.push({ name: `${base}.png`, bytes: picture });
+      }
+      return { files, row, states };
     },
 
     /** A canvas's `.excalidraw` file, its outline and its latest picture: what a send carries. */

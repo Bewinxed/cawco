@@ -942,8 +942,8 @@ export interface HandoffActions {
       from?: string;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
-      /** Files on this session's machine copied into its `$TMPDIR/inputs/` before its brief. */
-      inputs?: string[];
+      /** What it is handed (core handed-input.ts), written into its `$TMPDIR/inputs/` before its brief. */
+      inputs?: unknown[];
       /** Where its commits go once it passes the landing gate; `main` by default. */
       lands?: LandsMode;
       /** Files in its workspace the hub copies into the project's folder. */
@@ -986,12 +986,12 @@ export interface HandoffActions {
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
   /**
-   * Sends `message` to another session; `inputs`, files on this session's
-   * machine, are copied first into the `$TMPDIR/inputs/` of the target's
-   * work item, one this session delegated or leads.
+   * Sends `message` to another session; `inputs` (core handed-input.ts)
+   * are written first into the `$TMPDIR/inputs/` of the target's work item,
+   * one this session delegated or leads.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  handoff(target: string, message: string, inputs?: string[]): Promise<string>;
+  handoff(target: string, message: string, inputs?: unknown[]): Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   interruptDelegate(target: string): string;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
@@ -1171,17 +1171,16 @@ function resolveDelegate(
 }
 
 /**
- * A handoff's inputs, through the hub (work-items.ts `handInputs`): admitted
- * on `from`'s machine, copied into the `$TMPDIR/inputs/` of `target`'s work
- * item (by that machine itself when the item's workspace is on it too).
- * Answers each one's name and where it was read; the hub's refusal is thrown
- * in its words.
+ * A handoff's inputs, through the hub (work-items.ts `handInputs`): paths
+ * admitted on `from`'s machine and what the hub holds by name, written into
+ * the `$TMPDIR/inputs/` of `target`'s work item. Answers each one's name and
+ * where it came from; the hub's refusal is thrown in its words.
  */
 async function handInputs(
   authorization: string | undefined,
   from: string,
   target: string,
-  inputs: string[]
+  inputs: unknown[]
 ): Promise<{ from: string; name: string }[]> {
   const response = await fetch(`${hubHttpUrl()}/api/work-items/inputs`, {
     method: "POST",
@@ -1886,7 +1885,7 @@ export const handoffActions = ({
   async handoff(
     target: string,
     message: string,
-    inputs?: string[]
+    inputs?: unknown[]
   ): Promise<string> {
     const { peers, asleep, own, hosts, rows } = roster(fleet, instanceId);
     // A thread (`thread#1a2b3c4d`, or its id): Caw is handed it there.

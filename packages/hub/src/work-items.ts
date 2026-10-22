@@ -84,6 +84,7 @@ import {
   CONTROL_WORKSPACE_MIGRATE,
   handoffMarker,
   holdingWords,
+  INPUTS_LIMIT_BYTES,
   machineCalled,
   sessionLink,
   sizeWords,
@@ -94,6 +95,7 @@ import {
   withWorkspaceLine,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { type HeldInput, handedInputs } from "@cawco/core/handed-input";
 import {
   isMachinePath,
   type MachinePath,
@@ -138,6 +140,7 @@ import {
   lastCapable,
   projectGate,
 } from "./gate-file";
+import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
@@ -604,14 +607,16 @@ export const resolveSpawnType = (
 };
 
 /**
- * A delegation's inputs as admitted on its parent's machine: the paths named,
- * the parent's own workspace when it runs in one (what they were admitted
- * against), the machine they are on, and each by name. Their bytes are not
- * here: the workspace's machine copies or writes them (`handIn`).
+ * A delegation's inputs: the paths named, admitted on its parent's machine,
+ * with the parent's own workspace when it runs in one (what they were
+ * admitted against) and the machine they are on, whose bytes the
+ * workspace's machine copies or writes (`handIn`); `held`, what the hub
+ * resolved itself (handed-inputs.ts), bytes and all; and every one by name.
  */
 interface Inputs {
   bound: WorkspaceRef | null;
   files: InputNamed[];
+  held: HandedFile[];
   machineId: string;
   paths: string[];
   /** The project the parent belongs to: a file in its folder may go. */
@@ -625,7 +630,14 @@ const NO_INPUTS: Inputs = {
   project: null,
   machineId: "",
   files: [],
+  held: [],
 };
+
+/** Entries one delegation's inputs may name (agent inputs.ts holds its paths to the same). */
+const INPUTS_COUNT_LIMIT = 50;
+
+/** What the hub writes is its reader's to read and write. */
+const HELD_MODE = 0o600;
 
 /** What `delegate` asks for. */
 /** An item's clone as a brief reads it: its workspace, on its machine (commands in it run inside its boundary). */
@@ -673,11 +685,13 @@ export interface WorkItemRequest {
   group?: string;
   harness?: HarnessKind;
   /**
-   * Files on its parent's machine, by absolute path, copied into its
-   * workspace's `$TMPDIR/inputs/` before the brief that names them
-   * (agent inputs.ts): what its boundary cannot read where it lies.
+   * What its parent hands it (core handed-input.ts), written into its
+   * workspace's `$TMPDIR/inputs/` before the brief that names them: files
+   * on the parent's machine by absolute path (agent inputs.ts), and what
+   * the hub holds by name, resolved here (handed-inputs.ts). Checked as
+   * they come: the route takes any list.
    */
-  inputs?: string[];
+  inputs?: unknown[];
   /** Where its commits go once it passes the landing gate; `main` when left out. */
   lands?: LandsMode;
   /** The machine a new workspace is cut on; the parent's by default. */
@@ -925,6 +939,11 @@ export interface WorkItemDeps {
     notice?: boolean,
     headline?: string
   ) => void;
+  /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts); throws a refusal in its words. */
+  readonly resolveHanded: (
+    caller: InstanceRow,
+    input: HeldInput
+  ) => Promise<HandedFile[]> | HandedFile[];
   /** The one send path; its record says whether the machine took it. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -1982,6 +2001,7 @@ export const createWorkItems = ({
   recutDone,
   recutFailed,
   report,
+  resolveHanded,
   inputRefusal,
   inTurn,
   leadPlace,
@@ -4601,53 +4621,174 @@ export const createWorkItems = ({
   };
 
   /**
-   * The inputs `paths` names, admitted on `reader`'s machine (agent
-   * inputs.ts), before anything is cut: none for none. Refused, in the
-   * machine's words, when one may not leave it; one outside `reader`'s own
-   * clone and scratch dir may not, when it runs inside a boundary
-   * ({@link boundOf}). A file in the folder of `reader`'s project, which its
-   * delegates' boundaries read, may go. No byte of them is read here:
-   * {@link handIn} moves them once their workspace is known.
+   * `paths` admitted on `reader`'s machine (agent inputs.ts) against its
+   * workspace when it runs in one (`bound`) and its project: refused in the
+   * machine's words when one may not leave it. One outside `reader`'s own
+   * clone and scratch dir may not, when it runs inside a boundary ({@link
+   * boundOf}); a file in the folder of its project, which its delegates'
+   * boundaries read, may. No byte of them is read here: {@link handIn}
+   * moves them once their workspace is known.
    */
-  const readInputs = async (
-    paths: string[] | undefined,
-    reader: Pick<Parent, "id" | "machineId">
-  ): Promise<Inputs> => {
-    if (!paths?.length) {
-      return NO_INPUTS;
+  const admitPaths = async (
+    paths: string[],
+    reader: InstanceRow,
+    bound: WorkspaceRef | null
+  ): Promise<InputNamed[]> => {
+    if (paths.length === 0) {
+      return [];
     }
-    const [row] = db.getInstancesByIds([reader.id]);
-    const bound = (row && boundOf(row)) ?? null;
-    const project = row?.projectId ?? null;
     const judged = (await call(reader.machineId, CONTROL_INPUTS_ADMIT, [
       paths,
       bound,
-      project,
+      reader.projectId ?? null,
     ])) as InputsAdmitted;
     if ("refused" in judged) {
       throw new WorkItemRefusal(400, `inputs: ${judged.refused}.`);
     }
+    return judged.files;
+  };
+
+  /**
+   * What `held` names, resolved now and read for `reader` (handed-inputs.ts):
+   * refused in words naming it when it names nothing `reader` may read, or
+   * when together it is more than {@link INPUTS_LIMIT_BYTES}.
+   */
+  const resolveHeld = async (
+    held: HeldInput[],
+    reader: InstanceRow
+  ): Promise<HandedFile[]> => {
+    const resolved = (
+      await Promise.all(
+        held.map(async (input) => {
+          try {
+            return await resolveHanded(reader, input);
+          } catch (error) {
+            throw error instanceof HandedInputRefusal
+              ? new WorkItemRefusal(400, `inputs: ${error.message}.`, {
+                  cause: error,
+                })
+              : error;
+          }
+        })
+      )
+    ).flat();
+    // What is made for its reader as it is written (a preview's pass) is a
+    // few hundred bytes: what is in hand now is the whole of it that counts.
+    const bytes = resolved.reduce(
+      (sum, file) =>
+        sum + (typeof file.bytes === "function" ? 0 : file.bytes.length),
+      0
+    );
+    if (bytes > INPUTS_LIMIT_BYTES) {
+      throw new WorkItemRefusal(
+        400,
+        `inputs: what the hub hands comes to more than ${INPUTS_LIMIT_BYTES / MIB} MiB, the most one delegation carries; hand larger data on through git.`
+      );
+    }
+    return resolved;
+  };
+
+  /** Refuses two inputs that would land under one name in `inputs/`. */
+  const oneNameEach = (files: InputNamed[]): void => {
+    const landing = new Map<string, string>();
+    for (const file of files) {
+      const twin = landing.get(file.name);
+      if (twin !== undefined) {
+        throw new WorkItemRefusal(
+          400,
+          `inputs: ${twin} and ${file.from} would both land as ${file.name} in $TMPDIR/inputs/; hand one under another name.`
+        );
+      }
+      landing.set(file.name, file.from);
+    }
+  };
+
+  /**
+   * What `entries` hands on (core handed-input.ts), before anything is cut:
+   * none for none. Each entry is checked against the core's shapes; paths
+   * are admitted on `reader`'s machine ({@link admitPaths}), every other
+   * entry resolved by the hub ({@link resolveHeld}); two that would land
+   * under one name are refused.
+   */
+  const readInputs = async (
+    entries: unknown[] | undefined,
+    reader: Pick<Parent, "id" | "machineId">
+  ): Promise<Inputs> => {
+    if (!entries?.length) {
+      return NO_INPUTS;
+    }
+    const checked = handedInputs(entries);
+    if ("refused" in checked) {
+      throw new WorkItemRefusal(400, `inputs: ${checked.refused}.`);
+    }
+    if (checked.inputs.length > INPUTS_COUNT_LIMIT) {
+      throw new WorkItemRefusal(
+        400,
+        `inputs: ${checked.inputs.length} entries; one delegation carries ${INPUTS_COUNT_LIMIT} at most.`
+      );
+    }
+    const [row] = db.getInstancesByIds([reader.id]);
+    if (!row) {
+      throw new WorkItemRefusal(404, `unknown session ${reader.id}`);
+    }
+    const paths = checked.inputs.filter(
+      (input): input is string => typeof input === "string"
+    );
+    const bound = boundOf(row) ?? null;
+    const [pathFiles, hubFiles] = await Promise.all([
+      admitPaths(paths, row, bound),
+      resolveHeld(
+        checked.inputs.filter(
+          (input): input is HeldInput => typeof input !== "string"
+        ),
+        row
+      ),
+    ]);
+    const files: InputNamed[] = [
+      ...pathFiles,
+      ...hubFiles.map(({ name, from }) => ({ name, from, mode: HELD_MODE })),
+    ];
+    oneNameEach(files);
     return {
       paths,
       bound,
-      project,
+      project: row.projectId ?? null,
       machineId: reader.machineId,
-      files: judged.files,
+      files,
+      held: hubFiles,
     };
   };
 
   /**
-   * `inputs` put into `workspace`'s `$TMPDIR/inputs/` on its machine, before
-   * a brief names them, admitted again where they are read. THE ONE DECISION:
-   * on the machine that holds them, that machine copies them itself, and
-   * none of their bytes crosses its link; from another machine, they are
-   * read there and written here, through the hub.
+   * `inputs` put into `workspace`'s `$TMPDIR/inputs/` on its machine for
+   * `receiver`, the session that reads them, before a brief names them.
+   * What the hub resolved it writes there itself, what is made for its
+   * reader (a preview's pass) made for `receiver` now. Paths are admitted
+   * again where they are read. THE ONE DECISION for paths: on the machine
+   * that holds them, that machine copies them itself, and none of their
+   * bytes crosses its link; from another machine, they are read there and
+   * written here, through the hub.
    */
   const handIn = async (
     workspace: WorkspaceRow,
-    inputs: Inputs
+    inputs: Inputs,
+    receiver: InstanceRow
   ): Promise<void> => {
-    if (inputs.files.length === 0) {
+    if (inputs.held.length > 0) {
+      await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
+        refOf(workspace),
+        inputs.held.map((file): InputFile => ({
+          name: file.name,
+          from: file.from,
+          mode: HELD_MODE,
+          content: (typeof file.bytes === "function"
+            ? file.bytes(receiver)
+            : file.bytes
+          ).toString("base64"),
+        })),
+      ]);
+    }
+    if (inputs.paths.length === 0) {
       return;
     }
     if (workspace.machineId === inputs.machineId) {
@@ -4726,8 +4867,7 @@ export const createWorkItems = ({
           settingsOf(request, parent),
           parent,
           await briefedFrom(request, again),
-          inputs,
-          true
+          inputs
         );
       }
       // Its clone is gone, or on a machine the attempt may not run on: the
@@ -4810,7 +4950,6 @@ export const createWorkItems = ({
       parent,
       await briefedFrom(request, workspace),
       inputs,
-      true,
       { instanceId, placement }
     );
   };
@@ -4833,10 +4972,13 @@ export const createWorkItems = ({
 
   /**
    * The follow-up in the workspace `needle` names. A retired one is cut
-   * again at its own path first ({@link recut}). Its boundary is up and its
-   * inputs are written before the claim, which files the item in the same
-   * step as its one-writer check; the inputs land only in a workspace the
-   * claim would take, and the claim is made again as the item is filed.
+   * again at its own path first ({@link recut}). Its boundary is up and,
+   * when it continues a session, its inputs are written for that session
+   * before the claim, which files the item in the same step as its
+   * one-writer check; the inputs land only in a workspace the claim would
+   * take, and the claim is made again as the item is filed. A workspace
+   * whose last session never started gets a new session, its inputs
+   * written for it once it stands, as every new delegate's are.
    */
   const startFollowUp = async (
     needle: string,
@@ -4850,22 +4992,17 @@ export const createWorkItems = ({
       await recut(named);
     }
     await boundaryUp(needle);
-    if (inputs.files.length > 0) {
-      await handIn(claim(needle).workspace, inputs);
+    const { workspace, previous } = claim(needle);
+    const [resumed] = previous
+      ? db.getInstancesByIds([previous.instanceId])
+      : [];
+    if (resumed?.sessionId && inputs.files.length > 0) {
+      await handIn(workspace, inputs, resumed);
     }
     const followed = followUp(needle, request, parent, inputs);
-    // A workspace whose last session never started has nothing to continue:
-    // a session starts there the way every new delegate's does.
     return "item" in followed
       ? followed
-      : spawnIn(
-          followed,
-          settingsOf(request, parent),
-          parent,
-          request,
-          inputs,
-          false
-        );
+      : spawnIn(followed, settingsOf(request, parent), parent, request, inputs);
   };
 
   /**
@@ -4940,10 +5077,10 @@ export const createWorkItems = ({
 
   /**
    * A new session in `workspace`, running a new item from the request's
-   * brief. `handInFirst`: `inputs` are put in before the session starts,
-   * after the item is answered ({@link handIn}); false, they are in already.
-   * `ahead`: its id and account, placed before a new workspace was cut
-   * ({@link ItemPlacement}); absent, it is placed as it spawns.
+   * brief; `inputs` are put in for it once it stands, after the item is
+   * answered and before its brief ({@link handIn}). `ahead`: its id and
+   * account, placed before a new workspace was cut ({@link ItemPlacement});
+   * absent, it is placed as it spawns.
    */
   const spawnIn = (
     workspace: WorkspaceRow,
@@ -4951,7 +5088,6 @@ export const createWorkItems = ({
     parent: Parent,
     request: WorkItemRequest,
     inputs: Inputs,
-    handInFirst: boolean,
     ahead?: { instanceId: string; placement: ItemPlacement }
   ): WorkItemStart => {
     notPaused(workspace.machineId);
@@ -5026,7 +5162,7 @@ export const createWorkItems = ({
         )
       );
     };
-    if (handInFirst && inputs.files.length > 0) {
+    if (inputs.files.length > 0) {
       // The caller is answered now, with its workspace, item and session:
       // putting the inputs in waits on nothing the answer says, and behind a
       // conductor's burst it held the answer past the caller's own deadline
@@ -5049,7 +5185,11 @@ export const createWorkItems = ({
         }
         return end(instanceId);
       };
-      handIn(workspace, inputs)
+      const [receiver] = db.getInstancesByIds([instanceId]);
+      (receiver
+        ? handIn(workspace, inputs, receiver)
+        : Promise.reject(new Error(`its session ${instanceId} has no row`))
+      )
         .then(brief, notIn)
         .catch((stopped: unknown) =>
           console.warn(
@@ -7778,18 +7918,18 @@ export const createWorkItems = ({
     },
 
     /**
-     * A handoff's inputs: `paths` on `from`'s machine copied into the
+     * A handoff's inputs (core handed-input.ts): written into the
      * `$TMPDIR/inputs/` of the workspace `instanceId`'s item runs in, before
      * the handoff that names them goes. Only the session that delegated the
      * item, or its project's lead, hands it inputs; refused, too, for a
      * workspace whose work was discarded and an input that may not go
      * ({@link readInputs}). A retired workspace is cut again first
-     * ({@link recut}). Answers each input's name and where it was read.
+     * ({@link recut}). Answers each input's name and where it came from.
      */
     async handInputs(
       instanceId: string,
       from: string,
-      paths: string[]
+      entries: unknown[]
     ): Promise<{ from: string; name: string }[]> {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
@@ -7812,7 +7952,7 @@ export const createWorkItems = ({
       }
       // Read before a retired workspace is cut again: an input that may not
       // go refuses the handoff before anything is cut.
-      const inputs = await readInputs(paths, caller);
+      const inputs = await readInputs(entries, caller);
       const workspace = named && recuttable(named) ? await recut(named) : named;
       if (!workspace || workspace.state === "archived") {
         throw new WorkItemRefusal(
@@ -7820,7 +7960,7 @@ export const createWorkItems = ({
           `${item.title} (${item.id}) is in workspace ${item.workspaceId}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`
         );
       }
-      await handIn(workspace, inputs);
+      await handIn(workspace, inputs, row);
       return inputs.files.map(({ name, from: read }) => ({ name, from: read }));
     },
 

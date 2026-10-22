@@ -599,6 +599,7 @@ import { accountForecasts, carrySequence } from "./forecast";
 import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
+import { createHandedInputs } from "./handed-inputs";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
@@ -622,6 +623,7 @@ import {
   promptCacheExpiresAt,
 } from "./keep-alive";
 import { boardTitle, type LabelledRow, leafOf, sessionLabel } from "./labels";
+import { quote } from "./landing";
 import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
@@ -841,6 +843,7 @@ import {
   createWorkItems,
   type ItemPlacement,
   LEAF_DELEGATE_REFUSAL,
+  outputsFolder,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
   type Unlanded,
@@ -922,6 +925,8 @@ function searchMiss(answer: Bounded<ControlResult>): string {
  * delays when a new terminal session becomes findable by name.
  */
 const STORED_LISTING_MS = 15_000;
+/** How long a states file's read in its workspace may take before a handed input is refused: a `cat` of one source file. Our call. */
+const WORKSPACE_READ_MS = 15_000;
 /** How often the hub reads every skill's and plugin's source for an update. */
 const UPDATE_CHECK_MS = 6 * 60 * 60_000;
 
@@ -21616,6 +21621,9 @@ export const createServer = (
     beforeCut: (projectId, machineId, cwd) =>
       placeRepos.beforeCut(projectId, machineId, cwd),
     db,
+    // What a session hands by name (handed-inputs.ts), made further down;
+    // nothing starts an item before the hub is up.
+    resolveHanded: (caller, input) => handedInputs.resolve(caller, input),
     stageRuns: stageHold,
     // The design check (design-verify.ts), made further down; nothing
     // finishes an item before the hub is up.
@@ -23373,6 +23381,84 @@ export const createServer = (
         body: message.body,
         noteTitle: message.noteTitle,
       })),
+  });
+  /**
+   * A session's transcript, every page back to the conversation's start,
+   * or what stopped the walk: the pages are the in-memory builder's
+   * (transcripts.ts), so the whole walk reads no disk twice.
+   */
+  const wholeTranscript = async (instanceId: string) => {
+    const id = db.instanceIdOf(instanceId);
+    const pages: TranscriptPage[] = [];
+    let before: string | undefined;
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: each page names the cursor of the next
+      const page = await transcripts.page(id, ATTACHMENT_PAGE_LIMIT, before);
+      if ("gone" in page || "fault" in page) {
+        return page;
+      }
+      pages.push(page);
+      if (page.cursor === null) {
+        return { pages };
+      }
+      before = page.cursor;
+    }
+  };
+  // What a session hands another by name, as files (handed-inputs.ts).
+  const handedInputs = createHandedInputs({
+    artifacts,
+    attachments: async (instanceId) => {
+      const read = await wholeTranscript(instanceId);
+      if ("gone" in read) {
+        throw new Error(`the transcript no longer holds block ${read.gone}`);
+      }
+      if ("fault" in read) {
+        throw new Error(read.message);
+      }
+      return attachmentsOfPages(read.pages);
+    },
+    find: (actor, input) => findTool.call(actor, input),
+    folderFiles: (projectId, dir) => {
+      const walk = async (at: string): Promise<string[]> =>
+        (
+          await Promise.all(
+            (await folderFileNames(projectId, at)).map(async (name) => {
+              const path = `${at}/${name}`;
+              // A file is no folder to list (ENOTDIR): it is one of them.
+              const isFolder = await folderFileNames(projectId, path).then(
+                () => true,
+                () => false
+              );
+              return isFolder ? walk(path) : [path];
+            })
+          )
+        ).flat();
+      return walk(dir);
+    },
+    instance: (id) => db.getInstancesByIds([id])[0],
+    outputsFolder,
+    tree: (caller) => treeSessions(db, caller),
+    workItem: (id) => db.workItem(id),
+    // Read inside the workspace's boundary, as its own sessions read it.
+    workspaceText: async (workspaceId, path) => {
+      const [workspace] = db.workspacesNamed(workspaceId);
+      if (!workspace || workspace.state === "archived") {
+        throw new Error(
+          `workspace ${workspaceId} is ${workspace?.state ?? "gone"}`
+        );
+      }
+      const read = await runOnMachine(
+        workspace.machineId,
+        workspace.path,
+        `cat -- ${quote(path)}`,
+        WORKSPACE_READ_MS,
+        { id: workspace.id, path: workspace.path }
+      );
+      if (read.exitCode !== 0) {
+        throw new Error(read.stderr.trim() || `cat exited ${read.exitCode}`);
+      }
+      return read.stdout;
+    },
   });
   const hubTools = createHubTools({
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
@@ -27043,45 +27129,30 @@ export const createServer = (
       // first, so the list never depends on the pages a reader has loaded.
       // A transcript that can't be read answers as its page would.
       .get("/api/instances/:id/attachments", async ({ params, status }) => {
-        const id = db.instanceIdOf(params.id);
-        const pages: TranscriptPage[] = [];
-        let before: string | undefined;
-        // Back to the conversation's start: the pages are the in-memory
-        // builder's (transcripts.ts), so the whole walk reads no disk twice.
-        for (;;) {
-          // biome-ignore lint/performance/noAwaitInLoops: each page names the cursor of the next
-          const page = await transcripts.page(
-            id,
-            ATTACHMENT_PAGE_LIMIT,
-            before
+        const read = await wholeTranscript(params.id);
+        if ("gone" in read) {
+          return status(
+            409,
+            `the transcript no longer holds block ${read.gone}`
           );
-          if ("gone" in page) {
-            return status(
-              409,
-              `the transcript no longer holds block ${page.gone}`
-            );
-          }
-          if ("fault" in page) {
-            switch (page.fault) {
-              case "offline":
-                return machineAway(page);
-              case "missing":
-                return status(404, page.message);
-              case "timeout":
-                return status(504, page.message);
-              case "failed":
-                return status(500, page.message);
-            }
-          }
-          pages.push(page);
-          if (page.cursor === null) {
-            return {
-              harness: page.where.harness,
-              attachments: attachmentsOfPages(pages),
-            } satisfies SessionAttachments;
-          }
-          before = page.cursor;
         }
+        if ("fault" in read) {
+          switch (read.fault) {
+            case "offline":
+              return machineAway(read);
+            case "missing":
+              return status(404, read.message);
+            case "timeout":
+              return status(504, read.message);
+            case "failed":
+              return status(500, read.message);
+          }
+        }
+        const [first] = read.pages;
+        return {
+          harness: (first as TranscriptPage).where.harness,
+          attachments: attachmentsOfPages(read.pages),
+        } satisfies SessionAttachments;
       })
       .patch(
         "/api/instances/:id",
@@ -29241,7 +29312,8 @@ export const createServer = (
             workspace: t.Optional(t.String()),
             from: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
-            inputs: t.Optional(t.Array(t.String())),
+            // Each a path or a held kind (core handed-input.ts), checked in words by work-items.
+            inputs: t.Optional(t.Array(t.Unknown())),
             lands: t.Optional(LANDS),
             outputs: t.Optional(t.Array(t.String())),
             group: t.Optional(t.String()),
@@ -29437,7 +29509,7 @@ export const createServer = (
           body: t.Object({
             from: t.String({ minLength: 1 }),
             instanceId: t.String({ minLength: 1 }),
-            inputs: t.Array(t.String(), { minItems: 1 }),
+            inputs: t.Array(t.Unknown(), { minItems: 1 }),
           }),
         },
         async ({ body, request, status, server }) => {
