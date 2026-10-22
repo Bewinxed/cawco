@@ -29,6 +29,7 @@ import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { SOCAT_BACKLOG } from "@cawco/core/socat";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
 import { listeners, workspaceNetworks } from "./boundary";
@@ -79,24 +80,9 @@ const BRIDGE_START_MS = 3000;
 /** The most of a bridge's stderr kept, to say why it did not start. */
 const STDERR_KEPT = 2000;
 
-/**
- * How many connections the bridge's socket holds while socat takes them one
- * at a time, forking a child for each. socat's own is 5 ("backlog=<count>
- * … Default is 5", dest-unreach.org/socat/doc/socat.html), and a full
- * backlog on a unix socket refuses a nonblocking connect at once rather than
- * queueing it ("EAGAIN For nonblocking UNIX domain sockets … the connection
- * cannot be completed immediately", connect(2)): a canvas's cold open, about
- * 200 module requests the browser sends at once over HTTP/2, had Bun's fetch
- * in the agent's listener fail with EAGAIN, which it answers 502, and the
- * canvas didn't load. The kernel takes the smaller of this and
- * `net.core.somaxconn` ("silently capped to that value. Since Linux 5.4, the
- * default in this file is 4096", listen(2)).
- */
-const BRIDGE_BACKLOG = 4096;
-
-/** The bridge's own end, on `socket`: socat's listen address, a child per connection. */
+/** The bridge's own end, on `socket`: socat's listen address, a child per connection, queued past socat's own 5 (core `SOCAT_BACKLOG`). */
 export const bridgeListen = (socket: string): string =>
-  `UNIX-LISTEN:${socket},fork,backlog=${BRIDGE_BACKLOG}`;
+  `UNIX-LISTEN:${socket},fork,backlog=${SOCAT_BACKLOG}`;
 
 /** A workspace's id, or a place's (core `isPlace`): a sheet's stage runs in either. */
 const WORKSPACE_ID = new RegExp(

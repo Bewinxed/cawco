@@ -45,11 +45,13 @@
  * the socket, as it reaches the token in any sandboxed process's
  * environment, and holds the host's whole network anyway.
  *
- * Dependency-free: the srt host imports it (boundary-host.ts takes nothing
- * of cawco's but dependency-free modules).
+ * Dependency-free but for core's dependency-free socat backlog: the srt host
+ * imports it (boundary-host.ts takes nothing of cawco's but dependency-free
+ * modules).
  */
 import { chmodSync, rmSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import { SOCAT_BACKLOG } from "@cawco/core/socat";
 
 /** The relay's port inside a Linux workspace's sandbox, beside srt's 3128 (HTTP) and 1080 (SOCKS) there. */
 export const RELAY_PORT = 3129;
@@ -102,7 +104,7 @@ export const RELAY_STEP = `if [ -n "\${${RELAY_SOCKET_ENV}:-}" ]; then
   srt_proxy=\${srt_proxy#http://}
   srt_proxy=\${srt_proxy##*@}
   srt_proxy=\${srt_proxy%/}
-  socat TCP-LISTEN:${RELAY_PORT},bind=127.0.0.1,fork,reuseaddr "UNIX-CONNECT:$${RELAY_SOCKET_ENV}" < /dev/null > /dev/null 2>&1 &
+  socat TCP-LISTEN:${RELAY_PORT},bind=127.0.0.1,fork,reuseaddr,backlog=${SOCAT_BACKLOG} "UNIX-CONNECT:$${RELAY_SOCKET_ENV}" < /dev/null > /dev/null 2>&1 &
   relay_up=
   for _ in $(seq 200); do
     if grep -q ': ${LISTENING} ' /proc/net/tcp; then relay_up=1; break; fi

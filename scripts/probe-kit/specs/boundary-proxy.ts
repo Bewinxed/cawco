@@ -15,7 +15,9 @@
  * credential), the spec first stands this build's relay up as the boundary
  * does, in front of that same srt proxy: the host half
  * (`startProxyRelay`, the token taken from the URL) on a socket in
- * `$TMPDIR`, and the runner's own step (`RELAY_STEP`) run in a shell of its
+ * `$TMPDIR`, dialing srt's proxy socket as the srt host dials srt's port
+ * (past srt's own bridge to its port in here, no hop of the relay's), and
+ * the runner's own step (`RELAY_STEP`) run in a shell of its
  * own, which bridges it to `127.0.0.1:3129` and points the proxy URLs at it.
  * Then, with that environment:
  *
@@ -36,7 +38,11 @@
  *     the proxy in the environment answers its CONNECT with srt's own
  *     refusal, byte for byte what srt answers with its token directly;
  * (h) a plain `ws://` upgrade through that proxy is answered as srt answers
- *     it with its token directly (its status line), never a 407.
+ *     it with its token directly (its status line), never a 407;
+ * (i) 200 CONNECTs at once through that proxy: each connection opens within
+ *     1 s, before a dropped SYN's retry would, no listener of the sandbox's
+ *     network drops a handshake (its `ListenDrops`), and every one is
+ *     answered 200.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -49,12 +55,29 @@ import {
 } from "../../../packages/agent/src/proxy-relay";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid, signalGroup } from "../../../packages/core/src/signal";
+import { SOCAT_BACKLOG } from "../../../packages/core/src/socat";
+import { until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 type Env = Record<string, string | undefined>;
 
 /** A public WebSocket echo server. */
 const WSS_ECHO = "wss://echo.websocket.org/";
+
+/** srt's own bridge to its port inside the sandbox, as `pgrep -af` lists it: the socket it connects to. */
+const SRT_BRIDGE = /UNIX-CONNECT:(\S+)/;
+
+/** A port nothing on this loopback holds now. */
+const freePort = async (): Promise<number> => {
+  const lease = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(null),
+  });
+  const port = lease.port as number;
+  await lease.stop(true);
+  return port;
+};
 
 /** `git ls-remote <url> HEAD`'s one line. */
 const COMMIT_HEAD = /^[0-9a-f]{40}\tHEAD$/;
@@ -126,10 +149,40 @@ const boundaryEnv = async (kit: Kit) => {
   kit.note(
     `the boundary's proxy URL carries srt's credential (${srt.host}): it predates the relay, so this build's relay is stood up in front of that srt proxy as the boundary does`
   );
+  // srt's proxy as the srt host dials it, straight: the socket srt's own
+  // bridge to its port in here connects to (that socat's `UNIX-CONNECT:`),
+  // past that bridge, which listens with socat's own backlog of 5 and is no
+  // hop of the relay's in a boundary that has one.
+  const srtSocket = (
+    await Bun.$`pgrep -af ${`TCP-LISTEN:${srt.port},`}`.nothrow().text()
+  ).match(SRT_BRIDGE)?.[1];
+  if (!srtSocket) {
+    throw new Error(
+      `no socat bridges srt's port ${srt.port} in this boundary, so its proxy's socket is unknown`
+    );
+  }
+  const upstreamPort = await freePort();
+  const upstream = Bun.spawn(
+    [
+      "socat",
+      `TCP-LISTEN:${upstreamPort},bind=127.0.0.1,fork,reuseaddr,backlog=${SOCAT_BACKLOG}`,
+      `UNIX-CONNECT:${srtSocket}`,
+    ],
+    { stdin: "ignore", stdout: "ignore", stderr: "ignore" }
+  );
+  await until(
+    "srt's proxy socket bridged for the relay",
+    async () => (await Bun.file("/proc/net/tcp").text()).toUpperCase(),
+    (tcp) =>
+      tcp.includes(
+        `0100007F:${upstreamPort.toString(16).toUpperCase().padStart(4, "0")} 00000000:0000 0A`
+      ),
+    5000
+  );
   const socket = join(process.env.TMPDIR ?? "", RELAY_SOCKET_NAME);
   const relay = await startProxyRelay({
     socket,
-    upstream: { host: "127.0.0.1", port: Number(srt.port) },
+    upstream: { host: "127.0.0.1", port: upstreamPort },
     credential: credentialOf(srt),
   });
   // The runner's step, in a session of its own, so its socat goes with it.
@@ -159,6 +212,7 @@ const boundaryEnv = async (kit: Kit) => {
       // setsid made the step's shell its own group's leader; its socat stays in that group.
       signalGroup(listedPid(step.pid), "SIGTERM");
       relay.close();
+      upstream.kill("SIGKILL");
     },
   };
 };
@@ -369,6 +423,91 @@ const clientLegs = async (kit: Kit, env: Env) => {
   );
 };
 
+/** How many CONNECTs the burst opens at once. */
+const BURST = 200;
+/** A dropped SYN is sent again after the retransmission timeout, a second at first (RFC 6298 §2.1, "the RTO SHOULD be set to 1 second"). */
+const SYN_RETRY_MS = 1000;
+/** The burst's CONNECT target: a host srt lets through. */
+const BURST_TARGET = "example.com:443";
+
+/** This network namespace's accept-queue counters (`TcpExt` in /proc/net/netstat): handshakes a full listener dropped. */
+const listenDrops = async (): Promise<{ drops: number; overflows: number }> => {
+  const [names, values] = (await Bun.file("/proc/net/netstat").text())
+    .split("\n")
+    .filter((line) => line.startsWith("TcpExt:"))
+    .map((line) => line.split(" ").slice(1));
+  const of = (name: string) => Number(values?.[names?.indexOf(name) ?? -1]);
+  return { drops: of("ListenDrops"), overflows: of("ListenOverflows") };
+};
+
+/** One CONNECT to {@link BURST_TARGET} through the proxy at `port`: when its connection opened, when the proxy answered, and the answer's status line. */
+const connectOnce = async (
+  port: number
+): Promise<{ answer: string; answered: number; opened: number }> => {
+  const started = performance.now();
+  const { promise, resolve } = Promise.withResolvers<string>();
+  let opened = -1;
+  let head = "";
+  const socket = await Bun.connect({
+    hostname: "127.0.0.1",
+    port,
+    socket: {
+      open: () => {
+        opened = performance.now() - started;
+      },
+      data: (_socket, data) => {
+        head += Buffer.from(data).toString("latin1");
+        if (head.includes("\r\n")) {
+          resolve(head.split("\r\n")[0] ?? "");
+        }
+      },
+      close: () => resolve(head.split("\r\n")[0] || "closed with no answer"),
+      error: (_socket, error) => resolve(`error: ${error.message}`),
+    },
+  });
+  opened = opened < 0 ? performance.now() - started : opened;
+  socket.write(
+    `CONNECT ${BURST_TARGET} HTTP/1.1\r\nHost: ${BURST_TARGET}\r\n\r\n`
+  );
+  const read = await readWithin(30_000, () => promise);
+  const answered = performance.now() - started;
+  socket.end();
+  return {
+    opened,
+    answered,
+    answer: read.kind === "answered" ? read.value : "no answer in 30 s",
+  };
+};
+
+/**
+ * (i) A burst: {@link BURST} CONNECTs at once through the environment's
+ * proxy, as a package install or a page opens its connections. Each one's
+ * connection opens before a dropped SYN's retry would ({@link SYN_RETRY_MS}),
+ * the listener's backlog holding the whole burst (core `SOCAT_BACKLOG`;
+ * socat's own is 5), and every one is answered 200.
+ */
+const burstLeg = async (kit: Kit, env: Env) => {
+  const proxy = new URL(env.HTTPS_PROXY ?? "");
+  const before = await listenDrops();
+  const runs = await Promise.all(
+    Array.from({ length: BURST }, () => connectOnce(Number(proxy.port)))
+  );
+  const after = await listenDrops();
+  const opened = runs.map((one) => one.opened).sort((a, b) => a - b);
+  const late = opened.filter((ms) => ms >= SYN_RETRY_MS).length;
+  const answers = new Map<string, number>();
+  for (const { answer } of runs) {
+    answers.set(answer, (answers.get(answer) ?? 0) + 1);
+  }
+  const ok = runs.filter((one) => one.answer.startsWith("HTTP/1.1 200")).length;
+  const slowest = Math.max(...runs.map((one) => one.answered));
+  kit.check(
+    `(i) ${BURST} CONNECTs at once through ${proxy.host}: each connection opens within ${SYN_RETRY_MS} ms, no listener of this network drops a handshake, every one answered 200`,
+    late === 0 && ok === BURST && after.drops === before.drops,
+    `opened in ${Math.round(opened[0] ?? -1)} to ${Math.round(opened.at(-1) ?? -1)} ms, ${late} at ${SYN_RETRY_MS} ms or later; ${ok} of ${BURST} answered 200 (${JSON.stringify(Object.fromEntries(answers))}), the slowest answer at ${Math.round(slowest)} ms; this network's listeners dropped ${after.drops - before.drops} handshakes (${after.overflows - before.overflows} accept-queue overflows)`
+  );
+};
+
 /** srt's credential from its proxy URL's userinfo, as a client that reads it presents it. */
 const credentialOf = (srt: URL): string =>
   `${decodeURIComponent(srt.username)}:${decodeURIComponent(srt.password)}`;
@@ -454,6 +593,7 @@ const run = async (kit: Kit) => {
     await browseLeg(kit, env);
     await clientLegs(kit, env);
     await deniedLeg(kit, env, srtUrl);
+    await burstLeg(kit, env);
   } finally {
     stop();
   }

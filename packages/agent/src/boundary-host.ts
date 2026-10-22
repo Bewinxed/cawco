@@ -34,7 +34,8 @@
  *
  * A plain Bun script, never a module of cawco, importing nothing of it but
  * core's dependency-free dir names (`claude-dirs.ts`), mount table
- * (`mount-table.ts`) and nested-boundary words (`boundary-nesting.ts`),
+ * (`mount-table.ts`), nested-boundary words (`boundary-nesting.ts`) and
+ * socat backlog (`socat.ts`),
  * with safe git and state files, and the agent's own dependency-free proxy
  * relay (`proxy-relay.ts`): a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
