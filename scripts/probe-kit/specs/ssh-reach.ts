@@ -108,6 +108,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import {
@@ -1437,7 +1438,10 @@ async function olderBuild(
  * (niftybot, 2026-10-22): here it reads its config from a dir the add did
  * not write its key to. The installer's wait ends after its 90 s, and the
  * add fails on the join's own step, its last line the hub's words for what
- * it saw (`this hub: … proved no key …`), no line of a stack.
+ * it saw (`this hub: … proved no key …`), no line of a stack. The words name
+ * the agent by the hostname its register gives (agent daemon.ts
+ * `hostname()`), and the box's agent is this checkout's, run on this host:
+ * its name is this host's, not the box's machine id.
  */
 async function keylessJoin(box: Box, { check, add }: Readers): Promise<void> {
   const config = join(box.binary, "keyless-config");
@@ -1452,7 +1456,7 @@ async function keylessJoin(box: Box, { check, add }: Readers): Promise<void> {
         job.problem?.kind === "step" &&
         job.problem.step ===
           "waiting for the hub to list this machine online" &&
-        last.startsWith(`this hub: ${BOX}'s agent, CawCo `) &&
+        last.startsWith(`this hub: ${hostname()}'s agent, CawCo `) &&
         last.includes("proved no key") &&
         last.includes("Configure → Updates") &&
         stackless(job),
