@@ -40,8 +40,9 @@
  * - (4) what a failure left is said by how far it got: the key the add
  *   wrote named; a password add refused its forward after planting the
  *   hub's key says the installer never ran and names that key;
- * - (7) focus moves into the output sheet as it opens and back to where the
- *   window parked as it closes;
+ * - (7) focus moves into the output sheet as it opens and stays there past
+ *   the window's park; closed, the window comes back where it was, on its
+ *   install, focus on its Open output;
  * - (8) on a phone every Reach text field computes 16px or more, in
  *   Chromium and WebKit;
  * - (9) a disabled Add machine says why in words beside it, with no title;
@@ -843,14 +844,22 @@ async function walk(
   await page.locator(`${WINDOW} [data-ask-cancel]`).click();
   await settled(page, "running", "Fetching the signed build");
 
-  // (7) and (3): Open output. Focus goes into the sheet; its Stop asks
-  // first, in the same words as the window's, and nothing stops meanwhile;
-  // closed, focus goes back to where the window parked.
+  // (7) and (3): Open output. Focus goes into the sheet and stays there past
+  // the window's park into its row; its Stop asks first, in the same words
+  // as the window's, and nothing stops meanwhile; closed, it is
+  // back-navigation: the window comes back where it was, on its install,
+  // focus on its Open output.
+  const where = await page.evaluate((win) => {
+    const box = document.querySelector(win)?.getBoundingClientRect();
+    return box ? { top: box.top, left: box.left } : null;
+  }, WINDOW);
   await page
     .locator(WINDOW)
     .getByRole("button", { name: "Open output" })
     .click();
   await page.waitForSelector(`${OUTPUT}[data-state=open]`);
+  // The window's park into its row (--dur-panel) has played by now.
+  await page.waitForTimeout(600);
   const focusIn = await page.evaluate(
     (sel) =>
       document.querySelector(sel)?.contains(document.activeElement) ?? false,
@@ -889,28 +898,36 @@ async function walk(
   await page.waitForFunction((sel) => !document.querySelector(sel), OUTPUT, {
     timeout: 10_000,
   });
-  // Where it parked: its row when drawn, else what opens the band (the
-  // bar's machines item at the desk, the navigation's button on a phone).
-  const focusBack = await page.evaluate((install) => {
+  const cameBack = await settled(page, "running", "Fetching the signed build");
+  const focusBack = await page.evaluate((win) => {
     const active = document.activeElement as HTMLElement | null;
+    const box = document.querySelector(win)?.getBoundingClientRect();
     return {
-      parked: Boolean(
-        active?.matches(
-          `[data-install-row="${install}"], [data-machines], [data-slot=burger]`
-        ) && active.checkVisibility()
+      opener: Boolean(
+        active?.matches("[data-output-opener]") && active.closest(win)
       ),
       what: active
-        ? `${active.tagName} ${active.dataset.installRow ? "row" : (active.getAttribute("aria-label") ?? "")}`
+        ? `${active.tagName} ${(active.textContent ?? "").trim().slice(0, 24)}`
         : "none",
+      at: box ? { top: box.top, left: box.left } : null,
     };
-  }, id);
-  kit.check(
-    `${leg}: (7) focus moves into the output sheet as it opens, and back to where its window parked (its row, else what opens the band) as it closes`,
-    focusIn && focusBack.parked,
-    `in ${focusIn}; back on ${focusBack.what}`
+  }, WINDOW);
+  const sameInstall = new URL(page.url()).searchParams.get("install") === id;
+  const samePlace = Boolean(
+    where &&
+    focusBack.at &&
+    Math.abs(where.top - focusBack.at.top) <= 1 &&
+    Math.abs(where.left - focusBack.at.left) <= 1
   );
-  await openWindow(page, dashboard, id);
-  await settled(page, "running", "Fetching the signed build");
+  kit.check(
+    `${leg}: (7) focus moves into the output sheet and stays past the window's park; closed, the window comes back where it was, on its install, focus on its Open output`,
+    focusIn &&
+      cameBack.step === "running" &&
+      sameInstall &&
+      samePlace &&
+      focusBack.opener,
+    `in ${focusIn}; back on ${focusBack.what}; the window ${cameBack.step} on ${sameInstall ? "its install" : page.url()}, at ${JSON.stringify(focusBack.at)} (was ${JSON.stringify(where)})`
+  );
 
   // A second Add machine for the same target opens that install.
   await setDraft(fleet, {

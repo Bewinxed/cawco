@@ -1461,9 +1461,6 @@ public enum Motion {
     /// The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1).
     /// By day and by night: read it with `value(for:)`.
     public static let breathFloor = SchemeValue(light: 0.8, dark: 0.58)
-    /// The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5.
-    /// By day and by night: read it with `value(for:)`.
-    public static let glyphDuoStatusOpacity = SchemeValue(light: 0.57, dark: 0.46)
     /// How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track.
     /// By day and by night: read it with `value(for:)`.
     public static let accountWeekMix = SchemeValue(light: 0.32, dark: 0.63)

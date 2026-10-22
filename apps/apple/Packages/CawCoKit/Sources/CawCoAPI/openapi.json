@@ -55838,7 +55838,7 @@
             "type": "string"
           },
           "source": {
-            "description": "What an artifact shows (Projects spec §5.10): a dev server or a folder on\nthe session's machine (a preview), or a page the hub built and keeps under\nits data dir at `artifacts/<id>/` and serves itself, named by the page's\nname. A dev server or folder may name `path`, the page inside it the\npreview opens at (`/motion/mac-readiness`); the root when absent.",
+            "description": "What an artifact shows (Projects spec §5.10): a dev server or a folder on\nthe session's machine (a preview), or a page the hub built and keeps under\nits data dir at `artifacts/<id>/` and serves itself, named by the page's\nname. A dev server or folder may name `path`, the page inside it the\npreview opens at (`/motion/updates`); the root when absent.",
             "anyOf": [
               {
                 "type": "object",

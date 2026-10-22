@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * The line under an install command while no new machine has checked in.
-   * A check-in ends it: the dialog moves to its joined row and the machines
-   * popover back to its list, where the machine now is.
+   * The line under the Machines chip's install command while no new machine
+   * has checked in. A check-in ends it: the popover goes back to its list,
+   * where the machine now is.
    */
   import type { Snippet } from "svelte";
 

@@ -6,11 +6,11 @@
   /**
    * Machines chip + popover (§1.4, §2.5): multi-select rows, then "Connect a
    * machine…", which swaps the list in place for the pairing panel — the
-   * install command and a live wait for the machine to check in. The command
-   * box and the watcher are the Connect a machine dialog's own (join/), so the
-   * two surfaces cannot drift. Closing the popover, or opening another,
-   * cancels pairing (design L237); a machine checking in ends it, and its row
-   * is then in the list.
+   * install command and a live wait for the machine to check in. The hub's
+   * addresses are Add machine's own read (connect `loadJoin`), so the two
+   * read them one way. Closing the popover, or opening another, cancels
+   * pairing (design L237); a machine checking in ends it, and its row is
+   * then in the list.
    */
   import {
     IconAddCircleLine as Add,
@@ -18,9 +18,10 @@
     IconChevronDown as Down,
     IconServerSquare as Server,
   } from "#lib/icons.js";
-  import CheckInStatus from "../join/CheckInStatus.svelte";
-  import CopyBox from "../join/CopyBox.svelte";
-  import { CheckIn, installCommand, joinInfo } from "../join/join.svelte";
+  import CopyBox from "../CopyBox.svelte";
+  import { connect } from "../connect/installs.svelte";
+  import CheckInStatus from "./CheckInStatus.svelte";
+  import { CheckIn, installCommand } from "./check-in.svelte";
   import { machineRowRadius } from "./machine-rows";
   import NsPopover from "./NsPopover.svelte";
   import type { MachineItem } from "./ns-types";
@@ -54,11 +55,11 @@
   });
   function startPairing() {
     pairing = new CheckIn();
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the command renders from joinInfo when it lands
-    void joinInfo.refresh();
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; the command renders from the hub's addresses when they land
+    void connect.loadJoin();
   }
   /** Tailscale first: the address that works from wherever the machine is. */
-  const pairUrl = $derived(joinInfo.value?.addresses[0]?.url);
+  const pairUrl = $derived(connect.join?.addresses[0]?.url);
   const presenceOf = (row: MachineItem) => {
     if (!row.online) {
       return "off";
@@ -100,9 +101,10 @@
         <!-- Read before it is run: it wraps between its words, never cut
              mid-URL (CopyBox `wrap`). -->
         <CopyBox label="Install command" text={installCommand(pairUrl)} wrap />
-      {:else if joinInfo.error}
+      {:else if connect.joinFailed}
         <p class="type-meta text-status-fail-ink" role="alert">
-          {joinInfo.error}
+          The hub's addresses couldn't be read: {connect.joinFailed} Open this again
+          to read them again.
         </p>
       {:else}
         <p class="type-meta text-ink-muted">Reading this hub's addresses…</p>

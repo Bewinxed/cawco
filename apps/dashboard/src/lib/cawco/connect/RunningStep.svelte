@@ -160,6 +160,7 @@
     <div class="flex items-center justify-between gap-space-2">
       <Button
         data-connect-keep
+        data-output-opener
         onclick={() => connect.openOutput()}
         variant="outline">Open output</Button
       >

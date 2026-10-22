@@ -144,12 +144,21 @@ const signalled = async (kit: Kit): Promise<void> => {
       lastErrorKindOf?: (error: unknown) => string | undefined;
     };
   let listener:
-    | { exit?: (code: number | null, signal: NodeJS.Signals | null) => void }
+    | {
+        exit?: (
+          code: number | null,
+          signal: NodeJS.Signals | null,
+          pid: number | undefined
+        ) => void;
+      }
     | undefined;
   let reaped: unknown;
+  /** What the bridge let go once it read its child's end (sessiond-client.ts `release`). */
+  const released: [string, number | undefined][] = [];
   // sessiond's socket, stood in for: the spawn is acked, the bridge
   // subscribes and lists the keeper's children for its own pid (none here),
-  // which is all it asks of sessiond before an end.
+  // which is all it asks of sessiond before an end; once it has read the
+  // end, it lets the dead child go.
   const client = {
     list: () => Promise.resolve({ procs: [] }),
     spawnProc: () => Promise.resolve(),
@@ -159,6 +168,9 @@ const signalled = async (kit: Kit): Promise<void> => {
     write: () => Promise.resolve(),
     stdinEnd: () => Promise.resolve(),
     signal: () => Promise.resolve(),
+    release: (procId: string, pid: number | undefined) => {
+      released.push([procId, pid]);
+    },
   };
   sessiondBridge(
     client as never,
@@ -175,8 +187,14 @@ const signalled = async (kit: Kit): Promise<void> => {
   const child = Bun.spawn(["sleep", "30"]);
   child.kill("SIGKILL");
   await child.exited;
-  listener?.exit?.(child.exitCode, child.signalCode as NodeJS.Signals | null);
-  kit.note(`A: the bridge handed over ${JSON.stringify(reaped)}`);
+  listener?.exit?.(
+    child.exitCode,
+    child.signalCode as NodeJS.Signals | null,
+    child.pid
+  );
+  kit.note(
+    `A: the bridge handed over ${JSON.stringify(reaped)}, and let go ${JSON.stringify(released)}`
+  );
   let died: string | undefined;
   let failed: unknown;
   const ctx = {
@@ -578,6 +596,15 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       `ssh-keygen -q -t ed25519 -N '' -f '${key}'`
     );
   }
+  // The hub first: a fleet may wait long for the machine's heavy-run slot,
+  // and the sshd's port, an ephemeral one, is the kernel's to hand to
+  // anyone until sshd holds it, so sshd starts once the hub is up.
+  const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
+  fleet.launch("hub", [], {
+    PATH: `${bin}:${fleet.env.PATH}`,
+    PROBE_KNOWN_HOSTS: knownHosts,
+  });
+  await fleet.hubUp();
   const port = closedPort();
   await writeFile(
     join(dir, "sshd_config"),
@@ -589,13 +616,36 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       "UsePAM no",
       "StrictModes no",
       "AuthorizedKeysFile none",
+      // Every connection here is the loopback's: the leg's own keyscans and
+      // the hub's pre-checks, none of which signs in, would otherwise earn
+      // the source a penalty ("Not allowed at this time", OpenSSH 9.8+
+      // PerSourcePenalties) before the adds it measures.
+      "PerSourcePenaltyExemptList 127.0.0.1",
       "",
     ].join("\n")
   );
+  const sshdLog = join(dir, "sshd.log");
   const server = Bun.spawn(
     ["/usr/sbin/sshd", "-D", "-e", "-f", join(dir, "sshd_config")],
-    { stdout: "ignore", stderr: "ignore" }
+    { stdout: "ignore", stderr: Bun.file(sshdLog) }
   );
+  /** sshd's state and its last words, for a check that fails. */
+  const sshdSaid = async (): Promise<string> => {
+    const ended =
+      server.exitCode === null && server.signalCode === null
+        ? "running"
+        : `ended (${server.exitCode ?? server.signalCode})`;
+    const said = (
+      await Bun.file(sshdLog)
+        .text()
+        .catch(() => "")
+    )
+      .trim()
+      .split("\n")
+      .slice(-4)
+      .join(" | ");
+    return `sshd ${ended}: ${said}`;
+  };
   try {
     await until(
       "F: sshd listening",
@@ -608,12 +658,6 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       Boolean,
       10_000
     );
-    const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
-    fleet.launch("hub", [], {
-      PATH: `${bin}:${fleet.env.PATH}`,
-      PROBE_KNOWN_HOSTS: knownHosts,
-    });
-    await fleet.hubUp();
     /** One add through the hub's route, polled until it is not running. */
     const add = async (target: string, at: number) => {
       const started = await fleet.api<SshJoinJob>("/api/machines/ssh", {
@@ -657,7 +701,7 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
     kit.check(
       "F: an SSH add whose machine offers none of the host keys the hub knows it by is host-key, by ssh-keyscan against ssh-keygen -F",
       changed.problem?.kind === "host-key",
-      `${JSON.stringify(changed.problem)}; ssh said ${said(changed)}`
+      `${JSON.stringify(changed.problem)}; ssh said ${said(changed)}; ${await sshdSaid()}`
     );
 
     await writeFile(knownHosts, "");
@@ -667,7 +711,7 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       denied.problem?.kind === "step" &&
         denied.problem.step === "signing in over SSH" &&
         denied.lines.some((line) => line.includes("Zugriff verweigert")),
-      `${JSON.stringify(denied.problem)}; ssh said ${said(denied)}`
+      `${JSON.stringify(denied.problem)}; ssh said ${said(denied)}; ${await sshdSaid()}`
     );
   } finally {
     server.kill();

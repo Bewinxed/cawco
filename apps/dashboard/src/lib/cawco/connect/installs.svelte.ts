@@ -80,6 +80,17 @@ class Connect {
   anchor: HTMLElement | null = null;
   /** The output sheet stands open beside the window. */
   output = $state(false);
+  /**
+   * The window came back from the output sheet: it hands focus to its Open
+   * output as it arrives (ConnectWindow `arrive`), then forgets it.
+   */
+  backFromOutput = false;
+  /** The window the output sheet was opened from, to bring back as it closes. */
+  #outputFrom: {
+    id: string;
+    anchor: HTMLElement | null;
+    from: ConnectFrom;
+  } | null = null;
   /** The draft as typed here. */
   fields = $state<DraftFields>({ ...EMPTY_DRAFT });
   /**
@@ -163,15 +174,21 @@ class Connect {
     }
   }
 
-  /** The URL says which install the window stands on, so a reload opens it there. */
+  /**
+   * The URL says which install the window stands on, so a reload opens it
+   * there. Read from the address bar itself: a shallow replace (this one's
+   * last) reaches `page.shallow`, never `page.url`, which keeps the last
+   * navigation's (SvelteKit 3.1 `update_state`).
+   */
   #writeUrl(): void {
-    const url = new URL(page.url.href);
+    const now = new URL(location.href);
+    const url = new URL(now);
     if (this.open) {
       url.searchParams.set(INSTALL_PARAM, this.id ?? DRAFT_KEY);
     } else {
       url.searchParams.delete(INSTALL_PARAM);
     }
-    if (url.href !== page.url.href) {
+    if (url.href !== now.href) {
       replaceState(url, page.state);
     }
   }
@@ -242,8 +259,30 @@ class Connect {
 
   /** Open output: the window parks into its row as the output's sheet opens. */
   openOutput(): void {
+    this.#outputFrom = this.id
+      ? { id: this.id, anchor: this.anchor, from: this.from }
+      : null;
     this.open = false;
     this.output = true;
+    this.#writeUrl();
+  }
+
+  /**
+   * The output's sheet closes, by Close or Esc: back-navigation, so the
+   * window it was opened from comes back where it was, on its install, its
+   * Open output in hand (The Work Outlives Its Surface Rule). With no window
+   * to come back to (its install gone), the sheet gives focus to where the
+   * install is parked (OutputSheet).
+   */
+  closeOutput(): void {
+    const back = this.#outputFrom;
+    this.#outputFrom = null;
+    this.output = false;
+    if (back && this.installs.some((one) => one.id === back.id)) {
+      this.backFromOutput = true;
+      this.openInstall(back.id, back.anchor, back.from);
+      return;
+    }
     this.#writeUrl();
   }
 
@@ -255,6 +294,7 @@ class Connect {
   close(): void {
     this.open = false;
     this.output = false;
+    this.#outputFrom = null;
     this.#writeUrl();
   }
 

@@ -1,10 +1,10 @@
 <script lang="ts">
   /**
-   * One line of something to paste elsewhere — the install command, the hub's
-   * SSH key — in a code box with a Copy button. The single command box every
-   * join surface uses (the dialog's Command tab, the machines popover's
-   * pairing panel, the SSH key disclosure), so the command reads and copies
-   * the same wherever it is offered.
+   * One line of something to paste elsewhere — an install command, a
+   * command that fixes the hub — in a code box with a Copy button. The one
+   * command box of the Machines chip's pairing panel, Needs you's fixes and
+   * the relay journey, so a command reads and copies the same wherever it is
+   * offered.
    *
    * The line truncates to fit; what is copied is always the whole of it, and
    * the whole of it is the box's title. A command the person reads before

@@ -1873,11 +1873,6 @@ const BENCHES: [string, string, string][] = [
   ],
   ["head-tint", "/motion/head-tint", "[data-head-tint]"],
   ["lift", "/motion/lift", `${BENCH_MAIN} section[data-case]`],
-  [
-    "mac-readiness",
-    "/motion/mac-readiness",
-    'nav[aria-label="Readiness state"]',
-  ],
   ["new-session", "/motion/new-session", `${BENCH_MAIN} h1`],
   ["overlays", "/motion/overlays", `${BENCH_MAIN} [data-slot=openers]`],
   ["recall", "/motion/recall", "main#main-content form[data-slot=cin]"],
@@ -3688,7 +3683,7 @@ export const SURFACES: Surface[] = [
       },
       {
         // The Machines chip's "Connect a machine…": the pairing panel in the
-        // list's place, its install command in the join step's CopyBox. The
+        // list's place, its install command in its CopyBox. The
         // command stands once the hub lists an address (hub join.ts
         // `joinAddresses`: Tailscale, then each non-internal IPv4), which a
         // host's tape holds and a workspace's (loopback alone) does not.

@@ -256,6 +256,7 @@
       {#if install.state !== "lost"}
         <Button
           data-connect-keep
+          data-output-opener
           onclick={() => connect.openOutput()}
           variant="outline">Open output</Button
         >

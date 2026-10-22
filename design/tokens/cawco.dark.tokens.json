@@ -1644,10 +1644,6 @@
       "$type": "number",
       "$value": 0.63
     },
-    "glyph-duo-status-opacity": {
-      "$type": "number",
-      "$value": 0.46
-    },
     "breath-floor": {
       "$type": "number",
       "$value": 0.58

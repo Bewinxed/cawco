@@ -9,9 +9,10 @@
    *
    * Stop asks first, as the window's does: the question stands under the
    * head with what stopping now leaves on the machine. Focus moves into the
-   * sheet as it opens; closed, it goes back to where the window that opened
-   * it parked (its Open output went with it): the install's row when it is
-   * drawn, else what opens the band (installs.svelte.ts `parkedAt`).
+   * sheet as it opens. Closed (Close, Esc), it is back-navigation: the
+   * window it was opened from comes back where it was, focus on its Open
+   * output (installs.svelte.ts `closeOutput`); with no window to come back
+   * to, focus goes to where the install is parked (`parkedAt`).
    */
   import { causeLine, type Install } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -85,9 +86,13 @@
   function focusing(node: HTMLElement) {
     node.focus({ preventScroll: true });
     return () => {
-      // Only when focus was still the sheet's: a press elsewhere keeps its own.
+      // The window coming back takes focus itself (its Open output); else
+      // only when focus was still the sheet's: a press elsewhere keeps its own.
       const active = document.activeElement;
-      if (!active || active === document.body || node.contains(active)) {
+      if (
+        !connect.open &&
+        (!active || active === document.body || node.contains(active))
+      ) {
         parkedAt(install.id)?.focus({ preventScroll: true });
       }
     };
@@ -97,7 +102,7 @@
 <svelte:window
   onkeydown={(event) => {
     if (event.key === "Escape" && !event.defaultPrevented) {
-      connect.output = false;
+      connect.closeOutput();
     }
   }}
 />
@@ -148,9 +153,7 @@
       aria-label="Close output"
       title="Close output"
       class="pressable touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
-      onclick={() => {
-        connect.output = false;
-      }}
+      onclick={() => connect.closeOutput()}
     >
       <IconClose aria-hidden="true" class="size-icon-md" />
     </button>

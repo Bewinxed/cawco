@@ -187,12 +187,6 @@
    class from the markup that hosts them. Each is anchored on the host's own
    hook. */
 @layer components {
-  /* A joined row's duotone glyph: its status layer at the glyph's own
-     opacity (the icon's paths carry `opacity`, which no class reaches). */
-  [data-slot="glyph"] svg[data-duo] [opacity] {
-    opacity: var(--glyph-duo-status-opacity);
-  }
-
   /* Svelte Flow's node and handle (the decisions graph): a card new to the
      graph fades up where it lands, and the handles the edges need stay as
      1px points nobody can grab. */

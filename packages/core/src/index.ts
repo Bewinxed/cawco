@@ -1768,7 +1768,7 @@ export const PREVIEW_START_PATH = /^\/(?!\/)\S*$/;
  * the session's machine (a preview), or a page the hub built and keeps under
  * its data dir at `artifacts/<id>/` and serves itself, named by the page's
  * name. A dev server or folder may name `path`, the page inside it the
- * preview opens at (`/motion/mac-readiness`); the root when absent.
+ * preview opens at (`/motion/updates`); the root when absent.
  */
 export type PreviewSource =
   | {

@@ -1915,7 +1915,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         glassCard.show(card, from: cluster.caw, glass: cluster.glass)
     }
 
-    /// Connect a machine (AddMachineDialog), over whatever is up.
+    /// Connect a machine (AddMachine.swift), over whatever is up.
     func addMachine() {
         dialogPresenter.present(AddMachineController(hub: hub), animated: true)
     }

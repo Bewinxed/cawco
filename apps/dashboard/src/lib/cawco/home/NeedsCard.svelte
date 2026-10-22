@@ -114,6 +114,7 @@
     IconWorkflow,
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
+  import CopyBox from "../CopyBox.svelte";
   import {
     answerFleetUpstream,
     answerFor,
@@ -126,7 +127,6 @@
   } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
-  import CopyBox from "../join/CopyBox.svelte";
   import { conversationHref } from "../links";
   import { notices } from "../notices.svelte";
   import OriginText from "../OriginText.svelte";

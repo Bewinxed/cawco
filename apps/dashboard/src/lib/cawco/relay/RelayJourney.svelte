@@ -30,9 +30,9 @@
   } from "@cawco/core/stream-relay";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import CopyBox from "#lib/cawco/CopyBox.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import CopyBox from "#lib/cawco/join/CopyBox.svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

@@ -307,7 +307,10 @@
     if (!connect.open) {
       shown = false;
       leaving = false;
-      back?.focus({ preventScroll: true });
+      // Parked for the output's sheet, which holds focus: it is not taken back.
+      if (!connect.output) {
+        back?.focus({ preventScroll: true });
+      }
     }
   }
 
@@ -480,9 +483,13 @@
           row.style.visibility = "";
         });
     }
+    // Back from the output's sheet: its Open output, where the person left.
     const first = node.querySelector<HTMLElement>(
-      "[data-autofocus], input:not([type=hidden]), button[data-route], [data-slot=body] button"
+      connect.backFromOutput
+        ? "[data-output-opener]"
+        : "[data-autofocus], input:not([type=hidden]), button[data-route], [data-slot=body] button"
     );
+    connect.backFromOutput = false;
     first?.focus({ preventScroll: true });
   }
 
