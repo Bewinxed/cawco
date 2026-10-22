@@ -40,7 +40,7 @@ is in `.gitignore`. The parent opens the folder with
         {
           "id": "keep",
           "label": "Approved look",
-          "result": "What the baseline holds today; the new drawing comes back for review on every run until it changes back.",
+          "result": "What the baseline holds today; the new drawing fails the check until it changes back.",
           "items": [{ "label": "Light", "before": "img/tab-strip-rest-light-approved.jpg", "after": "img/tab-strip-rest-light-approved.jpg" }]
         },
         {

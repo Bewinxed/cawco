@@ -138,7 +138,7 @@ export async function writeReview(
           id: "keep",
           label: "Approved look",
           result:
-            "What the baseline holds today; the new drawing comes back for review on every run until it changes back.",
+            "What the baseline holds today; the new drawing fails the check until it changes back.",
           items: keep,
         },
         {
