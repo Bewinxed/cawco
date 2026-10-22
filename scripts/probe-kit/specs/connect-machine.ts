@@ -66,7 +66,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "playwright-core";
+import type { Page, Request } from "playwright-core";
 import type { AuthContext } from "ssh2";
 import type { InstallsRead } from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
@@ -579,6 +579,30 @@ async function walk(
       JSON.stringify(sizes)
     );
   }
+  // Every draft save the page sends, and how each ended: a failure says
+  // whether the typing was sent, and whether the reload cancelled it.
+  const saves: string[] = [];
+  const typedAt = Date.now();
+  const saveOf = (request: Request) =>
+    request.url().endsWith("/api/installs/draft") && request.method() === "PUT";
+  const sent = (request: Request) => {
+    if (saveOf(request)) {
+      const body = JSON.parse(request.postData() ?? "{}") as {
+        target?: string;
+      };
+      saves.push(`+${Date.now() - typedAt}ms sent "${body.target}"`);
+    }
+  };
+  const ended = (request: Request) => {
+    if (saveOf(request)) {
+      saves.push(
+        `+${Date.now() - typedAt}ms ${request.failure()?.errorText ?? "answered"}`
+      );
+    }
+  };
+  page.on("request", sent);
+  page.on("requestfinished", ended);
+  page.on("requestfailed", ended);
   await page.fill("#connect-target", options.target);
   await page.fill("#connect-password", "typed-and-forgotten");
   await page.waitForTimeout(700);
@@ -587,6 +611,20 @@ async function walk(
   const keptBefore = (await installs(fleet)).draft;
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#connect-password", { timeout: 30_000 });
+  // The save the reload overtook lands when it lands; the hub's frame brings
+  // it to the window then, so the field is waited for, as below.
+  await page
+    .waitForFunction(
+      (value) =>
+        (document.querySelector("#connect-target") as HTMLInputElement | null)
+          ?.value === value,
+      options.target,
+      { timeout: 5000 }
+    )
+    .catch(() => undefined);
+  page.off("request", sent);
+  page.off("requestfinished", ended);
+  page.off("requestfailed", ended);
   const keptAfter = (await installs(fleet)).draft;
   const after = await page.evaluate(() => ({
     target: (document.querySelector("#connect-target") as HTMLInputElement)
@@ -605,7 +643,7 @@ async function walk(
       after.target === options.target &&
       after.password === "" &&
       RELOAD_FORGETS.test(after.placeholder ?? ""),
-    `${JSON.stringify(after)}; the hub's draft as it reloaded ${JSON.stringify(keptBefore)}, after ${JSON.stringify(keptAfter)}`
+    `${JSON.stringify(after)}; the hub's draft as it reloaded ${JSON.stringify(keptBefore)}, after ${JSON.stringify(keptAfter)}; the saves ${JSON.stringify(saves)}`
   );
   // Typed, and reloaded at once, inside the draft save's wait: the save still
   // waiting goes as the page does, and the reload restores what was typed.

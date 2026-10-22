@@ -208,12 +208,6 @@
     }
   });
 
-  /** The hub's installs, once. */
-  $effect(() => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the band and the window draw what lands
-    void connect.load();
-  });
-
   /** A reload or a closed tab takes nothing typed with it: a draft save still waiting goes as the page does. */
   $effect(() => {
     const flush = () => connect.flushDraft();

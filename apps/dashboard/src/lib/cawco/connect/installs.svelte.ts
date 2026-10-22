@@ -68,8 +68,6 @@ class Connect {
   hubDraft = $state<InstallDraft | null>(null);
   /** Whether the hub has answered this page once. */
   known = $state(false);
-  /** Why the installs couldn't be read, while they couldn't. */
-  readFailed = $state<string | null>(null);
 
   /** The window stands open. */
   open = $state(false);
@@ -105,6 +103,7 @@ class Connect {
   joinFailed = $state<string | null>(null);
 
   #saveTimer: ReturnType<typeof setTimeout> | undefined;
+  #readRetry: ReturnType<typeof setTimeout> | undefined;
 
   /** The install the window stands on, as the hub has it now. */
   get install(): Install | null {
@@ -130,7 +129,6 @@ class Connect {
     this.installs = read.installs;
     this.hubDraft = read.draft;
     this.known = true;
-    this.readFailed = null;
     // A draft another device changed reads here too, unless this page is typing in it.
     if (!(this.open && this.id === null && this.#saveTimer)) {
       this.fields = read.draft
@@ -149,15 +147,28 @@ class Connect {
     }
   }
 
-  async load(): Promise<void> {
+  /**
+   * The installs and the draft, read whole. A read that fails is tried again
+   * after a second, then twice as long each time up to ten, while the hub's
+   * socket stays open, as the fleet's read is (client.svelte.ts `readFleet`);
+   * a socket that closes reads them again as it is back.
+   */
+  async load(delay = 1000): Promise<void> {
+    clearTimeout(this.#readRetry);
     try {
       const response = await fetch("/api/installs");
       if (!response.ok) {
         throw await hubRefusal(response);
       }
       this.take((await response.json()) as InstallsRead);
-    } catch (error) {
-      this.readFailed = failureWords(error);
+    } catch {
+      if (globalThis.__cawcoSocket?.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      this.#readRetry = setTimeout(() => {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget; each read schedules its own next try
+        void this.load(Math.min(delay * 2, 10_000));
+      }, delay);
     }
   }
 
@@ -303,7 +314,7 @@ class Connect {
     clearTimeout(this.#saveTimer);
     const send = () => {
       this.#saveTimer = undefined;
-      this.#putDraft(false)
+      this.#putDraft()
         .then(async (response) => {
           if (response.ok) {
             this.take((await response.json()) as InstallsRead);
@@ -320,8 +331,8 @@ class Connect {
 
   /**
    * The page is going (a reload, the tab closed): a draft save still waiting
-   * goes now, outliving the page (`keepalive`), since its timer never runs
-   * after the page has gone, and nothing typed is lost.
+   * goes now, since its timer never runs after the page has gone, and nothing
+   * typed is lost.
    */
   flushDraft(): void {
     if (this.#saveTimer === undefined) {
@@ -329,16 +340,21 @@ class Connect {
     }
     clearTimeout(this.#saveTimer);
     this.#saveTimer = undefined;
-    this.#putDraft(true).catch(() => undefined);
+    this.#putDraft().catch(() => undefined);
   }
 
-  #putDraft(keepalive: boolean): Promise<Response> {
+  /**
+   * Every save outlives the page (`keepalive`): one already sent when the
+   * page goes is otherwise cancelled with it (Fetch, "terminate a fetch
+   * group"), and what it carried never reaches the hub.
+   */
+  #putDraft(): Promise<Response> {
     const draft: InstallDraft = { ...this.fields };
     return fetch("/api/installs/draft", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(draft),
-      keepalive,
+      keepalive: true,
     });
   }
 
@@ -455,6 +471,16 @@ export const connect = new Connect();
 /** The hub's `installs` frame (client.svelte.ts). */
 export function takeInstallsFrame(frame: InstallsFrame): void {
   connect.take(frame);
+}
+
+/**
+ * The hub was reached on a socket (client.svelte.ts `hubReached`): the
+ * installs and the draft are read whole, now that the socket carrying their
+ * frames is open, so no change falls between the read and the frames (a
+ * draft save that outlived a reload, an install a hub restart lost).
+ */
+export function readInstalls(): Promise<void> {
+  return connect.load();
 }
 
 /** A running install's step line, as the band and the window's head say it. */

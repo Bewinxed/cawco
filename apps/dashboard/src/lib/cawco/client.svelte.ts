@@ -150,7 +150,7 @@ import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { currentClientId } from "./client-id";
-import { takeInstallsFrame } from "./connect/installs.svelte";
+import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { devDebug } from "./dev-debug";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
@@ -5306,6 +5306,8 @@ function hubReached(): void {
   state.restart = null;
   globalThis.__cawcoReconnectAttempts = 0;
   readFleet();
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the band and Add machine's window draw what lands
+  void readInstalls();
   rereadFollowed();
   lastPlanFollowKey = "";
   syncPlanFollows();
