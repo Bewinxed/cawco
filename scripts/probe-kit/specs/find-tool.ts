@@ -44,6 +44,8 @@ import type { Kit, Spec } from "../kit";
 
 const WORD = "zebrafish";
 /** A made-up password, password-shaped (secret-filter.ts `passwordShaped`): never a real one. */
+/** How long a leg waits for the machine's index to hold its turn. */
+const INDEXED_MS = 120_000;
 const PASSWORD = "Zq7!vRt9Lm";
 /** Another, typed far from the word "password"; its two halves as the index tokenises it. */
 const FAR_PASSWORD = "Xk8#pLm2Qw";
@@ -578,27 +580,47 @@ const talkOnce = async (probe: Probe, title: string, words: string) => {
 };
 
 /**
- * Whether the engine (the dashboard's Find) holds `id` for `q` by a moment
- * of its transcript yet: the machine's index read its words. A hit by the
- * session's title alone ("Narwhal box" for "narwhal") is not enough: it
- * comes before the turn is indexed, and the leg's own query then finds
- * nothing.
+ * Waits until the engine (the dashboard's Find) holds `id` for `q`, the
+ * leg's own words, by a moment of its transcript: the machine's index read
+ * the turn. A hit by the session's title alone ("Narwhal box" for
+ * "narwhal") comes before the turn is indexed. A turn the index never
+ * holds within the wait is the leg's failure, said as that, not searched
+ * anyway into a misleading "nothing matched".
  */
-const indexed = (probe: Probe, q: string, id: string, what: string) =>
-  until(
-    what,
+const indexed = async (
+  kit: Kit,
+  probe: Probe,
+  q: string,
+  id: string,
+  leg: string
+): Promise<boolean> => {
+  const held = await until(
+    `the ${leg} turn in /api/find for "${q}"`,
     () => probe.engine(q),
     (answer) =>
       answer.results.some(
         (result) => result.id === id && (result.moments?.length ?? 0) > 0
       ),
-    120_000
-  ).catch(() => undefined);
+    INDEXED_MS
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!held) {
+    kit.check(
+      `${leg}: the machine's index holds the turn for "${q}" within ${INDEXED_MS / 1000} s`,
+      false,
+      "never held: the leg did not search"
+    );
+  }
+  return held;
+};
 
 /** h: the person's typed password, through every answer find gives an agent. */
 const secretLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
   const talker = await talkOnce(probe, "Narwhal box", SAY.secret);
-  await indexed(probe, "narwhal", talker.id, "the narwhal turn in /api/find");
+  if (!(await indexed(kit, probe, "narwhal sudo", talker.id, "h"))) {
+    return;
+  }
   const concise = await probe.find(seeded.orchestrator, {
     query: "narwhal sudo",
     project: "all",
@@ -632,7 +654,9 @@ const secretLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
 const purgeLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
   const { fleet } = probe;
   const talker = await talkOnce(probe, "Axolotl plan", SAY.purge);
-  await indexed(probe, "axolotl", talker.id, "the axolotl turn in /api/find");
+  if (!(await indexed(kit, probe, "axolotl", talker.id, "i"))) {
+    return;
+  }
   const before = await probe.find(seeded.orchestrator, {
     query: "axolotl",
     project: "all",
@@ -696,7 +720,9 @@ const purgeLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
 /** k: a password typed past the snippet's window from "password", in a concise hit. */
 const farSecretLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
   const talker = await talkOnce(probe, "Pangolin queue", SAY.far);
-  await indexed(probe, "pangolin", talker.id, "the pangolin turn in /api/find");
+  if (!(await indexed(kit, probe, "pangolin", talker.id, "k"))) {
+    return;
+  }
   const concise = await probe.find(seeded.orchestrator, {
     query: "pangolin",
     project: "all",
