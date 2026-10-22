@@ -16,3 +16,20 @@ index 16c10a769f5f3cb71c918cd035651f94c3dc1dc9..5469e0ff4b32e77fdd8c2b8d0fd58cbc
  
  	const styleProp = $derived(
  		snapPointsOffset && snapPointsOffset.length > 0
+diff --git a/dist/use-drawer-content.svelte.js b/dist/use-drawer-content.svelte.js
+index 854a49f0ee696573fc6a89d673c274a1da79f5f0..ae9de90d981e6425b7ff3afcdf123f10891ee218 100644
+--- a/dist/use-drawer-content.svelte.js
++++ b/dist/use-drawer-content.svelte.js
+@@ -120,6 +120,12 @@ export function useDrawerContent(opts) {
+     }
+     function onpointerout(e) {
+         opts.onpointerout.current?.(e);
++        // CawCo's patch (patches/vaul-svelte@1.0.0-next.7.patch): a finger's
++        // pointerout mid-drag released it, and the sheet closed or snapped
++        // back under the finger (huntabyte/vaul-svelte#123). Upstream's own
++        // fix, open PR huntabyte/vaul-svelte#134, unreleased in 1.0.0-next.7;
++        // drop this hunk once a release carries it.
++        if (e.pointerType === "touch") return;
+         handleOnPointerUp(lastKnownPointerEvent);
+     }
+     function oncontextmenu(e) {

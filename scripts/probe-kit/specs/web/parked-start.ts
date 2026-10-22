@@ -806,6 +806,19 @@ async function swipeSheet(kit: Kit, page: Page, label: string) {
     `${label}: the swiped sheet's exit leaves from where it was dragged to, not from the top (translateY ${lift(lastOpen)} → ${lift(firstClosed)})`,
     lift(lastOpen) > 0 && lift(firstClosed) >= lift(lastOpen) - 1
   );
+  // The sheet follows the finger until it lifts: a `pointerout` while the
+  // finger is down (it leaves the 6px grabber as the sheet moves) ends
+  // nothing (patches/vaul-svelte, huntabyte/vaul-svelte#134).
+  const released = log.findIndex((frame) => frame.event === "probe: release");
+  const held = log.slice(0, released);
+  const outs = held.filter((frame) => frame.event === "pointerout").length;
+  const lastHeld = held.filter((frame) => frame.state !== undefined).at(-1);
+  kit.check(
+    `${label}: the sheet follows the finger until it lifts: no closed frame before the release, ${outs} pointerout(s) while the finger was down ended nothing, and it stood at the finger's travel when it lifted (translateY ${lift(lastHeld)} of ${Math.round(distance)}px)`,
+    released > 0 &&
+      held.every((frame) => frame.state !== "closed") &&
+      lift(lastHeld) >= distance * 0.95
+  );
   kit.check(
     `${label}: swiped down past its threshold mid-start, the sheet runs the drawer's exit (getAnimations, every frame from the touch)`,
     exited,
