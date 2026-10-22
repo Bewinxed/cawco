@@ -118,8 +118,24 @@ const firstSync = new Promise<void>((resolve) => {
   markSynced = resolve;
 });
 
+/**
+ * Why this agent refused the hub's fleet sync, the last time it did: a sync
+ * it will refuse again is not coming, so a spawn waiting for the first one
+ * is refused at once, in these words. Cleared by a sync that lands.
+ */
+let refusedSync: string | undefined;
+
 /** Called by the fleet sync once the sidecar it wrote carries the denials. */
-export const fleetDenialsSynced = (): void => markSynced();
+export const fleetDenialsSynced = (): void => {
+  refusedSync = undefined;
+  markSynced();
+};
+
+/** Called when this agent refused the hub's fleet sync: `reason`, in its words. */
+export const fleetSyncRefused = (reason: string): void => {
+  refusedSync = reason;
+  markSynced();
+};
 
 /** A spawn refused because the fleet's denials are not known here, in words. */
 export class FleetDenialsRefused extends Error {
@@ -137,11 +153,12 @@ export class FleetDenialsRefused extends Error {
  * A machine that has not heard them waits for its first sync (the hub sends
  * one on register) and says so; one that has not had it within
  * {@link FIRST_SYNC_WAIT_MS}, or whose sidecar cannot be read, refuses with
- * {@link FleetDenialsRefused}.
+ * {@link FleetDenialsRefused}. One whose agent refused the hub's sync waits
+ * for nothing: it refuses at once, with why ({@link fleetSyncRefused}).
  */
 export const resolvedFleetDenials = async (): Promise<FleetDenials> => {
   let read = await readFleetDenials();
-  if (read.kind === "unsynced") {
+  if (read.kind === "unsynced" && !refusedSync) {
     console.info(
       `[fleet] ${read.reason}: the spawn waits for its first fleet sync`
     );
@@ -153,7 +170,9 @@ export const resolvedFleetDenials = async (): Promise<FleetDenials> => {
       return read.denials;
     case "unsynced":
       throw new FleetDenialsRefused(
-        `${read.reason}, and none came within ${FIRST_SYNC_WAIT_MS / 1000}s`
+        refusedSync
+          ? `${read.reason}, and this agent refused the hub's sync: ${refusedSync}`
+          : `${read.reason}, and none came within ${FIRST_SYNC_WAIT_MS / 1000}s`
       );
     case "unreadable":
       throw new FleetDenialsRefused(read.reason);

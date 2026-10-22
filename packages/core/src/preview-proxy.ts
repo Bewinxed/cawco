@@ -1,6 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { Server, WebSocketHandler } from "bun";
+import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { dataUrlBytes, deskCaptures } from "./captures";
@@ -766,6 +766,8 @@ export interface PreviewSocket {
   /** Nothing listens at `url` any more: the hop forgets where it sent it (the hub's stale machine listener). */
   nothingListens?: () => void;
   opened: boolean;
+  /** What the upstream said that this socket has not taken yet, in order ({@link sendInOrder}). */
+  owed?: (string | ArrayBuffer)[];
   pending: (string | Uint8Array<ArrayBuffer>)[];
   protocol: string;
   /** The viewer's own release, once its socket opened; said when it closes. */
@@ -851,6 +853,48 @@ const sendable = (code: number): number =>
     ? code
     : 1000;
 
+/**
+ * What the upstream said, to the relayed socket, in order and never
+ * dropped. Bun's server `send()` drops a frame outright (returns 0) once 16
+ * MB wait in its socket's buffer (oven-sh/bun#44520, core wire.ts), so a
+ * relay that sends faster than its peer reads lost frames: an SSH-added
+ * machine's agent, reached through the hub's door over a slow link (hub
+ * ssh-door.ts), was handed a fleet sync's parts with a run of them missing
+ * (`wire part …#49 arrived where #22 was expected`), dropped its socket and
+ * was sent the same sync again (niftybot, 2026-10-22). A frame the socket
+ * did not take, and every one after it, waits for its drain
+ * ({@link previewWebSocket} `drain`).
+ */
+const sendInOrder = (
+  socket: ServerWebSocket<PreviewSocket>,
+  frame: string | ArrayBuffer
+): void => {
+  const { owed } = socket.data;
+  if (owed && owed.length > 0) {
+    owed.push(frame);
+    return;
+  }
+  if (socket.send(frame) === 0) {
+    socket.data.owed = [frame];
+  }
+};
+
+/** The socket drained: what it owes goes on, until it takes no more. */
+const sendOwed = (socket: ServerWebSocket<PreviewSocket>): void => {
+  const { owed } = socket.data;
+  while (owed && owed.length > 0 && !socket.data.closed) {
+    const sent = socket.send(owed[0] as string | ArrayBuffer);
+    if (sent === 0) {
+      return;
+    }
+    owed.shift();
+    // Taken, and its buffer backs up: the rest waits for the next drain.
+    if (sent === -1) {
+      return;
+    }
+  }
+};
+
 export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
   open(socket) {
     const { data } = socket;
@@ -877,7 +921,7 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
     };
     upstream.onmessage = (event) => {
       if (!data.closed) {
-        socket.send(event.data);
+        sendInOrder(socket, event.data as string | ArrayBuffer);
       }
     };
     // The app's own close code and reason travel through: a client that
@@ -905,11 +949,15 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
       pending.push(message);
     }
   },
+  drain(socket) {
+    sendOwed(socket);
+  },
   close(socket, code, reason) {
     socket.data.closed = true;
     socket.data.release?.();
     socket.data.release = undefined;
     socket.data.pending.length = 0;
+    socket.data.owed = undefined;
     socket.data.upstream?.close(sendable(code), reason);
   },
 };

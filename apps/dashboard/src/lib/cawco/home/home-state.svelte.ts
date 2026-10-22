@@ -903,6 +903,11 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (buildConvergence(machine.build, cawco.hubBuild) === "behind") {
     return "behind hub";
   }
+  // The sync did not land at all: nothing starts there until one does, and
+  // the row says why under it (MachinesList).
+  if (machine.fleetSyncFault) {
+    return "not synced";
+  }
   const faults = machineFaults(machine.machineId, machine.fleet);
   if (faults.length === 0) {
     return null;

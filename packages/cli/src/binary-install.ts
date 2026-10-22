@@ -30,7 +30,7 @@ import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { askYes, closeAsking } from "./ask";
 import { awaitJoined } from "./await-joined";
-import { discoverHub } from "./discover";
+import { keepJoinedHub } from "./joined-hub";
 import {
   awaitFirstMachineReady,
   dashboardUrl,
@@ -162,8 +162,8 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     updatedAt: Date.now(),
     hostsHub: options.role === "hub",
   } satisfies BinaryUpdateState);
-  // Saved the way `up` saves a hub it was told, so the agent unit finds it.
-  await discoverHub({ hub: options.hubUrl });
+  await keepJoinedHub(options.hubUrl);
+  // The agent's unit names its hub from this.
   process.env[CAWCO_ENV.hubUrl] = options.hubUrl;
   // An agent already running here (an earlier install whose files a failed
   // run removed, its unit left up) is left running by systemd's `enable
@@ -251,8 +251,8 @@ export async function rejoinBinary(hubUrl: string): Promise<void> {
   const note = (line: string) =>
     console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line);
   await writeJsonAtomic(installationPath(), { ...installed, hubUrl });
+  await keepJoinedHub(hubUrl);
   // The agent's unit names its hub, so the unit is rewritten before the agent restarts.
-  await discoverHub({ hub: hubUrl });
   process.env[CAWCO_ENV.hubUrl] = hubUrl;
   // Only the agent's unit is written: no keeper's is touched.
   const layout = binaryLayout(installed.installedVersion);

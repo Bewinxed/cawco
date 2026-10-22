@@ -375,7 +375,7 @@ import {
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
-import { detach } from "@cawco/core/detach";
+import { detach, failureOf } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
   type HandoverCommand,
@@ -9256,6 +9256,14 @@ export const createServer = (
    * account of the fleet config rather than an answer for whoever asked.
    */
   const pendingFleet = new Map<string, string>();
+  /** Of those, the syncs, by `requestId` (a status read is none): whose answer says whether a sync landed. */
+  const fleetSyncsOut = new Set<string>();
+  /**
+   * Why the last fleet sync the hub sent each machine did not land, in one
+   * sentence, by its id: said on its row ({@link AgentRow.fleetSyncFault})
+   * until a sync lands there, or its connection ends.
+   */
+  const fleetSyncFaults = new Map<string, string>();
   /** The fleet MCP changes each of those syncs carries, by `requestId` (fleet-mcp-changes.ts). */
   const fleetMcpRiding = new Map<string, RidingChanges>();
   /**
@@ -16852,6 +16860,10 @@ export const createServer = (
         ...(binaryUpdateStates.get(row.machineId)
           ? { binaryUpdate: binaryUpdateStates.get(row.machineId) }
           : {}),
+        // Live as well: why the sync this connection was sent did not land.
+        ...(fleetSyncFaults.get(row.machineId)
+          ? { fleetSyncFault: fleetSyncFaults.get(row.machineId) }
+          : {}),
       };
     });
 
@@ -18394,105 +18406,127 @@ export const createServer = (
     // Startup discovery finishes before any harness can see a remote fleet URL.
     // The control result arrives through pendingFleet.
     detach(
-      mcpReady.then(async () => {
-        await fleetMcp.ready();
-        const current = new Map(
-          db.fleetConfig().mcp.map((row) => [row.name, row])
-        );
-        // A directory on the hub's disk names nothing on any other machine, so
-        // only the hub's own machine links it; every other one is told which
-        // marketplaces those are and installs their plugins from the bytes.
-        const hubOnly = (await isHubMachine(machineId))
-          ? new Set<string>()
-          : new Set(
-              config.marketplaces
-                .filter(({ source }) => isHubDirectory(source))
-                .map(({ name }) => name)
-            );
-        const hubErrors = new Map(
-          hubOnly.size
-            ? db
-                .listPlugins()
-                .flatMap(({ id, error }) =>
-                  error ? [[id, error] as const] : []
-                )
-            : []
-        );
-        // What the machine holds is read off its disk now, and only those bytes
-        // are left out: a copy that was wiped or edited since its last report is
-        // carried in this same sync. A read that fails or does not answer holds
-        // nothing, so every byte goes — heavier, never wrong.
-        const held = await readHoldings(machineId);
-        const places = db.listProjects().flatMap((project) => project.places);
-        // A server scoped to platforms reaches only a machine whose register
-        // reported one of them (`machine_capabilities.platform`); any other
-        // is not sent it, so its agent removes what it had and probes nothing.
-        const platform = db
-          .listAgents()
-          .find((row) => row.machineId === machineId)
-          ?.machineCapabilities?.platform;
-        const mcpRows = config.mcp.flatMap((row) => {
-          const latest = current.get(row.name);
-          return latest && mcpRunsOn(latest, platform) ? [latest] : [];
-        });
-        const outbound = fleetMcp.syncConfig(
-          {
-            ...config,
-            // The fleet's own, for every folder; a project's are placed below.
-            skills: unbound(config.skills).map((skill) =>
-              held.skills?.[skill.name] === skill.hash
-                ? { ...skill, files: undefined }
-                : skill
-            ),
-            // A project-bound skill and MCP server once per place of its
-            // project on this machine (project-placements.ts); a placed skill
-            // always carries its files, as each place is its own copy.
-            placedSkills: placedCopies(config.skills, places, machineId),
-            placedMcp: placedCopies(mcpRows, places, machineId),
-            // A project's memory documents, likewise once per place.
-            placedMemory: placedCopies(config.placedMemory, places, machineId),
-            pluginPayloads: config.pluginPayloads.map((plugin) =>
-              // Keyed by the fleet's id: two marketplaces may each carry a
-              // plugin of the same name, and a machine holds both.
-              held.plugins?.[`${plugin.name}@${plugin.marketplace}`] ===
-              plugin.hash
-                ? { ...plugin, files: undefined }
-                : plugin
-            ),
-            hubOnlyMarketplaces: [...hubOnly],
-            // What the hub could not carry of a hub-only marketplace reaches that
-            // machine no other way, so the hub's reason goes with the row.
-            plugins: config.plugins.map((plugin) => {
-              const error = hubErrors.get(plugin.id);
-              return error && hubOnly.has(pluginMarketplace(plugin.id))
-                ? { ...plugin, error }
-                : plugin;
-            }),
-            mcp: unbound(mcpRows),
-            // A project-bound hook once per place of its project on this
-            // machine, with that place as its cwd (project-placements.ts).
-            hooks: placedHooks(config.hooks, places, machineId),
-          },
-          hubHttpUrl()
-        );
-        const requestId = crypto.randomUUID();
-        const payload: ControlPayload = {
-          requestId,
-          method: FLEET_SYNC,
-          args: [outbound],
-        };
-        pendingFleet.set(requestId, machineId);
-        if (riding.size > 0) {
-          fleetMcpRiding.set(requestId, riding);
-        }
-        sendFrame(agent, {
-          verb: "control",
-          machineId,
-          payload,
-        } satisfies Envelope<ControlPayload>);
-      }),
+      mcpReady
+        .then(async () => {
+          await fleetMcp.ready();
+          const current = new Map(
+            db.fleetConfig().mcp.map((row) => [row.name, row])
+          );
+          // A directory on the hub's disk names nothing on any other machine, so
+          // only the hub's own machine links it; every other one is told which
+          // marketplaces those are and installs their plugins from the bytes.
+          const hubOnly = (await isHubMachine(machineId))
+            ? new Set<string>()
+            : new Set(
+                config.marketplaces
+                  .filter(({ source }) => isHubDirectory(source))
+                  .map(({ name }) => name)
+              );
+          const hubErrors = new Map(
+            hubOnly.size
+              ? db
+                  .listPlugins()
+                  .flatMap(({ id, error }) =>
+                    error ? [[id, error] as const] : []
+                  )
+              : []
+          );
+          // What the machine holds is read off its disk now, and only those bytes
+          // are left out: a copy that was wiped or edited since its last report is
+          // carried in this same sync. A read that fails or does not answer holds
+          // nothing, so every byte goes — heavier, never wrong.
+          const held = await readHoldings(machineId);
+          const places = db.listProjects().flatMap((project) => project.places);
+          // A server scoped to platforms reaches only a machine whose register
+          // reported one of them (`machine_capabilities.platform`); any other
+          // is not sent it, so its agent removes what it had and probes nothing.
+          const platform = db
+            .listAgents()
+            .find((row) => row.machineId === machineId)
+            ?.machineCapabilities?.platform;
+          const mcpRows = config.mcp.flatMap((row) => {
+            const latest = current.get(row.name);
+            return latest && mcpRunsOn(latest, platform) ? [latest] : [];
+          });
+          const outbound = fleetMcp.syncConfig(
+            {
+              ...config,
+              // The fleet's own, for every folder; a project's are placed below.
+              skills: unbound(config.skills).map((skill) =>
+                held.skills?.[skill.name] === skill.hash
+                  ? { ...skill, files: undefined }
+                  : skill
+              ),
+              // A project-bound skill and MCP server once per place of its
+              // project on this machine (project-placements.ts); a placed skill
+              // always carries its files, as each place is its own copy.
+              placedSkills: placedCopies(config.skills, places, machineId),
+              placedMcp: placedCopies(mcpRows, places, machineId),
+              // A project's memory documents, likewise once per place.
+              placedMemory: placedCopies(
+                config.placedMemory,
+                places,
+                machineId
+              ),
+              pluginPayloads: config.pluginPayloads.map((plugin) =>
+                // Keyed by the fleet's id: two marketplaces may each carry a
+                // plugin of the same name, and a machine holds both.
+                held.plugins?.[`${plugin.name}@${plugin.marketplace}`] ===
+                plugin.hash
+                  ? { ...plugin, files: undefined }
+                  : plugin
+              ),
+              hubOnlyMarketplaces: [...hubOnly],
+              // What the hub could not carry of a hub-only marketplace reaches that
+              // machine no other way, so the hub's reason goes with the row.
+              plugins: config.plugins.map((plugin) => {
+                const error = hubErrors.get(plugin.id);
+                return error && hubOnly.has(pluginMarketplace(plugin.id))
+                  ? { ...plugin, error }
+                  : plugin;
+              }),
+              mcp: unbound(mcpRows),
+              // A project-bound hook once per place of its project on this
+              // machine, with that place as its cwd (project-placements.ts).
+              hooks: placedHooks(config.hooks, places, machineId),
+            },
+            hubHttpUrl()
+          );
+          const requestId = crypto.randomUUID();
+          const payload: ControlPayload = {
+            requestId,
+            method: FLEET_SYNC,
+            args: [outbound],
+          };
+          pendingFleet.set(requestId, machineId);
+          fleetSyncsOut.add(requestId);
+          if (riding.size > 0) {
+            fleetMcpRiding.set(requestId, riding);
+          }
+          sendFrame(agent, {
+            verb: "control",
+            machineId,
+            payload,
+          } satisfies Envelope<ControlPayload>);
+        })
+        .catch((error: unknown) => {
+          // Never sent: the machine waits for a sync that is not coming, and
+          // its row says why.
+          noteFleetSyncFault(
+            machineId,
+            `The hub could not send this machine its fleet sync: ${failureOf(error)}`
+          );
+          throw error;
+        }),
       "fleet sync"
     );
+  };
+
+  /** A sync that did not land on `machineId`, said in the hub's log and on its row. */
+  const noteFleetSyncFault = (machineId: string, sentence: string): void => {
+    console.warn(`[fleet] sync → ${machineName(machineId)}: ${sentence}`);
+    fleetSyncFaults.set(machineId, sentence);
+    publishInstances(machineId);
   };
 
   /**
@@ -20831,6 +20865,9 @@ export const createServer = (
     const method = peek(message.payload, "method");
     if (requestId && (method === FLEET_SYNC || method === FLEET_STATUS)) {
       pendingFleet.set(requestId, message.machineId);
+      if (method === FLEET_SYNC) {
+        fleetSyncsOut.add(requestId);
+      }
     }
     noteControl(message);
     return true;
@@ -33413,10 +33450,24 @@ export const createServer = (
                 pendingFleet.has(message.requestId)
               ) {
                 pendingFleet.delete(message.requestId);
+                const synced = fleetSyncsOut.delete(message.requestId);
                 const riding = fleetMcpRiding.get(message.requestId);
                 fleetMcpRiding.delete(message.requestId);
                 const peeked = peekFleetReport(message.payload);
+                const answer = message.payload as ControlResult;
+                if (synced && !answer.ok) {
+                  // The machine refused the sync, or failed applying it: it
+                  // has no fleet from it, and its row says why.
+                  noteFleetSyncFault(
+                    message.machineId,
+                    `Its fleet sync was not applied there: ${answer.error ?? "its agent gave no reason"}`
+                  );
+                }
                 if (peeked) {
+                  // Landed: the row says the report, and no fault it had.
+                  if (synced) {
+                    fleetSyncFaults.delete(message.machineId);
+                  }
                   keepFleetReport(message.machineId, ws, peeked, riding);
                 }
               }
@@ -33599,8 +33650,11 @@ export const createServer = (
           for (const [requestId, syncing] of pendingFleet) {
             if (syncing === machineId) {
               pendingFleet.delete(requestId);
+              fleetSyncsOut.delete(requestId);
             }
           }
+          // Its next register sends a sync of its own, which says again.
+          fleetSyncFaults.delete(machineId);
           db.markAgentOffline(machineId);
           // Its update state was true of a connection that has just ended.
           binaryUpdateStates.delete(machineId);

@@ -306,6 +306,8 @@
             </div>
           </MachineMenu>
           <RowFault again={updateFailed?.again} reason={updateFailed?.reason} />
+          <!-- The hub's fleet sync did not land: why, in the hub's sentence. -->
+          <RowFault reason={up ? machine.fleetSyncFault : undefined} />
         {/if}
       </li>
     {/each}

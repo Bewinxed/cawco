@@ -47409,6 +47409,10 @@
             "$ref": "#/components/schemas/FleetSyncReport",
             "description": "Last-known fleet-config sync report (NEW.md §11)."
           },
+          "fleetSyncFault": {
+            "description": "Why the fleet sync the hub sent this machine's connection did not land,\nin one sentence: the hub could not send it, or the machine refused or\nfailed it. Absent once one lands, and while none has failed.",
+            "type": "string"
+          },
           "harnesses": {
             "description": "What each installed harness can do, as the daemon reported at register.",
             "type": "array",

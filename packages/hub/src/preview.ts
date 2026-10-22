@@ -1100,6 +1100,11 @@ export function createPreviewListeners(
       isArtifact(socket)
         ? deps.socket.message(socket, message)
         : proxy.message(socket, message),
+    drain: (socket) => {
+      if (!isArtifact(socket)) {
+        proxy.drain?.(socket);
+      }
+    },
     close: (socket, code, reason) =>
       isArtifact(socket)
         ? deps.socket.close(socket)

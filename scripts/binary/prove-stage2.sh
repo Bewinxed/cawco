@@ -1276,6 +1276,9 @@ ssh_trust() {
   [[ -n $pub ]]
   $P exec "$sshrootc" sh -c 'mkdir -p -m 700 /root/.ssh && printf "%s\n" "$1" >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' sh "$pub"
   $P exec --user cawco "$sshuserc" sh -c 'mkdir -p -m 700 /home/cawco/.ssh && printf "%s\n" "$1" >> /home/cawco/.ssh/authorized_keys && chmod 600 /home/cawco/.ssh/authorized_keys' sh "$pub"
+  # Root's Claude Code where the official installer puts a user's (~/.local/bin, which the agent looks in, tools.ts
+  # `toolPath`): the image's, installed for the user, so a session can start on the machine added as root too.
+  $P exec "$sshrootc" sh -c 'mkdir -p /root/.local/bin && ln -sf "$(readlink -f /home/cawco/.local/bin/claude)" /root/.local/bin/claude && /root/.local/bin/claude --version'
   local c
   for c in "$sshrootc" "$sshuserc"; do
     $P exec "$c" sh -c 'systemctl enable --now ssh.service 2> /dev/null || systemctl start ssh.socket'
@@ -1307,6 +1310,7 @@ ssh_add_joins() {
   local c=$1 name=$2 user=$3 ip=$4 since job state id refused rows
   need_hub
   since=$(date +%s)
+  echo "$since" > "$rigdir/ssh-since-$name"
   job=$(hub_api /api/machines/ssh -X POST -H 'content-type: application/json' -d "{\"target\":\"$user@$ip\"}" | json 'd => d.id')
   [[ -n $job ]]
   echo "$job" > "$rigdir/ssh-add-$name.job"
@@ -1335,6 +1339,44 @@ ssh_add_joins() {
   refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
   [[ $refused == 0 ]] || { echo "ASSERTION FAILED: $refused of $name's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 20; return 1; }
   [[ "$(hub_api "/api/agents/$id" | json 'd => d.status')" == online ]]
+}
+# Once the SSH add of machine container $1 (hostname $2, as $3) is done: its first fleet sync landed (the sidecar holds
+# the fleet's denied tools, and the agent's journal says the sync), a Claude session started there runs, the hub's row
+# says no sync that did not land, and the hub refused nothing anonymous since the add. niftybot and uwucloud
+# (2026-10-22), each added over SSH, refused every session ("Not started: this machine has not had its first fleet
+# sync … none came within 30s") while the hub logged `[hub-auth] refused anonymous GET /api/binary-updates/settings`:
+# their installs never recorded the hub they joined, so their agents refused every fleet sync as not the machine's.
+ssh_add_works() {
+  local c=$1 name=$2 user=$3 id since home session journal anonymous fault
+  need_hub
+  id=$(cat "$rigdir/ssh-id-$name")
+  since=$(cat "$rigdir/ssh-since-$name")
+  [[ -n $id && -n $since ]]
+  if [[ $user == root ]]; then home=/root; else home=/home/$user; fi
+  # The install recorded the hub the machine joined as the address its agent reaches it by: the add's own.
+  local joined_at reached_at
+  joined_at=$($P exec "$c" sh -c "cat $home/.config/cawco/config.json 2> /dev/null || true" | json 'd => d.hubUrl ?? ""')
+  reached_at=$(hub_api "/api/machines/ssh/$(cat "$rigdir/ssh-add-$name.job")" | json 'd => d.hubUrl')
+  [[ -n $reached_at && $joined_at == "$reached_at" ]] || { echo "ASSERTION FAILED: $name's config.json names the hub it joined as \"$joined_at\", its agent reaches it at \"$reached_at\""; return 1; }
+  sidecar_denies() { $P exec "$c" sh -c "cat $home/.claude/cawco-fleet.json 2> /dev/null || true" | json 'd => Array.isArray(d.deniedTools)'; }
+  wait_until 60 '[[ "$(sidecar_denies)" == true ]]' || { echo "ASSERTION FAILED: $name has no fleet sidecar holding the fleet's denied tools ($home/.claude/cawco-fleet.json)"; ssh_add_said "$c" "$user" "$(cat "$rigdir/ssh-add-$name.job")"; return 1; }
+  if [[ $user == root ]]; then
+    journal=$($P exec "$c" sh -c 'XDG_RUNTIME_DIR=/run/user/0 journalctl --user --no-pager -o cat -u cawco-agent.service' || true)
+  else
+    journal=$(as_user "$c" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service' || true)
+  fi
+  grep -qF "[fleet] sync from the hub: " <<< "$journal" || { echo "ASSERTION FAILED: $name's agent never says a fleet sync from the hub"; grep -F "[fleet]" <<< "$journal" | tail -n 20; return 1; }
+  if grep -qE "not this machine's agent|sync from the hub refused" <<< "$journal"; then
+    echo "ASSERTION FAILED: $name's agent refused the hub's fleet sync"; grep -E "not this machine's agent|sync from the hub refused" <<< "$journal" | tail -n 5; return 1
+  fi
+  session="ssh-$name-session"
+  start_session "$id" "$session"
+  wait_until 120 "session_running $session" || { echo "ASSERTION FAILED: the session on $name does not run: $(hub_api /api/instances | json "d => JSON.stringify(d.find(r => r.id === '$session'))")"; return 1; }
+  stop_session "$id" "$session" || true
+  fault=$(hub_api "/api/agents/$id" | json 'd => d.fleetSyncFault ?? ""')
+  [[ -z $fault ]] || { echo "ASSERTION FAILED: the hub says $name's fleet sync did not land: $fault"; return 1; }
+  anonymous=$(hub_journal "$since" | grep -F "[hub-auth] refused anonymous" || true)
+  [[ -z $anonymous ]] || { echo "ASSERTION FAILED: since the add of $name the hub refused anonymous calls:"; echo "$anonymous" | tail -n 20; return 1; }
 }
 # A machine that joins by itself, on a hub that requires paired devices, is held; the person admits it, and from
 # then on it is the machine's registered connection: online, and over 40 s none of its frames refused "register
@@ -1373,7 +1415,7 @@ admitted_heartbeats() {
   [[ $refused == 0 ]] || { echo "ASSERTION FAILED: after the Admit, $refused of the machine's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
   [[ "$(owner_api "/api/agents/$id" | json 'd => d.status')" == online ]]
 }
-export -f hub_journal ssh_trust ssh_add_said ssh_add_joins owner_api admitted_heartbeats
+export -f hub_journal ssh_trust ssh_add_said ssh_add_joins ssh_add_works owner_api admitted_heartbeats
 rig_sshadd() {
   use_feed base
   setup "boot the machines: hub sshroot sshuser" machines hub sshroot sshuser
@@ -1382,6 +1424,8 @@ rig_sshadd() {
   setup_done
   check "an SSH add of a fresh machine as root installs CawCo for root under systemd and joins: a second add of it while it runs is refused 409 naming it, no Admit asked or listed, its first register proves the add's key, online, its heartbeats taken" "ssh_add_joins $sshrootc sshroot root $sshroot_ip" 1200
   check "an SSH add of a fresh machine as a normal user installs and joins the same way" "ssh_add_joins $sshuserc sshuser cawco $sshuser_ip" 1200
+  check "the machine added over SSH as root has its first fleet sync (its sidecar holds the fleet's denied tools, its agent says the sync), a Claude session starts there, and the hub refused nothing anonymous since the add" "ssh_add_works $sshrootc sshroot root" 300 "an SSH add of a fresh machine as root installs CawCo for root under systemd and joins: a second add of it while it runs is refused 409 naming it, no Admit asked or listed, its first register proves the add's key, online, its heartbeats taken"
+  check "the machine added over SSH as a normal user has its first fleet sync, a Claude session starts there, and the hub refused nothing anonymous since the add" "ssh_add_works $sshuserc sshuser cawco" 300 "an SSH add of a fresh machine as a normal user installs and joins the same way"
   check "a machine that joins a hub requiring paired devices by itself is held with none of its frames refused register first, the person admits it, and it is the machine's registered connection: online, none refused after either" admitted_heartbeats 900 "an SSH add of a fresh machine as a normal user installs and joins the same way"
 }
 

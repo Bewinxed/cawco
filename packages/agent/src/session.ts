@@ -154,6 +154,7 @@ import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
+import { fleetSyncRefused } from "./denied-tools";
 import { placeMemoryAtLaunch } from "./fleet";
 import { writeFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome, runFs } from "./fs";
@@ -5509,9 +5510,13 @@ export class SessionSupervisor {
         // Fleet sync writes machine-wide harness config (claude's, opencode's
         // and pi's); only the machine's own agent may (see machine-agent.ts).
         if (!(await isMachineAgent())) {
-          throw new Error(
-            "fleet sync skipped: this is not the machine's agent, so machine-wide harness config is left to the agent that is"
-          );
+          const refused =
+            "this is not the machine's agent, so machine-wide harness config is left to the agent that is";
+          console.warn(`[fleet] sync from the hub refused: ${refused}`);
+          // No sync is coming that this agent would apply: a spawn waiting
+          // for its first is refused now, in these words.
+          fleetSyncRefused(refused);
+          throw new Error(refused);
         }
         const config = args[0] as MachineFleetConfig;
         const report = await this.#fleetTurn(() => {

@@ -5,8 +5,10 @@
  * and to start the machine's OpenCode server.
  *
  * The signal is the machine's own cawco config: `config.json` names the hub
- * this machine joined (`cawco up` writes it). An agent talking to that hub is
- * the machine's agent; one started from a worktree against a test hub is not,
+ * this machine joined (`cawco up`'s discovery writes it, and so does every
+ * binary install and rejoin, cli joined-hub.ts `keepJoinedHub`). An
+ * agent talking to that hub is the machine's agent; one started from a
+ * worktree against a test hub is not,
  * and must not repoint the machine's harnesses at its hub. It keeps its
  * sessions on its own hub by passing the hub per session instead.
  *
@@ -27,7 +29,7 @@
  */
 
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { readConfig, writeConfig } from "./config";
+import { CONFIG_PATH, readConfig, writeConfig } from "./config";
 import { delegationHubUrl } from "./delegation";
 
 const WS_SCHEME = /^ws/;
@@ -86,6 +88,9 @@ const silent = (
     .filter(Boolean)
     .join(" and ");
 
+/** Whether the agent has said it is not the machine's because no joined hub is recorded: said once. */
+let saidUnjoined = false;
+
 /** The answer for one (hub address, joined address) pair, decided once. */
 let decided: { answer: Promise<boolean>; key: string } | undefined;
 
@@ -132,6 +137,12 @@ export const isMachineAgent = async (): Promise<boolean> => {
     return true;
   }
   if (!joined) {
+    if (!saidUnjoined) {
+      saidUnjoined = true;
+      console.warn(
+        `[agent] not this machine's agent: ${CONFIG_PATH} names no hub this machine joined, so machine-wide harness config (the fleet's sync among it) is left alone`
+      );
+    }
     return false;
   }
   const key = `${own} ${joined}`;

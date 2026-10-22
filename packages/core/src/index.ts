@@ -852,6 +852,12 @@ export interface AgentRow {
    * Last-known fleet-config sync report (NEW.md §11).
    */
   fleet?: FleetSyncReport;
+  /**
+   * Why the fleet sync the hub sent this machine's connection did not land,
+   * in one sentence: the hub could not send it, or the machine refused or
+   * failed it. Absent once one lands, and while none has failed.
+   */
+  fleetSyncFault?: string;
   /** What each installed harness can do, as the daemon reported at register. */
   harnesses?: import("./harness").HarnessReport[];
   /** The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has. */

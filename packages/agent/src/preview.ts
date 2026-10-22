@@ -358,6 +358,11 @@ const browserSocket: WebSocketHandler<BrowserSocket> = {
           socket as ServerWebSocket<PreviewSocket>,
           message
         ),
+  drain: (socket) => {
+    if (!isCdp(socket.data)) {
+      previewWebSocket.drain?.(socket as ServerWebSocket<PreviewSocket>);
+    }
+  },
   close: (socket, code, reason) =>
     isCdp(socket.data)
       ? cdpSocket.close?.(socket as ServerWebSocket<CdpSocket>, code, reason)

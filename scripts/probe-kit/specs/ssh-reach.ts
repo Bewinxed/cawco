@@ -110,6 +110,7 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import {
   listedPid,
@@ -207,15 +208,22 @@ const seen = (job: SshJoinJob) =>
 /**
  * The box's `cawco`: `binary-rejoin --hub <url>` does what rejoin does
  * (packages/cli/src/binary-install.ts `rejoinBinary`) with the agent's
- * unit, on a box with no service manager: the hub is recorded, the agent
- * (this checkout's, only its own pid ended) restarted against it, then the
- * installer's own wait (`awaitJoined`, run by `wait.ts`), and `joined as`
- * once it ends with the machine online. When it does not, its words and the
- * agent's last lines go to stderr, into the add's output. The build the
- * box's installation names is kept as it is. With `keyless` beside it, the
- * agent reads its config (its key among it) from a dir the add never wrote.
+ * unit, on a box with no service manager: the hub is recorded in the
+ * installation, and as the hub the machine joined by rejoin's own
+ * `keepJoinedHub` (run by `keep-joined.ts`), the agent (this checkout's,
+ * only its own pid ended) restarted against it, then the installer's own
+ * wait (`awaitJoined`, run by `wait.ts`), and `joined as` once it ends with
+ * the machine online. When it does not, its words and the agent's last
+ * lines go to stderr, into the add's output. The build the box's
+ * installation names is kept as it is. With `keyless` beside it, the agent
+ * reads its config (its key among it) from a dir the add never wrote.
  */
-const standIn = (root: string, agentEnv: string, wait: string): string => {
+const standIn = (
+  root: string,
+  agentEnv: string,
+  wait: string,
+  keep: string
+): string => {
   const agent = join(root, "packages/agent/src/cli.ts");
   return `#!/bin/sh
 set -u
@@ -232,6 +240,7 @@ case "$old" in
 esac
 . ${quoted(agentEnv)}
 cd ${quoted(root)} || exit 1
+${quoted(process.execPath)} ${quoted(keep)} "$hub" || exit 1
 # With keep-running, an agent that runs is left be, as a first install's
 # \`systemctl --user enable --now\` leaves a unit that is already active.
 if [ "$running" = 1 ] && [ -e "$binary/keep-running" ]; then
@@ -374,6 +383,13 @@ async function furnish(fleet: KitFleet, offered: string): Promise<Box> {
     wait,
     `setTimeout(() => {\n  console.error("cawco (ssh-reach): still waiting after ${WAIT_BOUND_MS / 1000} s");\n  process.exit(3);\n}, ${WAIT_BOUND_MS});\ntry {\n  const { awaitJoined } = await import(${JSON.stringify(join(root, "packages/cli/src/await-joined.ts"))});\n  await awaitJoined(process.argv[2] ?? "");\n} catch (error) {\n  console.error(\`cawco: \${error instanceof Error ? error.message : String(error)}\`);\n  process.exit(1);\n}\nprocess.exit(0);\n`
   );
+  // Rejoin's own record of the hub the machine joined (cli joined-hub.ts
+  // `keepJoinedHub`), which the stand-in runs as rejoin does.
+  const keep = join(dir, "keep-joined.ts");
+  writeFileSync(
+    keep,
+    `try {\n  const { keepJoinedHub } = await import(${JSON.stringify(join(root, "packages/cli/src/joined-hub.ts"))});\n  await keepJoinedHub(process.argv[2] ?? "");\n} catch (error) {\n  console.error(\`cawco: \${error instanceof Error ? error.message : String(error)}\`);\n  process.exit(1);\n}\nprocess.exit(0);\n`
+  );
   writeFileSync(
     join(dir, "ask-file.ts"),
     `import { createHash } from "node:crypto";\nimport { machineFetch } from ${JSON.stringify(join(root, "packages/core/src/machine-key.ts"))};\nconst answer = await machineFetch(process.env.ASK ?? "");\nconst bytes = new Uint8Array(await answer.arrayBuffer());\nconsole.log(answer.status, createHash("sha256").update(bytes).digest("hex"));\n`
@@ -412,7 +428,7 @@ socket.addEventListener("close", (event) => {
   );
   writeFileSync(
     join(binary, "current", "cawco"),
-    standIn(root, agentEnv, wait)
+    standIn(root, agentEnv, wait, keep)
   );
   chmodSync(join(binary, "current", "cawco"), 0o755);
   const boxScript = join(dir, "box.sh");
@@ -692,6 +708,96 @@ async function joins(
     `${seen(second)}; records ${JSON.stringify(rows())}; connections ${JSON.stringify(held.map(({ pid }) => pid))}; waiting ${JSON.stringify(waitingRows)}; the hub held it: ${heldIn(log, BOX)}`
   );
   return port;
+}
+
+/**
+ * (u) niftybot and uwucloud, 2026-10-22: joined over SSH, they refused every
+ * session (`Not started: this machine has not had its first fleet sync …,
+ * and none came within 30s`), and the hub logged `[hub-auth] refused
+ * anonymous GET /api/binary-updates/settings` for them. Their installs
+ * named the hub outright and recorded it nowhere as the hub the machine
+ * joined, so their agent was not the machine's own and refused every fleet
+ * sync (agent machine-agent.ts), and its updater's first look, before its
+ * socket heard a challenge, proved itself to no hub (agent hub-proof.ts).
+ * Now, once (b) and (c) have joined the box: its config names the hub at
+ * its forward and that hub's id; its first fleet sync has landed, the
+ * sidecar holding the fleet's denials; a session started there runs; and
+ * the hub refused nothing anonymous through the box's forward, nor said a
+ * sync did not land there, since the hub started.
+ */
+async function sessionStarts(
+  fleet: KitFleet,
+  box: Box,
+  { check }: Readers,
+  port: number
+): Promise<void> {
+  const hubId = await fetch(`${fleet.base}/health`)
+    .then((r) => r.json() as Promise<{ hubId?: string }>)
+    .then((body) => body.hubId ?? "");
+  const configFile = join(box.home, ".config", "cawco", "config.json");
+  const config = existsSync(configFile)
+    ? (JSON.parse(readFileSync(configFile, "utf8")) as {
+        hubId?: string;
+        hubUrl?: string;
+      })
+    : {};
+  const sidecar = join(box.home, CLAUDE_DIR_NAME, "cawco-fleet.json");
+  const denials = await until(
+    "the box's first fleet sync, its sidecar holding the fleet's denials",
+    () =>
+      existsSync(sidecar)
+        ? (JSON.parse(readFileSync(sidecar, "utf8")) as {
+            deniedTools?: unknown;
+          })
+        : undefined,
+    (read) => Array.isArray(read?.deniedTools),
+    30_000
+  ).catch(() => undefined);
+  const agentLog = existsSync(join(box.binary, "agent.log"))
+    ? readFileSync(join(box.binary, "agent.log"), "utf8")
+    : "";
+  const synced = agentLog.includes("[fleet] sync from the hub: ");
+  const refusedHere = agentLog
+    .split("\n")
+    .filter(
+      (line) =>
+        line.includes("not this machine's agent") ||
+        line.includes("sync from the hub refused")
+    );
+  const started = Date.now();
+  const session = await fleet
+    .spawn("claude", "ssh-reach u", box.home, {}, BOX)
+    .then(
+      (id) => ({ id, error: "" }),
+      (error: Error) => ({ id: "", error: error.message })
+    );
+  const tookMs = Date.now() - started;
+  const onBox = fleet.query<{ last_error: string | null; status: string }>(
+    "SELECT status, last_error FROM instances WHERE machine_id = ? ORDER BY created_at DESC LIMIT 1",
+    BOX
+  );
+  const hubLines = await logLines(fleet);
+  const anonymous = hubLines.filter((line) =>
+    line.includes("[hub-auth] refused anonymous")
+  );
+  const unlanded = hubLines.filter(
+    (line) =>
+      line.includes("fleet sync was not applied there") ||
+      line.includes("could not send this machine its fleet sync")
+  );
+  await check(
+    "u: joined over SSH, the box's config names the hub at its forward and that hub's id; its first fleet sync landed (the sidecar holds the fleet's denials, its agent says the sync and no refusal of it); a claude session started there runs; and the hub refused nothing anonymous through the forward nor said a sync did not land",
+    config.hubUrl === `http://127.0.0.1:${port}` &&
+      hubId !== "" &&
+      config.hubId === hubId &&
+      denials !== undefined &&
+      synced &&
+      refusedHere.length === 0 &&
+      session.id !== "" &&
+      anonymous.length === 0 &&
+      unlanded.length === 0,
+    `config ${JSON.stringify(config)} (hub ${hubId}, forward port ${port}); sidecar ${denials ? `deniedTools ${JSON.stringify(denials.deniedTools)}` : "none within 30 s"}; agent synced: ${synced}, refused: ${JSON.stringify(refusedHere)}; session ${session.id || session.error} after ${tookMs} ms, row ${JSON.stringify(onBox)}; anonymous refusals ${JSON.stringify(anonymous)}; syncs not landed ${JSON.stringify(unlanded)}`
+  );
 }
 
 /**
@@ -1528,6 +1634,8 @@ async function run(kit: Kit): Promise<void> {
     // Before the box ever joins: what (p) compares the relay's choice with.
     const choiceBefore = await relayChoice(fleet);
     const port = await joins(fleet, box, read);
+    // Before any leg that knocks anonymously through the forward on purpose.
+    await sessionStarts(fleet, box, read, port);
     await reconnects(fleet, box, read, port);
     await silentDrop(fleet, box, read, port);
     await credentials(fleet, box, read, port);
