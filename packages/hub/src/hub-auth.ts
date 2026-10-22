@@ -862,6 +862,29 @@ export const createHubAuth = ({
     return true;
   };
 
+  /** Whether the hub holds anything that admits or holds `machineId`: its key, a connection held for it, the person's refusal. */
+  const holdsMachine = (machineId: string): boolean =>
+    Boolean(db.machineKey(machineId)) ||
+    waiting.has(machineId) ||
+    refusals.has(machineId);
+
+  /**
+   * A removed machine: its key, a connection held for it and the person's
+   * refusal of it go, whether or not the fleet ever listed it (one admitted
+   * whose agent never proved the key was listed nowhere, and its key stood).
+   * If it comes back, it is admitted, or added over SSH, as a new one.
+   */
+  const forgetMachine = (machineId: string): void => {
+    db.forgetMachineKey(machineId);
+    refusals.delete(machineId);
+    const held = waiting.get(machineId);
+    if (held) {
+      waiting.delete(machineId);
+      held.close("This machine was removed.");
+    }
+    changed();
+  };
+
   /** The words the person refused `machineId` in, while that refusal stands. */
   const refusalOf = (machineId: string): string | undefined =>
     refusals.get(machineId);
@@ -1076,9 +1099,11 @@ export const createHubAuth = ({
     allows,
     callerOf,
     classify,
+    forgetMachine,
     frame,
     gate,
     hold,
+    holdsMachine,
     mintMachineKey,
     mode,
     modeFor,

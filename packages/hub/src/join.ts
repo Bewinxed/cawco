@@ -36,6 +36,7 @@ import { dirname, join } from "node:path";
 import {
   INSTALL_JOINED,
   INSTALL_STEP_PREFIX,
+  JOIN_WAIT_STEP,
   type JoinAddress,
   type JoinInfo,
   SSH_ADD_RUNNING_HEADER,
@@ -192,13 +193,14 @@ const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/;
 
 /**
  * The hub and the public site render the same installer body. An SSH add's
- * (`sshAdd`) joins this hub again on a machine that already has CawCo
- * (core install-script.ts).
+ * (`sshAdd`) leaves the machine on the newest build of the hub's update
+ * channel, joined to this hub, whatever it ran before (core
+ * install-script.ts).
  */
 export const installScript = (
   hub: string,
   releaseHost?: string,
-  sshAdd = false
+  sshAdd?: { channel: "stable" | "nightly"; version: string }
 ): string =>
   generateInstallScript({
     hub,
@@ -233,6 +235,19 @@ const TARGET = /^[^-\s][^\s]*$/;
 
 /** A remote shell's line ending, which a pty-less SSH session can still send. */
 const CARRIAGE_RETURN = /\r$/;
+
+/**
+ * A line of the report Bun prints for an error a build left uncaught: its
+ * source excerpt (`4158 | …`), the caret under it, a frame (`at f (…:1:2)`)
+ * and the runtime (`Bun v1.4.2 (Linux x64)`). An add keeps none of them: the
+ * error's own line (`error: …`) says what happened, and the person never
+ * reads a build's source.
+ */
+const STACK_LINE =
+  /^(?:\d+ \| |\s*\^+\s*$|\s+at \S.*:\d+:\d+\)?$|Bun v\d+\.\d+\.\d+ \()/;
+
+/** What starts the line an add's failure says the hub's own words on. */
+const HUB_SAID = "this hub: ";
 
 /** A password `ssh` could not be handed on askpass's one line. */
 const LINE_BREAK = /[\r\n]/;
@@ -287,6 +302,9 @@ const DOWNLOAD_STEP = "downloading the install script from ";
  * machine to it: the first line of an add whose connection has signed in.
  */
 const CARRY_STEP = "carrying this hub to the machine on its port ";
+
+/** The step the hub says as it finds the build an SSH add leaves the machine on: its update channel's newest (binary-updates.ts `offered`). */
+const OFFER_STEP = "finding the build this hub offers its fleet";
 
 /**
  * The step the hub says as it gives the machine its key over its own
@@ -691,8 +709,18 @@ const tunnelProblem = (
     : problemOf(outcome.lines, outcome.code ?? 255, null);
 
 interface JoinDeps {
+  /**
+   * Why the hub did not take the last register through SSH record `id`'s
+   * forward, in words (server.ts `registerProven`), taken once; undefined
+   * when it took it, or none came.
+   */
+  readonly heard: (id: string) => string | undefined;
   /** Runs each finished job's forgetting until the hub closes. */
   readonly lifetime: HubLifetimeShape;
+  /** The build the fleet is offered (binary-updates.ts), which an SSH add leaves its machine on; the words why there is none. */
+  readonly offered: () => Promise<
+    { channel: "stable" | "nightly"; version: string } | { refused: string }
+  >;
   /** Whether the hub holds a live socket from this machine right now. */
   readonly online: (machineId: string) => boolean;
   /** The connections the hub holds to the machines it added over SSH. */
@@ -713,7 +741,13 @@ interface Run {
   tunnel: TunnelOpen | null;
 }
 
-export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
+export const joinRoutes = ({
+  heard,
+  lifetime,
+  offered,
+  online,
+  tunnels,
+}: JoinDeps) => {
   const jobs = new Map<string, SshJoinJob>();
   const runs = new Map<string, Run>();
 
@@ -722,8 +756,14 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
     job.state = "failed";
   };
 
-  /** An install that has exited: done once the hub has the machine online, else what went wrong. */
-  const settle = async (job: SshJoinJob): Promise<void> => {
+  /**
+   * An install that has exited: done once the hub has the machine online,
+   * else what went wrong. A register the hub did not take through record
+   * `record`'s forward means the add got as far as the join, whatever the
+   * machine's build printed: that wait is the step, and the hub's words
+   * why are the add's last line.
+   */
+  const settle = async (job: SshJoinJob, record: string): Promise<void> => {
     const { machineId, exitCode } = job;
     if (exitCode === 0 && machineId) {
       const deadline = Date.now() + REGISTER_GRACE_MS;
@@ -736,12 +776,21 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
         return;
       }
     }
+    const said = heard(record);
+    if (said !== undefined) {
+      take(job, `${HUB_SAID}${said}`);
+      fail(job, { kind: "step", step: JOIN_WAIT_STEP });
+      return;
+    }
     fail(job, problemOf(job.lines, exitCode ?? -1, machineId));
   };
 
-  /** One line of the add's output, kept as the dialog reads it. */
+  /** One line of the add's output, kept as the dialog reads it; never a line of a stack trace. */
   const take = (job: SshJoinJob, line: string): void => {
     const clean = line.replace(CARRIAGE_RETURN, "");
+    if (STACK_LINE.test(clean)) {
+      return;
+    }
     if (clean.startsWith(INSTALL_JOINED)) {
       job.machineId = clean.slice(INSTALL_JOINED.length).trim();
     }
@@ -886,6 +935,42 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
   };
 
   /**
+   * What an install needs before it runs, once the hub's connection is up:
+   * the build the add leaves the machine on, known before anything is
+   * written there (its script names it, `/install.sh?add=ssh`), then the
+   * machine's key. Whether the install may run; a step that failed fails
+   * the add, in its words.
+   */
+  const prepare = async (
+    job: SshJoinJob,
+    run: Run,
+    tunnel: TunnelOpen
+  ): Promise<boolean> => {
+    const failed = (step: string, said: string): false => {
+      take(job, said);
+      if (tunnel.fresh) {
+        tunnels.abandon(tunnel.id);
+      }
+      fail(job, { kind: "step", step });
+      return false;
+    };
+    take(job, `${INSTALL_STEP_PREFIX}${OFFER_STEP}`);
+    const offer = await offered();
+    if (run.stopped) {
+      return false;
+    }
+    if ("refused" in offer) {
+      return failed(OFFER_STEP, `${HUB_SAID}${offer.refused}`);
+    }
+    take(job, `${INSTALL_STEP_PREFIX}${KEY_STEP}`);
+    const unkept = await tunnels.admit(tunnel.id);
+    if (run.stopped) {
+      return false;
+    }
+    return unkept ? failed(KEY_STEP, unkept) : true;
+  };
+
+  /**
    * The install, by key, through `port` on the machine, once the hub's
    * connection carries it; done once the machine is online, when the hub
    * holds that connection from then on.
@@ -898,17 +983,7 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
   ): Promise<void> => {
     job.hubUrl = `http://127.0.0.1:${port}`;
     take(job, `${INSTALL_STEP_PREFIX}${CARRY_STEP}${port}`);
-    take(job, `${INSTALL_STEP_PREFIX}${KEY_STEP}`);
-    const unkept = await tunnels.admit(tunnel.id);
-    if (run.stopped) {
-      return;
-    }
-    if (unkept) {
-      take(job, unkept);
-      if (tunnel.fresh) {
-        tunnels.abandon(tunnel.id);
-      }
-      fail(job, { kind: "step", step: KEY_STEP });
+    if (!(await prepare(job, run, tunnel))) {
       return;
     }
     job.exitCode = await session(job, run, null, installCommand(job.hubUrl));
@@ -918,7 +993,7 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
     // A machine already joined over this connection installs nothing new and
     // says no `joined as`: it is the machine the connection was held for.
     job.machineId ??= tunnel.machineId;
-    await settle(job);
+    await settle(job, tunnel.id);
     if (job.state === "done" && job.machineId) {
       tunnels.joined(tunnel.id, job.machineId);
     } else if (tunnel.fresh) {
@@ -1019,12 +1094,16 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
         );
       }
       const installation = await readInstallation();
-      set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
-      return installScript(
-        `http://${host}`,
-        installation?.releaseHost,
+      // An SSH add's script installs the build the fleet is offered.
+      const offer =
         new URL(request.url).search === `?${SSH_ADD_QUERY}`
-      );
+          ? await offered()
+          : undefined;
+      if (offer && "refused" in offer) {
+        return status(409, offer.refused);
+      }
+      set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
+      return installScript(`http://${host}`, installation?.releaseHost, offer);
     })
     .get("/api/join", async (): Promise<JoinInfo> => ({
       addresses: await joinAddresses(),

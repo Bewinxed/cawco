@@ -7,7 +7,11 @@
  * this very code.
  */
 import { hostname } from "node:os";
-import { type AgentRow, INSTALL_STEP_PREFIX } from "@cawco/core";
+import {
+  type AgentRow,
+  INSTALL_STEP_PREFIX,
+  JOIN_WAIT_STEP,
+} from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { machineId } from "@cawco/core/machine-id";
 import {
@@ -59,6 +63,9 @@ const readOwnRow = (
  */
 export async function awaitJoined(hubUrl: string): Promise<void> {
   const id = await machineId();
+  // Its own step, so an add that fails here names this wait, never the
+  // service step before it (hub join.ts `problemOf` reads the last step).
+  console.log(`${INSTALL_STEP_PREFIX}${JOIN_WAIT_STEP}`);
   const since = Date.now();
   const deadline = since + JOIN_TIMEOUT_MS;
   let waiting = false;

@@ -388,5 +388,27 @@ export function createBinaryUpdates(options: Options) {
         return status(404, "This build is not one the hub offers");
       }
     );
-  return { routes };
+  /**
+   * The build the fleet is offered, by its channel and version: the one an
+   * SSH add leaves its machine on (core install-script.ts `sshAdd`). None
+   * while the policy record is damaged, or while the release host does not
+   * answer, and the words that say why.
+   */
+  const offered = async (): Promise<
+    | { channel: BinaryUpdatePolicy["channel"]; version: string }
+    | { refused: string }
+  > => {
+    if ("damaged" in held) {
+      return { refused: refused() };
+    }
+    const { channel } = held.policy;
+    try {
+      return { channel, version: (await newest()).manifest.version };
+    } catch (error) {
+      return {
+        refused: `This hub could not find the newest ${channel} build to install: ${error instanceof Error ? error.message : String(error)}. Check that the hub reaches its release host, then Retry.`,
+      };
+    }
+  };
+  return { offered, routes };
 }

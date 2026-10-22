@@ -32707,6 +32707,9 @@
             "$ref": "#/components/schemas/StageCloneFrame"
           },
           {
+            "$ref": "#/components/schemas/FleetFetchFrame"
+          },
+          {
             "$ref": "#/components/schemas/FleetMcpFrame"
           },
           {
@@ -32809,9 +32812,6 @@
             "$ref": "#/components/schemas/LocalNameFrame"
           },
           {
-            "$ref": "#/components/schemas/FleetFetchFrame"
-          },
-          {
             "$ref": "#/components/schemas/ProjectCapFrame"
           },
           {
@@ -32862,6 +32862,7 @@
             "browser_handback": "#/components/schemas/BrowserHandedBackFrame",
             "stage": "#/components/schemas/StageFrame",
             "stage-clone": "#/components/schemas/StageCloneFrame",
+            "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "fleet_report": "#/components/schemas/FleetReportFrame",
             "preview": "#/components/schemas/PreviewFrame",
@@ -32896,7 +32897,6 @@
             "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
             "tailnet.https": "#/components/schemas/TailnetHttpsFrame",
             "local.name": "#/components/schemas/LocalNameFrame",
-            "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
             "project.stop": "#/components/schemas/ProjectStopFrame",
@@ -56393,6 +56393,53 @@
           "tmp"
         ]
       },
+      "FleetFetchFrame": {
+        "description": "Hub-originated: a download at the hub began (`fetching`) or landed. A fetch\nruns after the request that asked for it has answered, so this is how\nevery dashboard learns what came of it. Exactly one of the four is set:\n- `skill`, `plugin`: a fetch of a fleet row's files, the row whole as\n  `/api/fleet` reads it (files, or the sentence it failed with);\n- `marketplace`: a read of a marketplace source (its name and offers);\n- `link`: a link of a marketplace source, linked or refused.",
+        "type": "object",
+        "properties": {
+          "check": {
+            "description": "The check of every skill's and plugin's source for what it holds now:\nunder way, or done (each row it read came as its own frame).",
+            "type": "object",
+            "properties": {
+              "fetching": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "fetching"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fleet.fetch"
+            ]
+          },
+          "link": {
+            "$ref": "#/components/schemas/MarketplaceLink",
+            "description": "A link of the marketplace at `source`, asked for: under way (`fetching`),\nlinked (`marketplace`, the row), or refused (`error`)."
+          },
+          "marketplace": {
+            "$ref": "#/components/schemas/MarketplaceRead",
+            "description": "A marketplace source as the hub read it: what its `marketplace.json` calls\nit and what it offers, or why it could not be read. The hub reads it after\nthe request that asked has answered (`fetching`), and the read that lands\nis a `fleet.fetch` frame."
+          },
+          "plugin": {
+            "$ref": "#/components/schemas/FleetPlugin",
+            "description": "One installed plugin. `id` is the CLI's own `plugin@marketplace` form.\n\n`hash`, `bytes` and `error` are what the HUB resolved this row to, and they\nride the dashboard's read only — the copy a machine is sent carries the\nfiles themselves ({@link FleetPluginPayload}) and has no use for the\nbookkeeping. `error` is a hub-side failure and a different fact from a\nmachine's `failed` in {@link FleetSyncReport.plugins}: one says the bytes\nwere never fetched, the other says a machine would not take them."
+          },
+          "removed": {
+            "description": "The row was removed while it was fetched; its `error` says so. With\n`link`: a refused link was let go, and leaves the list.",
+            "type": "boolean"
+          },
+          "skill": {
+            "$ref": "#/components/schemas/FleetSkillMeta",
+            "description": "A skill row as the hub stores and the dashboard reads it: where it came\nfrom and what the hub resolved it to. The files themselves stay out of\nthis shape — a catalog read should not weigh megabytes.\n\n`source` forms the hub's resolver accepts. Installer CLIs are deliberately\nnever run: an installer is a wrapper around \"copy files into\n`~/.claude/skills/<name>`\", and cawco does the copy itself.\n- `skills:owner/repo[@skill][#ref]` — a skills.sh-style slug (what the\n  user would have typed after `bunx skills add`). The repo tarball is\n  walked in the CLI's own discovery order, except `.claude/skills/` wins\n  over `.agents/skills/` — cawco wants the Claude-tuned variant.\n- `github:owner/repo[/path][@ref]` — the repo tarball, `path` pointing at\n  the skill directory.\n- `npm:package[@version]` — the registry tarball, for the few packages\n  that embed `skills/<name>/SKILL.md` (most installer packages carry no\n  content — their CLIs fetch from GitHub at runtime).\n- a plain URL to a `SKILL.md` (single-file skill)."
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
       "FleetMcpFrame": {
         "type": "object",
         "properties": {
@@ -58281,53 +58328,6 @@
         "required": [
           "kind",
           "localName"
-        ]
-      },
-      "FleetFetchFrame": {
-        "description": "Hub-originated: a download at the hub began (`fetching`) or landed. A fetch\nruns after the request that asked for it has answered, so this is how\nevery dashboard learns what came of it. Exactly one of the four is set:\n- `skill`, `plugin`: a fetch of a fleet row's files, the row whole as\n  `/api/fleet` reads it (files, or the sentence it failed with);\n- `marketplace`: a read of a marketplace source (its name and offers);\n- `link`: a link of a marketplace source, linked or refused.",
-        "type": "object",
-        "properties": {
-          "check": {
-            "description": "The check of every skill's and plugin's source for what it holds now:\nunder way, or done (each row it read came as its own frame).",
-            "type": "object",
-            "properties": {
-              "fetching": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "fetching"
-            ]
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "fleet.fetch"
-            ]
-          },
-          "link": {
-            "$ref": "#/components/schemas/MarketplaceLink",
-            "description": "A link of the marketplace at `source`, asked for: under way (`fetching`),\nlinked (`marketplace`, the row), or refused (`error`)."
-          },
-          "marketplace": {
-            "$ref": "#/components/schemas/MarketplaceRead",
-            "description": "A marketplace source as the hub read it: what its `marketplace.json` calls\nit and what it offers, or why it could not be read. The hub reads it after\nthe request that asked has answered (`fetching`), and the read that lands\nis a `fleet.fetch` frame."
-          },
-          "plugin": {
-            "$ref": "#/components/schemas/FleetPlugin",
-            "description": "One installed plugin. `id` is the CLI's own `plugin@marketplace` form.\n\n`hash`, `bytes` and `error` are what the HUB resolved this row to, and they\nride the dashboard's read only — the copy a machine is sent carries the\nfiles themselves ({@link FleetPluginPayload}) and has no use for the\nbookkeeping. `error` is a hub-side failure and a different fact from a\nmachine's `failed` in {@link FleetSyncReport.plugins}: one says the bytes\nwere never fetched, the other says a machine would not take them."
-          },
-          "removed": {
-            "description": "The row was removed while it was fetched; its `error` says so. With\n`link`: a refused link was let go, and leaves the list.",
-            "type": "boolean"
-          },
-          "skill": {
-            "$ref": "#/components/schemas/FleetSkillMeta",
-            "description": "A skill row as the hub stores and the dashboard reads it: where it came\nfrom and what the hub resolved it to. The files themselves stay out of\nthis shape — a catalog read should not weigh megabytes.\n\n`source` forms the hub's resolver accepts. Installer CLIs are deliberately\nnever run: an installer is a wrapper around \"copy files into\n`~/.claude/skills/<name>`\", and cawco does the copy itself.\n- `skills:owner/repo[@skill][#ref]` — a skills.sh-style slug (what the\n  user would have typed after `bunx skills add`). The repo tarball is\n  walked in the CLI's own discovery order, except `.claude/skills/` wins\n  over `.agents/skills/` — cawco wants the Claude-tuned variant.\n- `github:owner/repo[/path][@ref]` — the repo tarball, `path` pointing at\n  the skill directory.\n- `npm:package[@version]` — the registry tarball, for the few packages\n  that embed `skills/<name>/SKILL.md` (most installer packages carry no\n  content — their CLIs fetch from GitHub at runtime).\n- a plain URL to a `SKILL.md` (single-file skill)."
-          }
-        },
-        "required": [
-          "kind"
         ]
       },
       "ProjectCapFrame": {

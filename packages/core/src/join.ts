@@ -16,6 +16,13 @@ export const INSTALL_STEP_PREFIX = "cawco-install: ";
  */
 export const SSH_ADD_RUNNING_HEADER = "x-cawco-ssh-add";
 
+/**
+ * The step the install says as its agent is up and it waits for the hub to
+ * list the machine (cli await-joined.ts): the last step of every join, so a
+ * join that never comes online is named by it.
+ */
+export const JOIN_WAIT_STEP = "waiting for the hub to list this machine online";
+
 /** The line `cawco binary-install agent` ends a successful run on, followed by the machine id. */
 export const INSTALL_JOINED = `${INSTALL_STEP_PREFIX}joined as `;
 

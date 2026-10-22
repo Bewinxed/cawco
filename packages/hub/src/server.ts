@@ -16624,6 +16624,12 @@ export const createServer = (
   const socketMachines = new Map<string, string>();
   /** Sockets held waiting for the person, by the machine they claim. */
   const waitingSockets = new Map<string, string>();
+  /**
+   * Why the hub did not take the last register through each SSH add's
+   * forward, in words, by its record (ssh-door.ts): what that add's failure
+   * says (join.ts `settle`). A register it takes clears its record's.
+   */
+  const sshAddHeard = new Map<string, string>();
   /** A socket the hub may close, and the address it came from. */
   type AuthSocket = HubSocket & {
     close: (code?: number, reason?: string) => void;
@@ -16694,6 +16700,51 @@ export const createServer = (
     return from;
   };
 
+  /** The SSH add record whose forward `ws` came through (ssh-door.ts), if it came through one. */
+  const sshRecordOf = (ws: AuthSocket): string | undefined =>
+    viaSshForward(ws.headers?.[SSH_FORWARD_HEADER])
+      ? ws.headers?.[SSH_RECORD_HEADER]
+      : undefined;
+
+  /**
+   * Why a register through an SSH add's forward was not taken, said to the
+   * person by that add: what happened, why, and the fix. `keyed`: it
+   * answered the nonce with some key, which no key the hub holds checks.
+   */
+  const unprovenWords = (message: Envelope, keyed: boolean): string => {
+    const said = (message.payload ?? {}) as {
+      build?: { version?: unknown };
+      hostname?: unknown;
+    };
+    const host =
+      typeof said.hostname === "string" ? said.hostname : message.machineId;
+    const version =
+      typeof said.build?.version === "string"
+        ? said.build.version
+        : "of an unknown version";
+    return keyed
+      ? `${host}'s agent connected through this add's SSH connection with a key this hub does not hold: neither the one this add wrote to the machine nor one admitted before. Its agent reads its key from another file than the add wrote ($XDG_CONFIG_HOME/cawco/machine-key in the add's SSH session). Make its service read that file, then Retry.`
+      : `${host}'s agent, CawCo ${version}, connected through this add's SSH connection and proved no key, which this hub requires of every machine added over SSH. Either that build predates machine keys (choose a channel in Configure → Updates whose newest build is newer), or its agent found no key where the add wrote one ($XDG_CONFIG_HOME/cawco/machine-key in the add's SSH session: make its service read that file). Then Retry.`;
+  };
+
+  /** A register through an SSH add's forward, kept for that add (join.ts `settle`): taken clears its record's words, else they say why not. */
+  const noteSshAdd = (
+    ws: AuthSocket,
+    message: Envelope,
+    taken: boolean,
+    keyed: boolean
+  ): void => {
+    const record = sshRecordOf(ws);
+    if (record === undefined) {
+      return;
+    }
+    if (taken) {
+      sshAddHeard.delete(record);
+    } else {
+      sshAddHeard.set(record, unprovenWords(message, keyed));
+    }
+  };
+
   /**
    * Whether `message`, a register, may stand: in trusted mode always; in
    * pairing mode when it answers this socket's nonce with its machine's key.
@@ -16720,13 +16771,15 @@ export const createServer = (
           ws.id
         )
       : "unknown";
-    if (verdict === "proven" || socketMode(ws) === "trusted") {
+    const taken = verdict === "proven" || socketMode(ws) === "trusted";
+    noteSshAdd(ws, message, taken, typeof proof === "string");
+    if (taken) {
       unhold(ws, message.machineId);
       socketMachines.set(ws.id, message.machineId);
       return true;
     }
     if (verdict === "wrong") {
-      const fault = `register refused: machine ${message.machineId} is admitted with a key, and this connection did not prove it. If this is that machine and it lost its key, remove it from Machines and admit it again.`;
+      const fault = `register refused: machine ${message.machineId} is admitted with a key, and this connection did not prove it. If this is that machine and it lost its key, add it again over SSH, which gives it a new key, or remove it from Machines and admit it again.`;
       console.warn(`[hub-auth] ${fault} (from ${socketAddress(ws)})`);
       sendFrame(ws, refusalFrame(message, fault));
       ws.close(4403, "machine key not proven");
@@ -16784,9 +16837,7 @@ export const createServer = (
     // the connection is the machine the add is joining: held for the add, not
     // the person (hub-auth.ts `Waiting.quiet`). The add's own key proof, the
     // agent's next register or the install's check over HTTP, ends the wait.
-    const record = viaSshForward(ws.headers?.[SSH_FORWARD_HEADER])
-      ? ws.headers?.[SSH_RECORD_HEADER]
-      : undefined;
+    const record = sshRecordOf(ws);
     const quiet =
       record !== undefined && Boolean(db.sshMachines.get(record)?.pendingKey);
     hubAuth.hold({
@@ -25130,6 +25181,36 @@ export const createServer = (
     }
   };
 
+  /** The fleet's update policy and the builds it is offered; its channel is what an SSH add installs (join.ts). */
+  const binaryUpdates = createBinaryUpdates({
+    dbPath: DB_PATH,
+    states: () => binaryUpdateStates,
+    online: () =>
+      db
+        .listAgents()
+        .filter((row) => registry.agent(row.machineId))
+        .map((row) => row.machineId),
+    setState: (machineId, state) => {
+      const known = peekBinaryUpdate({ binaryUpdate: state });
+      if (known) {
+        const moved = !sameBinaryUpdate(
+          binaryUpdateStates.get(machineId),
+          known
+        );
+        binaryUpdateStates.set(machineId, known);
+        restarts.note(known);
+        flushOwedStarts(machineId);
+        if (moved) {
+          publishInstances(machineId);
+        }
+      }
+    },
+    cancel: (machineId) =>
+      callAgent(machineId, CANCEL_BINARY_UPDATE, [], 10_000),
+    configure: (machineId, policy: BinaryUpdatePolicy) =>
+      callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy], 10_000),
+  });
+
   // Everything is made: a hub that serves starts its work off the boot path.
   // One built only to be read starts none of it.
   if (background) {
@@ -25269,38 +25350,17 @@ export const createServer = (
         blockRoutes(blocks),
         noticesSeen.routes,
         joinRoutes({
+          offered: binaryUpdates.offered,
+          heard: (record) => {
+            const said = sshAddHeard.get(record);
+            sshAddHeard.delete(record);
+            return said;
+          },
           lifetime,
           online: (machineId) => Boolean(registry.agent(machineId)),
           tunnels: sshTunnels,
         }),
-        createBinaryUpdates({
-          dbPath: DB_PATH,
-          states: () => binaryUpdateStates,
-          online: () =>
-            db
-              .listAgents()
-              .filter((row) => registry.agent(row.machineId))
-              .map((row) => row.machineId),
-          setState: (machineId, state) => {
-            const known = peekBinaryUpdate({ binaryUpdate: state });
-            if (known) {
-              const moved = !sameBinaryUpdate(
-                binaryUpdateStates.get(machineId),
-                known
-              );
-              binaryUpdateStates.set(machineId, known);
-              restarts.note(known);
-              flushOwedStarts(machineId);
-              if (moved) {
-                publishInstances(machineId);
-              }
-            }
-          },
-          cancel: (machineId) =>
-            callAgent(machineId, CANCEL_BINARY_UPDATE, [], 10_000),
-          configure: (machineId, policy: BinaryUpdatePolicy) =>
-            callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy], 10_000),
-        }).routes,
+        binaryUpdates.routes,
         workflowRoutes(
           db,
           workflowRuntime,
@@ -26103,12 +26163,23 @@ export const createServer = (
       // connected daemon would register straight back, and its sessions are
       // live. Nothing on the machine is touched — if its agent ever starts
       // again it rejoins as new, and its stored transcripts come back with it.
+      // One never listed (admitted, or added over SSH, whose agent never
+      // proved its key) has no row, and what the hub holds for it goes all
+      // the same: its key, its held connection, its SSH connection.
       .delete("/api/agents/:machineId", ({ params, status }) => {
         const row = db
           .listAgents()
           .find((agent) => agent.machineId === params.machineId);
         if (!row) {
-          return status(404, "No machine with that id on this hub.");
+          if (!(
+            hubAuth.holdsMachine(params.machineId) ||
+            sshTunnels.holds(params.machineId)
+          )) {
+            return status(404, "No machine with that id on this hub.");
+          }
+          hubAuth.forgetMachine(params.machineId);
+          sshTunnels.forget(params.machineId);
+          return { sessions: 0 };
         }
         if (registry.agent(params.machineId)) {
           return status(
@@ -26120,8 +26191,9 @@ export const createServer = (
         forgetInstances(gone.instanceIds);
         // A removed machine proves nothing to the git remote any more.
         machineCredentials.forget(params.machineId);
-        // Its key goes too: if it comes back, the person admits it again.
-        db.hubAuth.forgetMachineKey(params.machineId);
+        // Its key, a connection held for it and a refusal go too: if it
+        // comes back, the person admits it again.
+        hubAuth.forgetMachine(params.machineId);
         // The hub's SSH connection to it, if it was added over SSH, ends.
         sshTunnels.forget(params.machineId);
         // The frame that carries the machine list: every dashboard drops the

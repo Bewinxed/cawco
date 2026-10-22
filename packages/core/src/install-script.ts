@@ -20,11 +20,19 @@ const shellQuote = (value: string): string =>
  * signature and checksums) happens before the first file is placed; from then
  * on any failure removes what this run created. Run on a machine that already
  * has CawCo it reports the installed version and changes nothing, except that
- * the hub's own script moves a machine joined to a different hub, and the
- * script an SSH add runs (`sshAdd`) joins this hub again whatever the
- * machine was joined to: the add is the person asking for exactly that, and
- * it has just given the machine a key to prove (hub ssh-tunnels.ts `admit`),
- * which only a rejoin's restarted agent and its check prove.
+ * the hub's own script moves a machine joined to a different hub.
+ *
+ * The script an SSH add runs (`sshAdd`) leaves the machine on the build the
+ * hub offers its fleet, its update channel's newest (hub binary-updates.ts
+ * `offer`), joined to this hub, whatever the machine ran and was joined to:
+ * the add is the person asking for exactly that, and it has just given the
+ * machine a key to prove (hub ssh-tunnels.ts `admit`), which only a build
+ * that knows machine keys proves. One on that build already joins again
+ * (`binary-rejoin`), before any check a download needs; any other build is
+ * replaced by the channel's newest, installed as a first install is. Should
+ * that install fail once its setup began, the
+ * machine stays on the new build: removing it would leave the machine with
+ * no CawCo at all, where it had one before.
  *
  * `origin` is the GitHub repository releases are published to. `releaseHost`
  * and `publicKey` exist so a proof can stand a local folder and a throwaway
@@ -35,14 +43,14 @@ export const generateInstallScript = ({
   hub,
   publicKey = RELEASE_PUBLIC_KEY,
   releaseHost,
-  sshAdd = false,
+  sshAdd,
 }: {
   origin: string;
   hub?: string;
   publicKey?: string;
   releaseHost?: string;
-  /** The script an SSH add of this hub runs on the machine (hub join.ts `installCommand`). */
-  sshAdd?: boolean;
+  /** The script an SSH add of this hub runs on the machine (hub join.ts `installCommand`): the hub's update channel and the build it offers on it. */
+  sshAdd?: { channel: "stable" | "nightly"; version: string };
 }): string => {
   if (!publicKey) {
     throw new Error(
@@ -59,7 +67,8 @@ ${hub ? `  HUB=${shellQuote(hub)}\n` : ""}  REPO=${shellQuote(origin)}
   PUBLIC_KEY=${shellQuote(publicKey)}
   RELEASE_HOST=${shellQuote(releaseHost ?? "")}
   RELEASE_HOST="\${CAWCO_RELEASE_HOST:-$RELEASE_HOST}"
-  CHANNEL="\${CAWCO_CHANNEL:-stable}"
+  CHANNEL="\${CAWCO_CHANNEL:-${sshAdd?.channel ?? "stable"}}"
+${sshAdd ? `  OFFERED=${shellQuote(sshAdd.version)}\n` : ""}
   ROOT="\${XDG_DATA_HOME:-$HOME/.local/share}/cawco/binary"
   BIN_LINK="$HOME/.local/bin/cawco"
   WORK=""
@@ -68,15 +77,30 @@ ${hub ? `  HUB=${shellQuote(hub)}\n` : ""}  REPO=${shellQuote(origin)}
   CREATED_VERSION=""
   SETUP_BEGAN=0
   LINGER_ENABLED=0
+  # An SSH add onto a machine that has CawCo: the build it ran, and its links, until the offered one replaces it.
+  UPGRADE_FROM=""
+  PREV_CURRENT=""
+  PREV_KEEPER=""
 
   say() { printf '${INSTALL_STEP_PREFIX}%s\\n' "$*"; }
   fail() { printf 'cawco: %s\\n' "$*" >&2; exit 1; }
 
   # Whatever this run created is removed if it does not finish; before the
-  # first file is placed there is nothing to remove.
+  # first file is placed there is nothing to remove. A machine that had
+  # CawCo gets its build's links back until the new build's setup begins,
+  # and keeps the new build from then on.
   undo() {
     [ "$?" != 0 ] || return 0
     set +e
+    if [ -n "$UPGRADE_FROM" ]; then
+      if [ "$SETUP_BEGAN" = 0 ]; then
+        [ -z "$PREV_CURRENT" ] || ln -sfn "$PREV_CURRENT" "$ROOT/current"
+        [ -z "$PREV_KEEPER" ] || ln -sfn "$PREV_KEEPER" "$ROOT/keeper"
+        [ -z "$CREATED_VERSION" ] || rm -rf "$ROOT/versions/$CREATED_VERSION"
+      fi
+      [ -z "$WORK" ] || rm -rf "$WORK"
+      return 0
+    fi
     if [ "$SETUP_BEGAN" = 1 ] && [ -n "$CREATED_VERSION" ]; then
       "$ROOT/versions/$CREATED_VERSION/$EXE" service uninstall >/dev/null 2>&1
     fi
@@ -115,10 +139,24 @@ ${hub ? `  HUB=${shellQuote(hub)}\n` : ""}  REPO=${shellQuote(origin)}
     case "$answer" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
   }
 
-  # A machine that has CawCo is not updated here: one way to update, and it is the app.
+  # A machine that has CawCo is not updated here: one way to update, and it is
+  # the app. An SSH add is the exception: it moves the machine to the build the
+  # hub offers, once that build is known (below).
   if [ -f "$ROOT/installation.json" ]; then
     installed="$(sed -n 's/.*"installedVersion":"\\([^"]*\\)".*/\\1/p' "$ROOT/installation.json")"
-    joined="$(sed -n 's/.*"hubUrl":"\\([^"]*\\)".*/\\1/p' "$ROOT/installation.json")"
+${
+  sshAdd
+    ? `    if [ "$installed" = "$OFFERED" ]; then
+      say "CawCo $OFFERED, the build this hub offers, is installed; joining the hub at $HUB again"
+      "$ROOT/current/$EXE" binary-rejoin --hub "$HUB" </dev/null
+      return 0
+    fi
+    say "moving this machine from CawCo \${installed:-of an unknown version} to the build this hub offers, CawCo $OFFERED on its $CHANNEL channel"
+    UPGRADE_FROM="\${installed:-unknown}"
+    PREV_CURRENT="$(readlink "$ROOT/current" 2>/dev/null || :)"
+    PREV_KEEPER="$(readlink "$ROOT/keeper" 2>/dev/null || :)"
+`
+    : `    joined="$(sed -n 's/.*"hubUrl":"\\([^"]*\\)".*/\\1/p' "$ROOT/installation.json")"
     channel="$(sed -n 's/.*"channel":"\\([^"]*\\)".*/\\1/p' "$ROOT/update-state.json" 2>/dev/null || :)"
 ${
   hub
@@ -127,19 +165,13 @@ ${
       "$ROOT/current/$EXE" binary-rejoin --hub "$HUB" </dev/null
       return 0
     fi
-${
-  sshAdd
-    ? `    say "joining the hub at $HUB again"
-    "$ROOT/current/$EXE" binary-rejoin --hub "$HUB" </dev/null
-    return 0
 `
-    : ""
-}`
     : ""
 }    printf 'CawCo %s is already installed on this machine (channel: %s).\\n' "\${installed:-unknown}" "\${channel:-not reported yet}"
     printf 'Updates are installed from the CawCo app, automatically when this machine is idle or with Install now. Nothing was changed.\\n'
     return 0
-  fi
+`
+}  fi
 
   case "$(uname -m)" in
     x86_64|amd64) ARCH=x64 ;;
@@ -285,8 +317,9 @@ ${
   # Everything is checked; from here on a failure removes what this run created.
   say "installing CawCo $VERSION into $ROOT"
   [ -d "$ROOT" ] || CREATED_ROOT=1
+  # A build folder this machine already had (an update fetched it) is never this run's to remove.
+  [ -n "$UPGRADE_FROM" ] && [ -d "$ROOT/versions/$VERSION" ] || CREATED_VERSION="$VERSION"
   mkdir -p "$ROOT/versions/$VERSION" "$HOME/.local/bin"
-  CREATED_VERSION="$VERSION"
   mv "$WORK/extract/$TOP" "$ROOT/versions/$VERSION/$TOP"
   chmod 700 "$ROOT/versions/$VERSION/$EXE"
   cp "$WORK/release.json" "$ROOT/versions/$VERSION/release.json"
