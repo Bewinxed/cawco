@@ -10,7 +10,10 @@
  *
  * The new captures are the candidate baselines, kept apart from the approved
  * set: `<dir>/candidates/web/<spec>/<entry>.png`, the same layout as
- * `baselines/`. Nothing here writes an approved baseline. Approving is
+ * `baselines/`, and each surface's style snapshot beside them,
+ * `<dir>/candidates/style-snapshot/<surface>.json.gz`, written by the style
+ * snapshot's own `--approve` with `PROBE_BASELINES=<dir>/candidates`, then
+ * `review.ts <dir>` again. Nothing here writes an approved baseline. Approving is
  * `approve-review.ts`, which reads the page's picks and moves the approved
  * surfaces' candidates over the approved set.
  *
@@ -65,6 +68,12 @@ export interface ReviewSurface {
   id: string;
   label: string;
   spec: string;
+  /**
+   * Its candidate style snapshot (`candidates/style-snapshot/<surface>.json.gz`,
+   * the style snapshot's `--approve` written into the candidate folder),
+   * which Approve moves with its pictures; null where none was written.
+   */
+  style: string | null;
   surface: string;
 }
 
@@ -79,7 +88,7 @@ export interface ReviewManifest {
 /** The run's own record of what it wrote, for the manifest to be written again. */
 interface ReviewRecord {
   base: string;
-  surfaces: Omit<ReviewSurface, "commits">[];
+  surfaces: Omit<ReviewSurface, "commits" | "style">[];
 }
 
 /** "tab-strip" as words: "Tab strip". */
@@ -175,10 +184,18 @@ export async function writeManifest(dir: string): Promise<ReviewManifest> {
     id: `${basename(at)}-${record.base.slice(0, 9)}`,
     title: `${specs.map(words).join(", ")} at ${record.base.slice(0, 9)}: captures that differ from their approved baselines`,
     base: record.base,
-    surfaces: record.surfaces.map((s) => ({
-      ...s,
-      commits: commits[s.id] ?? [],
-    })),
+    surfaces: record.surfaces.map((s) => {
+      const style = join(
+        "candidates",
+        "style-snapshot",
+        `${s.surface}.json.gz`
+      );
+      return {
+        ...s,
+        commits: commits[s.id] ?? [],
+        style: existsSync(join(at, style)) ? style : null,
+      };
+    }),
   };
   await writeFile(
     join(at, "manifest.json"),

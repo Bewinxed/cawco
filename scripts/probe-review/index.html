@@ -359,6 +359,9 @@
           }
           card.append(more);
         }
+        if (s.style) {
+          card.append(el("p", "commit", "Approve also writes its style snapshot, as the dashboard reads it now."));
+        }
         for (const entry of s.entries) {
           card.append(entryRow(entry));
         }

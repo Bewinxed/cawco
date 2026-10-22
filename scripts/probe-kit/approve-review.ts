@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
  * The owner's picks on a review page (review.ts, `scripts/probe-review/`)
- * made baselines: every surface he approved has its candidates moved over the
- * approved set; a rejected or unpicked surface is left as it is, to the byte.
+ * made baselines: every surface he approved has its candidates (its pictures
+ * and its style snapshot) moved over the approved set; a rejected or unpicked surface is left as it is, to the byte.
  *
  *   bun scripts/probe-kit/approve-review.ts <review dir> <picks.json>
  *
@@ -72,9 +72,9 @@ const picked = (id: string): string => state[id]?.options?.[0] ?? "no pick";
 const approved = manifest.surfaces.filter((s) => picked(s.id) === "approve");
 // Every candidate is there before any moves: a half-moved surface is none of the two.
 const missing = approved.flatMap((s) =>
-  s.entries
-    .map((e) => e.candidate)
-    .filter((candidate) => !existsSync(join(dir, candidate)))
+  [...s.entries.map((e) => e.candidate), ...(s.style ? [s.style] : [])].filter(
+    (candidate) => !existsSync(join(dir, candidate))
+  )
 );
 if (missing.length > 0) {
   console.error(
@@ -85,16 +85,23 @@ if (missing.length > 0) {
 
 let moved = 0;
 for (const s of approved) {
-  for (const e of s.entries) {
-    // `candidates/<the baselines' own path>`: web/<spec>/<entry>.png.
-    const to = join(BASELINES, relative("candidates", e.candidate));
+  // `candidates/<the baselines' own path>`: web/<spec>/<entry>.png, and
+  // style-snapshot/<surface>.json.gz.
+  const files = [
+    ...s.entries.map((e) => e.candidate),
+    ...(s.style ? [s.style] : []),
+  ];
+  for (const file of files) {
+    const to = join(BASELINES, relative("candidates", file));
     // biome-ignore lint/performance/noAwaitInLoops: one baseline at a time
     await mkdir(dirname(to), { recursive: true });
-    await copyFile(join(dir, e.candidate), to);
-    await rm(join(dir, e.candidate));
+    await copyFile(join(dir, file), to);
+    await rm(join(dir, file));
     moved += 1;
   }
-  console.log(`APPROVED ${s.id}: ${s.entries.length} baseline(s) written`);
+  console.log(
+    `APPROVED ${s.id}: ${s.entries.length} picture(s)${s.style ? " and its style snapshot" : ""} written`
+  );
 }
 for (const s of manifest.surfaces) {
   if (picked(s.id) !== "approve") {

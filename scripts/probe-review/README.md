@@ -19,6 +19,11 @@ A capture that differs from its approved baseline FAILs the run. With
 - `<dir>/img/`: per capture, the approved baseline, the new capture and
   pixelmatch's picture of what changed, all cut to the same region with room
   round it, made jpg with ffmpeg (`scale='min(720,iw)':-2`, `-q:v 5`).
+- `<dir>/candidates/style-snapshot/<surface>.json.gz`: each surface's style
+  snapshot as the dashboard reads it now, written by the style snapshot's own
+  approve into the candidate folder:
+  `PROBE_BASELINES=<dir>/candidates bun scripts/probe-kit/run.ts style-snapshot --approve style-snapshot`,
+  then `bun scripts/probe-kit/review.ts <dir>` (the manifest's `style`).
 - `<dir>/changed.json`: the run's record, and `<dir>/manifest.json` from it.
 - `<dir>/index.html`: this page.
 
@@ -50,7 +55,8 @@ Save the page's `artifact_read` answer as JSON, then:
 bun scripts/probe-kit/approve-review.ts <dir> <picks.json>
 ```
 
-Every approved surface's candidates move over the approved baselines; a
+Every approved surface's candidates, its pictures and its style snapshot,
+move over the approved baselines; a
 rejected or unpicked surface is left as it is. A pick on a surface the
 manifest does not hold, or an option other than approve or reject, stops it
 before anything moves. `PROBE_BASELINES=<dir>` writes a scratch copy instead.
