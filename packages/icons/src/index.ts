@@ -1,7 +1,9 @@
 /**
- * Every Solar icon of the dashboard's, by the name the product gives it. The
- * dashboard's icon barrel (apps/dashboard/src/lib/icons.ts) gives them out
- * with its own local glyphs; every consumer imports them from there.
+ * Every product icon of the dashboard's, Solar's, by the name the product
+ * gives it. The dashboard's icon barrel (apps/dashboard/src/lib/icons.ts)
+ * gives them out with its own local glyphs; every consumer imports them from
+ * there (DESIGN.md, The Solar Duotone Rule). The brand marks, no product
+ * icons, are `@cawco/icons/marks` (marks.ts).
  *
  * A package of its own, so the dev server pre-bundles all of them into one
  * module (the dashboard's vite.config.ts `optimizeDeps.include`): Vite
@@ -9,13 +11,18 @@
  * `~icons/…` here is a module of its own otherwise, compiled on request, and
  * a page that loads the barrel asked for every one: a component canvas's
  * cold open sent 150 of them at once.
+ *
+ * Every `~icons/…` module of the repository's is named in this package and
+ * nowhere else (scripts/icon-imports-check.ts).
  */
+// biome-ignore lint/performance/noBarrelFile: the dashboard's icon barrel (lib/icons.ts) re-exports it, every consumer imports from there
+export { default as IconAddCircle } from "~icons/solar/add-circle-bold-duotone";
+export { default as IconAddCircleLine } from "~icons/solar/add-circle-linear";
 /*
  * The session strip's "+", beside the tabs' close X: Solar's bare add in its
  * line-duotone cut, the X's own grammar (24px grid, 1.5 stroke, round caps)
  * with its upright stroke at half ink.
  */
-// biome-ignore lint/performance/noBarrelFile: the icon barrel's Solar half — the dashboard's lib/icons.ts re-exports it
 export { default as IconAddLine } from "~icons/solar/add-line-duotone";
 export { default as IconAlignLeft } from "~icons/solar/align-left-bold-duotone";
 /*
@@ -25,11 +32,14 @@ export { default as IconAlignLeft } from "~icons/solar/align-left-bold-duotone";
  */
 export { default as IconChevronDown } from "~icons/solar/alt-arrow-down-linear";
 export { default as IconChevronLeft } from "~icons/solar/alt-arrow-left-linear";
+export { default as IconChevronRightDuotone } from "~icons/solar/alt-arrow-right-bold-duotone";
 export { default as IconChevronRight } from "~icons/solar/alt-arrow-right-linear";
 export { default as IconChevronUp } from "~icons/solar/alt-arrow-up-linear";
 export { default as IconArchive } from "~icons/solar/archive-down-minimlistic-bold-duotone";
 export { default as IconUnarchive } from "~icons/solar/archive-up-minimlistic-bold-duotone";
+export { default as IconArrowDownDuotone } from "~icons/solar/arrow-down-bold-duotone";
 export { default as IconArrowDown } from "~icons/solar/arrow-down-linear";
+export { default as IconArrowLeft } from "~icons/solar/arrow-left-linear";
 export { default as IconArrowRight } from "~icons/solar/arrow-right-linear";
 /** A link that opens in another tab. */
 export { default as IconArrowUpRight } from "~icons/solar/arrow-right-up-linear";
@@ -41,6 +51,7 @@ export {
   default as IconSkill,
   default as IconToolSkill,
 } from "~icons/solar/bolt-bold-duotone";
+export { default as IconBook2 } from "~icons/solar/book-2-bold-duotone";
 export { default as IconBook } from "~icons/solar/book-bold-duotone";
 export { default as IconBox } from "~icons/solar/box-bold-duotone";
 export { default as IconSubagent } from "~icons/solar/branching-paths-down-bold-duotone";
@@ -71,6 +82,7 @@ export { default as IconClock } from "~icons/solar/clock-circle-bold-duotone";
 export { default as IconError } from "~icons/solar/close-circle-bold-duotone";
 /** A tab closed (its menu's Close). */
 export { default as IconCloseTab } from "~icons/solar/close-square-bold-duotone";
+export { default as IconCloudCross } from "~icons/solar/cloud-cross-bold-duotone";
 export { default as IconToolCode } from "~icons/solar/code-2-bold-duotone";
 export { default as IconFileCode } from "~icons/solar/code-file-bold-duotone";
 export {
@@ -84,6 +96,7 @@ export { default as IconCopy } from "~icons/solar/copy-bold-duotone";
 /** The other tabs closed (its menu's Close others). */
 export { default as IconCloseOthers } from "~icons/solar/copy-close-bold-duotone";
 export { default as IconCpu } from "~icons/solar/cpu-bold-duotone";
+export { default as IconCpuBolt } from "~icons/solar/cpu-bolt-bold-duotone";
 /** A screen tool's row; the preview pane's Interact mode (the page gets the pointer). */
 export {
   default as IconInteract,
@@ -91,14 +104,17 @@ export {
 } from "~icons/solar/cursor-bold-duotone";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
+export { default as IconDatabase } from "~icons/solar/database-bold-duotone";
 // A new thread: a conversation of two. Its full-weight marks are as large as
 // a menu's other glyphs' (an add mark inside a tile read smaller beside them).
 export { default as IconChatAdd } from "~icons/solar/dialog-2-bold-duotone";
+export { default as IconDocumentAlt } from "~icons/solar/document-bold-duotone";
 export {
   default as IconArtifactPage,
   default as IconFileMarkdown,
   default as IconToolRead,
 } from "~icons/solar/document-text-bold-duotone";
+export { default as IconDocuments } from "~icons/solar/documents-bold-duotone";
 export { default as IconDollar } from "~icons/solar/dollar-bold-duotone";
 export { default as IconDownload } from "~icons/solar/download-bold-duotone";
 export { default as IconEye } from "~icons/solar/eye-bold-duotone";
@@ -109,6 +125,8 @@ export { default as IconFilter } from "~icons/solar/filter-bold-duotone";
 export { default as IconFire } from "~icons/solar/fire-bold-duotone";
 export { default as IconFiles } from "~icons/solar/folder-2-bold-duotone";
 export { default as IconFolder } from "~icons/solar/folder-bold-duotone";
+export { default as IconFolderGit } from "~icons/solar/folder-git-bold-duotone";
+export { default as IconFolderOpen } from "~icons/solar/folder-open-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
 export {
@@ -131,12 +149,15 @@ export { default as IconHourglass } from "~icons/solar/hourglass-bold-duotone";
 export { default as IconHandoff } from "~icons/solar/inbox-in-bold-duotone";
 export { default as IconInfo } from "~icons/solar/info-circle-bold-duotone";
 export { default as IconKey } from "~icons/solar/key-bold-duotone";
+export { default as IconLaptopAlt } from "~icons/solar/laptop-bold-duotone";
 export { default as IconLaptop } from "~icons/solar/laptop-minimalistic-bold-duotone";
 export { default as IconLayers } from "~icons/solar/layers-bold-duotone";
+export { default as IconLayersMinimal } from "~icons/solar/layers-minimalistic-bold-duotone";
 export { default as IconLeaf } from "~icons/solar/leaf-bold-duotone";
 /** A connection: Configure › Connections' rail glyph, and a row whose service has no mark. */
 export { default as IconConnection } from "~icons/solar/link-bold-duotone";
 export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duotone";
+export { default as IconListCheck } from "~icons/solar/list-check-bold-duotone";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
 export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
@@ -219,6 +240,8 @@ export { default as IconSplitDown } from "~icons/solar/rows-2-bold-duotone";
 export { default as IconRulerPen } from "~icons/solar/ruler-cross-pen-bold-duotone";
 export { default as IconJev } from "~icons/solar/scale-bold-duotone";
 export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
+export { default as IconServerAlt } from "~icons/solar/server-bold-duotone";
+export { default as IconServerSquare } from "~icons/solar/server-square-bold-duotone";
 export { default as IconSettings } from "~icons/solar/settings-bold-duotone";
 export { default as IconWorkflow } from "~icons/solar/share-circle-bold-duotone";
 export { default as IconShield } from "~icons/solar/shield-bold-duotone";
@@ -243,8 +266,12 @@ export { default as IconStars } from "~icons/solar/stars-bold-duotone";
 export { default as IconStop } from "~icons/solar/stop-bold-duotone";
 /** An install stopped by the person: its status glyph (Add machine). */
 export { default as IconStopped } from "~icons/solar/stop-circle-bold-duotone";
+/** A work tab's Structure toggle, on: the solid cut beside its duotone off. */
+export { default as IconStructureSolid } from "~icons/solar/structure-bold";
+export { default as IconStructure } from "~icons/solar/structure-bold-duotone";
 export { default as IconSun } from "~icons/solar/sun-bold-duotone";
 export { default as IconLab } from "~icons/solar/test-tube-bold-duotone";
+export { default as IconTransfer } from "~icons/solar/transfer-horizontal-bold-duotone";
 export { default as IconTrash } from "~icons/solar/trash-bin-minimalistic-bold-duotone";
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";
 export { default as IconReset } from "~icons/solar/undo-left-bold-duotone";

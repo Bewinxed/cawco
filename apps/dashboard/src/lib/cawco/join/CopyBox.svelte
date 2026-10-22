@@ -16,7 +16,7 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
-  import Documents from "~icons/solar/documents-bold-duotone";
+  import { IconDocuments as Documents } from "#lib/icons.js";
 
   let {
     text,

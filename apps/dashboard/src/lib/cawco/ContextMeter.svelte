@@ -2,8 +2,10 @@
   import type { NeutralStatus } from "@cawco/core";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import IconWindow from "~icons/solar/layers-minimalistic-bold-duotone";
-  import IconCompact from "~icons/solar/magic-stick-3-bold-duotone";
+  import {
+    IconSparkles as IconCompact,
+    IconLayersMinimal as IconWindow,
+  } from "#lib/icons.js";
   /**
    * How full the session's context window is, on the dock where the user is
    * already looking. Quiet until it matters: a thin bar and a percentage at

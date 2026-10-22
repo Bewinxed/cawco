@@ -11,8 +11,10 @@
    */
   import type { PermissionMode } from "@cawco/core";
   import { MachineRow } from "#lib/components/ui/machine-row/index.js";
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Server from "~icons/solar/server-square-bold-duotone";
+  import {
+    IconChevronDown as Down,
+    IconServerSquare as Server,
+  } from "#lib/icons.js";
   import LifetimeChip from "./LifetimeChip.svelte";
   import { machineRowRadius } from "./machine-rows";
   import NsPopover from "./NsPopover.svelte";

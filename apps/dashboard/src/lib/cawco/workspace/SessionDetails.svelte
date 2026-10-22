@@ -12,9 +12,11 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconCheck } from "#lib/icons.js";
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Link from "~icons/solar/link-bold-duotone";
+  import {
+    IconChevronDown as Down,
+    IconCheck,
+    IconConnection as Link,
+  } from "#lib/icons.js";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
   import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";

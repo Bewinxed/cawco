@@ -10,7 +10,7 @@
    * It is an option of the finder's listbox: the field keeps the focus and
    * names this row as its active descendant.
    */
-  import ChevronDown from "~icons/solar/alt-arrow-down-linear";
+  import { IconChevronDown as ChevronDown } from "#lib/icons.js";
   import { age, type Row } from "./find-rows";
 
   let {

@@ -6,10 +6,12 @@
    * and letting it end with its task is a decision worth a look at both
    * options, so the chip opens them rather than flipping on a click.
    */
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Check from "~icons/solar/check-circle-bold-duotone";
-  import Database from "~icons/solar/database-bold-duotone";
-  import Fire from "~icons/solar/fire-bold-duotone";
+  import {
+    IconSuccess as Check,
+    IconDatabase as Database,
+    IconChevronDown as Down,
+    IconFire as Fire,
+  } from "#lib/icons.js";
   import NsPopover from "./NsPopover.svelte";
 
   let {

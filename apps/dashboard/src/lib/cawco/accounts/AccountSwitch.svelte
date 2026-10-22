@@ -3,7 +3,7 @@
     type ChipSize,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
-  import { IconCheck } from "#lib/icons.js";
+  import { IconChevronDown as Down, IconCheck } from "#lib/icons.js";
   /**
    * A session card's account line: the account the session bills, as its dot
    * and name, and — when its machine has another account of its provider
@@ -15,7 +15,6 @@
    * and the account it runs on calls it off. Only while this tab's ask is on
    * its way to the hub does it take no picks.
    */
-  import Down from "~icons/solar/alt-arrow-down-linear";
   import { type BoardRow, cawco } from "../client.svelte";
   import NsPopover from "../spawn/NsPopover.svelte";
   import AccountName from "./AccountName.svelte";

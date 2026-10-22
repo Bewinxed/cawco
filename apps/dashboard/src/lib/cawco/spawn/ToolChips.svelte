@@ -52,9 +52,11 @@
     type ChipSize,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
-  import { IconShield } from "#lib/icons.js";
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Tuning from "~icons/solar/tuning-2-bold-duotone";
+  import {
+    IconChevronDown as Down,
+    IconShield,
+    IconTuning as Tuning,
+  } from "#lib/icons.js";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import EffortPips from "./EffortPips.svelte";
   import NsPopover from "./NsPopover.svelte";

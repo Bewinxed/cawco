@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { LogoClaude as ClaudeIcon } from "@cawco/icons/marks";
   /**
    * The page's lead, as Rings: can you keep going, on which account, what
    * happens when it runs out, and when an account is back. It leads with
@@ -15,7 +16,6 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconKey, IconRefresh } from "#lib/icons.js";
-  import ClaudeIcon from "~icons/logos/claude-icon";
   import AccountName from "../accounts/AccountName.svelte";
   import { cawco, type InstanceRow } from "../client.svelte";
   import OpenCodeLogo from "../OpenCodeLogo.svelte";

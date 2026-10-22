@@ -525,7 +525,8 @@ export default defineConfig(({ command }) => {
        * before (measured on Vite 8.3.4); with it, each icon's `.svelte` is
        * made there and vite-plugin-svelte's optimizer plugin compiles it in.
        */
-      include: ["@cawco/icons"],
+      // The brand marks (`@cawco/icons/marks`) are a module of their own, loaded by what draws one.
+      include: ["@cawco/icons", "@cawco/icons/marks"],
       rolldownOptions: { plugins: [IconsBundled({ compiler: "svelte" })] },
       // svelte-streamdown, svelte-sonner and vaul-svelte are compiled like the
       // app's own components, so their stylesheets pass through

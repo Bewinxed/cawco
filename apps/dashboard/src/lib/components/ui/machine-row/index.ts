@@ -1,8 +1,10 @@
 import type { Component } from "svelte";
-import Cpu from "~icons/solar/cpu-bold-duotone";
-import Laptop from "~icons/solar/laptop-bold-duotone";
-import Monitor from "~icons/solar/monitor-bold-duotone";
-import Server from "~icons/solar/server-square-bold-duotone";
+import {
+  IconCpu as Cpu,
+  IconLaptopAlt as Laptop,
+  IconMonitor as Monitor,
+  IconServerSquare as Server,
+} from "#lib/icons.js";
 
 // biome-ignore lint/performance/noBarrelFile: public entry point for the machine row, consumed under the shadcn-svelte convention
 export { default as MachineRow } from "./machine-row.svelte";

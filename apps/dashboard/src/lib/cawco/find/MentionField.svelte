@@ -41,9 +41,11 @@
   import { type Component, mount, unmount, untrack } from "svelte";
   import type { ClassValue, HTMLAttributes } from "svelte/elements";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import {
+    IconPauseCircle as Idle,
+    IconServerAlt as Machine,
+  } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import Idle from "~icons/solar/pause-circle-bold-duotone";
-  import Machine from "~icons/solar/server-bold-duotone";
   import { copyChips } from "../chip-copy";
   import { CURVE, dur, motionOk } from "../motion/curves.svelte.js";
   import SkillChip from "../SkillChip.svelte";

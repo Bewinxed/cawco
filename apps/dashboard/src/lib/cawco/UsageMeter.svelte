@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { LogoClaude as ClaudeIcon } from "@cawco/icons/marks";
   /**
    * The usage strip, in the rail's footer and, always, under the phone
    * home's status line, drawn as Rings (the owner's double dial): a cell for
@@ -34,7 +35,6 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconKey, IconRefresh, IconSubagents } from "#lib/icons.js";
-  import ClaudeIcon from "~icons/logos/claude-icon";
   import { cawco } from "./client.svelte";
   import { dur, motionOk } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";

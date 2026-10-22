@@ -11,7 +11,7 @@
    * says its restart, and a refusal, in that session's feedback line, as
    * any pick does.
    */
-  import Check from "~icons/solar/check-circle-bold-duotone";
+  import { IconSuccess as Check } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { fullSendCopy } from "../permission-modes";

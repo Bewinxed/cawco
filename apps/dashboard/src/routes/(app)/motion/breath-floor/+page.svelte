@@ -15,8 +15,7 @@
   import PlanTree, { type PlanNode } from "#lib/cawco/plan/PlanTree.svelte";
   import CatchUp from "#lib/cawco/transcript/CatchUp.svelte";
   import SessionStatus from "#lib/cawco/workspace/SessionStatus.svelte";
-  import { IconToolGeneric } from "#lib/icons.js";
-  import Working from "~icons/solar/refresh-circle-bold-duotone";
+  import { IconToolGeneric, IconRenew as Working } from "#lib/icons.js";
 
   const SURFACES = [
     "surface-page",

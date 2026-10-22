@@ -12,25 +12,27 @@
  */
 import type { ArtifactKind } from "@cawco/core";
 import type { Component } from "svelte";
-import Routine from "~icons/solar/calendar-bold-duotone";
-import Task from "~icons/solar/checklist-minimalistic-bold-duotone";
-import Failed from "~icons/solar/close-circle-bold-duotone";
-import File from "~icons/solar/code-file-bold-duotone";
-import Commit from "~icons/solar/code-square-bold-duotone";
-import Report from "~icons/solar/document-bold-duotone";
-import Page from "~icons/solar/document-text-bold-duotone";
-import Project from "~icons/solar/folder-bold-duotone";
-import Browser from "~icons/solar/global-bold-duotone";
-import NeedsYou from "~icons/solar/hand-shake-bold-duotone";
-import Decision from "~icons/solar/list-check-bold-duotone";
-import Sleeping from "~icons/solar/moon-sleep-bold-duotone";
-import Idle from "~icons/solar/pause-circle-bold-duotone";
-import Canvas from "~icons/solar/pen-new-square-bold-duotone";
-import Unreachable from "~icons/solar/question-circle-bold-duotone";
-import Working from "~icons/solar/refresh-circle-bold-duotone";
-import Machine from "~icons/solar/server-bold-duotone";
-import Sheet from "~icons/solar/widget-4-bold-duotone";
-import Preview from "~icons/solar/window-frame-bold-duotone";
+import {
+  IconGlobe as Browser,
+  IconResult as Canvas,
+  IconTerminal as Commit,
+  IconListCheck as Decision,
+  IconError as Failed,
+  IconFileCode as File,
+  IconPauseCircle as Idle,
+  IconServerAlt as Machine,
+  IconNeedsYou as NeedsYou,
+  IconArtifactPage as Page,
+  IconWindow as Preview,
+  IconFolder as Project,
+  IconDocumentAlt as Report,
+  IconCalendar as Routine,
+  IconArtifactSheet as Sheet,
+  IconMoonSleep as Sleeping,
+  IconTaskList as Task,
+  IconAsk as Unreachable,
+  IconRenew as Working,
+} from "#lib/icons.js";
 import type {
   FindArtifact,
   FindChange,

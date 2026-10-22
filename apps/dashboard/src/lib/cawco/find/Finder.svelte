@@ -27,11 +27,13 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconClose } from "#lib/icons.js";
-  import ChevronLeft from "~icons/solar/alt-arrow-left-linear";
-  import ChevronRight from "~icons/solar/alt-arrow-right-linear";
-  import NeedsYou from "~icons/solar/hand-shake-bold-duotone";
-  import Server from "~icons/solar/server-bold-duotone";
+  import {
+    IconChevronLeft as ChevronLeft,
+    IconChevronRight as ChevronRight,
+    IconClose,
+    IconNeedsYou as NeedsYou,
+    IconServerAlt as Server,
+  } from "#lib/icons.js";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import Segmented from "../spawn/Segmented.svelte";

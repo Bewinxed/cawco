@@ -53,17 +53,17 @@
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
+    IconBolt as Bolt,
+    IconBook2 as Book,
+    IconTranscript as Chat,
+    IconToolFiles as Files,
     IconChevronLeft,
     IconKey,
     IconShield,
+    IconStars as Stars,
     IconClose as X,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import Bolt from "~icons/solar/bolt-bold-duotone";
-  import Book from "~icons/solar/book-2-bold-duotone";
-  import Chat from "~icons/solar/chat-round-line-bold-duotone";
-  import Files from "~icons/solar/folder-with-files-bold-duotone";
-  import Stars from "~icons/solar/stars-bold-duotone";
   import {
     answeredOr,
     cawco,

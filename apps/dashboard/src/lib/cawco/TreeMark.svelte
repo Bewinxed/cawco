@@ -46,7 +46,7 @@
    */
   import type { Snippet } from "svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import ChevronIcon from "~icons/solar/alt-arrow-right-bold-duotone";
+  import { IconChevronRightDuotone as ChevronIcon } from "#lib/icons.js";
 
   let {
     count = 0,

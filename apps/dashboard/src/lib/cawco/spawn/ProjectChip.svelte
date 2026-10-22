@@ -4,12 +4,14 @@
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
-  import Add from "~icons/solar/add-circle-bold-duotone";
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Check from "~icons/solar/check-circle-bold-duotone";
-  import Clear from "~icons/solar/close-square-bold-duotone";
-  import Folder from "~icons/solar/folder-bold-duotone";
-  import Files from "~icons/solar/folder-with-files-bold-duotone";
+  import {
+    IconAddCircle as Add,
+    IconSuccess as Check,
+    IconCloseTab as Clear,
+    IconChevronDown as Down,
+    IconToolFiles as Files,
+    IconFolder as Folder,
+  } from "#lib/icons.js";
   import NsPopover from "./NsPopover.svelte";
   import type { ProjectItem } from "./ns-types";
 

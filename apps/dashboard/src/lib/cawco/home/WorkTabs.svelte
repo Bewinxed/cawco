@@ -60,11 +60,14 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconArchive, IconPlus } from "#lib/icons.js";
+  import {
+    IconArchive,
+    IconPlus,
+    IconStructure as Structure,
+    IconStructureSolid as StructureOn,
+  } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import StructureOn from "~icons/solar/structure-bold";
-  import Structure from "~icons/solar/structure-bold-duotone";
   import { type BoardRow, cawco, isFailed } from "../client.svelte";
   import { conversationHref } from "../links";
   import { nestFrom } from "../motion/branch.svelte";

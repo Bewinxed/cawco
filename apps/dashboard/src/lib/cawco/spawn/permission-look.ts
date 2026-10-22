@@ -1,10 +1,12 @@
 import type { HarnessKind, PermissionMode } from "@cawco/core";
 import type { Component } from "svelte";
-import { IconShield } from "#lib/icons.js";
-import Danger from "~icons/solar/danger-triangle-bold-duotone";
-import Notes from "~icons/solar/notes-bold-duotone";
-import Pen from "~icons/solar/pen-new-square-bold-duotone";
-import Shield from "~icons/solar/shield-check-bold-duotone";
+import {
+  IconWarningTriangle as Danger,
+  IconShield,
+  IconFileLog as Notes,
+  IconResult as Pen,
+  IconRules as Shield,
+} from "#lib/icons.js";
 import {
   permissionModeDescription,
   permissionModeLabel,

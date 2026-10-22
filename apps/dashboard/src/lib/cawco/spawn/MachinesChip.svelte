@@ -12,10 +12,12 @@
    * cancels pairing (design L237); a machine checking in ends it, and its row
    * is then in the list.
    */
-  import Add from "~icons/solar/add-circle-linear";
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Check from "~icons/solar/check-circle-bold-duotone";
-  import Server from "~icons/solar/server-square-bold-duotone";
+  import {
+    IconAddCircleLine as Add,
+    IconSuccess as Check,
+    IconChevronDown as Down,
+    IconServerSquare as Server,
+  } from "#lib/icons.js";
   import CheckInStatus from "../join/CheckInStatus.svelte";
   import CopyBox from "../join/CopyBox.svelte";
   import { CheckIn, installCommand, joinInfo } from "../join/join.svelte";

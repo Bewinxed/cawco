@@ -50,12 +50,14 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import {
+    IconNeedsYou as Attention,
+    IconCloudCross as Away,
+    IconError as Failed,
+    IconPauseCircle as Pause,
+    IconRenew as Working,
+  } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import Failed from "~icons/solar/close-circle-bold-duotone";
-  import Away from "~icons/solar/cloud-cross-bold-duotone";
-  import Attention from "~icons/solar/hand-shake-bold-duotone";
-  import Pause from "~icons/solar/pause-circle-bold-duotone";
-  import Working from "~icons/solar/refresh-circle-bold-duotone";
   import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { cawco } from "./client.svelte";
   import { frameObserver } from "./frame-observer";
