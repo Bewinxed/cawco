@@ -49,6 +49,7 @@ import { createHash } from "node:crypto";
 import {
   AWAY_AFTER_MS,
   DEVICE_TTL_MS,
+  type DeskAck,
   type DismissVia,
   MACHINE_TTL_MS,
   type MachineActivity,
@@ -367,6 +368,7 @@ export const createNotifications = ({
   /** Clients whose lapse was said: a lapsed client stays, unknown, its last input counting. */
   const lapsed = new Set<string>();
   const personListeners: PersonListener[] = [];
+  const ackListeners: ((ack: DeskAck) => void)[] = [];
 
   /** Every device's facts, as the rollup reads them: each client, and each machine the person opted in. */
   const facts = (): DeviceFacts[] => {
@@ -678,6 +680,29 @@ export const createNotifications = ({
       return best?.[0];
     },
 
+    /**
+     * A tab that did not answer a desk alert, or refused it: it is no longer
+     * an alert target until it beats again saying it can show one.
+     */
+    dropDeskTab(clientId: string): void {
+      const client = clients.get(clientId);
+      if (client?.alerts) {
+        clients.set(clientId, { ...client, alerts: false });
+      }
+    },
+
+    /** A tab's answer to a desk alert it was named for; the push outlet hears it. */
+    deskAck(ack: DeskAck): void {
+      for (const listener of ackListeners) {
+        listener(ack);
+      }
+    },
+
+    /** The push outlet hears every tab's answer to a desk alert. */
+    onDeskAck(listener: (ack: DeskAck) => void): void {
+      ackListeners.push(listener);
+    },
+
     /** An outlet hears the person change: here, on another chat, or away. */
     onPerson(listener: PersonListener): void {
       personListeners.push(listener);
@@ -791,6 +816,24 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
       },
       ({ body }) => {
         notifications.presence(body);
+        return { ok: true };
+      }
+    )
+    .post(
+      "/api/presence/desk-ack",
+      {
+        body: t.Object({
+          clientId: t.String({ minLength: 1, maxLength: 200 }),
+          collapseId: t.String({ minLength: 1, maxLength: 64 }),
+          how: t.Union([
+            t.Literal("notification"),
+            t.Literal("page"),
+            t.Literal("refused"),
+          ]),
+        }),
+      },
+      ({ body }) => {
+        notifications.deskAck(body);
         return { ok: true };
       }
     )

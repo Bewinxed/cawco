@@ -7882,6 +7882,68 @@
         }
       }
     },
+    "/api/presence/desk-ack": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "collapseId": {
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "type": "string"
+                  },
+                  "how": {
+                    "type": "string",
+                    "enum": [
+                      "notification",
+                      "page",
+                      "refused"
+                    ]
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "collapseId",
+                  "how"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiPresenceDeskAck",
+        "responses": {
+          "200": {
+            "description": "postApiPresenceDeskAck 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiPresenceDeskAck200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiPresenceDeskAck 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/person": {
       "get": {
         "operationId": "getApiPerson",
@@ -27973,6 +28035,17 @@
         ]
       },
       "postApiPresence200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiPresenceDeskAck200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -59884,7 +59957,7 @@
         ]
       },
       "DeskAlertFrame": {
-        "description": "The socket frame that shows something that needs the person on the\ndesk they are at, in place of a phone push (hub push.ts): the tab named\n`to` shows it as a desktop notification. Its words are the real ones:\nit never leaves the person's network.",
+        "description": "The socket frame that shows something that needs the person on the\ndesk they are at, in place of a phone push (hub push.ts): the tab named\n`to` shows it as a desktop notification, and answers with a\n{@link DeskAck}. Its words are the real ones: it never leaves the\nperson's network.",
         "type": "object",
         "properties": {
           "body": {

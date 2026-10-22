@@ -54,7 +54,12 @@
  *   most {@link HELD_RECENT_MS} before their last input goes to the phone as
  *   it would have; an older one waits on the board (the owner's pick: "only
  *   items from the last 10 min"). The device in use being the phone, or no
- *   desk tab able to show it, the push goes as before. Every visible push carries the
+ *   desk tab able to show it, the push goes as before. The tab answers each
+ *   desk alert (`POST /api/presence/desk-ack`); one silent for
+ *   {@link DESK_ACK_MS} or unable to show it is no longer an alert target,
+ *   and the item goes on: to the next tab that can show it, else to the
+ *   phone while it is under {@link HELD_RECENT_MS} old.
+ *   Every visible push carries the
  *   last day's cleared collapse ids (`cawco.cleared`), and each clear queues
  *   one background push per device, at most one per device every
  *   {@link BACKGROUND_GAP_MS}, carrying the whole set: APNs keeps only the
@@ -68,6 +73,7 @@ import {
   causeLine,
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
+  DESK_ACK_MS,
   type DeskAlertFrame,
   type Envelope,
   type FleetWatchNotice,
@@ -823,6 +829,8 @@ export const createPush = ({
   const backgroundAt = new Map<string, number>();
   /** By pairing: the background push waiting out its gap. */
   const queued = new Map<string, HubTimer>();
+  /** Installs whose outcome the person acted on: their item no longer needs them. */
+  const settledInstalls = new Set<string>();
 
   /** Records what Cawrier said for a device: taken, pairing gone (the device goes) or refused. */
   const settle = (
@@ -1005,7 +1013,7 @@ export const createPush = ({
   const answered = (requestId: string): void => {
     const id = askCollapseId(requestId);
     open?.items.delete(id);
-    atDesk.delete(id);
+    settleAtDesk(id);
     const [shownId, cover] =
       [...covers].find(([, one]) => one.burst.lead === id) ?? [];
     if (!(shownId && cover)) {
@@ -1122,22 +1130,108 @@ export const createPush = ({
       }
       burst.items.delete(id);
       atDesk.set(id, item);
-      const { sealed } = item.notification;
-      desk({
-        kind: "desk_alert",
-        to: tab,
-        collapseId: id,
-        title: sealed.title,
-        body: sealed.subtitle
-          ? `${sealed.subtitle} · ${sealed.body}`
-          : sealed.body,
-        session: item.instanceId,
-      });
+      alertDesk(tab, item);
       console.log(
         `[notify] push ${id}: held, the person is at a desk; shown on tab ${tab.slice(0, 8)}`
       );
     }
     return going;
+  };
+
+  /** Each desk alert waiting on its tab's answer, by collapse id: the tab, and the deadline's timer. */
+  const unanswered = new Map<string, { tab: string; timer: HubTimer }>();
+
+  /**
+   * Shows a held item on `tab` and waits {@link DESK_ACK_MS} for its answer:
+   * a tab that says nothing is gone, and the item goes on ({@link deskOn}).
+   */
+  const alertDesk = (tab: string, item: Arrival): void => {
+    const id = idOf(item);
+    const { sealed } = item.notification;
+    lifetime.cancel(unanswered.get(id)?.timer);
+    unanswered.set(id, {
+      tab,
+      timer: lifetime.after(DESK_ACK_MS, () => {
+        unanswered.delete(id);
+        console.log(
+          `[notify] push ${id}: tab ${tab.slice(0, 8)} did not answer its desk alert in ${DESK_ACK_MS / 1000} s; it is no longer an alert target`
+        );
+        notifications.dropDeskTab(tab);
+        deskOn(id);
+      }),
+    });
+    desk({
+      kind: "desk_alert",
+      to: tab,
+      collapseId: id,
+      title: sealed.title,
+      body: sealed.subtitle
+        ? `${sealed.subtitle} · ${sealed.body}`
+        : sealed.body,
+      session: item.instanceId,
+    });
+  };
+
+  /**
+   * A held item whose tab is gone or refused it, sent to the next place: the
+   * next tab that can show it, while the person is still at the desk; else
+   * the phone, as long as it landed within {@link HELD_RECENT_MS}; else it
+   * waits on the board.
+   */
+  const deskOn = (id: string): void => {
+    const item = atDesk.get(id);
+    if (!item) {
+      return;
+    }
+    const person = notifications.person();
+    const tab =
+      person.state === "here" && person.inUse?.kind !== "ios"
+        ? notifications.deskTab()
+        : undefined;
+    if (tab) {
+      console.log(
+        `[notify] push ${id}: shown on tab ${tab.slice(0, 8)} instead`
+      );
+      alertDesk(tab, item);
+      return;
+    }
+    atDesk.delete(id);
+    const age = Date.now() - item.landedAt.getTime();
+    if (age > HELD_RECENT_MS) {
+      console.log(
+        `[notify] push ${id}: no tab can show it and it landed ${(age / 60_000).toFixed(1)} min ago; it waits on the board`
+      );
+      return;
+    }
+    console.log(
+      `[notify] push ${id}: no tab at the desk can show it, so it goes to the phone`
+    );
+    arrive(item, false);
+  };
+
+  /** A tab's answer: taken, or refused (it can't show one), which sends the item on at once. */
+  notifications.onDeskAck(({ clientId, collapseId, how }) => {
+    const waiting = unanswered.get(collapseId);
+    if (waiting?.tab !== clientId) {
+      return;
+    }
+    lifetime.cancel(waiting.timer);
+    unanswered.delete(collapseId);
+    if (how !== "refused") {
+      return;
+    }
+    console.log(
+      `[notify] push ${collapseId}: tab ${clientId.slice(0, 8)} can't show a desktop notification; it is no longer an alert target`
+    );
+    notifications.dropDeskTab(clientId);
+    deskOn(collapseId);
+  });
+
+  /** A held item that is over: its tab's answer is no longer waited on. */
+  const settleAtDesk = (id: string): void => {
+    atDesk.delete(id);
+    lifetime.cancel(unanswered.get(id)?.timer);
+    unanswered.delete(id);
   };
 
   /**
@@ -1148,7 +1242,7 @@ export const createPush = ({
   const releaseFromDesk = (lastInputAt: number): void => {
     const floor = lastInputAt - HELD_RECENT_MS;
     for (const [id, item] of atDesk) {
-      atDesk.delete(id);
+      settleAtDesk(id);
       const landed = item.landedAt.getTime();
       if (landed < floor) {
         console.log(
@@ -1171,7 +1265,7 @@ export const createPush = ({
 
   notifications.onCleared((ids) => {
     for (const id of ids) {
-      atDesk.delete(id);
+      settleAtDesk(id);
     }
   });
 
@@ -1973,28 +2067,43 @@ export const createPush = ({
     /**
      * An install of a machine ended while nobody may be watching (installs.ts):
      * its outcome in its band row's own line (core install.ts `causeLine`:
-     * where it failed and why), the machine as the title. The person's act on
-     * the outcome takes it down ({@link installSettled}).
+     * where it failed and why), the machine as the title. It arrives as any
+     * item does, so the burst and the person gate decide where it goes (the
+     * owner: "the notification primitive is who decides where the
+     * notification goes based on activity and presence"). The person's act
+     * on the outcome makes it over and takes it down ({@link installSettled}).
      */
     install(install: Install): void {
       const collapseId = installCollapseId(install.id);
       const alert = alertOf(installName(install), null, causeLine(install));
+      settledInstalls.delete(install.id);
       console.log(
-        `[push] install ${install.id} ${install.state}: sent as ${collapseId}`
+        `[push] install ${install.id} ${install.state}: arrives as ${collapseId}`
       );
-      replace({
-        shown: alert,
-        sealed: alert,
-        category: PUSH_CATEGORIES.needs,
-        collapseId,
-        threadId: "install",
-        data: { kind: "install", installId: install.id },
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: new Date(),
+        // Acted on before its burst went out, or while held at a desk: over.
+        still: () => !settledInstalls.has(install.id),
+        notification: {
+          shown: alert,
+          sealed: alert,
+          category: PUSH_CATEGORIES.needs,
+          collapseId,
+          threadId: "install",
+          data: { kind: "install", installId: install.id },
+        },
       });
     },
 
-    /** The person acted on that install's outcome, here or anywhere: its push comes down. */
+    /** The person acted on that install's outcome, here or anywhere: it is over, and its push comes down. */
     installSettled(id: string): void {
-      notifications.clear([installCollapseId(id)], "settled");
+      settledInstalls.add(id);
+      const collapseId = installCollapseId(id);
+      open?.items.delete(collapseId);
+      settleAtDesk(collapseId);
+      notifications.clear([collapseId], "settled");
     },
 
     /** That pairing was answered, here or anywhere, or expired: its push comes down. */

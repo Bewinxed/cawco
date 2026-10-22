@@ -1009,6 +1009,8 @@ const holdLegs = async (
   );
   await fleet.api("/api/person/away", { on: false });
 
+  await installLeg(kit, fleet, phone, page);
+
   // One held, then the person stays at the desk past the hold's window.
   const old = await fleet.spawn("claude", "Hold old", cwd);
   await fleet.send(old, "PROBE-HOLD-OLD: say ok.");
@@ -1062,7 +1064,190 @@ const holdLegs = async (
     `old ${oldSent}, fresh ${freshSent}; hub: ${said.join(" | ")}`
   );
   await fleet.api("/api/person/away", { on: false });
+  await goneTabLegs(kit, fleet, phone, page, cwd);
+};
+
+/** A port nothing listens on: an SSH install there is refused at once. */
+const closedPort = async (): Promise<number> => {
+  const lease = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(null),
+  });
+  const port = lease.port as number;
+  await lease.stop(true);
+  return port;
+};
+
+/** (hold) An install's outcome goes where any item goes: held at the desk, sent on Appear away. */
+const installLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  phone: Phone,
+  page: import("playwright-core").Page
+): Promise<void> => {
+  const then = await fleet.logMark("hub");
+  const started = await fleet.api<{ install: { id: string } }>(
+    "/api/installs",
+    {
+      route: "ssh",
+      target: "probe@127.0.0.1",
+      port: await closedPort(),
+      signIn: "key",
+    }
+  );
+  const { id } = started.install;
+  const collapseId = `install-${id}`;
+  const held = await until(
+    "(install) its outcome held at the desk",
+    async () => (await then.since()).split("\n"),
+    (lines) =>
+      lines.some((line) =>
+        line.includes(`push ${collapseId}: held, the person is at a desk`)
+      ),
+    90_000
+  ).catch(() => [] as string[]);
+  await Bun.sleep(3000);
+  const shown = await shownOn(page);
+  kit.check(
+    "(hold) an install's outcome goes through the person gate: held at the desk and shown on its tab, not on the phone",
+    shown.some((one) => one.tag === collapseId) &&
+      phone.installAlerts(id).length === 0,
+    `tab showed ${JSON.stringify(shown.filter((one) => one.tag === collapseId))}; phone ${phone.installAlerts(id).length}; hub: ${held.filter((line) => line.includes(id)).join(" | ")}`
+  );
+  await fleet.api("/api/person/away", { on: true });
+  const sent = await until(
+    "(install) its push on the phone after Appear away",
+    () => phone.installAlerts(id).length,
+    (count) => count > 0,
+    60_000
+  ).catch(() => 0);
+  kit.check(
+    "(hold) Appear away: the install's outcome held at the desk goes to the phone",
+    sent === 1,
+    `${sent} push(es) for ${collapseId}: ${JSON.stringify(phone.installAlerts(id))}`
+  );
+  await fleet.api("/api/person/away", { on: false });
+  await fetch(`${fleet.base}/api/installs/${id}`, { method: "DELETE" });
+};
+
+/** A desk tab in a browser of its own, which the leg kills without its last beacon; its presence id. */
+const doomedTab = async (
+  kit: Kit,
+  base: string,
+  name: string
+): Promise<{ id: string; kill: () => Promise<void> }> => {
+  const doomed = await kit.page("desk", {
+    engine: "chromium",
+    browser: name,
+    init: [notificationsGranted, notificationStandIn, elsewhereOnTheDesk],
+  });
+  await open(doomed, base, "[data-needs-caw]");
+  await settle(doomed, 1500);
+  const id =
+    (await doomed.evaluate(() =>
+      sessionStorage.getItem("cawco-presence-client")
+    )) ?? "?";
+  return {
+    id,
+    // The whole browser, at once (DevTools' Browser.crash): no pagehide
+    // runs, so no last beacon (measured: 0 beacons, the page closed, no
+    // renderer crash). Its send never settles: the browser is gone.
+    kill: async () => {
+      const browser = doomed.context().browser();
+      const cdp = await browser?.newBrowserCDPSession();
+      cdp?.send("Browser.crash").catch(() => undefined);
+      await Bun.sleep(1000);
+    },
+  };
+};
+
+/** A finished turn in a new session, at rest: its id. */
+const turnEnds = async (
+  fleet: KitFleet,
+  cwd: string,
+  words: string
+): Promise<string> => {
+  const id = await fleet.spawn("claude", words, cwd);
+  await fleet.send(id, `${words}: say ok.`);
+  await turnOf(fleet, words, "claude");
+  await atRest(fleet, id);
+  return id;
+};
+
+/**
+ * (gone) A desk tab killed without its last beacon: its desk alert goes
+ * unanswered, so the item goes on to another live tab, and with none left,
+ * to the phone.
+ */
+const goneTabLegs = async (
+  kit: Kit,
+  fleet: KitFleet,
+  phone: Phone,
+  page: import("playwright-core").Page,
+  cwd: string
+): Promise<void> => {
+  const base = await fleet.dashboard();
+  const live = (
+    (await page.evaluate(() =>
+      sessionStorage.getItem("cawco-presence-client")
+    )) ?? "?"
+  ).slice(0, 8);
+  const first = await doomedTab(kit, base, "doomed-one");
+  await first.kill();
+  const then = await fleet.logMark("hub");
+  const one = await turnEnds(fleet, cwd, "PROBE-GONE-1");
+  const moved = await until(
+    "(gone) the item on the live tab",
+    async () => (await then.since()).split("\n"),
+    (lines) =>
+      lines.some((line) =>
+        line.includes(`push turn-${one}: shown on tab ${live} instead`)
+      ),
+    90_000
+  ).catch(() => [] as string[]);
+  await Bun.sleep(2000);
+  const shown = await shownOn(page);
+  kit.check(
+    "(gone) a desk tab killed without its last beacon doesn't answer, so its alert goes to the next live tab",
+    moved.some((line) =>
+      line.includes(
+        `push turn-${one}: tab ${first.id.slice(0, 8)} did not answer its desk alert`
+      )
+    ) &&
+      shown.some((item) => item.tag === `turn-${one}`) &&
+      (await phone.turns(one)) === 0,
+    `phone ${await phone.turns(one)}; hub: ${moved.filter((line) => line.includes(one)).join(" | ")}`
+  );
+
+  // No live tab left: the item goes to the phone.
   await page.context().close();
+  const second = await doomedTab(kit, base, "doomed-two");
+  await second.kill();
+  const later = await fleet.logMark("hub");
+  const two = await turnEnds(fleet, cwd, "PROBE-GONE-2");
+  const pushed = await until(
+    "(gone) the item on the phone",
+    () => phone.turns(two),
+    (count) => count > 0,
+    90_000
+  ).catch(() => 0);
+  const said = (await later.since())
+    .split("\n")
+    .filter((line) => line.includes(`turn-${two}`));
+  kit.check(
+    "(gone) with no live tab left, the alert to the killed tab goes unanswered and the item still reaches the phone",
+    pushed === 1 &&
+      said.some((line) =>
+        line.includes(
+          `tab ${second.id.slice(0, 8)} did not answer its desk alert`
+        )
+      ) &&
+      said.some((line) =>
+        line.includes("no tab at the desk can show it, so it goes to the phone")
+      ),
+    `phone ${pushed}; hub: ${said.join(" | ")}`
+  );
 };
 
 const spec: Spec = {

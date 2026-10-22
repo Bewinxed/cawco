@@ -95,6 +95,28 @@ export const AWAY_AFTER_MS = 10 * 60_000;
  * (the owner's pick: "only items from the last 10 min").
  */
 export const HELD_RECENT_MS = 10 * 60_000;
+/**
+ * How long the tab a desk alert went to has to answer it: a tab that says
+ * nothing in this time is gone (closed without its last beacon, its
+ * machine asleep), is no longer an alert target, and the item goes on to
+ * the next place. Our call: a live tab's socket hears a frame within
+ * milliseconds, hidden or not.
+ */
+export const DESK_ACK_MS = 5000;
+
+/**
+ * How a tab took a desk alert (`POST /api/presence/desk-ack`): shown as a
+ * desktop notification, seen in the page itself (the person is on the
+ * tab), or refused (this browser may not show one).
+ */
+export type DeskAckHow = "notification" | "page" | "refused";
+
+/** A tab's answer to a desk alert it was named for. */
+export interface DeskAck {
+  readonly clientId: string;
+  readonly collapseId: string;
+  readonly how: DeskAckHow;
+}
 
 /** One device as the person's presence menu lists it: a machine whose agent reads its desktop. */
 export interface PresenceDevice {
@@ -140,8 +162,9 @@ export interface PersonFrame {
 /**
  * The socket frame that shows something that needs the person on the
  * desk they are at, in place of a phone push (hub push.ts): the tab named
- * `to` shows it as a desktop notification. Its words are the real ones:
- * it never leaves the person's network.
+ * `to` shows it as a desktop notification, and answers with a
+ * {@link DeskAck}. Its words are the real ones: it never leaves the
+ * person's network.
  */
 export interface DeskAlertFrame {
   body: string;

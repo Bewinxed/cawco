@@ -8,10 +8,12 @@
  *   hub, and the view changes when it answers (its `person` frame, or the
  *   answer itself), so a reload or another screen shows the same.
  * - A desk alert (`desk_alert`) names one tab, the one the person uses: that
- *   tab shows it as a desktop notification, the item's real words, and a
- *   click opens the session it is about.
+ *   tab shows it as a desktop notification, the item's real words, a click
+ *   opening the session it is about, and answers the hub it did.
  */
 import {
+  type DeskAck,
+  type DeskAckHow,
   type DeskAlertFrame,
   type PersonView,
   presenceWords,
@@ -178,28 +180,51 @@ export const asksHere = (): boolean => {
   return permissions.idle === "prompt" || permissions.notify === "default";
 };
 
+/** This tab's answer to a desk alert it was named for: the hub sends the item on when none comes. */
+const answerDesk = (collapseId: string, how: DeskAckHow): void => {
+  const ack: DeskAck = { clientId: presenceClientId(), collapseId, how };
+  fetch("/api/presence/desk-ack", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(ack),
+    keepalive: true,
+  }).catch((error: unknown) => {
+    // Unanswered, the hub sends it to the next place itself.
+    console.warn("[cawco] desk alert not answered:", error);
+  });
+};
+
 /**
  * A desk alert for this tab: shown as a desktop notification while this
  * browser allows them and the person is not on this tab (visible and
  * focused, its Needs you already shows it), the hub's words as they are; a
- * click brings the tab forward at the session it is about.
+ * click brings the tab forward at the session it is about. Each is
+ * answered: shown, seen in the page, or refused when this browser may not
+ * show one, so the hub sends it to the next place.
  */
 export function showDeskAlert(
   frame: DeskAlertFrame,
   index: InstanceIndex
 ): void {
+  if (frame.to !== presenceClientId()) {
+    return;
+  }
   if (
-    frame.to !== presenceClientId() ||
     typeof Notification === "undefined" ||
-    Notification.permission !== "granted" ||
-    (document.visibilityState === "visible" && document.hasFocus())
+    Notification.permission !== "granted"
   ) {
+    answerDesk(frame.collapseId, "refused");
+    return;
+  }
+  if (document.visibilityState === "visible" && document.hasFocus()) {
+    answerDesk(frame.collapseId, "page");
     return;
   }
   const shown = new Notification(frame.title, {
     body: frame.body,
     tag: frame.collapseId,
   });
+  answerDesk(frame.collapseId, "notification");
   shown.onclick = () => {
     window.focus();
     shown.close();
