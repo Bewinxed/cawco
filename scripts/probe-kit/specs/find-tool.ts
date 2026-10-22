@@ -216,7 +216,9 @@ const standUp = async (kit: Kit) => {
       await fetch(
         `${fleet.base}/api/find?${new URLSearchParams({ q, limit: "50" })}`
       )
-    ).json()) as { results: { id: string; kind: string }[] };
+    ).json()) as {
+      results: { id: string; kind: string; moments?: unknown[] }[];
+    };
   return { fleet, mine, other, session, tool, find, engine };
 };
 
@@ -568,12 +570,21 @@ const talkOnce = async (probe: Probe, title: string, words: string) => {
   return talker;
 };
 
-/** Whether the engine (the dashboard's Find) holds `id` for `q` yet: the machine's index read its words. */
+/**
+ * Whether the engine (the dashboard's Find) holds `id` for `q` by a moment
+ * of its transcript yet: the machine's index read its words. A hit by the
+ * session's title alone ("Narwhal box" for "narwhal") is not enough: it
+ * comes before the turn is indexed, and the leg's own query then finds
+ * nothing.
+ */
 const indexed = (probe: Probe, q: string, id: string, what: string) =>
   until(
     what,
     () => probe.engine(q),
-    (answer) => answer.results.some((result) => result.id === id),
+    (answer) =>
+      answer.results.some(
+        (result) => result.id === id && (result.moments?.length ?? 0) > 0
+      ),
     120_000
   ).catch(() => undefined);
 
