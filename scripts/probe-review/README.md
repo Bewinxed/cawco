@@ -18,7 +18,7 @@ A capture that differs from its approved baseline FAILs the run. With
   approved set is not touched.
 - `<dir>/img/`: per capture, the approved baseline, the new capture and
   pixelmatch's picture of what changed, all cut to the same region with room
-  round it, made jpg with ffmpeg (`scale='min(1024,iw)':-2`, `-q:v 3`).
+  round it, made jpg with ffmpeg (`scale='min(720,iw)':-2`, `-q:v 5`).
 - `<dir>/changed.json`: the run's record, and `<dir>/manifest.json` from it.
 - `<dir>/index.html`: this page.
 

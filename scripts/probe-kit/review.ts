@@ -88,7 +88,11 @@ const words = (slug: string): string => {
   return said.charAt(0).toUpperCase() + said.slice(1);
 };
 
-/** `png` cut to `box`, made a phone-sized jpg at `to` with ffmpeg. */
+/**
+ * `png` cut to `box`, made a phone-sized jpg at `to` with ffmpeg: 720 px wide
+ * at most, `-q:v 5`, so a whole run's page (some 2,600 pictures) stays near
+ * 100 MB in the repo.
+ */
 async function jpg(png: Buffer, box: Changed["box"], to: string) {
   let bytes = png;
   if (box) {
@@ -108,9 +112,9 @@ async function jpg(png: Buffer, box: Changed["box"], to: string) {
       "-i",
       "pipe:0",
       "-vf",
-      "scale='min(1024,iw)':-2",
+      "scale='min(720,iw)':-2",
       "-q:v",
-      "3",
+      "5",
       to,
     ],
     { stdin: bytes, stdout: "ignore", stderr: "pipe" }
