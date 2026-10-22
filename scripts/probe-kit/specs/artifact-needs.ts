@@ -893,7 +893,9 @@ const onHarness = async (
     kit.check(
       "push: a look at the artifact clears it",
       cleared.includes(`cleared (look): artifact-${id}`),
-      "no `cleared (look)` line for it in the hub's log"
+      cleared.includes(`cleared (look): artifact-${id}`)
+        ? `the hub's log: cleared (look): artifact-${id}`
+        : "no `cleared (look)` line for it in the hub's log"
     );
     await page.close();
     expected = "0 of 1 picked";
