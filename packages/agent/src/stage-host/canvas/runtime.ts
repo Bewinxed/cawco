@@ -1426,6 +1426,11 @@ export function boot(options: BootOptions): void {
         section.frames.delete(key);
       }
     }
+    // An embed's section holding none of the stories it draws takes no place in it (PAGE_CSS `data-cawco-none`).
+    section.el.toggleAttribute(
+      "data-cawco-none",
+      embed && !!section.mod && stories.length === 0
+    );
     heads(section);
     chrome.outline();
   }
@@ -1468,7 +1473,7 @@ export function boot(options: BootOptions): void {
     syncFrames(section);
     said(section);
     if (embed) {
-      unnamedIn(section);
+      unnamedInEmbed();
     } else {
       quietly(
         columnsFor(section).then(() => {
@@ -1480,19 +1485,36 @@ export function boot(options: BootOptions): void {
     later();
   }
 
-  /** An embed's stories its states file doesn't have: said in the section's place, in words. */
-  function unnamedIn(section: Section): void {
-    const have = new Set(section.mod?.SHEET.stories.map((one) => one.name));
+  /** The line saying which stories an embed names that no states file of its canvas has; none while every one is held. */
+  let unnamedLine: HTMLElement | null = null;
+
+  /**
+   * An embed's named stories that no section holds, said once in the
+   * embed's own place, in words, after every section has loaded: a story
+   * is the canvas's, from whichever states file holds it. While a section
+   * is still on its way, or failed (it says why in its own place), nothing
+   * is said: its stories are not known.
+   */
+  function unnamedInEmbed(): void {
+    unnamedLine?.remove();
+    unnamedLine = null;
+    if (sections.some((one) => !one.loaded || one.failed)) {
+      return;
+    }
+    const have = new Set(
+      sections.flatMap(
+        (one) => one.mod?.SHEET.stories.map((story) => story.name) ?? []
+      )
+    );
     const missing = [...named].filter((name) => !have.has(name));
     if (missing.length === 0) {
       return;
     }
-    const line = document.createElement("p");
-    line.className = "cawco-section-failed-line cawco-ui";
-    line.setAttribute("role", "alert");
-    line.textContent = `${section.name} has no ${missing.length === 1 ? "story" : "stories"} named ${missing.join(", ")}.`;
-    section.head.after(line);
-    section.standIns = [line];
+    unnamedLine = document.createElement("p");
+    unnamedLine.className = "cawco-section-failed-line cawco-ui";
+    unnamedLine.setAttribute("role", "alert");
+    unnamedLine.textContent = `${spec.name ?? "This canvas"} has no ${missing.length === 1 ? "story" : "stories"} named ${missing.join(", ")}.`;
+    world.prepend(unnamedLine);
   }
 
   /** Takes a far section's frames down; its module and its last report stay. */

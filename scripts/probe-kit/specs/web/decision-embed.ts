@@ -68,6 +68,14 @@
  *    body, has each menu inside its own frame, shifted in from its start
  *    as a window that wide would.
  * 10. No console error.
+ * 11. An embed of a canvas of two states files (the ledger and the note)
+ *    naming stories draws exactly those, from whichever file holds them,
+ *    at 1440×900 light, on a page of its own: one from each file
+ *    (`["January", "Pinned"]`) draws both frames, in that order, with no
+ *    alert; one from the note alone (`["Pinned"]`) draws it with no alert,
+ *    the ledger's section 0px tall; one neither file holds
+ *    (`["Nowhere"]`) draws no frame and says so once, naming it, every
+ *    section 0px tall. No section head is seen in any of them.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  */
@@ -338,7 +346,7 @@ const PROGRAM = [
   `headPhone = Preview("${HEAD_ID}", "The head on a phone", ["Phone"])`,
   `headDesk = Preview("${HEAD_ID}", "The head on a desk", ["Desk"])`,
   `bar = Decision("bar", "Where does the bar's menu open?", [below, aside], "A bar at three widths, each with its menu open, at the card's full width.", [menuPhone])`,
-  `below = Option("below", "Under the ⋯", "End-aligned under it.", true, [], "It covers the first line.")`,
+  `below = Option("below", "Under the more button", "End-aligned under it.", true, [], "It covers the first line.")`,
   `aside = Option("aside", "Beside the bar", "Off to its end.", false, [], "It runs off a phone's edge.")`,
   `menuPhone = Preview("${MENU_ID}", "The bar's menus, open", ["Phone", "Small", "Half"])`,
   `chain = Decision("chain", "How does a release go out?", [steps, batch], "Each step is a person's own check.", [chainFlow, stageFlow])`,
@@ -347,6 +355,65 @@ const PROGRAM = [
   `chainFlow = Diagram("flowchart TD\\n${CHAIN}", "Nine steps down")`,
   `stageFlow = Diagram("flowchart LR\\nsubgraph Build\\nWrite[Write] -->|then| Check[Check]\\nend\\nCheck --> Ship[Ship]", "With a stage")`,
 ].join("\n");
+
+/** The page of item 11: Previews of the two-file canvas naming stories, by caption, with the frames each draws and the story it says no file has. */
+const NAMED_PAGE = "named";
+const NAMED: Record<
+  string,
+  { missing: readonly string[]; shows: readonly string[] }
+> = {
+  "January and the note": { shows: ["January", "Pinned"], missing: [] },
+  "The note from both files": { shows: ["Pinned"], missing: [] },
+  "A story neither has": { shows: [], missing: ["Nowhere"] },
+};
+const NAMED_PROGRAM = [
+  `root = Decisions("Named stories", [lines])`,
+  `lines = Decision("lines", "Which lines stand by the note?", [both, one, none], "Stories of two states files in one embed.", [both1])`,
+  `both = Option("both", "A month and the note", "January, then the pinned note.", true, [], "Two files' stories in one embed.")`,
+  `one = Option("one", "The note alone", "Only the pinned note.", false, [one1], "The ledger draws nothing.")`,
+  `none = Option("none", "A story neither has", "Named, never written.", false, [none1], "It draws nothing.")`,
+  `both1 = Preview("${BOOK_ID}", "January and the note", ["January", "Pinned"])`,
+  `one1 = Preview("${BOOK_ID}", "The note from both files", ["Pinned"])`,
+  `none1 = Preview("${BOOK_ID}", "A story neither has", ["Nowhere"])`,
+].join("\n");
+
+/**
+ * What an embed of several states files shows once each has loaded: its
+ * rest frames by story, with their state; every alert's words; and each
+ * section's file, how many frames it holds, its box's height and how many
+ * of its heads are seen. In the embed's page.
+ */
+function readNamed() {
+  const seen = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  return {
+    loaded: window.__cawcoCanvas?.loaded() ?? [],
+    frames: [
+      ...document.querySelectorAll<HTMLElement>(
+        '.cawco-frame[data-cawco-interaction="rest"]'
+      ),
+    ].map((frame) => ({
+      story: frame.dataset.cawcoStory ?? "",
+      state:
+        frame.querySelector<HTMLElement>(".cawco-frame-status")?.dataset
+          .state ?? "",
+    })),
+    alerts: [...document.querySelectorAll("[role=alert]")].map(
+      (one) => one.textContent?.trim() ?? ""
+    ),
+    sections: [...document.querySelectorAll<HTMLElement>(".cawco-section")].map(
+      (section) => ({
+        file: section.dataset.cawcoFile ?? "",
+        frames: section.querySelectorAll(".cawco-frame").length,
+        h: Math.round(section.getBoundingClientRect().height * 10) / 10,
+        heads: [...section.querySelectorAll(".cawco-section-head")].filter(seen)
+          .length,
+      })
+    ),
+  };
+}
 
 /** The fixture copied to scratch and installed once: the project the stage draws. */
 function fixtureRoot(): string {
@@ -651,16 +718,28 @@ const spec: Spec = {
     rmSync(OUT, { recursive: true, force: true });
     mkdirSync(OUT, { recursive: true });
 
-    let refusal = "";
-    try {
-      checkProgram(PROGRAM);
-    } catch (error) {
-      refusal = (error as Error).message;
+    for (const [name, program] of [
+      [NAME, PROGRAM],
+      [NAMED_PAGE, NAMED_PROGRAM],
+    ] as const) {
+      let refusal = "";
+      try {
+        checkProgram(program);
+      } catch (error) {
+        refusal = (error as Error).message;
+      }
+      kit.check(
+        `the hub's check keeps the ${name} program`,
+        refusal === "",
+        refusal
+      );
     }
-    kit.check("the hub's check keeps the program", refusal === "", refusal);
 
     const stage = await startDecisionStage(
-      new Map([[NAME, PROGRAM]]),
+      new Map([
+        [NAME, PROGRAM],
+        [NAMED_PAGE, NAMED_PROGRAM],
+      ]),
       {
         [BOOK_ID]: [LEDGER, NOTE],
         [NOTE_ID]: [NOTE],
@@ -1184,6 +1263,84 @@ const spec: Spec = {
             [...new Set(errors)].slice(0, 12).join("\n    ")
           );
         }
+      }
+
+      // 11. A canvas of two states files, embedded naming stories: each drawn from whichever file holds it.
+      const leg = "1440×900 light, named stories";
+      const page = await kit.page("desk", {
+        theme: "light",
+        init: [CAWCO_BRIDGE],
+      });
+      await page.goto(stage.pageUrl(NAMED_PAGE, "light"), {
+        waitUntil: "load",
+      });
+      const count = Object.keys(NAMED).length;
+      await page.waitForFunction(
+        ({ n, selector }) => document.querySelectorAll(selector).length === n,
+        { n: count, selector: EMBED_FRAME },
+        { timeout: 60_000 }
+      );
+      for (const handle of await page.$$(EMBED_FRAME)) {
+        await handle.scrollIntoViewIfNeeded();
+        const caption = await handle.evaluate(
+          (el) =>
+            el
+              .closest("figure")
+              ?.querySelector("[data-slot=media-caption]")
+              ?.textContent?.trim() ?? ""
+        );
+        const want = NAMED[caption] ?? { shows: [], missing: [] };
+        const frame = await handle.contentFrame();
+        // Every section loaded and every frame it draws said (drawn, failed or empty).
+        const ready = await frame
+          ?.waitForFunction(
+            ({ files, shows }) => {
+              const rest = [
+                ...document.querySelectorAll<HTMLElement>(
+                  '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status'
+                ),
+              ].map((one) => one.dataset.state ?? "");
+              return (
+                (window.__cawcoCanvas?.loaded().length ?? 0) === files &&
+                rest.length === shows &&
+                rest.every((one) => ["drawn", "failed", "empty"].includes(one))
+              );
+            },
+            { files: 2, shows: want.shows.length },
+            { timeout: 120_000, polling: 250 }
+          )
+          .then(
+            () => true,
+            () => false
+          );
+        await settle(page, 600);
+        const read = await frame?.evaluate(readNamed);
+        if (!(ready && read)) {
+          kit.check(
+            `${leg}: “${caption}” loads both states files and draws ${want.shows.join(", ") || "nothing"}`,
+            false,
+            JSON.stringify(read ?? "no frame")
+          );
+          continue;
+        }
+        const drew = read.frames
+          .filter((one) => one.state === "drawn")
+          .map((one) => one.story);
+        const empty = read.sections.filter((one) => one.frames === 0);
+        const heads = read.sections.reduce((n, one) => n + one.heads, 0);
+        const said = read.alerts.filter((one) =>
+          want.missing.every((name) => one.includes(name))
+        );
+        kit.check(
+          `${leg}: “${caption}” draws ${want.shows.join(", ") || "no frame"} from ${read.loaded.length} states files, ${want.missing.length ? `one alert naming ${want.missing.join(", ")}` : "no alert"}, every section holding nothing 0px tall, no section head seen (frames ${read.frames.map((one) => `${one.story} ${one.state}`).join(", ") || "none"}; alerts ${read.alerts.length}${read.alerts.length ? ` “${read.alerts.join("” “")}”` : ""}; sections ${read.sections.map((one) => `${one.file.split("/").at(-1)} ${one.frames} frames ${one.h}px`).join(", ")})`,
+          drew.join() === want.shows.join() &&
+            read.frames.length === want.shows.length &&
+            read.alerts.length === want.missing.length &&
+            said.length === read.alerts.length &&
+            empty.every((one) => one.h === 0) &&
+            heads === 0,
+          JSON.stringify(read)
+        );
       }
     } finally {
       await stage.stop();

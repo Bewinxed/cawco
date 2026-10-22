@@ -293,7 +293,8 @@ html[data-cawco-phone] .cawco-dock-dials { inset-block-start: auto; inset-inline
    width and centred in the embed, one wider than the embed scaled down to fit it (runtime fitToEmbed, CSS zoom), and one
    that would scale its words under 10px stops there and scrolls sideways in its frame (data-cawco-wide); the page
    holding it makes its frame as tall (CANVAS_EMBED_SIZE), and a wheel or a finger on it scrolls that page. A section that
-   didn't load, or names no story it has, still says so. */
+   didn't load still says so; one holding none of the stories the embed names takes no place (data-cawco-none), and a named
+   story no section holds is said once, in the embed's own place (runtime unnamedInEmbed). */
 html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; }
 /* An embed is no well: around a frame narrower than it stands the surface the decision page draws its Preview on (the
    host's Preview.svelte frame, surface-page), so no gutter of another colour shows beside a story. */
@@ -301,6 +302,7 @@ html.cawco-embed, html.cawco-embed body, html.cawco-embed .cawco-canvas { backgr
 html.cawco-embed .cawco-canvas { position: static; inset: auto; overflow: visible; touch-action: auto; }
 html.cawco-embed .cawco-world { position: static; inline-size: 100%; gap: var(--space-3); padding: 0; will-change: auto; }
 html.cawco-embed .cawco-section { min-block-size: 0; gap: var(--space-3); }
+html.cawco-embed .cawco-section[data-cawco-none] { display: none; }
 html.cawco-embed :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status, .cawco-edges, .cawco-stand-in > .cawco-frame-words) { display: none; }
 html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
 html.cawco-embed .cawco-frame { gap: 0; min-inline-size: 0; max-inline-size: 100%; }
