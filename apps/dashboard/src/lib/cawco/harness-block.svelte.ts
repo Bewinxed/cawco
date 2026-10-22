@@ -264,7 +264,11 @@ export function landedOn(
 /** The outcome was seen, and the work it unblocked has gone on: nothing more is said. */
 export function settleHarness(machineId: string, harness: HarnessKind): void {
   const key = keyOf(machineId, harness);
-  followed.value.brought = followed.value.brought.filter((one) => one !== key);
+  if (followed.value.brought.includes(key)) {
+    followed.value.brought = followed.value.brought.filter(
+      (one) => one !== key
+    );
+  }
 }
 
 /** Starts a session again, as its own start was (core `relaunchOf`); a refusal is kept, in words, for its surface. */

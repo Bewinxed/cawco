@@ -145,15 +145,20 @@
       ? sent.get(machineId) === true
       : heldFlow(flowKey(account.id, machineId))?.phase === "signed-in";
 
-  // Signed in: the check draws and holds, then the popover goes.
+  // Signed in: the check draws and holds, then the popover goes, and the
+  // Claude Code this tab brought up there, having done its work, is said no
+  // more. Both are written once the hold is over, outside the effect:
+  // `settleHarness` reads the list it writes, so written in here it made the
+  // effect its reader and ran it again, without end.
   $effect(() => {
     const on = openOn;
     if (on === null || !landed(on)) {
       return;
     }
-    // The Claude Code this tab brought up has done its work: said no more.
-    settleHarness(on, "claude");
-    const timer = setTimeout(() => setOpen(on, false), dur("--dur-hold"));
+    const timer = setTimeout(() => {
+      settleHarness(on, "claude");
+      setOpen(on, false);
+    }, dur("--dur-hold"));
     return () => clearTimeout(timer);
   });
 
