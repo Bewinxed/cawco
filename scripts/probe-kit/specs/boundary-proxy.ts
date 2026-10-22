@@ -39,10 +39,14 @@
  *     refusal, byte for byte what srt answers with its token directly;
  * (h) a plain `ws://` upgrade through that proxy is answered as srt answers
  *     it with its token directly (its status line), never a 407;
- * (i) 200 CONNECTs at once through that proxy: each connection opens within
- *     1 s, before a dropped SYN's retry would, no listener of the sandbox's
- *     network drops a handshake (its `ListenDrops`), and every one is
- *     answered 200.
+ * (i) bursts of 200 connections at once, one burst at a time: CONNECTs
+ *     through that proxy, every one answered 200; CONNECTs to srt's own
+ *     bridge to its HTTP proxy (3128), every one answered by srt; SOCKS5
+ *     greetings to its bridge to its SOCKS proxy (1080), every one answered
+ *     with a method. In each, every connection opens within 1 s, before a
+ *     dropped SYN's retry would, and no listener of the sandbox's network
+ *     drops a handshake (its `ListenDrops`). A boundary whose srt predates
+ *     0.0.81 bridges with socat's own backlog of 5 and fails the last two.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -66,6 +70,23 @@ const WSS_ECHO = "wss://echo.websocket.org/";
 
 /** srt's own bridge to its port inside the sandbox, as `pgrep -af` lists it: the socket it connects to. */
 const SRT_BRIDGE = /UNIX-CONNECT:(\S+)/;
+
+/**
+ * srt's own ports inside the sandbox, each a socat to srt's proxy on the host
+ * (linux-sandbox-utils.js `buildSandboxCommand`: `relay(3128, httpSocketPath)`,
+ * `relay(1080, socksSocketPath)` at 0.0.81).
+ */
+const SRT_HTTP_PORT = 3128;
+const SRT_SOCKS_PORT = 1080;
+
+/** A socat's listen address on its command line: `TCP-LISTEN`, or from srt 0.0.81 `TCP6-LISTEN` (IPv4 mapped in) or `TCP4-LISTEN`, its port and options. */
+const SOCAT_LISTEN = /\b(TCP[46]?-LISTEN:\d+,\S*)/;
+
+/** The command line of the socat listening on `port` in this sandbox, as `pgrep -a socat` lists it; undefined when none does. */
+const socatOn = async (port: number): Promise<string | undefined> =>
+  (await Bun.$`pgrep -a socat`.nothrow().text())
+    .split("\n")
+    .find((line) => new RegExp(`\\bTCP[46]?-LISTEN:${port},`).test(line));
 
 /** A port nothing on this loopback holds now. */
 const freePort = async (): Promise<number> => {
@@ -153,9 +174,7 @@ const boundaryEnv = async (kit: Kit) => {
   // bridge to its port in here connects to (that socat's `UNIX-CONNECT:`),
   // past that bridge, which listens with socat's own backlog of 5 and is no
   // hop of the relay's in a boundary that has one.
-  const srtSocket = (
-    await Bun.$`pgrep -af ${`TCP-LISTEN:${srt.port},`}`.nothrow().text()
-  ).match(SRT_BRIDGE)?.[1];
+  const srtSocket = (await socatOn(Number(srt.port)))?.match(SRT_BRIDGE)?.[1];
   if (!srtSocket) {
     throw new Error(
       `no socat bridges srt's port ${srt.port} in this boundary, so its proxy's socket is unknown`
@@ -440,14 +459,37 @@ const listenDrops = async (): Promise<{ drops: number; overflows: number }> => {
   return { drops: of("ListenDrops"), overflows: of("ListenOverflows") };
 };
 
-/** One CONNECT to {@link BURST_TARGET} through the proxy at `port`: when its connection opened, when the proxy answered, and the answer's status line. */
-const connectOnce = async (
-  port: number
+/** What a burst sends on each of its connections, and its answer's first words once they are in (undefined until then). */
+interface Ask {
+  bytes: string | Uint8Array;
+  read: (head: Buffer) => string | undefined;
+}
+
+/** A CONNECT to {@link BURST_TARGET}: its answer is the status line. */
+const CONNECT_ASK: Ask = {
+  bytes: `CONNECT ${BURST_TARGET} HTTP/1.1\r\nHost: ${BURST_TARGET}\r\n\r\n`,
+  read: (head) => {
+    const text = head.toString("latin1");
+    return text.includes("\r\n") ? (text.split("\r\n")[0] ?? "") : undefined;
+  },
+};
+
+/** A SOCKS5 greeting offering no authentication (RFC 1928 §3): its answer is the server's version and chosen method, two bytes. */
+const SOCKS_ASK: Ask = {
+  bytes: new Uint8Array([5, 1, 0]),
+  read: (head) =>
+    head.length >= 2 ? `SOCKS ${head[0]}, method ${head[1]}` : undefined,
+};
+
+/** One connection to `port` on loopback asking `ask`: when it opened, when it was answered, and the answer's first words. */
+const askOnce = async (
+  port: number,
+  ask: Ask
 ): Promise<{ answer: string; answered: number; opened: number }> => {
   const started = performance.now();
   const { promise, resolve } = Promise.withResolvers<string>();
   let opened = -1;
-  let head = "";
+  let head = Buffer.alloc(0);
   const socket = await Bun.connect({
     hostname: "127.0.0.1",
     port,
@@ -456,19 +498,18 @@ const connectOnce = async (
         opened = performance.now() - started;
       },
       data: (_socket, data) => {
-        head += Buffer.from(data).toString("latin1");
-        if (head.includes("\r\n")) {
-          resolve(head.split("\r\n")[0] ?? "");
+        head = Buffer.concat([head, Buffer.from(data)]);
+        const answer = ask.read(head);
+        if (answer !== undefined) {
+          resolve(answer);
         }
       },
-      close: () => resolve(head.split("\r\n")[0] || "closed with no answer"),
+      close: () => resolve(ask.read(head) ?? "closed with no answer"),
       error: (_socket, error) => resolve(`error: ${error.message}`),
     },
   });
   opened = opened < 0 ? performance.now() - started : opened;
-  socket.write(
-    `CONNECT ${BURST_TARGET} HTTP/1.1\r\nHost: ${BURST_TARGET}\r\n\r\n`
-  );
+  socket.write(ask.bytes);
   const read = await readWithin(30_000, () => promise);
   const answered = performance.now() - started;
   socket.end();
@@ -479,18 +520,28 @@ const connectOnce = async (
   };
 };
 
+/** The listen address of the socat on `port` in this sandbox ({@link socatOn}). */
+const socatListen = async (port: number): Promise<string | undefined> =>
+  (await socatOn(port))?.match(SOCAT_LISTEN)?.[1];
+
 /**
- * (i) A burst: {@link BURST} CONNECTs at once through the environment's
- * proxy, as a package install or a page opens its connections. Each one's
- * connection opens before a dropped SYN's retry would ({@link SYN_RETRY_MS}),
- * the listener's backlog holding the whole burst (core `SOCAT_BACKLOG`;
- * socat's own is 5), and every one is answered 200.
+ * One burst of (i): {@link BURST} connections at once to `port`, each asking
+ * `ask`. Each opens before a dropped SYN's retry would
+ * ({@link SYN_RETRY_MS}), no listener of this network drops a handshake (the
+ * bursts run one at a time, so the count is this burst's), and every answer
+ * is one `wanted` takes.
  */
-const burstLeg = async (kit: Kit, env: Env) => {
-  const proxy = new URL(env.HTTPS_PROXY ?? "");
+const burst = async (
+  kit: Kit,
+  what: string,
+  port: number,
+  ask: Ask,
+  wanted: { says: string; takes: (answer: string) => boolean }
+): Promise<void> => {
+  const listen = await socatListen(port);
   const before = await listenDrops();
   const runs = await Promise.all(
-    Array.from({ length: BURST }, () => connectOnce(Number(proxy.port)))
+    Array.from({ length: BURST }, () => askOnce(port, ask))
   );
   const after = await listenDrops();
   const opened = runs.map((one) => one.opened).sort((a, b) => a - b);
@@ -499,12 +550,54 @@ const burstLeg = async (kit: Kit, env: Env) => {
   for (const { answer } of runs) {
     answers.set(answer, (answers.get(answer) ?? 0) + 1);
   }
-  const ok = runs.filter((one) => one.answer.startsWith("HTTP/1.1 200")).length;
+  const ok = runs.filter((one) => wanted.takes(one.answer)).length;
   const slowest = Math.max(...runs.map((one) => one.answered));
   kit.check(
-    `(i) ${BURST} CONNECTs at once through ${proxy.host}: each connection opens within ${SYN_RETRY_MS} ms, no listener of this network drops a handshake, every one answered 200`,
+    `(i) ${BURST} ${what} at once: each connection opens within ${SYN_RETRY_MS} ms, no listener of this network drops a handshake, ${wanted.says}`,
     late === 0 && ok === BURST && after.drops === before.drops,
-    `opened in ${Math.round(opened[0] ?? -1)} to ${Math.round(opened.at(-1) ?? -1)} ms, ${late} at ${SYN_RETRY_MS} ms or later; ${ok} of ${BURST} answered 200 (${JSON.stringify(Object.fromEntries(answers))}), the slowest answer at ${Math.round(slowest)} ms; this network's listeners dropped ${after.drops - before.drops} handshakes (${after.overflows - before.overflows} accept-queue overflows)`
+    `its socat listens ${listen ?? "(no socat found on the port)"}; opened in ${Math.round(opened[0] ?? -1)} to ${Math.round(opened.at(-1) ?? -1)} ms, ${late} at ${SYN_RETRY_MS} ms or later; ${ok} of ${BURST} answered so (${JSON.stringify(Object.fromEntries(answers))}), the slowest answer at ${Math.round(slowest)} ms; this network's listeners dropped ${after.drops - before.drops} handshakes (${after.overflows - before.overflows} accept-queue overflows)`
+  );
+};
+
+/**
+ * (i) Bursts, as a package install or a page opens its connections: through
+ * the environment's proxy (the relay, core `SOCAT_BACKLOG`), then to srt's
+ * own bridges to its HTTP and SOCKS proxies, whose backlog srt sets
+ * (`backlog=4096` from 0.0.81). srt's answers there are its own: a 407 to a
+ * CONNECT without its token, a method to a SOCKS greeting. What is proved is
+ * that the listener takes the whole burst at once.
+ */
+const burstLeg = async (kit: Kit, env: Env) => {
+  const proxy = new URL(env.HTTPS_PROXY ?? "");
+  await burst(
+    kit,
+    `CONNECTs through the environment's proxy ${proxy.host}`,
+    Number(proxy.port),
+    CONNECT_ASK,
+    {
+      says: "every one answered 200",
+      takes: (answer) => answer.startsWith("HTTP/1.1 200"),
+    }
+  );
+  await burst(
+    kit,
+    `CONNECTs to srt's own HTTP proxy bridge 127.0.0.1:${SRT_HTTP_PORT}`,
+    SRT_HTTP_PORT,
+    CONNECT_ASK,
+    {
+      says: "every one answered by srt (its 407 without the token)",
+      takes: (answer) => answer.startsWith("HTTP/1.1 "),
+    }
+  );
+  await burst(
+    kit,
+    `SOCKS5 greetings to srt's own SOCKS proxy bridge 127.0.0.1:${SRT_SOCKS_PORT}`,
+    SRT_SOCKS_PORT,
+    SOCKS_ASK,
+    {
+      says: "every one answered by srt with its method",
+      takes: (answer) => answer.startsWith("SOCKS 5, "),
+    }
   );
 };
 

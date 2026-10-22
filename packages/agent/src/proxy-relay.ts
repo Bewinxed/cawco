@@ -67,7 +67,7 @@ export const RELAY_URL = `http://127.0.0.1:${RELAY_PORT}`;
 
 /**
  * Every proxy variable srt sets to its HTTP proxy's URL (sandbox-utils.js
- * `generateProxyEnvVars` at 0.0.79), each pointed at the relay. srt's SOCKS
+ * `generateProxyEnvVars` at 0.0.81), each pointed at the relay. srt's SOCKS
  * URLs (`FTP_PROXY`, `RSYNC_PROXY`) stay: a SOCKS client presents the
  * RFC 1929 credential from the URL itself, and no client that drops it
  * reads them.

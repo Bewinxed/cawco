@@ -207,7 +207,7 @@ if (!(settingsFile && runnerFile && fifo && clone && readyLine && deniesFile)) {
  * runtime dir (the workspace's door dir, srt's own temp dir). srt restores a
  * read carve-out of a denied dir only if it exists as it wraps ("Not
  * restoring … nothing there resolves (absent, dangling or unreadable)",
- * `pushReadDenyDirMounts` in linux-sandbox-utils.js at 0.0.79), and this
+ * `pushReadDenyDirMounts` in linux-sandbox-utils.js at 0.0.81), and this
  * sandbox lives as long as the workspace, so a dir made after the wrap never
  * shows inside: the door's sockets, made in it later, would be out of reach.
  * A bound dir shows every entry made in it afterwards.
@@ -310,15 +310,19 @@ const relay = await startProxyRelay({
 });
 
 /**
- * A mount point an earlier sandbox left on the host, by srt's own test
- * (`isStaleBwrapMountPoint`, linux-sandbox-utils.ts at 0.0.79): bwrap makes
- * one for an absent path with ensure_file(dest, 0444), an empty regular file
- * with no write bits and one link, which no checkout or writer makes.
+ * A mount point an earlier sandbox left on the host: bwrap makes one for an
+ * absent path with ensure_file(dest, 0444), and srt where it makes it itself
+ * (`makeableMountPoint`, `openSync(entry, 'wx', 0o444)` at 0.0.81), an empty
+ * regular file with no write bits and one link, which no checkout or writer
+ * makes. srt no longer tells one apart (0.0.81 has no
+ * `isStaleBwrapMountPoint`): one left at a deny path is an existing file to
+ * it, bound onto itself read-only and never removed, so at a stand-in's path
+ * this host replaces it ({@link makeStandIn}).
  */
 const leftMountPoint = (stat: Stats): boolean =>
   stat.isFile() &&
   stat.size === 0 &&
-  // biome-ignore lint/suspicious/noBitwiseOperators: a file mode's write bits, tested as srt tests them
+  // biome-ignore lint/suspicious/noBitwiseOperators: a file mode's write bits, none on a mount point bwrap left
   (stat.mode & 0o222) === 0 &&
   stat.nlink === 1;
 
@@ -380,8 +384,8 @@ const makeStandIn = (
     }
   } else {
     // Writable whatever the umask: an empty file with no write bits is what
-    // srt takes for a mount point an earlier sandbox left (leftMountPoint),
-    // and would cover with /dev/null and remove.
+    // this host takes for a mount point an earlier sandbox left
+    // (leftMountPoint), and would replace at the next start.
     // In place: its folder is the clone's own, made above or there already,
     // and a clone deleted since is never made again by this write.
     writeStateFileSync(path, empty.text, {
@@ -452,10 +456,9 @@ const markLfs = (): void => {
  * under a directory that is not the clone's own (a symlink, a file): srt
  * then stands in for the path as it always has. The workspace's
  * `info/exclude` keeps every one out of git's status, each by its own line
- * (`listStandIns` in stand-ins.ts). A file's stand-in is readable (0644): one
- * with no write bits is what srt takes for a mount point an earlier sandbox
- * left, and covers with `/dev/null`, which a sandbox cannot even read (the
- * clone's mounts are `nodev`).
+ * (`listStandIns` in stand-ins.ts). A file's stand-in is 0644: one with no
+ * write bits is what this host takes for a mount point an earlier sandbox
+ * left ({@link leftMountPoint}), and makes again at every start.
  */
 const standIn = (): void => {
   markLfs();
@@ -503,7 +506,7 @@ const PROTECTED = [
   ".opencode",
   ".mcp.json",
   // srt's own mandatory names at the clone's root (`DANGEROUS_FILES`,
-  // `getDangerousDirectories()` in sandbox-utils.js at 0.0.79).
+  // `getDangerousDirectories()` in sandbox-utils.js at 0.0.81).
   ".gitconfig",
   ".gitmodules",
   ".bashrc",

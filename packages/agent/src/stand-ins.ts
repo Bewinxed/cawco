@@ -55,15 +55,16 @@ import {
 import { excludedStandIns, excludeStandIns, gitIn } from "./checkout-exclude";
 
 /**
- * A mount point a sandbox left on the host, by srt's own test
- * (`isStaleBwrapMountPoint`, linux-sandbox-utils.ts at 0.0.79), as the host
- * tests it (`leftMountPoint`): an empty regular file with no write bits and
- * one link, as bwrap makes it.
+ * A mount point a sandbox left on the host, as the host tests it
+ * (boundary-host.ts `leftMountPoint`): an empty regular file with no write
+ * bits and one link, as bwrap makes one for an absent path
+ * (`ensure_file(dest, 0444)`), and srt too where it makes it itself
+ * (`makeableMountPoint`, `openSync(entry, 'wx', 0o444)` at 0.0.81).
  */
 const leftMountPoint = (found: Stats): boolean =>
   found.isFile() &&
   found.size === 0 &&
-  // biome-ignore lint/suspicious/noBitwiseOperators: a file mode's write bits, tested as srt tests them
+  // biome-ignore lint/suspicious/noBitwiseOperators: a file mode's write bits, none on a mount point bwrap left
   (found.mode & 0o222) === 0 &&
   found.nlink === 1;
 
