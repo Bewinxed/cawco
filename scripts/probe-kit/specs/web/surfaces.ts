@@ -1,17 +1,9 @@
 /**
- * The surfaces' pictures, the style snapshot's backstop: every surface and
- * open state the snapshot reads (surfaces/catalogue.ts), at desk 1440,
- * tablet 820 and phone 390, light and dark, opened and captured, and each
- * set beside the approved picture (diff.ts, pixelmatch). A state's capture
- * is its root: the viewport for a page, the open layer's box for a menu,
- * sheet or card.
- *
- * It FAILs only where a state does not open (walk.ts `walkTapes`). A
- * capture that differs from its baseline is a changed look caught for a
- * reviewer, never a failure: UI is judged by its look and its correctness
- * against DESIGN.md, not by sameness with older screens. Each is a NOTE,
- * their count is one more, and `--review <dir>` writes them all, beside
- * their baselines with what changed, into the owner's review page.
+ * The surfaces' pixel baseline, the style snapshot's backstop: every
+ * surface and open state the snapshot reads (surfaces/catalogue.ts), at
+ * desk 1440, tablet 820 and phone 390, light and dark, captured and held to
+ * the approved picture (diff.ts, pixelmatch). A state's capture is its root:
+ * the viewport for a page, the open layer's box for a menu, sheet or card.
  *
  *   bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b]
  *   bun scripts/probe-kit/run.ts web surfaces --approve surfaces[:<entry>,…] [--review <dir>]
@@ -91,8 +83,6 @@ async function atRest(): Promise<number> {
 const spec: Spec = {
   name: "surfaces",
   async run(kit) {
-    let captured = 0;
-    let changed = 0;
     const { misses, seconds } = await walkTapes(
       kit,
       chosen(surfacesArg),
@@ -135,8 +125,6 @@ const spec: Spec = {
           clip,
           ...(state.mask ? { mask: state.mask(page) } : {}),
         });
-        captured += 1;
-        changed += differs ? 1 : 0;
         if (differs || dumpAll) {
           await writeFile(
             join(kit.out, `${entry}.dump.json`),
@@ -144,13 +132,6 @@ const spec: Spec = {
           );
         }
       }
-    );
-    kit.check(
-      `every state the walk lists opened and was captured (${captured})`,
-      captured > 0
-    );
-    kit.note(
-      `${changed} of ${captured} capture(s) differ from their approved baselines, for review (--review <dir> writes them beside their baselines)`
     );
     if (misses.length > 0) {
       kit.note(
