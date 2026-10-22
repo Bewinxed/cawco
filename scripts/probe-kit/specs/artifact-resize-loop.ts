@@ -815,47 +815,110 @@ interface Run {
   keyframeEasing: string | null;
   kind: string;
   on: "clip" | "sheet";
+  /** Where its clock stood as it was paused: 0, no frame of the move played. */
+  playedFirst: number | null;
   start: number | null;
 }
 
+/** How long the scrub waits for the move's two runs to start, in wall-clock ms. */
+const START_WITHIN_MS = 10_000;
+
 /**
  * Moves the sheet between its stops (`focus`: the composer's field takes
- * the focus; `grab`: a tap on the grabber), lets the move start, pauses
- * every animation on the sheet and its host, and seeks them together to
+ * the focus; `grab`: a tap on the grabber), holds every animation the move
+ * starts on the sheet and its host at its start, and seeks them together to
  * each fraction of their duration (SCRUB), reading the floor and the
- * sheet's top at each. WebKit has no DevTools Animation domain, so the
- * clock is seeked through the Web Animations API, in the page. Then it lets
- * them run on to their end.
+ * sheet's top at each. Then it lets them run on to their end.
+ *
+ * WebKit has no DevTools Animation domain to pause the page's animations
+ * from outside, so each run is held in the page as it is made, before a
+ * frame can play it: vaul's move is a CSS transition made by its write to
+ * the sheet's style, held from a MutationObserver's callback (a microtask
+ * after that write: `getAnimations()` there makes the transition and returns
+ * it), and the clip is SideSheet's `animate()` on the host, held as it
+ * returns. Held is a playback rate of 0: the run stays `running`, its start
+ * time resolves on the frame that starts it as the page's own runs' do (so
+ * SideSheet reads the move it clips to, and sets the clip's start from it,
+ * unchanged), and its clock stands at 0 however many frames pass, however
+ * long each takes. Once both have started they are paused there and seeked.
+ * Waiting frames for the move to begin instead, a loaded machine (330-446ms
+ * a frame, one busy loop per core) let the whole 500ms move finish before
+ * the read, and it found nothing to scrub.
  */
 const scrub = (page: Page, act: "focus" | "grab") =>
   page.evaluate(
-    async ({ does, fractions, field }) => {
-      const host = document.querySelector('[data-slot="preview-sheet-host"]');
-      const sheet = document.querySelector("[data-preview-sheet]");
+    async ({ does, fractions, field, within }) => {
+      const host = document.querySelector<HTMLElement>(
+        '[data-slot="preview-sheet-host"]'
+      );
+      const sheet = document.querySelector<HTMLElement>("[data-preview-sheet]");
+      const held = new Set<Animation>();
+      const hold = (found: Animation[]) => {
+        for (const each of found) {
+          if (!held.has(each) && each.playState === "running") {
+            each.playbackRate = 0;
+            held.add(each);
+          }
+        }
+      };
+      const watch = new MutationObserver(() =>
+        hold(sheet?.getAnimations() ?? [])
+      );
+      if (sheet) {
+        watch.observe(sheet, { attributes: true, attributeFilter: ["style"] });
+      }
+      if (host) {
+        const animate = host.animate.bind(host);
+        host.animate = (...args: Parameters<HTMLElement["animate"]>) => {
+          const run = animate(...args);
+          hold([run]);
+          return run;
+        };
+      }
       if (does === "focus") {
         document.querySelector<HTMLElement>(field)?.focus();
       } else {
         document.querySelector<HTMLElement>("[data-preview-grab]")?.click();
       }
-      await new Promise<void>((done) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => done()))
-      );
-      const runs = document.getAnimations().filter((each) => {
-        const target = (each.effect as KeyframeEffect | null)?.target;
-        return (
-          (target === host || target === sheet) && each.playState === "running"
+      const started = () =>
+        [...held].filter(
+          (each) => each.playState === "running" && each.startTime !== null
         );
-      });
+      const deadline = performance.now() + within;
+      const both = () => {
+        const going = started();
+        return (
+          going.some(
+            (each) => (each.effect as KeyframeEffect | null)?.target === host
+          ) &&
+          going.some(
+            (each) => (each.effect as KeyframeEffect | null)?.target === sheet
+          )
+        );
+      };
+      while (!both() && performance.now() < deadline) {
+        // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until both runs have started, their clocks held at 0 meanwhile
+        await new Promise((done) => requestAnimationFrame(done));
+      }
+      watch.disconnect();
+      if (host) {
+        Reflect.deleteProperty(host, "animate");
+      }
+      const runs = started();
+      const starts = runs.map((each) => each.startTime);
       for (const each of runs) {
         each.pause();
       }
-      const described = runs.map((each) => {
+      const described = runs.map((each, index) => {
         const effect = each.effect as KeyframeEffect | null;
         const timing = effect?.getTiming();
+        const start = starts[index];
         return {
           on: (effect?.target === host ? "clip" : "sheet") as "clip" | "sheet",
           kind: each.constructor.name,
-          start: each.startTime === null ? null : Number(each.startTime),
+          start: start === null || start === undefined ? null : Number(start),
+          playedFirst:
+            each.currentTime === null ? null : Number(each.currentTime),
           duration:
             timing?.duration === undefined ? null : String(timing.duration),
           easing: timing?.easing ?? null,
@@ -875,17 +938,21 @@ const scrub = (page: Page, act: "focus" | "grab") =>
           top: now?.top ?? Number.NaN,
         });
       }
+      for (const each of held) {
+        each.playbackRate = 1;
+      }
       for (const each of runs) {
         each.play();
       }
       return { runs: described, at };
     },
-    { does: act, fractions: SCRUB, field: COMPOSER }
+    { does: act, fractions: SCRUB, field: COMPOSER, within: START_WITHIN_MS }
   );
 
 /**
  * The scrub's verdict: the sheet's move and the clip run on one clock (the
- * same start, duration and easing, one each), the floor and the sheet's top
+ * same start, duration and easing, one each), held at its start before a
+ * frame of it played, the floor and the sheet's top
  * at the stops' places at 0 and 1, and at 0.5 both the same share of their
  * way along.
  */
@@ -907,7 +974,9 @@ const oneClock = (
     a.start === b.start &&
     a.duration === b.duration &&
     a.easing === b.easing &&
-    a.keyframeEasing === b.keyframeEasing;
+    a.keyframeEasing === b.keyframeEasing &&
+    a.playedFirst === 0 &&
+    b.playedFirst === 0;
   const [start, middle, end] = scrubbed.at;
   const near = (x: number, y: number) => Math.abs(x - y) <= 1;
   const placed =
