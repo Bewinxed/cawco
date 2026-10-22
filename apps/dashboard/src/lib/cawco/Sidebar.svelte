@@ -1091,7 +1091,10 @@
                   style:--fault-indent="var(--space-2)"
                   style:--fault-end="var(--space-2)"
                 >
-                  <ForgetProjectTray at={forgetAtRail(project.id)} />
+                  <ForgetProjectTray
+                    at={forgetAtRail(project.id)}
+                    projectId={project.id}
+                  />
                 </div>
 
                 <!-- Its sessions hang under it the way a session's delegates

@@ -1,14 +1,18 @@
 <script lang="ts">
   import type { DelegateType, WorkflowListing } from "@cawco/core";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes } from "#lib/cawco/delegate-types.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import { departBox, land } from "#lib/cawco/motion/share.svelte.js";
   import { fleetFolders } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
-  import { runHref } from "#lib/cawco/workflow-runs.js";
-  import { launchWorkflow } from "#lib/cawco/workflows.js";
+  import {
+    type LaunchDraft,
+    launchShare,
+    workflowLaunches,
+  } from "#lib/cawco/workflow-launch.svelte.js";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
   import { Alert } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -22,34 +26,53 @@
     PopoverTitle,
   } from "#lib/components/ui/popover/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { goto } from "$app/navigation";
 
   /**
    * The launch form, opened under the button that asked for it (Run
    * workflow, a list row's Run). It blocks nothing (DESIGN.md, The Open
    * Page Rule): a popover with no scrim on a desk, the house bottom sheet
-   * under 640px, as the New Session form opens. Esc or a press outside
-   * closes it, and the focus goes back to the button. Opened by a pointer
-   * it focuses its own card, so no field shows a ring (The One Ring Rule).
+   * under 640px, as the New Session form opens. Opened by a pointer it
+   * focuses its own card, so no field shows a ring (The One Ring Rule).
+   *
+   * It shows the workflow's launch as it stands (workflow-launch.svelte.ts,
+   * The Work Outlives Its Surface Rule): what was typed and picked, a start
+   * under way, the hub's refusal; a reload brings it back as it was. Esc or
+   * a press outside closes it and parks the launch, which goes on: a start
+   * under way travels into the workflow's row (WorkflowLaunchParked) and
+   * comes back out of it on Reopen. Only Cancel ends it. The focus goes
+   * back to the button it hangs from.
    */
   let {
     workflow,
-    from,
-    onclose,
   }: {
-    /** The button it opens under, which the focus goes back to. */
-    from: HTMLElement;
-    onclose: () => void;
     workflow: WorkflowListing;
   } = $props();
   const phone = new MediaQuery("(max-width: 640px)");
+  const share = $derived(launchShare(workflow.id));
+  const launch = $derived(workflowLaunches.of(workflow.id));
+  const busy = $derived(launch?.step === "starting");
   let shown = $state(true);
   let card = $state<HTMLElement | null>(null);
+  /** The button it hangs from: the one pressed, else its workflow's Run (after a reload). */
+  const from = $derived(
+    workflowLaunches.from ??
+      (typeof document === "undefined"
+        ? null
+        : document.querySelector<HTMLElement>(
+            `[data-run-workflow="${CSS.escape(workflow.id)}"]`
+          ))
+  );
+  /** Esc, ✕ or a press outside: the form closes and the launch is parked as it stands. */
   const dismissed = (open: boolean) => {
-    if (!(open || busy)) {
-      shown = false;
-      onclose();
+    if (open) {
+      return;
     }
+    if (card && launch && launch.step !== "editing") {
+      // It travels into the place the launch is parked (The One Object Rule).
+      departBox(share, card, false);
+    }
+    shown = false;
+    workflowLaunches.park();
   };
   function takeFocus(event: Event) {
     event.preventDefault();
@@ -57,15 +80,11 @@
   }
   function giveFocusBack(event: Event) {
     event.preventDefault();
-    from.focus({ preventScroll: true });
+    from?.focus({ preventScroll: true });
   }
-  let machineId = $state("");
-  let workspace = $state("");
-  let supervisor = $state("");
-  let inputs = $state<Record<string, string>>({});
   let types = $state<DelegateType[]>([]);
-  let errorMessage = $state("");
-  let busy = $state(false);
+  /** The delegate types could not be read: said in the form. */
+  let unread = $state("");
   const start = $derived(
     workflow.graph?.nodes.find((node) => node.kind === "start")
   );
@@ -74,6 +93,46 @@
   const fields = $derived(
     start?.kind === "start" ? start.inputs : workflow.inputs
   );
+
+  /** The workflow's own defaults: its default project's checkout, its supervisor, each input's default. */
+  function defaults(): LaunchDraft {
+    const settings = workflow.graph?.settings;
+    const project = settings?.defaultProject
+      ? cawco.project(settings.defaultProject)
+      : null;
+    const primary = project ? checkoutOf(project) : undefined;
+    return {
+      machineId: settings?.defaultMachine ?? primary?.machineId ?? "",
+      workspace: primary?.path ?? "",
+      supervisor:
+        settings?.defaultSupervisor &&
+        "delegateType" in settings.defaultSupervisor
+          ? settings.defaultSupervisor.delegateType
+          : "",
+      inputs: Object.fromEntries(
+        fields.map((input) => [input.name, input.default ?? ""])
+      ),
+    };
+  }
+  // What the form held, where its launch keeps it; a first open, the
+  // defaults. Read once: the form is drawn for one workflow (its host keys it).
+  const held = untrack(
+    () => workflowLaunches.of(workflow.id)?.draft ?? defaults()
+  );
+  let machineId = $state(held.machineId);
+  let workspace = $state(held.workspace);
+  let supervisor = $state(held.supervisor);
+  let inputs = $state<Record<string, string>>({ ...held.inputs });
+  // Every change is written to the launch as it is made, so a reload keeps it.
+  $effect(() => {
+    workflowLaunches.write(workflow.id, {
+      machineId,
+      workspace,
+      supervisor,
+      inputs: $state.snapshot(inputs),
+    });
+  });
+
   const online = $derived(
     cawco.onlineMachines.some((machine) => machine.machineId === machineId)
   );
@@ -94,48 +153,24 @@
     }
     return "";
   });
+  const errorMessage = $derived(launch?.refusal ?? unread);
   onMount(() => {
-    const defaults = workflow.graph?.settings;
-    const project = defaults?.defaultProject
-      ? cawco.project(defaults.defaultProject)
-      : null;
-    const primary = project ? checkoutOf(project) : undefined;
-    machineId = defaults?.defaultMachine ?? primary?.machineId ?? "";
-    workspace = primary?.path ?? "";
-    supervisor =
-      defaults?.defaultSupervisor &&
-      "delegateType" in defaults.defaultSupervisor
-        ? defaults.defaultSupervisor.delegateType
-        : "";
-    inputs = Object.fromEntries(
-      fields.map((input) => [input.name, input.default ?? ""])
-    );
     loadDelegateTypes()
       .then((data) => {
         ({ types } = data);
       })
       .catch((caught) => {
-        errorMessage = message(caught);
+        unread = message(caught);
       });
   });
-  async function launch(event: SubmitEvent) {
+  function launchIt(event: SubmitEvent) {
     event.preventDefault();
-    busy = true;
-    errorMessage = "";
-    try {
-      const { runId } = await launchWorkflow(workflow.id, {
-        inputs,
-        workspace: { path: workspace, machineId },
-        supervisor: supervisor ? { delegateType: supervisor } : null,
-      });
-      await goto(runHref(runId));
-      shown = false;
-      onclose();
-    } catch (caught) {
-      errorMessage = message(caught);
-    } finally {
-      busy = false;
-    }
+    // biome-ignore lint/complexity/noVoid: the launch keeps its own outcome
+    void workflowLaunches.start(workflow.id);
+  }
+  function cancel() {
+    shown = false;
+    workflowLaunches.cancel(workflow.id);
   }
 </script>
 
@@ -145,7 +180,7 @@
     class:pb-space-4={sheet}
     data-slot="launch"
   >
-    <form class="flex min-w-0 flex-col gap-space-4" onsubmit={launch}>
+    <form class="flex min-w-0 flex-col gap-space-4" onsubmit={launchIt}>
       {#if fields.length}
         {#each fields as input (input.name)}
           <label
@@ -244,19 +279,21 @@
         </NativeSelect></label
       >
       {#if errorMessage}
-        <Alert variant="destructive">{errorMessage}</Alert>
+        <Alert data-slot="launch-refusal" variant="destructive"
+          >{errorMessage}</Alert
+        >
       {/if}
       <div class="flex flex-wrap items-center justify-between gap-space-2">
         <Button
           disabled={busy}
-          onclick={() => dismissed(false)}
+          onclick={cancel}
           type="button"
           variant="outline"
         >
           Cancel
         </Button><Button
           aria-describedby={waits ? "launch-waits" : undefined}
-          disabled={waits !== ""}
+          disabled={waits !== "" || busy}
           failed={errorMessage !== ""}
           label="Start run"
           pending={busy}
@@ -279,6 +316,7 @@
       tabindex={-1}
       title={`Run ${workflow.name}`}
       bind:ref={card}
+      {@attach land(() => share)}
     >
       <Drawer.Description visible={false}
         >Choose the inputs and workspace for this workflow run.</Drawer.Description
@@ -298,8 +336,6 @@
       customAnchor={from}
       gap="snug"
       height="room"
-      interactOutsideBehavior={busy ? "ignore" : "close"}
-      escapeKeydownBehavior={busy ? "ignore" : "close"}
       onCloseAutoFocus={giveFocusBack}
       onOpenAutoFocus={takeFocus}
       overflow="scroll"
@@ -308,6 +344,7 @@
       tabindex={-1}
       width="room"
       bind:ref={card}
+      {@attach land(() => share)}
     >
       <PopoverTitle>Run {workflow.name}</PopoverTitle>
       <p class="text-ink-muted">

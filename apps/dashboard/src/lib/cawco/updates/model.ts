@@ -348,7 +348,14 @@ export const installable = (
 
 // ── the notice ───────────────────────────────────────────────────────────
 
-export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+/** What the hub refused of an install this tab asked for, or of its cancel. */
+export interface Refusal {
+  act: "install" | "cancel";
+  /** The refusal in the error formula's words. */
+  reason: string;
+}
 export type LineState = "plain" | "done" | "busy" | "wait";
 
 export interface NoticeLine {
@@ -393,6 +400,8 @@ export interface NoticeInput {
    */
   newerBuild: string | null;
   policy: BinaryUpdatePolicy;
+  /** What the hub refused of this tab's asks, by machine id, until acted on. */
+  refused: ReadonlyMap<string, Refusal>;
   /** The notice ids acknowledged on any tab or device (notices.svelte.ts). */
   seen: ReadonlySet<string>;
 }
@@ -526,6 +535,42 @@ function keeperRestarted({ input, machines, name }: Ctx): Notice | null {
     caw: { status: "needs-you", moves: false },
     machineIds: [machine.machineId],
     version: "",
+  };
+}
+
+/**
+ * 9. The hub refused an install (or its cancel) this tab asked for: said in
+ * Caw's panel, where the update is parked, as it is under the machine's row
+ * where it was asked, until Retry or its ✕ (The Work Outlives Its Surface
+ * Rule). It is this tab's, so it is acknowledged here, not on the hub.
+ */
+function refusedHere({ input, name }: Ctx): Notice | null {
+  const asked = input.machines
+    .filter((m) => input.refused.has(m.machineId))
+    .sort(byName);
+  const [lead] = asked;
+  const refusal = lead && input.refused.get(lead.machineId);
+  if (!(lead && refusal)) {
+    return null;
+  }
+  const v = shownVersion(lead.binaryUpdate?.availableVersion);
+  return {
+    acks: [],
+    kind: 9,
+    title:
+      refusal.act === "cancel"
+        ? `The install on ${name(lead)} was not called off`
+        : `CawCo ${v} was not installed on ${name(lead)}`,
+    failed: true,
+    lines: asked.map((m) => ({
+      state: "plain",
+      text: input.refused.get(m.machineId)?.reason ?? "",
+    })),
+    configure: true,
+    action: "retry",
+    caw: { status: "needs-you", moves: true },
+    machineIds: asked.map((m) => m.machineId),
+    version: v,
   };
 }
 
@@ -787,6 +832,7 @@ export function noticeFor(
   return (
     rolledBack(ctx) ??
     keeperRestarted(ctx) ??
+    refusedHere(ctx) ??
     installing(ctx) ??
     landedAll(ctx) ??
     unlessSeen(waitsForYou(ctx), input) ??

@@ -29,7 +29,7 @@
   const cell = $derived(given ?? cellFor(machine, policy));
   /** The machine's whole error, unfolded in place under the cell. */
   let reading = $state(false);
-  const refused = $derived(updates.refused.get(machine.machineId));
+  const refused = $derived(updates.refusalOf(machine));
 </script>
 
 <div class="overflow-hidden" {@attach morph()}>

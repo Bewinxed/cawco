@@ -15,6 +15,7 @@
   import { crossIn, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { sessionTitle } from "#lib/cawco/session-names.svelte.js";
+  import { workflowLaunches } from "#lib/cawco/workflow-launch.svelte.js";
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import {
     refreshWorkflows,
@@ -48,6 +49,7 @@
   import WorkflowCanvas from "./WorkflowCanvas.svelte";
   import WorkflowInspector from "./WorkflowInspector.svelte";
   import WorkflowLaunch from "./WorkflowLaunch.svelte";
+  import WorkflowLaunchParked from "./WorkflowLaunchParked.svelte";
   import WorkflowProgram from "./WorkflowProgram.svelte";
   import WorkflowStatus from "./WorkflowStatus.svelte";
   import { duration, inspectorTitle, kinds, newNode } from "./workflow-ui";
@@ -85,9 +87,6 @@
     Number.parseFloat(((48 / panelWidth) * 100).toFixed(10))
   );
 
-  let launch = $state(false);
-  /** The button the launch dialog grows from. */
-  let launchFrom = $state<HTMLElement>();
   let program = $state("");
   /**
    * What the hub said about a payload: the compiler's and the typechecker's
@@ -345,12 +344,14 @@
       !saving &&
       problems.length === 0
   );
-  /** Opens the launch form under the button that asked for it. */
+  /** Opens the launch form under the button that asked for it (workflow-launch.svelte.ts). */
   function openLaunch(from: HTMLElement) {
+    if (!workflow) {
+      return;
+    }
     inspectorOpen = false;
     paletteOpen = false;
-    launchFrom = from;
-    launch = true;
+    workflowLaunches.openFor(workflow.id, workflow.name, from);
   }
   function openInspector() {
     inspectorOpen = true;
@@ -407,7 +408,7 @@
     ) {
       return;
     }
-    if (tab !== "editor" || launch) {
+    if (tab !== "editor" || workflowLaunches.open === workflow?.id) {
       return;
     }
     const command = event.metaKey || event.ctrlKey;
@@ -622,6 +623,7 @@
           type="button"
           variant="outline"
         /><Button
+          data-run-workflow={workflow?.id}
           disabled={!runnable}
           onclick={(event) => openLaunch(event.currentTarget)}
           title={live ? undefined : "Can't run while the hub is unreachable"}
@@ -631,6 +633,9 @@
         </Button>
       </div>
     </div>
+    {#if workflow}
+      <WorkflowLaunchParked workflowId={workflow.id} />
+    {/if}
     <div class="flex flex-wrap items-center justify-between gap-space-2">
       <div class="flex flex-wrap items-center gap-space-2">
         <Tabs.Root onValueChange={show} value={tab}>
@@ -847,14 +852,8 @@
     </div>
   {/if}
 </div>
-{#if workflow && launch && launchFrom}
-  <WorkflowLaunch
-    from={launchFrom}
-    onclose={() => {
-      launch = false;
-    }}
-    {workflow}
-  />
+{#if workflow && workflowLaunches.open === workflow.id}
+  <WorkflowLaunch {workflow} />
 {/if}
 {#if narrow.current}
   <Dialog.Root bind:open={paletteOpen}

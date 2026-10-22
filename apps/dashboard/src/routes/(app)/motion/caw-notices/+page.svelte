@@ -117,6 +117,7 @@
   /** A landing in a tab older than the dashboard: its notes, and Reload. */
   const UPDATE = noticeFor(
     {
+      refused: new Map(),
       commanded: new Set(),
       machines: MACHINES,
       newerBuild: "e3cbba1",

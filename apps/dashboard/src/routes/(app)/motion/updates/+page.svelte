@@ -215,6 +215,7 @@
   const ON: BinaryUpdatePolicy = { autoUpdate: true, channel: "stable" };
 
   const input = (over: Partial<NoticeInput>): NoticeInput => ({
+    refused: new Map(),
     commanded: new Set(),
     machines: [],
     newerBuild: null,

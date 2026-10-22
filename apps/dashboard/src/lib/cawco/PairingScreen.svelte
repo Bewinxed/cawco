@@ -7,22 +7,25 @@
    * device (RFC 8628 §5.4: the code on both screens is what
    * tells this browser's ask apart from anyone else's).
    *
-   * It asks for a code as it opens. Approved, the page reloads as this
-   * device; denied or expired, it says so and offers to start again.
+   * It asks for a code as it opens, unless this tab already holds one still
+   * valid (a reload): that code is shown again and polled, never replaced
+   * (hub-auth.svelte.ts `resumePairing`). Approved, the page reloads as this
+   * device; denied or expired, it says so, through a reload too, and offers
+   * to start again.
    */
   import { onMount } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import ErrorText from "./ErrorText.svelte";
   import Caw from "./home/Caw.svelte";
   import { clock } from "./home/home-state.svelte";
-  import { hubAuth, startPairing } from "./hub-auth.svelte";
+  import { hubAuth, resumePairing, startPairing } from "./hub-auth.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";
 
   /** Caw's side, as on the empty fleet. */
   const CAW_SIZE = 80;
 
   onMount(() => {
-    if (hubAuth.pairing.kind === "idle") {
+    if (hubAuth.pairing.kind === "idle" && !resumePairing()) {
       // biome-ignore lint/complexity/noVoid: the pairing reports its own outcome in its stage
       void startPairing();
     }

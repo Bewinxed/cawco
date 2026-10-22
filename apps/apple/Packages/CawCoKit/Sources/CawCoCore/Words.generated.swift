@@ -1631,6 +1631,27 @@ public enum Words {
 
         public static let cancel = "Cancel"
 
+        /// An act on a routine the hub refused, said under its row until the reader acts on it: what did not happen, then the hub's own sentence (its why and its way on).
+        public static func refusedRun(name: String, why: String) -> String {
+            "\(name) did not run. \(why)"
+        }
+
+        public static func refusedPause(name: String, why: String) -> String {
+            "\(name) was not paused. \(why)"
+        }
+
+        public static func refusedResume(name: String, why: String) -> String {
+            "\(name) was not resumed. \(why)"
+        }
+
+        public static func refusedKeep(name: String, why: String) -> String {
+            "\(name) was not kept. \(why)"
+        }
+
+        public static func refusedRemove(name: String, why: String) -> String {
+            "\(name) was not deleted. \(why)"
+        }
+
         public static let empty = "No routines yet"
 
         /// What the empty page is for: its line whether or not Caw can start.

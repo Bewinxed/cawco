@@ -498,7 +498,7 @@ The weight of the decision sets the shape, so flows differ:
 - Renaming edits the name where it stands.
 - Moving a session to another account says on that session's own row that it moves when its turn ends.
 - Forgetting a project with sessions running (`ForgetProjectTray.svelte`) is a heavy decision, so the tray unfolds under what asked (the project head's `⋯`, or the folder's row in the rail), grows to name each running session, arms when stopping them would cut a turn short, shows each stop as its machine confirms it, and forgets the project only after that.
-- Turning Caw off weighs what he started. With nothing running, the switch just flips. With only his own turn in flight, one line under the switch asks whether it finishes or stops. With sessions he started still running, it is the forget's decision again, so it is the forget's tray (`StopTray.svelte`, `CawOffTray.svelte`) under the switch, with one more way out, "Let them finish".
+- Turning Caw off weighs what he started. With nothing running, the switch just flips. With only his own turn in flight, one line under the switch asks whether it finishes or stops. With sessions he started still running, it is the forget's decision again, so it is the forget's tray (`StopTray.svelte` on a Caw-off job of `stop-work.svelte.ts`) under the switch, with one more way out, "Let them finish".
 
 The tray is one worked answer to the four questions, not a template. Carry its reasoning to every flow, and its parts only to a flow that asks the same questions.
 

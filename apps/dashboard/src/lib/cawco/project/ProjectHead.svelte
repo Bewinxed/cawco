@@ -58,6 +58,7 @@
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
+  import { stopWork } from "#lib/cawco/stop-work.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -152,6 +153,11 @@
   function openDetails(atPlaces: boolean): void {
     if (forgetHost.at === forgetAt) {
       forgetHost.close();
+    }
+    // A forget's tray standing here gives way too; stops under way park.
+    const forgetting = stopWork.of("forget", project.id);
+    if (forgetting?.open && forgetting.at === forgetAt) {
+      stopWork.dismiss(forgetting);
     }
     const asked = details?.placesAsked ?? 0;
     standing.set(project.id, { placesAsked: atPlaces ? asked + 1 : asked });
@@ -603,6 +609,7 @@
 <div class="contents" style:--ask-end="var(--space-5)">
   <ForgetProjectTray
     at={forgetAt}
+    projectId={project.id}
     class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
   />
 </div>

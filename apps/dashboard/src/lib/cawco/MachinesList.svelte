@@ -124,7 +124,7 @@
     return cellFor(machine, updates.policy);
   }
   function updateFault(machine: Machine) {
-    const refused = updates.refused.get(machine.machineId);
+    const refused = updates.refusalOf(machine);
     if (refused) {
       return refused;
     }

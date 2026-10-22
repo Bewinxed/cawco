@@ -12,8 +12,23 @@ import type {
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { failureClause, hubFailure, hubRefusal } from "#lib/cawco/hub-read.js";
 import { newId } from "../id";
+import { readJson, writeJson } from "../storage";
 import { toast } from "../toasts";
-import { installable, type UpdateMachine } from "./model";
+import { installable, type Refusal, type UpdateMachine } from "./model";
+
+/**
+ * What this tab asked of the machines' updates, kept in the tab's own
+ * storage (DESIGN.md, The Work Outlives Its Surface Rule): the installs it
+ * commanded, which the panel's installing notice follows, and what the hub
+ * refused, said until the reader acts on it. A reload keeps both; the phase
+ * each machine stands in comes from the hub.
+ */
+const KEPT = "cawco:update-commands";
+
+interface Kept {
+  commanded: string[];
+  refused: [string, Refusal][];
+}
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -28,15 +43,64 @@ class Updates {
    */
   damaged = $state(false);
   /** Machines whose install this tab commanded. */
-  commanded = new SvelteSet<string>();
+  readonly commanded: SvelteSet<string>;
   /**
    * What the hub said when it refused an install or a cancel, by machine:
-   * said under that machine's row and its Update cell, where it was asked.
+   * said under that machine's row and its Update cell, where it was asked,
+   * and in Caw's panel, where the update is parked; kept until the reader
+   * acts on it (Retry, or the notice's ✕).
    */
-  refused = new SvelteMap<
-    string,
-    { again: () => Promise<void>; reason: string }
-  >();
+  readonly refused: SvelteMap<string, Refusal>;
+
+  constructor() {
+    const kept = readJson<Kept>(
+      KEPT,
+      { commanded: [], refused: [] },
+      "session"
+    );
+    this.commanded = new SvelteSet(kept.commanded);
+    this.refused = new SvelteMap(kept.refused);
+  }
+
+  /** Writes what this tab asked to the tab's storage, so a reload keeps it. */
+  private keep(): void {
+    writeJson(
+      KEPT,
+      { commanded: [...this.commanded], refused: [...this.refused] },
+      "session"
+    );
+  }
+
+  /** This tab's installs are forgotten: their outcome was said and seen. */
+  forgetCommanded(): void {
+    this.commanded.clear();
+    this.keep();
+  }
+
+  /** A refusal acknowledged (the notice's ✕): nothing more is said of it. */
+  forgetRefusal(machineIds: readonly string[]): void {
+    for (const id of machineIds) {
+      this.refused.delete(id);
+    }
+    this.keep();
+  }
+
+  /** A machine's refusal with its way on: what refused runs again. */
+  refusalOf(
+    machine: UpdateMachine
+  ): { again: () => Promise<void>; reason: string } | null {
+    const refusal = this.refused.get(machine.machineId);
+    return refusal
+      ? { reason: refusal.reason, again: () => this.again(machine) }
+      : null;
+  }
+
+  /** What the hub refused on `machine`, asked again. */
+  again(machine: UpdateMachine): Promise<void> {
+    return this.refused.get(machine.machineId)?.act === "cancel"
+      ? this.cancel(machine)
+      : this.installNow(machine);
+  }
 
   async loadPolicy(): Promise<void> {
     try {
@@ -132,6 +196,7 @@ class Updates {
     const name = machineLabel(machine.hostname);
     this.commanded.add(machineId);
     this.refused.delete(machineId);
+    this.keep();
     let response: Response;
     try {
       response = await fetch(`/api/agents/${machineId}/update`, {
@@ -147,20 +212,23 @@ class Updates {
     } catch {
       return;
     }
-    const again = () => this.installNow(machine);
     if (response.status === 404) {
-      this.commanded.delete(machineId);
-      this.refused.set(machineId, {
-        reason: `${name} is not connected, so nothing was installed. Try again when it is back.`,
-        again,
+      this.refuse(machineId, {
+        act: "install",
+        reason: `${name} is not connected, so nothing was installed. Retry once it is back.`,
       });
     } else if (response.status === 500) {
-      this.commanded.delete(machineId);
-      this.refused.set(machineId, {
-        reason: `${name} could not start the update. ${await errorText(response)}.`,
-        again,
+      this.refuse(machineId, {
+        act: "install",
+        reason: `${name} could not start the update: ${await errorText(response)}. It keeps the build it runs; Retry to install it again.`,
       });
     }
+  }
+
+  private refuse(machineId: string, refusal: Refusal): void {
+    this.commanded.delete(machineId);
+    this.refused.set(machineId, refusal);
+    this.keep();
   }
 
   /** Every machine with a build to install; the machine that hosts the hub goes last. */
@@ -179,18 +247,22 @@ class Updates {
   async cancel(machine: UpdateMachine): Promise<void> {
     const { machineId } = machine;
     this.refused.delete(machineId);
+    this.keep();
     const response = await fetch(
       `/api/binary-updates/machines/${machineId}/cancel`,
       { method: "POST" }
     ).catch(() => null);
     if (!response?.ok) {
+      // The install it meant to call off goes on: still this tab's to follow.
       this.refused.set(machineId, {
-        reason: `The install was not called off: ${response ? await errorText(response) : "the hub did not answer"}.`,
-        again: () => this.cancel(machine),
+        act: "cancel",
+        reason: `The install on ${machineLabel(machine.hostname)} was not called off: ${response ? await errorText(response) : "the hub did not answer"}. It still installs; Retry to call it off.`,
       });
+      this.keep();
       return;
     }
     this.commanded.delete(machineId);
+    this.keep();
   }
 }
 

@@ -150,6 +150,18 @@ export const routinesWords = {
   removeLabel: (name: string) => `Delete ${name}`,
   removing: "Deleting…",
   cancel: "Cancel",
+  /**
+   * An act on a routine the hub refused, said under its row until the
+   * reader acts on it: what did not happen, then the hub's own sentence
+   * (its why and its way on).
+   */
+  refusedRun: (name: string, why: string) => `${name} did not run. ${why}`,
+  refusedPause: (name: string, why: string) => `${name} was not paused. ${why}`,
+  refusedResume: (name: string, why: string) =>
+    `${name} was not resumed. ${why}`,
+  refusedKeep: (name: string, why: string) => `${name} was not kept. ${why}`,
+  refusedRemove: (name: string, why: string) =>
+    `${name} was not deleted. ${why}`,
 
   // The empty Routines block.
   empty: "No routines yet",

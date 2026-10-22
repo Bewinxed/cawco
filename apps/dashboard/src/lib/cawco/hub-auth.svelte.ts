@@ -25,6 +25,7 @@ import type {
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { failureWords, hubRefusal } from "./hub-read";
 import { leaveThePage } from "./leaving";
+import { readJson, unstore, writeJson } from "./storage";
 
 /** Where pairing stands for this browser. */
 export type PairingStage =
@@ -106,10 +107,64 @@ export function readAuth(): Promise<void> {
 
 let polling: ReturnType<typeof setTimeout> | undefined;
 
+/**
+ * The pairing this tab asked for, kept in the tab's own storage (DESIGN.md,
+ * The Work Outlives Its Surface Rule): a reload shows the same code while it
+ * is still valid and goes on polling for it, never minting another, and a
+ * denial or an expiry is said again until the person starts over. The device
+ * code is this browser's own handle on its ask (RFC 8628 §3.2), the one
+ * thing it polls with; the token the approval sets is an HttpOnly cookie,
+ * never kept here.
+ */
+const KEPT = "cawco:pairing";
+
+interface KeptPairing {
+  deviceCode?: string;
+  /** Seconds between polls, as the hub last asked. */
+  interval?: number;
+  stage: PairingStage;
+}
+
+const keep = (kept: KeptPairing | null) =>
+  kept ? writeJson(KEPT, kept, "session") : unstore("session", KEPT);
+
+/** Sets the stage, and keeps it with what polls it. */
+function stageTo(
+  stage: PairingStage,
+  poll?: { deviceCode: string; interval: number }
+): void {
+  hubAuth.pairing = stage;
+  keep(stage.kind === "asking" ? null : { stage, ...poll });
+}
+
+/**
+ * Where this tab's pairing stood before a reload, brought back: a code
+ * still valid is shown and polled again; a denial or an expiry is said
+ * again. False when there is nothing to bring back, so a code is asked for.
+ */
+export function resumePairing(): boolean {
+  const kept = readJson<KeptPairing | null>(KEPT, null, "session");
+  if (!kept || kept.stage.kind === "idle" || kept.stage.kind === "asking") {
+    return false;
+  }
+  const { stage } = kept;
+  if (stage.kind !== "waiting") {
+    hubAuth.pairing = stage;
+    return true;
+  }
+  if (!kept.deviceCode || stage.expiresAt <= Date.now()) {
+    stageTo({ kind: "expired" });
+    return true;
+  }
+  hubAuth.pairing = stage;
+  pollFor(kept.deviceCode, (kept.interval ?? 5) * 1000);
+  return true;
+}
+
 /** Asks the hub for a code and waits for the person's answer. */
 export async function startPairing(): Promise<void> {
   clearTimeout(polling);
-  hubAuth.pairing = { kind: "asking" };
+  stageTo({ kind: "asking" });
   let started: PairingStart;
   try {
     const response = await fetch("/api/pair", {
@@ -122,23 +177,32 @@ export async function startPairing(): Promise<void> {
     }
     started = (await response.json()) as PairingStart;
   } catch (error) {
-    hubAuth.pairing = { kind: "failed", message: failureWords(error) };
+    stageTo({ kind: "failed", message: failureWords(error) });
     return;
   }
-  hubAuth.pairing = {
-    kind: "waiting",
-    userCode: started.userCode,
-    expiresAt: Date.now() + started.expiresIn * 1000,
-    verificationUriComplete: started.verificationUriComplete,
-  };
-  let interval = started.interval * 1000;
+  stageTo(
+    {
+      kind: "waiting",
+      userCode: started.userCode,
+      expiresAt: Date.now() + started.expiresIn * 1000,
+      verificationUriComplete: started.verificationUriComplete,
+    },
+    { deviceCode: started.deviceCode, interval: started.interval }
+  );
+  pollFor(started.deviceCode, started.interval * 1000);
+}
+
+/** Polls the hub for the answer to `deviceCode` every `interval` ms (RFC 8628 §3.4). */
+function pollFor(deviceCode: string, every: number): void {
+  clearTimeout(polling);
+  let interval = every;
   const poll = async () => {
     let answer: PairingPoll;
     try {
       const response = await fetch("/api/pair/poll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceCode: started.deviceCode }),
+        body: JSON.stringify({ deviceCode }),
       });
       answer = (await response.json()) as PairingPoll;
     } catch {
@@ -149,16 +213,20 @@ export async function startPairing(): Promise<void> {
     switch (answer.status) {
       case "approved":
         // The cookie came with this answer: the app opens as this device.
+        keep(null);
         leaveThePage(() => location.reload());
         return;
       case "access_denied":
-        hubAuth.pairing = { kind: "denied" };
+        stageTo({ kind: "denied" });
         return;
       case "expired_token":
-        hubAuth.pairing = { kind: "expired" };
+        stageTo({ kind: "expired" });
         return;
       case "slow_down":
         interval += 5000;
+        if (hubAuth.pairing.kind === "waiting") {
+          stageTo(hubAuth.pairing, { deviceCode, interval: interval / 1000 });
+        }
         break;
       case "authorization_pending":
         break;
