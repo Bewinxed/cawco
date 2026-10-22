@@ -15,7 +15,7 @@ import type { Locator, Page, WebSocketRoute } from "playwright-core";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
-import { COMPOSER_FIELD } from "../kit";
+import { COMPOSER_FIELD, pressIn } from "../kit";
 import { exactly, startsWith } from "../words";
 import {
   ANSWERED_PIN,
@@ -4384,10 +4384,7 @@ export const SURFACES: Surface[] = [
         act: async (page) => {
           await pinWith(page, "h1", "Keep the heading on one line.");
           await paneKey(page, "v");
-          await page
-            .frameLocator(PREVIEW_FRAME)
-            .locator("[data-option=wrap]")
-            .click();
+          await pressIn(page.frameLocator(PREVIEW_FRAME), "[data-option=wrap]");
           await page.locator("[data-slot=send]").first().waitFor();
           await sideToFloor(page);
           await page

@@ -9,14 +9,15 @@
  * stays where it is, now offering its next step (Make tasks).
  */
 import { join } from "node:path";
-import type { Locator } from "playwright-core";
+import type { FrameLocator, Locator } from "playwright-core";
 import { pageProgram, type SeedPage } from "../../decisions-preview/seed";
 import { MACHINE, type Seen } from "../../scratch-fleet";
-import type { KitFleet } from "../kit";
+import { type KitFleet, pressIn } from "../kit";
 import { say } from "./mock";
 import {
   type Data,
   eventually,
+  expect,
   gone,
   type Journey,
   type Leg,
@@ -85,10 +86,13 @@ async function seed(fleet: KitFleet, data: Data): Promise<Seeded> {
   return { projectId: id };
 }
 
-/** An option scrolled to the middle of its page's frame, then tapped. */
-async function pick(option: Locator): Promise<void> {
+/**
+ * An option scrolled to the middle of its page's frame, then pressed once
+ * nothing on the dashboard stands over it (kit pressIn).
+ */
+async function pick(frame: FrameLocator, option: Locator): Promise<void> {
   await option.evaluate((el) => el.scrollIntoView({ block: "center" }));
-  await option.click();
+  await pressIn(frame, option);
 }
 
 interface DecisionRead {
@@ -116,8 +120,8 @@ async function walk(leg: Leg): Promise<void> {
     fleet.api<DecisionRead>(`/api/projects/${projectId}/decisions/${name}`);
   const frame = page.getByTitle(`Decision page: ${title}`).contentFrame();
   // A project whose board is empty opens Caw's panel (CawLead.arrive); on a
-  // phone it is a sheet over the page's foot, which a person puts away to
-  // read the page. Beside the page (tablet, desk) it covers none of it.
+  // phone it is a sheet over the page, which puts itself away as a decision
+  // page opens. Beside the page (tablet, desk) it covers none of it.
   const sheet = page.getByRole("dialog", { name: CAW_SHEET });
   // A card answered by one pick is a radiogroup named by its question, each
   // option a radio named by its label (ui/option-group).
@@ -132,11 +136,18 @@ async function walk(leg: Leg): Promise<void> {
       page.goto(`${base}/project/${projectId}?view=decisions`, {
         waitUntil: "domcontentloaded",
       }),
-    () =>
-      shows(
+    async () => {
+      await shows(
         page.getByRole("link", { name: new RegExp(title.slice(0, 40)) }),
         `the page's tile, “${title}”`
-      )
+      );
+      if (leg.size === "phone") {
+        await shows(
+          sheet,
+          "Caw's sheet, open on a project with an empty board"
+        );
+      }
+    }
   );
 
   let at = "";
@@ -147,31 +158,53 @@ async function walk(leg: Leg): Promise<void> {
         .getByRole("link", { name: new RegExp(title.slice(0, 40)) })
         .first()
         .click();
-      if (leg.size === "phone") {
-        await sheet.getByRole("button", { name: "Close" }).click();
-      }
       at = page.url();
     },
     async () => {
-      await gone(sheet, "Caw's sheet over the page");
+      await gone(sheet, "Caw's sheet over the page, put away by itself");
       await shows(option(SHAPE, PER_MACHINE), "the page's cards, live", 60_000);
     }
   );
 
+  // The phone's page scroller: a reveal in the page's frame carries up into it.
+  const scrolled = () =>
+    page
+      .locator('[data-slot="project-page"]')
+      .first()
+      .evaluate((el) => el.scrollTop);
   await leg.step(
-    "Pick an option on each card",
+    "Pick an option on each card, the second with Caw back",
     async () => {
-      // Each option scrolled up into the open part of the page (the page
-      // runs on under the docked composer, as a person scrolls it), then
-      // tapped; one pick, its count seen, then the next.
-      await pick(option(SHAPE, PER_MACHINE));
+      // Each option scrolled to the middle of the page, then pressed; one
+      // pick, its count seen, then the next.
+      await pick(frame, option(SHAPE, PER_MACHINE));
       await shows(
         page.getByText(PICKS).filter({ hasText: "1 of 2" }),
         "the page's head counting 1 of 2 picked"
       );
-      await pick(option(TRIAL, A_MONTH));
+      if (leg.size !== "phone") {
+        await pick(frame, option(TRIAL, A_MONTH));
+        return;
+      }
+      // On a phone: his seat brings his sheet back over the page (one
+      // press), and the second card's option, revealed in the page's frame,
+      // lands above the sheet: the page scroller moves it there (its scroll
+      // padding is the sheet's while it stands), and the press finds
+      // nothing over it (kit pressIn). Then he is put away to send.
+      await page.getByRole("button", { name: CAW_SHEET }).first().click();
+      await shows(sheet, "Caw's sheet back over the page, by his seat");
+      const before = await scrolled();
+      await pick(frame, option(TRIAL, A_MONTH));
+      const after = await scrolled();
+      expect(
+        "the reveal moved the phone's page scroller",
+        after > before,
+        `scrollTop ${before} → ${after}`
+      );
+      await sheet.getByRole("button", { name: "Close" }).click();
     },
     async () => {
+      await gone(sheet, "Caw's sheet, put away to send");
       await eventually(
         "the hub holds both picks",
         decision,

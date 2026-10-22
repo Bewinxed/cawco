@@ -1361,7 +1361,12 @@ const commentInEmbed = async (on: On, frame: Frame) => {
     await desk.emulateMedia({ reducedMotion: null });
     return;
   }
-  await pressIn(frame.frameLocator(EMBED).first(), ".box >> nth=0");
+  // In Comment mode the page's overlay takes the press over the embed and
+  // asks the embed's overlay what stands at the point (preview-overlay
+  // embeds.ts); the dashboard around the page must still leave it open.
+  await pressIn(frame.frameLocator(EMBED).first(), ".box >> nth=0", {
+    through: "cawco-overlay",
+  });
   await desk.emulateMedia({ reducedMotion: null });
   await writeComment(desk, "This box, inside the embed.");
   const pinned = await until(
@@ -2862,7 +2867,7 @@ const tapLeg = async (on: On) => {
         .map((el) => `${el.tagName.toLowerCase()}.${el.className}`),
     };
   });
-  await frame.locator('#decision-tall [data-option="stages"]').tap();
+  await pressIn(frame, '#decision-tall [data-option="stages"]', { tap: true });
   const tapped = await until(
     "the tall card holding the tap's pick",
     () => foldOf(frame, "tall"),
@@ -2877,7 +2882,7 @@ const tapLeg = async (on: On) => {
     under?.top === "stages" && !!tapped && !tapped.decided && tapped.body,
     JSON.stringify({ under, tapped, heard })
   );
-  await frame.locator("#decision-tall [data-continue]").tap();
+  await pressIn(frame, "#decision-tall [data-continue]", { tap: true });
   const folded = await until(
     "the tall card folded by Continue",
     () => foldOf(frame, "tall"),
@@ -2896,7 +2901,7 @@ const tapLeg = async (on: On) => {
   // The card opened again by Change keeps its pick, and a tap on the
   // chosen option keeps it (the overlay's pick, preview-overlay pick.ts: a
   // one-pick choice is never let go), for a finger as for a mouse.
-  await frame.locator("#decision-tall [data-change]").tap();
+  await pressIn(frame, "#decision-tall [data-change]", { tap: true });
   await until(
     "the tall card open again",
     () => foldOf(frame, "tall"),
@@ -2905,7 +2910,7 @@ const tapLeg = async (on: On) => {
   ).catch(() => null);
   await settle(phone, 600);
   const reopened = await foldOf(frame, "tall");
-  await frame.locator('#decision-tall [data-option="stages"]').tap();
+  await pressIn(frame, '#decision-tall [data-option="stages"]', { tap: true });
   await settle(phone, 600);
   const stayed = await foldOf(frame, "tall");
   kit.check(
@@ -2917,14 +2922,14 @@ const tapLeg = async (on: On) => {
       stayed.next,
     JSON.stringify({ reopened, stayed })
   );
-  await frame.locator('#decision-tall [data-option="skim"]').tap();
+  await pressIn(frame, '#decision-tall [data-option="skim"]', { tap: true });
   const moved = await until(
     "the tall card's pick moved by a tap",
     () => foldOf(frame, "tall"),
     (fold) => JSON.stringify(fold.marked) === '["skim"]',
     5000
   ).catch(() => null);
-  await frame.locator("#decision-tall [data-continue]").tap();
+  await pressIn(frame, "#decision-tall [data-continue]", { tap: true });
   const other = await until(
     "the tall card folded again by Continue",
     () => foldOf(frame, "tall"),

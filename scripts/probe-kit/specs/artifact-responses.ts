@@ -287,7 +287,7 @@ const run = async (kit: Kit) => {
       seq: number;
       state: Record<string, { note: string | null; options: string[] }>;
     }>(`/api/instances/${session}/artifacts/${id}`);
-  await frame.locator('[data-option="cover"]').click();
+  await pressIn(frame, '[data-option="cover"]');
   const note = frame.locator('[data-dp-note="song"]');
   const typeNote = async (words: string) => {
     await note.fill("");
@@ -464,7 +464,7 @@ const run = async (kit: Kit) => {
   await page.screenshot({ path: join(kit.out, "artifact-responses-read.png") });
 
   // 7. A pick after the Send is offered again.
-  await frame.locator('[data-option="original"]').click();
+  await pressIn(frame, '[data-option="original"]');
   const label = sendControl.locator('[data-slot="send-label"]');
   const figure = sendControl.locator('[data-slot="send-count"]');
   const labelNow = async () =>

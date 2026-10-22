@@ -1496,11 +1496,104 @@ export const frames = (page: Page): Promise<void> =>
 
 /** How many times {@link pressIn} presses before a press its `<iframe>` element took is a failure. */
 const PRESSES = 3;
+/** How long {@link pressIn} waits for the page around a frame to uncover its target. */
+const UNCOVER_MS = 5000;
 
 /**
- * Clicks `selector` in `frame`, a preview's frame of another origin, and
- * returns once a press went past the frame's `<iframe>` element. Chromium
- * hit-tests a press sent over the DevTools protocol against the
+ * What in the pages around `inner` stands over `point` (in `inner`'s
+ * viewport), or null when every `<iframe>` up the chain is the element at
+ * that point in its own parent. A press is sent at the top page's point and
+ * the top page hit-tests it, so an overlay there (a sheet, a popover) takes
+ * a press Playwright's own check never sees: that check runs inside the
+ * target's frame alone. `through` names a layer that takes the press on
+ * purpose (a preview overlay's Comment layer, which asks the frame under it
+ * what the point is): at its level it stands for the `<iframe>`. Each level
+ * maps the point through its `<iframe>`'s box: its border and padding, and
+ * any scale a transform puts on it.
+ */
+async function coverOver(
+  inner: Frame,
+  point: { x: number; y: number },
+  through: string | null
+): Promise<string | null> {
+  let at = point;
+  for (
+    let child = inner, parent = inner.parentFrame();
+    parent;
+    child = parent, parent = parent.parentFrame()
+  ) {
+    // biome-ignore lint/performance/noAwaitInLoops: each level maps the point the level inside it gave
+    const element = await child.frameElement();
+    const seen = await element.evaluate(
+      (el: Element, { p, layer }) => {
+        const box = el.getBoundingClientRect();
+        const html = el as HTMLElement;
+        const style = getComputedStyle(el);
+        const scale = html.offsetWidth > 0 ? box.width / html.offsetWidth : 1;
+        const x =
+          box.left +
+          (html.clientLeft + Number.parseFloat(style.paddingLeft) + p.x) *
+            scale;
+        const y =
+          box.top +
+          (html.clientTop + Number.parseFloat(style.paddingTop) + p.y) * scale;
+        const hit = document.elementFromPoint(x, y);
+        if (hit === el || (layer && hit?.closest(layer))) {
+          return { x, y, cover: null };
+        }
+        const name = (node: Element | null): string => {
+          if (!node) {
+            return "nothing (the point is off the page)";
+          }
+          // The surface it belongs to, by its role and its accessible name:
+          // a sheet reads as the dialog it is, not the row inside it.
+          const surface = node.closest(
+            "[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [role=tooltip], [role=complementary], [role=region], [role=banner], [role=navigation], [popover], dialog, aside, header, nav"
+          );
+          const labelled = surface
+            ?.getAttribute("aria-labelledby")
+            ?.split(" ")
+            .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+            .join(" ");
+          const said = surface?.getAttribute("aria-label") ?? labelled;
+          const role =
+            surface?.getAttribute("role") ?? surface?.tagName.toLowerCase();
+          const slot = node.closest("[data-slot]")?.getAttribute("data-slot");
+          return [
+            `<${node.tagName.toLowerCase()}>`,
+            slot ? `[data-slot=${slot}]` : "",
+            role ? `in the ${role}` : "",
+            said ? `“${said}”` : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+        };
+        return {
+          x,
+          y,
+          cover: `${name(hit)} at (${Math.round(x)}, ${Math.round(y)}) in ${location.href}`,
+        };
+      },
+      { p: at, layer: through }
+    );
+    if (seen.cover) {
+      return seen.cover;
+    }
+    at = { x: seen.x, y: seen.y };
+  }
+  return null;
+}
+
+/**
+ * Presses `target` in `frame` (a selector in it, or a locator into it),
+ * once nothing in the pages around it stands over it, and returns once a
+ * press went past the frame's `<iframe>` element; `tap` presses it with a
+ * finger. The press's point is the target's centre: every page around the
+ * frame must have the frame's `<iframe>` element there ({@link coverOver}),
+ * else the press fails naming what covers it, where Playwright would
+ * report a click done that a sheet took.
+ *
+ * Chromium hit-tests a press sent over the DevTools protocol against the
  * compositor's last frame, and a frame not yet in it takes the press as its
  * `<iframe>` element in the parent: "the compositor might not be up-to-date
  * yet resulting in a misclick (the iframe element becomes the event target
@@ -1517,9 +1610,19 @@ const PRESSES = 3;
  */
 export async function pressIn(
   frame: Frame | FrameLocator,
-  selector: string
+  target: string | Locator,
+  {
+    tap = false,
+    through = null,
+  }: {
+    tap?: boolean;
+    /** A layer in a page around the frame that takes the press on purpose ({@link coverOver}). */
+    through?: string | null;
+  } = {}
 ): Promise<void> {
   const root = frame.locator(":root");
+  const pressed = typeof target === "string" ? frame.locator(target) : target;
+  const named = typeof target === "string" ? target : String(target);
   // Both handles evaluate alike; the cast names the one signature.
   const element = (
     "owner" in frame ? frame.owner() : await frame.frameElement()
@@ -1544,7 +1647,9 @@ export async function pressIn(
         )
     );
     await frames(root.page());
-    await frame.locator(selector).click();
+    await pressed.scrollIntoViewIfNeeded();
+    await uncovered(pressed, named, through);
+    await (tap ? pressed.tap() : pressed.click());
     const took = await element.evaluate(
       (el: Element) => (el as unknown as { __kitTook: boolean }).__kitTook
     );
@@ -1553,6 +1658,36 @@ export async function pressIn(
     }
   }
   throw new Error(
-    `${selector}: the parent's <iframe> took each of ${PRESSES} presses`
+    `${named}: the parent's <iframe> took each of ${PRESSES} presses`
+  );
+}
+
+/** Waits up to {@link UNCOVER_MS} for nothing around `pressed`'s frame to stand over its centre, else fails naming what does. */
+async function uncovered(
+  pressed: Locator,
+  named: string,
+  through: string | null
+): Promise<void> {
+  const deadline = performance.now() + UNCOVER_MS;
+  let cover: string | null = null;
+  do {
+    // biome-ignore lint/performance/noAwaitInLoops: each read waits on the page the one before it saw
+    const handle = await pressed.elementHandle();
+    const inner = await handle?.ownerFrame();
+    if (!(handle && inner)) {
+      throw new Error(`${named}: not in a frame`);
+    }
+    const point = await handle.evaluate((el: Element) => {
+      const box = el.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    });
+    cover = await coverOver(inner, point, through);
+    if (!cover) {
+      return;
+    }
+    await pressed.page().waitForTimeout(100);
+  } while (performance.now() < deadline);
+  throw new Error(
+    `${named}: the page around its frame covers it: ${cover}, for ${UNCOVER_MS / 1000}s`
   );
 }

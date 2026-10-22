@@ -334,12 +334,14 @@
   /**
    * Arrived on the project, its board and its row read: his panel opens as
    * the person last left it here, else while the board is empty, so a
-   * project just made opens on Caw (PRD §5.6; CawLead.arrive).
+   * project just made opens on Caw (PRD §5.6; CawLead.arrive). Arriving on
+   * a decision page on a phone, where his sheet would stand over it, his
+   * panel stays put away.
    */
   $effect(() => {
     if (list !== null && lead.project !== null) {
       const blank = empty;
-      untrack(() => lead.arrive(blank));
+      untrack(() => lead.arrive(blank, sheetCovers()));
     }
   });
   /**
@@ -538,6 +540,26 @@
   /** The decision page open in the tab, and how the tab shows the rest. */
   let decisionPage = $derived<string | null>(data.decisionPage);
   let decisionMode = $derived<DecisionsMode>(data.decisionMode);
+  /** The decision page the person has open, in the Decisions tab. */
+  const openPage = $derived(current === "decisions" ? decisionPage : null);
+  /** On a phone Caw's panel is a sheet over the page's foot: an open decision page stands under it. */
+  const sheetCovers = () => openPage !== null && pageScrollsQuery.current;
+  /**
+   * A decision page opened on a phone puts Caw's sheet away, as his Close
+   * does (DESIGN.md, The Work Outlives Its Surface Rule): the sheet leaves
+   * by its own exit, his thread keeps its place, and his seat brings it
+   * back over the page when the person asks. Only an opening moves it: his
+   * panel reopened over the page stays.
+   */
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: read so each page opened runs the effect
+    void openPage;
+    untrack(() => {
+      if (lead.open && sheetCovers()) {
+        lead.open = false;
+      }
+    });
+  });
   /** The card a link names (`#<card>`): the page opens scrolled to it. */
   let decisionCard = $derived<string | null>(
     page.url.hash ? decodeURIComponent(page.url.hash.slice(1)) : null
@@ -2048,13 +2070,19 @@
           <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
             <!-- A phone: the page is the one scroller, so iOS never chains two. The
            foot's edge fade ends at the bar's top edge, a step of air under
-           the reach. -->
+           the reach. What it reveals (a scrollIntoView here, or one in a
+           decision page's frame, which carries up into it) lands in the part
+           nothing stands over: above the bar, or above Caw's sheet while it
+           stands (--reveal-foot, its scroll padding). -->
             <div
               data-slot="project-page"
               class={[
-                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)",
+                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
                 fadeOn === "page" && "kit-edge-fade-block",
               ]}
+              style:--reveal-foot={docked
+                ? "var(--c-sheet-max-h)"
+                : "var(--bar-reach)"}
               style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
               style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
             >

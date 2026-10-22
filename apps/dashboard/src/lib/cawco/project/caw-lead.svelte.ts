@@ -224,8 +224,11 @@ export class CawLead {
    * The page has read the project's board and its row: his panel opens as
    * the person last left it here, else while the board is empty and he can
    * take words (a project just made opens on him). Once per project.
+   * Arriving on a page his sheet would stand over (a decision page on a
+   * phone, `covered`), it stays put away, as if put away by hand: his
+   * thread keeps its place and his seat brings it back.
    */
-  arrive(emptyBoard: boolean): void {
+  arrive(emptyBoard: boolean, covered: boolean): void {
     const id = this.#projectId();
     if (!id || this.#arrivedFor === id || !this.project) {
       return;
@@ -233,7 +236,7 @@ export class CawLead {
     this.#follow(id);
     this.#arrivedFor = id;
     const kept = stored("local", openKey(id));
-    this.#open = kept === null ? emptyBoard : kept === "1";
+    this.#open = !covered && (kept === null ? emptyBoard : kept === "1");
   }
 
   /** Reads his view; the page calls it on arrival and after a reconnect. */
