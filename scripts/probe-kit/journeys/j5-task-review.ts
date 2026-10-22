@@ -5,7 +5,8 @@
  * should change, and its next attempt is given those words.
  *
  * A project whose gate.md declares CawCo's iOS build step (`needs: apple`)
- * and the code stages (`review` is the person's): a session there files two
+ * and the code stages (`review` is the person's), with Review before done on
+ * (a project's choice, off by default): a session there files two
  * tasks with `task_create` and starts each with `task_start` (as
  * task-approval's filer does). One task's attempt commits under apps/apple:
  * with no Mac online, its finish_item is answered with the gate's sentence,
@@ -104,6 +105,20 @@ async function seed(fleet: KitFleet, data: Data): Promise<Seeded> {
   if (!stages.ok) {
     throw new Error(
       `the project's stages: ${stages.status} ${await stages.text()}`
+    );
+  }
+  // Review before done, as the person turns it on in the project's details
+  // (ProjectDetails.svelte's Review row): off by default, a landed attempt's
+  // task goes straight to done (stages.ts `ruledStages`, dispatch.ts
+  // `reviewsFirst`).
+  const review = await fetch(`${fleet.base}/api/projects/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ review: true }),
+  });
+  if (!review.ok) {
+    throw new Error(
+      `the project's review before done: ${review.status} ${await review.text()}`
     );
   }
   await declareGate(fleet.base, id, APPLE_GATE);
