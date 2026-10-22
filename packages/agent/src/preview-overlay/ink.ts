@@ -313,8 +313,9 @@ const pathOf = (points: Point[]): string => {
 /** The overlay's layers that hold a mark now (a stroke, a disc), each as its own draw said. */
 const holding = new Set<SVGSVGElement>();
 
-/** The overlay's own elements in the page: its host, and its ink and pin layers. */
-const OWN = "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]";
+/** The overlay's own elements in the page: its host, its ink and pin layers, and its stand-ins over frames of another origin (embeds.ts). */
+const OWN =
+  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], [data-cawco-stand-ins]";
 /** Whether `node` is the overlay's own or stands in it (a node of a frame's document included). */
 const ownNode = (node: Node | null): boolean => {
   const el =

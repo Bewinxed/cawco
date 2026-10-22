@@ -138,6 +138,20 @@
  * k4. 61 whole parts ahead of the graph in the crop (one past the picture's
  *    60): the picture is drawn with no part failed and the hull not black.
  *
+ * And the owner's report (2026-10-22, in Comment mode on a decision page
+ * whose cards draw live component canvases: "i'm unable to comment on this
+ * stupi canvas it selects the whole page"), on a decision page whose card
+ * shows a Preview of a two-story canvas on an origin of its own (the hub's
+ * embed origin, the overlay running in it):
+ * l. Moved across the Preview, the target never names the whole page;
+ *    resting on each story's button washes that button, the target's box
+ *    the button's mapped into the page (±1px), at rest with its label; a
+ *    press opens the composer with the button chosen (its 1px line, no
+ *    label); the comment's pin stores the canvas's id, the story, the
+ *    button's source and a selector that finds it in the canvas, and its
+ *    pill's tail stands on the point pressed (±2px); comment_read of the
+ *    page answers it with the canvas's id, the story and the button.
+ *
  * And the owner's pins (2026-10-21: "this line is too tihck and too
  * prominent, why is it so thick?", "why use such thick and solid lines?"),
  * The One Target Rule (DESIGN.md):
@@ -584,6 +598,7 @@ const runOn = async (kit: Kit, on: On) => {
   for (const checks of [
     () => tapAndDeleteChecks(on, frame),
     () => frameChecks(on),
+    () => embedChecks(on),
     () => scaledFrameChecks(on),
     () => scrollChecks(on, "window"),
     () => scrollChecks(on, "container"),
@@ -2022,6 +2037,325 @@ const frameChecks = async (on: On) => {
       `disc y ${disc?.y} → ${scrolled?.y}`
     );
     await rootlessFrameCheck(on, reloaded);
+  } finally {
+    await app.stop(true);
+  }
+};
+
+/**
+ * A component canvas as a decision page's Preview draws it (`by=embed`,
+ * agent stage-host canvas/runtime.ts): each story a `cawco-frame` section
+ * carrying its story, states file, state and the story's place, one under
+ * another, the component's own markup in its body, and its height told to
+ * the page holding it. Two stories of a toggle, Off and On, each with its
+ * button; the toggle's root stamped with its call site, the button with its
+ * own line. Served as a dev server's port, so it reaches the page through
+ * the hub's embed origin and the machine's preview proxy (which runs the
+ * overlay in it) as a component canvas's stage does; a canvas's own stage
+ * runs in a boundary no workspace can make.
+ */
+const EMBED_CANVAS = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Toggle</title>
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; background: #fff; color: #222; }
+  .cawco-frame { padding: 20px 28px; }
+  .cawco-frame + .cawco-frame { border-top: 1px solid #ddd; }
+  .toggle { display: flex; align-items: center; gap: 12px; }
+  button { font: inherit; padding: 6px 14px; border: 1px solid #888; border-radius: 8px; background: #f2f2f2; }
+</style></head>
+<body>${[
+  ["Off", 6, "The lamp is dark.", "Turn on"],
+  ["On", 10, "The lamp is lit.", "Turn off"],
+]
+  .map(
+    ([story, line, words, label]) =>
+      `<section class="cawco-frame" data-cawco-story="${story}" data-cawco-file="src/Toggle.stories.ts" data-cawco-interaction="rest" data-cawco-scheme="page" data-cawco-width="360" data-cawco-source="src/Toggle.stories.ts:${line}:14"><div class="cawco-frame-body"><div class="toggle" data-insp-path="src/Toggle.stories.ts:${line}:3:Toggle"><p>${words}</p><button type="button" data-insp-path="src/Toggle.svelte:9:3">${label}</button></div></div></section>`
+  )
+  .join("")}
+<script>parent.postMessage({ type: "cawco:embed-size", height: document.documentElement.scrollHeight }, "*");</script>
+</body></html>`;
+
+/** A decision page whose card shows the canvas `canvas`, live. */
+const embedProgram = (
+  canvas: string
+) => `root = Decisions("Pick how the toggle reads", [look])
+look = Decision("look", "Does the toggle read right?", [keep, redo], "Drawn live, off and on.", [live])
+keep = Option("keep", "Keep it", "It says its state in words.", true, [], "One more word on the button.")
+redo = Option("redo", "Redraw it", "A new look.", false, [], "Another round.")
+live = Preview("${canvas}", "The toggle, off and on")`;
+
+/** The On story, as comment_read writes a pin's sheet. */
+const STORY_ON = /"story":\s*"On"/;
+
+/** A card's Preview of another origin's canvas, on the decision page. */
+const EMBED_FRAME = "iframe[data-slot=embed]";
+
+/** The overlay's one target over the page, in the frame's viewport: its box, whether it rests (no line), and its label. */
+const embedTarget = (frame: Frame) =>
+  frame.evaluate(() => {
+    const root = document.querySelector("cawco-overlay")?.shadowRoot;
+    const rect = root?.querySelector<HTMLElement>(".rect");
+    const label = root?.querySelector<HTMLElement>(".label");
+    if (!rect || rect.hidden) {
+      return null;
+    }
+    const r = rect.getBoundingClientRect();
+    return {
+      box: { x: r.x, y: r.y, w: r.width, h: r.height },
+      rest: rect.hasAttribute("data-rest"),
+      line: getComputedStyle(rect).outlineStyle,
+      label: label && !label.hidden ? (label.textContent ?? "") : null,
+    };
+  });
+
+/**
+ * (l) The owner's report (2026-10-22, on a decision page whose cards draw
+ * live component canvases: "i'm unable to comment on this stupi canvas it
+ * selects the whole page"): Comment mode reaches into a Preview of another
+ * origin, element by element.
+ */
+const embedChecks = async (on: On) => {
+  const app = Bun.serve({
+    port: 0,
+    fetch: () =>
+      new Response(EMBED_CANVAS, { headers: { "content-type": "text/html" } }),
+  });
+  try {
+    const made = await on.call(CREATE, {
+      kind: "preview",
+      does: "try",
+      ask: "Try the toggle",
+      name: "toggle",
+      port: app.port,
+    });
+    const canvas = made.match(ANSWERED_ID)?.[1];
+    const posted = await on.call(CREATE, {
+      kind: "page",
+      does: "pick",
+      ask: "Pick how the toggle reads",
+      name: "toggle-pick",
+      program: embedProgram(canvas ?? ""),
+    });
+    const pageId = posted.match(ANSWERED_ID)?.[1];
+    if (!(canvas && pageId)) {
+      on.kit.check(
+        "l: the canvas and its decision page are made",
+        false,
+        `${made.slice(0, 200)} | ${posted.slice(0, 200)}`
+      );
+      return;
+    }
+    const outer = (await until(
+      "the decision page's Preview in the pane",
+      async () => {
+        const frame = await pageFrame(on);
+        return (await frame
+          .locator(EMBED_FRAME)
+          .count()
+          .catch(() => 0)) === 1
+          ? frame
+          : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+    const embed = (await until(
+      "the canvas's two stories in the Preview",
+      async () => {
+        const handle = await outer
+          .locator(EMBED_FRAME)
+          .elementHandle()
+          .catch(() => null);
+        const inner = await handle?.contentFrame();
+        return inner && (await inner.locator("button").count()) === 2
+          ? inner
+          : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+    await outer.locator(EMBED_FRAME).scrollIntoViewIfNeeded();
+    await settle(on.page, 600);
+    await paneMode(on, outer, "C");
+
+    const pane = await on.page.locator(FRAME).boundingBox();
+    /** A story's button in the page's viewport: the embed's content box plus the button's own box in it. */
+    const buttonBox = async (label: string) => {
+      const frame = await outer.locator(EMBED_FRAME).evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x + el.clientLeft, y: r.y + el.clientTop };
+      });
+      const own = await embed
+        .getByRole("button", { name: label })
+        .evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return { x: r.x, y: r.y, w: r.width, h: r.height };
+        });
+      return { x: frame.x + own.x, y: frame.y + own.y, w: own.w, h: own.h };
+    };
+    const embedBox = await outer.locator(EMBED_FRAME).evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    });
+    if (!pane) {
+      on.kit.check("l: the pane's page has a box", false, "none");
+      return;
+    }
+
+    // Across the embed, from its top-left corner in to the On story's
+    // button, the target read at every step: never the page as a whole.
+    const off = await buttonBox("Turn on");
+    const onButton = await buttonBox("Turn off");
+    const start = { x: pane.x + embedBox.x + 6, y: pane.y + embedBox.y + 6 };
+    const end = {
+      x: pane.x + onButton.x + onButton.w * 0.4,
+      y: pane.y + onButton.y + onButton.h / 2,
+    };
+    await on.page.mouse.move(pane.x + embedBox.x - 30, start.y);
+    const labels: string[] = [];
+    const STEPS = 14;
+    for (let i = 0; i <= STEPS; i += 1) {
+      const t = i / STEPS;
+      // biome-ignore lint/performance/noAwaitInLoops: one pointer step at a time, the target read after each
+      await on.page.mouse.move(
+        start.x + (end.x - start.x) * t,
+        start.y + (end.y - start.y) * t
+      );
+      await settle(on.page, 60);
+      labels.push((await embedTarget(outer))?.label ?? "(none)");
+    }
+    on.kit.check(
+      `l: in Comment mode, moving across a canvas Preview of another origin never names the whole page (${STEPS + 1} steps read)`,
+      !labels.includes("Whole page"),
+      labels.join(" | ")
+    );
+
+    // Resting on each story's button washes that button, its box mapped into the page.
+    const restOn = async (box: typeof off) => {
+      await on.page.mouse.move(
+        pane.x + box.x + box.w * 0.4,
+        pane.y + box.y + box.h / 2,
+        { steps: 3 }
+      );
+      return await until(
+        "the target on the button",
+        () => embedTarget(outer),
+        (now) => near(now?.box ?? null, box, 1),
+        5000
+      ).catch(() => embedTarget(outer));
+    };
+    const washes = (
+      now: Awaited<ReturnType<typeof embedTarget>>,
+      box: typeof off
+    ) =>
+      !!now &&
+      near(now.box, box, 1) &&
+      now.rest &&
+      (now.label ?? "").startsWith("button");
+    const onOff = await restOn(off);
+    const onOn = await restOn(onButton);
+    on.kit.check(
+      "l: resting on the Off story's button, then the On story's, inside the Preview washes each button: the target's box is the button's box mapped into the page (±1px), at rest (no line), its label naming the button",
+      washes(onOff, off) && washes(onOn, onButton),
+      `Off ${JSON.stringify(onOff)} vs ${JSON.stringify(off)}; On ${JSON.stringify(onOn)} vs ${JSON.stringify(onButton)}`
+    );
+
+    // A press on it opens the composer there: the button chosen, its line drawn.
+    const before = Object.keys((await docOf(outer)).pins).length;
+    await on.page.mouse.click(end.x, end.y);
+    const composer = on.page.locator(COMPOSE);
+    const shown = await composer
+      .waitFor({ timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    const chosen = await embedTarget(outer);
+    on.kit.check(
+      "l: a press on the On story's button opens the composer, the button the one target chosen: its box (±1px), its 1px line drawn, no label",
+      shown &&
+        !!chosen &&
+        near(chosen.box, onButton, 1) &&
+        !chosen.rest &&
+        chosen.line === "solid" &&
+        chosen.label === null,
+      `composer ${shown}; target ${JSON.stringify(chosen)}`
+    );
+    if (shown) {
+      await composer.getByRole("combobox").fill("Say whether it is on.");
+      await on.page.keyboard.press("Enter");
+      await composer
+        .waitFor({ state: "detached", timeout: 8000 })
+        .catch(() => undefined);
+    }
+    const pins = await until(
+      "the embed's pin in the page's doc",
+      async () => (await docOf(outer)).pins,
+      (all) => Object.keys(all).length > before,
+      10_000
+    ).catch(() => ({}) as Pins);
+    const pin = Object.values(pins).sort(
+      (a, b) => Number(b.number) - Number(a.number)
+    )[0] as
+      | {
+          anchor: {
+            embed?: { artifact: string };
+            frames?: string[];
+            selector: string;
+            sheet?: { file: string; story: string };
+            source?: { file?: string; line?: number };
+          };
+          id: string;
+          number: number;
+        }
+      | undefined;
+    const found = pin
+      ? await embed.evaluate(
+          (selector) => document.querySelector(selector)?.textContent ?? null,
+          pin.anchor.selector
+        )
+      : null;
+    on.kit.check(
+      "l: the comment's pin stands on the button in the embed: its anchor names the canvas, the story On of its states file, the button's own source line, the frame it is in, and a selector that finds the button in the canvas",
+      !!pin &&
+        pin.anchor.embed?.artifact === canvas &&
+        pin.anchor.sheet?.story === "On" &&
+        pin.anchor.sheet.file === "src/Toggle.stories.ts" &&
+        pin.anchor.source?.file === "src/Toggle.svelte" &&
+        pin.anchor.frames?.length === 1 &&
+        found === "Turn off",
+      `anchor ${JSON.stringify(pin?.anchor)}; the selector finds ${JSON.stringify(found)}`
+    );
+    if (!pin) {
+      return;
+    }
+    const disc = await until(
+      "the pin's pill on the button",
+      () => discAt(outer, pin.number),
+      (now) =>
+        !!now &&
+        Math.abs(now.x - (end.x - pane.x)) <= 2 &&
+        Math.abs(now.y - (end.y - pane.y)) <= 2,
+      8000
+    ).catch(() => discAt(outer, pin.number));
+    on.kit.check(
+      "l: its pill's tail stands on the point pressed on the button (±2px)",
+      !!disc &&
+        Math.abs(disc.x - (end.x - pane.x)) <= 2 &&
+        Math.abs(disc.y - (end.y - pane.y)) <= 2,
+      `tail ${JSON.stringify(disc)}; pressed ${JSON.stringify({ x: end.x - pane.x, y: end.y - pane.y })}`
+    );
+
+    await paneMode(on, outer, "V");
+    const read = await on.call(READ, { artifact: pageId, filter: "all" });
+    on.kit.check(
+      "l: comment_read of the decision page answers the pin with the canvas's id, its story and the button",
+      read.includes(pin.id) &&
+        new RegExp(`"embed":\\s*\\{\\s*"artifact":\\s*"${canvas}"`).test(
+          read
+        ) &&
+        STORY_ON.test(read) &&
+        read.includes("src/Toggle.svelte") &&
+        read.includes("Turn off"),
+      read.slice(read.indexOf("{"), read.indexOf("{") + 900)
+    );
   } finally {
     await app.stop(true);
   }

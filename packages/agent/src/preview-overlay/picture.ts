@@ -858,7 +858,7 @@ async function partRoot(
 const PNG_PREFIX = /^data:image\/png;base64,/;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
 export const SKIPPED =
-  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], script, style, template, noscript, link, meta";
+  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], [data-cawco-stand-ins], script, style, template, noscript, link, meta";
 /** Elements drawn whole wherever the crop meets them: their insides are not boxes of their own. */
 const WHOLE = new Set([
   "img",

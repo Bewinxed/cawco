@@ -38823,8 +38823,20 @@
               "$ref": "#/components/schemas/ChainLink"
             }
           },
+          "embed": {
+            "description": "The artifact whose frame holds it, when that frame shows one (a decision\npage's Preview, dashboard decisions host Preview.svelte\n`data-cawco-artifact`): a component canvas, a dev server's preview, a page.",
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "artifact"
+            ]
+          },
           "frames": {
-            "description": "The frames it stands in, outermost first, each by its selector in its parent's document; none at the top.",
+            "description": "The frames it stands in, outermost first, each by its selector in its\nparent's document; none at the top. A frame of another origin is read\nthrough its own overlay (agent preview-overlay embeds.ts), and the\nselector, source, text, chain and sheet are read in the innermost frame's\ndocument either way.",
             "type": "array",
             "items": {
               "type": "string"

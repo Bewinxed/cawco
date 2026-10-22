@@ -29,6 +29,13 @@ import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark, markOf } from "./boot";
+import {
+  answerEmbedder,
+  EMBED_ARTIFACT,
+  type Remote,
+  STAND_INS,
+  startEmbeds,
+} from "./embeds";
 import { fillFields, trackFields } from "./fields";
 import {
   deepElementAt,
@@ -163,6 +170,19 @@ let drafting: {
 const composing = () => threadOpen || drafting !== null;
 
 /**
+ * Frames of another origin whose overlay answers (a decision page's
+ * Preview): their elements stand in this page as stand-ins (embeds.ts), and
+ * every read of an element below takes a stand-in's from what its embed
+ * answered.
+ */
+const embeds = startEmbeds({
+  changed: () => framesChanged(),
+  inUse: (el) =>
+    el === hovered || el === pinEl || !!drafting?.chain.includes(el),
+  selectorOf: (el) => selectorOf(el),
+});
+
+/**
  * Pin `el`'s element chosen, or none; `lead` says whether it leads the
  * pointer's in Comment mode (a disc rested on, a pin stepped to), and left
  * out keeps the lead as it was (the same pin drawn again where it stands).
@@ -186,6 +206,10 @@ const CLEAR = /^(?:transparent|rgba\(.*,\s*0\)|.*\/\s*0\))$/;
  * the offset.
  */
 function drawsBox(el: Element): boolean {
+  const standIn = embeds.read(el);
+  if (standIn) {
+    return standIn.remote.boxed;
+  }
   const own = (el.ownerDocument.defaultView ?? window).getComputedStyle(el);
   const sides = ["Top", "Right", "Bottom", "Left"] as const;
   return (
@@ -259,21 +283,33 @@ function outlineOver(el: Element): DOMRect {
     }
     return rect;
   }
-  const own = (doc.defaultView ?? window).getComputedStyle(el);
+  const corners = embeds.read(el)?.remote.corners ?? cornersOf(el, rect);
+  for (const [i, corner] of CORNERS.entries()) {
+    highlight.style[corner] = corners[i] ?? "";
+  }
+  return rect;
+}
+
+/**
+ * `el`'s four corners as the outline takes them, `rect` its box on screen:
+ * each its own computed radius scaled as it is drawn, `--radius-xs` its
+ * floor. An embed's overlay reads them for its parent (embeds.ts).
+ */
+function cornersOf(el: Element, rect: DOMRect): string[] {
+  const own = (el.ownerDocument.defaultView ?? window).getComputedStyle(el);
   const laidWidth = el instanceof HTMLElement ? el.offsetWidth : 0;
   const scale = laidWidth > 0 ? rect.width / laidWidth : 1;
-  for (const corner of CORNERS) {
-    // A computed corner is one or two lengths (px) or percentages; a percentage is of the box, which the highlight shares.
-    highlight.style[corner] = own[corner]
+  // A computed corner is one or two lengths (px) or percentages; a percentage is of the box, which the highlight shares.
+  return CORNERS.map((corner) =>
+    own[corner]
       .split(" ")
       .map((part) => {
         const px = part.endsWith("px") ? Number.parseFloat(part) : Number.NaN;
         const value = Number.isNaN(px) ? part : `${px * scale}px`;
         return `max(var(--radius-xs), ${value})`;
       })
-      .join(" ");
-  }
-  return rect;
+      .join(" ")
+  );
 }
 
 /** The person's pins, drawn after the ink (pins.ts). */
@@ -341,6 +377,7 @@ function framesChanged() {
   }
   framesFrame = requestAnimationFrame(() => {
     framesFrame = 0;
+    embeds.fit();
     ink.replace();
     if (!highlight.hidden) {
       paint();
@@ -1211,8 +1248,7 @@ function elementAt(x: number, y: number): Element | null {
 }
 
 /** The overlay's own: its host, and the ink and pin layers it puts in the page. */
-const OVERLAY_OWN =
-  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed]";
+const OVERLAY_OWN = `cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed], [${STAND_INS}]`;
 
 /**
  * The page's own deepest element at each of the viewport's points, seen
@@ -1296,7 +1332,9 @@ const NEAR_WAYS = [
  */
 function contentAt(x: number, y: number): Element | null {
   const [hit = null] = elementsAt([[x, y]]);
-  if (!(hit && pageSized(hit))) {
+  // A frame of another origin is content however big it stands: what is in
+  // it is its embed's to name (embeds.ts), never this page's as a whole.
+  if (!(hit && pageSized(hit)) || (isFrame(hit) && !frameDocument(hit))) {
     return hit;
   }
   const round = NEAR_RINGS.flatMap((r) =>
@@ -1383,12 +1421,21 @@ function wordsOf(el: Element): string {
  * from one state of the page to the next and say nothing of where it stands.
  */
 function anchorOf(el: Element): PageAnchor {
+  const remote = embeds.anchorOf(el);
+  if (remote) {
+    return remote;
+  }
   const { x, y, width, height } = rectOf(el);
   const frames = frameSelectors(el);
   const doc = el.ownerDocument;
   const whole = el === doc.body || el === doc.documentElement;
+  // The artifact the nearest frame showing one shows: the one it stands in, or the frame itself.
+  const shown = [...framesOf(el), ...(isFrame(el) ? [el] : [])]
+    .findLast((frame) => frame.hasAttribute(EMBED_ARTIFACT))
+    ?.getAttribute(EMBED_ARTIFACT);
   return {
     ...(frames.length > 0 ? { frames } : {}),
+    ...(shown ? { embed: { artifact: shown } } : {}),
     selector: whole ? el.localName : selectorOf(el),
     source: sourceOf(el),
     ...(sheetChain(el) ?? {}),
@@ -1425,6 +1472,10 @@ function frameIn(within: Document, selector: string): Document | null {
  * found yet, and is not gone either.
  */
 function waiting(anchor: PageAnchor): boolean {
+  const remote = embeds.find(anchor);
+  if (remote) {
+    return remote.state === "waiting";
+  }
   let within: Document | null = document;
   for (const selector of anchor.frames ?? []) {
     let frame: Element | null = null;
@@ -1447,8 +1498,16 @@ function waiting(anchor: PageAnchor): boolean {
   return false;
 }
 
-/** Where a page's anchor stands now (core `findAnchor`: down its frames, then file:line, then selector, then text). */
+/**
+ * Where a page's anchor stands now (core `findAnchor`: down its frames, then
+ * file:line, then selector, then text); one that leads into a frame of
+ * another origin, where its embed found it (embeds.ts).
+ */
 function locate(anchor: PageAnchor) {
+  const remote = embeds.find(anchor);
+  if (remote) {
+    return remote.state === "found" ? { by: remote.by, el: remote.el } : null;
+  }
   return findAnchor<Element, Document>(anchor, {
     top: document,
     frame: frameIn,
@@ -1481,6 +1540,10 @@ function locate(anchor: PageAnchor) {
 
 /** `el` as a pin names it: its box in the top viewport and page, its styles, and the address of the document it is in. */
 function describe(el: Element): PinnedElement {
+  const remote = embeds.describe(el);
+  if (remote) {
+    return remote;
+  }
   const { x, y, width, height } = rectOf(el);
   const computed = (el.ownerDocument.defaultView ?? window).getComputedStyle(
     el
@@ -1584,6 +1647,10 @@ const WHOLE_PAGE = "Whole page";
  * source; a frame of another origin, which cannot be read into, by its origin.
  */
 function labelOf(el: Element): string {
+  const standIn = embeds.read(el);
+  if (standIn) {
+    return standIn.remote.label;
+  }
   const doc = el.ownerDocument;
   if (el === doc.body || el === doc.documentElement) {
     return WHOLE_PAGE;
@@ -1602,12 +1669,54 @@ function hover(el: Element | null) {
   paint();
 }
 
+/** The pointer's latest place asked of: an embed's answer for an earlier one is let go. */
+let pointing = 0;
+
+/**
+ * What the pointer at the viewport's `x`, `y` names, then `then` with it:
+ * `el`, what this page has there (`contentAt`), at once; over a frame whose
+ * embed answers (embeds.ts), its element there as the embed names it, once
+ * it has.
+ */
+function pointed(
+  el: Element | null,
+  x: number,
+  y: number,
+  then: (named: Element | null) => void
+) {
+  pointing += 1;
+  const mine = pointing;
+  if (!embeds.bridged(el)) {
+    then(el);
+    return;
+  }
+  embeds.at(el, x, y).then((inside) => {
+    if (inside && mine === pointing) {
+      then(inside);
+    }
+  });
+}
+
 window.addEventListener(
   "mousemove",
   (event) => {
-    if (commenting()) {
-      hover(contentAt(event.clientX, event.clientY));
+    if (!commenting()) {
+      return;
     }
+    const el = contentAt(event.clientX, event.clientY);
+    // Over an embed, nothing of this page's stands while its answer comes:
+    // the target its last answer named stays, or none.
+    if (
+      embeds.bridged(el) &&
+      !(hovered && embeds.read(hovered)?.frame === el)
+    ) {
+      hover(null);
+    }
+    pointed(el, event.clientX, event.clientY, (found) => {
+      if (commenting()) {
+        hover(found);
+      }
+    });
   },
   true
 );
@@ -1622,7 +1731,15 @@ function commentAt(clientX: number, clientY: number) {
     pins.open(pill);
     return;
   }
-  const el = contentAt(clientX, clientY);
+  pointed(contentAt(clientX, clientY), clientX, clientY, (el) => {
+    if (commenting()) {
+      pressedOn(el, clientX, clientY);
+    }
+  });
+}
+
+/** A Comment-mode tap named `el`: its composer opened there, or the moved pin placed again on it. */
+function pressedOn(el: Element | null, clientX: number, clientY: number) {
   if (!(el && artifact.keeps())) {
     return;
   }
@@ -1644,8 +1761,18 @@ const CHAIN_MOST = 5;
  * What a press on `el` may stand on, innermost first: `el`, its ancestors
  * that draw a box of their own (a wrapper exactly as big as what it holds
  * says nothing new), at most {@link CHAIN_MOST}, then the page as a whole.
+ * In an embed of another origin, what holds `el` there as its embed read it
+ * (embeds.ts), then its frame and what holds that here.
  */
 function chainOf(el: Element): Element[] {
+  const standIn = embeds.read(el);
+  if (standIn) {
+    const outer = chainOf(standIn.frame);
+    return [
+      ...[el, ...standIn.chain, ...outer.slice(0, -1)].slice(0, CHAIN_MOST + 1),
+      ...outer.slice(-1),
+    ];
+  }
   const doc = el.ownerDocument;
   const root = doc.body ?? doc.documentElement;
   if (el === root || el === doc.documentElement) {
@@ -2408,6 +2535,35 @@ window.addEventListener("cawco:element-press", (event) => {
  */
 window.addEventListener("cawco:sheet", (event) => {
   post("cawco:sheet", { sheet: (event as CustomEvent<object>).detail });
+});
+
+/** What this page reads of one of its elements for a page that frames it from another origin (embeds.ts). */
+function remoteOf(el: Element): Remote {
+  const rect = rectOf(el);
+  const { box: _box, ...anchor } = anchorOf(el);
+  return {
+    anchor,
+    box: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+    boxed: drawsBox(el),
+    corners: cornersOf(el, rect),
+    element: describe(el),
+    label: labelOf(el),
+  };
+}
+
+// Framed by a page of another origin (a decision page's Preview): its
+// overlay asks what stands under its pointer here, and where its pins do.
+answerEmbedder({
+  at: contentAt,
+  chain: chainOf,
+  locate,
+  own: (node) =>
+    !!(
+      node.nodeType === Node.ELEMENT_NODE
+        ? (node as Element)
+        : node.parentElement
+    )?.closest(OVERLAY_OWN),
+  read: remoteOf,
 });
 
 window.addEventListener("popstate", navigated);

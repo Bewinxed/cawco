@@ -130,7 +130,19 @@ export interface PageAnchor {
    * a stamped component root's call site), then the story that mounts them.
    */
   chain?: ChainLink[];
-  /** The frames it stands in, outermost first, each by its selector in its parent's document; none at the top. */
+  /**
+   * The artifact whose frame holds it, when that frame shows one (a decision
+   * page's Preview, dashboard decisions host Preview.svelte
+   * `data-cawco-artifact`): a component canvas, a dev server's preview, a page.
+   */
+  embed?: { artifact: string };
+  /**
+   * The frames it stands in, outermost first, each by its selector in its
+   * parent's document; none at the top. A frame of another origin is read
+   * through its own overlay (agent preview-overlay embeds.ts), and the
+   * selector, source, text, chain and sheet are read in the innermost frame's
+   * document either way.
+   */
   frames?: string[];
   selector: string;
   /**
@@ -825,6 +837,9 @@ const standsOn = (pin: Pin, url: string): string[] => {
   const chain = chainWords(anchor);
   return [
     `## ${pin.number}. ${pin.kind} on ${wholePage(anchor) ? "the whole page" : anchor.selector}`,
+    ...(anchor.embed
+      ? [`- Inside the artifact ${anchor.embed.artifact}, shown in this page`]
+      : []),
     ...(anchor.frames?.length
       ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
       : []),
@@ -855,6 +870,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
 export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
   was.selector !== now.selector ||
   (was.frames ?? []).join("\u0000") !== (now.frames ?? []).join("\u0000") ||
+  was.embed?.artifact !== now.embed?.artifact ||
   (was.text ?? "") !== (now.text ?? "") ||
   JSON.stringify(was.source) !== JSON.stringify(now.source) ||
   JSON.stringify(was.chain ?? []) !== JSON.stringify(now.chain ?? []) ||
