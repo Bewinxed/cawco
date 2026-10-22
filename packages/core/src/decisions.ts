@@ -236,8 +236,12 @@ export const graphId = (page: string, card: string): string =>
 
 /** What a program says of itself: its title and intro, its cards and Sections, and the media it names. */
 export interface ProgramRead {
-  /** The artifacts its Canvas and Preview pieces show, by id. */
-  artifacts: { component: "Canvas" | "Preview"; id: string }[];
+  /** The artifacts its Canvas and Preview pieces show, by id; a Preview's `width` its stories' own, px, when it says it. */
+  artifacts: {
+    component: "Canvas" | "Preview";
+    id: string;
+    width?: number;
+  }[];
   cards: DecisionCard[];
   /** The files its Image pieces show, as written. */
   images: string[];
@@ -287,6 +291,17 @@ const cardOf = (
   after: strings(props.after),
   section,
 });
+
+/** A Canvas or Preview as the artifact it shows; a Preview's `width` its stories' own, px, when it says one. */
+const artifactOf = (
+  component: "Canvas" | "Preview",
+  props: Record<string, unknown>
+): ProgramRead["artifacts"][number] => {
+  const { width } = props;
+  return component === "Preview" && typeof width === "number" && width > 0
+    ? { component, id: text(props.artifact), width }
+    : { component, id: text(props.artifact) };
+};
 
 /** A Section's id: its title as a slug, made its own on the page with `-2`, `-3`… */
 const sectionId = (title: string, taken: Set<string>): string => {
@@ -355,7 +370,7 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     } else if (typeName === "Decision") {
       decision(props, section);
     } else if (typeName === "Canvas" || typeName === "Preview") {
-      read.artifacts.push({ component: typeName, id: text(props.artifact) });
+      read.artifacts.push(artifactOf(typeName, props));
     } else if (typeName === "Image") {
       read.images.push(text(props.file));
     } else {

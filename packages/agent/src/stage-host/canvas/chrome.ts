@@ -290,8 +290,9 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 html[data-cawco-phone] .cawco-dock-dials { inset-block-start: auto; inset-inline: var(--space-3); inline-size: auto;
   inset-block-end: calc(var(--foot) + var(--space-2) + var(--cawco-timeline-room)); max-block-size: 25dvh; }
 /* A decision page's Preview (runtime by=embed): its frames alone, one under another in the page's own flow, each at its own
-   width and centred in the embed, one wider than the embed scaled down to fit it (runtime fitToEmbed, CSS zoom), and one
-   that would scale its words under 10px stops there and scrolls sideways in its frame (data-cawco-wide); the page
+   width from the embed's start (the decision page's words stand on the same edge), one wider than the embed scaled down to
+   fit it (runtime fitToEmbed, CSS zoom), and on a desk one that would scale its words under 12px stops there and scrolls
+   sideways in its frame (data-cawco-wide); the page
    holding it makes its frame as tall (CANVAS_EMBED_SIZE), and a wheel or a finger on it scrolls that page. A section that
    didn't load still says so; one holding none of the stories the embed names takes no place (data-cawco-none), and a named
    story no section holds is said once, in the embed's own place (runtime unnamedInEmbed). */
@@ -304,7 +305,7 @@ html.cawco-embed .cawco-world { position: static; inline-size: 100%; gap: var(--
 html.cawco-embed .cawco-section { min-block-size: 0; gap: var(--space-3); }
 html.cawco-embed .cawco-section[data-cawco-none] { display: none; }
 html.cawco-embed :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status, .cawco-edges, .cawco-stand-in > .cawco-frame-words) { display: none; }
-html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: start; gap: var(--space-3); }
 html.cawco-embed .cawco-frame { gap: 0; min-inline-size: 0; max-inline-size: 100%; }
 html.cawco-embed .cawco-frame[data-cawco-wide] { align-self: stretch; overflow-x: auto; overscroll-behavior-inline: contain; }
 /* Its fade is the house edge fade at its full 40px on every width (DESIGN.md: over words cut mid-word a phone's 16px reads as

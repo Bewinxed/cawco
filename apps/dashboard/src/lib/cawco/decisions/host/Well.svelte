@@ -6,13 +6,17 @@
   its own size and centred"); a piece wider than the well at its smallest
   scrolls sideways under the house edge fade (`wide`). Under it the caption
   in meta at the start and the piece's one action at the end; an action's
-  refusal stands under them in the error formula's ink.
+  refusal stands under them in the error formula's ink. A picture drawn at
+  its story's own width (`bleed`, a Preview that says it) standing alone in
+  its card on a phone reaches the screen's edges, with no side, edge or
+  corner of its own, its words kept on the page's text edge.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
 
   let {
     action,
+    bleed = false,
     caption,
     children,
     said = "",
@@ -20,6 +24,8 @@
     wide = false,
   }: {
     action?: Snippet;
+    /** Under the phone's line, where it stands alone in its card (`data-bleeds`), it reaches the screen's edges. */
+    bleed?: boolean;
     caption?: string;
     children: Snippet;
     /** A refusal of the action, in the hub's words. */
@@ -32,7 +38,12 @@
 </script>
 
 <figure
-  class="m-0 flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well p-space-3"
+  class={[
+    "m-0 flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well p-space-3",
+    bleed &&
+      "max-phone:in-data-bleeds:-mx-(--bleed) max-phone:in-data-bleeds:rounded-none max-phone:in-data-bleeds:border-x-0 max-phone:in-data-bleeds:px-0",
+  ]}
+  data-bleed={bleed ? "" : undefined}
   data-slot="media"
 >
   <div
@@ -47,7 +58,10 @@
   </div>
   {#if caption || action}
     <figcaption
-      class="flex flex-wrap items-center justify-between gap-space-2"
+      class={[
+        "flex flex-wrap items-center justify-between gap-space-2",
+        bleed && "max-phone:in-data-bleeds:px-(--bleed)",
+      ]}
       data-slot="media-foot"
     >
       <span
@@ -57,7 +71,13 @@
     </figcaption>
   {/if}
   {#if said}
-    <p class="type-meta text-status-fail-ink wrap-anywhere" role="status">
+    <p
+      class={[
+        "type-meta text-status-fail-ink wrap-anywhere",
+        bleed && "max-phone:in-data-bleeds:px-(--bleed)",
+      ]}
+      role="status"
+    >
       {said}
     </p>
   {/if}

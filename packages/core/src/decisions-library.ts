@@ -122,7 +122,7 @@ export const decisionLibrary = <C>(
   );
   const Preview = define(
     "Preview",
-    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone: the stories `stories` names, in that order (every story, in its file's order, when it names none), each at its own size and centred, one wider than the card scaled down to fit it, and one too wide to fit with its words still 10px scrolling sideways.",
+    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone: the stories `stories` names, in that order (every story, in its file's order, when it names none), each at its own size from its start, one wider than the room it has scaled down to fit it.",
     z.object({
       artifact: z.string().describe("Its id."),
       caption,
@@ -131,6 +131,12 @@ export const decisionLibrary = <C>(
         .optional()
         .describe(
           'A component canvas\'s stories to show, by their export names, like ["Review", "PhoneReview"]; every story when left out.'
+        ),
+      width: z
+        .number()
+        .optional()
+        .describe(
+          "The widest of those stories' own widths in px (its `parameters.viewport`), like 640: the page widens to draw it at 1:1, as many options abreast as fit."
         ),
     })
   );

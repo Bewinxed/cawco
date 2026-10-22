@@ -182,7 +182,11 @@ const foldOf = (page: Page, id: string) =>
       body: Math.round((body?.getBoundingClientRect().height ?? 0) * 10) / 10,
       opacity: body ? Number(getComputedStyle(body).opacity) : -1,
       padding: root ? getComputedStyle(root).paddingBlockStart : "",
-      scroll: Math.round(scrollY * 10) / 10,
+      scroll:
+        Math.round(
+          (document.querySelector("[data-slot=page-scroll]")?.scrollTop ?? 0) *
+            10
+        ) / 10,
       progress: run?.effect?.getComputedTiming().progress ?? null,
       keyframes: run
         ? [
@@ -630,7 +634,9 @@ async function liveFold(
     // animation callbacks and layout (the ride's scroll written, the fold's
     // height laid out), every frame the card changes size, and once as it
     // starts watching (the page at rest).
-    const scroller = document.scrollingElement as Element;
+    const scroller = document.querySelector(
+      "[data-slot=page-scroll]"
+    ) as Element;
     const sized = new ResizeObserver(() => {
       const body = root?.querySelector<HTMLElement>(
         "[data-slot=decision-body]"
@@ -746,10 +752,13 @@ const nextFrameOf = (page: Page, id: string) =>
       }>((done) =>
         requestAnimationFrame(() => {
           const root = document.getElementById(`decision-${card}`);
-          const scroller = document.scrollingElement as Element;
+          const scroller = document.querySelector(
+            "[data-slot=page-scroll]"
+          ) as Element;
           const chip = root?.querySelector<HTMLElement>("[data-cawco-picked]");
           const top =
-            (root?.getBoundingClientRect().top ?? 0) +
+            (root?.getBoundingClientRect().top ?? 0) -
+            scroller.getBoundingClientRect().top +
             scroller.scrollTop -
             (root
               ? Number.parseFloat(getComputedStyle(root).scrollMarginTop) || 0
@@ -1699,14 +1708,17 @@ async function readerLeg(
     // (the strip past the page's client width; its length and place the
     // view's share of the page).
     const bar = await page.evaluate(() => {
-      const root = document.scrollingElement as Element;
-      const strip = innerWidth - root.clientWidth;
+      const root = document.querySelector(
+        "[data-slot=page-scroll]"
+      ) as HTMLElement;
+      const box = root.getBoundingClientRect();
+      const strip = root.offsetWidth - root.clientWidth;
       const length =
         (root.clientHeight * root.clientHeight) / root.scrollHeight;
       const top = (root.scrollTop / root.scrollHeight) * root.clientHeight;
       return {
-        x: root.clientWidth + strip / 2,
-        y: top + length / 2,
+        x: box.left + root.clientWidth + strip / 2,
+        y: box.top + top + length / 2,
         strip,
         per: root.clientHeight / root.scrollHeight,
       };
@@ -1764,7 +1776,9 @@ async function readerLeg(
           "#decision-path [data-slot=decision-body]"
         );
         const step = () => {
-          seen.push(scrollY);
+          seen.push(
+            document.querySelector("[data-slot=page-scroll]")?.scrollTop ?? 0
+          );
           if ((body?.getAnimations().length ?? 0) === 0 && seen.length > 2) {
             done(seen);
             return;
@@ -1813,7 +1827,9 @@ const footFrames = (page: Page, count: number) =>
     (n) =>
       new Promise<{ most: number; scroll: number }[]>((done) => {
         const seen: { most: number; scroll: number }[] = [];
-        const root = document.scrollingElement as Element;
+        const root = document.querySelector(
+          "[data-slot=page-scroll]"
+        ) as Element;
         const step = () => {
           seen.push({
             scroll: root.scrollTop,
@@ -1873,9 +1889,12 @@ async function clampLeg(
   await page.keyboard.press("Enter");
   await settle(page, 400);
   const toFoot = async () => {
-    await page.evaluate(() =>
-      window.scrollTo(0, (document.scrollingElement as Element).scrollHeight)
-    );
+    await page.evaluate(() => {
+      const scroller = document.querySelector(
+        "[data-slot=page-scroll]"
+      ) as Element;
+      scroller.scrollTop = scroller.scrollHeight;
+    });
     await settle(page, 300);
   };
   await toFoot();
@@ -1920,12 +1939,16 @@ async function clampLeg(
   // The root scrollbar's thumb, read before the press: the strip past the
   // page's client width, its length and place the view's share of the page.
   const thumb = await page.evaluate(() => {
-    const root = document.scrollingElement as Element;
+    const root = document.querySelector(
+      "[data-slot=page-scroll]"
+    ) as HTMLElement;
+    const box = root.getBoundingClientRect();
     const length = (root.clientHeight * root.clientHeight) / root.scrollHeight;
     const top = (root.scrollTop / root.scrollHeight) * root.clientHeight;
     return {
-      x: root.clientWidth + (innerWidth - root.clientWidth) / 2,
-      y: top + length / 2,
+      x:
+        box.left + root.clientWidth + (root.offsetWidth - root.clientWidth) / 2,
+      y: box.top + top + length / 2,
     };
   });
   const watched = footFrames(page, 40);
@@ -1961,7 +1984,9 @@ async function clampLeg(
     () =>
       new Promise<{ most: number; scroll: number }[]>((done) => {
         const frames: { most: number; scroll: number }[] = [];
-        const root = document.scrollingElement as Element;
+        const root = document.querySelector(
+          "[data-slot=page-scroll]"
+        ) as Element;
         const body = document.querySelector(
           "#decision-radius [data-slot=decision-body]"
         );
@@ -2194,7 +2219,15 @@ const coralOf = (page: Page) =>
             .cawcoChoice ?? "";
         return {
           what: one.hasAttribute("data-send") ? "send" : `${card} continue`,
-          inView: at.bottom > 0 && at.top < innerHeight && at.height > 0,
+          // In view where it is seen: a card's in the cards' scroller, Send in the foot.
+          inView: (() => {
+            const seen = one
+              .closest("[data-slot=page-scroll]")
+              ?.getBoundingClientRect() ?? { top: 0, bottom: innerHeight };
+            return (
+              at.bottom > seen.top && at.top < seen.bottom && at.height > 0
+            );
+          })(),
           // Its keycaps as drawn on the coral: their fill and ink.
           keys: [...one.querySelectorAll<HTMLElement>("[data-slot=kbd]")]
             .filter((key) => key.checkVisibility())

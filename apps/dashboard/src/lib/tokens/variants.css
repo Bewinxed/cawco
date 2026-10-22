@@ -501,6 +501,7 @@
 @custom-variant slot-option-group (&[data-slot="option-group"]);
 @custom-variant slot-order (&[data-slot="order"]);
 @custom-variant slot-page-head (&[data-slot="page-head"]);
+@custom-variant slot-page-scroll (&[data-slot="page-scroll"]);
 @custom-variant slot-page-thumb (&[data-slot="page-thumb"]);
 @custom-variant slot-pair (&[data-slot="pair"]);
 @custom-variant slot-pairing (&[data-slot="pairing"]);

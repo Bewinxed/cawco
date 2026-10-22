@@ -30,15 +30,17 @@
  * 5. None of the canvas's working chrome is seen (band, crumb, foot, steps,
  *    section heads, labels, statuses).
  * 6. It posted its height: the embed is as tall as what it draws, within
- *    2px. Each frame stands inside its width, centred in it within 1px; one
- *    narrower than the embed at its own width, one wider scaled down to fit
- *    (CSS zoom) and never reflowed: its drawn width its own times its zoom.
- *    Its words at 12px or more as drawn, 10px where it is scaled; one that
- *    would scale its words under 10px to fit stops at 10px and scrolls
- *    sideways in its frame, the frame inside the embed, under the house
- *    edge fade (DESIGN.md `kit-edge-fade`) at its full 40px on every
- *    width: read at the scroll's start, middle and end, a fade on each side
- *    where more is hidden and none at either end.
+ *    2px. Each frame stands inside its width, at its start within 1px (the
+ *    card's words start there too); one narrower than the embed at its own
+ *    width, one wider scaled down to fit (CSS zoom) and never reflowed: its
+ *    drawn width its own times its zoom. On a desk its words at 12px or
+ *    more as drawn, scaled or not; one that would scale its words under
+ *    12px to fit stops at 12px and scrolls sideways in its frame, the frame
+ *    inside the embed, under the house edge fade (DESIGN.md
+ *    `kit-edge-fade`) at its full 40px on every width: read at the scroll's
+ *    start, middle and end, a fade on each side where more is hidden and
+ *    none at either end. Under a finger every story fits whole, no floor,
+ *    and none scrolls sideways.
  * 7. A card's three media stand in one column, each at the card's full
  *    width.
  * 8. The page is as CawCo shows it: no offline notice, Send picks enabled,
@@ -77,12 +79,30 @@
  *    (`["Nowhere"]`) draws no frame and says so once, naming it, the alert
  *    seen inside the embed's width and the embed as tall as it, every
  *    section 0px tall. No section head is seen in any of them.
+ * 12. A pictured page sizes to its pictures (Preview's `width`), on a card
+ *    of three options each a 640px story and a card of two each a 390px
+ *    story, all five Previews of one canvas, and the same cards in words
+ *    alone, at 1900, 1440, 1100, 820 and 640 under a mouse with a desk's
+ *    scrollbars and 390 and 320 under a finger, light and dark: the column
+ *    the largest of 742, 1417 or 2092px its room holds, never under 920
+ *    and never past its room (a worded page 920); each card's options per
+ *    row on their stories' pitch (190px on a worded page; one per row
+ *    under the phone's line); before any scroll every picture at the height
+ *    its canvas says, below the fold too, the first as the rest; each story
+ *    at 1:1 from its embed's start where its room holds it, else zoomed to
+ *    fit with no sideways scroll; on a phone each well reaching the screen's
+ *    edges; every question, why, line and cost at most 72ch; no well, page
+ *    scroller or document scrolling sideways; the foot 59px at a desk, 67px
+ *    under a finger on one row (122px where Send wraps under the count);
+ *    and the foot's box meeting no card's words at six scroll positions top
+ *    to bottom.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
+import type { Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
@@ -185,7 +205,7 @@ function readHeads() {
 
 /**
  * What this embed paints beside a frame narrower than it: the first opaque
- * background out from the element in the gutter at the frame's middle,
+ * background out from the element in the gutter past the frame's end, at its middle,
  * resolved to sRGB, and what it is; null where no frame leaves a gutter. In
  * the embed's page.
  */
@@ -199,15 +219,18 @@ function readGround() {
     ink.fillRect(0, 0, 1, 1);
     return [...ink.getImageData(0, 0, 1, 1).data];
   };
+  // The world's box, never the window's: the canvas answers a story's own width for the window's (canvas width.ts).
+  const room =
+    document.querySelector(".cawco-world")?.getBoundingClientRect().right ?? 0;
   const frame = [...document.querySelectorAll(".cawco-frame")]
     .map((one) => one.getBoundingClientRect())
-    .find((r) => r.width > 0 && r.left >= 4);
+    .find((r) => r.width > 0 && r.right <= room - 4);
   if (!frame) {
     return null;
   }
   const y = Math.min(frame.top + frame.height / 2, innerHeight / 2);
   for (
-    let at = document.elementFromPoint(frame.left / 2, y);
+    let at = document.elementFromPoint((frame.right + room) / 2, y);
     at;
     at = at.parentElement
   ) {
@@ -447,6 +470,7 @@ function fixtureRoot(): string {
  * well and the sticky foot, from the engine, each beside the token it
  * should be (resolved on a probe element in the page itself).
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a reader page.evaluate sends whole (it runs in the page and can import nothing)
 function readLayout() {
   const probe = document.createElement("i");
   document.body.append(probe);
@@ -475,7 +499,10 @@ function readLayout() {
         }
       : null;
   };
-  const main = document.querySelector<HTMLElement>("[data-slot=decision-page]");
+  const main = document.querySelector<HTMLElement>("[data-slot=page-column]");
+  const scroller = document.querySelector<HTMLElement>(
+    "[data-slot=page-scroll]"
+  );
   const card = document.querySelector<HTMLElement>(
     "[data-slot=decision]:not([data-decided])"
   );
@@ -514,6 +541,8 @@ function readLayout() {
     window: { w: innerWidth, h: innerHeight },
     page: {
       box: at(main),
+      // The room the column is centred in: the scroller's, its scrollbar's gutter kept.
+      room: scroller?.clientWidth ?? 0,
       inset: ms ? [ms.paddingLeft, ms.paddingRight] : [],
       gap: ms?.rowGap ?? "",
       ground: getComputedStyle(document.body).backgroundColor,
@@ -553,7 +582,10 @@ function readLayout() {
     foot: {
       position: foot ? getComputedStyle(foot).position : "",
       bottom: footAt ? footAt.y + footAt.h : 0,
-      page: document.documentElement.scrollHeight,
+      top: footAt?.y ?? 0,
+      width: footAt?.w ?? 0,
+      page: scroller?.scrollHeight ?? 0,
+      shown: scroller ? scroller.getBoundingClientRect().bottom : 0,
       send: !!(hit && send?.contains(hit)),
     },
   };
@@ -724,6 +756,547 @@ function readPage() {
   };
 }
 
+// --- 12. Pictured pages sized to their pictures --------------------------------
+
+const BOARD = "src/Board.stories.js";
+const BOARD_ID = idOf("board-looks");
+/** The board's desk stories' and phone stories' own widths (their viewports). */
+const DESK_STORY = 640;
+const PHONE_STORY = 390;
+const PICTURED_PAGE = "pictured";
+const WORDED_PAGE = "worded";
+const LONG_QUESTION =
+  "Which board does the fleet open on, now that every machine reports its sessions, its spend and what is waiting on you, in one place a person reads at a glance each morning?";
+const LONG_LINE =
+  "Every machine on one line, its sessions counted and its spend beside them, so the person reads the whole fleet in one look and opens only the one that waits on them, never every terminal in turn.";
+const LONG_COST =
+  "The figures a person checks once a week stand a click away, behind the machine's own line, and a newcomer has to learn where each one went before they trust the board with a morning.";
+/** The pictured page: a card of three options each a 640px story, and a card of two options each a 390px story; five Previews of one canvas. */
+const PICTURED_PROGRAM = [
+  `root = Decisions("Pick the board's look", [look, phone])`,
+  `look = Decision("look", "${LONG_QUESTION}", [calm, dense, split], "Calm keeps the morning short.")`,
+  `calm = Option("calm", "Calm", "${LONG_LINE}", true, [calmP], "${LONG_COST}")`,
+  `dense = Option("dense", "Dense", "Every figure at once.", false, [denseP], "A wall of numbers.")`,
+  `split = Option("split", "Split", "Needs on the left, the rest on the right.", false, [splitP], "Two places to look.")`,
+  `calmP = Preview("${BOARD_ID}", "Calm", ["Calm"], ${DESK_STORY})`,
+  `denseP = Preview("${BOARD_ID}", "Dense", ["Dense"], ${DESK_STORY})`,
+  `splitP = Preview("${BOARD_ID}", "Split", ["Split"], ${DESK_STORY})`,
+  `phone = Decision("phone", "Which board does a phone open on?", [pcalm, pdense], "Calm fits a phone's first screen.")`,
+  `pcalm = Option("pcalm", "Calm on a phone", "Three lines.", true, [pcalmP], "The machines a scroll away.")`,
+  `pdense = Option("pdense", "Dense on a phone", "Four lines.", false, [pdenseP], "Taller than a screen.")`,
+  `pcalmP = Preview("${BOARD_ID}", "Calm on a phone", ["PhoneCalm"], ${PHONE_STORY})`,
+  `pdenseP = Preview("${BOARD_ID}", "Dense on a phone", ["PhoneDense"], ${PHONE_STORY})`,
+].join("\n");
+/** The same cards in words alone: a page with no pictures keeps its 920px column and its 190px options. */
+const WORDED_PROGRAM = [
+  `root = Decisions("Pick the board's look", [look, phone])`,
+  `look = Decision("look", "${LONG_QUESTION}", [calm, dense, split], "Calm keeps the morning short.")`,
+  `calm = Option("calm", "Calm", "${LONG_LINE}", true, [], "${LONG_COST}")`,
+  `dense = Option("dense", "Dense", "Every figure at once.", false, [], "A wall of numbers.")`,
+  `split = Option("split", "Split", "Needs on the left, the rest on the right.", false, [], "Two places to look.")`,
+  `phone = Decision("phone", "Which board does a phone open on?", [pcalm, pdense], "Calm fits a phone's first screen.")`,
+  `pcalm = Option("pcalm", "Calm on a phone", "Three lines.", true, [], "The machines a scroll away.")`,
+  `pdense = Option("pdense", "Dense on a phone", "Four lines.", false, [], "Taller than a screen.")`,
+].join("\n");
+/** Each story's own width, by name. */
+const BOARD_WIDTHS: Record<string, number> = {
+  Calm: DESK_STORY,
+  Dense: DESK_STORY,
+  Split: DESK_STORY,
+  PhoneCalm: PHONE_STORY,
+  PhoneDense: PHONE_STORY,
+};
+/**
+ * The panel widths the owner's panels stand at, desk ones under a mouse
+ * with a desk's scrollbars, the phones under a finger; 640 the narrowest a
+ * desk's story zooms in with no sideways scroll, 320 the narrowest phone,
+ * where the foot's count and Send stand on two rows.
+ */
+const WIDTHS = [
+  { w: 1900, view: "desk" },
+  { w: 1440, view: "desk" },
+  { w: 1100, view: "desk" },
+  { w: 820, view: "desk" },
+  { w: 640, view: "desk" },
+  { w: 390, view: "phone" },
+  { w: 320, view: "phone" },
+] as const;
+
+/**
+ * The page's column, its room and every card's options, from the engine:
+ * the column's width and the scroller's client width; per card, how many
+ * option cells stand on its first row, its body's width and each option
+ * embed's box and shape; every text run's width beside its own `ch`; every
+ * well's stage, the page's scroller and the document scrolling sideways or
+ * not; the foot's height and its count bar's width. In the page.
+ */
+function readWidths() {
+  const box = (el: Element | null) => {
+    const r = el?.getBoundingClientRect();
+    return r
+      ? {
+          x: Math.round(r.x * 10) / 10,
+          y: Math.round(r.y * 10) / 10,
+          w: Math.round(r.width * 10) / 10,
+          h: Math.round(r.height * 10) / 10,
+        }
+      : { x: 0, y: 0, w: 0, h: 0 };
+  };
+  const scroller = document.querySelector<HTMLElement>(
+    "[data-slot=page-scroll]"
+  );
+  const column = document.querySelector("[data-slot=page-column]");
+  const foot = document.querySelector("[data-slot=page-foot]");
+  const chOf = (el: Element) => {
+    const probe = document.createElement("span");
+    probe.textContent = "0".repeat(20);
+    probe.style.font = getComputedStyle(el).font;
+    probe.style.position = "absolute";
+    probe.style.whiteSpace = "pre";
+    document.body.append(probe);
+    const ch = probe.getBoundingClientRect().width / 20;
+    probe.remove();
+    return ch;
+  };
+  const texts = [
+    ...document.querySelectorAll(
+      "[data-slot=decision] h2, [data-slot=why], label[id$='-line'], label[id$='-cost']"
+    ),
+  ].map((el) => ({
+    text: (el.textContent ?? "").trim().slice(0, 32),
+    w: box(el).w,
+    ch: Math.round(chOf(el) * 100) / 100,
+  }));
+  const cards = [...document.querySelectorAll("[data-slot=decision]")].map(
+    (card) => {
+      const cells = [...card.querySelectorAll("[data-slot=option-cell]")];
+      const tops = cells.map((cell) => Math.round(box(cell).y));
+      const first = Math.min(...tops);
+      const words = [
+        ...card.querySelectorAll(
+          "h2, [data-slot=why], label, [data-slot=option-label]"
+        ),
+      ].map((el) => box(el).x);
+      return {
+        id: card.getAttribute("data-cawco-choice") ?? "",
+        cells: cells.length,
+        perRow: tops.filter((top) => top === first).length,
+        body: box(card.querySelector("[data-slot=decision-body]")).w,
+        cellW: cells.map((cell) => box(cell).w),
+        wordsLeft: Math.min(...words),
+        cardLeft: box(card).x,
+        embeds: [
+          ...card.querySelectorAll<HTMLIFrameElement>(
+            "[data-slot=media] iframe[data-slot=embed]"
+          ),
+        ].map((frame) => ({
+          caption:
+            frame
+              .closest("figure")
+              ?.querySelector("[data-slot=media-caption]")
+              ?.textContent?.trim() ?? "",
+          shape: frame.dataset.shape ?? "",
+          ...box(frame),
+        })),
+      };
+    }
+  );
+  const wells = [
+    ...document.querySelectorAll<HTMLElement>("[data-slot=media-stage]"),
+  ].map((stage) => stage.scrollWidth - stage.clientWidth);
+  const bar = document.querySelector("[data-slot=meter-bar]");
+  return {
+    column: box(column).w,
+    room: scroller?.clientWidth ?? 0,
+    pictured: document
+      .querySelector("[data-slot=decision-page]")
+      ?.hasAttribute("data-pictured"),
+    scrollerOver: scroller ? scroller.scrollWidth - scroller.clientWidth : 0,
+    docOver:
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+    wells,
+    texts,
+    cards,
+    foot: box(foot).h,
+    // Two rows when Send stands under the count, not beside it.
+    footRows:
+      box(foot?.querySelector("[data-send]") ?? null).y >=
+      box(foot?.querySelector("[data-slot=meter]") ?? null).y +
+        box(foot?.querySelector("[data-slot=meter]") ?? null).h -
+        0.5
+        ? 2
+        : 1,
+    bar: box(bar).w,
+    viewport: innerWidth,
+  };
+}
+
+/** An embed's frames, from the engine: each story's zoom, its start in the embed, its width as drawn and any sideways scroll; the world's height. In the embed's page. */
+function readBoardFrames() {
+  return {
+    frames: [
+      ...document.querySelectorAll<HTMLElement>(
+        '.cawco-frame[data-cawco-interaction="rest"]'
+      ),
+    ].map((frame) => {
+      const body = frame.querySelector<HTMLElement>(".cawco-frame-body");
+      const zoom = Number.parseFloat(body ? getComputedStyle(body).zoom : "1");
+      return {
+        story: frame.dataset.cawcoStory ?? "",
+        zoom: Math.round((Number.isFinite(zoom) ? zoom : 1) * 1000) / 1000,
+        left: Math.round(frame.getBoundingClientRect().left * 10) / 10,
+        drawn: Math.round((body?.getBoundingClientRect().width ?? 0) * 10) / 10,
+        over: frame.scrollWidth - frame.clientWidth,
+        wide: frame.hasAttribute("data-cawco-wide"),
+      };
+    }),
+    // The world's box, never the document's: the canvas answers a story's own width for the window's (canvas width.ts).
+    docOver:
+      (document.querySelector<HTMLElement>(".cawco-world")?.scrollWidth ?? 0) -
+      (document.querySelector<HTMLElement>(".cawco-world")?.clientWidth ?? 0),
+    world: Math.ceil(
+      document.querySelector<HTMLElement>(".cawco-world")?.offsetHeight ?? 0
+    ),
+    room: document.querySelector<HTMLElement>(".cawco-world")?.clientWidth ?? 0,
+  };
+}
+
+/**
+ * The foot against every card's words at six scroll positions, top to
+ * bottom: each text box's part the scroller shows, met with the foot's box.
+ * What meets, by its words, with the position. In the page.
+ */
+async function footOverWords() {
+  const scroller = document.querySelector<HTMLElement>(
+    "[data-slot=page-scroll]"
+  );
+  const foot = document.querySelector("[data-slot=page-foot]");
+  if (!(scroller && foot)) {
+    return ["no scroller or no foot"];
+  }
+  const met: string[] = [];
+  const most = scroller.scrollHeight - scroller.clientHeight;
+  for (let at = 0; at < 6; at += 1) {
+    scroller.scrollTop = (most * at) / 5;
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(done))
+    );
+    const seen = scroller.getBoundingClientRect();
+    const f = foot.getBoundingClientRect();
+    for (const el of document.querySelectorAll(
+      "[data-slot=decision] :is(h2, p, label, [data-slot=option-label], figcaption, button)"
+    )) {
+      const r = el.getBoundingClientRect();
+      const top = Math.max(r.top, seen.top);
+      const bottom = Math.min(r.bottom, seen.bottom);
+      if (bottom - top <= 0.5 || r.width === 0) {
+        continue;
+      }
+      const left = Math.max(r.left, f.left);
+      const right = Math.min(r.right, f.right);
+      const over = Math.min(bottom, f.bottom) - Math.max(top, f.top);
+      if (right - left > 0.5 && over > 0.5) {
+        met.push(
+          `${at}/5: “${(el.textContent ?? "").trim().slice(0, 24)}” ${Math.round(over)}px under the foot`
+        );
+      }
+    }
+  }
+  scroller.scrollTop = 0;
+  return met;
+}
+
+/**
+ * What is wrong with the 1400px side card as an embed draws it: never
+ * reflowed (its drawn width its own times its zoom); on a desk scaled only
+ * as far as 12px words, then scrolling sideways in its frame; under a
+ * finger fitted whole, no floor, no sideways scroll.
+ */
+function wideFaultsOf(
+  f: {
+    caption: string;
+    past: number;
+    scrollable: boolean;
+    scrolls: number;
+    type: number;
+    w: number;
+    wide: boolean;
+    zoom: number;
+  },
+  view: "desk" | "phone"
+): string[] {
+  const faults: string[] = [];
+  const own = Math.round(WIDE_W * f.zoom);
+  if (Math.abs(f.w - own) > 1) {
+    faults.push(
+      `${f.w}px drawn at zoom ${f.zoom}, its own ${WIDE_W}px would draw ${own}px`
+    );
+  }
+  if (view === "desk") {
+    if (Math.round(f.type) !== 12) {
+      faults.push(`its words at ${f.type}px, not stopped at 12px`);
+    }
+    if (!(f.wide && f.scrollable && f.scrolls > 0)) {
+      faults.push(
+        `its frame doesn't scroll sideways (wide ${f.wide}, overflow-x scrolls ${f.scrollable}, ${f.scrolls}px past)`
+      );
+    }
+  } else if (f.wide || f.scrolls > 0 || f.past > 1) {
+    faults.push(
+      `it scrolls sideways (wide ${f.wide}, ${f.scrolls}px past), not fitted whole`
+    );
+  }
+  return faults.map((fault) => `“${f.caption}” Wide: ${fault}`);
+}
+
+/** One leg of 12: a page at a width, under a mouse or a finger, in a scheme. */
+interface WidthLeg {
+  leg: string;
+  pictured: boolean;
+  view: "desk" | "phone";
+}
+
+/** The chrome round a story at 1:1, px: the page's and the card's insets each side, a well's edge and inset each side, the gap between options. */
+const CHROME = {
+  gap: 11,
+  well: 12,
+  insets: { desk: 2 * (21 + 18), phone: 2 * (14 + 14) },
+} as const;
+
+/**
+ * Before the page is scrolled, every picture stands at the height its
+ * canvas says, the ones below the fold too: one rule for every Preview of
+ * a canvas, the first as the rest. Then each reached as a person scrolls
+ * to it, its frames drawn.
+ */
+async function picturesUnscrolled(kit: Kit, page: Page, { leg }: WidthLeg) {
+  await page.waitForFunction(
+    (selector) => document.querySelectorAll(selector).length === 5,
+    EMBED_FRAME,
+    { timeout: 60_000 }
+  );
+  const allDrawn = (timeout: number) =>
+    page
+      .waitForFunction(
+        (selector) =>
+          [...document.querySelectorAll<HTMLIFrameElement>(selector)].every(
+            (one) => one.dataset.shape === "drawn"
+          ),
+        EMBED_FRAME,
+        { timeout, polling: 250 }
+      )
+      .then(
+        () => true,
+        () => false
+      );
+  const unscrolled = await allDrawn(60_000);
+  const shapes = await page.$$eval(EMBED_FRAME, (frames) =>
+    frames.map(
+      (one) =>
+        `${one.dataset.shape} ${Math.round(one.getBoundingClientRect().height)}px at ${Math.round(one.getBoundingClientRect().top)}px`
+    )
+  );
+  kit.check(
+    `${leg}: before any scroll, all 5 pictures stand at the height their canvas says, below the fold too (${shapes.join(", ")})`,
+    unscrolled
+  );
+  for (const handle of await page.$$(EMBED_FRAME)) {
+    await handle.scrollIntoViewIfNeeded();
+    const frame = await handle.contentFrame();
+    await frame
+      ?.waitForFunction(
+        () =>
+          [
+            ...document.querySelectorAll<HTMLElement>(
+              '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status'
+            ),
+          ].some((one) => one.dataset.state === "drawn"),
+        undefined,
+        { timeout: 120_000, polling: 250 }
+      )
+      .catch(() => undefined);
+  }
+  await allDrawn(30_000);
+}
+
+/** The column, each card's options per row, the words' measure, nothing scrolling sideways. */
+function checkLayout(
+  kit: Kit,
+  read: Awaited<ReturnType<typeof readWidths>>,
+  { leg, pictured, view }: WidthLeg
+) {
+  const { gap, well } = CHROME;
+  const insets = CHROME.insets[view];
+  // The column: on a pictured page the largest step of 640px stories abreast its room holds, never under 920; else 920; never past its room.
+  const pitch = DESK_STORY + 2 * well;
+  const abreast = Math.floor((read.room - insets + gap) / (pitch + gap));
+  const step = abreast > 0 ? abreast * (pitch + gap) - gap + insets : 0;
+  const want = Math.min(read.room, pictured ? Math.max(920, step) : 920);
+  kit.check(
+    `${leg}: the column is ${want}px (its room ${read.room}px; got ${read.column}px)`,
+    Math.abs(read.column - want) <= 0.5,
+    JSON.stringify({ column: read.column, room: read.room })
+  );
+  // Options per row: on their stories' pitch on a pictured page (one per row under the phone's line), at 190px each on a worded one.
+  for (const card of read.cards) {
+    const story = card.id === "phone" ? PHONE_STORY : DESK_STORY;
+    const least = pictured ? story + 2 * well : 190;
+    const fits =
+      pictured && view === "phone"
+        ? 1
+        : Math.max(1, Math.floor((card.body + gap) / (least + gap)));
+    const per = Math.min(card.cells, fits);
+    kit.check(
+      `${leg}: card ${card.id} stands ${per} option${per === 1 ? "" : "s"} to its first row (its body ${card.body}px; got ${card.perRow})`,
+      card.perRow === per,
+      JSON.stringify(card)
+    );
+  }
+  // Words keep their measure: every question, why, line and cost at most 72ch.
+  const long = read.texts.filter((one) => one.w > 72 * one.ch + 0.5);
+  kit.check(
+    `${leg}: every question, why, line and cost runs at most 72ch (${read.texts.length} runs, widest ${Math.max(...read.texts.map((one) => Math.round((one.w / one.ch) * 10) / 10))}ch)`,
+    read.texts.length > 0 && long.length === 0,
+    JSON.stringify(long)
+  );
+  kit.check(
+    `${leg}: nothing scrolls sideways: no well's stage, not the page's scroller, not the document`,
+    read.wells.every((over) => over <= 0) &&
+      read.scrollerOver <= 0 &&
+      read.docOver <= 0,
+    JSON.stringify({
+      wells: read.wells,
+      scroller: read.scrollerOver,
+      doc: read.docOver,
+    })
+  );
+}
+
+/** The foot's height on its rows, and its box against every card's words at six scroll positions. */
+async function checkFoot(
+  kit: Kit,
+  page: Page,
+  read: Awaited<ReturnType<typeof readWidths>>,
+  { leg, view }: WidthLeg
+) {
+  // One row at a desk, 59px; under a finger 67px on one row (its count's bar giving way first: 320px holds it at 66px), 122px where Send wraps under the count.
+  let want = 59;
+  if (view === "phone") {
+    want = read.footRows > 1 ? 122 : 67;
+  }
+  kit.check(
+    `${leg}: the foot is ${want}px on ${read.footRows} row${read.footRows === 1 ? "" : "s"} (got ${read.foot}px, the count's bar ${read.bar}px)`,
+    Math.abs(read.foot - want) <= 0.5,
+    JSON.stringify({ foot: read.foot, rows: read.footRows, bar: read.bar })
+  );
+  const met = await page.evaluate(footOverWords);
+  kit.check(
+    `${leg}: the foot's box meets no card's words at six scroll positions, top to bottom`,
+    met.length === 0,
+    met.slice(0, 8).join("\n    ")
+  );
+}
+
+/** Each option's picture: as tall as its canvas says, at 1:1 from its start where its room holds it, else zoomed to fit; on a phone its well at the screen's edges. */
+async function checkPictures(
+  kit: Kit,
+  page: Page,
+  read: Awaited<ReturnType<typeof readWidths>>,
+  { leg, view }: WidthLeg
+) {
+  kit.check(`${leg}: the page reads as pictured`, read.pictured === true);
+  for (const card of read.cards) {
+    kit.check(
+      `${leg}: card ${card.id}'s ${card.embeds.length} option pictures each stand at the height their canvas says (${card.embeds.map((one) => `${one.caption} ${one.shape} ${one.h}px`).join(", ")})`,
+      card.embeds.length === card.cells &&
+        card.embeds.every((one) => one.shape === "drawn"),
+      JSON.stringify(card.embeds)
+    );
+  }
+  for (const handle of await page.$$(EMBED_FRAME)) {
+    await handle.scrollIntoViewIfNeeded();
+    const inside = await (
+      await handle.contentFrame()
+    )?.evaluate(readBoardFrames);
+    const outer = await handle.boundingBox();
+    const caption = await handle.evaluate(
+      (el) =>
+        el
+          .closest("figure")
+          ?.querySelector("[data-slot=media-caption]")
+          ?.textContent?.trim() ?? ""
+    );
+    const [one] = inside?.frames ?? [];
+    if (!(inside && outer && one)) {
+      kit.check(`${leg}: “${caption}” reads`, false);
+      continue;
+    }
+    // 1:1 where the room holds the story; else zoomed to fit, with no floor on a phone.
+    const scale = Math.min(1, inside.room / (BOARD_WIDTHS[one.story] ?? 1));
+    kit.check(
+      `${leg}: “${caption}” draws ${one.story} at ${scale === 1 ? "1:1" : `${Math.round(scale * 1000) / 1000}`} from its start (zoom ${one.zoom}, ${one.drawn}px of ${inside.room}px at ${one.left}px), with no sideways scroll, its frame ${Math.round(outer.height)}px for a world of ${inside.world}px`,
+      inside.frames.length === 1 &&
+        Math.abs(one.zoom - scale) <= 0.002 &&
+        Math.abs(one.left) <= 0.5 &&
+        one.over <= 0 &&
+        !one.wide &&
+        inside.docOver <= 0 &&
+        Math.abs(outer.height - inside.world) <= 2,
+      JSON.stringify({ inside, outer })
+    );
+    if (view === "phone") {
+      kit.check(
+        `${leg}: “${caption}”'s well reaches the screen's edges (${Math.round(outer.x)}px to ${Math.round(outer.x + outer.width)}px of ${read.viewport}px)`,
+        Math.abs(outer.x) <= 0.5 &&
+          Math.abs(outer.x + outer.width - read.viewport) <= 0.5
+      );
+    }
+  }
+}
+
+/** 12. The pictured page and the worded one at the owner's panel widths, light and dark. */
+async function widthLegs(
+  kit: Kit,
+  stage: Awaited<ReturnType<typeof startDecisionStage>>
+): Promise<void> {
+  for (const { w, view } of WIDTHS) {
+    for (const theme of THEMES) {
+      for (const name of [PICTURED_PAGE, WORDED_PAGE]) {
+        const at: WidthLeg = {
+          leg: `${w}px ${theme}, ${name}`,
+          pictured: name === PICTURED_PAGE,
+          view,
+        };
+        const page = await kit.page(view, {
+          theme,
+          init: [CAWCO_BRIDGE],
+          scrollbars: view === "desk",
+        });
+        await page.setViewportSize({
+          width: w,
+          height: view === "desk" ? 900 : 844,
+        });
+        await page.goto(stage.pageUrl(name, theme), { waitUntil: "load" });
+        await page.waitForSelector("[data-slot=decision]", {
+          timeout: 30_000,
+        });
+        if (at.pictured) {
+          await picturesUnscrolled(kit, page, at);
+        }
+        await settle(page, 600);
+        const read = await page.evaluate(readWidths);
+        checkLayout(kit, read, at);
+        await checkFoot(kit, page, read, at);
+        if (at.pictured) {
+          await checkPictures(kit, page, read, at);
+        }
+        await page.close();
+      }
+    }
+  }
+}
+
 const spec: Spec = {
   name: "decision-embed",
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every assertion in the order the spec's head lists them
@@ -734,6 +1307,8 @@ const spec: Spec = {
     for (const [name, program] of [
       [NAME, PROGRAM],
       [NAMED_PAGE, NAMED_PROGRAM],
+      [PICTURED_PAGE, PICTURED_PROGRAM],
+      [WORDED_PAGE, WORDED_PROGRAM],
     ] as const) {
       let refusal = "";
       try {
@@ -752,6 +1327,8 @@ const spec: Spec = {
       new Map([
         [NAME, PROGRAM],
         [NAMED_PAGE, NAMED_PROGRAM],
+        [PICTURED_PAGE, PICTURED_PROGRAM],
+        [WORDED_PAGE, WORDED_PROGRAM],
       ]),
       {
         [BOOK_ID]: [LEDGER, NOTE],
@@ -761,6 +1338,7 @@ const spec: Spec = {
         [MENU_ID]: [MENU],
         [MONTH_ID]: [LEDGER],
         [SHEET_ID]: [SHEET],
+        [BOARD_ID]: [BOARD],
       },
       { root: fixtureRoot(), kit: false }
     );
@@ -794,11 +1372,18 @@ const spec: Spec = {
 
           // Reached by scrolling the page alone, then scrolled away and back: nothing inside an embed moved yet.
           const reached = await readEmbeds(page, theme, null);
-          await page.evaluate(() =>
-            window.scrollTo(0, document.documentElement.scrollHeight)
-          );
+          await page.evaluate(() => {
+            const scroller = document.querySelector(
+              "[data-slot=page-scroll]"
+            ) as HTMLElement;
+            scroller.scrollTop = scroller.scrollHeight;
+          });
           await settle(page, 600);
-          await page.evaluate(() => window.scrollTo(0, 0));
+          await page.evaluate(() => {
+            (
+              document.querySelector("[data-slot=page-scroll]") as HTMLElement
+            ).scrollTop = 0;
+          });
           await settle(page, 600);
           const back = await readEmbeds(page, theme, null);
           const asleep = [...reached.embeds, ...back.embeds].flatMap((e) => [
@@ -893,14 +1478,14 @@ const spec: Spec = {
             ...(f.past > 1
               ? [`“${f.caption}” ${f.story}: ${f.past}px past the embed`]
               : []),
-            ...(f.gap > 1
+            ...(Math.abs(f.left) > 1
               ? [
-                  `“${f.caption}” ${f.story}: ${f.left}px before and ${f.left + f.gap}px after it, not centred`,
+                  `“${f.caption}” ${f.story}: ${f.left}px in from the embed's start, not at it`,
                 ]
               : []),
           ]);
           kit.check(
-            `${leg}: every frame inside its embed and centred in it (${frames.map((f) => `${f.story} ${f.w}px at ${f.left}`).join(", ")})`,
+            `${leg}: every frame inside its embed and at its start, where the card's words start (${frames.map((f) => `${f.story} ${f.w}px at ${f.left}`).join(", ")})`,
             frames.length > 0 && placeFaults.length === 0,
             placeFaults.join("\n    ")
           );
@@ -924,26 +1509,11 @@ const spec: Spec = {
             fitFaults.join("\n    ")
           );
           const wides = frames.filter((f) => f.story === "Wide");
-          const wideFaults = wides.flatMap((f) => {
-            const own = Math.round(WIDE_W * f.zoom);
-            return [
-              ...(Math.abs(f.w - own) > 1
-                ? [
-                    `${f.w}px drawn at zoom ${f.zoom}, its own ${WIDE_W}px would draw ${own}px`,
-                  ]
-                : []),
-              ...(f.type < 9.9 || f.type > 10.1
-                ? [`its words at ${f.type}px, not stopped at 10px`]
-                : []),
-              ...(f.wide && f.scrollable && f.scrolls > 0
-                ? []
-                : [
-                    `its frame doesn't scroll sideways (wide ${f.wide}, overflow-x scrolls ${f.scrollable}, ${f.scrolls}px past)`,
-                  ]),
-            ].map((fault) => `“${f.caption}” Wide: ${fault}`);
-          });
+          const wideFaults = wides.flatMap((f) => wideFaultsOf(f, view));
           kit.check(
-            `${leg}: the ${WIDE_W}px side card scales only as far as 10px words, then scrolls sideways in its frame (${wides.map((f) => `${f.w}px at zoom ${f.zoom}, its words at ${f.type}px, ${f.scrolls}px to scroll`).join(", ")})`,
+            view === "desk"
+              ? `${leg}: the ${WIDE_W}px side card scales only as far as 12px words, then scrolls sideways in its frame (${wides.map((f) => `${f.w}px at zoom ${f.zoom}, its words at ${f.type}px, ${f.scrolls}px to scroll`).join(", ")})`
+              : `${leg}: under a finger the ${WIDE_W}px side card is fitted whole, no floor, no sideways scroll (${wides.map((f) => `${f.w}px at zoom ${f.zoom}, its words at ${f.type}px`).join(", ")})`,
             wides.length > 0 && wideFaults.length === 0,
             wideFaults.join("\n    ")
           );
@@ -1058,15 +1628,20 @@ const spec: Spec = {
             }),
           ]);
           kit.check(
-            `${leg}: a frame that scrolls sideways draws the house edge fade, ${HOUSE_FADE}px on every width, where more is hidden, none at either end (${fades.map((f) => `${f.story}, ${f.len}px: ${f.at.map((one) => `${one.place} ${one.start}px|${one.end}px`).join(", ")}`).join("; ")})`,
+            view === "desk"
+              ? `${leg}: a frame that scrolls sideways draws the house edge fade, ${HOUSE_FADE}px on every width, where more is hidden, none at either end (${fades.map((f) => `${f.story}, ${f.len}px: ${f.at.map((one) => `${one.place} ${one.start}px|${one.end}px`).join(", ")}`).join("; ")})`
+              : `${leg}: under a finger no frame scrolls sideways, so none draws an edge fade`,
             fades.length === frames.filter((f) => f.wide).length &&
-              fades.length > 0 &&
+              (view === "desk" ? fades.length > 0 : fades.length === 0) &&
               fadeFaults.length === 0,
             fadeFaults.join("\n    ")
           );
-          const small = frames.filter((f) => f.type < (f.zoom < 1 ? 10 : 12));
+          // A desk's words stand at 12px as the reader sees them (rounded to the pixel), scaled or not; a phone's at 12px where drawn at 1:1, its scaled stories fitted whole.
+          const small = frames.filter(
+            (f) => Math.round(f.type) < 12 && (view === "desk" || f.zoom >= 1)
+          );
           kit.check(
-            `${leg}: every embed's words readable as drawn: 12px and up, 10px where scaled (smallest ${Math.min(...frames.map((f) => f.type))}px)`,
+            `${leg}: every embed's words readable as drawn: 12px and up${view === "desk" ? ", scaled or not" : " at 1:1, a scaled story fitted whole"} (smallest ${Math.min(...frames.map((f) => f.type))}px)`,
             small.length === 0,
             small
               .map(
@@ -1124,11 +1699,11 @@ const spec: Spec = {
           const spread = (values: number[]) =>
             values.length ? Math.max(...values) - Math.min(...values) : 99;
           kit.check(
-            `${leg}: the page is one centred column ${view === "desk" ? "920px at most" : "the window wide"}, ${inset} in, its groups 18px apart, on the recessed ground (${JSON.stringify(laid.page)})`,
+            `${leg}: the page is one centred column ${view === "desk" ? "920px at most" : "the window wide"} (no Preview says its stories' width), ${inset} in, its groups 18px apart, on the recessed ground (${JSON.stringify(laid.page)})`,
             !!laid.page.box &&
               (view === "desk"
                 ? laid.page.box.w === 920 &&
-                  laid.page.box.x === (laid.window.w - 920) / 2
+                  laid.page.box.x === (laid.page.room - 920) / 2
                 : laid.page.box.w === laid.window.w) &&
               laid.page.inset.every((one) => one === inset) &&
               laid.page.gap === "18px" &&
@@ -1160,10 +1735,12 @@ const spec: Spec = {
               laid.well.off <= 0.5
           );
           kit.check(
-            `${leg}: the foot is sticky at the window's foot on a page ${laid.foot.page}px tall, Send unobscured where it stands (${JSON.stringify(laid.foot)})`,
-            laid.foot.position === "sticky" &&
+            `${leg}: the foot stands in its own row at the window's foot, the window's full width, under the cards' scroller (their ${laid.foot.page}px scrolling above it), Send unobscured where it stands (${JSON.stringify(laid.foot)})`,
+            laid.foot.position === "static" &&
               laid.foot.page > laid.window.h &&
               Math.abs(laid.foot.bottom - laid.window.h) <= 0.5 &&
+              Math.abs(laid.foot.width - laid.window.w) <= 0.5 &&
+              Math.abs(laid.foot.shown - laid.foot.top) <= 0.5 &&
               laid.foot.send
           );
           const said = await page.evaluate(readPage);
@@ -1373,6 +1950,7 @@ const spec: Spec = {
           }
         }
       }
+      await widthLegs(kit, stage);
     } finally {
       await stage.stop();
     }

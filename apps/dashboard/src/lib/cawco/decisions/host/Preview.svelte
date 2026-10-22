@@ -37,6 +37,7 @@
     artifact: unknown;
     caption?: unknown;
     stories?: unknown;
+    width?: unknown;
   }> = $props();
   const id = $derived(String(props.artifact ?? ""));
   const held = $derived(served.media[id]);
@@ -105,6 +106,20 @@
    */
   let ready = $state<string | null>(null);
   let waited = $state(false);
+  /**
+   * It stands at its own shape: a screen once its origin serves, a
+   * component canvas once it has said its height (every Preview of a
+   * canvas by that one rule, the first as the rest), never at a screen's
+   * 16:10 while it hasn't.
+   */
+  const shaped = $derived(screen ? ready !== null : tall !== null);
+  /** What its frame's shape is now, for a reader: a screen's 16:10, drawn at the height its canvas said, or waiting for that. */
+  const shape = $derived.by(() => {
+    if (!shaped) {
+      return "waiting";
+    }
+    return tall === null ? "screen" : "drawn";
+  });
   /** The wait has outlasted `--dur-wait-grace`: its line may show. */
   let slow = $state(false);
   $effect(() => {
@@ -149,7 +164,7 @@
 
   /** What the embed's status says: nothing until the wait outlasts its grace, nothing once it serves. */
   const waitLine = $derived.by(() => {
-    if (!held?.embed || ready || !slow) {
+    if (!held?.embed || shaped || !slow) {
       return "";
     }
     return waited
@@ -158,7 +173,10 @@
   });
 </script>
 
-<Well caption={props.caption ? String(props.caption) : undefined}>
+<Well
+  bleed={typeof props.width === "number"}
+  caption={props.caption ? String(props.caption) : undefined}
+>
   {#if held?.kind === "page"}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load measures the page, so the frame is as tall as it. -->
     <iframe
@@ -175,17 +193,18 @@
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it serves it is one status row, a skeleton of its line before the grace. Past the grace Caw and the wait's line stand in the row (The Real Wait Rule), over the screen's place; once it serves, the row stands over the frame, empty. The live region is the row's one line throughout. -->
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it says it is one status row, a skeleton of its line before the grace, its frame loading at no height above it. Past the grace Caw and the wait's line stand in the row (The Real Wait Rule), over the screen's place; once it stands at its shape, the row stands over the frame, empty. The live region is the row's one line throughout. -->
     <div class="relative w-full">
       {#if ready}
         <iframe
           bind:this={frame}
           class={[
             "block w-full rounded-xs border-0 bg-surface-page",
-            tall === null && "aspect-16/10 max-h-c-media-max-h",
+            tall === null &&
+              (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),
           ]}
           data-cawco-artifact={id}
-          data-shape={tall === null ? "screen" : "drawn"}
+          data-shape={shape}
           data-slot="embed"
           src={ready}
           style:block-size={tall === null ? undefined : `${tall}px`}
@@ -201,16 +220,16 @@
       <div
         class={[
           "mark-line flex items-center justify-center gap-space-2",
-          ready || screen
+          screen || shaped
             ? "pointer-events-none absolute inset-0"
             : "min-h-c-btn-h-lg",
         ]}
         data-slot="wait-row"
       >
-        {#if !(ready || slow || screen)}
+        {#if !(shaped || slow || screen)}
           <Skeleton data-box line="meta" width="title" />
         {/if}
-        {#if slow && !waited && !ready}
+        {#if slow && !waited && !shaped}
           <img
             alt=""
             height="40"

@@ -148,6 +148,35 @@
   });
   setContext("decision-rows", () => rows);
 
+  /**
+   * The widest story its options' Previews draw, px, as the program says it
+   * (`Preview`'s `width`, through any Row or Column); 0 when none says one.
+   * Its options then stand on that pitch (the story and its well's insets),
+   * as many abreast as the column holds, each story at 1:1.
+   */
+  const storyWidth = $derived.by(() => {
+    const widest = (value: unknown): number => {
+      if (Array.isArray(value)) {
+        return Math.max(0, ...value.map(widest));
+      }
+      if (typeof value !== "object" || value === null) {
+        return 0;
+      }
+      const node = value as {
+        props?: { children?: unknown; width?: unknown };
+        typeName?: unknown;
+      };
+      if (node.typeName === "Preview") {
+        return typeof node.props?.width === "number" ? node.props.width : 0;
+      }
+      return widest(node.props?.children);
+    };
+    return widest(
+      (Array.isArray(props.options) ? props.options : []).map(
+        (option) => (option as OptionNode)?.props?.media
+      )
+    );
+  });
   /** The pieces drawn in a well (Well.svelte), by the library's names for them. */
   const WELLS = new Set(["Image", "Diagram", "Canvas", "Preview", "Dials"]);
   /** The card's media are two pictures: they may share the body's width. */
@@ -186,6 +215,7 @@
   const page = getContext<
     | {
         say: (words: string) => void;
+        scroller: () => HTMLElement | null;
         stand: (card: string, open: boolean) => void;
         tally: () => string;
         work: (card: string) => void;
@@ -345,6 +375,10 @@
     page?.say(`Decided: ${decidedLine}. ${page.tally()}`);
   }
 
+  /** What scrolls the page's cards (Decisions.svelte's first row). */
+  const pageScroller = (): HTMLElement =>
+    page?.scroller() ?? document.documentElement;
+
   /** The page's cards in its order. */
   const cardsOnPage = () => [
     ...document.querySelectorAll<HTMLElement>("[data-cawco-choice]"),
@@ -373,12 +407,12 @@
    * Where the page's scroll lands once `node` (`from`'s body) has folded
    * shut: the next open card in view, under `from`'s decided line when it
    * comes right after it, else at the top; with none left, where it stands
-   * (Send is in the sticky foot, always in view).
+   * (Send is in the page's foot, always in view).
    * Read with the body held at the fold's end, let go before anything is
    * drawn.
    */
   function landing(node: HTMLElement, gap: number, from: HTMLElement): number {
-    const scroller = document.scrollingElement ?? document.documentElement;
+    const scroller = pageScroller();
     // The page's own scroll as it stands: the read below lays the page out
     // at its folded height, and the browser clamps the scroll to that
     // shorter page (it fell 321px on a card near the foot, the fold's
@@ -394,8 +428,10 @@
     node.style.height = "0px";
     node.style.marginBottom = `${-gap}px`;
     node.style.overflow = "hidden";
+    const origin = scroller.getBoundingClientRect().top;
     const top = (el: Element) =>
-      el.getBoundingClientRect().top +
+      el.getBoundingClientRect().top -
+      origin +
       scroller.scrollTop -
       (Number.parseFloat(getComputedStyle(el).scrollMarginTop) || 0);
     const cards = cardsOnPage();
@@ -405,7 +441,7 @@
       to = top(cards.indexOf(next) === cards.indexOf(from) + 1 ? from : next);
     }
     // With none left the page stays where the reader has it: Send stands in
-    // the sticky foot, always in view, and only the page's own shrink moves
+    // the page's foot, always in view, and only the page's own shrink moves
     // the scroll (the clamp below).
     const most = scroller.scrollHeight - scroller.clientHeight;
     [node.style.height, node.style.marginBottom, node.style.overflow] = was;
@@ -565,11 +601,7 @@
       );
     }
     if (to !== null && run) {
-      stopRide = scrollOnClock(
-        run,
-        document.scrollingElement ?? document.documentElement,
-        to
-      );
+      stopRide = scrollOnClock(run, pageScroller(), to);
     }
     const still = () => {
       moving = false;
@@ -618,7 +650,7 @@
       // page where the fold would have taken it, focus on.
       landFold(node, !shut, { fade: true, gap });
       if (to !== null) {
-        (document.scrollingElement ?? document.documentElement).scrollTop = to;
+        pageScroller().scrollTop = to;
         nextStop(box)?.focus({ preventScroll: true });
       }
       return;
@@ -744,7 +776,7 @@
 <article
   bind:this={card}
   {@attach morph({ still: () => instant })}
-  class="group/card relative flex min-w-0 data-instant:**:transition-none scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-space-5 shadow-tile coarse:p-space-4 data-decided:py-space-3"
+  class="group/card relative flex min-w-0 data-instant:**:transition-none scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-(--card-in) shadow-tile data-decided:py-space-3"
   data-cawco-choice={id}
   data-cawco-multiple={multiple ? "" : undefined}
   data-decided={decided ? "" : undefined}
@@ -759,7 +791,7 @@
     data-slot="decision-head"
   >
     <h2
-      class="type-title min-w-0 flex-1 basis-c-decision-question-basis text-balance text-ink-strong wrap-anywhere"
+      class="type-title min-w-0 max-w-c-measure flex-1 basis-c-decision-question-basis text-balance text-ink-strong wrap-anywhere"
     >
       {question}
     </h2>
@@ -843,12 +875,13 @@
       </p>
     {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}
-      <!-- Two pictures side by side in equal columns once the card's body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, each at the body's width. -->
+      <!-- Two pictures side by side in equal columns once the card's body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, each at the body's width, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
       <div
         class={[
           "grid min-w-0 grid-cols-1 gap-space-3",
           pictures && "@media-split:grid-cols-2",
         ]}
+        data-bleeds={pictures ? undefined : ""}
         data-slot="decision-media"
       >
         {@render renderNode(props.media)}
@@ -866,9 +899,17 @@
         }
       }}
     >
+      <!-- Options with pictures stand on their stories' pitch, each story at 1:1 in its well, as many abreast as the column holds; under the phone's line one under another, each well reaching the screen's edges (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. -->
       <div
-        class="grid w-full min-w-0 grid-cols-fit-c-decision-option-min gap-space-3"
+        class={[
+          "grid w-full min-w-0 gap-space-3",
+          storyWidth > 0
+            ? "grid-cols-fit-story max-phone:grid-cols-1"
+            : "grid-cols-fit-c-decision-option-min",
+        ]}
+        data-bleeds={storyWidth > 0 ? "" : undefined}
         data-slot="options"
+        style:--story-w={storyWidth > 0 ? `${storyWidth}px` : undefined}
       >
         {@render renderNode(props.options)}
       </div>

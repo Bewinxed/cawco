@@ -1109,6 +1109,22 @@ export function startInk(deps: InkDeps): Ink {
   // The window resizes or the page grows: every group stands where its element is now.
   addEventListener("resize", later);
   sizesIn(document, later)?.observe(document.documentElement);
+  // A scroll container inside the page scrolled (a decision page's cards
+  // scroll in its first row, a transcript in its pane): every group over
+  // what it holds stands where its element is now. The page's own scroll
+  // moves the layer with it, so it draws nothing again.
+  addEventListener(
+    "scroll",
+    (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target !== document.scrollingElement
+      ) {
+        later();
+      }
+    },
+    { capture: true, passive: true }
+  );
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", changed, { once: true });
   } else {

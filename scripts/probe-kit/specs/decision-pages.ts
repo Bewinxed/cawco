@@ -22,7 +22,9 @@
  * (c) The graph is derived: a card per decision, an edge per `after`, a
  *     frame per Section; a drag's place is kept in the page's state under
  *     `graph.places` and survives a revision; the Decisions tab's graph
- *     draws its cards and edges.
+ *     draws its cards and edges; the page live in the tab stands its Send
+ *     picks bar above the docked composer and the foot fade's dissolve,
+ *     no fade layer over the bar's box.
  * (d) A flowchart, a sequence diagram and a Gantt chart draw as Pele SVG on
  *     the house tokens in both themes; "Open as canvas" stands under the
  *     two types the converter draws as elements, never the Gantt, and opens
@@ -1202,7 +1204,10 @@ const resolveIn = (frame: Frame, anchors: Named[]) =>
 const toPaneTop = (target: Locator) =>
   target.evaluate((el) => {
     el.scrollIntoView({ block: "start" });
-    scrollBy(0, -40);
+    // Back 40px in what scrolls the page: a decision page's cards scroll in its first row.
+    (
+      el.closest("[data-slot=page-scroll]") ?? document.documentElement
+    ).scrollBy(0, -40);
   });
 
 /** What the page shows topmost at the middle of `box` (the desk's px), seen through the overlay. */
@@ -1408,6 +1413,13 @@ const insertAhead = async (on: On, first: string) => {
   );
   const after = await frameWith(desk, 4);
   await settle(desk, 600);
+  // The stack card in view: a pin stands drawn only where its element is
+  // seen (pins.ts, clipped to the scroll containers round it), and the
+  // page's cards scroll in its first row.
+  await after
+    .locator("#decision-stack")
+    .evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await settle(desk, 400);
   const placed = await after.evaluate(() => {
     const stack = document
       .querySelector("#decision-stack")
@@ -1549,6 +1561,52 @@ const graphChecks = async (on: On) => {
     "(c) the Decisions tab's graph draws the derived cards, edges and Section frame",
     drawn?.nodes === 4 && drawn.edges === 2 && drawn.frames === 1,
     JSON.stringify(drawn)
+  );
+  // The page live in the tab: its Send picks bar stands above the docked
+  // composer and above the foot fade's dissolve over it (FootFade), so no
+  // layer of the fade is drawn over the bar's box.
+  await open(
+    tab,
+    `${on.base}/project/${projectId}?view=decisions&page=${NAME}`,
+    "[data-slot=page-view] iframe"
+  );
+  const live = tab.frameLocator("[data-slot=page-view] iframe");
+  await live.locator("[data-slot=page-foot]").waitFor({ timeout: 30_000 });
+  await settle(tab, 600);
+  const barAt = await live.locator("[data-slot=page-foot]").boundingBox();
+  const barBox = barAt && {
+    x: barAt.x,
+    y: barAt.y,
+    w: barAt.width,
+    h: barAt.height,
+  };
+  const layers = await tab.evaluate(() => {
+    const box = (el: Element | null) => {
+      const r = el?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+    };
+    const view = document.querySelector("[data-slot=page-view]");
+    return {
+      fade: box(view?.querySelector(":scope > [data-standing]") ?? null),
+      dock: box(view?.querySelector("[data-slot=dock]") ?? null),
+    };
+  });
+  const meets = (
+    a: { h: number; w: number; x: number; y: number } | null,
+    b: { h: number; w: number; x: number; y: number } | null
+  ) =>
+    !!a &&
+    !!b &&
+    Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0.5 &&
+    Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 0.5;
+  kit.check(
+    `(c) the live page's Send picks bar stands above the dock and the foot fade: no fade layer over its box (the bar ${barBox ? `${Math.round(barBox.y)}–${Math.round(barBox.y + barBox.h)}px` : "missing"}, the fade from ${layers.fade ? Math.round(layers.fade.y) : "none"}px, the dock from ${layers.dock ? Math.round(layers.dock.y) : "none"}px)`,
+    !!barBox &&
+      !!layers.fade &&
+      !!layers.dock &&
+      !meets(barBox, layers.fade) &&
+      !meets(barBox, layers.dock),
+    JSON.stringify({ bar: barBox, ...layers })
   );
   await tab.close();
 };

@@ -167,8 +167,17 @@ const UNMOUNT_MARGIN = 3;
 const SWEEP_KEPT = 3;
 /** The quiet after the last change before a report is posted. Ours. */
 const REPORT_QUIET_MS = 200;
-/** The smallest an embed draws a story's words, in px: scaled further, they stop being legible. The owner's call ("if the scale would put body text under ~10px, say so"). */
-const EMBED_TYPE_FLOOR = 10;
+/**
+ * The smallest a desk's embed draws a story's words, in px, as the reader
+ * sees them (rounded to the pixel: 14px words at the 0.84 a 640px story
+ * takes in a 640px panel stand at 11.76px, read as 12): scaled further, the
+ * embed stops there and scrolls sideways. A phone has no floor: its story
+ * fits the screen whole, and a pinch reads it closer. The designer's call
+ * for decision pages (640 to 741px panels zoom 0.84 to 1 and never scroll).
+ */
+const EMBED_TYPE_FLOOR = 12;
+/** A phone or a tablet under a finger: its embed fits its room with no floor. */
+const FINGER = "(pointer: coarse)";
 
 export type WidthSlot = number | "own";
 
@@ -975,6 +984,7 @@ export function boot(options: BootOptions): void {
     section.head.after(failed);
     section.standIns = [failed];
     section.failed = true;
+    sayHeight();
   }
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
@@ -1251,25 +1261,60 @@ export function boot(options: BootOptions): void {
    * scales its box and its paint together (MDN, zoom: it "scales the
    * targeted element, which can affect the page layout", where scale()
    * leaves the layout), so the embed stands as tall as what it draws and a
-   * narrower story centres in it at its own size. The scale stops where the
-   * story's words would be drawn under EMBED_TYPE_FLOOR: a story still
-   * wider than the embed there scrolls sideways in its frame
-   * (`data-cawco-wide`), its words legible, under the house edge fade
-   * (DESIGN.md `kit-edge-fade`, its sheet set in the page by the chrome),
-   * drawn on the side where more is hidden and gone at each end of the
-   * scroll.
+   * narrower story stands at its start at its own size. On a desk the
+   * scale stops where the story's words would be drawn under
+   * EMBED_TYPE_FLOOR: a story still wider than the embed there scrolls
+   * sideways in its frame (`data-cawco-wide`), its words legible, under the
+   * house edge fade (DESIGN.md `kit-edge-fade`, its sheet set in the page
+   * by the chrome), drawn on the side where more is hidden and gone at each
+   * end of the scroll. Under a finger it always fits (`FINGER`).
    */
   function fitToEmbed(frame: Frame): void {
     const width = widthOf(frame.story, frame.column.width);
     const room = world.clientWidth;
     const fit = width === null || room === 0 ? 1 : Math.min(1, room / width);
-    const type = fit < 1 ? typeOf(frame.body) : null;
+    const type =
+      fit < 1 && !matchMedia(FINGER).matches ? typeOf(frame.body) : null;
     const scale =
-      type === null ? fit : Math.max(fit, Math.min(1, EMBED_TYPE_FLOOR / type));
+      type === null || Math.round(type * fit) >= EMBED_TYPE_FLOOR
+        ? fit
+        : Math.min(1, EMBED_TYPE_FLOOR / type);
     frame.body.style.zoom = scale < 1 ? String(scale) : "";
     const wide = width !== null && width * scale > room + 0.5;
     frame.el.toggleAttribute("data-cawco-wide", wide);
     frame.el.classList.toggle("kit-edge-fade", wide);
+  }
+
+  /** Each frame of an embed fitted to it again: its width, or the pointer it is read under, changed, or its sections drew. */
+  function refitEmbed(): void {
+    for (const section of sections) {
+      for (const frame of section.frames.values()) {
+        fitToEmbed(frame);
+      }
+    }
+  }
+
+  let saidHeight = -1;
+  /**
+   * The page holding an embed (a decision page's Preview) makes its frame
+   * this tall: the frames whole, no inner scroll. Said whenever it changes:
+   * from the world's resize observer while the frame is on the page's
+   * screen, and as its sections draw. A cross-origin frame off the page's
+   * screen gets no rendering steps until it is scrolled to, so no observer
+   * delivery: said only from there, nine of ten Previews of one canvas below
+   * the fold stood in a 16:10 box at 252px beside the first at its own
+   * 760px. Its height read here lays it out, rendering steps or none.
+   */
+  function sayHeight(): void {
+    if (!embed) {
+      return;
+    }
+    const height = Math.ceil(world.offsetHeight);
+    if (height === saidHeight) {
+      return;
+    }
+    saidHeight = height;
+    window.parent.postMessage({ type: CANVAS_EMBED_SIZE, height }, "*");
   }
 
   /** The font size most of a story's words stand at, in its own px (CSS zoom leaves the computed size alone); null before it draws any. */
@@ -1474,6 +1519,11 @@ export function boot(options: BootOptions): void {
     said(section);
     if (embed) {
       unnamedInEmbed();
+      refitEmbed();
+      sayHeight();
+      // Once what the stories mounted has settled (their own effects, the faces).
+      setTimeout(sayHeight);
+      document.fonts.ready.then(sayHeight, () => undefined);
     } else {
       quietly(
         columnsFor(section).then(() => {
@@ -2750,21 +2800,15 @@ export function boot(options: BootOptions): void {
     chrome.layout();
     drawEdges();
   });
+  if (embed) {
+    matchMedia(FINGER).addEventListener("change", refitEmbed);
+  }
   new ResizeObserver(() => {
     drawEdges();
     later();
     if (embed) {
-      // The embed's width changed: each frame wider than it fits it again.
-      for (const section of sections) {
-        for (const frame of section.frames.values()) {
-          fitToEmbed(frame);
-        }
-      }
-      // The page holding an embed (a decision page's Preview) makes its frame this tall: the frames whole, no inner scroll.
-      window.parent.postMessage(
-        { type: CANVAS_EMBED_SIZE, height: Math.ceil(world.offsetHeight) },
-        "*"
-      );
+      refitEmbed();
+      sayHeight();
     }
   }).observe(world);
 

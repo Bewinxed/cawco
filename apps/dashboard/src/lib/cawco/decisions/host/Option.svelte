@@ -100,7 +100,7 @@
   {#if props.line}
     <label
       class={[
-        "type-body min-w-0 text-pretty text-ink-strong wrap-anywhere",
+        "type-body min-w-0 max-w-c-measure text-pretty text-ink-strong wrap-anywhere",
         rowOf(at.line),
       ]}
       data-option-for={id}
@@ -111,7 +111,7 @@
   {#if props.cost}
     <label
       class={[
-        "type-meta min-w-0 text-pretty text-ink-muted wrap-anywhere",
+        "type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere",
         rowOf(at.cost),
       ]}
       data-option-for={id}

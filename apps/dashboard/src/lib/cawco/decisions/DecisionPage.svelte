@@ -120,6 +120,13 @@
   let refusal = $state<string | null>(null);
   let dock = $state<HTMLFormElement | null>(null);
   let dockRoom = $state(0);
+  /**
+   * What the live page keeps clear at its foot: the dock, and the foot
+   * fade's dissolve over it (FootFade, `--space-8` above what it holds
+   * solid), so the page's own foot (its Send picks bar) stands above the
+   * fade, never under its gradient.
+   */
+  let pageInset = $state(0);
 
   // What the dock covers of the pane's foot: the page pads for it, the fade stands to it.
   $effect(() => {
@@ -128,8 +135,12 @@
       return;
     }
     const measure = () => {
-      const below = Number.parseFloat(getComputedStyle(node).bottom) || 0;
+      const style = getComputedStyle(node);
+      const below = Number.parseFloat(style.bottom) || 0;
       dockRoom = Math.round(node.offsetHeight + below);
+      pageInset =
+        dockRoom +
+        (Number.parseFloat(style.getPropertyValue("--space-8")) || 0);
     };
     // Read now, and a change in the next frame (frameObserver): the page
     // pads for it.
@@ -296,7 +307,7 @@
       <PageFrame
         artifactId={read.artifactId}
         {card}
-        insetBottom={dockRoom}
+        insetBottom={pageInset}
         {projectId}
         name={read.name}
         title={read.title}

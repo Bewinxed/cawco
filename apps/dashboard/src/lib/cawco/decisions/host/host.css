@@ -25,14 +25,27 @@
 @source "../../../components/ui/spinner/";
 @source "../../../components/ui/textarea/";
 
+/* A Preview's well inset, each side (its 1px edge and --space-3): typed, so
+   the page reads it as one length (Decisions.svelte, a pictured page's
+   column; Decision.svelte, its options' pitch). */
+@property --well-in {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 @layer base {
   /* The page is its own document: it follows the reader's scheme until the
      overlay names the host's (`data-theme` and `color-scheme` on the root),
-     and its scroller moves only where a fold rides it (Decision.svelte,
-     motion/scroll-on), never by the browser's scroll anchoring as a card
-     folds above the reader's view (the transcript's precedent). */
-  :root {
+     and its scroller (Decisions.svelte's first row) moves only where a fold
+     rides it (Decision.svelte, motion/scroll-on), never by the browser's
+     scroll anchoring as a card folds above the reader's view (the
+     transcript's precedent). */
+  :root,
+  [data-slot="page-scroll"] {
     overflow-anchor: none;
+  }
+  :root {
     /* What a host's docked composer covers of the page's foot (the
        project's Decisions tab says it, preview-overlay page.ts): none until
        it says. */

@@ -1027,18 +1027,33 @@ function wholesOf(pictures: string): { from: number; to: number }[] {
  */
 export async function capturePage(page: Page, path: string): Promise<Capture> {
   await scrollThrough(page, () => settle(page, 300));
-  // A box the page sticks to the window's edge (the decision host's Send
-  // picks bar) stands in every window it reaches, over the rows under it:
-  // stitched, those rows were never pictured. A sticky box takes its place
-  // in the flow whether it sticks or not, so unstuck (`static`) for the
-  // capture the page lays out the same and pictures it once, where it
-  // stands in the page; its own inline style comes back after.
+  // A box the page holds at the window's edge (the decision host's Send
+  // picks bar, the second row of a page the window's height whose cards
+  // scroll in its first; or a sticky one) stands in every window, over or
+  // beside the rows that pass it: stitched, those rows were never pictured.
+  // For the capture the page lays out as one document (its own scroller
+  // let go, the page as tall as what it holds, a sticky box `static`, each
+  // in the place it takes in the flow), and pictures its foot once, at its
+  // end; their own inline styles come back after.
   await page.evaluate(() => {
+    const hold = (el: HTMLElement, property: string, value: string) => {
+      el.dataset.captureStyle ??= el.getAttribute("style") ?? "";
+      el.style.setProperty(property, value);
+    };
     for (const el of document.querySelectorAll<HTMLElement>("body *")) {
       if (getComputedStyle(el).position === "sticky") {
-        el.dataset.captureStyle = el.getAttribute("style") ?? "";
-        el.style.setProperty("position", "static");
+        hold(el, "position", "static");
       }
+    }
+    const root = document.querySelector<HTMLElement>(
+      "[data-slot=decision-page]"
+    );
+    const scroller = document.querySelector<HTMLElement>(
+      "[data-slot=page-scroll]"
+    );
+    if (root && scroller) {
+      hold(root, "height", "auto");
+      hold(scroller, "overflow", "visible");
     }
   });
   const size = await page.evaluate(() => ({
@@ -1209,12 +1224,23 @@ export async function pageReach(
         })
     );
   const full = await scrollThrough(page, rest);
-  const height = await page.evaluate(() => innerHeight);
+  const height = await page.evaluate(
+    () =>
+      (
+        document.querySelector("[data-slot=page-scroll]") ??
+        document.documentElement
+      ).clientHeight
+  );
   const controls = new Map<string, ControlReach>();
   const spills = new Set<string>();
   for (let top = 0; top < full; top += height / 2) {
     await page.evaluate(
-      (y) => window.scrollTo(0, y),
+      (y) => {
+        (
+          document.querySelector("[data-slot=page-scroll]") ??
+          document.documentElement
+        ).scrollTop = y;
+      },
       Math.max(0, Math.min(top, full - height))
     );
     await rest();
@@ -1236,7 +1262,12 @@ export async function pageReach(
       takeReach(line, foot, controls, spills);
     }
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => {
+    (
+      document.querySelector("[data-slot=page-scroll]") ??
+      document.documentElement
+    ).scrollTop = 0;
+  });
   await rest();
   return { controls: [...controls.values()], spills: [...spills] };
 }
@@ -1293,30 +1324,50 @@ function takeReach(
 const THROUGH_PASSES = 6;
 
 /**
- * Scrolls `page` through, half a window at a time, until its height is the
- * same after a pass as before it, waiting `rest` at each stop; back at the
- * top. Its height as it held.
+ * Scrolls `page` through, half its scroller at a time (a decision page's
+ * own, its first row; else the document's), until its height is the same
+ * after a pass as before it, waiting `rest` at each stop; back at the top.
+ * Its height as it held.
  */
 async function scrollThrough(
   page: Page | Frame,
   rest: () => Promise<void>
 ): Promise<number> {
+  const scrollTo = (top: number) =>
+    page.evaluate((y) => {
+      (
+        document.querySelector("[data-slot=page-scroll]") ??
+        document.documentElement
+      ).scrollTop = y;
+    }, top);
   let tall = -1;
   for (let pass = 0; pass < THROUGH_PASSES; pass += 1) {
     const now = await page.evaluate(
-      () => document.documentElement.scrollHeight
+      () =>
+        (
+          document.querySelector("[data-slot=page-scroll]") ??
+          document.documentElement
+        ).scrollHeight
     );
     if (now === tall) {
       break;
     }
     tall = now;
-    const step = await page.evaluate(() => Math.max(1, innerHeight / 2));
+    const step = await page.evaluate(() =>
+      Math.max(
+        1,
+        (
+          document.querySelector("[data-slot=page-scroll]") ??
+          document.documentElement
+        ).clientHeight / 2
+      )
+    );
     for (let y = 0; y < tall; y += step) {
-      await page.evaluate((top) => window.scrollTo(0, top), y);
+      await scrollTo(y);
       await rest();
     }
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await scrollTo(0);
   await rest();
   return tall;
 }
