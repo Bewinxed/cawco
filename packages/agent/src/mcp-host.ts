@@ -160,6 +160,8 @@ const hostDir = (): string => join(cawcoDataDir(), "mcp-host");
 const keptFile = (name: string): string =>
   join(hostDir(), `${encodeURIComponent(name)}.json`);
 const startedFile = (): string => join(hostDir(), "started.json");
+/** The shared servers the last fleet sync named, each with its command ({@link McpHost.restore}). */
+const sharedFile = (): string => join(hostDir(), "shared.json");
 
 /** A config's key: its command, arguments and environment as written. */
 const keyOf = (config: HostedConfig): string =>
@@ -688,9 +690,40 @@ export class McpHost {
   /**
    * The shared servers as the fleet's latest sync names them, each with its
    * resolved command (mcp-launcher.ts). One whose config changed, or that is
-   * no longer shared, is ended; its next call starts the new one.
+   * no longer shared, is ended; its next call starts the new one. The set is
+   * kept on disk for the next agent ({@link restore}).
    */
   configure(servers: { name: string; config: HostedConfig }[]): void {
+    this.#take(servers);
+    mkdirSync(hostDir(), { recursive: true });
+    // Owner-only: a server's environment may carry its keys.
+    writeStateFileSync(sharedFile(), JSON.stringify(servers), { mode: 0o600 });
+  }
+
+  /**
+   * The shared servers the last agent's last sync named, served from this
+   * agent's start. Every harness was told their path then: OpenCode's
+   * server, which its keeper keeps across an agent's restart, and every
+   * session's config. Until this agent's first sync (which the hub holds
+   * until the machine's harnesses report, hub server.ts `awaitHarnesses`), a
+   * host holding none answered each of them 404, and a location booted then
+   * held the server failed: "xcode is not a shared MCP server on this
+   * machine" on the Mac (2026-10-22). Nothing starts here: a process starts
+   * at its first call, as ever.
+   */
+  restore(): void {
+    let kept: { name: string; config: HostedConfig }[];
+    try {
+      kept = JSON.parse(readFileSync(sharedFile(), "utf8")) as typeof kept;
+    } catch {
+      return;
+    }
+    if (Array.isArray(kept)) {
+      this.#take(kept);
+    }
+  }
+
+  #take(servers: { name: string; config: HostedConfig }[]): void {
     const wanted = new Map(servers.map((one) => [one.name, one.config]));
     for (const [name, hosted] of this.#servers) {
       const config = wanted.get(name);

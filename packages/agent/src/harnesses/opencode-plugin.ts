@@ -94,6 +94,17 @@ export const OPENCODE_DIR = join(
  */
 export const OPENCODE_PLACED_MCP = join(OPENCODE_DIR, "cawco-placed-mcp.json");
 
+/**
+ * The location the agent's own reads of a server go to (its config sources,
+ * its models, its integrations): one where the plugin turns every MCP server
+ * off. OpenCode 2.0 boots a location on its first request and connects every
+ * MCP server it has there (2.0.29: one `GET /api/config` at the server's own
+ * directory started the launch config's stdio server, 2026-10-22), so a read
+ * left on the server's own directory, the home, started every fleet server
+ * there and left them running.
+ */
+export const OPENCODE_QUIET_DIR = join(homedir(), ".cawco", "opencode-quiet");
+
 /** The plugin's own tools, which take no session credential: they ask the hub as the session's step. */
 const WORKFLOW_TOOLS = [
   "cawco_submit_result",
@@ -132,6 +143,7 @@ const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const cawcoCredentials = ${JSON.stringify(opencodeCredentialFile())};
 const cawcoPlacedMcp = ${JSON.stringify(OPENCODE_PLACED_MCP)};
+const cawcoQuiet = ${JSON.stringify(OPENCODE_QUIET_DIR)};
 const machineData = ${JSON.stringify(machineDataHome())};
 const sessionNames = ${JSON.stringify(SESSION_CAWCO_ENV)};
 const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
@@ -506,6 +518,15 @@ export default {
     // server's command line, which every local user can read.
     const door = state && existsSync(state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)}) ? state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)} : undefined;
     await ctx.mcp.transform((editor) => {
+      // The agent's reads of this server run here, and need no MCP server.
+      // Removed, not \`enabled = false\`: 2.0.29 started a server updated so
+      // (2026-10-22, a stdio fixture writing its pid), and none removed.
+      if (realOf(directory) === realOf(cawcoQuiet)) {
+        for (const [name] of [...editor.list()]) {
+          editor.remove(name);
+        }
+        return;
+      }
       placeMcp(editor, directory);
       for (const [name, config] of editor.list()) {
         if (config.type !== "local") continue;

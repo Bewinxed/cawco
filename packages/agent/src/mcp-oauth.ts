@@ -454,8 +454,10 @@ async function hostedRoute(name: string, request: Request): Promise<Response> {
 }
 
 export const startMcpGateway = async (hubUrl: () => string) => {
-  // Shared servers an agent before this one left running are ended first.
+  // Shared servers an agent before this one left running are ended first,
+  // and the set it served is served from now, before the first sync.
   await mcpHost.sweep();
+  mcpHost.restore();
   // The one setting every session's config names too: a different port on a
   // live machine leaves its running sessions dialling the old one.
   const port = mcpGatewayPort();

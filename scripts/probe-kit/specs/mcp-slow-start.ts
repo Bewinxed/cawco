@@ -29,6 +29,10 @@
  *   is still being waited for;
  * - (c) once the row reads applied, no process an OpenCode server started of
  *   it is still running, within {@link RELEASE_BOUND_MS};
+ * - no OpenCode server starts it in the location the agent's own reads
+ *   go to (`OPENCODE_QUIET_DIR`);
+ * - no OpenCode server starts it in the location the agent's own reads of
+ *   a server go to (agent opencode-plugin.ts `OPENCODE_QUIET_DIR`);
  * - the hub carried `probe-slow` to the machine once.
  *
  * Runs inside a workspace or on the host alike: it delegates nothing.
@@ -58,6 +62,8 @@ const RETIRE_BOUND_MS = 30_000;
  * held it (opencode.ts `DIRECTORY_RELEASE_RETRY_MS`), with margin.
  */
 const RELEASE_BOUND_MS = 45_000;
+/** The location the agent's own reads of a server go to (agent opencode-plugin.ts `OPENCODE_QUIET_DIR`). */
+const QUIET_LOCATION = "/.cawco/opencode-quiet";
 const CANDIDATE = /candidate→active [^/\s]+\/(\d+) → [^/\s]+\/(\d+)/;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
@@ -288,6 +294,16 @@ const run = async (kit: Kit): Promise<void> => {
       perLocation.length > 0 &&
       perLocation.every(([, group]) => group?.length === 1),
     JSON.stringify({ handover, all })
+  );
+  // The agent's own reads of a server (its config sources, its models) go
+  // to a location the plugin takes every MCP server out of.
+  const quiet = opencodeStarts.filter((one) =>
+    one.cwd.endsWith(QUIET_LOCATION)
+  );
+  kit.check(
+    `no OpenCode server started ${SERVER} in the agent's quiet location (${quiet.length} start(s) there)`,
+    quiet.length === 0,
+    JSON.stringify(quiet)
   );
   const again = opencodeStarts.find(
     (one) =>
