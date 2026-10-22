@@ -1665,6 +1665,8 @@ const buildAdmitted = async (current: Request): Promise<void> => {
     );
   } finally {
     abandoned = undefined;
+    // The Apple secrets' files go first, whatever becomes of the rest of the staging.
+    await rm(join(staging, "apple"), { recursive: true, force: true });
     // A build that failed fails with its own error; the sweep's, if it fails too, is said beside it.
     await clear(Object.values(trees), staging).catch((error: unknown) => {
       console.error(
