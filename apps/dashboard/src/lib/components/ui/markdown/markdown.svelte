@@ -397,7 +397,11 @@
     })}
       {@const drawn = referenceOf(token.href)}
       {#if drawn.draw === "element"}
-        <drawn.element id={drawn.id} label={writtenLabel(token.text)} />
+        <drawn.element
+          id={drawn.id}
+          kind={drawn.kind}
+          label={writtenLabel(token.text)}
+        />
       {:else if drawn.draw === "label"}
         {@render children()}
       {:else if token.href.startsWith("/")}

@@ -8162,14 +8162,37 @@ const chipsRead = (screen: Page, ids: Record<string, string>) =>
           const r = chip?.getBoundingClientRect();
           const l = label?.getBoundingClientRect();
           const p = line?.getBoundingClientRect();
+          const mark = chip?.querySelector('[data-slot="mark"] svg');
+          // The chip in an auto-sized grid track, as a canvas's fixture holds
+          // one: its track takes its min-content, which a percentage cap
+          // never bounds, and must still fit the line's room.
+          let track: { room: number; w: number } | null = null;
+          if (chip && line?.parentElement) {
+            const grid = document.createElement("div");
+            grid.style.display = "grid";
+            grid.style.gridTemplateColumns = "auto";
+            grid.style.justifyContent = "start";
+            grid.append(chip.cloneNode(true));
+            line.parentElement.append(grid);
+            track = {
+              w: grid.firstElementChild?.getBoundingClientRect().width ?? 0,
+              room: line.parentElement.clientWidth,
+            };
+            grid.remove();
+          }
           return [
             kind,
-            chip && r && l && p
+            chip && r && l && p && label
               ? {
                   chip: { x: r.x, w: r.width, right: r.right },
                   label: l.width,
+                  labelMax: Number.parseFloat(getComputedStyle(label).maxWidth),
                   line: { x: p.x, right: p.right },
-                  cut: !!label && label.scrollWidth > label.clientWidth + 0.5,
+                  cut: label.scrollWidth > label.clientWidth + 0.5,
+                  mark: mark
+                    ? Math.round(mark.getBoundingClientRect().width * 10) / 10
+                    : null,
+                  track,
                   name:
                     chip.getAttribute("aria-label") ??
                     chip.textContent?.trim() ??
@@ -8190,8 +8213,10 @@ const chipsRead = (screen: Page, ids: Record<string, string>) =>
  * Chip labels (2): a 40-word decision question, a 40-word session title, a
  * pin on 40 words and the longest artifact name, each named by the agent,
  * at 1440 and at 390: every chip stands inside its line, its label at most
- * `c-inline-chip-label` (240px) and cut with an ellipsis, its whole name
- * its accessible name, and nothing spills.
+ * `c-inline-chip-max-w` (32ch, an absolute length) and cut with an
+ * ellipsis, the chip held to its line's room in an auto-sized grid track
+ * too, a card's and an artifact's mark 12px, its whole name its accessible
+ * name, and nothing spills.
  */
 const longNameChecks = async (on: On) => {
   const { origin } = new URL(on.page.url());
@@ -8267,8 +8292,12 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
         !!chip &&
         chip.chip.x >= chip.line.x - 0.5 &&
         chip.chip.right <= chip.line.right + 0.5 &&
-        chip.label <= 240.5 &&
+        Number.isFinite(chip.labelMax) &&
+        chip.label <= chip.labelMax + 0.5 &&
         chip.cut &&
+        !!chip.track &&
+        chip.track.w <= chip.track.room + 0.5 &&
+        (kind === "card" || kind === "artifact" ? chip.mark === 12 : true) &&
         chip.name.includes(name)
       );
     }) &&
@@ -8292,7 +8321,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
     20_000
   ).catch(() => chipsRead(on.page, selectors));
   on.kit.check(
-    "chip labels (1440): a 40-word decision question, a 40-word session title, a pin on 40 words and the longest artifact name each draw as a chip inside its line, its label at most c-inline-chip-label (240px) and cut with an ellipsis, its whole name its accessible name; nothing spills",
+    "chip labels (1440): a 40-word decision question, a 40-word session title, a pin on 40 words and the longest artifact name each draw as a chip inside its line, its label at most c-inline-chip-max-w (32ch) and cut with an ellipsis, held to its line's room in an auto-sized grid track too, the card's and the artifact's mark 12px, its whole name its accessible name; nothing spills",
     renamed === 200 && held(desk, full),
     `rename ${renamed}; ${JSON.stringify(desk)}`
   );
@@ -8314,7 +8343,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
     20_000
   ).catch(() => chipsRead(phone, selectors));
   on.kit.check(
-    "chip labels (390): the same four chips each stand inside their line, labels at most 240px and cut, whole names their accessible names; nothing spills",
+    "chip labels (390): the same four chips each stand inside their line and in an auto-sized grid track, labels at most 32ch and cut, the card's and the artifact's mark 12px, whole names their accessible names; nothing spills",
     held(small, full),
     JSON.stringify(small)
   );

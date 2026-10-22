@@ -915,8 +915,8 @@
     --c-inline-chip-line: var(--c-row-mark);
     /* An inline chip's fill past its line, above and below, given back by an equal negative margin: the chip draws 22px tall and lays out as its 18px line, inside any line of text from 13px up. Web only. */
     --c-inline-chip-pad: 2px;
-    /* The most an inline chip's label stands across (a session, a pin, a decision card, an artifact named in running text): past it the label ends in an ellipsis, its whole name in the chip's accessible name and its peek or card. A 40-word name never takes a line by itself. Our call: about 30 characters of the label role, the most a line of chat reads as one name. Web only. */
-    --c-inline-chip-label: 240px;
+    /* The most an inline chip's label stands across (a session, a pin, a decision card, an artifact, a task, a plan, any thing named in running text): past it the label ends in an ellipsis, its whole name in the chip's accessible name and its peek or card. An absolute length, never a percentage, so it bounds the chip's min-content too: in an auto-sized grid or flex track a percentage counts for nothing, and a long name claimed its whole nowrap width (a 390 page scrolled 660px sideways). 32ch: the most a line of chat reads as one name. Web only. */
+    --c-inline-chip-max-w: 32ch;
     /* A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger. */
     --c-peek-glyph: var(--icon-md);
     --c-tray-gap: var(--space-2);

@@ -74,6 +74,7 @@
     type TaskView,
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
+  import { planAsked } from "./reference-things.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
@@ -162,6 +163,12 @@
   $effect(() => {
     if (!planProgressNow) {
       planOpen = false;
+    }
+  });
+  // A plan's or a step's chip asked for this session's plan (reference-things.svelte.ts `askPlan`): it opens over the composer, and PlanPane brings the step into view.
+  $effect(() => {
+    if (planProgressNow && planAsked(viewId)) {
+      planOpen = true;
     }
   });
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */

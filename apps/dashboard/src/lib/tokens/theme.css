@@ -399,7 +399,7 @@
   --spacing-c-tray-chip: var(--c-tray-chip);
   --spacing-c-inline-chip-line: var(--c-inline-chip-line);
   --spacing-c-inline-chip-pad: var(--c-inline-chip-pad);
-  --spacing-c-inline-chip-label: var(--c-inline-chip-label);
+  --spacing-c-inline-chip-max-w: var(--c-inline-chip-max-w);
   /* Switches with its context: no literal maps to it. */
   --spacing-c-peek-glyph: var(--c-peek-glyph);
   /* Switches with its context: no literal maps to it. */

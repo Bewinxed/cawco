@@ -66,7 +66,7 @@
     class="grid size-c-row-mark flex-none place-items-center text-ink-muted"
     data-box
   >
-    <IconDecisions />
+    <IconDecisions class="block size-icon-sm" />
   </span>
   <span data-slot="label">{words}</span>
 </button>

@@ -14,6 +14,8 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { page } from "$app/state";
+  import { dur, motionOk } from "../motion/curves.svelte";
 
   let {
     todos,
@@ -29,6 +31,40 @@
 
   /** A to-do is named by its id, or by its place when it has none. */
   const refOf = (todo: Todo): string => todo.id ?? todo.path;
+
+  /*
+   * The to-do a link named (`?todo=td-3`, a to-do's chip): brought into view
+   * and marked for a moment once it is drawn, once per link.
+   */
+  const linked = $derived(page.url.searchParams.get("todo"));
+  let broughtFor: string | null = null;
+  let marked = $state<string | null>(null);
+  $effect(() => {
+    const ref = linked;
+    if (
+      !ref ||
+      broughtFor === ref ||
+      !todos.some((one) => refOf(one) === ref)
+    ) {
+      return;
+    }
+    broughtFor = ref;
+    tick().then(() => {
+      document
+        .querySelector(`[data-todo="${CSS.escape(ref)}"]`)
+        ?.scrollIntoView({
+          block: "center",
+          behavior: motionOk.current ? "smooth" : "auto",
+        });
+      marked = ref;
+      setTimeout(
+        () => {
+          marked = null;
+        },
+        dur("--dur-fade") * 4
+      );
+    });
+  });
 
   /** Ticks shown before the hub has written them, by ref. */
   let ticking = $state<Record<string, boolean>>({});
@@ -178,7 +214,9 @@
         {@const checked = ticking[ref] ?? todo.done}
         <li
           data-slot="todo"
-          class="group flex items-center gap-space-2 min-h-c-btn-h ps-(--indent)"
+          data-todo={ref}
+          data-linked={marked === ref || undefined}
+          class="group flex items-center gap-space-2 min-h-c-btn-h ps-(--indent) rounded-sm transition-[background-color] duration-(--dur-fade) ease-out data-linked:bg-selected-bg"
           style:--depth={todo.depth}
           style:--indent="calc(var(--depth, 0) * var(--space-6))"
         >

@@ -67,7 +67,9 @@
   import { IconClose } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
+  import { dur, motionOk } from "../motion/curves.svelte";
   import { popIn, popOut } from "../motion/pop.svelte";
+  import { planAsked, takePlan } from "../reference-things.svelte";
   import { composerLayer } from "../transcript/composer-layer.svelte";
   import PlanTree from "./PlanTree.svelte";
 
@@ -132,6 +134,37 @@
   $effect(() => () => composerLayer.drop(layerOwner));
 
   let section = $state<HTMLElement>();
+  let body = $state<HTMLElement>();
+  /*
+   * A plan's or a step's chip asked for this plan (reference-things.svelte.ts
+   * `askPlan`; the pane opened it): the step is brought into view in its
+   * column and marked for a moment, once it is drawn; then the ask is taken.
+   */
+  $effect(() => {
+    const asked = planAsked(instanceId);
+    const drawn = steps.length;
+    if (!(asked && body)) {
+      return;
+    }
+    const { step } = asked;
+    if (!step) {
+      takePlan(instanceId);
+      return;
+    }
+    const row = drawn
+      ? body.querySelector<HTMLElement>(`[data-plan-row="${CSS.escape(step)}"]`)
+      : null;
+    if (!row) {
+      return;
+    }
+    takePlan(instanceId);
+    row.scrollIntoView({
+      block: "nearest",
+      behavior: motionOk.current ? "smooth" : "auto",
+    });
+    row.setAttribute("data-linked", "");
+    setTimeout(() => row.removeAttribute("data-linked"), dur("--dur-fade") * 4);
+  });
   function onkeydown(event: KeyboardEvent): void {
     if (event.key === "Escape" && !event.defaultPrevented) {
       event.preventDefault();
@@ -204,6 +237,7 @@
   <!-- The parts, flat on the surface: a heading, then what it names. -->
   <div
     data-slot="body"
+    bind:this={body}
     class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-3 pbe-space-4 px-space-4 flex flex-col gap-space-2"
     style:--more-px="0"
   >

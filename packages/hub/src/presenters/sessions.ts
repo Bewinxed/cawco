@@ -8,9 +8,11 @@
 import {
   type DelegateType,
   type GeneratedImage,
+  planLink,
   sessionLink,
   type WorkflowInput,
   type WorkflowListing,
+  workflowLink,
 } from "@cawco/core";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import type { DelegateList, DelegateNode } from "../delegation-tree";
@@ -73,7 +75,15 @@ const nodeLines = (
     stateWords(node, now),
     ...(live && node.machine ? [`on ${node.machine}`] : []),
     ...(node.cacheWarm ? ["cache warm"] : ["cache cold"]),
-    ...(node.plan ? [`plan ${node.plan.done}/${node.plan.total}`] : []),
+    // Its plan by its link, which the person's dashboard draws as its chip.
+    ...(node.plan
+      ? [
+          planLink(
+            node.instanceId,
+            `plan ${node.plan.done}/${node.plan.total}`
+          ),
+        ]
+      : []),
     ...(node.queued > 0 ? [`${count(node.queued, "message")} unread`] : []),
     ...(node.paused ? [node.paused] : []),
     ...(node.landingWait
@@ -175,13 +185,13 @@ export const delegateTypesWords = (catalog: {
         catalog.types.map(typeLine)
       );
 
-/** One workflow as a line: its name, what it does, its inputs. */
+/** One workflow as a line: its name as its link, what it does, its inputs. */
 const workflowLine = (workflow: WorkflowListing, now: number): string => {
   const inputs = workflow.inputs.map(
     (input: WorkflowInput) =>
       `${input.name}${input.required ? "" : "?"}${input.options?.length ? ` (${input.options.join(" | ")})` : ""}`
   );
-  return `- ${workflow.slug}: ${workflow.description.replace(/\s+/g, " ").trim() || "no description"} · inputs ${inputs.length > 0 ? inputs.join(", ") : "none"} · changed ${ago(workflow.updatedAt, now)}`;
+  return `- ${workflowLink(workflow.id, workflow.slug)}: ${workflow.description.replace(/\s+/g, " ").trim() || "no description"} · inputs ${inputs.length > 0 ? inputs.join(", ") : "none"} · changed ${ago(workflow.updatedAt, now)}`;
 };
 
 /** `workflow_list`: each saved workflow, a line. */
@@ -199,11 +209,11 @@ export const workflowsWords = (listed: {
 
 /** `workflow_create` and `workflow_update`: what was saved. */
 export const workflowSavedWords = (saved: WorkflowListing): string =>
-  `Saved workflow ${saved.slug}${saved.inputs.length > 0 ? `, inputs ${saved.inputs.map((input: WorkflowInput) => input.name).join(", ")}` : ", no inputs"}; workflow_run takes the name.`;
+  `Saved workflow ${workflowLink(saved.id, saved.slug)}${saved.inputs.length > 0 ? `, inputs ${saved.inputs.map((input: WorkflowInput) => input.name).join(", ")}` : ", no inputs"}; workflow_run takes the name.`;
 
 /** `workflow_run`: the run started, its handle for workflow_read and workflow_steer. */
 export const runStartedWords = (run: { runId: string }): string =>
-  `Started run ${handle(run.runId)}; you supervise it, and a receipt arrives for each step. workflow_read and workflow_steer take the run's handle.`;
+  `Started run ${handle(run.runId)}, ${workflowLink(run.runId, `run ${handle(run.runId)}`)}; you supervise it, and a receipt arrives for each step. workflow_read and workflow_steer take the run's handle.`;
 
 /** `workflow_state_read`: the slot's value. */
 export const stateSlotWords = (slot: { value: unknown }): string =>

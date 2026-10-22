@@ -23,15 +23,36 @@ import ArtifactReference from "./ArtifactReference.svelte";
 import { artifactNamed } from "./artifact-names.svelte";
 import DecisionReference from "./DecisionReference.svelte";
 import PinReference from "./PinReference.svelte";
+import { type ThingKind, thingNamed } from "./reference-things.svelte";
 import SessionReference from "./SessionReference.svelte";
 import { sessionNamed } from "./session-names.svelte";
+import ThingReference from "./ThingReference.svelte";
+
+/** What an element is given: the id `find` answered, its kind, and the link's written label. */
+interface ElementProps {
+  id: string;
+  kind: ReferenceKind;
+  label?: string;
+}
 
 interface ReferenceElement {
-  /** What draws it, given the id `find` answered and the link's written label. */
-  readonly element: Component<{ id: string; label?: string }>;
+  /** What draws it. */
+  readonly element: Component<ElementProps>;
   /** The id as the dashboard holds it, or null when it holds none by that id. */
   find: (id: string) => string | null;
 }
+
+/**
+ * A task, a to-do, a plan, a step, a routine, a workflow or its run, a
+ * project or a machine (reference-things.svelte.ts): drawn as its chip
+ * (ThingReference) once the dashboard holds it or the hub named it.
+ */
+const thing = (kind: ThingKind): ReferenceElement => ({
+  find: (id) => (thingNamed(kind, id) ? id : null),
+  get element() {
+    return ThingReference as unknown as Component<ElementProps>;
+  },
+});
 
 /** An id whose artifact part the dashboard holds or the hub names; null while it is asked, and when it names none. */
 const ofArtifact = (id: string, artifact: string | undefined): string | null =>
@@ -74,6 +95,14 @@ export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
       return ArtifactReference;
     },
   },
+  task: thing("task"),
+  todo: thing("todo"),
+  plan: thing("plan"),
+  step: thing("step"),
+  routine: thing("routine"),
+  workflow: thing("workflow"),
+  project: thing("project"),
+  machine: thing("machine"),
 };
 
 /** A backslash escape in a link's label (core `referenceLink` writes them). */
@@ -91,8 +120,9 @@ export type Drawn =
   | { draw: "label" }
   | {
       draw: "element";
-      element: Component<{ id: string; label?: string }>;
+      element: Component<ElementProps>;
       id: string;
+      kind: ReferenceKind;
     };
 
 /** What a written link whose destination is `href` draws as. */
@@ -107,6 +137,6 @@ export function referenceOf(href: string): Drawn {
   const entry = REFERENCE_ELEMENTS[reference.kind];
   const id = entry.find(reference.id);
   return id
-    ? { draw: "element", element: entry.element, id }
+    ? { draw: "element", element: entry.element, id, kind: reference.kind }
     : { draw: "label" };
 }

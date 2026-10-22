@@ -29,6 +29,7 @@ import { tool } from "./mcp-tool";
 import type { WrittenStep } from "./plans";
 import {
   attemptStartWords,
+  type LinkScope,
   taskArchivedWords,
   taskChangedWords,
   taskCommentedWords,
@@ -295,6 +296,12 @@ export function taskTools(context: TaskToolContext | undefined) {
     };
   };
 
+  /** The calling session's project and id: the links its answers carry (presenters/tasks.ts); none in discovery. */
+  const linkScope = (): LinkScope => ({
+    project: context?.actor.projectId ?? null,
+    session: context?.actor.id ?? null,
+  });
+
   /** The task todo_write or task_comment may change: the work item's own, or any one a mainline session names. */
   const ownTask = (
     name: "todo_write" | "task_comment",
@@ -360,7 +367,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         ]);
         return { list, stages };
       },
-      taskReadWords
+      (said) => taskReadWords(said, linkScope())
     ),
     tool(
       "task_create",
@@ -423,7 +430,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           ...(suggest ? { suggest } : {}),
         };
       },
-      taskCreatedWords
+      (said) => taskCreatedWords(said, linkScope())
     ),
     tool(
       "task_update",
@@ -466,7 +473,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         }
         return task ?? (await tasks.get(projectId, id));
       },
-      taskChangedWords
+      (said) => taskChangedWords(said, linkScope())
     ),
     tool(
       "task_link",
@@ -481,7 +488,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         const { projectId, tasks, actor } = scope();
         return await tasks.link(projectId, id, { edge, to, remove }, actor);
       },
-      taskChangedWords
+      (said) => taskChangedWords(said, linkScope())
     ),
     tool(
       "task_start",
@@ -559,7 +566,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         );
         return { id: done.id, todos: done.todos };
       },
-      todoWrittenWords
+      (said) => todoWrittenWords(said, linkScope())
     ),
     tool(
       "task_comment",

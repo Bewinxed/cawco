@@ -11,8 +11,10 @@ import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { showArtifact } from "./artifact-api";
 import { artifactNamed, askOpen, type OpenAt } from "./artifact-names.svelte";
+import { barGlass } from "./bar-glass.svelte";
 import { cawco, revealPreview } from "./client.svelte";
 import { failureClause } from "./hub-read";
+import { askPlan, type Thing } from "./reference-things.svelte";
 import { refusals } from "./refusals.svelte";
 
 /** The address of artifact `id`'s own tab, opening at `at`. */
@@ -96,4 +98,28 @@ export async function openArtifactIn(
     refusals.set(key, { reason, asked: { instanceId, id, at } });
     return reason;
   }
+}
+
+/**
+ * A thing's chip pressed (a task's, a to-do's, a plan's, a step's, a
+ * routine's, a workflow's, a project's, a machine's): its page opens; a
+ * plan or a step opens over its session's composer, at the step; a machine opens
+ * the machines onto its row, where the dashboard keeps them (the bar's card,
+ * a phone's sidebar).
+ */
+export async function openThing(thing: Thing): Promise<void> {
+  const { place } = thing;
+  if ("machines" in place) {
+    barGlass.showMachine(place.machines);
+    return;
+  }
+  if ("plan" in place) {
+    askPlan(place.plan, place.step);
+    const at = `/session/${encodeURIComponent(place.plan)}`;
+    if (page.url.pathname !== at) {
+      await goto(at);
+    }
+    return;
+  }
+  await goto(place.href);
 }

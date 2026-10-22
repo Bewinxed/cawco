@@ -5,11 +5,15 @@
  * marker (`td-3`) or position (`2.1`). What a task leaves unset reads as the
  * default it falls back to.
  */
-import type {
-  AttemptResult,
-  ResultArtifact,
-  SessionPlan,
-  TaskTodo,
+import {
+  type AttemptResult,
+  planLink,
+  type ResultArtifact,
+  type SessionPlan,
+  stepLink,
+  type TaskTodo,
+  taskLink,
+  todoLink,
 } from "@cawco/core";
 import type { AttemptStart } from "../dispatch";
 import type { TaskComment } from "../task-file";
@@ -18,6 +22,32 @@ import type { StagesView, TaskList, TaskView } from "../tasks";
 import { ago, count, handle, lines, listed, quote, valueWords } from "./words";
 
 type TaskLine = TaskList["tasks"][number];
+
+/**
+ * Who reads the answer: the calling session's project and its own id, for
+ * the links that name a task, a to-do, its plan and a step to the person
+ * (core references.ts). None in discovery, which writes no links.
+ */
+export interface LinkScope {
+  project: string | null;
+  session: string | null;
+}
+const NO_LINKS: LinkScope = { project: null, session: null };
+
+/** Words cut at `max` characters, a link's label. */
+const cut = (text: string, max: number): string => {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+};
+
+/** A task's title: its link in the project, else its words in quotes. */
+const titleOf = (
+  links: LinkScope,
+  id: string,
+  title: string,
+  max: number
+): string =>
+  links.project ? taskLink(links.project, id, cut(title, max)) : quote(title, max);
 
 /** A stage as a model reads it: `draft (active, runs writer)`. */
 const stageWords = ({ name, kind, hooks }: StagesView["stages"][number]) => {
@@ -58,7 +88,7 @@ const attemptWords = (
 };
 
 /** One task of the board, a line. */
-const taskLine = (task: TaskLine, now: number): string => {
+const taskLine = (task: TaskLine, now: number, links: LinkScope): string => {
   const facts = [
     task.stage,
     ...(task.needsYou ? ["needs the operator"] : []),
@@ -78,14 +108,17 @@ const taskLine = (task: TaskLine, now: number): string => {
     ...(task.problem ? [`its file: ${task.problem}`] : []),
     `changed ${ago(task.updatedAt, now)}${task.updatedBy ? ` by ${task.updatedBy.name}` : ""}`,
   ];
-  return `- ${task.id} ${quote(task.title, 120)} · ${facts.join(" · ")}`;
+  return `- ${task.id} ${titleOf(links, task.id, task.title, 120)} · ${facts.join(" · ")}`;
 };
 
 /** `task_read` without an id: the stages, then the board. */
-export const taskListWords = (board: {
-  list: TaskList;
-  stages: StagesView;
-}): string => {
+export const taskListWords = (
+  board: {
+    list: TaskList;
+    stages: StagesView;
+  },
+  links: LinkScope = NO_LINKS
+): string => {
   const now = Date.now();
   const { list, stages } = board;
   return lines(
@@ -95,17 +128,21 @@ export const taskListWords = (board: {
     list.tasks.length === 0
       ? "No tasks match."
       : `${count(list.tasks.length, "task")}; task_read with id reads one:`,
-    list.tasks.map((task) => taskLine(task, now)),
+    list.tasks.map((task) => taskLine(task, now, links)),
     list.problems.length > 0 &&
       `Unreadable task files: ${list.problems.join("; ")}`
   );
 };
 
-/** A task's to-dos, nested, each with its marker. */
-const todoLines = (todos: TaskTodo[]): string[] =>
+/** A task's to-dos, nested, each with its marker, and its link while it has one. */
+const todoLines = (
+  todos: TaskTodo[],
+  links: LinkScope = NO_LINKS,
+  task?: string
+): string[] =>
   todos.map(
     (todo) =>
-      `${"  ".repeat(todo.depth)}- [${todo.done ? "x" : " "}] ${todo.id ?? todo.path} ${todo.proposed ? "(proposed) " : ""}${todo.text}${todo.promoted ? ` → ${todo.promoted}` : ""}`
+      `${"  ".repeat(todo.depth)}- [${todo.done ? "x" : " "}] ${todo.id ?? todo.path} ${todo.proposed ? "(proposed) " : ""}${links.project && task && todo.id ? todoLink(links.project, task, todo.id, todo.text) : todo.text}${todo.promoted ? ` → ${todo.promoted}` : ""}`
   );
 
 /** An attempt at a task, a line. */
@@ -170,7 +207,7 @@ const timeWords = (task: TaskView, now: number): string =>
   `Created ${ago(task.createdAt, now)}${task.createdBy ? ` by ${task.createdBy.name}` : ""}; changed ${ago(task.updatedAt, now)}${task.updatedBy ? ` by ${task.updatedBy.name}` : ""}.`;
 
 /** What a task's file says: its labels and fields, its sections, its to-dos, checks, outputs and context. */
-const fileLines = (task: TaskView): string[] =>
+const fileLines = (task: TaskView, links: LinkScope): string[] =>
   lines(
     task.labels.length > 0 && `Labels: ${task.labels.join(", ")}.`,
     Object.keys(task.extra).length > 0 &&
@@ -184,7 +221,7 @@ const fileLines = (task: TaskView): string[] =>
       lines(`## ${section.heading}`, section.text.trim())
     ),
     task.todos.length > 0
-      ? lines("## To-dos", todoLines(task.todos))
+      ? lines("## To-dos", todoLines(task.todos, links, task.id))
       : "No to-dos.",
     task.checks.length > 0 && `Checks: ${task.checks.join("; ")}`,
     task.outputs.length > 0 && `Outputs: ${task.outputs.join(", ")}`,
@@ -231,16 +268,17 @@ const workLines = (
 
 /** One task whole: its fields, sections, to-dos, attempts, result and comments. */
 export const taskWords = (
-  task: TaskView & { history?: TaskHistoryEvent[] }
+  task: TaskView & { history?: TaskHistoryEvent[] },
+  links: LinkScope = NO_LINKS
 ): string => {
   const now = Date.now();
   const edges = edgeWords(task);
   return lines(
-    `${task.id} ${quote(task.title, 200)} · ${task.stage}${task.needsYou ? " · needs the operator" : ""} · ${task.path}`,
+    `${task.id} ${titleOf(links, task.id, task.title, 200)} · ${task.stage}${task.needsYou ? " · needs the operator" : ""} · ${task.path}`,
     timeWords(task, now),
     edges.length > 0 && `Edges: ${edges.join("; ")}.`,
     `Runs: ${runWords(task).join("; ")}.`,
-    fileLines(task),
+    fileLines(task, links),
     workLines(task, now)
   );
 };
@@ -249,16 +287,19 @@ export const taskWords = (
 export const taskReadWords = (
   read:
     | { list: TaskList; stages: StagesView }
-    | (TaskView & { history?: TaskHistoryEvent[] })
-): string => ("list" in read ? taskListWords(read) : taskWords(read));
+    | (TaskView & { history?: TaskHistoryEvent[] }),
+  links: LinkScope = NO_LINKS
+): string =>
+  "list" in read ? taskListWords(read, links) : taskWords(read, links);
 
 /** `task_create`: the task filed, and what Jev or the hub suggests of it. */
 export const taskCreatedWords = (
-  created: TaskView & { duplicates?: unknown; suggest?: unknown }
+  created: TaskView & { duplicates?: unknown; suggest?: unknown },
+  links: LinkScope = NO_LINKS
 ): string =>
   lines(
     `Filed ${created.id} in ${created.stage}.`,
-    taskWords(created),
+    taskWords(created, links),
     created.duplicates !== undefined &&
       `Possible duplicates, to act on: ${valueWords(created.duplicates, 2000)}`,
     created.suggest !== undefined &&
@@ -266,8 +307,10 @@ export const taskCreatedWords = (
   );
 
 /** `task_update` and `task_link`: the task as it stands now. */
-export const taskChangedWords = (task: TaskView): string =>
-  lines(`${task.id} now:`, taskWords(task));
+export const taskChangedWords = (
+  task: TaskView,
+  links: LinkScope = NO_LINKS
+): string => lines(`${task.id} now:`, taskWords(task, links));
 
 /** `task_start` and `task_retry`: the attempt as it started, or that it waits. */
 export const attemptStartWords = (start: AttemptStart): string =>
@@ -285,23 +328,38 @@ const STEP_BOX: Record<SessionPlan["steps"][number]["status"], string> = {
   pending: " ",
 };
 
-/** A plan's steps, nested, each with its status. */
-const stepLines = (plan: SessionPlan): string[] =>
+/** A plan's steps, nested, each with its status and its link. */
+const stepLines = (plan: SessionPlan, links: LinkScope): string[] =>
   plan.steps.map(
     (step) =>
-      `${"  ".repeat(step.depth)}- [${STEP_BOX[step.status]}] ${step.id} ${step.content}${step.priority ? ` (${step.priority})` : ""}`
+      `${"  ".repeat(step.depth)}- [${STEP_BOX[step.status]}] ${step.id} ${links.session ? stepLink(links.session, step.id, step.content) : step.content}${step.priority ? ` (${step.priority})` : ""}`
   );
+
+const HEADING = /^#+\s*/;
+
+/** What a plan is called: its spec's first line, else its first step's words, else Plan (the dashboard's chip reads it so too). */
+const planName = (plan: SessionPlan): string =>
+  plan.spec?.markdown
+    .split("\n")
+    .map((line) => line.replace(HEADING, "").trim())
+    .find(Boolean) ||
+  plan.steps[0]?.content ||
+  "Plan";
 
 /** `todo_write`: the plan as it stands, or the task's to-dos. */
 export const todoWrittenWords = (
   written:
     | (SessionPlan & { personChanged?: string })
-    | { id: string; todos: TaskTodo[] }
+    | { id: string; todos: TaskTodo[] },
+  links: LinkScope = NO_LINKS
 ): string => {
   if ("steps" in written) {
+    const plan = links.session
+      ? `Your plan, ${planLink(links.session, cut(planName(written), 120))}`
+      : "Your plan";
     return lines(
-      written.steps.length > 0 ? "Your plan:" : "Your plan has no steps.",
-      stepLines(written),
+      written.steps.length > 0 ? `${plan}:` : `${plan} has no steps.`,
+      stepLines(written, links),
       written.spec && "Your spec is kept.",
       written.personChanged &&
         `The person changed it: ${written.personChanged}`,
@@ -309,11 +367,14 @@ export const todoWrittenWords = (
         written.todos.length > 0 &&
         lines(
           `${written.taskId ?? "Your task"}'s to-dos:`,
-          todoLines(written.todos)
+          todoLines(written.todos, links, written.taskId)
         )
     );
   }
-  return lines(`${written.id}'s to-dos:`, todoLines(written.todos));
+  return lines(
+    `${written.id}'s to-dos:`,
+    todoLines(written.todos, links, written.id)
+  );
 };
 
 /** `task_comment`: the task's comments, the newest yours. */

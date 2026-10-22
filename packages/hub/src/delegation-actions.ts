@@ -31,6 +31,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   machineCalled,
   machineLabel,
+  machineLink,
   machinesCalled,
   pauseClock,
   QUESTION_DISMISSED,
@@ -1865,8 +1866,14 @@ export const handoffActions = ({
         (machine) =>
           `${machineCalled(machine.machineId, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
       );
+    const online = machines.filter((machine) => machine.status === "online");
     const where = [
       `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`,
+      ...(online.length > 0
+        ? [
+            `To name one to the person: ${online.map((machine) => machineLink(machine.machineId, machineCalled(machine.machineId, machines))).join(", ")}.`,
+          ]
+        : []),
       ...paused,
     ].join(" ");
     if (peers.length === 0) {
