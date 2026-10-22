@@ -3,7 +3,7 @@
  * `$TMPDIR/inputs/`, written by the hub, with no file the caller writes
  * (core handed-input.ts `HandedInput`, hub handed-inputs.ts
  * `createHandedInputs`, work-items.ts `readInputs` and `handIn`). On a
- * scratch fleet (real hub, agent and sessiond; Claude Code and OpenCode
+ * scratch fleet (real hub, agent and sessiond; Claude Code, OpenCode and pi
  * against the mock model) and the built dashboard at the desk, read from the
  * files the hub wrote, the leaf's brief and what the leaf's Bash printed:
  *
@@ -26,9 +26,9 @@
  *    the folder's page.
  * 6. The parent's `handoff` tool, called with a `{ text, name }` input,
  *    lands it in B's inputs and names it; B finishes.
- * 7. OpenCode: a parent there calls `delegate` (Code Mode) with a
- *    `{ text, name }` input; its leaf's brief names the file and its Bash
- *    reads the words.
+ * 7. OpenCode and pi: a parent on each calls `delegate` as that harness
+ *    offers it (OpenCode's Code Mode, pi's own tool) with a `{ text, name }`
+ *    input; its leaf's brief names the file and its Bash reads the words.
  *
  * It delegates, so its fleet cuts workspaces: it runs on the host, outside
  * every boundary.
@@ -50,8 +50,6 @@ import { type Kit, type KitFleet, open, type Spec } from "../kit";
 const RUN = crypto.randomUUID().slice(0, 8);
 const TAG_A = `PROBE-HANDED-A-${RUN}`;
 const TAG_B = `PROBE-HANDED-B-${RUN}`;
-const TAG_OC = `PROBE-HANDED-OC-${RUN}`;
-const TAG_OC_LEAF = `PROBE-HANDED-OC-LEAF-${RUN}`;
 const FINISH = "mcp__cawco__finish_item";
 const CREATE = "mcp__cawco__artifact_create";
 /** OpenCode keeps MCP tools in Code Mode's catalog. */
@@ -64,7 +62,6 @@ const PIN_WORDS = `handed-pin-${crypto.randomUUID()}`;
 const REPLY_WORDS = `handed-reply-${crypto.randomUUID()}`;
 const TEXT_TOKEN = `handed-text-${crypto.randomUUID()}`;
 const HANDOFF_TOKEN = `handed-handoff-${crypto.randomUUID()}`;
-const OC_TOKEN = `handed-opencode-${crypto.randomUUID()}`;
 const BLOB = Buffer.from(`handed-blob-${crypto.randomUUID()}\u0000ÿ`);
 /** A 1×1 PNG, the person's pasted picture. */
 const PICTURE = Buffer.from(
@@ -79,7 +76,6 @@ const PREVIEW = `probe-preview-${RUN}`;
 const BOX = "probe-box";
 const PIN_ID = crypto.randomUUID();
 const HANDOFF_FILE = "handoff-note.md";
-const OC_FILE = "oc-note.md";
 
 const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Handed</title></head><body><h1>Handed</h1><p id="here">${PAGE_TOKEN}</p></body></html>`;
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
@@ -104,19 +100,42 @@ const found = (request: Seen, name: string, input: object): Reply => {
     : say(`${name} is not offered`);
 };
 
+/** The harnesses besides Claude Code whose parent calls `delegate` itself (step 7). */
+const OTHERS = ["opencode", "pi"] as const;
+type Other = (typeof OTHERS)[number];
+
+/** Step 7 on one harness: its parent's and leaf's marks, the words handed, and where each is. */
+interface OtherLeg {
+  called: boolean;
+  file: string;
+  finished: boolean;
+  leafTag: string;
+  read: boolean;
+  tag: string;
+  token: string;
+}
+
+const otherLeg = (harness: Other): OtherLeg => ({
+  tag: `PROBE-HANDED-${harness.toUpperCase()}-${RUN}`,
+  leafTag: `PROBE-HANDED-${harness.toUpperCase()}-LEAF-${RUN}`,
+  token: `handed-${harness}-${crypto.randomUUID()}`,
+  file: `${harness}-note.md`,
+  called: false,
+  read: false,
+  finished: false,
+});
+
 interface Progress {
   a: { finished: boolean; made: boolean };
   b: { finished: boolean; read: boolean };
-  oc: { called: boolean };
-  ocLeaf: { finished: boolean; read: boolean };
+  others: Record<Other, OtherLeg>;
 }
 
 /** Where each mocked session is. */
 const state: Progress = {
   a: { made: false, finished: false },
   b: { read: false, finished: false },
-  oc: { called: false },
-  ocLeaf: { read: false, finished: false },
+  others: { opencode: otherLeg("opencode"), pi: otherLeg("pi") },
 };
 
 /** Leaf A: hand its parent a canvas, then finish with a report. */
@@ -179,35 +198,51 @@ const leafB = (request: Seen): Reply => {
   return reply;
 };
 
-/** The OpenCode parent: one `delegate` call with a text input, through Code Mode. */
-const ocParent = (request: Seen, repo: string): Reply => {
-  if (state.oc.called || !request.toolNames.includes(CODE_MODE)) {
-    return say("Delegated.");
+/** `delegate` as pi offers it: its own name, else as an MCP name. */
+const piDelegate = (request: Seen): string | undefined =>
+  request.toolNames.find((name) =>
+    ["delegate", "mcp__cawco__delegate", "cawco_delegate"].includes(name)
+  );
+
+/** A parent on `harness`: one `delegate` call with a text input, as that harness offers the tool. */
+const otherParent = (
+  request: Seen,
+  harness: Other,
+  leg: OtherLeg,
+  repo: string
+): Reply => {
+  const direct = harness === "pi" ? piDelegate(request) : undefined;
+  const codeMode =
+    harness === "opencode" && request.toolNames.includes(CODE_MODE);
+  if (leg.called || !(direct || codeMode)) {
+    return say(leg.called ? "Delegated." : "No delegate tool is offered.");
   }
-  state.oc.called = true;
+  leg.called = true;
   const input = {
-    title: `Handed inputs OpenCode ${RUN}`,
-    prompt: `${TAG_OC_LEAF}: read your input, then finish.`,
+    title: `Handed inputs ${harness} ${RUN}`,
+    prompt: `${leg.leafTag}: read your input, then finish.`,
     harness: "claude",
     model: MODEL.claude,
     cwd: repo,
     lands: "none",
-    inputs: [{ text: OC_TOKEN, name: OC_FILE }],
+    inputs: [{ text: leg.token, name: leg.file }],
   };
-  return call(CODE_MODE, {
-    code: `return await tools.cawco.delegate(${JSON.stringify(input)});`,
-  });
+  return direct
+    ? call(direct, input)
+    : call(CODE_MODE, {
+        code: `return await tools.cawco.delegate(${JSON.stringify(input)});`,
+      });
 };
 
-/** The OpenCode parent's leaf: read its input, then finish. */
-const ocLeaf = (request: Seen): Reply => {
-  if (state.ocLeaf.finished) {
+/** That parent's leaf: read its input, then finish. */
+const otherLeaf = (request: Seen, leg: OtherLeg): Reply => {
+  if (leg.finished) {
     return say("ok");
   }
-  if (!state.ocLeaf.read) {
-    state.ocLeaf.read = true;
+  if (!leg.read) {
+    leg.read = true;
     return call("Bash", {
-      command: `cat "$TMPDIR/inputs/${OC_FILE}"`,
+      command: `cat "$TMPDIR/inputs/${leg.file}"`,
       description: "Read the input",
     });
   }
@@ -215,7 +250,7 @@ const ocLeaf = (request: Seen): Reply => {
     headline: "Read the input.",
     summary: "Read the input.",
   });
-  state.ocLeaf.finished = reply.tool?.name === FINISH;
+  leg.finished = reply.tool?.name === FINISH;
   return reply;
 };
 
@@ -466,6 +501,53 @@ const landed = async (
   );
 };
 
+/** Step 7 on `harness`: its parent delegates with a text input; the leaf's brief names the file and its Bash reads the words. */
+const otherHarness = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  harness: Other,
+  repo: string,
+  projectId: string
+): Promise<void> => {
+  const leg = state.others[harness];
+  const parent = await fleet.spawn(harness, `${harness} parent`, repo, {
+    projectId,
+  });
+  await fleet.send(parent, `${leg.tag}: delegate with a text input.`);
+  const brief = await until(
+    `the ${harness} parent's leaf's brief`,
+    () =>
+      fleet.seen.find(
+        (one) => one.tools && one.all.includes(leg.leafTag) && !one.afterTool
+      ),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  check(
+    `7: ${harness}'s delegate call with a { text, name } input starts a leaf whose brief names the file`,
+    !!brief && brief.all.includes(`${INPUTS_LINE}${leg.file}`),
+    brief
+      ? "brief without the file"
+      : `no brief (delegate called: ${leg.called})`
+  );
+  const read = await until(
+    `the ${harness} parent's leaf read its input`,
+    () =>
+      fleet.seen.find(
+        (one) =>
+          one.afterTool &&
+          one.all.includes(leg.leafTag) &&
+          one.body.includes(leg.token)
+      ),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  check(
+    `7: the leaf reads the ${harness} parent's words from $TMPDIR/inputs/`,
+    read !== undefined
+  );
+};
+
 const spec: Spec = {
   name: "handed-inputs",
   host: "it delegates, so its fleet cuts workspaces",
@@ -476,11 +558,14 @@ const spec: Spec = {
       if (!request.tools) {
         return say("Probe title");
       }
-      if (request.all.includes(TAG_OC_LEAF)) {
-        return ocLeaf(request);
-      }
-      if (request.all.includes(TAG_OC)) {
-        return ocParent(request, repo);
+      for (const harness of OTHERS) {
+        const leg = state.others[harness];
+        if (request.all.includes(leg.leafTag)) {
+          return otherLeaf(request, leg);
+        }
+        if (request.all.includes(leg.tag)) {
+          return otherParent(request, harness, leg, repo);
+        }
       }
       if (request.all.includes(TAG_B)) {
         return leafB(request);
@@ -684,41 +769,11 @@ const spec: Spec = {
       `${bEnded?.state}: ${(bEnded?.result ?? "").slice(0, 300)}`
     );
 
-    // 7. OpenCode: its delegate call carries a text input.
-    const ocParentId = await fleet.spawn("opencode", "OpenCode parent", repo, {
-      projectId: project.id,
-    });
-    await fleet.send(ocParentId, `${TAG_OC}: delegate with a text input.`);
-    const ocBrief = await until(
-      "the OpenCode parent's leaf's brief",
-      () =>
-        fleet.seen.find(
-          (one) => one.tools && one.all.includes(TAG_OC_LEAF) && !one.afterTool
-        ),
-      Boolean,
-      180_000
-    ).catch(() => undefined);
-    check(
-      "7: OpenCode's delegate call with a { text, name } input starts a leaf whose brief names the file",
-      !!ocBrief && ocBrief.all.includes(`${INPUTS_LINE}${OC_FILE}`),
-      ocBrief ? "brief without the file" : "no brief"
-    );
-    const ocRead = await until(
-      "the OpenCode parent's leaf read its input",
-      () =>
-        fleet.seen.find(
-          (one) =>
-            one.afterTool &&
-            one.all.includes(TAG_OC_LEAF) &&
-            one.body.includes(OC_TOKEN)
-        ),
-      Boolean,
-      120_000
-    ).catch(() => undefined);
-    check(
-      "7: the leaf reads the OpenCode parent's words from $TMPDIR/inputs/",
-      ocRead !== undefined
-    );
+    // 7. OpenCode and pi: each parent's own delegate call carries a text input.
+    for (const harness of OTHERS) {
+      // biome-ignore lint/performance/noAwaitInLoops: one harness's parent after the other, so the mock answers one leg at a time
+      await otherHarness(kit, fleet, harness, repo, project.id);
+    }
   },
 };
 

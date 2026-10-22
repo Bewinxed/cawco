@@ -26999,10 +26999,10 @@
                   "host"
                 ]
               },
-              "pattern": {
+              "passDomain": {
                 "type": "string"
               },
-              "passDomain": {
+              "pattern": {
                 "type": "string"
               },
               "ports": {
@@ -27047,10 +27047,10 @@
                   "host"
                 ]
               },
-              "pattern": {
+              "passDomain": {
                 "type": "string"
               },
-              "passDomain": {
+              "pattern": {
                 "type": "string"
               },
               "ports": {
@@ -27070,16 +27070,29 @@
         "description": "Request validation problem. Diagnostic fields are development-only.",
         "type": "object",
         "properties": {
-          "type": {
+          "code": {
             "type": "string",
             "enum": [
               "validation"
             ]
           },
-          "code": {
-            "type": "string",
+          "detail": {
+            "type": "string"
+          },
+          "expected": {
+            "type": "string"
+          },
+          "found": {},
+          "on": {
+            "type": "string"
+          },
+          "property": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
             "enum": [
-              "validation"
+              422
             ]
           },
           "title": {
@@ -27088,24 +27101,11 @@
               "Validation Error"
             ]
           },
-          "status": {
-            "type": "number",
+          "type": {
+            "type": "string",
             "enum": [
-              422
+              "validation"
             ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
           }
         },
         "required": [
@@ -27151,12 +27151,6 @@
           {
             "type": "object",
             "properties": {
-              "status": {
-                "type": "string",
-                "enum": [
-                  "approved"
-                ]
-              },
               "device": {
                 "type": "object",
                 "properties": {
@@ -27170,6 +27164,12 @@
                 "required": [
                   "id",
                   "name"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "approved"
                 ]
               },
               "token": {
@@ -27214,17 +27214,17 @@
       "getApiDevices200": {
         "type": "object",
         "properties": {
-          "devices": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OwnerDevice"
-            }
-          },
           "current": {
             "type": [
               "null",
               "string"
             ]
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnerDevice"
+            }
           }
         },
         "required": [
@@ -27251,11 +27251,11 @@
           {
             "type": "object",
             "properties": {
-              "mode": {
-                "$ref": "#/components/schemas/HubAuthMode"
-              },
               "device": {
                 "type": "null"
+              },
+              "mode": {
+                "$ref": "#/components/schemas/HubAuthMode"
               }
             },
             "required": [
@@ -27266,9 +27266,6 @@
           {
             "type": "object",
             "properties": {
-              "mode": {
-                "$ref": "#/components/schemas/HubAuthMode"
-              },
               "device": {
                 "type": "object",
                 "properties": {
@@ -27283,6 +27280,9 @@
                   "id",
                   "name"
                 ]
+              },
+              "mode": {
+                "$ref": "#/components/schemas/HubAuthMode"
               }
             },
             "required": [
@@ -27293,9 +27293,6 @@
           {
             "type": "object",
             "properties": {
-              "mode": {
-                "$ref": "#/components/schemas/HubAuthMode"
-              },
               "device": {
                 "type": "object",
                 "properties": {
@@ -27310,6 +27307,9 @@
                   "id",
                   "name"
                 ]
+              },
+              "mode": {
+                "$ref": "#/components/schemas/HubAuthMode"
               },
               "token": {
                 "type": "string"
@@ -27661,6 +27661,18 @@
                 "id": {
                   "type": "string"
                 },
+                "lastError": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "lastSentAt": {
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
                 "name": {
                   "type": "string"
                 },
@@ -27672,18 +27684,6 @@
                 },
                 "registeredAt": {
                   "type": "number"
-                },
-                "lastSentAt": {
-                  "type": [
-                    "null",
-                    "number"
-                  ]
-                },
-                "lastError": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
                 }
               },
               "required": [
@@ -27768,11 +27768,11 @@
             "items": {
               "type": "object",
               "properties": {
-                "collapseId": {
-                  "type": "string"
-                },
                 "at": {
                   "type": "number"
+                },
+                "collapseId": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -27876,10 +27876,10 @@
             "items": {
               "type": "object",
               "properties": {
-                "name": {
+                "description": {
                   "type": "string"
                 },
-                "description": {
+                "name": {
                   "type": "string"
                 },
                 "readOnly": {
@@ -28027,13 +28027,13 @@
       "getApiSessionLimits200": {
         "type": "object",
         "properties": {
-          "memoryPercent": {
+          "cpuPercent": {
             "type": [
               "null",
               "number"
             ]
           },
-          "cpuPercent": {
+          "memoryPercent": {
             "type": [
               "null",
               "number"
@@ -28048,13 +28048,13 @@
       "putApiSessionLimits200": {
         "type": "object",
         "properties": {
-          "memoryPercent": {
+          "cpuPercent": {
             "type": [
               "null",
               "number"
             ]
           },
-          "cpuPercent": {
+          "memoryPercent": {
             "type": [
               "null",
               "number"
@@ -28156,16 +28156,16 @@
       "postApiBinaryUpdatesCheck200": {
         "type": "object",
         "properties": {
-          "version": {
+          "channel": {
+            "$ref": "#/components/schemas/BinaryUpdatePolicyChannel"
+          },
+          "notes": {
             "type": "string"
           },
           "sequence": {
             "type": "number"
           },
-          "channel": {
-            "$ref": "#/components/schemas/BinaryUpdatePolicyChannel"
-          },
-          "notes": {
+          "version": {
             "type": "string"
           }
         },
@@ -28201,14 +28201,14 @@
       "getApiBinaryUpdatesRelease200": {
         "type": "object",
         "properties": {
+          "dbSchemaVersion": {
+            "type": "number"
+          },
           "manifest": {
             "$ref": "#/components/schemas/ReleaseManifest"
           },
           "signature": {
             "type": "string"
-          },
-          "dbSchemaVersion": {
-            "type": "number"
           }
         },
         "required": [
@@ -28220,14 +28220,14 @@
       "getApiBinaryUpdatesLatest200": {
         "type": "object",
         "properties": {
+          "dbSchemaVersion": {
+            "type": "number"
+          },
           "manifest": {
             "$ref": "#/components/schemas/ReleaseManifest"
           },
           "signature": {
             "type": "string"
-          },
-          "dbSchemaVersion": {
-            "type": "number"
           }
         },
         "required": [
@@ -28253,37 +28253,18 @@
       "postApiWorkflows201": {
         "type": "object",
         "properties": {
-          "problems": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Problem"
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
-          },
-          "name": {
-            "type": "string"
-          },
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
             "type": "string",
             "format": "date-time"
           },
           "description": {
             "type": "string"
           },
-          "program": {
-            "type": "string"
-          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "id": {
+            "type": "string"
           },
           "inputs": {
             "type": "array",
@@ -28291,8 +28272,27 @@
               "$ref": "#/components/schemas/WorkflowInput"
             }
           },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          },
+          "program": {
+            "type": "string"
+          },
           "slug": {
             "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -28325,37 +28325,18 @@
       "getApiWorkflowsById200": {
         "type": "object",
         "properties": {
-          "problems": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Problem"
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
-          },
-          "name": {
-            "type": "string"
-          },
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
             "type": "string",
             "format": "date-time"
           },
           "description": {
             "type": "string"
           },
-          "program": {
-            "type": "string"
-          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "id": {
+            "type": "string"
           },
           "inputs": {
             "type": "array",
@@ -28363,8 +28344,27 @@
               "$ref": "#/components/schemas/WorkflowInput"
             }
           },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          },
+          "program": {
+            "type": "string"
+          },
           "slug": {
             "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -28383,37 +28383,18 @@
       "putApiWorkflowsById200": {
         "type": "object",
         "properties": {
-          "problems": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Problem"
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
-          },
-          "name": {
-            "type": "string"
-          },
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
             "type": "string",
             "format": "date-time"
           },
           "description": {
             "type": "string"
           },
-          "program": {
-            "type": "string"
-          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "id": {
+            "type": "string"
           },
           "inputs": {
             "type": "array",
@@ -28421,8 +28402,27 @@
               "$ref": "#/components/schemas/WorkflowInput"
             }
           },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          },
+          "program": {
+            "type": "string"
+          },
           "slug": {
             "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -28491,14 +28491,132 @@
       "getApiWorkflowRunsById200": {
         "type": "object",
         "properties": {
+          "ask": {
+            "$ref": "#/components/schemas/WorkflowAsk"
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "endedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "failure": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "number": {
+                  "type": "number"
+                },
+                "renderedPrompt": {
+                  "type": "string"
+                },
+                "result": {},
+                "startedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "stepId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "failure",
+                "id",
+                "number",
+                "renderedPrompt",
+                "result",
+                "startedAt",
+                "stepId"
+              ]
+            }
+          },
+          "edges": {
+            "type": "object"
+          },
+          "endedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "failure": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "graph": {
+            "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object"
+          },
+          "launchedBy": {
+            "type": "string"
+          },
+          "loops": {
+            "type": "object"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "parentRunId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentStepId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "planned": {
+            "description": "How many steps the run makes at most: a graph-origin run's `step`, `ask`\nand `workflow` nodes. Null for a code-origin run, whose steps are only\nknown as each one starts, and for a graph with a map or a loop, which can\nmake more steps than it has nodes.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "program": {
+            "type": "string"
+          },
+          "rerunOfRunId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "result": {},
+          "seenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "object"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkflowRunStatus"
+          },
           "steps": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "status": {
-                  "type": "string"
-                },
                 "childRunId": {
                   "type": [
                     "null",
@@ -28568,6 +28686,9 @@
                     }
                   ]
                 },
+                "status": {
+                  "type": "string"
+                },
                 "title": {
                   "description": "What the call that opened the step named it: a `run`/`spawn` step's\ntitle, an `ask`'s question, the workflow a `workflow` call started.\nNull when the call named nothing.",
                   "type": [
@@ -28594,122 +28715,11 @@
               ]
             }
           },
-          "ask": {
-            "$ref": "#/components/schemas/WorkflowAsk"
-          },
-          "attempts": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "number": {
-                  "type": "number"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "result": {},
-                "endedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "startedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "failure": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "stepId": {
-                  "type": "string"
-                },
-                "renderedPrompt": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "failure",
-                "id",
-                "number",
-                "renderedPrompt",
-                "result",
-                "startedAt",
-                "stepId"
-              ]
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/WorkflowRunStatus"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "seenAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "program": {
-            "type": "string"
-          },
-          "workspace": {
-            "type": "string"
-          },
-          "graph": {
-            "$ref": "#/components/schemas/WorkflowGraph"
-          },
-          "result": {},
-          "endedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "inputs": {
-            "type": "object"
-          },
-          "startedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "parentRunId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parentStepId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "workflowId": {
-            "type": "string"
-          },
           "supervisorInstanceId": {
             "type": [
               "null",
               "string"
             ]
-          },
-          "failure": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "rerunOfRunId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "launchedBy": {
-            "type": "string"
           },
           "waiting": {
             "description": "What a command of the run (`w.exec`) waits for now, as said: \"waiting:\nOmars-MacBook-Pro is paused until 00:57\", or a shared slot it is queued\nfor. Null when it waits for nothing.",
@@ -28718,21 +28728,11 @@
               "string"
             ]
           },
-          "state": {
-            "type": "object"
+          "workflowId": {
+            "type": "string"
           },
-          "edges": {
-            "type": "object"
-          },
-          "loops": {
-            "type": "object"
-          },
-          "planned": {
-            "description": "How many steps the run makes at most: a graph-origin run's `step`, `ask`\nand `workflow` nodes. Null for a code-origin run, whose steps are only\nknown as each one starts, and for a graph with a map or a loop, which can\nmake more steps than it has nodes.",
-            "type": [
-              "null",
-              "number"
-            ]
+          "workspace": {
+            "type": "string"
           }
         },
         "required": [
@@ -28768,25 +28768,25 @@
             "items": {
               "type": "object",
               "properties": {
+                "args": {
+                  "type": "object"
+                },
                 "at": {
                   "type": "string",
                   "format": "date-time"
                 },
+                "failure": {
+                  "$ref": "#/components/schemas/WorkflowFailure"
+                },
                 "kind": {
                   "$ref": "#/components/schemas/WorkflowEffectKind"
-                },
-                "seq": {
-                  "type": "number"
-                },
-                "args": {
-                  "type": "object"
                 },
                 "result": {},
                 "runId": {
                   "type": "string"
                 },
-                "failure": {
-                  "$ref": "#/components/schemas/WorkflowFailure"
+                "seq": {
+                  "type": "number"
                 }
               },
               "required": [
@@ -28808,39 +28808,30 @@
           {
             "type": "object",
             "properties": {
-              "id": {
-                "type": "string"
-              },
-              "status": {
-                "$ref": "#/components/schemas/WorkflowRunStatus"
-              },
-              "machineId": {
-                "type": "string"
-              },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "program": {
-                "type": "string"
-              },
-              "workspace": {
-                "type": "string"
-              },
-              "graph": {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              "result": {},
               "endedAt": {
                 "type": "string",
                 "format": "date-time"
               },
+              "failure": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "graph": {
+                "$ref": "#/components/schemas/WorkflowGraph"
+              },
+              "id": {
+                "type": "string"
+              },
               "inputs": {
                 "type": "object"
               },
-              "startedAt": {
-                "type": "string",
-                "format": "date-time"
+              "launchedBy": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
               },
               "parentRunId": {
                 "type": [
@@ -28854,20 +28845,8 @@
                   "string"
                 ]
               },
-              "workflowId": {
+              "program": {
                 "type": "string"
-              },
-              "supervisorInstanceId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "failure": {
-                "type": [
-                  "null",
-                  "string"
-                ]
               },
               "rerunOfRunId": {
                 "type": [
@@ -28875,7 +28854,28 @@
                   "string"
                 ]
               },
-              "launchedBy": {
+              "result": {},
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "status": {
+                "$ref": "#/components/schemas/WorkflowRunStatus"
+              },
+              "supervisorInstanceId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "workflowId": {
+                "type": "string"
+              },
+              "workspace": {
                 "type": "string"
               }
             },
@@ -28900,16 +28900,6 @@
           {
             "type": "object",
             "properties": {
-              "waiting": {
-                "description": "What a command of the run (`w.exec`) waits for now, as said: \"waiting:\nOmars-MacBook-Pro is paused until 00:57\", or a shared slot it is queued\nfor. Null when it waits for nothing.",
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "state": {
-                "type": "object"
-              },
               "edges": {
                 "type": "object"
               },
@@ -28921,6 +28911,16 @@
                 "type": [
                   "null",
                   "number"
+                ]
+              },
+              "state": {
+                "type": "object"
+              },
+              "waiting": {
+                "description": "What a command of the run (`w.exec`) waits for now, as said: \"waiting:\nOmars-MacBook-Pro is paused until 00:57\", or a shared slot it is queued\nfor. Null when it waits for nothing.",
+                "type": [
+                  "null",
+                  "string"
                 ]
               }
             },
@@ -28990,15 +28990,6 @@
           "asks": {
             "type": "number"
           },
-          "liveContextTokens": {
-            "type": "number"
-          },
-          "summariseInputTokens": {
-            "type": "number"
-          },
-          "openingTokens": {
-            "type": "number"
-          },
           "compacted": {
             "type": "boolean"
           },
@@ -29008,10 +28999,10 @@
               "live": {
                 "type": "number"
               },
-              "whole": {
+              "scope": {
                 "type": "number"
               },
-              "scope": {
+              "whole": {
                 "type": "number"
               }
             },
@@ -29020,6 +29011,15 @@
               "scope",
               "whole"
             ]
+          },
+          "liveContextTokens": {
+            "type": "number"
+          },
+          "openingTokens": {
+            "type": "number"
+          },
+          "summariseInputTokens": {
+            "type": "number"
           }
         },
         "required": [
@@ -29034,6 +29034,18 @@
       "postApiInstancesByIdContinue200": {
         "type": "object",
         "properties": {
+          "continuationId": {
+            "type": "string"
+          },
+          "summariserInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetInstanceId": {
+            "type": "string"
+          },
           "waiting": {
             "type": "object",
             "properties": {
@@ -29054,18 +29066,6 @@
               "since",
               "until",
               "why"
-            ]
-          },
-          "continuationId": {
-            "type": "string"
-          },
-          "targetInstanceId": {
-            "type": "string"
-          },
-          "summariserInstanceId": {
-            "type": [
-              "null",
-              "string"
             ]
           }
         },
@@ -29132,132 +29132,11 @@
           {
             "type": "object",
             "properties": {
-              "id": {
-                "type": "string"
-              },
-              "status": {
-                "$ref": "#/components/schemas/InstanceStatus"
-              },
-              "lastRequestAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "modelUsageSeen": {
-                "type": "object"
-              },
-              "workflowRunId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "workflowStepId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "threadId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "machineId": {
-                "type": "string"
-              },
-              "createdAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "projectId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "sessionId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "harness": {
-                "$ref": "#/components/schemas/HarnessKind"
-              },
               "accountId": {
                 "type": [
                   "null",
                   "string"
                 ]
-              },
-              "forkedFrom": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "parentInstanceId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "parentToolUseId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "cwd": {
-                "$ref": "#/components/schemas/MachinePath"
-              },
-              "launchDir": {
-                "$ref": "#/components/schemas/InstanceRowLaunchDir"
-              },
-              "title": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "titleSource": {
-                "$ref": "#/components/schemas/InstanceRowTitleSource"
-              },
-              "derivedTitle": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "turnEndedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "kind": {
-                "$ref": "#/components/schemas/GetApiInstances200Kind"
-              },
-              "permissionMode": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "model": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "effort": {
-                "$ref": "#/components/schemas/InstanceRowEffort"
-              },
-              "chosenEffort": {
-                "$ref": "#/components/schemas/EffortLevel"
               },
               "canDelegate": {
                 "type": [
@@ -29265,8 +29144,21 @@
                   "boolean"
                 ]
               },
-              "role": {
-                "$ref": "#/components/schemas/DelegateTypeRole"
+              "chosenEffort": {
+                "$ref": "#/components/schemas/EffortLevel"
+              },
+              "continuedInto": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "cwd": {
+                "$ref": "#/components/schemas/MachinePath"
               },
               "delegateType": {
                 "type": [
@@ -29280,6 +29172,30 @@
                   "string"
                 ]
               },
+              "derivedTitle": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "effort": {
+                "$ref": "#/components/schemas/InstanceRowEffort"
+              },
+              "forkedFrom": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "harness": {
+                "$ref": "#/components/schemas/HarnessKind"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/GetApiInstances200Kind"
+              },
               "lastError": {
                 "type": [
                   "null",
@@ -29289,11 +29205,89 @@
               "lastErrorKind": {
                 "$ref": "#/components/schemas/ErrorFrameLastErrorKind"
               },
-              "updatedAt": {
+              "lastRequestAt": {
                 "type": "string",
                 "format": "date-time"
               },
+              "launchDir": {
+                "$ref": "#/components/schemas/InstanceRowLaunchDir"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "model": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "modelUsageSeen": {
+                "type": "object"
+              },
+              "parentInstanceId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "parentToolUseId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "permissionMode": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "projectId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "role": {
+                "$ref": "#/components/schemas/DelegateTypeRole"
+              },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "sessionId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "spawnedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "status": {
+                "$ref": "#/components/schemas/InstanceStatus"
+              },
+              "threadId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "title": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "titleSource": {
+                "$ref": "#/components/schemas/InstanceRowTitleSource"
+              },
+              "turnEndedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
                 "type": "string",
                 "format": "date-time"
               },
@@ -29303,7 +29297,13 @@
                   "string"
                 ]
               },
-              "continuedInto": {
+              "workflowRunId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "workflowStepId": {
                 "type": [
                   "null",
                   "string"
@@ -29377,8 +29377,104 @@
         "items": {
           "type": "object",
           "properties": {
-            "stalled": {
-              "$ref": "#/components/schemas/Stall"
+            "accountId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "canDelegate": {
+              "type": [
+                "null",
+                "boolean"
+              ]
+            },
+            "chosenEffort": {
+              "$ref": "#/components/schemas/EffortLevel"
+            },
+            "continuedInto": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "cwd": {
+              "$ref": "#/components/schemas/MachinePath"
+            },
+            "damaged": {
+              "$ref": "#/components/schemas/DamagedRow",
+              "description": "What the hub lays over a session row whose record, or whose workspace's\nrecord, is damaged on its machine ({@link DamagedRecordReport}): the file,\nwhy, and the way out that removes it (`archive`: archive workspace\n`workspaceId`; `end`: end the session)."
+            },
+            "delegateType": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "delegateTypeProject": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "derivedTitle": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "effort": {
+              "$ref": "#/components/schemas/InstanceRowEffort"
+            },
+            "forkedFrom": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "harness": {
+              "$ref": "#/components/schemas/HarnessKind"
+            },
+            "id": {
+              "type": "string"
+            },
+            "keepAlive": {
+              "$ref": "#/components/schemas/KeepAlive"
+            },
+            "kind": {
+              "$ref": "#/components/schemas/GetApiInstances200Kind"
+            },
+            "lastError": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastErrorKind": {
+              "$ref": "#/components/schemas/ErrorFrameLastErrorKind"
+            },
+            "lastRequestAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "launchDir": {
+              "$ref": "#/components/schemas/InstanceRowLaunchDir"
+            },
+            "machineId": {
+              "type": "string"
+            },
+            "model": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "modelUsageSeen": {
+              "type": "object"
             },
             "owedMove": {
               "type": "object",
@@ -29395,71 +29491,6 @@
                 "waits"
               ]
             },
-            "id": {
-              "type": "string"
-            },
-            "status": {
-              "$ref": "#/components/schemas/InstanceStatus"
-            },
-            "lastRequestAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "modelUsageSeen": {
-              "type": "object"
-            },
-            "workflowRunId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "workflowStepId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "threadId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "machineId": {
-              "type": "string"
-            },
-            "createdAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "projectId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sessionId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "harness": {
-              "$ref": "#/components/schemas/HarnessKind"
-            },
-            "accountId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "forkedFrom": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
             "parentInstanceId": {
               "type": [
                 "null",
@@ -29472,11 +29503,49 @@
                 "string"
               ]
             },
-            "cwd": {
-              "$ref": "#/components/schemas/MachinePath"
+            "permissionMode": {
+              "type": [
+                "null",
+                "string"
+              ]
             },
-            "launchDir": {
-              "$ref": "#/components/schemas/InstanceRowLaunchDir"
+            "projectId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "role": {
+              "$ref": "#/components/schemas/DelegateTypeRole"
+            },
+            "runningDelegates": {
+              "type": "number"
+            },
+            "seenAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "sessionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "spawnedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "stalled": {
+              "$ref": "#/components/schemas/Stall"
+            },
+            "status": {
+              "$ref": "#/components/schemas/InstanceStatus"
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
             },
             "title": {
               "type": [
@@ -29487,76 +29556,11 @@
             "titleSource": {
               "$ref": "#/components/schemas/InstanceRowTitleSource"
             },
-            "derivedTitle": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "seenAt": {
-              "type": "string",
-              "format": "date-time"
-            },
             "turnEndedAt": {
               "type": "string",
               "format": "date-time"
             },
-            "kind": {
-              "$ref": "#/components/schemas/GetApiInstances200Kind"
-            },
-            "permissionMode": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "model": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "effort": {
-              "$ref": "#/components/schemas/InstanceRowEffort"
-            },
-            "chosenEffort": {
-              "$ref": "#/components/schemas/EffortLevel"
-            },
-            "canDelegate": {
-              "type": [
-                "null",
-                "boolean"
-              ]
-            },
-            "role": {
-              "$ref": "#/components/schemas/DelegateTypeRole"
-            },
-            "delegateType": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "delegateTypeProject": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lastError": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lastErrorKind": {
-              "$ref": "#/components/schemas/ErrorFrameLastErrorKind"
-            },
             "updatedAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "spawnedAt": {
               "type": "string",
               "format": "date-time"
             },
@@ -29566,21 +29570,17 @@
                 "string"
               ]
             },
-            "continuedInto": {
+            "workflowRunId": {
               "type": [
                 "null",
                 "string"
               ]
             },
-            "damaged": {
-              "$ref": "#/components/schemas/DamagedRow",
-              "description": "What the hub lays over a session row whose record, or whose workspace's\nrecord, is damaged on its machine ({@link DamagedRecordReport}): the file,\nwhy, and the way out that removes it (`archive`: archive workspace\n`workspaceId`; `end`: end the session)."
-            },
-            "runningDelegates": {
-              "type": "number"
-            },
-            "keepAlive": {
-              "$ref": "#/components/schemas/KeepAlive"
+            "workflowStepId": {
+              "type": [
+                "null",
+                "string"
+              ]
             }
           },
           "required": [
@@ -29666,17 +29666,17 @@
       "postApiFiles200": {
         "type": "object",
         "properties": {
-          "ref": {
-            "type": "string"
-          },
-          "size": {
-            "type": "number"
-          },
           "mediaType": {
             "type": "string"
           },
           "name": {
             "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
           }
         },
         "required": [
@@ -29689,14 +29689,14 @@
       "getApiInstancesByIdAttachments200": {
         "type": "object",
         "properties": {
-          "harness": {
-            "$ref": "#/components/schemas/HarnessKind"
-          },
           "attachments": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SessionAttachment"
             }
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
           }
         },
         "required": [
@@ -29788,19 +29788,25 @@
       "getApiFleet200": {
         "type": "object",
         "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FleetAgent"
+            }
+          },
           "config": {
             "type": "object",
             "properties": {
-              "mcp": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/FleetMcpServer"
-                }
-              },
               "marketplaces": {
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/FleetMarketplace"
+                }
+              },
+              "mcp": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FleetMcpServer"
                 }
               },
               "plugins": {
@@ -29820,18 +29826,6 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MarketplaceLink"
-            }
-          },
-          "skills": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FleetSkillMeta"
-            }
-          },
-          "agents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FleetAgent"
             }
           },
           "memory": {
@@ -29858,6 +29852,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MemoryDocRow"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FleetSkillMeta"
             }
           },
           "unpushable": {
@@ -29895,8 +29895,24 @@
             "items": {
               "type": "object",
               "properties": {
-                "stats": {
-                  "$ref": "#/components/schemas/RuleStats"
+                "caseSensitive": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "matchKind": {
+                  "$ref": "#/components/schemas/RuleMatchKind"
+                },
+                "name": {
+                  "description": "What the rule is called in the list, and in the reply the session reads.",
+                  "type": "string"
                 },
                 "orphaned": {
                   "type": "object",
@@ -29923,25 +29939,6 @@
                     "removedAt"
                   ]
                 },
-                "caseSensitive": {
-                  "type": "boolean"
-                },
-                "createdAt": {
-                  "type": "number"
-                },
-                "enabled": {
-                  "type": "boolean"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "matchKind": {
-                  "$ref": "#/components/schemas/RuleMatchKind"
-                },
-                "name": {
-                  "description": "What the rule is called in the list, and in the reply the session reads.",
-                  "type": "string"
-                },
                 "pattern": {
                   "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
                   "type": "string"
@@ -29956,6 +29953,9 @@
                 },
                 "scope": {
                   "$ref": "#/components/schemas/RuleScope"
+                },
+                "stats": {
+                  "$ref": "#/components/schemas/RuleStats"
                 },
                 "timing": {
                   "$ref": "#/components/schemas/RuleTiming"
@@ -29991,14 +29991,14 @@
             "items": {
               "type": "object",
               "properties": {
-                "title": {
-                  "type": "string"
-                },
                 "blurb": {
                   "type": "string"
                 },
                 "draft": {
                   "$ref": "#/components/schemas/RuleDraft"
+                },
+                "title": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -30035,15 +30035,6 @@
             "items": {
               "type": "object",
               "properties": {
-                "where": {
-                  "type": "string"
-                },
-                "harness": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "ackedAt": {
                   "description": "When a turn last ended without matching the rule again, re-arming it.",
                   "type": [
@@ -30054,6 +30045,12 @@
                 "fireCount": {
                   "description": "Fires in a row, each in a turn that matched again. Stops at {@link RULE_FIRE_CEILING}.",
                   "type": "number"
+                },
+                "harness": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 },
                 "instanceId": {
                   "type": "string"
@@ -30074,6 +30071,9 @@
                 "totalFires": {
                   "description": "Fires over the session's whole life, which re-arming does not reset.",
                   "type": "number"
+                },
+                "where": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -30129,6 +30129,9 @@
           "route": {
             "$ref": "#/components/schemas/DeleteApiJevTypesafeKey200Route"
           },
+          "suggestWhileTyping": {
+            "type": "boolean"
+          },
           "typesafe": {
             "type": "object",
             "properties": {
@@ -30146,9 +30149,6 @@
               "ends",
               "setAt"
             ]
-          },
-          "suggestWhileTyping": {
-            "type": "boolean"
           }
         },
         "required": [
@@ -30161,6 +30161,9 @@
           "route": {
             "$ref": "#/components/schemas/DeleteApiJevTypesafeKey200Route"
           },
+          "suggestWhileTyping": {
+            "type": "boolean"
+          },
           "typesafe": {
             "type": "object",
             "properties": {
@@ -30178,9 +30181,6 @@
               "ends",
               "setAt"
             ]
-          },
-          "suggestWhileTyping": {
-            "type": "boolean"
           }
         },
         "required": [
@@ -30193,6 +30193,9 @@
           "route": {
             "$ref": "#/components/schemas/DeleteApiJevTypesafeKey200Route"
           },
+          "suggestWhileTyping": {
+            "type": "boolean"
+          },
           "typesafe": {
             "type": "object",
             "properties": {
@@ -30210,9 +30213,6 @@
               "ends",
               "setAt"
             ]
-          },
-          "suggestWhileTyping": {
-            "type": "boolean"
           }
         },
         "required": [
@@ -30506,14 +30506,14 @@
             "items": {
               "type": "object",
               "properties": {
-                "title": {
-                  "type": "string"
-                },
                 "blurb": {
                   "type": "string"
                 },
                 "draft": {
                   "$ref": "#/components/schemas/HookDraft"
+                },
+                "title": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -30532,6 +30532,10 @@
       "putApiFleetHooksById409": {
         "type": "object",
         "properties": {
+          "cwd": {
+            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "type": "string"
+          },
           "enabled": {
             "description": "A disabled hook is simply not written to any machine. Claude Code itself\nhas no way to disable one hook while keeping it, so this is cawco's\nto provide: the row stays, the registration goes.",
             "type": "boolean"
@@ -30561,14 +30565,6 @@
             "description": "What the reader calls it. Unique across the fleet.",
             "type": "string"
           },
-          "script": {
-            "description": "A command hook's script body. CawCo writes it to a file on every machine\nand points the registration at that path, so the hook travels — a machine\nthat has never seen this hook still runs it correctly. Absent means the\nhandler carries its own `command` and the reader is on their own for\ngetting that command onto each box.",
-            "type": "string"
-          },
-          "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
-            "type": "string"
-          },
           "placeId": {
             "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
             "type": "string"
@@ -30580,6 +30576,10 @@
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
             "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+          },
+          "script": {
+            "description": "A command hook's script body. CawCo writes it to a file on every machine\nand points the registration at that path, so the hook travels — a machine\nthat has never seen this hook still runs it correctly. Absent means the\nhandler carries its own `command` and the reader is on their own for\ngetting that command onto each box.",
+            "type": "string"
           }
         },
         "required": [
@@ -30624,38 +30624,119 @@
         "items": {
           "type": "object",
           "properties": {
+            "accounts": {
+              "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "appleGate": {
+              "type": "boolean"
+            },
+            "budget": {
+              "$ref": "#/components/schemas/WorkBudget"
+            },
             "cap": {
               "$ref": "#/components/schemas/ProjectCap"
+            },
+            "capPeriod": {
+              "$ref": "#/components/schemas/CapPeriod"
+            },
+            "capUsd": {
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "caw": {
+              "type": "boolean"
+            },
+            "cawHarness": {
+              "$ref": "#/components/schemas/HarnessKind"
+            },
+            "cawModel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "dispatch": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "lands": {
+              "$ref": "#/components/schemas/LandsMode"
+            },
+            "leadCostSeen": {
+              "type": "number"
+            },
+            "leadInstanceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lfsConnection": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lfsUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "maxAttempts": {
+              "type": "number"
+            },
+            "moveDeclinedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "name": {
+              "type": "string"
+            },
+            "onCap": {
+              "$ref": "#/components/schemas/OnCap"
             },
             "places": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
                   "held": {
                     "$ref": "#/components/schemas/BridgedHeldPlace"
                   },
                   "id": {
                     "type": "string"
                   },
-                  "machineId": {
-                    "type": "string"
-                  },
-                  "createdAt": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "projectId": {
-                    "type": "string"
+                  "isPrimary": {
+                    "type": "boolean"
                   },
                   "kind": {
                     "$ref": "#/components/schemas/PlaceKind"
                   },
+                  "machineId": {
+                    "type": "string"
+                  },
                   "path": {
                     "$ref": "#/components/schemas/PlacePath"
                   },
-                  "isPrimary": {
-                    "type": "boolean"
+                  "projectId": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -30675,56 +30756,17 @@
                 "string"
               ]
             },
-            "appleGate": {
-              "type": "boolean"
-            },
-            "id": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
             "remote": {
               "type": [
                 "null",
                 "string"
               ]
             },
-            "tracker": {
-              "$ref": "#/components/schemas/Tracker"
-            },
-            "leadInstanceId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "caw": {
+            "review": {
               "type": "boolean"
-            },
-            "cawHarness": {
-              "$ref": "#/components/schemas/HarnessKind"
-            },
-            "cawModel": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "leadCostSeen": {
-              "type": "number"
-            },
-            "dispatch": {
-              "type": "boolean"
-            },
-            "maxAttempts": {
-              "type": "number"
             },
             "reviewLimit": {
               "type": "number"
-            },
-            "lands": {
-              "$ref": "#/components/schemas/LandsMode"
             },
             "runsOn": {
               "type": [
@@ -30732,56 +30774,14 @@
                 "string"
               ]
             },
-            "budget": {
-              "$ref": "#/components/schemas/WorkBudget"
-            },
-            "capUsd": {
-              "type": [
-                "null",
-                "number"
-              ]
-            },
-            "capPeriod": {
-              "$ref": "#/components/schemas/CapPeriod"
-            },
-            "onCap": {
-              "$ref": "#/components/schemas/OnCap"
-            },
-            "moveDeclinedAt": {
-              "type": "string",
-              "format": "date-time"
-            },
             "template": {
               "$ref": "#/components/schemas/StagesTemplate"
             },
-            "review": {
-              "type": "boolean"
+            "tracker": {
+              "$ref": "#/components/schemas/Tracker"
             },
             "upstreamPosts": {
               "$ref": "#/components/schemas/FleetChoicesUpstream"
-            },
-            "lfsUrl": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lfsConnection": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "createdAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "accounts": {
-              "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             }
           },
           "required": [
@@ -30813,33 +30813,111 @@
       "postApiProjects200": {
         "type": "object",
         "properties": {
-          "setupThread": {
-            "$ref": "#/components/schemas/ThreadSummary"
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "appleGate": {
+            "type": "boolean"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "caw": {
+            "type": "boolean"
+          },
+          "cawHarness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "leadCostSeen": {
+            "type": "number"
+          },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "moveDeclinedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
           },
           "place": {
             "type": "object",
             "properties": {
-              "id": {
-                "type": "string"
-              },
-              "machineId": {
-                "type": "string"
-              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
               },
-              "projectId": {
+              "id": {
                 "type": "string"
+              },
+              "isPrimary": {
+                "type": "boolean"
               },
               "kind": {
                 "$ref": "#/components/schemas/PlaceKind"
               },
+              "machineId": {
+                "type": "string"
+              },
               "path": {
                 "$ref": "#/components/schemas/PlacePath"
               },
-              "isPrimary": {
-                "type": "boolean"
+              "projectId": {
+                "type": "string"
               }
             },
             "required": [
@@ -30860,30 +30938,30 @@
             "items": {
               "type": "object",
               "properties": {
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "held": {
                   "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
                 "id": {
                   "type": "string"
                 },
-                "machineId": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "projectId": {
-                  "type": "string"
+                "isPrimary": {
+                  "type": "boolean"
                 },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
                 },
+                "machineId": {
+                  "type": "string"
+                },
                 "path": {
                   "$ref": "#/components/schemas/PlacePath"
                 },
-                "isPrimary": {
-                  "type": "boolean"
+                "projectId": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -30903,56 +30981,17 @@
               "string"
             ]
           },
-          "appleGate": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
           "remote": {
             "type": [
               "null",
               "string"
             ]
           },
-          "tracker": {
-            "$ref": "#/components/schemas/Tracker"
-          },
-          "leadInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "caw": {
+          "review": {
             "type": "boolean"
-          },
-          "cawHarness": {
-            "$ref": "#/components/schemas/HarnessKind"
-          },
-          "cawModel": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "leadCostSeen": {
-            "type": "number"
-          },
-          "dispatch": {
-            "type": "boolean"
-          },
-          "maxAttempts": {
-            "type": "number"
           },
           "reviewLimit": {
             "type": "number"
-          },
-          "lands": {
-            "$ref": "#/components/schemas/LandsMode"
           },
           "runsOn": {
             "type": [
@@ -30960,56 +30999,17 @@
               "string"
             ]
           },
-          "budget": {
-            "$ref": "#/components/schemas/WorkBudget"
-          },
-          "capUsd": {
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "capPeriod": {
-            "$ref": "#/components/schemas/CapPeriod"
-          },
-          "onCap": {
-            "$ref": "#/components/schemas/OnCap"
-          },
-          "moveDeclinedAt": {
-            "type": "string",
-            "format": "date-time"
+          "setupThread": {
+            "$ref": "#/components/schemas/ThreadSummary"
           },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
-          "review": {
-            "type": "boolean"
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
           },
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
-          },
-          "lfsUrl": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lfsConnection": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "accounts": {
-            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
@@ -31067,38 +31067,119 @@
       "patchApiProjectsById200": {
         "type": "object",
         "properties": {
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "appleGate": {
+            "type": "boolean"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
           "cap": {
             "$ref": "#/components/schemas/ProjectCap"
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "caw": {
+            "type": "boolean"
+          },
+          "cawHarness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "leadCostSeen": {
+            "type": "number"
+          },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "moveDeclinedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
           },
           "places": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "held": {
                   "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
                 "id": {
                   "type": "string"
                 },
-                "machineId": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "projectId": {
-                  "type": "string"
+                "isPrimary": {
+                  "type": "boolean"
                 },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
                 },
+                "machineId": {
+                  "type": "string"
+                },
                 "path": {
                   "$ref": "#/components/schemas/PlacePath"
                 },
-                "isPrimary": {
-                  "type": "boolean"
+                "projectId": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -31118,56 +31199,17 @@
               "string"
             ]
           },
-          "appleGate": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
           "remote": {
             "type": [
               "null",
               "string"
             ]
           },
-          "tracker": {
-            "$ref": "#/components/schemas/Tracker"
-          },
-          "leadInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "caw": {
+          "review": {
             "type": "boolean"
-          },
-          "cawHarness": {
-            "$ref": "#/components/schemas/HarnessKind"
-          },
-          "cawModel": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "leadCostSeen": {
-            "type": "number"
-          },
-          "dispatch": {
-            "type": "boolean"
-          },
-          "maxAttempts": {
-            "type": "number"
           },
           "reviewLimit": {
             "type": "number"
-          },
-          "lands": {
-            "$ref": "#/components/schemas/LandsMode"
           },
           "runsOn": {
             "type": [
@@ -31175,56 +31217,14 @@
               "string"
             ]
           },
-          "budget": {
-            "$ref": "#/components/schemas/WorkBudget"
-          },
-          "capUsd": {
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "capPeriod": {
-            "$ref": "#/components/schemas/CapPeriod"
-          },
-          "onCap": {
-            "$ref": "#/components/schemas/OnCap"
-          },
-          "moveDeclinedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
-          "review": {
-            "type": "boolean"
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
           },
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
-          },
-          "lfsUrl": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lfsConnection": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "accounts": {
-            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
@@ -31266,30 +31266,111 @@
       "postApiProjectsByIdPlaces200": {
         "type": "object",
         "properties": {
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "appleGate": {
+            "type": "boolean"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "caw": {
+            "type": "boolean"
+          },
+          "cawHarness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "leadCostSeen": {
+            "type": "number"
+          },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "moveDeclinedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          },
           "place": {
             "type": "object",
             "properties": {
-              "id": {
-                "type": "string"
-              },
-              "machineId": {
-                "type": "string"
-              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
               },
-              "projectId": {
+              "id": {
                 "type": "string"
+              },
+              "isPrimary": {
+                "type": "boolean"
               },
               "kind": {
                 "$ref": "#/components/schemas/PlaceKind"
               },
+              "machineId": {
+                "type": "string"
+              },
               "path": {
                 "$ref": "#/components/schemas/PlacePath"
               },
-              "isPrimary": {
-                "type": "boolean"
+              "projectId": {
+                "type": "string"
               }
             },
             "required": [
@@ -31310,30 +31391,30 @@
             "items": {
               "type": "object",
               "properties": {
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "held": {
                   "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
                 "id": {
                   "type": "string"
                 },
-                "machineId": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "projectId": {
-                  "type": "string"
+                "isPrimary": {
+                  "type": "boolean"
                 },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
                 },
+                "machineId": {
+                  "type": "string"
+                },
                 "path": {
                   "$ref": "#/components/schemas/PlacePath"
                 },
-                "isPrimary": {
-                  "type": "boolean"
+                "projectId": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -31353,56 +31434,17 @@
               "string"
             ]
           },
-          "appleGate": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
           "remote": {
             "type": [
               "null",
               "string"
             ]
           },
-          "tracker": {
-            "$ref": "#/components/schemas/Tracker"
-          },
-          "leadInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "caw": {
+          "review": {
             "type": "boolean"
-          },
-          "cawHarness": {
-            "$ref": "#/components/schemas/HarnessKind"
-          },
-          "cawModel": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "leadCostSeen": {
-            "type": "number"
-          },
-          "dispatch": {
-            "type": "boolean"
-          },
-          "maxAttempts": {
-            "type": "number"
           },
           "reviewLimit": {
             "type": "number"
-          },
-          "lands": {
-            "$ref": "#/components/schemas/LandsMode"
           },
           "runsOn": {
             "type": [
@@ -31410,56 +31452,14 @@
               "string"
             ]
           },
-          "budget": {
-            "$ref": "#/components/schemas/WorkBudget"
-          },
-          "capUsd": {
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "capPeriod": {
-            "$ref": "#/components/schemas/CapPeriod"
-          },
-          "onCap": {
-            "$ref": "#/components/schemas/OnCap"
-          },
-          "moveDeclinedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
-          "review": {
-            "type": "boolean"
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
           },
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
-          },
-          "lfsUrl": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lfsConnection": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "accounts": {
-            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
@@ -31492,35 +31492,116 @@
       "putApiProjectsByIdAccounts200": {
         "type": "object",
         "properties": {
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "appleGate": {
+            "type": "boolean"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "caw": {
+            "type": "boolean"
+          },
+          "cawHarness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "leadCostSeen": {
+            "type": "number"
+          },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "moveDeclinedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          },
           "places": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "held": {
                   "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
                 "id": {
                   "type": "string"
                 },
-                "machineId": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "projectId": {
-                  "type": "string"
+                "isPrimary": {
+                  "type": "boolean"
                 },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
                 },
+                "machineId": {
+                  "type": "string"
+                },
                 "path": {
                   "$ref": "#/components/schemas/PlacePath"
                 },
-                "isPrimary": {
-                  "type": "boolean"
+                "projectId": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -31540,56 +31621,17 @@
               "string"
             ]
           },
-          "appleGate": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
           "remote": {
             "type": [
               "null",
               "string"
             ]
           },
-          "tracker": {
-            "$ref": "#/components/schemas/Tracker"
-          },
-          "leadInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "caw": {
+          "review": {
             "type": "boolean"
-          },
-          "cawHarness": {
-            "$ref": "#/components/schemas/HarnessKind"
-          },
-          "cawModel": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "leadCostSeen": {
-            "type": "number"
-          },
-          "dispatch": {
-            "type": "boolean"
-          },
-          "maxAttempts": {
-            "type": "number"
           },
           "reviewLimit": {
             "type": "number"
-          },
-          "lands": {
-            "$ref": "#/components/schemas/LandsMode"
           },
           "runsOn": {
             "type": [
@@ -31597,56 +31639,14 @@
               "string"
             ]
           },
-          "budget": {
-            "$ref": "#/components/schemas/WorkBudget"
-          },
-          "capUsd": {
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "capPeriod": {
-            "$ref": "#/components/schemas/CapPeriod"
-          },
-          "onCap": {
-            "$ref": "#/components/schemas/OnCap"
-          },
-          "moveDeclinedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
-          "review": {
-            "type": "boolean"
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
           },
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
-          },
-          "lfsUrl": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lfsConnection": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "accounts": {
-            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
@@ -31688,25 +31688,6 @@
       "postApiWorkspacesByIdArchive200": {
         "type": "object",
         "properties": {
-          "carry": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "id": {
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "base": {
             "type": "string"
           },
@@ -31716,23 +31697,14 @@
               "number"
             ]
           },
-          "state": {
-            "$ref": "#/components/schemas/WorkspaceState"
+          "branch": {
+            "type": "string"
           },
-          "ports": {
-            "type": "array",
-            "items": {
-              "type": "number"
-            }
-          },
-          "tmp": {
+          "carry": {
             "type": [
               "null",
               "string"
             ]
-          },
-          "createdByInstanceId": {
-            "type": "string"
           },
           "checksFor": {
             "type": [
@@ -31740,21 +31712,31 @@
               "string"
             ]
           },
-          "stageFor": {
-            "type": [
-              "null",
-              "string"
-            ]
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           },
-          "holding": {
-            "$ref": "#/components/schemas/WorkspaceHolding"
+          "createdByInstanceId": {
+            "type": "string"
+          },
+          "cutFrom": {
+            "$ref": "#/components/schemas/WorkspaceFrom"
+          },
+          "head": {
+            "$ref": "#/components/schemas/WorkspaceCut"
           },
           "heldAt": {
             "type": "string",
             "format": "date-time"
           },
-          "head": {
-            "$ref": "#/components/schemas/WorkspaceCut"
+          "holding": {
+            "$ref": "#/components/schemas/WorkspaceHolding"
+          },
+          "id": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
           },
           "movedUntold": {
             "anyOf": [
@@ -31808,14 +31790,32 @@
               }
             ]
           },
-          "cutFrom": {
-            "$ref": "#/components/schemas/WorkspaceFrom"
-          },
           "path": {
             "$ref": "#/components/schemas/MachinePath"
           },
+          "ports": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "repoRoot": {
             "$ref": "#/components/schemas/MachinePath"
+          },
+          "stageFor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkspaceState"
+          },
+          "tmp": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -31845,40 +31845,10 @@
               "$ref": "#/components/schemas/Account"
             }
           },
-          "signins": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AccountSignin"
-            }
-          },
-          "pending": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PendingAccountSignin"
-            }
-          },
-          "routing": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProviderRouting"
-            }
-          },
-          "readings": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AccountReading"
-            }
-          },
           "bench": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountBench"
-            }
-          },
-          "catalogs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AccountCatalog"
             }
           },
           "catalogFaults": {
@@ -31887,10 +31857,40 @@
               "$ref": "#/components/schemas/AccountCatalogFault"
             }
           },
+          "catalogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountCatalog"
+            }
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingAccountSignin"
+            }
+          },
+          "readings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountReading"
+            }
+          },
           "rebalances": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RebalanceNotice"
+            }
+          },
+          "routing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderRouting"
+            }
+          },
+          "signins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountSignin"
             }
           }
         },
@@ -31915,14 +31915,14 @@
       "deleteApiAccountsById200": {
         "type": "object",
         "properties": {
-          "ok": {
-            "type": "boolean"
-          },
           "later": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "ok": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -31947,9 +31947,6 @@
           "atLimit": {
             "type": "object",
             "properties": {
-              "prepareAtPct": {
-                "type": "number"
-              },
               "delegateWork": {
                 "type": "string",
                 "enum": [
@@ -31959,10 +31956,13 @@
               "move": {
                 "type": "boolean"
               },
-              "waitMinutes": {
+              "moveWholeUnderK": {
                 "type": "number"
               },
-              "moveWholeUnderK": {
+              "prepareAtPct": {
+                "type": "number"
+              },
+              "waitMinutes": {
                 "type": "number"
               }
             },
@@ -31982,6 +31982,9 @@
               }
             }
           },
+          "provider": {
+            "type": "string"
+          },
           "yours": {
             "type": "object",
             "properties": {
@@ -31989,9 +31992,6 @@
                 "type": "string"
               }
             }
-          },
-          "provider": {
-            "type": "string"
           }
         },
         "required": [
@@ -32004,13 +32004,13 @@
       "getApiAccountsPlacement200": {
         "type": "object",
         "properties": {
-          "model": {
+          "accountId": {
             "type": [
               "null",
               "string"
             ]
           },
-          "accountId": {
+          "model": {
             "type": [
               "null",
               "string"
@@ -32038,12 +32038,6 @@
           {
             "type": "object",
             "properties": {
-              "state": {
-                "type": "string",
-                "enum": [
-                  "signed-in"
-                ]
-              },
               "email": {
                 "type": [
                   "null",
@@ -32063,6 +32057,12 @@
                   "null",
                   "string"
                 ]
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "signed-in"
+                ]
               }
             },
             "required": [
@@ -32074,16 +32074,16 @@
           {
             "type": "object",
             "properties": {
-              "state": {
-                "type": "string",
-                "enum": [
-                  "mismatch"
-                ]
-              },
               "email": {
                 "type": [
                   "null",
                   "string"
+                ]
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "mismatch"
                 ]
               }
             },
@@ -32132,10 +32132,10 @@
                 {
                   "type": "object",
                   "properties": {
-                    "machineId": {
+                    "error": {
                       "type": "string"
                     },
-                    "error": {
+                    "machineId": {
                       "type": "string"
                     }
                   },
@@ -32215,40 +32215,6 @@
       "getApiAccountsMoveLogin200": {
         "type": "object",
         "properties": {
-          "moving": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "machineId": {
-                  "type": "string"
-                },
-                "store": {
-                  "$ref": "#/components/schemas/HomeStore"
-                },
-                "storeProvider": {
-                  "type": "string"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "accountId": {
-                  "type": "string"
-                },
-                "since": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "accountId",
-                "machineId",
-                "provider",
-                "since",
-                "store",
-                "storeProvider"
-              ]
-            }
-          },
           "done": {
             "type": "array",
             "items": {
@@ -32263,15 +32229,15 @@
                 "error": {
                   "type": "string"
                 },
+                "kept": {
+                  "description": "Where the moved credential is kept now, as its owner names it.",
+                  "type": "string"
+                },
                 "machineId": {
                   "type": "string"
                 },
                 "provider": {
                   "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
-                  "type": "string"
-                },
-                "kept": {
-                  "description": "Where the moved credential is kept now, as its owner names it.",
                   "type": "string"
                 },
                 "store": {
@@ -32290,6 +32256,40 @@
                 "storeProvider"
               ]
             }
+          },
+          "moving": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "since": {
+                  "type": "number"
+                },
+                "store": {
+                  "$ref": "#/components/schemas/HomeStore"
+                },
+                "storeProvider": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accountId",
+                "machineId",
+                "provider",
+                "since",
+                "store",
+                "storeProvider"
+              ]
+            }
           }
         },
         "required": [
@@ -32302,26 +32302,21 @@
         "items": {
           "type": "object",
           "properties": {
-            "id": {
-              "type": "number"
-            },
             "accountId": {
               "type": "string"
+            },
+            "fetchedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "id": {
+              "type": "number"
             },
             "kind": {
               "type": "string"
             },
-            "scopeLabel": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
             "percent": {
               "type": "number"
-            },
-            "severity": {
-              "type": "string"
             },
             "resetsAt": {
               "type": [
@@ -32329,9 +32324,14 @@
                 "string"
               ]
             },
-            "fetchedAt": {
-              "type": "string",
-              "format": "date-time"
+            "scopeLabel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "severity": {
+              "type": "string"
             }
           },
           "required": [

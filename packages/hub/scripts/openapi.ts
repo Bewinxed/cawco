@@ -302,29 +302,56 @@ const RESPONSE = `${DEFINITION}Response`;
 /** What OpenAPI allows a component to be called. */
 const NAME = /^[A-Za-z0-9._-]+$/;
 
+/** `properties` by name: one order, whatever order the checker met them in. */
+const byName = (properties: unknown): unknown =>
+  typeof properties === "object" && properties !== null
+    ? Object.fromEntries(
+        Object.entries(properties).toSorted(([a], [b]) =>
+          a < b ? -1 : Number(a > b)
+        )
+      )
+    : properties;
+
 /**
  * Into the document's terms. A named type becomes a component ref. A type the
  * generator could only name by its text (`Record<string,number>`, a row's
  * `{ id: string; … }`) is no name at all, so it is written out where it is
  * used. And `default` goes: the generator reads it off the literal a handler
  * happened to return, which is not a default of anything.
+ *
+ * `inferred`: the value is a route's response or written out inside one, a
+ * type the checker inferred from what a handler returns (`{ ...row, status }`).
+ * Its fields come in the order the checker met their symbols, which a change
+ * to any module the program reads can move, and the Swift client's fields
+ * with it; so they are written by name. A named type keeps the order it is
+ * declared in, and so does every request body (Elysia's own schemas).
  */
 const toDocument = (
   value: unknown,
   key?: string,
-  inlining: string[] = []
+  inlining: string[] = [],
+  inferred = false
 ): unknown => {
   if (Array.isArray(value)) {
-    return value.map((item) => toDocument(item, undefined, inlining));
+    return value.map((item) => toDocument(item, undefined, inlining, inferred));
   }
   if (typeof value !== "object" || value === null) {
     return value;
   }
   const { $ref, ...rest } = value as Schema;
+  // An inferred object's own fields, by name; a `properties` map is no object
+  // of its own, and each of its fields is ordered where it is one.
+  const own =
+    inferred && key !== "properties" && rest.properties !== undefined
+      ? { ...rest, properties: byName(rest.properties) }
+      : rest;
   let fields: Schema = Object.fromEntries(
-    Object.entries(rest)
+    Object.entries(own)
       .filter(([field]) => key === "properties" || field !== "default")
-      .map(([field, item]) => [field, toDocument(item, field, inlining)])
+      .map(([field, item]) => [
+        field,
+        toDocument(item, field, inlining, inferred),
+      ])
   );
   // A tuple as the generator's draft-07 writes it (`items: [...]`) is
   // `prefixItems` in the 2020-12 dialect OpenAPI 3.1 speaks.
@@ -347,10 +374,12 @@ const toDocument = (
     throw new Error(`${name} contains itself and has no name to refer to`);
   }
   return {
-    ...(toDocument(definitions[name], undefined, [
-      ...inlining,
-      name,
-    ]) as Schema),
+    ...(toDocument(
+      definitions[name],
+      undefined,
+      [...inlining, name],
+      inferred
+    ) as Schema),
     ...fields,
   };
 };
@@ -434,7 +463,7 @@ for (const { op, method, path } of operations) {
       continue;
     }
     const bare = withoutResponse(returned);
-    const schema = bare && (toDocument(bare) as Schema);
+    const schema = bare && (toDocument(bare, undefined, [], true) as Schema);
     if (!schema) {
       // Only a `Response`: the handler answers with bytes of its own.
       op.responses[status] = { description, content: binary };
