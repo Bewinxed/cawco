@@ -471,8 +471,14 @@ async function runLeg(
   }
   const seconds = ((performance.now() - started) / 1000).toFixed(0);
   kit.check(`${label} [${seconds}s]`, failure === null, failure ?? undefined);
-  await restore(at.fleet, since, journey.hubMachine);
-  await journey.clean?.(at.fleet);
+  // Put away after every leg: one that fails is this leg's own failed line,
+  // and the legs after it still run and report.
+  try {
+    await restore(at.fleet, since, journey.hubMachine);
+    await journey.clean?.(at.fleet);
+  } catch (error) {
+    kit.check(`${label}: put away after the leg`, false, measuredBy(error));
+  }
 }
 
 /** The run's arguments: journeys named, `--engine` and `--size` narrowing. */

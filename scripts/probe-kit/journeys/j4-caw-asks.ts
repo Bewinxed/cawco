@@ -47,7 +47,11 @@ const question = (text: string) => ({
   ],
 });
 
-/** How Claude Code hands an answered question back (its tool result). */
+/**
+ * How Claude Code hands an answered question back (its tool result), read in
+ * the request's words (`Seen.all`, a tool result's text among them): its
+ * `body` is the request as JSON, where these quotes are escaped.
+ */
 const answered = (text: string, label: string) => `"${text}"="${label}"`;
 
 /**
@@ -76,7 +80,7 @@ const made: string[] = [];
 async function stopAll(fleet: KitFleet, projectId: string): Promise<void> {
   const running = () =>
     fleet
-      .api<{ sessions: { id: string }[] }>(`/api/projects/${projectId}/stop`)
+      .api<{ sessions: { id: string }[] }>(`/api/projects/${projectId}/running`)
       .then((read) => read.sessions);
   const sessions = await running();
   if (sessions.length > 0) {
@@ -209,8 +213,8 @@ async function walk(leg: Leg): Promise<void> {
             (one) =>
               one.afterTool &&
               one.all.includes(token) &&
-              one.body.includes(answered(VOICE, PLAIN)) &&
-              one.body.includes(answered(TONE, WARM))
+              one.all.includes(answered(VOICE, PLAIN)) &&
+              one.all.includes(answered(TONE, WARM))
           ),
         Boolean,
         60_000
