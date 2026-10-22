@@ -1792,15 +1792,24 @@
   /* The drawer's grabber (its head's top edge), the one rest mark left from the pills. */
   --c-edge-grip-len: 36px;
   --c-edge-hit: var(--space-3);
-  /* A lit arm's taper at each end. */
+  /* The split line's taper at each end. */
   --c-edge-lit-fade: 36px;
-  /* Round 27, the designer's report: the handle designs' own sizes, the kind-of-change hues on the tool-family
-     formula (50% L / 0.12 C by day, 74% / 0.11 at night, none of the four status hues), and the kept
-     region's band. */
-  --c-arc-run: 8px;
-  --c-arc-stroke: 3px;
-  --c-arc-stroke-touch: 4px;
-  --c-handle-bead: 10px;
+  /* Round 28: iPadOS 26's window handle, measured on Apple's own picture of it (support.apple.com 125309,
+     its magnified corner) against that window's corner radius, then scaled to ours: an arc concentric with
+     the corner, its centreline 0.198 R in from the edge, 0.111 R thick, sweeping 72.8° about the corner's
+     diagonal, round caps. */
+  --c-grip-inset: calc(var(--radius-panel) * 0.198);
+  --c-grip-stroke: calc(var(--radius-panel) * 0.111);
+  --c-grip-sweep: 72.8deg;
+  /* Apple's handle is an opaque near-black (24, 24, 24) on its window, 8.7:1 against it. At rest ours stands
+     at that same contrast on the raised surface, a mix of the strong ink into it; under the pointer and in a
+     drag it brightens to the strong ink itself. (Apple: white on a dark window; the same 8.7:1 at night.) */
+  /* 84% of the strong ink into the raised surface by day, 81% at night: both 8.7:1. */
+  --c-grip-ink-rest: light-dark(color-mix(in oklab, var(--ink-strong) 84%, var(--surface-raised)), color-mix(in oklab, var(--ink-strong) 81%, var(--surface-raised)));
+  /* My call: how far the held handle runs out along each edge before it has thinned to nothing. */
+  --c-grip-run: 120px;
+  /* Round 27, the designer's report: the kind-of-change hues on the tool-family formula (50% L / 0.12 C by
+     day, 74% / 0.11 at night, none of the four status hues), and the kept region's band. */
   --c-section-band-h: 24px;
   --motion-enter: light-dark(oklch(50% 0.12 176), oklch(74% 0.11 176));
   --motion-change: light-dark(oklch(50% 0.12 253), oklch(74% 0.11 253));
@@ -2032,113 +2041,59 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .sash-w { inset-block:
 html:is([data-input="touch"], [data-input="touch-hover"]) .sash-h { inset-inline: calc(var(--c-side-divider-hit) / 2); inset-block-end: calc(-0.5px - var(--c-side-divider-hit) / 2); block-size: var(--c-side-divider-hit); }
 html:is([data-input="touch"], [data-input="touch-hover"]) .sash-d { inset-inline: calc(var(--c-side-divider-hit) / 2); inset-block-start: calc(-0.5px - var(--c-side-divider-hit) / 2); block-size: var(--c-side-divider-hit); }
 html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline-start: calc(-0.5px - var(--c-side-divider-hit) / 2); inset-block-end: calc(-0.5px - var(--c-side-divider-hit) / 2); inline-size: var(--c-side-divider-hit); block-size: var(--c-side-divider-hit); }
-/* Touch without a hover pointer has no corner: the width edge and the foot are the two grips. */
-html[data-input="touch"] .sash-c { display: none; }
+/* Under a finger too the corner is a grip, its handle drawn (round 28: iPadOS's handle is a finger's first;
+   the r23 "no corner on touch" ruling falls with the handle it served). */
 
-/* ---- The resize handle (round 27, the designer's three designs; html[data-handle] picks one) ----
-   One mechanism under all three. Each resizable arm is a .lit: the panel's own outline re-stroked on its
-   border and radius (an inset spread, which no pixel ratio snaps), masked to that arm. Its mask reads four
-   registered lengths, so every change of length, width and place interpolates and turns back mid-way
-   (The Interruptible Rule):
-     --run  how far the lit stroke runs from the corner along the arm (arc)
-     --at   where along the arm the light stands (light, bead)
-     --win  half the run of full ink round --at (light, bead); --c-edge-lit-fade tapers past it either side
-     --lw   the stroke's width
-   The rest mark answers at once (--dur-control), the arm comes in after --dur-pop on a hover (VS Code's
-   sash delay), at once on a press, and goes over --dur-exit (The Fast Exit Rule). */
-@property --run { syntax: "<length-percentage>"; inherits: false; initial-value: 0px; }
-@property --at { syntax: "<length-percentage>"; inherits: false; initial-value: 50%; }
-@property --win { syntax: "<length-percentage>"; inherits: false; initial-value: 0px; }
-@property --lw { syntax: "<length>"; inherits: false; initial-value: 1.5px; }
-.lit { --lw: var(--c-corner-grip-stroke); --lit-ink: var(--border-row-outline); position: absolute; z-index: 3; pointer-events: none; inset: calc(-1px - (var(--lw) - 1px) / 2); border-radius: calc(var(--radius-panel) + (var(--lw) - 1px) / 2); box-shadow: inset 0 0 0 var(--lw) var(--lit-ink); opacity: 0; mask-composite: intersect; transition: opacity var(--dur-exit) var(--ease-out), --run var(--dur-exit) var(--ease-out), --win var(--dur-exit) var(--ease-out), --lw var(--dur-exit) var(--ease-out), --at var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
-/* Each arm's own strip of the outline, then the run that lights along it. The panel's arms meet at its
-   bottom-start corner; the dock's one arm is its top, from its top-start corner. */
-.lit[data-arm="w"] { mask-image: linear-gradient(to right, #000 calc(var(--radius-panel) + var(--lw)), transparent 0), var(--along, linear-gradient(to top, #000 calc(var(--radius-panel) + var(--run)), transparent calc(var(--radius-panel) + 2 * var(--run)))); --axis: to bottom; }
-.lit[data-arm="h"] { mask-image: linear-gradient(to top, #000 calc(var(--radius-panel) + var(--lw)), transparent 0), var(--along, linear-gradient(to right, #000 calc(var(--radius-panel) + var(--run)), transparent calc(var(--radius-panel) + 2 * var(--run)))); }
-.lit[data-arm="d"] { mask-image: linear-gradient(to bottom, #000 calc(var(--radius-panel) + var(--lw)), transparent 0), var(--along, linear-gradient(to right, #000 calc(var(--radius-panel) + var(--run)), transparent calc(var(--radius-panel) + 2 * var(--run)))); }
-/* The split between stacked graphs lies inside the panel, off its outline: its arm is a line across the gap
-   (top set by app.js), its ends tapered; it has no rest mark in any design. */
-.lit[data-arm="s"] { inset: auto var(--radius-panel); block-size: var(--lw); border-radius: var(--radius-pill); box-shadow: none; background: linear-gradient(to right, transparent, var(--lit-ink) var(--c-edge-lit-fade), var(--lit-ink) calc(100% - var(--c-edge-lit-fade)), transparent); mask: none; }
-html[data-graphs="stack"] .lit[data-arm="h"] { visibility: hidden; }
+/* ---- The resize handle (round 28): iPadOS 26's window handle ----
+   One path per handle (app.js draws it as a filled ribbon round its centreline: every shape is the same
+   list of points, so `d` interpolates point for point). At rest, the panel's is the short arc concentric with
+   its resizing corner (iPadOS puts it at the corner that resizes: bottom-right on a window, bottom-left on
+   one snapped right, as this panel stands); the dock's, the same stroke as a short capsule on its top edge.
+   Pointing at an edge or the corner brightens it to the strong ink. A drag runs its stroke out along the
+   edges it moves, thinning to nothing at the ends (pin 26), on one clock: out over --dur-reveal, back over
+   --dur-exit (The Fast Exit Rule), both on --ease-out. No side edge carries a mark of its own (pin 25). */
+@property --c-grip-inset { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-grip-stroke { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-grip-sweep { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+@property --c-grip-run { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; }
+.resize-handle path { d: var(--grip-rest); fill: var(--c-grip-ink-rest); transition: d var(--dur-exit) var(--ease-out), fill var(--dur-control) var(--ease-out); }
+/* The panel's at its border box's bottom-start corner, the dock's at the middle of its top edge. */
+#gripC { inset-inline-start: -1px; inset-block-end: -1px; }
+#gripD { inset-inline-start: 50%; inset-block-start: -1px; translate: -50% 0; }
+@media (hover: hover) {
+  .panel:has(.sash-w:hover, .sash-h:hover, .sash-c:hover) #gripC path,
+  .dock:has(.sash-d:hover) #gripD path { fill: var(--ink-strong); }
+}
+/* The demo's pointer (#demo, handle-demo.html) is the hover's own state. */
+.panel[data-pointing] #gripC path, .dock[data-pointing] #gripD path { fill: var(--ink-strong); }
+.panel:is([data-resizing="w"], [data-resizing="h"], [data-resizing="wh"]) #gripC path,
+.dock[data-resizing] #gripD path { fill: var(--ink-strong); transition: d var(--dur-reveal) var(--ease-out), fill var(--dur-control) var(--ease-out); }
+.panel[data-resizing="w"] #gripC path { d: var(--grip-w); }
+.panel[data-resizing="h"] #gripC path { d: var(--grip-h); }
+.panel[data-resizing="wh"] #gripC path { d: var(--grip-wh); }
+.dock[data-resizing] #gripD path { d: var(--grip-run); }
+/* Focus from the keyboard holds the edge's highlight in the focus ink, with no motion (keys move it, so
+   nothing animates on a key). */
+.panel:has(.sash-w:focus-visible) #gripC path { d: var(--grip-w); fill: var(--focus-ring); transition: none; }
+.panel:has(.sash-h:focus-visible) #gripC path { d: var(--grip-h); fill: var(--focus-ring); transition: none; }
+.panel:has(.sash-c:focus-visible) #gripC path { d: var(--grip-wh); fill: var(--focus-ring); transition: none; }
+.dock:has(.sash-d:focus-visible) #gripD path { d: var(--grip-run); fill: var(--focus-ring); transition: none; }
+/* Stacked graphs have no corner (the r23 ruling): no rest mark; the width edge's highlight comes in with its
+   drag or its focus. */
+html[data-graphs="stack"] #gripC { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
+html[data-graphs="stack"] .panel:is([data-resizing="w"], :has(.sash-w:focus-visible)) #gripC { opacity: 1; transition: opacity var(--dur-control) var(--ease-out); }
+/* Less motion: the shape changes at once, its ink still fades. */
+@media (prefers-reduced-motion: reduce) { .resize-handle path { transition: fill var(--dur-fade) var(--ease-out) !important; } }
+
+/* The split between stacked graphs lies inside the panel, off its outline: a line across the gap (top set
+   by app.js), its ends tapered, shown while it is pointed at, held or focused. */
+.lit[data-arm="s"] { --lit-ink: var(--ink-muted); position: absolute; z-index: 3; pointer-events: none; inset: auto var(--radius-panel); block-size: var(--c-corner-grip-stroke); border-radius: var(--radius-pill); background: linear-gradient(to right, transparent, var(--lit-ink) var(--c-edge-lit-fade), var(--lit-ink) calc(100% - var(--c-edge-lit-fade)), transparent); opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
 html:not([data-graphs="stack"]) .lit[data-arm="s"] { display: none; }
 
-/* A. The corner arc (iPadOS 26's window handle): a short thick arc round the corner at rest, which thins
-   and runs on along an arm on hover and lights the whole arm while it drags. */
-html[data-handle="arc"] .lit:not([data-arm="s"]) { --run: var(--c-arc-run); --lw: var(--c-arc-stroke); opacity: 1; }
-html[data-handle="arc"][data-input="touch"] .lit:not([data-arm="s"]) { --lw: var(--c-arc-stroke-touch); }
-@media (hover: hover) {
-  html[data-handle="arc"] .panel:has(.sash-w:hover, .sash-c:hover) .lit[data-arm="w"],
-  html[data-handle="arc"] .panel:has(.sash-h:hover, .sash-c:hover) .lit[data-arm="h"],
-  html[data-handle="arc"] .dock:has(.sash-d:hover) .lit[data-arm="d"] { --lit-ink: var(--ink-muted); --run: calc(2 * var(--c-arc-run)); --lw: var(--c-corner-grip-stroke); transition: box-shadow var(--dur-control) var(--ease-out), --run var(--dur-control) var(--ease-out) var(--dur-pop), --lw var(--dur-control) var(--ease-out) var(--dur-pop); }
-}
-/* A press outranks a hover (one more attribute, and later). */
-html[data-handle="arc"] .panel[data-resizing]:is([data-resizing="w"], [data-resizing="wh"]) .lit[data-arm="w"],
-html[data-handle="arc"] .panel[data-resizing]:is([data-resizing="h"], [data-resizing="wh"]) .lit[data-arm="h"],
-html[data-handle="arc"] .dock[data-resizing][data-resizing] .lit[data-arm="d"] { --lit-ink: var(--ink-muted); --run: 100%; --lw: var(--c-corner-grip-stroke); transition: box-shadow var(--dur-control) var(--ease-out), --run var(--dur-control) var(--ease-out), --lw var(--dur-control) var(--ease-out); }
-
-/* B. The pointer's light: nothing drawn; a resizable side's border is a step darker than a fixed one, and a
-   short taper lights under the pointer, then opens to the whole arm on a press. */
-html[data-handle="light"] .panel { border-inline-start-color: var(--border-row-outline); border-block-end-color: var(--border-row-outline); }
-html[data-handle="light"][data-graphs="stack"] .panel { border-block-end-color: var(--border-control); }
-html[data-handle="light"] .dock { border-block-start-color: var(--border-row-outline); }
-:is(html[data-handle="light"], html[data-handle="bead"]) .lit[data-arm="w"] { --along: linear-gradient(to bottom, transparent calc(var(--at) - var(--win) - var(--c-edge-lit-fade)), #000 calc(var(--at) - var(--win)), #000 calc(var(--at) + var(--win)), transparent calc(var(--at) + var(--win) + var(--c-edge-lit-fade))); --lit-ink: var(--ink-muted); }
-:is(html[data-handle="light"], html[data-handle="bead"]) :is(.lit[data-arm="h"], .lit[data-arm="d"]) { --along: linear-gradient(to right, transparent calc(var(--at) - var(--win) - var(--c-edge-lit-fade)), #000 calc(var(--at) - var(--win)), #000 calc(var(--at) + var(--win)), transparent calc(var(--at) + var(--win) + var(--c-edge-lit-fade))); --lit-ink: var(--ink-muted); }
-@media (hover: hover) {
-  html[data-handle="light"] .panel:has(.sash-w:hover, .sash-c:hover) .lit[data-arm="w"],
-  html[data-handle="light"] .panel:has(.sash-h:hover, .sash-c:hover) .lit[data-arm="h"],
-  html[data-handle="light"] .dock:has(.sash-d:hover) .lit[data-arm="d"] { opacity: 1; transition: opacity var(--dur-control) var(--ease-out) var(--dur-pop), --at var(--dur-control) var(--ease-out); }
-}
-/* A press opens the window from where the pointer stands to the whole arm (bead: from where the knob stood). */
-:is(html[data-handle="light"], html[data-handle="bead"]) .panel[data-resizing]:is([data-resizing="w"], [data-resizing="wh"]) .lit[data-arm="w"],
-:is(html[data-handle="light"], html[data-handle="bead"]) .panel[data-resizing]:is([data-resizing="h"], [data-resizing="wh"]) .lit[data-arm="h"],
-:is(html[data-handle="light"], html[data-handle="bead"]) .dock[data-resizing][data-resizing] .lit[data-arm="d"] { opacity: 1; --win: 100%; transition: opacity var(--dur-control) var(--ease-out), --win var(--dur-control) var(--ease-out), --at var(--dur-control) var(--ease-out); }
-
-/* C. The bead that grows into a knob (design tools' selection handles): a 10px bead on each resizable edge
-   at rest; under the pointer a 24px knob with the axis' two-headed arrow that follows it along the edge; on
-   a press it melts into the arm, which grows out from where it stood. */
-.bead { display: none; }
-html[data-handle="bead"] .bead { --b: var(--c-handle-bead); position: absolute; z-index: 5; display: grid; place-items: center; inline-size: var(--b); block-size: var(--b); margin: calc(var(--b) / -2); border-radius: var(--radius-pill); background: var(--surface-raised); border: 1px solid var(--border-row-outline); box-shadow: var(--shadow-tile); color: var(--ink-row); pointer-events: none; transition: inline-size var(--dur-control) var(--ease-out), block-size var(--dur-control) var(--ease-out), margin var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out), translate var(--dur-control) var(--ease-out), opacity var(--dur-exit) var(--ease-out), scale var(--dur-exit) var(--ease-out), filter var(--dur-exit) var(--ease-out); }
-html[data-handle="bead"] .bead svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
-.bead[data-arm="w"] { inset-inline-start: -0.5px; inset-block-start: 50%; }
-.bead[data-arm="h"] { inset-block-end: -0.5px; inset-inline-start: 50%; }
-.bead[data-arm="wh"] { inset-inline-start: calc(var(--radius-panel) * 0.29); inset-block-end: calc(var(--radius-panel) * 0.29); }
-.bead[data-arm="d"] { inset-block-start: -0.5px; inset-inline-start: 50%; }
-html[data-graphs="stack"] .bead:is([data-arm="h"], [data-arm="wh"]) { display: none !important; }
-html[data-input="touch"] .bead[data-arm="wh"] { display: none !important; }
-@media (hover: hover) {
-  html[data-handle="bead"] .panel:has(.sash-w:hover) .bead[data-arm="w"],
-  html[data-handle="bead"] .panel:has(.sash-h:hover) .bead[data-arm="h"],
-  html[data-handle="bead"] .panel:has(.sash-c:hover) .bead[data-arm="wh"],
-  html[data-handle="bead"] .dock:has(.sash-d:hover) .bead[data-arm="d"] { --b: var(--c-btn-h-xs); background: var(--surface-hover); }
-  html[data-handle="bead"] .panel:has(.sash-w:hover) .bead[data-arm="w"] svg,
-  html[data-handle="bead"] .panel:has(.sash-h:hover) .bead[data-arm="h"] svg,
-  html[data-handle="bead"] .panel:has(.sash-c:hover) .bead[data-arm="wh"] svg,
-  html[data-handle="bead"] .dock:has(.sash-d:hover) .bead[data-arm="d"] svg { opacity: 1; }
-}
-/* A finger has no hover: the bead is always the knob, so it has a drawn target. */
-html[data-handle="bead"]:is([data-input="touch"], [data-input="touch-hover"]) .bead { --b: var(--c-btn-h-xs); }
-html[data-handle="bead"]:is([data-input="touch"], [data-input="touch-hover"]) .bead svg { opacity: 1; }
-/* The knob collapses into the arm as it lights: onto the border, a quarter of its size, a 2px blur, gone
-   (transitions.dev icon swap's cross-blur), on the arm's own clock. */
-html[data-handle="bead"] .panel[data-resizing]:is([data-resizing="w"], [data-resizing="wh"]) .bead[data-arm="w"],
-html[data-handle="bead"] .panel[data-resizing]:is([data-resizing="h"], [data-resizing="wh"]) .bead[data-arm="h"],
-html[data-handle="bead"] .panel[data-resizing][data-resizing="wh"] .bead[data-arm="wh"],
-html[data-handle="bead"] .dock[data-resizing][data-resizing] .bead[data-arm="d"] { opacity: 0; scale: 0.25; filter: blur(var(--c-recall-cross-blur)); transition-duration: var(--dur-control); }
-
-/* Focus on an edge from the keyboard: the ring on the arm's own mark, so the person sees which edge the
-   arrows move. */
-.panel:has(.sash-w:focus-visible) .lit[data-arm="w"],
-.panel:has(.sash-h:focus-visible) .lit[data-arm="h"],
-.panel:has(.sash-c:focus-visible) :is(.lit[data-arm="w"], .lit[data-arm="h"]),
-.panel:has(.sash-s:focus-visible) .lit[data-arm="s"],
-.dock:has(.sash-d:focus-visible) .lit[data-arm="d"] { opacity: 1; --lit-ink: var(--focus-ring); --win: 100%; --run: 100%; }
-.panel[data-resizing="s"] .lit[data-arm="s"] { opacity: 1; --lit-ink: var(--ink-muted); transition: opacity var(--dur-control) var(--ease-out); }
-@media (hover: hover) { .panel:has(.sash-s:hover) .lit[data-arm="s"] { opacity: 1; --lit-ink: var(--ink-muted); transition: opacity var(--dur-control) var(--ease-out) var(--dur-pop); } }
-/* Less motion: no length or place morph, the mark and the arm cross-fade. */
-@media (prefers-reduced-motion: reduce) {
-  .lit { transition: opacity var(--dur-fade) var(--ease-out), box-shadow var(--dur-fade) var(--ease-out) !important; }
-  html[data-handle="bead"] .bead { transition: opacity var(--dur-fade) var(--ease-out), background-color var(--dur-fade) var(--ease-out) !important; }
-}
+.panel:has(.sash-s:focus-visible) .lit[data-arm="s"] { opacity: 1; --lit-ink: var(--focus-ring); transition: none; }
+.panel[data-resizing="s"] .lit[data-arm="s"] { opacity: 1; transition: opacity var(--dur-control) var(--ease-out); }
+@media (hover: hover) { .panel:has(.sash-s:hover) .lit[data-arm="s"] { opacity: 1; transition: opacity var(--dur-control) var(--ease-out) var(--dur-pop); } }
 /* A drag holds its cursor on the document, so it stays when the pointer outruns the band. */
 html[data-resizing] * { user-select: none; }
 html[data-resizing="w"], html[data-resizing="w"] * { cursor: ew-resize !important; }
@@ -2164,11 +2119,11 @@ html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !im
 /* Open, the clip stands well outside the panel, so its shadow and the outer half of its edge bands are never
    clipped; it still interpolates to the pill's box. */
 html[data-layout="desk"] .panel { transition: clip-path var(--dur-panel) var(--ease-drawer), box-shadow var(--dur-panel) var(--ease-drawer); clip-path: inset(-64px round var(--radius-panel)); }
-html[data-layout="desk"] .panel > :not(.toolbar, .lit, .bead, .sash),
+html[data-layout="desk"] .panel > :not(.toolbar, .lit, .resize-handle, .sash),
 html[data-layout="desk"] .panel .toolbar > :not(.bar-end),
 html[data-layout="desk"] .panel .bar-end > :not(#hide) { transition: opacity var(--dur-control) var(--ease-out) calc(var(--dur-panel) / 2), filter var(--dur-control) var(--ease-out) calc(var(--dur-panel) / 2); }
 html[data-layout="desk"] .panel[data-open="false"] { clip-path: var(--pill-clip, inset(0 round var(--radius-md))); box-shadow: var(--shadow-raised); pointer-events: none; transition: clip-path var(--dur-exit) var(--ease-out), box-shadow var(--dur-exit) var(--ease-out); }
-html[data-layout="desk"] .panel[data-open="false"] > :not(.toolbar, .lit, .bead, .sash),
+html[data-layout="desk"] .panel[data-open="false"] > :not(.toolbar, .lit, .resize-handle, .sash),
 html[data-layout="desk"] .panel[data-open="false"] .toolbar > :not(.bar-end),
 html[data-layout="desk"] .panel[data-open="false"] .bar-end > :not(#hide) { opacity: 0; filter: blur(var(--c-recall-cross-blur)); transition: opacity calc(var(--dur-exit) / 2) var(--ease-out), filter calc(var(--dur-exit) / 2) var(--ease-out); }
 html[data-layout="desk"] .panel[data-open="false"] #hide { pointer-events: auto; grid-template-columns: var(--icon-md) 1fr; column-gap: var(--space-2); padding-inline: var(--space-3); border-color: var(--border-control); transition: var(--transition-control), grid-template-columns var(--dur-exit) var(--ease-out) calc(var(--dur-exit) / 2), column-gap var(--dur-exit) var(--ease-out) calc(var(--dur-exit) / 2), padding var(--dur-exit) var(--ease-out) calc(var(--dur-exit) / 2); }
@@ -2469,10 +2424,10 @@ html:not([data-layout="desk"]) .sheet-head { position: relative; display: flex; 
 .sheet-title:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 .faces { flex: none; overflow: visible; }
 html:not([data-layout="desk"]) .tools > .tool { position: relative; inset: auto; z-index: auto; inline-size: auto; block-size: auto; max-block-size: none; flex: 1 1 auto; min-block-size: 0; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; transform: none; opacity: 1; filter: none; pointer-events: auto; transition: none; will-change: auto; }
-html:not([data-layout="desk"]) .tools > .tool :is(.lit, .bead) { display: none !important; }
+html:not([data-layout="desk"]) .tools > .tool :is(.lit, .resize-handle) { display: none !important; }
 html:not([data-layout="desk"]) .tools[data-face="graph"] > .dock,
 html:not([data-layout="desk"]) .tools[data-face="move"] > .panel { display: none; }
-html:not([data-layout="desk"]) :is(.sash, .lit, .bead, #hide) { display: none; }
+html:not([data-layout="desk"]) :is(.sash, .lit, .resize-handle, #hide) { display: none; }
 html:not([data-layout="desk"]) .panel { padding-block-start: 0; }
 html:not([data-layout="desk"]) :is(.graphs, .gsec[data-current], .graph) { flex: 1 1 auto; }
 html:not([data-layout="desk"]) .graph { block-size: auto; }
@@ -2533,12 +2488,9 @@ html[data-layout="sheet"] .show { writing-mode: vertical-rl; inset: 50% 0 auto a
       <div class="sash sash-w" id="sashW" role="separator" aria-orientation="vertical" aria-label="Resize panel width" tabindex="0" data-edge="w"></div>
       <div class="sash sash-h" id="sashH" role="separator" aria-orientation="horizontal" aria-label="Resize graph height" tabindex="0" data-edge="h"></div>
       <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize panel" tabindex="0" data-edge="wh"></div>
-      <!-- The resize handle (html[data-handle]): one lit arm per resizable edge, and the bead design's marks. -->
-      <span class="lit" data-arm="w" aria-hidden="true"></span>
-      <span class="lit" data-arm="h" aria-hidden="true"></span>
-      <span class="bead" data-arm="w" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg></span>
-      <span class="bead" data-arm="h" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M9 6l3-3 3 3M9 18l3 3 3-3"/></svg></span>
-      <span class="bead" data-arm="wh" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19L19 5M5 14v5h5M14 5h5v5"/></svg></span>
+      <!-- The resize handle (round 28): iPadOS 26's window handle, a short arc concentric with the panel's
+           corner, at the corner that resizes it. One path; a drag morphs it into the tapered highlight. -->
+      <svg class="resize-handle" id="gripC" aria-hidden="true"><path/></svg>
       <!-- Two graphs stacked: the foot edge between them splits their heights. -->
       <div class="sash sash-s" id="sashS" role="separator" aria-orientation="horizontal" aria-label="Split the graphs' heights" tabindex="0" data-edge="s"></div>
       <span class="lit" data-arm="s" aria-hidden="true"></span>
@@ -2546,8 +2498,7 @@ html[data-layout="sheet"] .show { writing-mode: vertical-rl; inset: 50% 0 auto a
 
     <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The kept move">
       <div class="sash sash-d" id="sashD" role="separator" aria-orientation="horizontal" aria-label="Resize the dock's height" tabindex="0" data-edge="d"></div>
-      <span class="lit" data-arm="d" aria-hidden="true"></span>
-      <span class="bead" data-arm="d" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M9 6l3-3 3 3M9 18l3 3 3-3"/></svg></span>
+      <svg class="resize-handle" id="gripD" aria-hidden="true"><path/></svg>
       <div class="dock-body" id="dockBody"></div>
     </section>
   </div>
@@ -7595,27 +7546,53 @@ function syncSashes() {
   if (stackedGraphs()) set($("sashS"), splitGraphs()[0].offsetHeight, splitFloor(), splitCeil());
 }
 function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); mark(); for (const c of shownComps()) showKept(c.id); placeSplit(); if (tl) layoutDock(); sizeDockRoom(); if (pop) placePop(); }
-// The resize handle's design: html[data-handle] (arc, light or bead), from #handle= or ?handle=, arc by
-// default (round 27; the owner picks one on its decision page).
-rootEl.dataset.handle = (location.hash.match(/handle=(arc|light|bead)/) || location.search.match(/handle=(arc|light|bead)/) || [, rootEl.dataset.handle || "arc"])[1];
-// Where along each arm the light (and the bead's knob) stands: the pointer's place on that arm, held 16px
-// clear of the corners; on the corner, both arms' corner ends.
-const armsOf = (owner, edge) => (edge === "wh" ? ["w", "h"] : edge === "d" || edge === "s" ? [edge] : [edge]);
-function aimArms(owner, edge, e) {
-  const b = owner.getBoundingClientRect(), R = px("--radius-panel"), clear = px("--c-edge-pull");
-  for (const arm of armsOf(owner, edge)) {
-    const lit = owner.querySelector('.lit[data-arm="' + arm + '"]'), bead = owner.querySelector('.bead[data-arm="' + arm + '"]');
-    const len = arm === "w" ? b.height : b.width;
-    const along = edge === "wh" ? (arm === "w" ? len - R : R) : arm === "w" ? e.clientY - b.top : e.clientX - b.left;
-    const at = clamp(along, R + clear, len - R - clear);
-    if (lit) lit.style.setProperty("--at", Math.round(at) + "px");
-    if (bead && edge !== "wh") bead.style.translate = arm === "w" ? "0 " + Math.round(at - len / 2) + "px" : Math.round(at - len / 2) + "px 0";
-  }
+// ---- The resize handle (round 28): iPadOS 26's window handle, one path per handle ----
+// Every shape is a ribbon round a centreline: GRIP_N + 1 points down one side, a round cap, the same back up
+// the other side, a round cap, all straight segments. So each shape a handle takes is the same list of
+// points, and CSS interpolates `d` between them point for point, on one clock, turning back mid-way.
+const GRIP_N = 64, GRIP_CAP = 8;
+function ribbon(len, at, width) {
+  const A = [], B = [], r2 = (n) => Math.round(n * 100) / 100;
+  for (let i = 0; i <= GRIP_N; i++) { const [x, y, tx, ty] = at((len * i) / GRIP_N), h = width((len * i) / GRIP_N) / 2; A.push([x - ty * h, y + tx * h]); B.push([x + ty * h, y - tx * h]); }
+  // A cap: the half circle round the end, from one side to the other through the point the stroke runs on to.
+  const cap = (s, sign) => { const [x, y, tx, ty] = at(s), h = width(s) / 2, out = []; for (let k = 1; k <= GRIP_CAP; k++) { const f = (Math.PI * k) / (GRIP_CAP + 1), c = Math.cos(f), sn = Math.sin(f); out.push([x + sign * h * (-ty * c + tx * sn), y + sign * h * (tx * c + ty * sn)]); } return out; };
+  const pts = [...A, ...cap(len, 1), ...B.reverse(), ...cap(0, -1)];
+  return 'path("M ' + pts.map(([x, y]) => r2(x) + " " + r2(y)).join(" L ") + ' Z")';
 }
+// The panel's handle, in the corner's own frame (its outer corner at 0,0, up the left edge is -y): `a` of
+// stroke run up the width edge and `b` along the foot, round the arc between. At rest both are 0 and the arc
+// is the measured sweep about the corner's diagonal; a run arm takes the arc on to that edge's tangent.
+function cornerShape(a, b) {
+  const R = px("--radius-panel"), d = px("--c-grip-inset"), r = R - d, w0 = px("--c-grip-stroke"), half = (px("--c-grip-sweep") * Math.PI) / 360;
+  const t0 = a > 0 ? Math.PI : (3 * Math.PI) / 4 + half, t1 = b > 0 ? Math.PI / 2 : (3 * Math.PI) / 4 - half, lc = r * (t0 - t1), len = a + lc + b;
+  const at = (s) => {
+    if (s < a) return [d, -R - a + s, 0, 1];
+    if (s <= a + lc) { const t = t0 - (s - a) / r; return [R + r * Math.cos(t), -R + r * Math.sin(t), Math.sin(t), -Math.cos(t)]; }
+    return [R + (s - a - lc), -d, 1, 0];
+  };
+  const taper = (u) => w0 * Math.cos((Math.PI / 2) * Math.min(1, Math.max(0, u)));
+  const width = (s) => (s < a ? taper((a - s) / a) : s <= a + lc ? w0 : taper((s - a - lc) / b));
+  return ribbon(len, at, width);
+}
+// The dock's: the same stroke as a capsule the arc's length, centred on its top edge, `a` run out either way.
+function edgeShape(a) {
+  const R = px("--radius-panel"), d = px("--c-grip-inset"), w0 = px("--c-grip-stroke"), h0 = ((R - d) * px("--c-grip-sweep") * Math.PI) / 360;
+  const taper = (u) => w0 * Math.cos((Math.PI / 2) * Math.min(1, Math.max(0, u)));
+  return ribbon(2 * (a + h0), (s) => [-h0 - a + s, d, 1, 0], (s) => (s < a ? taper((a - s) / a) : s <= a + 2 * h0 ? w0 : taper((s - a - 2 * h0) / a)));
+}
+function drawGrips() {
+  const R = px("--radius-panel"), L = px("--c-grip-run"), d = px("--c-grip-inset"), w0 = px("--c-grip-stroke"), h0 = ((R - d) * px("--c-grip-sweep") * Math.PI) / 360;
+  const c = $("gripC"), S = Math.ceil(R + L + w0);
+  c.setAttribute("width", S); c.setAttribute("height", S); c.setAttribute("viewBox", "0 " + -S + " " + S + " " + S);
+  c.style.setProperty("--grip-rest", cornerShape(0, 0)); c.style.setProperty("--grip-w", cornerShape(L, 0)); c.style.setProperty("--grip-h", cornerShape(0, L)); c.style.setProperty("--grip-wh", cornerShape(L, L));
+  const g = $("gripD"), W = Math.ceil(2 * (h0 + L) + w0), H = Math.ceil(d + w0);
+  g.setAttribute("width", W); g.setAttribute("height", H); g.setAttribute("viewBox", -W / 2 + " 0 " + W + " " + H);
+  g.style.setProperty("--grip-rest", edgeShape(0)); g.style.setProperty("--grip-run", edgeShape(L));
+}
+drawGrips();
 for (const sash of document.querySelectorAll(".sash")) {
   const edge = sash.dataset.edge, owner = sash.closest(".tool");
-  sash.addEventListener("pointermove", (e) => { if (!owner.dataset.resizing) aimArms(owner, edge, e); });
-  sash.onpointerenter = (e) => { owner.dataset.edge = edge; aimArms(owner, edge, e); };
+  sash.onpointerenter = () => { owner.dataset.edge = edge; };
   sash.onfocus = () => { owner.dataset.edge = edge; };
   sash.onpointerdown = (e) => {
     e.preventDefault();
@@ -7743,6 +7720,46 @@ addEventListener("resize", onResize);
 rootEl.dataset.tools = "open";
 if (layoutIs("drawer")) setStop("peek");
 setFace("graph");
+
+// ---- The handle's demo (round 28) ----
+// #demo=corner or #demo=dock (with &theme=dark for the night) plays the handle on this page's own elements on
+// a loop for handle-demo.html, which shows it cropped at 1:1: at rest, the pointer arrives (data-pointing, the
+// hover's own rule), a drag wider (the real data-resizing and the real setSize/setDockH), let go. The first
+// real pointer on the page stops it where it is, and the page is the person's.
+const demoOf = location.hash.match(/demo=(corner|dock)/);
+if (demoOf) {
+  const which = demoOf[1];
+  rootEl.style.colorScheme = /theme=dark/.test(location.hash) ? "dark" : "light";
+  // The dock stands once a state is kept: keep the first one, as a press on it would.
+  if (which === "dock") { const n = document.querySelector(".node:not(.kept)"); if (n) n.click(); }
+  const owner = which === "corner" ? panel : $("dock");
+  let on = true, timer = null;
+  const anchor = () => { const b = owner.getBoundingClientRect(); return which === "corner" ? { x: b.left, y: b.bottom } : { x: b.left + b.width / 2, y: b.top }; };
+  const say = (step) => parent.postMessage({ demo: which, step, ...anchor() }, "*");
+  const tween = (dur, set) => new Promise((done) => { let t0 = null; const go = (now) => { t0 ??= now; const k = Math.min(1, (now - t0) / dur); set(1 - (1 - k) ** 3); if (k < 1 && on) requestAnimationFrame(go); else done(); }; requestAnimationFrame(go); });
+  const w0 = panel.offsetWidth, h0 = graphOf(tab).offsetHeight, d0 = () => $("dock").offsetHeight;
+  let dock0 = null;
+  const steps = [
+    ["rest", 1200, () => {}],
+    ["pointing", 1000, () => { owner.dataset.pointing = ""; }],
+    ["drag", 1300, () => {
+      if (which === "corner") { panel.dataset.resizing = rootEl.dataset.resizing = "wh"; tween(800, (e) => setSize(w0 + 40 * e, h0 + 30 * e)); }
+      else { dock0 ??= d0(); $("dock").dataset.resizing = rootEl.dataset.resizing = "d"; tween(800, (e) => setDockH(dock0 + 40 * e)); }
+    }],
+    ["release", 1400, () => { delete owner.dataset.resizing; delete rootEl.dataset.resizing; delete owner.dataset.pointing; }],
+    ["reset", 700, () => { if (which === "corner") tween(500, (e) => setSize(w0 + 40 * (1 - e), h0 + 30 * (1 - e))); else tween(500, (e) => setDockH(dock0 + 40 * (1 - e))); }],
+  ];
+  let i = 0;
+  const next = () => { if (!on) return; const [k, ms_, fn] = steps[i]; fn(); say(k); i = (i + 1) % steps.length; timer = setTimeout(next, ms_); };
+  setTimeout(next, 300);
+  addEventListener("pointerover", () => {
+    if (!on) return;
+    on = false; clearTimeout(timer);
+    delete owner.dataset.pointing; delete owner.dataset.resizing; delete rootEl.dataset.resizing;
+    if (which === "corner") setSize(w0, h0); else if (dock0) setDockH(dock0);
+    relayoutAfterResize(); say("yours");
+  }, { once: true });
+}
 render();
 document.fonts.ready.then(() => { if (layoutIs("drawer")) setStop(stop); render(); });
 
