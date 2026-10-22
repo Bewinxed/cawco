@@ -119,9 +119,11 @@ export const skillsWords = {
   adopting: "Adopting…",
   inTheFleet: "In the fleet",
 
-  /** A marketplace the hub could not read, with its reason. */
+  /** A marketplace the hub could not read or link, with its reason. */
   couldNotRead: (what: string, why: string) =>
     `Could not read ${what} — ${why}.`,
+  couldNotLink: (what: string, why: string) =>
+    `Could not link ${what} — ${why}.`,
   saidNothing: "it said nothing",
 
   /** Why a name cannot be used. */

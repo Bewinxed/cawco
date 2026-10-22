@@ -2833,9 +2833,13 @@ public enum Words {
 
         public static let inTheFleet = "In the fleet"
 
-        /// A marketplace the hub could not read, with its reason.
+        /// A marketplace the hub could not read or link, with its reason.
         public static func couldNotRead(what: String, why: String) -> String {
             "Could not read \(what) — \(why)."
+        }
+
+        public static func couldNotLink(what: String, why: String) -> String {
+            "Could not link \(what) — \(why)."
         }
 
         public static let saidNothing = "it said nothing"
