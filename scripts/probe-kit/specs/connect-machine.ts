@@ -15,9 +15,22 @@
  *
  * Legs, each a PASS or FAIL line:
  * - every state reached on the engine (its `data-step`, its words);
- * - no scroll inside the window at any step (the body's scrollHeight ≤ its
- *   clientHeight), and the phone's Reach variants inside the visual viewport
- *   with the keyboard up (844 less a 336 keyboard: 508);
+ * - the window is a modal: with no way in chosen it opens straight on its
+ *   details, the Over SSH tab chosen, no question first; a press on the
+ *   scrim leaves it open with what was typed; × on the draft just closes
+ *   it, nothing parked; the machines list's Add machine opens it on Over
+ *   SSH with the typing kept; each entry point that names a way (Home's
+ *   cards, the list's ways) opens it on that tab;
+ * - switching tabs keeps what was typed in each, and a reload opens it on
+ *   the tab it stood on with both tabs' details;
+ * - the tabs and each tab's details fit at 390, 680 and 1440 in Chromium
+ *   and WebKit with nothing past the window's edge or scrolling, and
+ *   nothing outside the window moves while it stands; each tab captured,
+ *   dark, at 390 and 1440 (captures/add-machine);
+ * - no scroll inside the window at any step (the dialog grid's scrollHeight
+ *   ≤ its clientHeight, a finger's touch areas included), and the phone's
+ *   Reach variants with a field to type in inside the visual viewport with
+ *   the keyboard up (844 less a 336 keyboard: 508);
  * - each neighbouring step's height ≥ 36px apart;
  * - no layout shift while Running (each step row's box constant across ticks);
  * - a reload with the window open restores the same step and details, the
@@ -30,18 +43,23 @@
  *   then Running, never Route meanwhile, and the draft it used up is not
  *   made again (the hub's addresses carry its loopback as a network's: a
  *   workspace's machine lists none);
- * - Esc parks it, its row's step text changes on the engine, a press on the
- *   row reopens the window at the same step;
- * - the row stands in the band from the start, before any dismiss;
+ * - closed while it works it minimizes: its row's step text changes on the
+ *   engine, a reload leaves it minimized, a press on the row reopens the
+ *   modal on its running step;
+ * - the bar's machines item counts the install from the start, under the
+ *   modal;
  * - a second Add machine for the same target opens that install;
  * - a forced failure says the Problem's words on the row and in the window,
  *   never as a toast;
  * - the command route's three steps tick from the hub's fetch and join, and
  *   its harnesses step (installs.ts `ready`) ends it joined;
- * - the window's flight into its row, scrubbed at 0, 0.5 and 1;
- * - in WebKit, focusing each Reach field moves nothing inside the drawer;
- * - (1) a press outside, × and Esc each park a failed install: it stays on
- *   the hub, its row reopens it with Retry;
+ * - the modal's flight as it minimizes, scrubbed at 0, 0.5 and 1;
+ * - on a phone the sheet follows a finger down its grabber and is put away
+ *   past 30% of its height;
+ * - in WebKit, focusing each Reach field moves nothing inside the sheet;
+ * - (1) a press on the scrim leaves a failed install's window open; × and
+ *   Esc each close it into its row: it stays on the hub, its row reopens it
+ *   with Retry;
  * - (2) a command install whose installer fails a check fails at its own
  *   route's step (Installing on it), never an SSH one;
  * - (3) Stop in the output sheet asks first, the install running meanwhile;
@@ -80,7 +98,14 @@ import type { InstallsRead } from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { until } from "../../scratch-fleet";
 import { Clock } from "../anim";
-import { type Kit, type KitFleet, open, type Spec, type Theme } from "../kit";
+import {
+  handOn,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+  type Theme,
+} from "../kit";
 import {
   HELD,
   keyAccepted,
@@ -93,7 +118,10 @@ import { type Phone, standInPhone } from "./turn-push";
 const USER = "deploy";
 const PASSWORD = `pw-${crypto.randomUUID()}`;
 const WINDOW = "[data-connect-window]";
-const BODY = `${WINDOW} [data-slot=body]`;
+/** The dialog's content grid, the one box that would scroll. */
+const BODY = `${WINDOW} [data-slot=grid]`;
+/** The dialog's own ×. */
+const CLOSE = `${WINDOW} [data-slot=dialog-close]`;
 const RELOAD_FORGETS = /reload forgets/;
 const FETCHING = /Fetching the signed build/;
 const LACKS_TAR = /Failed at Fetching the signed build · it lacks tar/;
@@ -118,6 +146,8 @@ const KEYBOARD_UP = 508;
 interface Reading {
   bottom: number;
   height: number;
+  /** What holds the window's size as it was read: its inline height, its animations, the grid's heights. */
+  held: string;
   /** How far the body's content runs past its box: 0 when nothing scrolls. */
   overflow: number;
   step: string;
@@ -140,6 +170,14 @@ const read = (page: Page): Promise<Reading | null> =>
         top: box.top,
         bottom: box.bottom,
         overflow: inner.scrollHeight - inner.clientHeight,
+        held: `height ${node.style.height || "auto"}, max ${node.style.maxHeight || "css"}; animations ${JSON.stringify(
+          node
+            .getAnimations()
+            .map(
+              (one) =>
+                `${(one as CSSAnimation).animationName ?? "script"} ${one.playState}`
+            )
+        )}; grid ${inner.clientHeight}/${inner.scrollHeight}`,
         text: node.innerText.replace(/\s+/g, " ").trim(),
       };
     },
@@ -246,7 +284,22 @@ async function fillPort(page: Page, port: number) {
   await page.fill("#connect-port", String(port));
 }
 
-/** Picks `words` in the window's choice named `label` ("Sign in", "Bring it in"). */
+/** Picks one of the window's two ways in by its tab ("Over SSH", "By a command"). */
+async function pickTab(page: Page, name: string) {
+  await page.locator(WINDOW).getByRole("tab", { name }).click();
+}
+
+/** The tab chosen in the window, by its name. */
+const chosenTab = (page: Page) =>
+  page.evaluate(
+    (win) =>
+      document
+        .querySelector(`${win} [role=tab][aria-selected=true]`)
+        ?.textContent?.trim() ?? "",
+    WINDOW
+  );
+
+/** Picks `words` in the window's choice named `label` ("Sign in").*/
 async function choose(page: Page, label: string, words: string) {
   await page
     .locator(`${WINDOW} button[aria-label^="${label}:"]`)
@@ -295,6 +348,22 @@ const fieldSizes = (page: Page) =>
       };
     })
   );
+
+/**
+ * The machines list's Add machine, as the person reaches it: in the bar's
+ * machines card on a desk, in the navigation sheet on a phone.
+ */
+async function addFromList(page: Page, view: "desk" | "phone") {
+  const add = "[data-slot=row][data-add] >> visible=true";
+  if (!(await page.locator(add).count())) {
+    if (view === "desk") {
+      await page.locator("[data-machines]").click();
+    } else {
+      await page.getByRole("button", { name: OPEN_NAVIGATION }).first().click();
+    }
+  }
+  await page.locator(add).first().click();
+}
 
 /** Opens the port's field ("Port 22 ▾" gives way to it), so its size can be read. */
 async function openPort(page: Page) {
@@ -385,9 +454,10 @@ async function run(kit: Kit): Promise<void> {
     fleet.launch("hub", [], { PATH: `${bin}:${fleet.env.PATH}` });
     await fleet.hubUp();
     await pushes.pair();
+    const dashboard = await fleet.dashboard();
+    await entryTabs(kit, fleet, dashboard);
     fleet.launch("agent");
     await fleet.agentUp();
-    const dashboard = await fleet.dashboard();
 
     await refusedForward(kit, fleet, dashboard, {
       pushes,
@@ -435,8 +505,6 @@ async function run(kit: Kit): Promise<void> {
 
     // The ladder: every neighbouring pair ≥ 36px apart, at the desk and the phone.
     const NEIGHBOURS: [string, string][] = [
-      ["route", "reach-key"],
-      ["route", "reach-command"],
       ["reach-key", "reach-password"],
       ["reach-password", "reach-by-hand"],
       ["reach-key", "reach-by-hand"],
@@ -476,6 +544,7 @@ async function run(kit: Kit): Promise<void> {
 
     await keyboardUp(kit, fleet, dashboard);
     await webkitFocus(kit, fleet, dashboard);
+    await tabsFit(kit, fleet, dashboard);
   } finally {
     holdOff();
     // A held install's `uname` became `sleep 3017` on the machine: whatever
@@ -532,7 +601,7 @@ async function walk(
   const note = (state: string, at: Reading) => {
     ladder[state] = at.height;
     if (at.overflow > 0.5) {
-      scrolls.push(`${state} runs ${at.overflow}px past its box`);
+      scrolls.push(`${state} runs ${at.overflow}px past its box (${at.held})`);
     }
     kit.check(
       `${leg}: ${state} is reached (data-step ${at.step}), ${at.height}px tall`,
@@ -542,22 +611,23 @@ async function walk(
   };
   await clearInstalls(fleet);
 
-  // A: Route.
-  await setDraft(fleet, { route: null });
-  await openWindow(page, dashboard, "new");
-  note(
-    "route",
-    await settled(page, "route", "Can the hub sign in to it over SSH?")
-  );
-
-  // B: Reach over SSH, the hub with no key: the Sign in line gives way, Add machine waits.
-  // Out of the hub's ~/.ssh altogether: any id_*.pub there is a key the hub would use.
+  // A: no way in chosen yet: the window opens on its details, Over SSH, no
+  // question first. The hub with no key: the Sign in line gives way, Add
+  // machine waits. Out of the hub's ~/.ssh altogether: any id_*.pub there is
+  // a key the hub would use.
   const aside = join(fleet.sandbox, "hub-key-aside");
   renameSync(`${options.hubKey}.pub`, `${aside}.pub`);
   renameSync(options.hubKey, aside);
-  await page.locator(`${WINDOW} button[data-route=ssh]`).click();
+  await setDraft(fleet, { route: null });
+  await openWindow(page, dashboard, "new");
   const noKey = await settled(page, "reach", "The hub has no SSH key yet");
   note("reach-no-key", noKey);
+  const opensOn = await chosenTab(page);
+  kit.check(
+    `${leg}: with no way in chosen the window opens straight on its details, the Over SSH tab chosen, no question first`,
+    opensOn === "Over SSH" && !noKey.text.includes("Can the hub"),
+    `${opensOn}; ${noKey.text.slice(0, 120)}`
+  );
   const waits = await page.evaluate((win) => {
     const button = [
       ...document.querySelectorAll<HTMLButtonElement>(`${win} button`),
@@ -754,12 +824,158 @@ async function walk(
     timeout: 10_000,
   });
 
+  // A modal holds while it is open: a press on the scrim leaves it open
+  // with what was typed; × just closes it, and on the draft nothing parks
+  // (nothing has started). The machines list's Add machine, which names no
+  // way in, opens it again on Over SSH, the typing kept (the hub's draft).
+  await page.fill("#connect-target", "half@typed");
+  await page.waitForTimeout(700);
+  await pressOutside(page, view);
+  await page.waitForTimeout(400);
+  const held = await page.evaluate(
+    (win) => ({
+      open: document.querySelector<HTMLElement>(win)?.dataset.state === "open",
+      target:
+        document.querySelector<HTMLInputElement>("#connect-target")?.value ??
+        "",
+    }),
+    WINDOW
+  );
+  kit.check(
+    `${leg}: a press on the scrim leaves the window open with what was typed`,
+    held.open && held.target === "half@typed",
+    JSON.stringify(held)
+  );
+  const before = (await installs(fleet)).installs.length;
+  await page.locator(CLOSE).click();
+  await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+    timeout: 10_000,
+  });
+  await page.waitForTimeout(400);
+  const closedDraft = {
+    installs: (await installs(fleet)).installs.length,
+    rows: await page.locator("[data-install-row]").count(),
+    url: new URL(page.url()).searchParams.get("install"),
+  };
+  kit.check(
+    `${leg}: × on the draft just closes it: nothing parks, no install, no row, the URL names nothing`,
+    closedDraft.installs === before &&
+      closedDraft.rows === 0 &&
+      closedDraft.url === null,
+    JSON.stringify({ before, ...closedDraft })
+  );
+  await editDraft(fleet, { route: "command" });
+  await page.waitForTimeout(300);
+  await addFromList(page, view);
+  await settled(page, "reach", "Sign in");
+  const fromList = {
+    tab: await chosenTab(page),
+    target: await page.inputValue("#connect-target"),
+  };
+  kit.check(
+    `${leg}: the machines list's Add machine, naming no way in, opens on Over SSH with the typing kept`,
+    fromList.tab === "Over SSH" && fromList.target === "half@typed",
+    JSON.stringify(fromList)
+  );
+
+  // Each tab keeps what was typed in it while the other shows, and a reload
+  // opens the window on the tab it stood on, both tabs' details kept. The
+  // command tab's input is its address: the hub's read carries two here (a
+  // workspace's machine lists none), and the second is chosen.
+  const local = fleet.base.replace("127.0.0.1", "localhost");
+  await page.route(isJoinRead, async (route) => {
+    const response = await route.fetch();
+    const joinInfo = (await response.json()) as {
+      addresses: { label: string; url: string }[];
+    };
+    await route.fulfill({
+      response,
+      json: {
+        ...joinInfo,
+        addresses: [
+          ...joinInfo.addresses,
+          { label: "probe0", url: fleet.base },
+          { label: "On this network", url: local },
+        ],
+      },
+    });
+  });
+  await page.locator(CLOSE).click();
+  await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+    timeout: 10_000,
+  });
+  await openWindow(page, dashboard, "new");
+  await settled(page, "reach", "Sign in");
+  await fillPort(page, 2200);
+  await pickTab(page, "By a command");
+  await settled(page, "reach", "It reaches the hub at");
+  await page.waitForSelector(`${WINDOW} [data-address=local] input:enabled`, {
+    timeout: 10_000,
+  });
+  await page.locator(`${WINDOW} [data-address=local] input`).check();
+  await pickTab(page, "Over SSH");
+  await settled(page, "reach", "Sign in");
+  const sshKept = {
+    target: await page.inputValue("#connect-target"),
+    port: await page.inputValue("#connect-port").catch(() => "(no field)"),
+  };
+  await pickTab(page, "By a command");
+  await settled(page, "reach", "It reaches the hub at");
+  const chosenAddress = () =>
+    page.evaluate(
+      (win) =>
+        document
+          .querySelector<HTMLElement>(`${win} [data-address] input:checked`)
+          ?.closest<HTMLElement>("[data-address]")?.dataset.address ?? "",
+      WINDOW
+    );
+  const commandKept = await chosenAddress();
+  await page.waitForTimeout(700);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await settled(page, "reach", "It reaches the hub at");
+  // The addresses stand once the window's read of them lands.
+  await page
+    .waitForSelector(`${WINDOW} [data-address] input:checked`, {
+      timeout: 10_000,
+    })
+    .catch(() => undefined);
+  const afterReload = {
+    tab: await chosenTab(page),
+    address: await chosenAddress(),
+  };
+  await pickTab(page, "Over SSH");
+  await settled(page, "reach", "Sign in");
+  const sshAfterReload = {
+    target: await page.inputValue("#connect-target"),
+    port: await page.inputValue("#connect-port").catch(() => "(no field)"),
+  };
+  kit.check(
+    `${leg}: switching tabs keeps what was typed in each (SSH's address and port, the command's chosen address)`,
+    sshKept.target === "half@typed" &&
+      sshKept.port === "2200" &&
+      commandKept === "local",
+    JSON.stringify({ sshKept, commandKept })
+  );
+  kit.check(
+    `${leg}: a reload opens the window on the tab it stood on, both tabs' details kept`,
+    afterReload.tab === "By a command" &&
+      afterReload.address === "local" &&
+      sshAfterReload.target === "half@typed" &&
+      sshAfterReload.port === "2200",
+    JSON.stringify({ afterReload, sshAfterReload })
+  );
+  await page.unroute(isJoinRead);
+  await editDraft(fleet, { port: "", address: null });
+  await page.waitForFunction(() => !document.querySelector("#connect-port"), {
+    timeout: 10_000,
+  });
+
   // B: the key put there by hand.
   await choose(page, "Sign in", "I'll put the key there myself");
   note("reach-by-hand", await settled(page, "reach", "authorized_keys"));
 
   // B: by a command.
-  await choose(page, "Bring it in", "by a command");
+  await pickTab(page, "By a command");
   note("reach-command", await settled(page, "reach", "It reaches the hub at"));
 
   // (14) and (10): the window reads the hub's addresses once per opening, as Reach shows;
@@ -782,7 +998,7 @@ async function walk(
         })
       : route.continue()
   );
-  await page.focus(`${WINDOW} [data-slot=close]`);
+  await page.focus(CLOSE);
   await page.keyboard.press("Escape");
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
@@ -853,7 +1069,7 @@ async function walk(
   );
   await page.unroute(isJoinRead);
   // One open, one read: closed and opened again on the SSH route.
-  await page.focus(`${WINDOW} [data-slot=close]`);
+  await page.focus(CLOSE);
   await page.keyboard.press("Escape");
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
@@ -871,7 +1087,7 @@ async function walk(
   );
 
   // C: Running over SSH, held at its fetch, started from the window.
-  await choose(page, "Bring it in", "over SSH");
+  await pickTab(page, "Over SSH");
   await choose(page, "Sign in", "with the hub's key");
   await page.fill("#connect-target", options.target);
   await fillPort(page, options.port);
@@ -929,16 +1145,18 @@ async function walk(
       .join("; ")}`
   );
 
-  // The row stands in the band from the start: the machines card on the desk,
-  // opened under the window. A phone's band is in its navigation sheet,
-  // which the drawer stands over; it is read there once the window is parked.
-  if (view === "desk") {
-    kit.check(
-      `${leg}: the install's row is in the band from the start, before any dismiss`,
-      await rowShown(page, view, id),
-      `row ${id}`
-    );
-  }
+  // The install counts in the bar's machines item from the start, under the
+  // modal's scrim, before any close: its row in the band is read once the
+  // window is minimized (nothing under a modal can be opened).
+  const barSays = await page
+    .locator("[data-machines]")
+    .first()
+    .getAttribute("aria-label");
+  kit.check(
+    `${leg}: the bar's machines item counts the install being added from the start, under the modal`,
+    (barSays ?? "").includes("1 being added"),
+    `${barSays}`
+  );
 
   // A reload with the window open on the running install: the same step and details.
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -1059,7 +1277,7 @@ async function walk(
     target: options.target,
     port: String(options.port),
   });
-  await page.focus(`${WINDOW} [data-slot=close]`);
+  await page.focus(CLOSE);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);
   await openWindow(page, dashboard, "new");
@@ -1085,31 +1303,39 @@ async function walk(
       .join(", ")}`
   );
 
-  // Esc parks it into its row (scrubbed at the desk in light); the row is live; a press brings it back.
-  // On the desk the band is the machines card, opened under the window; a
-  // phone's is its navigation sheet, opened once the drawer has gone (a
-  // press there is a press outside the drawer, which dismisses it).
-  if (view === "desk") {
-    await rowShown(page, view, id);
-  }
-  if (view === "desk" && theme === "light") {
-    await scrubFlight(kit, page, id);
-  } else {
-    await page.focus(`${WINDOW} [data-slot=close]`);
-    await page.keyboard.press("Escape");
-  }
+  // Esc minimizes it while it works: on the desk into the bar's machines
+  // item (no card stands open under a modal). The row is live in the band,
+  // a reload leaves it minimized, and a press on the row brings the modal
+  // back on its running step; closed again with the band open behind it, it
+  // flies into the row (scrubbed at the desk in light).
+  await page.focus(CLOSE);
+  await page.keyboard.press("Escape");
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
   });
   const row = `[data-install-row="${id}"] [data-slot=step] >> visible=true`;
   await rowShown(page, view, id);
-  const before = await page.locator(row).first().innerText();
+  const firstSaid = await page.locator(row).first().innerText();
   await page.waitForTimeout(2100);
   const later = await page.locator(row).first().innerText();
   kit.check(
-    `${leg}: after Esc the install's row is live: its step text changes on the engine`,
-    before !== later && FETCHING.test(later),
-    `${before} → ${later}`
+    `${leg}: closed while it works, the install's row is live: its step text changes on the engine`,
+    firstSaid !== later && FETCHING.test(later),
+    `${firstSaid} → ${later}`
+  );
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  const stillMinimized = {
+    open: await page.locator(WINDOW).count(),
+    url: new URL(page.url()).searchParams.get("install"),
+    shown: await rowShown(page, view, id),
+  };
+  kit.check(
+    `${leg}: a reload leaves a minimized install minimized: no window, its row in the band`,
+    stillMinimized.open === 0 &&
+      stillMinimized.url === null &&
+      stillMinimized.shown,
+    JSON.stringify(stillMinimized)
   );
   await page
     .locator(`[data-install-row="${id}"] >> visible=true`)
@@ -1117,11 +1343,17 @@ async function walk(
     .click();
   const back = await settled(page, "running", "Fetching the signed build");
   kit.check(
-    `${leg}: a press on the row reopens the window at the same step`,
+    `${leg}: a press on the row reopens the modal on its running step, the same install`,
     new URL(page.url()).searchParams.get("install") === id &&
       back.step === "running",
     back.text.slice(0, 100)
   );
+  if (view === "desk" && theme === "light") {
+    await scrubFlight(kit, page, id);
+    await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+      timeout: 10_000,
+    });
+  }
 
   // The forced failure. A held install's `uname` has become its `sleep`,
   // which no release ends: it is stopped and goes, and the same machine is
@@ -1196,8 +1428,16 @@ async function walk(
     )
   );
   if (view === "desk") {
-    await rowShown(page, view, failedId);
-    rowWords = await readRow(page, failedId);
+    // Nothing under a modal opens: the window closes into its row, the row
+    // is read in the band, and a press on it opens the window again.
+    await closeAndRead(
+      page,
+      view,
+      failedId,
+      "Failed at Fetching the signed build"
+    ).then((words) => {
+      rowWords = words;
+    });
   }
   kit.check(
     `${leg}: a forced failure says the Problem's words in the window and on the row, never as a toast`,
@@ -1234,18 +1474,26 @@ async function walk(
     JSON.stringify(alerts)
   );
 
-  // (1) Dismissing parks the outcome: a press outside, × and Esc each close
-  // the window, the install stays on the hub, and its row reopens it with Retry.
+  // (1) A press on the scrim leaves the outcome open; × and Esc each close
+  // it into its row, the install stays on the hub, and the row reopens it
+  // with Retry.
+  await pressOutside(page, view);
+  await page.waitForTimeout(500);
+  const scrimHeld = await read(page);
+  kit.check(
+    `${leg}: (1) a press on the scrim leaves the failed install's window open on its outcome`,
+    scrimHeld?.step === "outcome" &&
+      (await page.locator(`${WINDOW}[data-state=open]`).count()) === 1,
+    `${scrimHeld?.step}`
+  );
   const parks: string[] = [];
   let parked = true;
-  for (const how of ["a press outside", "×", "Esc"] as const) {
-    if (how === "a press outside") {
+  for (const how of ["×", "Esc"] as const) {
+    if (how === "×") {
       // biome-ignore lint/performance/noAwaitInLoops: one way of closing after another, each on the window the last reopened
-      await pressOutside(page, view);
-    } else if (how === "×") {
-      await page.locator(`${WINDOW} [data-slot=close]`).click();
+      await page.locator(CLOSE).click();
     } else {
-      await page.focus(`${WINDOW} [data-slot=close]`);
+      await page.focus(CLOSE);
       await page.keyboard.press("Escape");
     }
     await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
@@ -1275,7 +1523,7 @@ async function walk(
     parked &&= kept === "failed" && retry;
   }
   kit.check(
-    `${leg}: (1) a press outside, × and Esc each park the failed install: it stays, and its row reopens it with Retry`,
+    `${leg}: (1) × and Esc each close the failed install into its row: it stays, and its row reopens it with Retry`,
     parked,
     parks.join("; ")
   );
@@ -1451,7 +1699,7 @@ async function walk(
         "run,install,listed,harnesses",
     `after the fetch ${JSON.stringify(afterFetch)}; after the join ${afterJoin?.state} ${JSON.stringify(afterJoin?.steps.map((one) => one.step))}`
   );
-  await page.focus(`${WINDOW} [data-slot=close]`);
+  await page.focus(CLOSE);
   await page.keyboard.press("Escape");
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
@@ -1487,8 +1735,12 @@ async function walk(
   const checkInstall = (await installs(fleet)).installs.find(
     (one) => one.id === checkId
   );
-  await rowShown(page, view, checkId);
-  const checkRow = await readRow(page, checkId);
+  const checkRow = await closeAndRead(
+    page,
+    view,
+    checkId,
+    "Failed at Installing on it"
+  );
   kit.check(
     `${leg}: (2) a command install whose installer fails a check fails at its own step, Installing on it, in the window and on its row`,
     checkInstall?.problemStep === "install" &&
@@ -1605,6 +1857,31 @@ const readRow = (page: Page, id: string): Promise<string> =>
     .innerText()
     .catch(() => "");
 
+/**
+ * The install's row as the band says it, read with the window closed into
+ * it (nothing under a modal opens), then the window opened again from the
+ * row onto the outcome saying `has`.
+ */
+async function closeAndRead(
+  page: Page,
+  view: "desk" | "phone",
+  id: string,
+  has: string
+): Promise<string> {
+  await page.locator(CLOSE).click();
+  await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+    timeout: 10_000,
+  });
+  await rowShown(page, view, id);
+  const words = await readRow(page, id);
+  await page
+    .locator(`[data-install-row="${id}"] >> visible=true`)
+    .first()
+    .click();
+  await settled(page, "outcome", has);
+  return words;
+}
+
 /** Whether the install's row is on screen in the band: the machines card on the desk, the sidebar on the phone. */
 async function rowShown(
   page: Page,
@@ -1638,14 +1915,16 @@ async function rowShown(
 }
 
 /**
- * The window's flight into its row, on the clock: caught as Esc starts it,
- * read at 0, 0.5 and 1. At 0 it stands where it stood; at 1 its drawn box is
- * the row's; at 0.5 between the two; the row is hidden while it flies.
+ * The window's flight as it minimizes, on the clock: caught as Esc starts
+ * it, read at 0, 0.5 and 1. Its goal is the install's row where the band
+ * stands open behind the modal, else the bar's machines item. At 0 it
+ * stands where it stood; at 1 its drawn box is the goal's; at 0.5 between
+ * the two; a row it flies into is hidden while it flies.
  */
 async function scrubFlight(kit: Kit, page: Page, id: string): Promise<void> {
   const clock = await Clock.on(page);
   const start = await page.locator(WINDOW).boundingBox();
-  await page.focus(`${WINDOW} [data-slot=close]`);
+  await page.focus(CLOSE);
   const runs = await clock.catchRuns(
     () => page.keyboard.press("Escape"),
     WINDOW
@@ -1660,19 +1939,15 @@ async function scrubFlight(kit: Kit, page: Page, id: string): Promise<void> {
         const parked = [...document.querySelectorAll<HTMLElement>(row)].find(
           (each) => each.getBoundingClientRect().width > 0
         );
-        const goal = parked?.getBoundingClientRect();
+        const goal = (
+          parked ?? document.querySelector<HTMLElement>("[data-machines]")
+        )?.getBoundingClientRect();
         return {
           window: box ? [box.left, box.top, box.width, box.height] : null,
-          row: goal ? [goal.left, goal.top, goal.width, goal.height] : null,
+          goal: goal ? [goal.left, goal.top, goal.width, goal.height] : null,
+          into: parked ? "row" : "bar",
           rowHidden: parked
             ? getComputedStyle(parked).visibility === "hidden"
-            : null,
-          opacity: document.querySelector<HTMLElement>(win)
-            ? Number(
-                getComputedStyle(
-                  document.querySelector<HTMLElement>(win) as HTMLElement
-                ).opacity
-              )
             : null,
         };
       },
@@ -1708,12 +1983,12 @@ async function scrubFlight(kit: Kit, page: Page, id: string): Promise<void> {
     );
   const startBox = start ? [start.x, start.y, start.width, start.height] : null;
   kit.check(
-    "desk light: the window's flight into its row, scrubbed: at 0 where it stood, at 0.5 between, at 1 the row's box, the row hidden while it flies",
+    "desk light: the modal's flight as it minimizes, scrubbed: at 0 where it stood, at 0.5 between, at 1 its goal's box (the install's row, the row hidden while it flies, or the bar's machines item)",
     runs.length > 0 &&
       near(zero.window, startBox) &&
-      between(half.window, startBox, one.row) &&
-      near(one.window, one.row, 3) &&
-      zero.rowHidden === true,
+      between(half.window, startBox, one.goal) &&
+      near(one.window, one.goal, 3) &&
+      (zero.into === "bar" || zero.rowHidden === true),
     JSON.stringify({ runs: runs.length, start: startBox, zero, half, one })
   );
 }
@@ -1750,11 +2025,7 @@ async function keyboardUp(
         ),
       "authorized_keys",
     ],
-    [
-      "command",
-      () => setDraft(fleet, { route: "command" }).then(() => undefined),
-      "It reaches the hub at",
-    ],
+    // By a command has no field to type in, so no keyboard stands over it.
   ];
   const said: string[] = [];
   let fits = true;
@@ -1776,42 +2047,41 @@ async function keyboardUp(
       `${name} ${at.height} in ${room} (top ${at.top.toFixed(1)}, overflow ${at.overflow})`
     );
   }
-  // The drawer follows a finger down its grabber, and let go past 30% of its height it is dismissed.
-  const dragged = await page.evaluate(async (win) => {
-    const grabber = document.querySelector<HTMLElement>(
-      `${win} [data-slot=grabber]`
+  // The sheet follows a finger down its grabber and, let go past 30% of its
+  // height, is put away as its × puts it (the kit sheet's own drag).
+  const hand = await handOn(page);
+  const grab = await page
+    .locator(`${WINDOW} [data-slot=dialog-grabber]`)
+    .boundingBox();
+  const tall = (await page.locator(WINDOW).boundingBox())?.height ?? 0;
+  let followed = "";
+  if (grab) {
+    const x = grab.x + grab.width / 2;
+    const y = grab.y + grab.height / 2;
+    await hand.down(x, y);
+    await hand.move(x, y + tall * 0.1);
+    await hand.move(x, y + tall * 0.2);
+    followed = await page.evaluate(
+      (win) => document.querySelector<HTMLElement>(win)?.style.transform ?? "",
+      WINDOW
     );
-    const drawer = document.querySelector<HTMLElement>(win);
-    if (!(grabber && drawer)) {
-      return { followed: null, gone: false };
-    }
-    const box = grabber.getBoundingClientRect();
-    const height = drawer.offsetHeight;
-    const at = (y: number, type: string) =>
-      grabber.dispatchEvent(
-        new PointerEvent(type, {
-          bubbles: true,
-          pointerId: 7,
-          pointerType: "touch",
-          clientX: box.left + box.width / 2,
-          clientY: y,
-        })
-      );
-    at(box.top, "pointerdown");
-    at(box.top + height * 0.2, "pointermove");
-    const followed = drawer.style.translate;
-    at(box.top + height * 0.5, "pointermove");
-    at(box.top + height * 0.5, "pointerup");
-    await new Promise((done) => setTimeout(done, 600));
-    return { followed, gone: !document.querySelector(win) };
-  }, WINDOW);
+    await hand.move(x, y + tall * 0.5);
+    await hand.up();
+  }
+  await hand.done();
+  const gone = await page
+    .waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
+      timeout: 8000,
+    })
+    .then(() => true)
+    .catch(() => false);
   kit.check(
-    "phone: the drawer follows a finger down its grabber and, let go past 30% of its height, is dismissed",
-    Boolean(dragged.followed) && dragged.gone,
-    JSON.stringify(dragged)
+    "phone: the sheet follows a finger down its grabber and, let go past 30% of its height, is put away",
+    Boolean(grab) && followed !== "" && gone,
+    JSON.stringify({ grabber: Boolean(grab), followed, gone })
   );
   kit.check(
-    `phone, keyboard up (visual viewport ${KEYBOARD_UP}): every Reach variant stands inside the visual viewport with nothing scrolling`,
+    `phone, keyboard up (visual viewport ${KEYBOARD_UP}): every Reach variant with a field to type in (Over SSH, each sign-in) stands inside the visual viewport with nothing scrolling`,
     fits,
     said.join("; ")
   );
@@ -1871,6 +2141,253 @@ async function webkitFocus(
   if (existsSync(join(kit.out, "unused"))) {
     rmSync(join(kit.out, "unused"));
   }
+}
+
+/**
+ * Each entry point that names a way in opens the window on that tab: the
+ * empty fleet's two cards on Home, and its machines list's two ways (in the
+ * bar's machines card on a desk, the navigation sheet on a phone). Run
+ * before the fleet has a machine, while both offer their ways. × closes
+ * each, on the draft, with nothing parked.
+ */
+async function entryTabs(
+  kit: Kit,
+  fleet: KitFleet,
+  dashboard: string
+): Promise<void> {
+  await clearInstalls(fleet);
+  for (const view of ["desk", "phone"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const page = await kit.page(view, { theme: "light" });
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        errors.push(message.text().slice(0, 600));
+      }
+    });
+    const opened: string[] = [];
+    let right = true;
+    for (const where of ["home", "list"] as const) {
+      for (const way of ["By a command", "Over SSH"]) {
+        // biome-ignore lint/performance/noAwaitInLoops: one entry point after another, on one page
+        await open(page, `${dashboard}/`, "body");
+        if (where === "home") {
+          await page
+            .locator("[data-slot=icon-card] >> visible=true", { hasText: way })
+            .first()
+            .click();
+        } else {
+          if (view === "desk") {
+            await page.locator("[data-machines]").click();
+          } else {
+            await page
+              .getByRole("button", { name: OPEN_NAVIGATION })
+              .first()
+              .click();
+          }
+          await page
+            .locator("button[data-slot=row] >> visible=true", { hasText: way })
+            .first()
+            .click();
+        }
+        await settled(
+          page,
+          "reach",
+          way === "Over SSH" ? "Reach it at" : "It reaches the hub at"
+        ).catch(async (error: Error) => {
+          const seen = await page.evaluate(() => ({
+            url: location.href,
+            dialogs: document.querySelectorAll("[role=dialog]").length,
+            window: Boolean(document.querySelector("[data-connect-window]")),
+            cards: [
+              ...document.querySelectorAll<HTMLElement>(
+                "[data-slot=icon-card]"
+              ),
+            ].map((one) => one.innerText.replace(/\s+/g, " ").slice(0, 40)),
+            text: document.body.innerText.replace(/\s+/g, " ").slice(0, 300),
+          }));
+          throw new Error(
+            `${error.message}; ${where} "${way}" on ${view}: ${JSON.stringify(seen)}; page errors ${JSON.stringify(errors)}`
+          );
+        });
+        const tab = await chosenTab(page);
+        opened.push(`${where} "${way}" → ${tab}`);
+        right &&= tab === way;
+        await page.locator(CLOSE).click();
+        await page.waitForFunction(
+          (sel) => !document.querySelector(sel),
+          WINDOW,
+          { timeout: 10_000 }
+        );
+      }
+    }
+    kit.check(
+      `${view}: each entry point that names a way in opens the window on its tab (Home's cards, the machines list's ways)`,
+      right && opened.length === 4,
+      opened.join("; ")
+    );
+    await page.close();
+  }
+}
+
+/** Where a review's captures of the window are kept (the repo's captures/). */
+const CAPTURES = join(import.meta.dir, "../../../captures/add-machine");
+
+/**
+ * The tabs and each tab's details fit the window at 390, 680 and 1440, in
+ * Chromium and WebKit: the tab list and every tab's name inside the
+ * window, nothing past its edge or scrolling inside it, the window inside
+ * the viewport; and nothing outside the window moves while it stands, on
+ * either tab, against the same page with it closed. The hub's addresses
+ * read as a tailnet hub's would (a workspace's machine lists none), so the
+ * command tab holds its longest rows. Dark in Chromium at 390 and 1440,
+ * each tab is captured for review (captures/add-machine).
+ */
+async function tabsFit(
+  kit: Kit,
+  fleet: KitFleet,
+  dashboard: string
+): Promise<void> {
+  await clearInstalls(fleet);
+  mkdirSync(CAPTURES, { recursive: true });
+  const saved: string[] = [];
+  const said: string[] = [];
+  let fits = true;
+  let still = true;
+  const landmarks = (page: Page) =>
+    page.evaluate(
+      (win) =>
+        [
+          ...document.querySelectorAll<HTMLElement>(
+            "header, main, nav, aside, [data-machines]"
+          ),
+        ]
+          .filter((one) => !one.closest(win) && one.checkVisibility())
+          .map((one) => {
+            const box = one.getBoundingClientRect();
+            return `${one.tagName}:${box.left.toFixed(1)},${box.top.toFixed(1)},${box.width.toFixed(1)},${box.height.toFixed(1)}`;
+          })
+          .join("|"),
+      WINDOW
+    );
+  const measure = (page: Page) =>
+    page.evaluate(
+      ([win, body]) => {
+        const node = document.querySelector<HTMLElement>(win);
+        const grid = document.querySelector<HTMLElement>(body);
+        const list = node?.querySelector<HTMLElement>("[role=tablist]");
+        if (!(node && grid && list)) {
+          return null;
+        }
+        const box = node.getBoundingClientRect();
+        const strip = list.getBoundingClientRect();
+        const tabs = [...list.querySelectorAll<HTMLElement>("[role=tab]")];
+        return {
+          inView:
+            box.left >= -0.5 &&
+            box.top >= -0.5 &&
+            box.right <= innerWidth + 0.5 &&
+            box.bottom <= innerHeight + 0.5,
+          stripInside:
+            strip.left >= box.left - 0.5 && strip.right <= box.right + 0.5,
+          namesWhole: tabs.every(
+            (tab) => tab.scrollWidth <= tab.clientWidth + 1
+          ),
+          across: grid.scrollWidth - grid.clientWidth,
+          down: grid.scrollHeight - grid.clientHeight,
+          size: `${box.width.toFixed(0)}×${box.height.toFixed(0)}`,
+        };
+      },
+      [WINDOW, BODY] as const
+    );
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["phone", "narrowDesk", "desk"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+      const page = await kit.page(view, { engine, theme: "dark" });
+      await page.route(isJoinRead, async (route) => {
+        const response = await route.fetch();
+        const joinInfo = (await response.json()) as Record<string, unknown>;
+        await route.fulfill({
+          response,
+          json: {
+            ...joinInfo,
+            addresses: [
+              { label: "Tailscale", url: "http://100.101.102.103:7777" },
+              {
+                label: "Tailscale DNS",
+                url: "http://build-hub.example-tailnet.ts.net:7777",
+              },
+              { label: "eth0", url: "http://192.168.1.20:7777" },
+              { label: "On this network", url: "http://build-hub.local:7777" },
+            ],
+          },
+        });
+      });
+      await setDraft(fleet, {
+        route: "ssh",
+        target: "deploy@build-01.example.net",
+      });
+      await openWindow(page, dashboard, "new");
+      const shown: string[] = [];
+      for (const [tab, has, file] of [
+        ["Over SSH", "Reach it at", "ssh"],
+        ["By a command", "It reaches the hub at", "command"],
+      ] as const) {
+        // biome-ignore lint/performance/noAwaitInLoops: one tab after the other, each measured where it stands
+        if ((await chosenTab(page)) !== tab) {
+          await pickTab(page, tab);
+        }
+        await settled(page, "reach", has);
+        await page.mouse.move(2, 2);
+        const at = await measure(page);
+        shown.push(await landmarks(page));
+        const ok = Boolean(
+          at?.inView &&
+          at.stripInside &&
+          at.namesWhole &&
+          at.across <= 0.5 &&
+          at.down <= 0.5
+        );
+        fits &&= ok;
+        said.push(`${engine} ${view} ${tab}: ${JSON.stringify(at)}`);
+        if (engine === "chromium" && view !== "narrowDesk") {
+          const name = `${view}-dark-${file}.png`;
+          await page.screenshot({ path: join(CAPTURES, name) });
+          saved.push(`captures/add-machine/${name}`);
+        }
+      }
+      await page.locator(CLOSE).click();
+      await page.waitForFunction(
+        (sel) => !document.querySelector(sel),
+        WINDOW,
+        {
+          timeout: 10_000,
+        }
+      );
+      await page.waitForTimeout(400);
+      const closed = await landmarks(page);
+      const moved = shown.some((one) => one !== closed);
+      still &&= !moved;
+      if (moved) {
+        said.push(
+          `${engine} ${view} moved: open ${JSON.stringify(shown)} closed ${closed}`
+        );
+      }
+      await page.close();
+    }
+  }
+  kit.check(
+    "the tabs and each tab's details fit the window at 390, 680 and 1440 in Chromium and WebKit: inside the viewport, nothing past the window's edge, no tab name cut, nothing scrolling",
+    fits,
+    said.join("; ")
+  );
+  kit.check(
+    "nothing outside the window moves while it stands, on either tab, at 390, 680 and 1440 in Chromium and WebKit",
+    still,
+    said.filter((line) => line.includes("moved")).join("; ") || "still"
+  );
+  kit.note(`captures for review: ${saved.join(", ")}`);
 }
 
 export default { name: "connect-machine", run } satisfies Spec;

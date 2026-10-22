@@ -5,7 +5,7 @@
    * New project: Caw at 80px over a title and one line.
    *
    * - `none`, no machine registered: the two ways in as icon cards, each
-   *   opening Add machine's window on its route (connect/).
+   *   opening Add machine on its tab (connect/).
    * - `offline`, machines registered and none online: one line and Check
    *   machines, which opens the top bar's Machines popover, where they are
    *   listed greyed.

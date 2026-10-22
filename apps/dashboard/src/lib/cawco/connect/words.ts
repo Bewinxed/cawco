@@ -151,6 +151,15 @@ export function problemWords(
         fix: "then restart sshd there.",
         next: `Then Retry. ${left(install, name)}`,
       };
+    case "penalized":
+      return {
+        headline,
+        why: `${name}'s SSH server turned the hub away for now: it answered "Not allowed at this time". OpenSSH holds back an address after connections from it that never signed in, or failed to.`,
+        where: null,
+        command: null,
+        fix: "Wait a minute. OpenSSH lets an address back after 15 seconds at first, and after up to 10 minutes if such connections keep coming.",
+        next: `Then Retry. ${left(install, name)}`,
+      };
     case "port-held":
       return {
         headline,

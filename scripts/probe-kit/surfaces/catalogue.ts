@@ -2360,15 +2360,16 @@ export const SURFACES: Surface[] = [
         ready: { shows: SUB_MENU, says: PAUSE_ENDS },
       },
       {
-        // The machines list's Add machine: its window on Route, then on
-        // Reach by a command (the hub's addresses, one per kind, and the line).
+        // The machines list's Add machine: the modal on its Over SSH tab,
+        // then By a command (the hub's addresses, one per kind, and the line).
         name: "add-machine",
         widths: ["desk"],
         act: async (page) => {
           await press(MACHINES)(page);
           await press(ADD_MACHINE)(page);
           await page
-            .locator(`${CONNECT_WINDOW} button[data-route=command]`)
+            .locator(CONNECT_WINDOW)
+            .getByRole("tab", { name: "By a command" })
             .click();
         },
         root: "body",
@@ -4618,8 +4619,8 @@ export const SURFACES: Surface[] = [
         },
       },
       {
-        // Its first way to connect one pressed: Add machine's window on
-        // Reach over SSH, a popover on a desk and the drawer on a phone.
+        // Its first way to connect one pressed: Add machine on its Over SSH
+        // tab, the modal on a desk and its sheet on a phone.
         name: "connect",
         hub: "unregistered",
         act: async (page) => {

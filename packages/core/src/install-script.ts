@@ -4,6 +4,15 @@ import { INSTALL_CODE_ENV } from "./install";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { RELEASE_PUBLIC_KEY } from "./release-key";
 
+/** What a hub's script installs: the hub it joins, the build it offers its fleet, and the command route's code. */
+export interface InstallJoin {
+  /** The command route's install's one-time code (hub installs.ts). */
+  code?: string;
+  hub: string;
+  /** The build the hub offers its fleet: its update channel, and that channel's newest (hub binary-updates.ts `offer`). */
+  offer: { channel: "stable" | "nightly"; version: string };
+}
+
 const shellQuote = (value: string): string =>
   `'${value.replaceAll("'", `'\\''`)}'`;
 
@@ -23,23 +32,26 @@ const shellQuote = (value: string): string =>
  * has CawCo it reports the installed version and changes nothing, except that
  * the hub's own script moves a machine joined to a different hub.
  *
- * The script an SSH add runs (`sshAdd`) leaves the machine on the build the
- * hub offers its fleet, its update channel's newest (hub binary-updates.ts
- * `offer`), joined to this hub, whatever the machine ran and was joined to:
- * the add is the person asking for exactly that, and it has just given the
- * machine a key to prove (hub ssh-tunnels.ts `admit`), which only a build
- * that knows machine keys proves. One on that build already joins again
- * (`binary-rejoin`), before any check a download needs; any other build is
- * replaced by the channel's newest, installed as a first install is. Should
- * that install fail once its setup began, the
- * machine stays on the new build: removing it would leave the machine with
- * no CawCo at all, where it had one before.
+ * A hub's script (`join`), whichever way the machine joins (the dashboard's
+ * command, an SSH add, the line a first install prints for a hub it found),
+ * leaves the machine on the build the hub offers its fleet, its update
+ * channel's newest (hub binary-updates.ts `offer`), joined to this hub,
+ * whatever the machine ran and was joined to: the channel and the build are
+ * the offer's and nothing else's, so no way of joining can drift from
+ * another. A machine on that build already joins again (`binary-rejoin`),
+ * before any check a download needs; any other build is replaced by the
+ * channel's newest, installed as a first install is. Should that install
+ * fail once its setup began, the machine stays on the new build: removing
+ * it would leave the machine with no CawCo at all, where it had one before.
  *
- * A command route's script (`code`, hub installs.ts) carries its install's
- * one-time code: it hands it to `cawco binary-install` (whose join wait names
- * it to the hub, which admits that machine), and says its end to the hub
- * however it ends: its exit status, its refusal's words, and the host it
- * ran on.
+ * The command route's script (`join.code`, hub installs.ts) carries its
+ * install's one-time code: it hands it to `cawco binary-install` (whose join
+ * wait names it to the hub, which admits that machine), and says its end to
+ * the hub however it ends: its exit status, its refusal's words, and the
+ * host it ran on.
+ *
+ * A first hub's script (no `join`) installs the stable channel, or the one
+ * `CAWCO_CHANNEL` names.
  *
  * `origin` is the GitHub repository releases are published to. `releaseHost`
  * and `publicKey` exist so a proof can stand a local folder and a throwaway
@@ -47,21 +59,19 @@ const shellQuote = (value: string): string =>
  */
 export const generateInstallScript = ({
   origin,
-  hub,
   publicKey = RELEASE_PUBLIC_KEY,
   releaseHost,
-  sshAdd,
-  code,
+  join,
 }: {
-  /** The command route's install's one-time code (hub installs.ts). */
-  code?: string;
   origin: string;
-  hub?: string;
   publicKey?: string;
   releaseHost?: string;
-  /** The script an SSH add of this hub runs on the machine (hub join.ts `installCommand`): the hub's update channel and the build it offers on it. */
-  sshAdd?: { channel: "stable" | "nightly"; version: string };
+  /** A hub's script: the hub, the build it offers its fleet, and the command route's one-time code. */
+  join?: InstallJoin;
 }): string => {
+  const hub = join?.hub;
+  const code = join?.code;
+  const offer = join?.offer;
   if (!publicKey) {
     throw new Error(
       "No release public key is embedded: an installer cannot be generated before publishing is enabled. Set RELEASE_PUBLIC_KEY in packages/core/src/release-key.ts."
@@ -77,8 +87,14 @@ ${hub ? `  HUB=${shellQuote(hub)}\n` : ""}  REPO=${shellQuote(origin)}
   PUBLIC_KEY=${shellQuote(publicKey)}
   RELEASE_HOST=${shellQuote(releaseHost ?? "")}
   RELEASE_HOST="\${CAWCO_RELEASE_HOST:-$RELEASE_HOST}"
-  CHANNEL="\${CAWCO_CHANNEL:-${sshAdd?.channel ?? "stable"}}"
-${sshAdd ? `  OFFERED=${shellQuote(sshAdd.version)}\n` : ""}
+${
+  offer
+    ? `  CHANNEL=${shellQuote(offer.channel)}
+  OFFERED=${shellQuote(offer.version)}
+`
+    : `  CHANNEL="\${CAWCO_CHANNEL:-stable}"
+`
+}
   ROOT="\${XDG_DATA_HOME:-$HOME/.local/share}/cawco/binary"
   BIN_LINK="$HOME/.local/bin/cawco"
   WORK=""
@@ -87,7 +103,7 @@ ${sshAdd ? `  OFFERED=${shellQuote(sshAdd.version)}\n` : ""}
   CREATED_VERSION=""
   SETUP_BEGAN=0
   LINGER_ENABLED=0
-  # An SSH add onto a machine that has CawCo: the build it ran, and its links, until the offered one replaces it.
+  # A join onto a machine that has CawCo: the build it ran, and its links, until the offered one replaces it.
   UPGRADE_FROM=""
   PREV_CURRENT=""
   PREV_KEEPER=""
@@ -171,12 +187,12 @@ ${
   }
 
   # A machine that has CawCo is not updated here: one way to update, and it is
-  # the app. An SSH add is the exception: it moves the machine to the build the
-  # hub offers, once that build is known (below).
+  # the app. Joining a hub is the exception: it moves the machine to the build
+  # the hub offers, once that build is known (below).
   if [ -f "$ROOT/installation.json" ]; then
     installed="$(sed -n 's/.*"installedVersion":"\\([^"]*\\)".*/\\1/p' "$ROOT/installation.json")"
 ${
-  sshAdd
+  offer
     ? `    if [ "$installed" = "$OFFERED" ]; then
       say "CawCo $OFFERED, the build this hub offers, is installed; joining the hub at $HUB again"
       "$ROOT/current/$EXE" binary-rejoin --hub "$HUB" </dev/null
@@ -187,18 +203,8 @@ ${
     PREV_CURRENT="$(readlink "$ROOT/current" 2>/dev/null || :)"
     PREV_KEEPER="$(readlink "$ROOT/keeper" 2>/dev/null || :)"
 `
-    : `    joined="$(sed -n 's/.*"hubUrl":"\\([^"]*\\)".*/\\1/p' "$ROOT/installation.json")"
-    channel="$(sed -n 's/.*"channel":"\\([^"]*\\)".*/\\1/p' "$ROOT/update-state.json" 2>/dev/null || :)"
-${
-  hub
-    ? `    if [ "$joined" != "$HUB" ]; then
-      say "moving this machine from $joined to the hub at $HUB"
-      "$ROOT/current/$EXE" binary-rejoin --hub "$HUB" </dev/null
-      return 0
-    fi
-`
-    : ""
-}    printf 'CawCo %s is already installed on this machine (channel: %s).\\n' "\${installed:-unknown}" "\${channel:-not reported yet}"
+    : `    channel="$(sed -n 's/.*"channel":"\\([^"]*\\)".*/\\1/p' "$ROOT/update-state.json" 2>/dev/null || :)"
+    printf 'CawCo %s is already installed on this machine (channel: %s).\\n' "\${installed:-unknown}" "\${channel:-not reported yet}"
     printf 'Updates are installed from the CawCo app, automatically when this machine is idle or with Install now. Nothing was changed.\\n'
     return 0
 `

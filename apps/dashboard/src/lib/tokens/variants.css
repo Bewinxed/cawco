@@ -229,6 +229,7 @@
 @custom-variant align-start (&[data-align="start"]);
 @custom-variant aria-busy-false (&[aria-busy="false"]);
 @custom-variant aria-checked-false (&[aria-checked="false"]);
+@custom-variant aria-controls-session-machines-popover (&[aria-controls="session-machines-popover"]);
 @custom-variant aria-current-false (&[aria-current="false"]);
 @custom-variant aria-current-page (&[aria-current="page"]);
 @custom-variant aria-disabled-false (&[aria-disabled="false"]);
@@ -502,6 +503,7 @@
 @custom-variant slot-page-head (&[data-slot="page-head"]);
 @custom-variant slot-page-scroll (&[data-slot="page-scroll"]);
 @custom-variant slot-page-thumb (&[data-slot="page-thumb"]);
+@custom-variant slot-pages (&[data-slot="pages"]);
 @custom-variant slot-pair (&[data-slot="pair"]);
 @custom-variant slot-pairing (&[data-slot="pairing"]);
 @custom-variant slot-palette-item (&[data-slot="palette-item"]);

@@ -45470,6 +45470,20 @@
                   "kind": {
                     "type": "string",
                     "enum": [
+                      "penalized"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
                       "sign-in"
                     ]
                   },

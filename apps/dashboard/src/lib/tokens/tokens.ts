@@ -328,7 +328,6 @@ export type TokenSize =
   | "size.c-toolbar-ctl"
   | "size.c-find-w"
   | "size.c-new-session-pop-w"
-  | "size.c-connect-max-h"
   | "size.c-step-rail-x"
   | "size.c-step-rail-top"
   | "size.c-step-rail-gap"

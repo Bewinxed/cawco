@@ -109,6 +109,12 @@ export type InstallProblem =
   | { kind: "unreachable"; detail: string }
   /** The machine's SSH host key is not the one the hub knew. */
   | { kind: "host-key"; host: string }
+  /**
+   * The machine's sshd turns the hub away for now ("Not allowed at this
+   * time", sshd_config(5) PerSourcePenalties): too many connections from the
+   * hub's address never signed in, or failed to.
+   */
+  | { kind: "penalized" }
   /** ssh refused the sign-in: `said` is ssh's own last words. */
   | { kind: "sign-in"; said: string }
   /** The machine's sshd will not carry the hub to it. */
@@ -376,6 +382,7 @@ const keysStay = (install: Install): string | null => {
 const CAUSE: Record<Exclude<InstallProblem["kind"], "check">, string> = {
   unreachable: "it didn't answer",
   "host-key": "its host key changed",
+  penalized: "its SSH server turned the hub away for now",
   "sign-in": "it refused the sign-in",
   forwarding: "its SSH server won't forward",
   exposed: "it would expose the hub",

@@ -4416,19 +4416,6 @@
       },
       "$description": "The New Session form as a popover at its trigger (the session strip's \"+\", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it (\"Opus 5.5 claude-opus-5-5\"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own."
     },
-    "c-connect-max-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 788,
-        "unit": "px"
-      },
-      "$description": "Add machine's window on the desk at its tallest: the viewport under the top bar less the screen's margin. Every step fits well inside it at 1440×900; on a short window (200% zoom, a landscape tablet) the window scrolls rather than leave its foot off screen.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "calc(100dvh - {size.c-top-bar-h} - {size.c-screen-margin})"
-        }
-      }
-    },
     "c-step-rail-x": {
       "$type": "dimension",
       "$value": {
@@ -4474,7 +4461,7 @@
         "value": 480,
         "unit": "px"
       },
-      "$description": "Add machine's window (connect/ConnectWindow) and its output sheet: the width at which the command route's longest address row (a Tailscale name and \"anywhere on the tailnet\") and the install's one line stand on one line each in the label and code roles, so no step of the window wraps a row and its height ladder holds."
+      "$description": "Add machine's raised body on the desk (the kit dialog's `connect` width, its tray's padding round it) and its output sheet: the width at which the command route's longest address row (a Tailscale name and \"anywhere on the tailnet\") and the install's one line stand on one line each in the label and code roles, so no step of the window wraps a row and its height ladder holds."
     },
     "c-panel-w": {
       "$type": "dimension",

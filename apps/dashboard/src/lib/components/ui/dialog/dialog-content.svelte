@@ -31,36 +31,45 @@
   });
 
   /** Its callers' widths past the phone, each as they drew it: a form, a
-      report (an error's whole text), a document (a diff). Every dialog is as
-      tall as its content up to the cap (`c-dialog-max-h`; the sheet's
-      85vh under the phone line), its body scrolling inside. */
+      report (an error's whole text), a document (a diff), Add machine (its
+      raised body `c-connect-w` wide, the tray's padding round it, so its
+      steps wrap as its height ladder was measured). Every dialog is as tall as its
+      content up to the cap (`c-dialog-max-h`; the sheet's 85vh under the
+      phone line), its body scrolling inside. */
   export const dialogContentVariants = tv({
     variants: {
       width: {
         form: "phone:max-w-128",
         report: "phone:max-w-168",
         document: "phone:max-w-320",
+        connect: "phone:max-w-[calc(var(--c-connect-w)+2*--spacing(1.5))]",
       },
     },
   });
   /**
    * The raised body: a frame that holds Close where it stands, and the grid
    * of the caller's content that scrolls inside it, its first row (the
-   * header) kept clear of Close. `flush`, for what draws its own padding,
-   * gaps and clearance (the safe area still kept on the sheet); `document`,
-   * for a document (a diff) that lays itself out in a column and scrolls in
-   * its own viewer.
+   * header) kept clear of Close. Under a finger a control's touch area
+   * reaches past its box (`touch-hit`, to the 44px floor: 10.5px under the
+   * smallest), which the grid would count as content and scroll by: there
+   * the grid keeps that reach (`--hit-foot`) inside its foot, and the body
+   * gives it back from its own, so nothing moves and nothing scrolls.
+   * `flush`, for what draws its own padding, gaps and clearance (the safe
+   * area still kept on the sheet); `document`, for a document (a diff) that
+   * lays itself out in a column and scrolls in its own viewer.
    */
   export const dialogBodyVariants = tv({
     slots: {
-      frame: "relative flex min-h-0 flex-1 flex-col text-body text-ink-strong",
-      grid: "grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain",
+      frame:
+        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--space-5)-var(--hit-foot))] text-body text-ink-strong coarse:[--hit-foot:calc((var(--c-touch-floor)-var(--c-btn-h-xs))/2+0.5px)] max-phone:coarse:pb-[calc(1rem+var(--safe-bottom)-var(--hit-foot))]",
+      grid: "grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain coarse:pb-(--hit-foot)",
     },
     variants: {
       bodyPad: {
         flush: {
-          frame: "p-0 phone:p-0 max-phone:px-0 max-phone:pb-(--safe-bottom)",
-          grid: "gap-0",
+          frame:
+            "p-0 phone:p-0 phone:coarse:pb-0 max-phone:px-0 max-phone:coarse:pb-(--safe-bottom) max-phone:pb-(--safe-bottom)",
+          grid: "gap-0 coarse:pb-0",
         },
       },
       body: { document: { grid: "flex flex-col overflow-hidden" } },

@@ -517,6 +517,15 @@ export const sshMachines = sqliteTable(
     sshPort: integer("ssh_port"),
     /** The port on the machine's loopback carried to the hub: null until OpenSSH allocates it. */
     boxPort: integer("box_port"),
+    /**
+     * The process on the machine that holds this hub's forward on `boxPort`,
+     * as `<pid> <start>` (`ps -o lstart=`), read there each time the
+     * connection comes up: the one process the hub ends when the port is
+     * still held as it connects again (a dead hub's session, a dropped
+     * one's). Anything else holding the port is left alone (ssh-tunnels.ts
+     * `endStale`).
+     */
+    boxSession: text("box_session"),
     machineId: text("machine_id"),
     /**
      * The machine key the last add wrote to the machine (ssh-tunnels.ts

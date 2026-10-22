@@ -1975,6 +1975,13 @@
       "when": 1792662471529,
       "tag": "0289_owner_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "6",
+      "when": 1792691433252,
+      "tag": "0290_ssh_box_session",
+      "breakpoints": true
     }
   ]
 }

@@ -606,15 +606,13 @@ public enum Size {
     public static let cFindW: Double = 520
     /// The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own.
     public static let cNewSessionPopW: Double = 569
-    /// Add machine's window on the desk at its tallest: the viewport under the top bar less the screen's margin. Every step fits well inside it at 1440×900; on a short window (200% zoom, a landscape tablet) the window scrolls rather than leave its foot off screen.
-    public static let cConnectMaxH: Double = 788
     /// Add machine's step rail (connect/RunningStep): the connector's line stands on the middle of a step's 16px glyph.
     public static let cStepRailX: Double = 8
     /// Add machine's step rail: from a step's row top to its glyph's foot (the row's 30px, its glyph centred), where the connector to the next step starts.
     public static let cStepRailTop: Double = 23
     /// Add machine's step rail: from a step's foot to the next step's glyph top, where the connector ends (the room above a glyph centred in its 30px row).
     public static let cStepRailGap: Double = 7
-    /// Add machine's window (connect/ConnectWindow) and its output sheet: the width at which the command route's longest address row (a Tailscale name and "anywhere on the tailnet") and the install's one line stand on one line each in the label and code roles, so no step of the window wraps a row and its height ladder holds.
+    /// Add machine's raised body on the desk (the kit dialog's `connect` width, its tray's padding round it) and its output sheet: the width at which the command route's longest address row (a Tailscale name and "anywhere on the tailnet") and the install's one line stand on one line each in the label and code roles, so no step of the window wraps a row and its height ladder holds.
     public static let cConnectW: Double = 480
     /// A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line.
     public static let cPanelW: Double = 380

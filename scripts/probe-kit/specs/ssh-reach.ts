@@ -72,6 +72,11 @@
  * (o) A new SSH add of the refused machine clears the refusal.
  * (p) Added by a public IP literal, the machine is recorded by that host,
  *     and the stream relay's candidates are as before the box joined.
+ * (u) A same-user sshd of the person's own holding the machine's port while
+ *     the hub's connection is down: the hub ends only the session its own
+ *     connection left (recorded by pid and start as it came up), so this
+ *     sshd lives on, the hub says the port is taken, and once it goes the
+ *     machine is back on the same port.
  * (t) Removing a machine the fleet never listed (the refused knock of (k))
  *     forgets what the hub held of it; a second removal finds nothing.
  * (q) uwucloud, 2026-10-22: the hub still holds an admitted key for the
@@ -1297,6 +1302,104 @@ async function silentDrop(
 }
 
 /**
+ * (u) A port held by something of the person's own: with the hub and its
+ * connections gone, a same-user `sshd` on the box listens on the machine's
+ * port. The hub, back, ends only the session its own connection left
+ * (ssh-tunnels.ts `endStale`, by the pid and start recorded as it came up):
+ * this sshd lives on, the hub says the port is taken, and once it goes the
+ * machine is online again on the same port.
+ */
+async function foreignHeld(
+  fleet: KitFleet,
+  box: Box,
+  { check, status, rows, tunnels }: Readers,
+  port: number
+): Promise<void> {
+  const name =
+    "u: a same-user sshd of the person's own holding the machine's port survives the hub connecting again: the hub ends nothing of it and says the port is taken, and the machine is back on that port once it goes";
+  // The hub and every connection of its gone, so the box lets the port go.
+  await fleet.stop("hub");
+  for (const { pid } of tunnels()) {
+    signalOwn(listedPid(pid), "SIGKILL");
+  }
+  const free = await until(
+    "the machine's port let go",
+    () => box.enter(OPEN, `ss -ltnH "sport = :${port}"`),
+    (heard) => heard.code === 0 && heard.out === "",
+    30_000
+  ).catch(() => undefined);
+  // The person's own sshd on that port, as this user, in the box.
+  const conf = join(box.dir, "foreign-sshd.conf");
+  const pidFile = join(box.dir, "foreign-sshd.pid");
+  writeFileSync(
+    conf,
+    `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(box.dir, "host_key")}\nPidFile ${pidFile}\nAuthorizedKeysFile none\nUsePAM no\nStrictModes no\n`
+  );
+  const started = await box.enter(
+    OPEN,
+    `/usr/sbin/sshd -f ${quoted(conf)} -E ${quoted(join(box.dir, "foreign-sshd.log"))}`
+  );
+  const foreign = await until(
+    "the person's sshd listening",
+    () =>
+      existsSync(pidFile)
+        ? Number(readFileSync(pidFile, "utf8").trim())
+        : undefined,
+    (pid) => Number.isInteger(pid) && (pid ?? 0) > 1,
+    10_000
+  ).catch(() => undefined);
+  fleet.launch("hub", [], { PATH: `${box.bin}:${fleet.env.PATH}` });
+  await fleet.hubUp();
+  const taken = `holds port ${port}`;
+  const hubLog = (): Promise<string> => fleet.logs("hub").catch(() => "");
+  const said = await until(
+    "the hub saying the port is taken",
+    hubLog,
+    (now) => now.includes(taken),
+    60_000
+  ).catch(() => undefined);
+  const survived = foreign !== undefined && existsSync(`/proc/${foreign}`);
+  const ended = (await hubLog())
+    .split("\n")
+    .filter(
+      (line) =>
+        line.includes(`ended the stale session holding port ${port}`) &&
+        line.includes(`pid ${foreign}`)
+    );
+  // It goes; the machine comes back on its port.
+  if (foreign !== undefined) {
+    signalOwn(listedPid(foreign), "SIGTERM");
+  }
+  const back = await until(
+    "the machine online again once the person's sshd is gone",
+    () => status(),
+    (now) => now === "online",
+    BACK_MS
+  ).catch(() => status());
+  await check(
+    name,
+    free !== undefined &&
+      started.code === 0 &&
+      foreign !== undefined &&
+      said !== undefined &&
+      survived &&
+      ended.length === 0 &&
+      back === "online" &&
+      rows().every((row) => row.box_port === port),
+    JSON.stringify({
+      free: free !== undefined,
+      started,
+      foreign,
+      said: said?.split("\n").filter((line) => line.includes(taken)),
+      survived,
+      ended,
+      back,
+      rows: rows(),
+    })
+  );
+}
+
+/**
  * (i) Through the forward, nothing without the machine's key: a box
  * process with none is refused an owner route and an attached file; with
  * the key the file comes, and a clone of a project on the hub's remote
@@ -1638,6 +1741,7 @@ async function run(kit: Kit): Promise<void> {
     await sessionStarts(fleet, box, read, port);
     await reconnects(fleet, box, read, port);
     await silentDrop(fleet, box, read, port);
+    await foreignHeld(fleet, box, read, port);
     await credentials(fleet, box, read, port);
     await refusals(box, read);
     await heldAgentAdd(fleet, box, read);

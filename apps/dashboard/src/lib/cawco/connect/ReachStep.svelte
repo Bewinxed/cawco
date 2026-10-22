@@ -1,6 +1,8 @@
 <script lang="ts">
   /**
-   * Reach: how the hub reaches the machine, on the route chosen.
+   * Reach: the window's details for a machine not yet added, under the two
+   * ways in as tabs (Over SSH, By a command), the one the entry point
+   * implied chosen as it opens, else Over SSH.
    *
    * Over SSH: where it is (`user@host` or a Host the hub's ssh knows, a port
    * when it isn't 22), how it signs in (the hub's key; a password once,
@@ -16,8 +18,8 @@
    * a machine that has CawCo, what the installer needs. Copy command is the
    * start: the install's row arrives in the band and the hub listens.
    *
-   * The route chip switches routes in place: the panes cross-fade inside
-   * the body's resize, and nothing typed is lost (the draft is the hub's).
+   * A tab switches in place: the panes cross-fade inside the window's
+   * resize, and what was typed in each stays (the draft is the hub's).
    */
   import {
     DRAFT_LIMITS,
@@ -26,6 +28,11 @@
   } from "@cawco/core";
   import { flushSync } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import { IconChevronDown } from "#lib/icons.js";
   import {
@@ -41,16 +48,13 @@
   import { connect, phone } from "./installs.svelte";
   import MonoWell from "./MonoWell.svelte";
   import PasswordField from "./PasswordField.svelte";
+  import { CONNECT_WAYS } from "./ways";
 
-  const route = $derived(connect.fields.route as InstallRoute);
+  const route = $derived(connect.tab);
   const join = $derived(connect.join);
   /** The hub has no SSH key: nothing can sign in by key, nor plant one. */
   const noKey = $derived(join !== null && join.sshPublicKey === null);
 
-  const ROUTES = [
-    { value: "ssh" as const, words: "over SSH" },
-    { value: "command" as const, words: "by a command" },
-  ];
   const SIGN_INS: { value: InstallSignIn; words: string; says?: string }[] = [
     { value: "key", words: "with the hub's key" },
     {
@@ -164,7 +168,7 @@
     // A machine mid-install: its window, at Running.
     const running = connect.runningFor(target, port);
     if (running) {
-      connect.openInstall(running.id, connect.anchor, connect.from);
+      connect.openInstall(running.id, connect.anchor);
       return;
     }
     pending = true;
@@ -244,12 +248,6 @@
   const line = $derived(
     address && code ? `curl -fsSL ${address}/install.sh?code=${code} | sh` : ""
   );
-  /** The draft has a code once the hub has kept the route: ask it to. */
-  $effect(() => {
-    if (route === "command" && connect.known && !code) {
-      connect.edit({ route: "command" }, true);
-    }
-  });
 
   const clipboard = new UseClipboard();
   /** "Copied · Listening for it…" while the copy settles, before Running. */
@@ -322,21 +320,36 @@
 </script>
 
 <div class="flex flex-col gap-space-3">
-  <div class="mark-line flex items-center gap-space-2">
-    <span class="type-body text-ink-strong">Bring it in</span>
-    <span data-box
-      ><Choice
-        label="Bring it in"
-        onchoose={(next) => edit({ route: next })}
-        options={ROUTES}
-        value={route}
-      /></span
-    >
-  </div>
+  <!-- The two ways in, the house's tab switch; each tab's details stay as
+       typed while the other shows (the hub's draft). -->
+  <Tabs
+    onValueChange={(next) => {
+      said = "";
+      refused = "";
+      connect.chooseTab(next as InstallRoute);
+    }}
+    value={route}
+    values={CONNECT_WAYS.map((way) => way.route)}
+  >
+    <TabsList aria-label="How to add it">
+      {#each CONNECT_WAYS as way (way.route)}
+        <TabItem
+          aria-controls="connect-tab-panel"
+          icon={way.icon}
+          id={`connect-tab-${way.route}`}
+          label={way.name}
+          value={way.route}
+        />
+      {/each}
+    </TabsList>
+  </Tabs>
 
   <div class="grid">
     {#key route}
       <div
+        id="connect-tab-panel"
+        role="tabpanel"
+        aria-labelledby={`connect-tab-${route}`}
         class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-3"
         in:crossIn
         out:crossOut

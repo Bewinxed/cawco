@@ -1,7 +1,7 @@
 <script lang="ts" generics="T extends string">
   /**
-   * A choice set inside a sentence ("Bring it in [over SSH ▾]", "Sign in
-   * [with the hub's key ▾]"): the kit's setting chip (30px, 8px corner, a
+   * A choice set inside a sentence ("Sign in [with the hub's key ▾]"):
+   * the kit's setting chip (30px, 8px corner, a
    * 12px chevron) opening the kit's menu of radio items, each its words and,
    * where it has one, the consequence in meta under them. The chip's words
    * morph as the choice changes (The Steady Swap Rule).

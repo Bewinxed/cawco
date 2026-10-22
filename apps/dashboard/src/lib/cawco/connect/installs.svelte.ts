@@ -2,7 +2,7 @@
  * Adding a machine, as this page holds it: the hub's installs and the draft
  * (hub installs.ts, `GET /api/installs` and the `installs` frame), and
  * Add machine's window over them: whether it stands open, on which install
- * or on the draft, and what it hangs from (DESIGN.md, The Work Outlives Its
+ * or on the draft, and what opened it (DESIGN.md, The Work Outlives Its
  * Surface Rule).
  *
  * Everything the window shows is read from where the work lives: an install
@@ -47,11 +47,8 @@ const DRAFT_KEY = "new";
 /** Under the phone's line the window is the drawer (DESIGN.md, Breakpoints: 640px). */
 export const phone = new MediaQuery("(width < 640px)");
 
-/** Which of the window's steps stands. */
-export type ConnectStep = "route" | "reach" | "running" | "outcome";
-
-/** What the window hangs from: the Add machine that opened it, or the top bar's machines item. */
-export type ConnectFrom = "add" | "bar";
+/** Which of the window's steps stands: the draft's details, an install running, its outcome. */
+export type ConnectStep = "reach" | "running" | "outcome";
 
 /** The draft as the window edits it: the hub's, kept as the person types. */
 export interface DraftFields {
@@ -97,8 +94,10 @@ class Connect {
   open = $state(false);
   /** The install it stands on; null on the draft. */
   id = $state<string | null>(null);
-  /** What it hangs from, and the element itself while it is on the page. */
-  from = $state<ConnectFrom>("bar");
+  /**
+   * What opened it, while it is on the page: focus goes back to it as the
+   * window closes, and from an install's row the window opens out of it.
+   */
   anchor: HTMLElement | null = null;
   /** The output sheet stands open beside the window. */
   output = $state(false);
@@ -108,11 +107,7 @@ class Connect {
    */
   backFromOutput = false;
   /** The window the output sheet was opened from, to bring back as it closes. */
-  #outputFrom: {
-    id: string;
-    anchor: HTMLElement | null;
-    from: ConnectFrom;
-  } | null = null;
+  #outputFrom: { id: string; anchor: HTMLElement | null } | null = null;
   /** The draft as the window shows it: the hub's, under every edit typed here it hasn't kept yet. */
   fields = $state<DraftFields>({ ...EMPTY_DRAFT });
   /**
@@ -157,7 +152,12 @@ class Connect {
     if (install) {
       return install.state === "running" ? "running" : "outcome";
     }
-    return this.fields.route === null ? "route" : "reach";
+    return "reach";
+  }
+
+  /** The draft's way in, as its tab shows it: Over SSH until one is chosen. */
+  get tab(): InstallRoute {
+    return this.fields.route ?? "ssh";
   }
 
   /** The installs the band shows: every one but those whose machine already has its own row now. */
@@ -272,8 +272,9 @@ class Connect {
   /**
    * The window as the URL names it: after a reload, or a link that opens an
    * install (a row of Caw's panel, a notification). It opens on the same
-   * install or the draft, hung from the bar's machines item. Asked once the
-   * hub's installs are known, so it never opens on an install it can't read.
+   * install or the draft, its tab and details as the hub keeps them. Asked
+   * once the hub's installs are known, so it never opens on an install it
+   * can't read.
    */
   follow(named: string | null): void {
     if (!(named && this.known)) {
@@ -290,7 +291,6 @@ class Connect {
       return;
     }
     this.open = true;
-    this.from = "bar";
     this.anchor = null;
     this.id = id;
     this.output = false;
@@ -301,16 +301,16 @@ class Connect {
   }
 
   /**
-   * Add machine: the draft, on the route the entry point implies, or where
-   * it was left. A route the caller names replaces the draft's choice.
+   * Add machine: the draft, on the tab its entry point implies (a machines
+   * list's "Over SSH", the empty fleet's "By a command"), else Over SSH. What
+   * was typed in either tab stays (the hub's draft).
    */
-  openNew(anchor: HTMLElement | null, route?: InstallRoute): void {
-    this.from = anchor ? "add" : "bar";
+  openNew(anchor: HTMLElement | null, route: InstallRoute = "ssh"): void {
     this.anchor = anchor;
     this.id = null;
     this.output = false;
     this.passwordLost = false;
-    if (route && this.fields.route !== route) {
+    if (this.fields.route !== route) {
       this.edit({ route }, true);
     }
     this.open = true;
@@ -318,12 +318,7 @@ class Connect {
   }
 
   /** One install's window, where it stands: its row, a notification, the bar's popover. */
-  openInstall(
-    id: string,
-    anchor: HTMLElement | null,
-    from: ConnectFrom = "bar"
-  ): void {
-    this.from = from;
+  openInstall(id: string, anchor: HTMLElement | null): void {
     this.anchor = anchor;
     this.id = id;
     this.output = false;
@@ -334,9 +329,7 @@ class Connect {
 
   /** Open output: the window parks into its row as the output's sheet opens. */
   openOutput(): void {
-    this.#outputFrom = this.id
-      ? { id: this.id, anchor: this.anchor, from: this.from }
-      : null;
+    this.#outputFrom = this.id ? { id: this.id, anchor: this.anchor } : null;
     this.open = false;
     this.output = true;
     this.#writeUrl();
@@ -355,16 +348,18 @@ class Connect {
     this.output = false;
     if (back && this.installs.some((one) => one.id === back.id)) {
       this.backFromOutput = true;
-      this.openInstall(back.id, back.anchor, back.from);
+      this.openInstall(back.id, back.anchor);
       return;
     }
     this.#writeUrl();
   }
 
   /**
-   * ×, Esc, a press outside, a drag down: the window parks and the work goes
-   * on. An outcome stays where it was parked too (its row, a joined one's
-   * notice), Retry on it, until Remove install takes it away.
+   * × or Esc (a finger dragging the phone's sheet down is its ×). On an
+   * install the window minimizes into the install's row and the work goes
+   * on; an outcome stays there too (its row, a joined one's notice), Retry
+   * on it, until Remove install takes it away. On the draft it just closes:
+   * nothing has started, so nothing parks (the hub keeps what was typed).
    */
   close(): void {
     this.open = false;
@@ -461,8 +456,8 @@ class Connect {
     });
   }
 
-  /** Back to Route: the draft forgets its route, nothing else. */
-  chooseRoute(route: InstallRoute | null): void {
+  /** A tab chosen: the draft's way in, what was typed in each tab kept. */
+  chooseTab(route: InstallRoute): void {
     this.edit({ route }, true);
   }
 

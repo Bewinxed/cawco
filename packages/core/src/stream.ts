@@ -110,12 +110,15 @@ import type { TailnetServing } from "./tailnet-https";
  *    `url` (the name with the dashboard's port) or `absent`: no `needs` state,
  *    no `command`, and no `local.name` frame, since the hub binds no port of
  *    its own for the name. A page built for 21 reloads first.
+ * 23: an install's problem may be `penalized` (core install.ts
+ *    `InstallProblem`): the machine's sshd turns the hub away for now. A
+ *    page built for 22 has no words for it, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 22;
+export const WIRE_PROTOCOL = 23;
 
 /**
  * What a session's stream carries: the changes each frame made to its

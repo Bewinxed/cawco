@@ -389,8 +389,9 @@ export function createBinaryUpdates(options: Options) {
       }
     );
   /**
-   * The build the fleet is offered, by its channel and version: the one an
-   * SSH add leaves its machine on (core install-script.ts `sshAdd`). None
+   * The build the fleet is offered, by its channel and version: the one
+   * every join leaves its machine on, by any route (core install-script.ts
+   * `join`). None
    * while the policy record is damaged, or while the release host does not
    * answer, and the words that say why.
    */

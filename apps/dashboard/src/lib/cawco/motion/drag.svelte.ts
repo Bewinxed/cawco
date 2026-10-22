@@ -262,8 +262,12 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
       }
       pointer = -1;
       if (phase === "dragging") {
-        dragged = event.type === "pointerup";
-        release(event.type === "pointerup");
+        const lifted = event.type === "pointerup";
+        release(lifted);
+        // After the release: a dismissal that closes by a click of the
+        // surface's own (the kit dialog's Close) is not the tap a drag ends
+        // in, which this swallows.
+        dragged = lifted;
       } else if (phase === "armed") {
         phase = "idle";
       }

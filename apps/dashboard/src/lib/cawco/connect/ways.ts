@@ -1,7 +1,7 @@
 /**
  * The two ways a machine comes in, as the empty fleet and the machines
- * list offer them: each opens Add machine already on its route, so the
- * window starts at Reach.
+ * list offer them, and Add machine's tabs name them: each opens Add
+ * machine on its own tab.
  */
 import type { InstallRoute } from "@cawco/core";
 import type { Component } from "svelte";

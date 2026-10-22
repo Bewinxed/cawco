@@ -844,7 +844,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       });
       return;
     }
-    if (before?.kind === "unreachable") {
+    if (before?.kind === "unreachable" || before?.kind === "penalized") {
       end(entry, "failed", before);
       return;
     }
@@ -1454,6 +1454,21 @@ export const createInstalls = (deps: InstallsDeps) => {
       next.code = draft?.code ?? (next.route === "command" ? newCode() : null);
       draft = next;
       changed();
+    },
+    /** Whether `code` names a command install that still listens for its machine. */
+    live: (code: string): boolean => byCode(code) !== undefined,
+    /**
+     * The command route's installer was asked for while the hub could not
+     * say which build it offers its fleet: nothing installs, and the install
+     * ends there, in the hub's words why.
+     */
+    offerRefused(code: string, said: string): void {
+      const entry = byCode(code);
+      if (!entry) {
+        return;
+      }
+      take(entry, `${HUB_SAID}${said}`);
+      end(entry, "failed", { kind: "offer", said });
     },
     /** The installer was fetched with `code`: whether the code is live, and step one is done. */
     fetched(code: string): boolean {

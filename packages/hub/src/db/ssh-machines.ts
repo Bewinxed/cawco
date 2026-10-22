@@ -24,7 +24,9 @@ export interface SshMachinesDb {
   readonly unjoined: () => SshMachineRow[];
   readonly update: (
     id: string,
-    patch: Partial<Pick<SshMachineRow, "boxPort" | "machineId" | "pendingKey">>
+    patch: Partial<
+      Pick<SshMachineRow, "boxPort" | "boxSession" | "machineId" | "pendingKey">
+    >
   ) => void;
 }
 

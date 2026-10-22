@@ -41,12 +41,14 @@ import {
   type JoinAddress,
   type JoinInfo,
   SSH_ADD_RUNNING_HEADER,
-  type SshJoinProblem,
 } from "@cawco/core";
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
 import { readWithin } from "@cawco/core/bounded";
-import { generateInstallScript } from "@cawco/core/install-script";
+import {
+  generateInstallScript,
+  type InstallJoin,
+} from "@cawco/core/install-script";
 import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -182,24 +184,30 @@ export const sshPublicKey = (): string | null => {
 const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/;
 
 /**
- * The hub and the public site render the same installer body. An SSH add's
- * (`sshAdd`) leaves the machine on the newest build of the hub's update
- * channel, joined to this hub, whatever it ran before (core
- * install-script.ts).
+ * The hub and the public site render the same installer body. Every way a
+ * machine joins this hub (the dashboard's command, an SSH add, the line a
+ * first install prints for a hub it found) fetches this one script, which
+ * leaves the machine on the build the hub offers its fleet, joined to this
+ * hub, whatever it ran before (core install-script.ts).
  */
 export const installScript = (
-  hub: string,
-  releaseHost?: string,
-  sshAdd?: { channel: "stable" | "nightly"; version: string },
-  code?: string
+  joining: InstallJoin,
+  releaseHost?: string
 ): string =>
   generateInstallScript({
-    hub,
     origin: `https://github.com/${RELEASE_REPOSITORY}`,
     releaseHost,
-    sshAdd,
-    code,
+    join: joining,
   });
+
+/**
+ * What a join runs when the hub cannot say which build it offers: the
+ * hub's words why, and an exit that leaves the machine as it was.
+ */
+const refusalScript = (said: string): string => {
+  const line = `cawco: ${said} Nothing on this machine was changed.`;
+  return `#!/bin/sh\nprintf '%s\\n' '${line.replaceAll("'", "'\\''")}' >&2\nexit 1\n`;
+};
 
 /**
  * What a command whose code no longer works runs on the machine: one line
@@ -209,14 +217,6 @@ const VOID_SCRIPT = `#!/bin/sh
 printf '%s\\n' "cawco: this command was stopped from the dashboard, so it installs nothing. Nothing on this machine was changed. Copy a new command there." >&2
 exit 1
 `;
-
-/**
- * The query an SSH add's install command fetches the script with
- * ({@link installCommand}): the script that joins this hub again on a
- * machine that already has CawCo. Read off the URL, never a route schema:
- * the route stays one plain script for everyone else.
- */
-const SSH_ADD_QUERY = "add=ssh";
 
 /**
  * A target `ssh` reads as a destination and nothing else: no leading dash (an
@@ -342,7 +342,7 @@ export const CURL_EXIT = "cawco-curl-exit: ";
  * joins at that address too. It holds no single quote ({@link remoteCommand}).
  */
 export const installCommand = (hubUrl: string): string =>
-  `echo "${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}${hubUrl}" && if script=$(curl -fsSL --connect-timeout ${CONNECT_S} --max-time ${DOWNLOAD_MAX_S} "${hubUrl}/install.sh?${SSH_ADD_QUERY}"); then printf "%s\\n" "$script" | sh; else echo "${CURL_EXIT}$?"; false; fi`;
+  `echo "${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}${hubUrl}" && if script=$(curl -fsSL --connect-timeout ${CONNECT_S} --max-time ${DOWNLOAD_MAX_S} "${hubUrl}/install.sh"); then printf "%s\\n" "$script" | sh; else echo "${CURL_EXIT}$?"; false; fi`;
 
 /**
  * What `ssh-copy-id` does on the machine, run by a password add's one
@@ -475,38 +475,82 @@ const CONNECT_ERRORS: Record<string, string> = {
   ETIMEDOUT: "no answer",
 };
 
-/** One TCP connect from the hub to `address`: undefined once it connects, else connect(2)'s errno. */
-const tcpConnect = (
-  address: string,
-  port: number
-): Promise<string | undefined> =>
+/**
+ * OpenSSH's words in place of its greeting to an address it holds back
+ * (sshd_config(5) PerSourcePenalties, OpenSSH 9.8 on): it refuses the
+ * connection with them for a while after connections from there that never
+ * signed in, or failed to.
+ */
+const PENALIZED_LINE = "Not allowed at this time";
+
+/** What one TCP connect to the machine's SSH port heard. */
+type Knock =
+  /** Its server greeted (or said nothing in time): `ssh` takes it from here. */
+  | { kind: "greeted" }
+  /** Its server turned this address away for now ({@link PENALIZED_LINE}). */
+  | { kind: "penalized" }
+  /** It never connected: connect(2)'s errno. */
+  | { kind: "failed"; code: string };
+
+/**
+ * One TCP connect from the hub to `address`, the server's first line read
+ * once it connects: its greeting, or the words OpenSSH turns a held-back
+ * address away with. A connect that fails reaches no server and costs the
+ * hub nothing with it.
+ */
+const knock = (address: string, port: number): Promise<Knock> =>
   new Promise((resolve) => {
+    let connected = false;
+    let heard = "";
+    let done = false;
     const socket = connect({ host: address, port, timeout: CONNECT_S * 1000 });
+    const end = (result: Knock): void => {
+      if (done) {
+        return;
+      }
+      done = true;
+      socket.destroy();
+      resolve(result);
+    };
+    const said = (): Knock =>
+      heard.startsWith(PENALIZED_LINE)
+        ? { kind: "penalized" }
+        : { kind: "greeted" };
     socket.once("connect", () => {
-      socket.destroy();
-      resolve(undefined);
+      connected = true;
     });
-    socket.once("timeout", () => {
-      socket.destroy();
-      resolve("ETIMEDOUT");
+    socket.on("data", (chunk: Buffer) => {
+      heard += chunk.toString("latin1");
+      if (heard.includes("\n")) {
+        end(said());
+      }
     });
-    socket.once("error", (error: NodeJS.ErrnoException) => {
-      socket.destroy();
-      resolve(error.code ?? "EIO");
-    });
+    socket.once("end", () => end(said()));
+    socket.once("timeout", () =>
+      end(connected ? said() : { kind: "failed", code: "ETIMEDOUT" })
+    );
+    socket.once("error", (error: NodeJS.ErrnoException) =>
+      end(connected ? said() : { kind: "failed", code: error.code ?? "EIO" })
+    );
   });
+
+/** What stops an add before any `ssh` runs ({@link beforeSsh}). */
+export type BeforeSsh =
+  | { kind: "unreachable"; detail: string }
+  | { kind: "host-key" }
+  | { kind: "penalized" };
 
 /**
  * Whether the hub reaches `host` on `port`, as `ssh` would first: the name
- * resolved, then a TCP connect to each of its addresses in turn until one
+ * resolved, then a {@link knock} on each of its addresses in turn until one
  * answers. Unreachable, by getaddrinfo's or connect(2)'s errno: the name did
  * not resolve, the port refused, no route, or no answer within ssh's own
- * ConnectTimeout.
+ * ConnectTimeout. Penalized when its server turns this address away.
  */
 const reach = async (
   host: string,
   port: number
-): Promise<SshJoinProblem | undefined> => {
+): Promise<BeforeSsh | undefined> => {
   const addresses = await lookup(host, { all: true }).then(
     (found) => found.map(({ address }) => address),
     (error: NodeJS.ErrnoException) => error.code ?? "EIO"
@@ -522,11 +566,14 @@ const reach = async (
   let failed = "ENOTFOUND";
   for (const address of addresses) {
     // biome-ignore lint/performance/noAwaitInLoops: one address after another, as ssh tries them
-    const code = await tcpConnect(address, port);
-    if (code === undefined) {
+    const heard = await knock(address, port);
+    if (heard.kind === "greeted") {
       return;
     }
-    failed = code;
+    if (heard.kind === "penalized") {
+      return { kind: "penalized" };
+    }
+    failed = heard.code;
   }
   return {
     kind: "unreachable",
@@ -564,67 +611,88 @@ const knownKeysOf = (said: string): Set<string> | null => {
 const WHITESPACE = /\s+/;
 
 /**
- * Whether the machine's host key is one this hub's `ssh` knows it by: what
- * `ssh-keyscan` hears from the machine against what `ssh-keygen -F` finds in
- * each known-hosts file `ssh` reads. Changed when the hub knows keys for it
- * and the machine offers none of them; a machine the hub knows no key for is
- * new, which `ssh` takes (StrictHostKeyChecking=accept-new, ssh-tunnels.ts).
- * Not changed, too, when either side could not be read: `ssh` then decides.
+ * `ssh-keyscan -t`'s name for a key type as known-hosts lines write it, in
+ * the order `ssh` prefers them (ssh_config(5) HostKeyAlgorithms).
  */
-const hostKeyChanged = async (to: SshDestination): Promise<boolean> => {
+const SCAN_TYPES: [string, string][] = [
+  ["ssh-ed25519", "ed25519"],
+  ["ecdsa-sha2-nistp256", "ecdsa"],
+  ["ecdsa-sha2-nistp384", "ecdsa"],
+  ["ecdsa-sha2-nistp521", "ecdsa"],
+  ["sk-ssh-ed25519@openssh.com", "ed25519-sk"],
+  ["sk-ecdsa-sha2-nistp256@openssh.com", "ecdsa-sk"],
+  ["ssh-rsa", "rsa"],
+];
+
+/**
+ * The keys this hub's `ssh` knows the machine by, from each known-hosts file
+ * `ssh` reads (`ssh-keygen -F`); `null` when one vouches by certificate,
+ * which `ssh` decides.
+ */
+const knownKeys = async (to: SshDestination): Promise<Set<string> | null> => {
   const known = new Set<string>();
   for (const file of to.knownHosts) {
     // biome-ignore lint/performance/noAwaitInLoops: a few files, each a short local read
     const said = await output(["ssh-keygen", "-F", to.keyName, "-f", file]);
     const keys = said === undefined ? new Set<string>() : knownKeysOf(said);
     if (keys === null) {
-      return false;
+      return null;
     }
     for (const key of keys) {
       known.add(key);
     }
   }
-  if (known.size === 0) {
-    return false;
-  }
-  const scanned = await output(
-    [
-      "ssh-keyscan",
-      "-T",
-      String(CONNECT_S),
-      "-p",
-      String(to.port),
-      "--",
-      to.host,
-    ],
-    (CONNECT_S + 5) * 1000
-  );
-  const offered = scanned === undefined ? null : knownKeysOf(scanned);
-  if (!offered || offered.size === 0) {
-    return false;
-  }
-  return ![...offered].some((key) => known.has(key));
+  return known;
 };
 
 /**
- * What stops an add before any `ssh` runs: the machine's port unreachable
- * from the hub ({@link reach}), or its host key not the one the hub knows
- * ({@link hostKeyChanged}). A target that goes through another host, or one
- * `ssh -G` could not resolve, is `ssh`'s to try.
+ * What stops an add before any `ssh` runs, at the cost of one connection
+ * that never signs in (OpenSSH holds back an address after such connections:
+ * sshd_config(5) PerSourcePenalties, `noauth` 1s each, enforced from 15s).
+ * When the hub knows the machine's host key, that connection is
+ * `ssh-keyscan` for the one type it knows it by first (`ssh-keyscan` makes a
+ * connection per type): a key heard is the machine reached, and its host key
+ * either one the hub knows or changed. When it knows none, or the scan heard
+ * nothing, it is a {@link knock}: the port unreachable (a connect that fails
+ * reaches no server), or the server turning this address away. The one case
+ * that makes two is a server that no longer offers the key type the hub
+ * knows it by, scanned and then knocked on. A target that goes through
+ * another host, or one `ssh -G` could not resolve, is `ssh`'s to try.
  */
 export const beforeSsh = async (
   target: string,
   port: number | null
-): Promise<SshJoinProblem | undefined> => {
+): Promise<BeforeSsh | undefined> => {
   const to = await destinationOf(target, port);
   if (!to || to.proxied) {
     return;
   }
-  const unreached = await reach(to.host, to.port);
-  if (unreached) {
-    return unreached;
+  const known = await knownKeys(to);
+  const types = new Set([...(known ?? [])].map((key) => key.split(" ")[0]));
+  const scan = SCAN_TYPES.find(([type]) => types.has(type))?.[1];
+  if (known && scan) {
+    const scanned = await output(
+      [
+        "ssh-keyscan",
+        "-T",
+        String(CONNECT_S),
+        "-t",
+        scan,
+        "-p",
+        String(to.port),
+        "--",
+        to.host,
+      ],
+      (CONNECT_S + 5) * 1000
+    );
+    const offered = scanned === undefined ? null : knownKeysOf(scanned);
+    if (offered && offered.size > 0) {
+      return [...offered].some((key) => known.has(key))
+        ? undefined
+        : { kind: "host-key" };
+    }
   }
-  return (await hostKeyChanged(to)) ? { kind: "host-key" } : undefined;
+  return await reach(to.host, to.port);
 };
 
 /** A sign-in way, as the routes take it. */
@@ -662,7 +730,7 @@ export const joinRoutes = ({
   offered,
 }: {
   installs: Installs;
-  /** The build the fleet is offered (binary-updates.ts), which an SSH add's script installs; the words why there is none. */
+  /** The build the fleet is offered (binary-updates.ts), which every join's script installs; the words why there is none. */
   offered: () => Promise<
     { channel: "stable" | "nightly"; version: string } | { refused: string }
   >;
@@ -679,31 +747,29 @@ export const joinRoutes = ({
           "This hub's build cannot install machines yet: it carries no release key to check a download against, so it would hand out an installer that verifies nothing. Install a released build of CawCo on this hub to enable it."
         );
       }
-      const query = new URL(request.url).searchParams;
-      const code = query.get("code");
-      // The command route's line: step one of its install, or a code that no longer works.
-      if (
-        code !== null &&
-        !(INSTALL_CODE.test(code) && installs.fetched(code))
-      ) {
-        set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
+      const code = new URL(request.url).searchParams.get("code");
+      set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
+      // The command route's line, with a code that no longer works.
+      if (code !== null && !(INSTALL_CODE.test(code) && installs.live(code))) {
         return VOID_SCRIPT;
       }
-      const installation = await readInstallation();
-      // An SSH add's script installs the build the fleet is offered.
-      const offer =
-        new URL(request.url).search === `?${SSH_ADD_QUERY}`
-          ? await offered()
-          : undefined;
-      if (offer && "refused" in offer) {
-        return status(409, offer.refused);
+      // Every join installs the build the fleet is offered; with none to
+      // name, it installs nothing, and a command route's install ends there.
+      const offer = await offered();
+      if ("refused" in offer) {
+        if (code !== null) {
+          installs.offerRefused(code, offer.refused);
+        }
+        return refusalScript(offer.refused);
       }
-      set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
+      // The command route's step one: its installer fetched.
+      if (code !== null) {
+        installs.fetched(code);
+      }
+      const installation = await readInstallation();
       return installScript(
-        `http://${host}`,
-        installation?.releaseHost,
-        offer,
-        code ?? undefined
+        { hub: `http://${host}`, offer, ...(code === null ? {} : { code }) },
+        installation?.releaseHost
       );
     })
     .get("/api/join", async (): Promise<JoinInfo> => ({

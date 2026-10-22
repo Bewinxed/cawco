@@ -1,0 +1,1 @@
+ALTER TABLE `ssh_machines` ADD `box_session` text;

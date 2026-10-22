@@ -147,13 +147,35 @@ const listenersOn = (port: number): string =>
   `PATH="$PATH:/usr/sbin:/sbin"; if command -v ss >/dev/null 2>&1; then ss -ltnH "sport = :${port}" | while read -r state recv send local rest; do echo "$local"; done; elif command -v lsof >/dev/null 2>&1; then lsof -nP -iTCP:${port} -sTCP:LISTEN -Fn | sed -n "s/^n//p"; else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi`;
 
 /**
- * The machine's command that ends the stale session of the user it runs as
- * that still listens on `port`: each pid listening there that is an `sshd`
- * or `sshd-session` of this user, and nothing else, each an integer above 1.
- * It prints each pid it ended.
+ * The machine's shell words that set `pids` to each process listening on
+ * `port`, as `ss -ltnp` or `lsof` lists it there for this user.
  */
-const endStaleOn = (port: number): string =>
-  `PATH="$PATH:/usr/sbin:/sbin"; me=$(id -un); if command -v ss >/dev/null 2>&1; then pids=$(ss -ltnpH "sport = :${port}" | sed -n "s/.*pid=\\([0-9][0-9]*\\).*/\\1/p"); elif command -v lsof >/dev/null 2>&1; then pids=$(lsof -nP -iTCP:${port} -sTCP:LISTEN -Fp | sed -n "s/^p//p"); else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi; for pid in $pids; do [ "$pid" -gt 1 ] 2>/dev/null || continue; name=$(ps -o comm= -p "$pid"); owner=$(ps -o user= -p "$pid"); case "$name" in sshd|sshd-session) if [ "$owner" = "$me" ]; then kill "$pid" && echo "$pid"; fi;; esac; done; exit 0`;
+const listenersOf = (port: number): string =>
+  `PATH="$PATH:/usr/sbin:/sbin"; if command -v ss >/dev/null 2>&1; then pids=$(ss -ltnpH "sport = :${port}" | sed -n "s/.*pid=\\([0-9][0-9]*\\).*/\\1/p"); elif command -v lsof >/dev/null 2>&1; then pids=$(lsof -nP -iTCP:${port} -sTCP:LISTEN -Fp | sed -n "s/^p//p"); else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi`;
+
+/** The shell words for `$pid`'s start, in `ps -o lstart=`'s words with its spaces squeezed. */
+const START_OF_PID = `$(ps -o lstart= -p "$pid" | tr -s " " | sed "s/^ //;s/ $//")`;
+
+/**
+ * The machine's command that prints each process listening on `port` as
+ * `<pid> <start>`, one a line, each pid an integer above 1. One line, so
+ * every login shell hands it over whole.
+ */
+const holderOn = (port: number): string =>
+  `${listenersOf(port)}; for pid in $pids; do [ "$pid" -gt 1 ] 2>/dev/null || continue; printf "%s %s\\n" "$pid" "${START_OF_PID}"; done; exit 0`;
+
+/**
+ * The machine's command that ends `session` (`<pid> <start>`, as
+ * {@link holderOn} read it when this hub's connection came up) if it still
+ * listens on `port`, and nothing else: a pid there is ended only when its
+ * start is the one recorded, so a pid the system has handed to another
+ * process since is left alone. It prints the pid it ended.
+ */
+const endOwnOn = (port: number, session: string): string =>
+  `${listenersOf(port)}; for pid in $pids; do [ "$pid" -gt 1 ] 2>/dev/null || continue; if [ "$pid ${START_OF_PID}" = "${session}" ]; then kill "$pid" && echo "$pid"; fi; done; exit 0`;
+
+/** A session as {@link holderOn} prints it: a pid, then its start in `ps`'s words. */
+const SESSION = /^\d+ [A-Za-z0-9: ]+$/;
 
 /**
  * The machine's command that keeps its key where its agent reads it
@@ -167,7 +189,7 @@ const KEEP_KEY = `umask 077 && d="\${XDG_CONFIG_HOME:-$HOME/.config}/cawco" && m
 export type TunnelRefusal =
   /** Its sshd forwards no port to the hub (AllowTcpForwarding). */
   | { kind: "forwarding" }
-  /** Something there other than this user's own sshd holds the machine's port. */
+  /** Something there other than this hub's own connection holds the machine's port. */
   | { kind: "held"; port: number }
   /** Its sshd binds a forward on more than its loopback (GatewayPorts): the addresses it bound. */
   | { kind: "exposed"; bound: string[] }
@@ -398,7 +420,7 @@ export const refusalWords = (refusal: TunnelRefusal): string => {
     case "forwarding":
       return "its sshd forwards no port (AllowTcpForwarding)";
     case "held":
-      return `something on the machine other than its own sshd holds port ${refusal.port}`;
+      return `something on the machine other than this hub's own connection holds port ${refusal.port}`;
     case "exposed":
       return `its sshd binds a forward on ${refusal.bound.join(", ")}, beyond its loopback (GatewayPorts)`;
     case "failed":
@@ -520,16 +542,23 @@ const checkBinding = async (
 };
 
 /**
- * Ends this user's own stale session that still holds `port` on the
- * machine, and waits for the port to be let go. Nothing else that holds it
- * is touched: the forward then says the port is taken.
+ * Ends this hub's own earlier connection's session that still holds `port`
+ * on the machine (a dead hub's, a dropped one's): the process recorded as
+ * `session` when that connection came up, by its pid and its start, and
+ * waits for the port to be let go. Nothing else that holds it is touched,
+ * whatever it is (the person's own sshd, a session of theirs): the forward
+ * then says the port is taken.
  */
 const endStale = async (
   path: string,
   target: string,
-  port: number
+  port: number,
+  session: string | null
 ): Promise<TunnelRefusal | null> => {
-  const ended = await onMachine(path, target, endStaleOn(port));
+  if (!(session && SESSION.test(session))) {
+    return null;
+  }
+  const ended = await onMachine(path, target, endOwnOn(port, session));
   if (ended?.code !== 0) {
     return {
       kind: "failed",
@@ -636,12 +665,40 @@ export const createSshTunnels = ({
       return { refusal: binding };
     }
     if (row.boxPort !== null) {
-      const stale = await endStale(path, row.target, row.boxPort);
+      const stale = await endStale(
+        path,
+        row.target,
+        row.boxPort,
+        row.boxSession
+      );
       if (stale) {
         return { refusal: stale };
       }
     }
-    return forwardDoor(row, path);
+    const forwarded = await forwardDoor(row, path);
+    if ("port" in forwarded) {
+      await recordSession(row, path, forwarded.port);
+    }
+    return forwarded;
+  };
+
+  /**
+   * The process on the machine holding this connection's forward, recorded
+   * for the row: the one {@link endStale} may end when this connection has
+   * died and left it there. None read, none recorded: then nothing is ended.
+   */
+  const recordSession = async (
+    row: SshMachineRow,
+    path: string,
+    port: number
+  ): Promise<void> => {
+    const read = await onMachine(path, row.target, holderOn(port));
+    const lines = read?.code === 0 ? read.out.split("\n").filter(Boolean) : [];
+    const [session] = lines;
+    db.update(row.id, {
+      boxSession:
+        lines.length === 1 && session && SESSION.test(session) ? session : null,
+    });
   };
 
   /** The forward itself: the machine's port, kept the first time, to the hub's door. */
@@ -834,6 +891,7 @@ export const createSshTunnels = ({
         target,
         sshPort,
         boxPort: null,
+        boxSession: null,
         machineId: null,
         pendingKey: null,
         createdAt: new Date(),
