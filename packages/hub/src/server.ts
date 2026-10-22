@@ -12235,6 +12235,17 @@ export const createServer = (
     instance: (id) => db.getInstancesByIds([id])[0],
     ended: (instance) =>
       !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
+    // No one can give it a turn again, the person included: what refuses
+    // even their words for good, never a refusal they could clear (a
+    // sign-in, a machine coming back, a mode to pick).
+    stranded: (instance) => {
+      if (relaunchOf(instance).kind === "refused") {
+        return true;
+      }
+      const refused = workItems.refusal(instance, { kind: "human" })?.refusal
+        .kind;
+      return refused === "workspace-archived" || refused === "item-superseded";
+    },
     // Caw answers the pins of his project's sessions whose writer ended, and
     // reads every page of his project (decisions.ts).
     ledProjects: (instance) =>

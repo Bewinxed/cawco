@@ -353,8 +353,8 @@ export const artifactPromote = {
 export const artifactDelete = {
   name: "artifact_delete",
   description:
-    "Remove an artifact of yours a newer one superseded, once that one is up. Its picks and pins go too; a " +
-    "promoted copy stays. Answers `showing`: what your panel shows now, or null.",
+    "Remove an artifact of yours a newer one superseded, or one a delegate below you left once it can't act. " +
+    "Pins go too; a promoted copy stays. Answers `showing`: your panel now.",
   input: { id },
 };
 

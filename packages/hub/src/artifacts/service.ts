@@ -45,6 +45,7 @@ import {
   pinLink,
   type SendAttachment,
   type ShownFailure,
+  sessionLink,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -1312,9 +1313,19 @@ export interface ArtifactServiceDeps {
    */
   stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
   /**
+   * Whether a session can no longer act, ever: no one, its parent and the
+   * person included, can give it a turn again. Its item ended and its
+   * workspace was discarded or retired past cutting again, or a newer item
+   * holds that workspace, or the session itself ended for good (continued
+   * into another, its conversation gone). What it wrote is then deleted by
+   * the sessions up its delegation tree ({@link Artifacts.remove}).
+   */
+  stranded: (instance: InstanceRow) => boolean;
+  /**
    * Every session of `instance`'s delegation tree (delegation-tree.ts
    * `treeSessions`): each reads, never changes, the others' artifacts of
-   * its project.
+   * its project; one up a writer that can no longer act deletes that
+   * writer's ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
   /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
@@ -1540,6 +1551,43 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
     }
     return row;
+  };
+
+  /** The sessions above `writer`: its parent, that one's parent, up to the top. */
+  const above = (writer: InstanceRow): Set<string> => {
+    const up = new Set<string>();
+    let at = writer.parentInstanceId;
+    while (at && !up.has(at)) {
+      up.add(at);
+      at = deps.instance(at)?.parentInstanceId ?? null;
+    }
+    return up;
+  };
+
+  /**
+   * Artifact `id` for a delete: the session's own ({@link own}), or another
+   * session's whose writer can no longer act ({@link ArtifactServiceDeps.stranded})
+   * when this session is up the writer's delegation tree, so an artifact
+   * always has someone who can remove it. Its content stays the writer's: no
+   * other change widens so. Refused otherwise, naming who deletes it.
+   */
+  const deletable = (instance: InstanceRow, id: string): ArtifactRow => {
+    const row = db.get(id);
+    const writer = row && row.heldFor === null ? holder(row) : undefined;
+    if (!(row && writer) || writer.id === instance.id) {
+      return own(instance, id);
+    }
+    const up = above(writer).has(instance.id);
+    if (up && deps.stranded(writer)) {
+      return row;
+    }
+    const whose = `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is ${sessionLink(writer.id, sessionLabel(writer).name)}'s`;
+    throw new ArtifactRefusal(
+      403,
+      up
+        ? `${whose}, and that session can still act: it deletes it now (a handoff asks it to). Once it can't (its item ended and its workspace was discarded or archived, or the session ended for good), you, up its delegation tree, can delete it.`
+        : `${whose}. That session deletes it while it can still act; after that, the sessions up its delegation tree do, and the person can from the dashboard. This session is neither.`
+    );
   };
 
   /**
@@ -5367,6 +5415,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      *   ({@link ArtifactServiceDeps.personShown}), or closes the panel: an
      *   agent taking something away never brings a different artifact
      *   forward as if it wanted the person there.
+     * A session up the delegation tree of a writer that can no longer act
+     * removes that writer's too ({@link deletable}); the writer's panel that
+     * showed it closes, else it hears its artifacts again.
      * Answers what the panel shows after.
      */
     remove: async (
@@ -5375,8 +5426,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       by: PanelHand
     ): Promise<Removed> => {
       const instance = sessionOf(instanceId);
-      const row = own(instance, id);
+      const row = deletable(instance, id);
       const wasShown = deps.showing(instance.id) === row.id;
+      const writerShown = row.instanceId !== instance.id && inPanel(row);
       // A project's page is its source in the project's folder: both go, the
       // source first, so a refused commit leaves the page as it was.
       if (isProjectPage(row)) {
@@ -5390,6 +5442,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
       }
       discard(row);
+      if (row.instanceId !== instance.id) {
+        if (writerShown) {
+          await deps.close(row.instanceId as string);
+        } else {
+          relistOf(row);
+        }
+      }
       if (!wasShown) {
         deps.relist(instance.id);
         const shown = deps.showing(instance.id);
