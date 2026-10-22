@@ -137,6 +137,9 @@ const STEP_CALLS: Record<string, { input: object; name: string }> = {
   },
 };
 
+/** A memory write's words, naming the hash the next write takes (hub presenters/fleet-settings.ts `memorySettingsWords`). */
+const KEPT_HASH = "the next write's expectedHash takes";
+
 /** One Full Send step as the mock plays it: its call made, then what came back. */
 interface Step {
   called: boolean;
@@ -618,7 +621,7 @@ const run = async (kit: Kit) => {
     "8: Claude Code in Full Send: admin_memory_write runs at once, no ask parks, and the hub's log records it approved by Full Send",
     modeOf(sent) === "fullSend" &&
       memory.result?.failed === false &&
-      memory.cameBack.includes("hash") &&
+      memory.cameBack.includes(KEPT_HASH) &&
       memory.asked.length === 0 &&
       (await nothingPending(sent)) &&
       memory.approved !== undefined,
@@ -676,7 +679,7 @@ const run = async (kit: Kit) => {
     "12: OpenCode in Full Send: admin_memory_write runs at once, no ask parks, and the hub's log records it approved by Full Send",
     modeOf(opencode) === "fullSend" &&
       written.result?.failed === false &&
-      written.cameBack.includes("hash") &&
+      written.cameBack.includes(KEPT_HASH) &&
       written.asked.length === 0 &&
       (await nothingPending(opencode)) &&
       written.approved !== undefined,
