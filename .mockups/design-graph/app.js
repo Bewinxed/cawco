@@ -464,7 +464,7 @@ function layout(items, edges, rankdir, margin, extra) {
   g.setGraph({ rankdir, nodesep: 22, ranksep: 46, edgesep: 12, marginx: margin, marginy: margin, ...extra });
   g.setDefaultEdgeLabel(() => ({}));
   for (const it of items) g.setNode(it.id, { width: it.w, height: it.h });
-  for (const [a, b, label, hidden] of edges) g.setEdge(a, b, hidden ? { hidden } : label ? { label, width: label.length * 6 + 6, height: 14, labelpos: "c" } : {});
+  for (const [a, b, label, hidden] of edges) g.setEdge(a, b, hidden ? { hidden } : label ? { label, width: label.length * 7 + 18, height: 22, labelpos: "c" } : {});
   dagre.layout(g);
   return g;
 }
@@ -486,33 +486,60 @@ const SVGNS = "http://www.w3.org/2000/svg";
 // then takes the nearest place round it, a few px at a time, that no line crosses and no state covers, its
 // halo's 2px included.
 function clearLabels(svg, g) {
-  const segs = [...svg.querySelectorAll("polyline")].flatMap((pl) => { const p = pl.getAttribute("points").split(" ").map((q) => q.split(",").map(Number)); return p.slice(1).map((b, i) => [p[i], b]); });
+  const segs = [...svg.querySelectorAll("path.edge")].flatMap((pl) => { const p = pl.dataset.points.split(" ").map((q) => q.split(",").map(Number)); return p.slice(1).map((b, i) => [p[i], b]); });
   const nodes = g.nodes().map((id) => { const n = g.node(id); return { l: n.x - n.width / 2, t: n.y - n.height / 2, r: n.x + n.width / 2, b: n.y + n.height / 2 }; });
   // A label may stand into its machine's padding, never past it.
   const slack = px("--space-2") - 1, W = g.graph().width + slack, H = g.graph().height + slack;
   const hitSeg = (bx, [[x1, y1], [x2, y2]]) => { for (let k = 0; k <= 48; k++) { const x = x1 + ((x2 - x1) * k) / 48, y = y1 + ((y2 - y1) * k) / 48; if (x > bx.l && x < bx.r && y > bx.t && y < bx.b) return true; } return false; };
   const free = (bx) => bx.l >= -slack && bx.t >= -slack && bx.r <= W && bx.b <= H && !segs.some((sg) => hitSeg(bx, sg)) && !nodes.some((n) => n.l < bx.r && n.r > bx.l && n.t < bx.b && n.b > bx.t);
   for (const t of svg.querySelectorAll("text")) {
-    const b = t.getBBox(), x0 = +t.getAttribute("x"), y0 = +t.getAttribute("y"), halo = 2;
+    // The chip round the label: its 6px pad either side and 3px over and under count as its box.
+    const b = t.getBBox(), x0 = +t.getAttribute("x"), y0 = +t.getAttribute("y"), halo = 6;
     const at = (dx, dy) => ({ l: b.x + dx - halo, t: b.y + dy - halo, r: b.x + b.width + dx + halo, b: b.y + b.height + dy + halo });
     let best = null;
     for (let r = 0; r <= 120 && !best; r += 2) for (const [dx, dy] of [[r, 0], [-r, 0], [0, -r], [0, r], [r, -r], [-r, -r], [r, r], [-r, r]]) if (free(at(dx, dy))) { best = [dx, dy]; break; }
     if (best) { t.setAttribute("x", x0 + best[0]); t.setAttribute("y", y0 + best[1]); }
+    // The label's chip (round 27, pin 30; React Flow's labelShowBg): the raised surface, a hairline, on the path.
+    const nb = t.getBBox(), chip = document.createElementNS(SVGNS, "rect");
+    chip.setAttribute("class", "lchip"); chip.setAttribute("x", nb.x - 6); chip.setAttribute("y", nb.y - 3); chip.setAttribute("width", nb.width + 12); chip.setAttribute("height", nb.height + 6); chip.setAttribute("rx", 5);
+    t.before(chip);
   }
 }
-function edgesSvg(g, id) {
+// A smoothstep path (React Flow's "smoothstep", pathOptions.borderRadius): dagre's points, every bend rounded
+// by --radius-sm, the last run kept straight into its chevron.
+function roundedPath(pts, r) {
+  if (pts.length < 3) return "M" + pts.map((q) => q.x + "," + q.y).join(" L");
+  let d = "M" + pts[0].x + "," + pts[0].y;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+    const l1 = Math.hypot(b.x - a.x, b.y - a.y), l2 = Math.hypot(c.x - b.x, c.y - b.y), k = Math.min(r, l1 / 2, l2 / 2);
+    const p1 = { x: b.x + ((a.x - b.x) * k) / (l1 || 1), y: b.y + ((a.y - b.y) * k) / (l1 || 1) }, p2 = { x: b.x + ((c.x - b.x) * k) / (l2 || 1), y: b.y + ((c.y - b.y) * k) / (l2 || 1) };
+    d += " L" + p1.x + "," + p1.y + " Q" + b.x + "," + b.y + " " + p2.x + "," + p2.y;
+  }
+  const z = pts[pts.length - 1];
+  return d + " L" + z.x + "," + z.y;
+}
+// Edges (round 27, pin 30): smoothstep paths with an open chevron (two 1.5px strokes, round caps, 6px) as the
+// house's linear arrows are; the edges between machines are dependencies, not moves: a hairline, no head.
+function edgesSvg(g, id, between) {
   const svg = document.createElementNS(SVGNS, "svg");
   svg.setAttribute("width", g.graph().width); svg.setAttribute("height", g.graph().height);
-  svg.innerHTML = '<defs><marker id="' + id + '" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" style="fill: var(--border-contrast)"/></marker><marker id="' + id + '-kept" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" style="fill: var(--brand-solid)"/></marker></defs>';
+  const chevron = (mid, ink) => '<marker id="' + mid + '" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5,1 L7,4 L1.5,7" style="fill: none; stroke: ' + ink + '; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round"/></marker>';
+  svg.innerHTML = "<defs>" + chevron(id, "var(--border-contrast)") + chevron(id + "-kept", "var(--brand-solid)") + "</defs>";
+  if (between) svg.classList.add("between");
   for (const e of g.edges()) {
     const ed = g.edge(e);
     if (ed.hidden) continue;
-    const pl = document.createElementNS(SVGNS, "polyline");
-    pl.setAttribute("points", ed.points.map((q) => q.x + "," + q.y).join(" ")); pl.setAttribute("marker-end", "url(#" + id + ")");
+    const pl = document.createElementNS(SVGNS, "path");
+    pl.setAttribute("class", "edge"); pl.dataset.points = ed.points.map((q) => q.x + "," + q.y).join(" ");
+    pl.setAttribute("d", roundedPath(ed.points, px("--radius-sm")));
+    if (!between) pl.setAttribute("marker-end", "url(#" + id + ")");
     pl.dataset.from = e.v; pl.dataset.to = e.w; pl.dataset.marker = id;
-    if (ed.label === "Try again" || ed.label === "Run again" || ed.label === "Resume") pl.classList.add("dash");
+    // A way back (Try again, Run again, Resume): its own hue-less line, dotted, so dashes mean "free" alone in the
+    // dock and "a way back" here, never "original" (finding 2).
+    if (ed.label === "Try again" || ed.label === "Run again" || ed.label === "Resume") pl.classList.add("back");
     svg.append(pl);
-    if (ed.label) { const tx = document.createElementNS(SVGNS, "text"); tx.setAttribute("x", ed.x - ed.width / 2 + 3); tx.setAttribute("y", ed.y + 4); tx.textContent = ed.label; svg.append(tx); }
+    if (ed.label) { const tx = document.createElementNS(SVGNS, "text"); tx.setAttribute("x", ed.x - ed.width / 2 + 9); tx.setAttribute("y", ed.y + 4); tx.textContent = ed.label; svg.append(tx); }
   }
   return svg;
 }
@@ -617,17 +644,61 @@ function drawGraph(cid = tab) {
     outer = layout(sized, c.machineEdges.concat(chain), "TB", margin, { align: "UL", nodesep: 8, edgesep: 4 });
   }
   for (const id of outer.nodes()) { const p = outer.node(id); regions[id].style.left = p.x - p.width / 2 + "px"; regions[id].style.top = p.y - p.height / 2 + "px"; }
-  world.prepend(edgesSvg(outer, "arrow-" + cid + "-machines"));
+  world.prepend(edgesSvg(outer, "arrow-" + cid + "-machines", true));
   const points = outer.edges().flatMap((e) => (outer.edge(e).hidden ? [] : outer.edge(e).points));
   gs.gw = Math.max(outer.graph().width, ...points.map((q) => q.x + margin));
   gs.gh = Math.max(outer.graph().height, ...points.map((q) => q.y + margin));
   world.style.width = gs.gw + "px"; world.style.height = gs.gh + "px";
+  drawStrip(c, graph);
   applyZoom(cid);
 }
+// The section strip (round 27, pin 30; ComfyUI's canvas toolbar, Figma's labelled sections): sticky at the
+// well's top, one chip per machine in region order. A chip whose region is in view reads full ink on the raised
+// surface, one out of view is muted with no fill, the kept machine's wears the brand wash. A press brings its
+// region into view by revealIn's own rule, over --dur-panel. Edge fades say there is more above or below.
+function drawStrip(c, graph) {
+  if (c.machines.length < 2) { const old = graph.parentNode.querySelector(":scope > .secstrip"); if (old) old.remove(); return; }
+  // It stands right over the well, outside its scroll, so it is always in view and takes none of the view's room.
+  const old = graph.parentNode.querySelector(":scope > .secstrip"); if (old) old.remove();
+  const strip = document.createElement("div"); strip.className = "secstrip"; strip.setAttribute("role", "toolbar"); strip.setAttribute("aria-label", "Machines");
+  for (const m of c.machines) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "secchip"; b.dataset.machine = m.id; b.textContent = m.name;
+    b.onclick = (e) => { e.stopPropagation(); jumpTo(c.id, m.id); };
+    strip.append(b);
+  }
+  const foot = document.createElement("div"); foot.className = "gfoot"; foot.setAttribute("aria-hidden", "true");
+  const head = document.createElement("div"); head.className = "gtop"; head.setAttribute("aria-hidden", "true");
+  graph.before(strip); graph.prepend(head); graph.append(foot);
+  graph.onscroll = () => stripView(graph);
+  requestAnimationFrame(() => stripView(graph));
+}
+function stripView(graph) {
+  const strip = graph.parentNode.querySelector(":scope > .secstrip");
+  if (!strip) return;
+  const g = graph.getBoundingClientRect(), top = g.top, more = graph.scrollHeight - graph.clientHeight - graph.scrollTop;
+  for (const chip of strip.children) {
+    const r = graph.querySelector('.region[data-machine="' + chip.dataset.machine + '"]');
+    const b = r && r.getBoundingClientRect();
+    chip.toggleAttribute("data-inview", !!b && b.bottom > top + 1 && b.top < g.bottom - 1 && b.right > g.left + 1 && b.left < g.right - 1);
+  }
+  graph.dataset.fade = (graph.scrollTop > 1 ? "top" : "") + (more > 1 ? " foot" : "");
+}
+function jumpTo(cid, machine) {
+  const g = graphOf(cid), r = g.querySelector('.region[data-machine="' + machine + '"]');
+  if (!r) return;
+  const n = r.querySelector(".node.kept, .node.cur") || r.querySelector(".node");
+  const s0 = g.scrollTop, l0 = g.scrollLeft;
+  revealIn(cid, n, null, false);
+  // The region's own top in view: its band under the strip, --space-2 clear.
+  const rb = r.getBoundingClientRect(), gb = g.getBoundingClientRect();
+  const want = clamp(g.scrollTop + (rb.top - gb.top - g.clientTop) - px("--space-2"), 0, g.scrollHeight - g.clientHeight), wantL = g.scrollLeft;
+  g.scrollTop = s0; g.scrollLeft = l0;
+  g.scrollTo({ top: want, left: wantL, behavior: reduced() ? "auto" : "smooth" });
+}
 function applyZoom(cid = tab) {
-  const gs = G[cid], zoomer = graphOf(cid).querySelector(".zoomer"), label = Math.round(gs.zoom * 100) + "%";
-  gsecOf(cid).querySelector(".gsec-head output").textContent = label;
-  if (cid === tab) $("zoomLevel").textContent = label;
+  const gs = G[cid], zoomer = graphOf(cid).querySelector(".zoomer"), label = fig(Math.round(gs.zoom * 100) + "%");
+  gsecOf(cid).querySelector(".gsec-head output").innerHTML = label;
+  if (cid === tab) $("zoomLevel").innerHTML = label;
   if (!zoomer) return;
   zoomer.style.width = gs.gw * gs.zoom + "px"; zoomer.style.height = gs.gh * gs.zoom + "px";
   zoomer.firstChild.style.transform = "scale(" + gs.zoom + ")";
@@ -658,24 +729,26 @@ function revealIn(cid, el, fromEl, fit) {
   // margin, between 0.75 and 1 (the r24 values ruling, call 3). Where it doesn't fit at 0.75, the view opens
   // on the kept state, its from-state above it when there is room, the machine's top cut cleanly.
   if (fit && !gs.own) {
-    const rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, z = clamp((g.clientHeight - 2 * pad) / rh, 0.75, 1);
+    const st = g.querySelector(".secstrip"), rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, z = clamp((g.clientHeight - (st ? st.offsetHeight : 0) - 2 * pad) / rh, 0.75, 1);
     if (Math.abs(z - gs.zoom) > 0.001) { gs.zoom = z; applyZoom(cid); }
   }
   const box = g.getBoundingClientRect(), n = el.getBoundingClientRect(), r = el.closest(".region").getBoundingClientRect();
-  const at = (y) => y - box.top - g.clientTop + g.scrollTop;
+  // The section strip stands over the view's top (pin 30): what shows starts under it.
+  const strip = g.querySelector(".secstrip"), sh = strip ? strip.offsetHeight : 0;
+  const at = (y) => y - box.top - g.clientTop + g.scrollTop - sh;
   const topWant = Math.min(at(r.top) - pad, fromEl ? at(fromEl.getBoundingClientRect().top) - pad : Infinity, at(n.top) - pad);
-  let want = Math.max(at(n.bottom) + pad - g.clientHeight, topWant);
+  let want = Math.max(at(n.bottom) + pad - (g.clientHeight - sh), topWant);
   // A focus keeps the view where it stands when that already shows the state; else it moves the least.
-  if (!fit) { const s0 = g.scrollTop; want = at(n.top) >= s0 - 0.5 && at(n.bottom) <= s0 + g.clientHeight + 0.5 ? s0 : at(n.top) < s0 ? at(n.top) - pad : at(n.bottom) + pad - g.clientHeight; }
+  if (!fit) { const s0 = g.scrollTop, Hv = g.clientHeight - sh; want = at(n.top) >= s0 - 0.5 && at(n.bottom) <= s0 + Hv + 0.5 ? s0 : at(n.top) < s0 ? at(n.top) - pad : at(n.bottom) + pad - Hv; }
   // The view it opens on (the r23 review): its top edge cuts nothing, a state, a machine's name, an edge's
   // label, a machine's box or an arrow inside one, and stands --space-2 clear of what shows under it; only an
   // arrow between machines may come in over it, its head in view. Its foot cuts no state, name or label (a
   // box or an arrow running on under it is the cue that there is more). The nearest such scroll to the
   // kept state's; where none shows the kept state whole, the edges cut no state or name, as before.
-  const H = g.clientHeight;
-  let max = g.scrollHeight - H;
+  const H = g.clientHeight - sh;
+  let max = g.scrollHeight - g.clientHeight;
   const boxOf = (el) => { const b = el.getBoundingClientRect(); return [at(b.top), at(b.bottom)]; };
-  const solid = [...g.querySelectorAll(".node, .region-name, .world svg text")].map(boxOf);
+  const solid = [...g.querySelectorAll(".node, .region-name, .world svg text, .world svg .lchip")].map(boxOf);
   // The edge cuts no state, no machine's name and no edge label (the r24 values ruling, call 4); a machine's
   // box and arrows, between machines or inside one, may run on over it.
   const frames = [];
@@ -695,13 +768,16 @@ function revealIn(cid, el, fromEl, fit) {
   const uncut = (s) => s <= 0.5 || !solid.some(([t, b]) => t < s - 0.5 && b > s + 0.5);
   // The foot's --space-2 is the first wish; the top's margin outranks it where both can't stand.
   const strict = pickBy((s) => clear(s) && footClear(s) && footRoom(s)), topClear = pickBy((s) => clear(s) && footClear(s)), footFirst = pickBy((s) => uncut(s) && footClear(s)), loose = pickBy((s) => !cuts(s));
-  const pick = (limit) => strict(limit) ?? topClear(limit) ?? footFirst(limit) ?? loose(limit);
+  // Last, where nothing keeps both edges clean (a short stacked well), the top stays uncut and the foot runs on
+  // (round 27: the region bands made such views possible).
+  const topOnly = pickBy((s) => uncut(s));
+  const pick = (limit) => strict(limit) ?? topClear(limit) ?? footFirst(limit) ?? loose(limit) ?? topOnly(limit);
   let best = pick(max);
   // Where no view of the content as drawn shows the kept state whole and cuts nothing, the well gets room
   // past its last machine, so the view can open lower.
   if (best === undefined) {
     best = pick(Infinity);
-    if (best !== undefined && best > max) { const tail = document.createElement("div"); tail.className = "graph-tail"; tail.style.blockSize = Math.ceil(best - max) + "px"; g.append(tail); max = g.scrollHeight - H; }
+    if (best !== undefined && best > max) { const tail = document.createElement("div"); tail.className = "graph-tail"; tail.style.blockSize = Math.ceil(best - max) + "px"; g.append(tail); max = g.scrollHeight - g.clientHeight; }
   }
   g.scrollTop = best ?? want;
   g.scrollLeft += n.left + n.width / 2 - (box.left + box.width / 2);
@@ -723,9 +799,12 @@ function mark() {
       el.classList.toggle("kept", on && el.dataset.machine === v.last); el.classList.toggle("cur", on && el.dataset.machine !== v.last);
       el.classList.toggle("peek", peeked(el) && peek.vary === i);
     });
+    // The kept machine's region and its chip in the strip (pin 30).
+    sec.querySelectorAll(".region").forEach((r) => r.classList.toggle("kept-region", r.dataset.machine === v.last));
+    sec.querySelectorAll(".secchip").forEach((b) => b.toggleAttribute("data-kept", b.dataset.machine === v.last));
     // The lit edge: the edge into the kept state, drawn last, in coral. Edges between machines never light.
     const into = moveInto(c, v.last, v.cur[v.last].state);
-    sec.querySelectorAll(".region polyline").forEach((pl) => {
+    sec.querySelectorAll(".region path.edge").forEach((pl) => {
       const lit = !!into && pl.closest(".region").dataset.machine === v.last && pl.dataset.from === into.from && pl.dataset.to === v.cur[v.last].state;
       pl.classList.toggle("kept", lit);
       pl.setAttribute("marker-end", "url(#" + pl.dataset.marker + (lit ? "-kept" : "") + ")");
@@ -741,7 +820,7 @@ function mark() {
 }
 // The disc rides the lit edge with the dock's playhead, one to one; shown while playing or scrubbing.
 function updateDisc() {
-  const pl = gsecOf(tab).querySelector(".region polyline.kept");
+  const pl = gsecOf(tab).querySelector(".region path.edge.kept");
   let disc = document.querySelector(".disc");
   const km = keptMove();
   const show = !!pl && !!km && (scrubbing || (!!playing && !reduced()));
@@ -801,22 +880,32 @@ function glyph(ease, cls) {
 }
 const fmtMs = (v) => Math.round(v) + " ms";
 const curveName = (ease) => (isSpring(ease) ? "spring" : Array.isArray(ease) ? ease.map((n) => +n.toFixed(2)).join(", ") : ease);
-// The readouts: the Badge, a token's name then its value, or the value alone with the dashed free edge.
+// The readouts (round 27, pin 27): each is one button that opens the clip's popover on its own field (pin 28).
+// A token's name is a code chip; a number is a Measured figure (JetBrains Mono, tabular, at its cap height)
+// in full ink, its unit after it in meta. A free value's figure keeps the dashed edge, the one mark of free;
+// a value the person changed takes the selection pair, theirs alone.
+const fig = (v, unit, cls = "") => '<span class="fig ' + cls + '">' + v + (unit ? '<span class="unit">' + unit + "</span>" : "") + "</span>";
+const codeChip = (name) => '<span class="badge code"><code>' + esc(name) + "</code></span>";
+const readout = (open, label, inner, cls) => '<button type="button" class="ro ' + cls + '" data-open="' + open + '" aria-label="' + esc(label) + '">' + inner + "</button>";
 function lengthBadge(c, cls = "") {
-  return typeof c.dur === "string" ? '<span class="badge ' + cls + '"><code>' + c.dur + "</code> " + fmtMs(ms(c.dur)) + "</span>" : '<span class="badge free ' + cls + '">' + fmtMs(c.dur) + "</span>";
+  return typeof c.dur === "string" ? readout("dur", "Length " + c.dur + " " + fmtMs(ms(c.dur)), codeChip(c.dur) + fig(Math.round(ms(c.dur)), "ms"), cls) : readout("dur", "Length " + fmtMs(c.dur), fig(Math.round(c.dur), "ms", "free"), cls);
 }
 function curveBadge(c, cls = "") {
-  if (isSpring(c.ease)) return '<span class="badge ' + cls + '">' + glyph(c.ease) + "<code>spring</code> " + c.ease.spring.bounce + "</span>";
-  if (Array.isArray(c.ease)) return '<span class="badge free ' + cls + '">' + glyph(c.ease) + curveName(c.ease) + "</span>";
-  return '<span class="badge ' + cls + '">' + glyph(c.ease) + "<code>" + c.ease + "</code></span>";
+  if (isSpring(c.ease)) return readout("curve", "Curve spring, bounce " + c.ease.spring.bounce, '<span class="badge code">' + glyph(c.ease) + "<code>spring</code></span>" + fig(c.ease.spring.bounce), cls);
+  if (Array.isArray(c.ease)) return readout("curve", "Curve " + curveName(c.ease), '<span class="fig free">' + glyph(c.ease) + curveName(c.ease) + "</span>", cls);
+  return readout("curve", "Curve " + c.ease, '<span class="badge code">' + glyph(c.ease) + "<code>" + c.ease + "</code></span>", cls);
 }
 // Values take a line of their own, so a row's height never turns on how wide its other readouts are.
-function valuesBadge(c, cls = "") { return c.from != null ? '<span class="readouts-break" aria-hidden="true"></span><span class="badge values ' + cls + '"><code>' + c.prop + "</code> " + c.from + " → " + c.to + " " + (c.unit || "") + "</span>" : ""; }
+function valuesBadge(c, cls = "") { return c.from != null ? '<span class="readouts-break" aria-hidden="true"></span>' + readout("from", c.prop + " " + c.from + " to " + c.to + " " + (c.unit || ""), codeChip(c.prop) + fig(c.from) + '<span class="arrow">→</span>' + fig(c.to, c.unit || ""), "values " + cls) : ""; }
 function readoutsHtml(e, c) {
   const o = e.orig.find((x) => x.key === c.key);
   const ch = (a, b) => (same(a, b) ? "" : "changed");
   return lengthBadge(c, ch(c.dur, o.dur)) + curveBadge(c, ch(c.ease, o.ease)) + valuesBadge(c, ch([c.from, c.to], [o.from, o.to]));
 }
+// The kind of change a clip makes, by its verb: it comes in, it changes in place, or it goes (pin 27). Its hue
+// marks its bar's edge and a dot before the verb, so clips read apart before their words are read.
+const KINDS = { enter: /^(comes in|fade in|unfolds|appears|rises)/, exit: /^(folds away|goes|dims|fades out|leaves)/ };
+const kindOf = (c) => (KINDS.enter.test(c.does) ? "enter" : KINDS.exit.test(c.does) ? "exit" : "change");
 const anchorWords = (e, c) => (c.at.ref ? c.at.ref + " " + e.cur.concat(e.orig).find((x) => x.key === c.at.of).of : "");
 function buildDock(opts = {}) {
   const dock = $("dock"), km = keptMove();
@@ -832,11 +921,11 @@ function buildDock(opts = {}) {
   const edited = n > 0;
   let html = '<header class="dock-head"><h2 class="dock-title">' + esc(title) + "</h2>";
   html += '<div class="edits">';
-  if (edited) html += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original">Original</button><button class="t-tab" role="tab" data-view="edited">Edited</button></div><span class="badge">' + n + (n === 1 ? " edit" : " edits") + '</span><button class="ghost-btn" id="resetAll">Reset</button>';
+  if (edited) html += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original">Original</button><button class="t-tab" role="tab" data-view="edited">Edited</button></div><span class="badge edits-count"><span class="num">' + n + "</span>" + (n === 1 ? " edit" : " edits") + '</span><button class="ghost-btn" id="resetAll">Reset</button>';
   html += "</div></header>";
   html += '<div class="tl" id="tl"><div class="end-area" id="endArea"></div>';
   html += '<div class="tl-row ruler-row"><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button><span class="readout" id="readout"></span></div><div class="ruler" id="ruler"></div></div>';
-  html += '<div class="rows" id="rows">' + km.clips.map((c) => '<div class="tl-row clip" data-key="' + c.key + '"><div class="clip-name"><p>' + esc(c.of) + " <span>" + esc(c.does) + '</span></p><div class="readouts">' + readoutsHtml(km.e, c) + '</div></div><div class="lane" data-key="' + c.key + '"><div class="ghost" hidden></div><div class="bar" role="button" tabindex="0" aria-pressed="false" data-key="' + c.key + '" aria-label="' + esc(c.of + " " + c.does) + '"' + (c.at.ref ? ' data-tip="' + esc(anchorWords(km.e, c)) + '"' : "") + '></div><div class="tail" hidden></div></div></div>').join("") + "</div>";
+  html += '<div class="rows" id="rows">' + km.clips.map((c) => '<div class="tl-row clip" data-key="' + c.key + '" data-kind="' + kindOf(c) + '"><div class="clip-name"><p>' + esc(c.of) + ' <span class="verb"><i class="kind" aria-hidden="true"></i>' + esc(c.does) + '</span></p><div class="readouts">' + readoutsHtml(km.e, c) + '</div></div><div class="lane" data-key="' + c.key + '"><div class="ghost" hidden></div><div class="bar" role="button" tabindex="0" aria-pressed="false" data-key="' + c.key + '" aria-label="' + esc(c.of + " " + c.does) + '"' + (c.at.ref ? ' data-tip="' + esc(anchorWords(km.e, c)) + '"' : "") + '></div><div class="tail" hidden></div></div></div>').join("") + "</div>";
   html += '<div id="ties"></div><div class="playhead" id="playhead"></div></div>';
   const refocus = pop && pop.inline && pop.el.contains(document.activeElement) ? document.activeElement.dataset.f : null;
   $("dockBody").innerHTML = html;
@@ -930,6 +1019,8 @@ function layoutDock(work) {
     const t = +s.dataset.t, w = s.offsetWidth, x = (g.w * t) / g.end, left = clamp(x - w / 2, 0, g.w - w);
     if (left < prevRight + gap) { s.remove(); continue; }
     s.style.left = left + "px"; prevRight = left + w;
+    // Over the move's end area the tick's figure steps up to ink-muted, to hold 4.5:1 on the deeper recess.
+    s.classList.toggle("over-end", left + w / 2 >= endX - g.x0);
   }
   drawTies(clips, r, g);
   updateTime();
@@ -965,7 +1056,7 @@ function updateTime() {
   $("tl").style.setProperty("--ph-x", xOf(g, Math.min(t, g.end)) - g.x0 + "px");
   const rb = $("ruler").getBoundingClientRect(), tb = $("tl").getBoundingClientRect();
   $("playhead").style.setProperty("--ph-y", rb.bottom - tlTop() - px("--space-1") / 2 + "px");
-  $("readout").innerHTML = "<b>" + Math.round(t) + "</b> / " + Math.round(len) + " ms";
+  $("readout").innerHTML = '<b class="fig">' + Math.round(t) + '</b> / <span class="fig">' + Math.round(len) + '<span class="unit">ms</span></span>';
   $("play").toggleAttribute("data-playing", !!playing);
   $("play").setAttribute("aria-label", playing ? "Pause" : "Play");
   updateDisc();
@@ -1031,7 +1122,16 @@ function wireDock(km) {
   const scrubAt = (e) => { const g = laneGeo(), tlb = tlEl.getBoundingClientRect(); stopPlayKeepTime(); time = clamp(((e.clientX - tlb.left - g.x0) / g.w) * g.end, 0, playLengthOf(tl.km.r)); drawStage(); updateTime(); };
   const startScrub = (e) => { e.preventDefault(); scrubbing = true; rootEl.dataset.scrubbing = ""; e.currentTarget.setPointerCapture(e.pointerId); scrubAt(e); e.currentTarget.onpointermove = scrubAt; e.currentTarget.onpointerup = e.currentTarget.onpointercancel = (ev) => { ev.currentTarget.onpointermove = null; scrubbing = false; delete rootEl.dataset.scrubbing; updateDisc(); }; };
   $("ruler").onpointerdown = startScrub;
-  for (const name of rows.querySelectorAll(".clip-name")) name.onclick = (e) => { const bar = name.parentNode.querySelector(".bar"); barClick(bar.dataset.key, e, "pointer"); };
+  for (const name of rows.querySelectorAll(".clip-name")) name.onclick = (e) => { if (e.target.closest(".ro")) return; const bar = name.parentNode.querySelector(".bar"); barClick(bar.dataset.key, e, "pointer", { name: true }); };
+  // A readout opens its clip's popover on its own field: Length on its figure, the curve on its menu, values on From.
+  for (const ro of rows.querySelectorAll(".ro")) ro.onclick = (e) => {
+    e.stopPropagation();
+    const key = ro.closest(".clip").dataset.key, open = ro.dataset.open, keyed = e.detail === 0;
+    barClick(key, e, keyed ? "key" : "pointer", { open });
+    if (!pop || pop.key !== key) return;
+    if (open === "curve") { const t = pop.el.querySelector('[data-menu="curve"]'); if (t) openMenu("curve", t); }
+    else { const f = pop.el.querySelector('input[data-f="' + (open === "from" ? "from" : "dur") + '"]'); if (f) { f.focus({ preventScroll: true }); if (f.select) f.select(); } }
+  };
   for (const bar of rows.querySelectorAll(".bar")) {
     bar.onpointermove = (e) => { if (bar.dataset.dragging || km.e.view === "original") return; const b = bar.getBoundingClientRect(), z = px("--bar-handle-zone"); const zone = e.clientX - b.left < z ? "start" : b.right - e.clientX < z ? "end" : ""; if (zone) bar.dataset.zone = zone; else delete bar.dataset.zone; };
     bar.onpointerleave = () => { delete bar.dataset.zone; };
@@ -1057,7 +1157,7 @@ function touchZone(bar, x) {
   return ds <= de ? "start" : "end";
 }
 function stopPlayKeepTime() { if (playing) { cancelAnimationFrame(playing); playing = null; } }
-function barClick(key, e, origin) {
+function barClick(key, e, origin, anchor) {
   const km = keptMove();
   if (km.e.view === "original") return;
   if (e.shiftKey || e.metaKey || e.ctrlKey) {
@@ -1066,7 +1166,7 @@ function barClick(key, e, origin) {
   }
   km.e.sel = new Set([key]);
   layoutDock();
-  openPop(key, origin);
+  openPop(key, origin, anchor);
 }
 function barDown(bar, e, touchEdge) {
   const km = keptMove();
@@ -1236,14 +1336,16 @@ function followRows(anim, reveal) {
   anim.finished.then(() => { if (tl) layoutDock(); if (reveal) revealInline(); }, () => {});
 }
 function clipNow(key, work) { const km = keptMove(); return (work || km.e.cur).find((x) => x.key === key); }
-function openPop(key, origin) {
+// The popover opens on what was pressed (round 27, pin 28): a readout, the clip's name or its bar (the anchor,
+// held by what it is, so a relayout finds it again). It grows from that element's centre.
+function openPop(key, origin, anchor) {
   const km = keptMove();
   if (!km || km.e.view === "original") return;
-  if (pop && pop.key === key) { if (origin === "key") focusFirst(); return; }
+  if (pop && pop.key === key) { pop.anchor = anchor || null; if (!pop.inline) placePop(); if (origin === "key") focusFirst(); return; }
   closePop(true);
   const el = document.createElement("div"), inline = stacked();
   el.className = "pop" + (inline ? " inline" : ""); el.setAttribute("role", inline ? "group" : "dialog"); el.dataset.key = key;
-  pop = { key, el, origin, held: false, committed: {}, inline };
+  pop = { key, el, origin, held: false, committed: {}, inline, anchor: anchor || null };
   if (inline) attachInline(); else document.body.append(el);
   renderPop();
   placePop();
@@ -1301,9 +1403,28 @@ function popBounds() {
 // Where it stands (clip-popover-design.md): 4px above its bar, its start on the bar's start, slid along the row
 // inside its surface; below the bar's row only when the room above is shorter than it (and the room below
 // longer); where neither side holds it, it stays inside the surface.
+// The pressed element, found again by what it is: a readout by its field, the name block, or the bar.
+function anchorEl() {
+  const row = $("rows") && $("rows").querySelector('.clip[data-key="' + pop.key + '"]');
+  if (!row) return null;
+  const a = pop.anchor;
+  return (a && a.open && row.querySelector('.ro[data-open="' + a.open + '"]')) || (a && a.name && row.querySelector(".clip-name")) || row.querySelector(".bar");
+}
 function popPlace() {
-  const bar = $("rows") && $("rows").querySelector('.bar[data-key="' + pop.key + '"]');
+  const bar = anchorEl();
   if (!bar) return null;
+  // A press in the name column opens under what was pressed, its start on its start; a bar's opens above it.
+  // The anchor is read at rest: a chip still pressed (scaled by --press-scale) would put it a pixel or two off.
+  if (!bar.classList.contains("bar")) {
+    const was = bar.style.scale; bar.style.scale = "1";
+    const b = bar.getBoundingClientRect();
+    bar.style.scale = was;
+    const el = pop.el, B = popBounds(), gap = px("--space-1"), w = el.offsetWidth, h = el.offsetHeight;
+    const left = clamp(b.left, B.l, B.r - w), roomBelow = B.b - (b.bottom + gap), roomAbove = b.top - gap - B.t;
+    const below = roomBelow >= h || roomBelow >= roomAbove, top = clamp(below ? b.bottom + gap : b.top - gap - h, B.t, B.b - h);
+    el.style.transformOrigin = (b.left + b.width / 2 - left) + "px " + (below ? "0" : "100%");
+    return { left, top, above: !below, bottom: innerHeight - (top + h) };
+  }
   const b = bar.getBoundingClientRect(), el = pop.el, B = popBounds(), gap = px("--space-1");
   const w = el.offsetWidth, h = el.offsetHeight;
   const left = clamp(b.left, B.l, B.r - w);
@@ -1535,8 +1656,10 @@ function drawDials(cid = tab) {
     const row = document.createElement("label"); row.className = "dial";
     const n = document.createElement("span"); n.textContent = d.name;
     const r = document.createElement("input"); r.type = "range"; r.min = d.min; r.max = d.max; r.step = d.step; r.value = d.value;
-    const out = document.createElement("output"); out.textContent = d.value + " " + d.unit;
-    r.oninput = () => { d.value = +r.value; out.textContent = d.value + " " + d.unit; d.apply(d.value); for (const c of shownComps()) keptSnaps[c.id] = snapStage(c.id); };
+    const out = document.createElement("output");
+    const say = () => { out.innerHTML = fig(d.value, d.unit); };
+    say();
+    r.oninput = () => { d.value = +r.value; say(); d.apply(d.value); for (const c of shownComps()) keptSnaps[c.id] = snapStage(c.id); };
     row.append(n, r, out); box.append(row);
   }
 }
@@ -1563,7 +1686,7 @@ for (const c of review) {
 // dragged), the last the rest.
 let splitDragged = false;
 function placeSplit() {
-  const stackedGraphs = screen.multi && screen.multi.graphs === "stack", sash = $("sashS"), pill = document.querySelector(".edge-pill-s");
+  const stackedGraphs = screen.multi && screen.multi.graphs === "stack", sash = $("sashS"), pill = document.querySelector('.lit[data-arm="s"]');
   sash.hidden = pill.hidden = !stackedGraphs;
   if (!stackedGraphs) return;
   const secs = [...$("graphs").children], first = secs[0], g1 = graphOf(first.dataset.comp);
@@ -1680,9 +1803,27 @@ function syncSashes() {
   if (stackedGraphs()) set($("sashS"), splitGraphs()[0].offsetHeight, splitFloor(), splitCeil());
 }
 function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); mark(); for (const c of shownComps()) showKept(c.id); placeSplit(); if (tl) layoutDock(); sizeDockRoom(); if (pop) placePop(); }
+// The resize handle's design: html[data-handle] (arc, light or bead), from #handle= or ?handle=, arc by
+// default (round 27; the owner picks one on its decision page).
+rootEl.dataset.handle = (location.hash.match(/handle=(arc|light|bead)/) || location.search.match(/handle=(arc|light|bead)/) || [, rootEl.dataset.handle || "arc"])[1];
+// Where along each arm the light (and the bead's knob) stands: the pointer's place on that arm, held 16px
+// clear of the corners; on the corner, both arms' corner ends.
+const armsOf = (owner, edge) => (edge === "wh" ? ["w", "h"] : edge === "d" || edge === "s" ? [edge] : [edge]);
+function aimArms(owner, edge, e) {
+  const b = owner.getBoundingClientRect(), R = px("--radius-panel"), clear = px("--c-edge-pull");
+  for (const arm of armsOf(owner, edge)) {
+    const lit = owner.querySelector('.lit[data-arm="' + arm + '"]'), bead = owner.querySelector('.bead[data-arm="' + arm + '"]');
+    const len = arm === "w" ? b.height : b.width;
+    const along = edge === "wh" ? (arm === "w" ? len - R : R) : arm === "w" ? e.clientY - b.top : e.clientX - b.left;
+    const at = clamp(along, R + clear, len - R - clear);
+    if (lit) lit.style.setProperty("--at", Math.round(at) + "px");
+    if (bead && edge !== "wh") bead.style.translate = arm === "w" ? "0 " + Math.round(at - len / 2) + "px" : Math.round(at - len / 2) + "px 0";
+  }
+}
 for (const sash of document.querySelectorAll(".sash")) {
   const edge = sash.dataset.edge, owner = sash.closest(".tool");
-  sash.onpointerenter = () => { owner.dataset.edge = edge; };
+  sash.addEventListener("pointermove", (e) => { if (!owner.dataset.resizing) aimArms(owner, edge, e); });
+  sash.onpointerenter = (e) => { owner.dataset.edge = edge; aimArms(owner, edge, e); };
   sash.onfocus = () => { owner.dataset.edge = edge; };
   sash.onpointerdown = (e) => {
     e.preventDefault();
@@ -1733,7 +1874,7 @@ for (const c of review) {
   }, { passive: false });
   g.addEventListener("touchend", (e) => { if (e.touches.length < 2) pinch.d0 = 0; });
   g.addEventListener("pointerdown", (e) => {
-    if (e.pointerType === "touch" || e.target.closest(".node")) return;
+    if (e.pointerType === "touch" || e.target.closest(".node, .secstrip")) return;
     const x0 = e.clientX, y0 = e.clientY, sl = g.scrollLeft, st = g.scrollTop;
     g.setPointerCapture(e.pointerId); g.classList.add("panning");
     g.onpointermove = (ev) => { g.scrollLeft = sl - (ev.clientX - x0); g.scrollTop = st - (ev.clientY - y0); };
@@ -1744,18 +1885,30 @@ for (const c of review) {
 // ---- Hide and Show ----
 // At a desk Hide takes the panel and the dock away; the side sheet folds to its edge tab; the drawer
 // drops to its head.
+// The pill Hide becomes, as a clip of the panel's border box: the button's own box, grown from its end by the
+// eye, the gap and "Show graph" (pin 29). Read from the button as it stands, so it holds at any panel size.
+function pillClip() {
+  const b = $("hide"), pb = panel.getBoundingClientRect(), r = b.getBoundingClientRect();
+  const w = 2 * px("--space-3") + px("--icon-md") + px("--space-2") + b.querySelector(".show-label").scrollWidth + 2;
+  const top = r.top - pb.top, right = pb.right - r.right, bottom = pb.bottom - r.bottom, left = Math.max(0, r.right - w - pb.left);
+  return "inset(" + [top, right, bottom, left].map((v) => Math.round(v * 100) / 100 + "px").join(" ") + " round " + tok("--radius-md") + ")";
+}
 function setOpen(open) {
   if (layoutIs("drawer")) { setStop(open ? "peek" : "head"); return; }
+  if (!open && layoutIs("desk")) panel.style.setProperty("--pill-clip", pillClip());
   panel.dataset.open = String(open);
   rootEl.dataset.tools = open ? "open" : "hidden";
-  $("show").hidden = open;
+  const hide = $("hide"), label = open ? "Hide graph" : "Show graph";
+  hide.setAttribute("aria-label", label); hide.dataset.tip = label + " (H)"; hide.setAttribute("aria-expanded", String(open));
+  $("show").hidden = open || layoutIs("desk");
   if (!open) closePop(true);
   buildDock();
   if (open && layoutIs("sheet")) { if (face === "graph") { drawGraph(); mark(); showKept(); } else buildDock(); }
   if (open && layoutIs("desk")) { for (const c of shownComps()) drawGraph(c.id); mark(); for (const c of shownComps()) showKept(c.id); placeSplit(); }
 }
 const toolsOpen = () => (layoutIs("drawer") ? stop !== "head" : panelOpen());
-$("hide").onclick = () => { setOpen(false); $("show").focus(); };
+// At a desk the one button toggles: Hide folds the panel into it, Show opens it back out; its focus stays.
+$("hide").onclick = () => { if (layoutIs("desk")) { setOpen(!panelOpen()); return; } setOpen(false); $("show").focus(); };
 $("sheetHide").onclick = () => { setOpen(false); $("show").focus(); };
 $("show").onclick = () => { setOpen(true); (layoutIs("sheet") ? $("sheetHide") : $("hide")).focus(); };
 
@@ -1790,7 +1943,8 @@ function onResize() {
   if (layoutIs("desk") && rootEl.style.getPropertyValue("--dock-h")) setDockH(parseFloat(rootEl.style.getPropertyValue("--dock-h")));
   if (layoutIs("drawer")) panel.dataset.open = "true";
   rootEl.dataset.tools = panelOpen() ? "open" : "hidden";
-  $("show").hidden = panelOpen();
+  $("show").hidden = panelOpen() || layoutIs("desk");
+  if (!panelOpen() && layoutIs("desk")) panel.style.setProperty("--pill-clip", pillClip());
   render();
 }
 addEventListener("resize", onResize);
