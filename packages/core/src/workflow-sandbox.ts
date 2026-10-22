@@ -100,6 +100,11 @@ function importsOf(program: string): string[] {
 
 let cachedHost: ts.CompilerHost | undefined;
 
+/**
+ * One set of options wherever the hub runs. `zod` resolves as any package
+ * does, from the node_modules above the program (programDir); the binary
+ * publishes it at workflow/node_modules/zod, beside workflow/programs.
+ */
 const COMPILER_OPTIONS: ts.CompilerOptions = {
   target: ts.ScriptTarget.ESNext,
   module: ts.ModuleKind.ESNext,
@@ -109,7 +114,6 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
   skipLibCheck: true,
   allowImportingTsExtensions: true,
   types: [],
-  ...(standalone ? { baseUrl: runtimeTree("workflow") } : {}),
 };
 
 /**
