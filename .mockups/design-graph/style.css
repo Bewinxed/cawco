@@ -12,22 +12,26 @@
   /* The split line's taper at each end. */
   --c-edge-lit-fade: 36px;
   /* Round 28: iPadOS 26's window handle, measured on Apple's own picture of it (support.apple.com 125309, its
-     magnifier over the window's corner; circles fitted to the window's edge and to the handle's ink, R the
-     window's corner radius, 51.74px there), then scaled to ours. Not concentric: the handle's circle is
-     tighter than the corner's (r = 0.560 R) and its centre is pulled 0.201 R toward the corner on both axes,
-     so its stroke stands 0.156 R in from the edge on the diagonal and 0.239 R in where it meets the straight
-     edges. 0.114 R thick, sweeping 95° centred on the diagonal, round caps. */
-  --c-grip-pull: calc(var(--radius-panel) * 0.201);
-  --c-grip-r: calc(var(--radius-panel) * 0.56);
-  --c-grip-stroke: calc(var(--radius-panel) * 0.114);
-  --c-grip-sweep: 95deg;
+     magnifier over the window's corner). The window's edge fitted as a circle (R = 51.74px there), the handle's
+     centreline as the midpoints of its ink's 50% crossings on 71 rays (worst residual 0.13px). Concentric with
+     the corner (its centre within 0.017 R of the corner's); its stroke 0.112 R; the visible gap from the
+     window's edge to the ink 0.12–0.136 R (0.125 R taken), so its centreline 0.18 R in; its body 65.6° of the
+     circle on the diagonal (73.3° tip to tip with its round caps). Scaled to our radius for a fine pointer. */
+  --c-grip-gap: calc(var(--radius-panel) * 0.125);
+  --c-grip-stroke: calc(var(--radius-panel) * 0.112);
+  --c-grip-inset: calc(var(--c-grip-gap) + var(--c-grip-stroke) / 2);
+  /* Its rest length along the centreline: 65.6° (1.1449 rad) of the circle R − inset round. */
+  --c-grip-len: calc((var(--radius-panel) - var(--c-grip-inset)) * 1.1449);
   /* Apple's handle is opaque near-black, rgb(24 24 24), on its window, 8.7:1 against it; white on a dark window
      (rehafachperson.ch, "Accessility Tools in iOS 26": "a white (dark colour scheme) or black corner"). At rest
      ours stands at Apple's 8.7:1 on the raised surface, an opaque mix of the strong ink into it (84% by day,
      81% at night); under the pointer and in a drag it brightens to the strong ink itself. */
   --c-grip-ink-rest: light-dark(color-mix(in oklab, var(--ink-strong) 84%, var(--surface-raised)), color-mix(in oklab, var(--ink-strong) 81%, var(--surface-raised)));
-  /* My call: how far the held handle runs out along each edge before it has thinned to nothing. */
-  --c-grip-run: 120px;
+  /* My call: how far the held handle runs out from each end of its body, three radii: past the corner's curve
+     (one R) and two radii on along each straight edge, enough to show which two edges move, short enough that
+     it stays the corner's mark and never becomes a lit edge. Its bend onto the hairline takes one radius. */
+  --c-grip-run: calc(var(--radius-panel) * 3);
+  --c-grip-bend: var(--radius-panel);
   /* Round 27, the designer's report: the kind-of-change hues on the tool-family formula (50% L / 0.12 C by
      day, 74% / 0.11 at night, none of the four status hues), and the kept region's band. */
   --c-section-band-h: 24px;
@@ -59,6 +63,14 @@
   --gutter: max(0px, (100% - var(--c-review-max-w)) / 2);
   --gutter-start: var(--gutter);
   --gutter-end: var(--gutter);
+}
+/* A finger has no hover to find the corner with, so its handle is Apple's own size, not scaled to our smaller
+   corner: on that picture the loupe magnifies 1.39× (the window's real corner 37.2px against its 51.74px) and
+   the iPad's 1210pt screen spans 1448px, so the handle is 3.45pt thick and 29.7pt long. It keeps our gap from
+   the edge; its length past our quarter circle runs on as a straight leg along each edge. */
+html:is([data-input="touch"], [data-input="touch-hover"]) {
+  --c-grip-stroke: 3.45px;
+  --c-grip-len: 29.7px;
 }
 /* One component under review: the wide panel from bp-desk-wide. Two or more on screen at once: the 448 panel
    with the graphs stacked, or twice it with them side by side, and no 2000 cap (all-components-design.md). */
@@ -265,21 +277,23 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline
    the r23 "no corner on touch" ruling falls with the handle it served). */
 
 /* ---- The resize handle (round 28): iPadOS 26's window handle ----
-   One filled path per handle, its two shapes drawn by app.js from one list of points (see cornerShape). At
-   rest the panel's is Apple's arc in its resizing corner (iPadOS puts the handle at the corner that resizes:
-   bottom-right on a window, bottom-left on one snapped right, as this panel stands); the dock's, the same
-   stroke straightened into a short capsule on its top edge. No side edge carries a mark of its own (pin 25).
-   Pointing at an edge or the corner gives the resize cursor and brightens the handle to the strong ink. A
-   drag on any of the panel's edges runs the arc's stroke out along both edges of its curve, the same length
-   each way, thinning to nothing (pin 26); the dock's runs out both ways along its edge. One transition, on
+   One filled path per handle, drawn by app.js from its progress (see cornerShape). At rest the panel's is
+   Apple's arc in its resizing corner (iPadOS puts the handle at the corner that resizes: bottom-right on a
+   window, bottom-left on one snapped right, as this panel stands); the dock's, the same stroke straightened
+   into a short capsule on its top edge. No side edge carries a mark of its own (pin 25). Pointing at an edge
+   or the corner gives the resize cursor and brightens the handle to the strong ink. A drag on any of the
+   panel's edges runs the arc's stroke out along both edges of its curve alike, bending onto the border's
+   hairline as it thins and ending on it at nothing, one line (pin 26); the dock's does the same both ways
+   along its top edge. One transition, on
    --grip-p (0 rest, 1 run; app.js paints the path's points from it): out over --dur-reveal, back over --dur-exit
    (The Fast Exit Rule), both on --ease-out. */
 @property --grip-p { syntax: "<number>"; inherits: false; initial-value: 0; }
-@property --c-grip-pull { syntax: "<length>"; inherits: true; initial-value: 0px; }
-@property --c-grip-r { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-grip-gap { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-stroke { syntax: "<length>"; inherits: true; initial-value: 0px; }
-@property --c-grip-sweep { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+@property --c-grip-inset { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-grip-len { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-grip-run { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-grip-bend { syntax: "<length>"; inherits: true; initial-value: 0px; }
 .resize-handle { position: absolute; z-index: 3; overflow: visible; pointer-events: none; }
 .resize-handle path { --grip-p: 0; fill: var(--c-grip-ink-rest); transition: --grip-p var(--dur-exit) var(--ease-out), fill var(--dur-control) var(--ease-out); }
 /* The panel's at its border box's bottom-start corner, the dock's at the middle of its top edge. */
