@@ -1370,7 +1370,7 @@
    */
   export function close(): string | null {
     submission += 1;
-    if (pressedFor !== null && !spawning.shown) {
+    if (pressedFor !== null && !busy) {
       pressedFor = null;
       // biome-ignore lint/complexity/noVoid: the start parks itself as it begins, and says how it ends on its row
       void start(true);

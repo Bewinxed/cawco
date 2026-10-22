@@ -61,9 +61,19 @@
     const row = document.querySelector<HTMLElement>(
       `[data-parked="${CSS.escape(id)}"]`
     );
-    if (surface && row && row.getClientRects().length > 0) {
-      closeInto(surface, row);
+    if (!(surface && row && row.getClientRects().length > 0)) {
+      return;
     }
+    const flight = closeInto(surface, row);
+    if (!flight) {
+      return;
+    }
+    // One object: the row is drawn once the form has landed in it.
+    row.style.visibility = "hidden";
+    const landed = () => {
+      row.style.visibility = "";
+    };
+    flight.finished.then(landed, landed);
   }
   let card = $state<HTMLElement | null>(null);
   let form = $state<NewSessionForm>();

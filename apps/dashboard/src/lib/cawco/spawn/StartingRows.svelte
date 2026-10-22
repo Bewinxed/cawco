@@ -13,8 +13,9 @@
    * - started: a press opens the session it started.
    *
    * A finished row is dismissed by its ×. The row the form shows while it is
-   * open stands aside (`shownStart`), so the start is never drawn twice; the
-   * form travels into its row as it closes, and opens out of it again
+   * open keeps its place but is not drawn (`shownStart`), so the start is
+   * never drawn twice and the form hangs from the row's own box: it opens
+   * out of the row, and travels back into it as it closes
    * (NewSessionPopover). Rows arrive and leave with the home's own reflow.
    */
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -37,7 +38,8 @@
     shownStart,
   } from "./parked.svelte";
 
-  const rows = $derived(parked.list.filter((one) => one.id !== shownStart()));
+  /** The start the open form shows: its row holds its place, undrawn. */
+  const shown = $derived(shownStart());
 
   /** Where it starts, by its first machine's name. */
   const hostOf = (start: ParkedStart): string => {
@@ -71,19 +73,22 @@
   }
 </script>
 
-{#if rows.length > 0}
+{#if parked.list.length > 0}
   <ul
     aria-label="Starting"
     class="m-0 flex list-none flex-col gap-space-row p-0"
     data-flip
     data-slot="starting"
   >
-    {#each rows as start (start.id)}
+    {#each parked.list as start (start.id)}
       <li
-        class="relative min-w-0"
+        class="relative min-w-0 data-shown:invisible"
+        aria-hidden={start.id === shown || undefined}
         data-flip="box"
         data-parked={start.id}
+        data-shown={start.id === shown || undefined}
         data-state={start.state}
+        inert={start.id === shown}
       >
         <div
           class="group/parked relative flex items-center rounded-sm text-ink-strong"
