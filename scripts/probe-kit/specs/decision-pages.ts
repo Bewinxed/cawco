@@ -77,6 +77,7 @@ import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { pageReach } from "../decision-embeds";
 import {
@@ -1639,7 +1640,7 @@ const makeTasks = async (on: On) => {
         )
         .map((each) => each.body)
         .join("\n"),
-    (body) => body.includes("Make tasks"),
+    (body) => body.includes(decisionsWords.makeTasks),
     30_000
   ).catch(() => "");
   const cards = made.record?.cards ?? [];

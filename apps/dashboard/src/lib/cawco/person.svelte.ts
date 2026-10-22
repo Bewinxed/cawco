@@ -16,6 +16,7 @@ import {
   type DeskAckHow,
   type DeskAlertFrame,
   type PersonView,
+  PRESENCE_ONBOARDING_SKIPPED,
   presenceWords,
 } from "@cawco/core";
 import { goto } from "$app/navigation";
@@ -30,8 +31,8 @@ import {
 import { send as askHub, json } from "./project-tasks";
 import { store, stored } from "./storage";
 
-/** Per browser: the onboarding row put away with Skip. */
-const SKIPPED_KEY = "cawco-presence-onboarding";
+/** Per browser: the onboarding row put away with Skip (core presence-onboarding.ts). */
+const SKIPPED = PRESENCE_ONBOARDING_SKIPPED;
 
 const state = $state({
   /** The person as the hub last said; null until read. */
@@ -76,7 +77,7 @@ export function takePerson(view: PersonView): void {
 
 /** Reads the person and this browser's permissions: on connect and again after every reconnect. */
 export async function readPerson(): Promise<void> {
-  state.skipped = stored("local", SKIPPED_KEY) === "skipped";
+  state.skipped = stored("local", SKIPPED.key) === SKIPPED.value;
   state.permissions = await deskPermissions();
   try {
     state.view = await askHub<PersonView>("/api/person");
@@ -163,7 +164,7 @@ const blockedWords = (after: DeskPermissions): string => {
 
 /** Puts the onboarding row away in this browser; the presence menu still offers it. */
 export function skipHere(): void {
-  store("local", SKIPPED_KEY, "skipped");
+  store("local", SKIPPED.key, SKIPPED.value);
   state.skipped = true;
   state.refusal = null;
 }

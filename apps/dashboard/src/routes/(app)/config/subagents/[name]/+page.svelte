@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import SubagentEditor from "#lib/cawco/config/editors/SubagentEditor.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -18,7 +19,7 @@
   found={name === "new" || agent !== null}
   loaded={fleet !== null}
   problem={store.fleet.error}
-  saveLabel={name === "new" ? "Create subagent" : "Save changes"}
+  saveLabel={name === "new" ? "Create subagent" : commonWords.saveChanges}
   {section}
   what="subagent"
 >

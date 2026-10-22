@@ -129,6 +129,7 @@ import type {
   StageError,
   StageState,
 } from "../../../packages/core/src/stage";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
@@ -2869,20 +2870,25 @@ async function unreachedLeg(
   );
   const card = page.locator('[data-bench-pane] [data-slot="down"]').first();
   await card.waitFor({ timeout: REFUSED_MS }).catch(() => undefined);
+  // The words go in as the read's argument: it runs in the page, where
+  // nothing of this module's scope is.
   const said = await card
-    .evaluate((el) => ({
-      text: el.textContent?.replace(/\s+/g, " ").trim() ?? "",
-      unreached:
-        el
-          .querySelector('[data-slot="unreached"]')
-          ?.textContent?.replace(/\s+/g, " ")
-          .trim() ?? null,
-      retry: [...el.querySelectorAll("button")].some(
-        (one) =>
-          one.getAttribute("aria-label") === "Try again" ||
-          !!one.textContent?.trim().startsWith("Try again")
-      ),
-    }))
+    .evaluate(
+      (el, again) => ({
+        text: el.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        unreached:
+          el
+            .querySelector('[data-slot="unreached"]')
+            ?.textContent?.replace(/\s+/g, " ")
+            .trim() ?? null,
+        retry: [...el.querySelectorAll("button")].some(
+          (one) =>
+            one.getAttribute("aria-label") === again ||
+            !!one.textContent?.trim().startsWith(again)
+        ),
+      }),
+      commonWords.tryAgain
+    )
     .catch(() => null);
   kit.check(
     `15: ${theme}: a canvas whose stage the hub's last read couldn't reach says so where the page would be: the machine isn't answering, since when and why, and Try again`,

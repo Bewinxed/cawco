@@ -37,6 +37,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { freshApp, simulatorApp, staleApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import {
@@ -664,11 +665,11 @@ async function run(kit: Kit): Promise<void> {
       {
         // Home's "Needs you", the list that draws the ask's command
         // on one line, sampled while it stands; then its row.
-        name: "Needs you",
+        name: commonWords.needsYou,
         args: "",
         reach: async () => {
           await pause(6000);
-          if (!(await tap((label) => label.startsWith("Needs you")))) {
+          if (!(await tap((label) => label.startsWith(commonWords.needsYou)))) {
             return false;
           }
           await pause(3000);
@@ -1261,7 +1262,7 @@ async function onSimulator(
     // Needs you, the list that draws the ask's command on a line; then the probe's own row.
     id = (await launch()) ?? id;
     await pause(8000);
-    const needs = await tap((label) => label.startsWith("Needs you"));
+    const needs = await tap((label) => label.startsWith(commonWords.needsYou));
     await pause(3000);
     report("Needs you lists the asks", needs, await rest(id, "needs-you"));
     const row =

@@ -4,7 +4,12 @@
 
 <script lang="ts">
   import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
-  import { accountsWords, EFFORT_NONE, isEffortLevel } from "@cawco/core";
+  import {
+    accountsWords,
+    commonWords,
+    EFFORT_NONE,
+    isEffortLevel,
+  } from "@cawco/core";
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -634,7 +639,7 @@
           data-again
           class="flex-none"
           icon={IconRefresh}
-          label="Try again"
+          label={commonWords.tryAgain}
           onclick={again}
           size="xs"
           variant="ghost"

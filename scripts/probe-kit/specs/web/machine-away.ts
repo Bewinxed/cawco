@@ -35,6 +35,8 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { CLAUDE_DIR_NAME } from "../../../../packages/core/src/claude-dirs";
 import { HOOK_TEMPLATES } from "../../../../packages/core/src/hooks";
+import { commonWords } from "../../../../packages/core/src/words/common";
+import { skillsWords } from "../../../../packages/core/src/words/skills";
 import { MACHINE } from "../../../scratch-fleet";
 import {
   type Engine,
@@ -310,7 +312,7 @@ async function inventory(
     fleet,
     page,
     `(b) ${tag}`,
-    "Show what it has",
+    skillsWords.showWhatItHas,
     () => head.click(),
     () =>
       page.waitForFunction(
@@ -375,7 +377,7 @@ async function fetchAgain(
     .first();
   await details.waitFor({ state: "visible", timeout: 60_000 });
   await details.click();
-  const again = await pressable(page, "Fetch again");
+  const again = await pressable(page, commonWords.fetchAgain);
   await leg(
     kit,
     fleet,

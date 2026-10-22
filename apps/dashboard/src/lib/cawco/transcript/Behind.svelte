@@ -26,7 +26,7 @@
   column a few letters wide.
 -->
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
+  import { commonWords, machineLabel } from "@cawco/core";
   import { rise } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { cawco, type ReadFault, reconnectingNow } from "../client.svelte";
@@ -80,7 +80,7 @@
     <!-- The kit link: an action in the line, in the link's ink, never plain
          words beside the words it answers. -->
     <Button onclick={onretry} pad="none" size="xs" variant="link"
-      >Try again</Button
+      >{commonWords.tryAgain}</Button
     >
   {/if}
 </div>

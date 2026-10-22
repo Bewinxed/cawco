@@ -3,8 +3,9 @@
  * (NeedsCaw.svelte): its label, its tooltip and the line his panel shows
  * with nothing to count (CawPanel `quiet`). The probe kit's journeys find
  * the head by these same words (scripts/probe-kit/caw-head.ts), so a word
- * changed here is changed for both. The app's head (NeedsCaw.swift) spells
- * its own for now; these are not written into it (scripts/words-swift.ts).
+ * changed here is changed for both. `bun run words` writes them into the app
+ * as `Words.CawHead`; the app's head (NeedsCaw.swift, CawPanel.swift) still
+ * spells its own until it is wired to read them.
  */
 export const cawHeadWords = {
   /** Something waits on the operator: how many, his label. */

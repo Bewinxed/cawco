@@ -16,6 +16,7 @@
    * page under the footer, with what stopping leaves on the machine.
    */
   import type { Install } from "@cawco/core";
+  import { commonWords } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
@@ -170,7 +171,7 @@
     {#if install.command}
       <MonoWell
         copy={install.command}
-        copyLabel="Copy command"
+        copyLabel={commonWords.copyCommand}
         label="The command to run on the machine"
         lines={[install.command]}
       />

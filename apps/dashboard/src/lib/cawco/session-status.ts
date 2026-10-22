@@ -4,7 +4,9 @@
  * reads no fleet: a page without the fleet store (an artifact's own tab,
  * whose pin card asks in place) draws marks too.
  */
+
 import type { ThreadStatus } from "@cawco/core";
+import { commonWords } from "@cawco/core";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
 import { type BoardRow, cawco, isFailed, isStale } from "./client.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
@@ -12,7 +14,7 @@ import { isThreadTab } from "./thread-tabs";
 
 const STATUS_WORD: Record<MarkStatus, string> = {
   live: "Working",
-  attn: "Needs you",
+  attn: commonWords.needsYou,
   done: "Finished",
   fail: "Failed",
   idle: "Idle",

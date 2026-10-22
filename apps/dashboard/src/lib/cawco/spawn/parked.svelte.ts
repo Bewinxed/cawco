@@ -17,7 +17,9 @@
  * answer the reload lost, is said as failed in the error formula (WORDS.md),
  * with Reopen.
  */
+
 import type { ContinuationJob } from "@cawco/core";
+import { commonWords } from "@cawco/core";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { cawco, followContinuations, sendFirstPrompt } from "../client.svelte";
 import {
@@ -129,7 +131,9 @@ function titleOf(draft: SessionDraft, continueFrom?: ContinueSource): string {
   if (first) {
     return first;
   }
-  return continueFrom ? `Continue ${continueFrom.title}` : "New session";
+  return continueFrom
+    ? `Continue ${continueFrom.title}`
+    : commonWords.newSession;
 }
 
 /**

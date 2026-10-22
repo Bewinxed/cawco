@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   import { onMount } from "svelte";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { page } from "$app/state";
@@ -11,8 +12,12 @@
   onMount(open);
 </script>
 
-<svelte:head><title>New session | CawCo</title></svelte:head>
+<svelte:head><title>{commonWords.newSession} | CawCo</title></svelte:head>
 <main class="p-space-8 text-ink-strong">
-  <h1 class="text-size-title font-medium text-ink-strong">New session</h1>
-  <button class="select-none" onclick={open} type="button">New session</button>
+  <h1 class="text-size-title font-medium text-ink-strong">
+    {commonWords.newSession}
+  </h1>
+  <button class="select-none" onclick={open} type="button"
+    >{commonWords.newSession}</button
+  >
 </main>

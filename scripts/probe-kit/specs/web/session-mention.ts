@@ -54,6 +54,7 @@ import type {
 import type { InstancesFrame } from "../../../../packages/core/src/frames";
 import type { Envelope } from "../../../../packages/core/src/index";
 import { WIRE_PROTOCOL } from "../../../../packages/core/src/stream";
+import { commonWords } from "../../../../packages/core/src/words/common";
 import { fitsLine, inlineFit } from "../../geom";
 import {
   COMPOSER,
@@ -1149,7 +1150,8 @@ async function taskAttempt(kit: Kit, base: string): Promise<void> {
   kit.note(`task attempt, the attempt reads: ${attempted}`);
   kit.check(
     "task attempt: on a task's Details, the attempt the far session ran is named by its title, not Its session",
-    attempted.includes(FAR_TITLE) && !attempted.includes("Its session"),
+    attempted.includes(FAR_TITLE) &&
+      !attempted.includes(commonWords.itsSession),
     attempted
   );
   sameHue(
@@ -1164,7 +1166,7 @@ async function taskAttempt(kit: Kit, base: string): Promise<void> {
   kit.note(`task attempt, the review's session reads: ${review}`);
   kit.check(
     "task attempt: on a task's Review, the session it is from (the far session) is named by its title, not Its session",
-    review.includes(FAR_TITLE) && !review.includes("Its session"),
+    review.includes(FAR_TITLE) && !review.includes(commonWords.itsSession),
     review
   );
   sameHue(

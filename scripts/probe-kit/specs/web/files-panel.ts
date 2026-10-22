@@ -45,6 +45,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { commonWords } from "../../../../packages/core/src/words/common";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { tokenColour } from "../../geom";
 import { scan } from "../../journeys/scan";
@@ -946,7 +947,7 @@ const reviewLegs = async (
   // Its Try again by its accessible name: a kit Button's text holds its pending words too.
   const refusedRetry = await refused
     .locator('[data-files-region="attachments"] [data-files-failed]')
-    .getByRole("button", { name: "Try again", exact: true })
+    .getByRole("button", { name: commonWords.tryAgain, exact: true })
     .count();
   kit.check(
     "14: the attachments read refused says so in its region (RowFault, Try again), the artifacts still listed, and the bar claims no count",

@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     agentProblem,
+    commonWords,
     type FleetAgent,
     parseAgentFrontMatter,
     userLayerLabel,
@@ -139,7 +140,7 @@ You are a <role>, working in one repository at a time.
   oncancel={cancel}
   ondelete={agent ? forget : undefined}
   onsubmit={save}
-  saveLabel={agent ? "Save changes" : "Create subagent"}
+  saveLabel={agent ? commonWords.saveChanges : "Create subagent"}
   {saving}
   title={agent ? agent.name : "New subagent"}
 >

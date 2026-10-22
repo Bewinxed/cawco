@@ -51,6 +51,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
+import { connectionsWords } from "../../../packages/core/src/words/connections";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
@@ -126,8 +127,7 @@ const GITEA_CONNECTION = "gitea-probe";
 /** The long address the app types (ConfigProbe `longAddress`). */
 const LONG_ADDRESS =
   "https://gitea.a-very-long-subdomain-for-a-self-hosted-forge.example.internal.company.com/mcp/servers/gitea-mcp-instance-with-a-long-name";
-const ADDRESS_PROBLEM =
-  "A server address starts with https:// or http://, like the example.";
+const ADDRESS_PROBLEM = connectionsWords.serverAddressProblem;
 /** A frame in a ConfigProbe line: `name [x,y w×h]`. */
 const frameIn = (line: string, name: string) => {
   const found = new RegExp(
@@ -206,11 +206,11 @@ async function safariForms(
   };
   const openForm = async (service: string) => {
     await sh(`xcrun simctl openurl ${udid} "${dashboard}/config/connections"`);
-    await waitFor("Sign in to a service");
+    await waitFor(connectionsWords.signInTo);
     await axe('tap --label "Sign in to a service" --element-type Button');
     await waitFor(service);
     await axe(`tap --label "${service}"`);
-    await waitFor("Server address");
+    await waitFor(connectionsWords.serverAddress);
     await Bun.sleep(800);
   };
   await openForm("GitLab");
@@ -535,11 +535,11 @@ async function run(kit: Kit): Promise<void> {
         const linearApp = said("connections linear app");
         kit.check(
           `${at}: Connections: Linear's app way names the callback URL its settings list, then its client's fields`,
-          linearApp.includes("Signs in with") &&
-            linearApp.includes("Add this callback URL to the app in Linear:") &&
+          linearApp.includes(connectionsWords.signsInWith) &&
+            linearApp.includes(connectionsWords.callbackLine) &&
             linearApp.includes("/api/connections/oauth/callback") &&
-            linearApp.includes("Client ID") &&
-            linearApp.includes("Client secret"),
+            linearApp.includes(connectionsWords.clientId) &&
+            linearApp.includes(connectionsWords.clientSecret),
           linearApp.slice(0, 400)
         );
 

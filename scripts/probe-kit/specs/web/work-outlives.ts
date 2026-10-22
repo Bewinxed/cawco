@@ -54,6 +54,7 @@
  */
 import type { Page, WebSocketRoute } from "playwright-core";
 import { HOOK_TEMPLATES } from "../../../../packages/core/src/hooks";
+import { commonWords } from "../../../../packages/core/src/words/common";
 import { MACHINE, type Seen } from "../../../scratch-fleet";
 import {
   type Engine,
@@ -542,7 +543,7 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
       : route.fallback()
   );
   await page.locator("#auto-update").click();
-  await page.getByRole("button", { name: "Check for updates" }).click();
+  await page.getByRole("button", { name: commonWords.checkForUpdates }).click();
   const auto = '[data-setting-refusal="auto"]';
   const checked = '[data-setting-refusal="check"]';
   const told = await until(
@@ -1253,22 +1254,24 @@ const LONG_WHY =
 
 /** What a refusal line says and offers: its words, and whether Try again stands in it. */
 const faultOf = (page: Page, selector: string) =>
-  page.evaluate((sel) => {
-    // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, where nothing of the module's reaches
-    const again = /Try again/;
-    // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, where nothing of the module's reaches
-    const showDetails = /Show details/;
-    const line = document.querySelector(sel);
-    return {
-      text: line?.textContent?.replace(/\s+/g, " ").trim() ?? "",
-      again: [...(line?.querySelectorAll("button") ?? [])].some((button) =>
-        again.test(button.textContent ?? "")
-      ),
-      details: [...(line?.querySelectorAll("button") ?? [])].some((button) =>
-        showDetails.test(button.textContent ?? "")
-      ),
-    };
-  }, selector);
+  page.evaluate(
+    ({ sel, again }) => {
+      // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, where nothing of the module's reaches
+      const showDetails = /Show details/;
+      const line = document.querySelector(sel);
+      return {
+        text: line?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        again: [...(line?.querySelectorAll("button") ?? [])].some((button) =>
+          (button.textContent ?? "").includes(again)
+        ),
+        details: [...(line?.querySelectorAll("button") ?? [])].some((button) =>
+          showDetails.test(button.textContent ?? "")
+        ),
+      };
+    },
+    // Try again's words go in as the read's argument: it runs in the page.
+    { sel: selector, again: commonWords.tryAgain }
+  );
 
 /** Toasts on screen now: none may be, after any refusal. */
 const toastsNow = (page: Page) => page.locator("[data-sonner-toast]").count();

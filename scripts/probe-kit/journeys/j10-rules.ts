@@ -12,6 +12,8 @@
  *    affordance after the fact rather than a confirm dialog before it”;
  *    undone, the hub holds the rule again.
  */
+
+import { commonWords } from "../../../packages/core/src/words/common";
 import type { Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import { say } from "./mock";
@@ -127,7 +129,7 @@ async function walk(leg: Leg): Promise<void> {
       await ruleRow().getByRole("link").first().click();
       await page.getByLabel("Rule name").fill(name);
       await page.getByLabel("Reply").fill(EDITED);
-      await page.getByRole("button", { name: "Save changes" }).click();
+      await page.getByRole("button", { name: commonWords.saveChanges }).click();
     },
     async () => {
       await eventually(

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
   import { cawco } from "#lib/cawco/client.svelte.js";
@@ -292,7 +293,7 @@
             {/if}
             <Button
               failed={checkFailed}
-              label="Check for updates"
+              label={commonWords.checkForUpdates}
               onclick={check}
               pending={checking}
               pendingLabel="Checking…"

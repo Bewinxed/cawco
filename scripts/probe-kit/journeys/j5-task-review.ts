@@ -427,6 +427,7 @@ function attempt(whole: Seen, task: string, title: string): Reply {
 const journey: Journey = {
   name: "j5-task-review",
   flow: "Task review: a task needing a Mac waits, never fails; approve and send back",
+  host: "each attempt of a task starts in a delegate's workspace",
   respond: (seen: Seen) => {
     if (!seen.tools) {
       return say("Task");

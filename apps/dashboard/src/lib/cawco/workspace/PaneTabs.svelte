@@ -20,6 +20,7 @@
 </script>
 
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
@@ -1788,7 +1789,7 @@
           <Button
             {...props}
             aria-haspopup="dialog"
-            aria-label="New session"
+            aria-label={commonWords.newSession}
             data-tnew
             onclick={(event) => startHere(event.currentTarget)}
             size="icon-xs"
@@ -1801,7 +1802,7 @@
       </Tooltip.Trigger>
       <!-- 8px clear of the viewport's edges, as every tooltip (Tip). -->
       <Tooltip.Content collisionPadding={8} side="bottom">
-        New session
+        {commonWords.newSession}
       </Tooltip.Content>
     </Tooltip.Root>
   </div>

@@ -68,6 +68,7 @@ import {
   olderThan,
   PI_VERSION_FLOOR,
 } from "../../../packages/core/src/tools";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
 import {
   ACCOUNT,
   type Fleet,
@@ -225,15 +226,18 @@ const installName = (page: Page) =>
 
 /** Whether the sign-in form stands anywhere on the page: its Open sign-in link, or its code field. */
 const formOn = (page: Page) =>
-  page.evaluate(() => ({
-    openLink: [...document.querySelectorAll("a, button")].some(
-      (one) => window.probeName(one) === "Open sign-in link"
-    ),
-    code:
-      document.querySelector(
-        'input[aria-label="Code from the sign-in page"]'
-      ) !== null,
-  }));
+  page.evaluate(
+    (openLink) => ({
+      openLink: [...document.querySelectorAll("a, button")].some(
+        (one) => window.probeName(one) === openLink
+      ),
+      code:
+        document.querySelector(
+          'input[aria-label="Code from the sign-in page"]'
+        ) !== null,
+    }),
+    accountsWords.signin.openLink
+  );
 
 /** What the block shows now, read off the page; null when none stands. */
 const blockOn = (page: Page) =>
@@ -573,11 +577,11 @@ async function signInLegs(run: Run, kit: Kit): Promise<void> {
   );
   await trigger.click();
   await page.waitForFunction(
-    () =>
+    (openLink) =>
       [...document.querySelectorAll("a, button")].some(
-        (one) => window.probeName(one) === "Open sign-in link"
+        (one) => window.probeName(one) === openLink
       ),
-    null,
+    accountsWords.signin.openLink,
     { timeout: 30_000 }
   );
   const offered = await page.evaluate(

@@ -40,6 +40,7 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import type { FleetPlugin, FleetSkillMeta } from "../../../packages/core/src";
+import { skillsWords } from "../../../packages/core/src/words/skills";
 import type { Reply } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
@@ -168,14 +169,15 @@ const openMenu = async (page: Page, name: string) => {
 
 async function fetchAgain(page: Page, name: string) {
   await openMenu(page, name);
-  await page.getByRole("menuitem", { name: "Fetch again" }).click();
+  await page.getByRole("menuitem", { name: skillsWords.fetchAgain }).click();
 }
 
 /** Check for updates pressed; resolves once the hub says the check ended. */
 const checkNow = (fleet: KitFleet, page: Page) =>
   fleet.fetched(
     (frame) => frame.check,
-    () => page.getByRole("button", { name: "Check for updates" }).click()
+    () =>
+      page.getByRole("button", { name: skillsWords.checkForUpdates }).click()
   );
 
 /** A marketplace with one plugin at `version`, on the hub's disk. */
@@ -280,7 +282,8 @@ async function loopback({ kit, fleet, page, base }: On, source: string) {
   const items = await page.getByRole("menuitem").allInnerTexts();
   kit.check(
     "loopback: its menu offers no Fetch again",
-    items.length > 0 && !items.some((item) => item.includes("Fetch again")),
+    items.length > 0 &&
+      !items.some((item) => item.includes(skillsWords.fetchAgain)),
     items.join(" / ")
   );
   await page.keyboard.press("Escape");
@@ -503,7 +506,7 @@ async function phone({ kit, fleet, base }: On) {
 
 /** The row's Fetch update, the update badge's action. */
 const updateButton = (page: Page, name: string) =>
-  rowOf(page, name).getByRole("button", { name: "Fetch update" });
+  rowOf(page, name).getByRole("button", { name: skillsWords.fetchUpdate });
 
 /** The hub's lines about `what` and its syncs, for a check's detail. */
 const told = (log: string, what: string) =>

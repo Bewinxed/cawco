@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
+  import { commonWords, machineLabel } from "@cawco/core";
   /**
    * One fault, rendered the same way everywhere it appears.
    *
@@ -236,7 +236,7 @@
     if (copy.action === "refresh") {
       return group.faults.length > 1
         ? `Fetch all ${group.faults.length} again`
-        : "Fetch again";
+        : commonWords.fetchAgain;
     }
     return "";
   });

@@ -12,6 +12,7 @@
  * where the HIG asks for something the web does another way.
  */
 import type { AccountHue, PlacementStrategy } from "../accounts";
+import { commonWords } from "./common";
 import { andList, pad2 } from "./helpers";
 
 /** One strategy, as its card names it and its line explains it. */
@@ -66,7 +67,7 @@ export const accountsWords = {
     /** What the editor's row is, for "That account is gone". */
     what: "account",
     nickname: "Nickname",
-    save: "Save changes",
+    save: commonWords.saveChanges,
     remove: "Remove account",
     removing: "Removing…",
     removeTitle: (name: string) => `Remove ${name}?`,

@@ -43,6 +43,7 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person takes them
 import type { Locator, Page } from "playwright-core";
+import { commonWords } from "../../../../packages/core/src/words/common";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
@@ -221,7 +222,7 @@ async function runLeg(
     kit.check(
       `${leg.label}: the sheet's one header is the kit's, titled with the form's own name through MorphText (DESIGN.md L515), the form drawing none of its own`,
       opened.heads.kit === 1 &&
-        opened.heads.title === "New session" &&
+        opened.heads.title === commonWords.newSession &&
         opened.heads.morphs &&
         opened.heads.form === 0,
       JSON.stringify(opened.heads)

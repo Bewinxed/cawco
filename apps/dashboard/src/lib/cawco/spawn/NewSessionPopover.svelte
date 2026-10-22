@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The New Session form on a desk: a popover hanging from the trigger
    * pressed (the rail's Start session, the session strip's "+", a project's
@@ -149,7 +150,7 @@
          bits-ui's popover content carries no role of its own. -->
     <PopoverContent
       align="start"
-      aria-label="New session"
+      aria-label={commonWords.newSession}
       aria-modal="false"
       customAnchor={hangsFrom}
       data-ns-popover

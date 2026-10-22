@@ -29,6 +29,7 @@
 </script>
 
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The scrolling transcript: the folded rows, virtualized. The live tail rides
    * as rows of its own (see `buildRowsFrom`), so streaming text, an open reasoning
@@ -3978,7 +3979,7 @@
         size="sm"
         variant="outline"
       >
-        Try again
+        {commonWords.tryAgain}
       </Button>
     {:else if renderedRows.length > 0 && session.cursor !== null}
       <p

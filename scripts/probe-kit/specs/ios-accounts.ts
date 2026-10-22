@@ -879,7 +879,7 @@ function judge(
   );
   kit.check(
     label("Sign out runs on its row, then the hub's answer stands there"),
-    show("sign out running").includes("Signing out…") &&
+    show("sign out running").includes(words.machines.signingOut) &&
       !show("sign out answered").includes("Signing out") &&
       (show("sign out answered").includes("refused: ") ||
         show("sign out answered").endsWith("hub: signed-out")),

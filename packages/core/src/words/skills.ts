@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * What Configure › Skills says (routes/config/skills, its Fetch skill and
  * Link marketplace popovers, MachineInventory.svelte), and the refusals a
@@ -25,7 +27,7 @@ export const skillsWords = {
     "Disabling a plugin uninstalls it from the machines and keeps its row here.",
   /** A row's actions and state. */
   fetching: "Fetching…",
-  fetchAgain: "Fetch again",
+  fetchAgain: commonWords.fetchAgain,
   fetchAllAgain: (count: number) => `Fetch all ${count} again`,
   previousVersions: "Previous versions",
   hidePreviousVersions: "Hide previous versions",
@@ -36,7 +38,7 @@ export const skillsWords = {
   unlink: "Unlink",
   noBytes: "No bytes resolved yet",
   /** A row's version against what its source holds now. */
-  checkForUpdates: "Check for updates",
+  checkForUpdates: commonWords.checkForUpdates,
   checking: "Checking…",
   updateAvailable: (from: string, to: string) =>
     `Update available · ${from} → ${to}`,
@@ -106,7 +108,7 @@ export const skillsWords = {
   onEachMachine: "On each machine",
   inventoryNote:
     "What each machine really has, whoever put it there — read live, never stored. Anything the fleet does not manage can be adopted into it.",
-  noMachines: "No machines yet",
+  noMachines: commonWords.noMachines,
   noMachinesAfter: " — each one reports what it has once it registers.",
   showWhatItHas: "Show what it has",
   offline: "Offline",

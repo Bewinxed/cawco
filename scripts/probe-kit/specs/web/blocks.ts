@@ -38,6 +38,8 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one step at a time
 import type { Page } from "playwright-core";
+import { blocksWords } from "../../../../packages/core/src/words/blocks";
+import { routinesWords } from "../../../../packages/core/src/words/routines";
 import { Clock } from "../../anim";
 import { frames, type Kit, open, type Spec, settle } from "../../kit";
 
@@ -171,7 +173,7 @@ async function throughHub(
     '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
   );
   await settle(other);
-  await pick(page, "Approved actions", "Move up");
+  await pick(page, routinesWords.actions, "Move up");
   await page.waitForFunction(
     () =>
       [
@@ -278,7 +280,7 @@ async function motion(kit: Kit, page: Page) {
   const was = before.blocks.find((b) => b.id === "sources");
   const clock = await Clock.on(page);
   await clock.catchRuns(
-    () => pick(page, "Approved actions", "Move down"),
+    () => pick(page, routinesWords.actions, blocksWords.moveDown),
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
   );
   const moved = await scrub(
@@ -310,7 +312,7 @@ async function motion(kit: Kit, page: Page) {
   const narrow = (await blocksOf(page)).blocks.find((b) => b.id === "sources");
   const wideClock = await Clock.on(page);
   await wideClock.catchRuns(
-    () => pick(page, "Event sources", "Wide"),
+    () => pick(page, routinesWords.sources, "Wide"),
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
   );
   const grown = await scrub(
@@ -332,7 +334,7 @@ async function motion(kit: Kit, page: Page) {
     `narrow ${narrow?.w}, wide ${wide?.w}, drawn ${grown.map((g) => g.w.toFixed(1)).join(" → ")}`
   );
   // Back to narrow for what follows.
-  await pick(page, "Event sources", "Narrow");
+  await pick(page, routinesWords.sources, "Narrow");
   await page.waitForSelector(
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-narrow][data-block='sources']"
   );
@@ -559,7 +561,7 @@ async function tabAndBlock(
   await settle(page);
   const strip = await stripOf(page);
   await page.getByRole("button", { name: "More for Spend" }).click();
-  await page.getByRole("menuitem", { name: "Place on a page" }).click();
+  await page.getByRole("menuitem", { name: blocksWords.placeOnPage }).click();
   await page.getByRole("menuitem", { name: "Routines", exact: true }).click();
   await page.waitForSelector(
     `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
@@ -592,7 +594,7 @@ async function tabAndBlock(
     reached,
     await orderOf(other)
   );
-  await pick(page, "Spend", "Show as a tab");
+  await pick(page, "Spend", blocksWords.showAsTab);
   await page.waitForFunction(
     (block) =>
       !document.querySelector(
@@ -615,7 +617,7 @@ async function tabAndBlock(
   // filling the pane above the view.
   await openView(page, base, hub, projectId);
   await page.getByRole("button", { name: "More for Spend" }).click();
-  await page.getByRole("menuitem", { name: "Place on a page" }).click();
+  await page.getByRole("menuitem", { name: blocksWords.placeOnPage }).click();
   await page.getByRole("menuitem", { name: "Board", exact: true }).click();
   await page.waitForSelector(
     `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
@@ -670,7 +672,7 @@ async function tabAndBlock(
       board.board > 0,
     JSON.stringify(board)
   );
-  await pick(page, "Spend", "Show as a tab");
+  await pick(page, "Spend", blocksWords.showAsTab);
   await page.waitForFunction(
     (block) =>
       !document.querySelector(

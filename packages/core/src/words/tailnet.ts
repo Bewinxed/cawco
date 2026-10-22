@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * HTTPS on the tailnet: its onboarding row in Caw's Needs you, for the
  * dashboard and the native app alike (core tailnet-https.ts). The dashboard
@@ -59,6 +61,6 @@ export const tailnetWords = {
   openDocs: "Open Tailscale's docs",
   /** Tailscale's page on kernel and userspace networking. */
   userspacePage: "https://tailscale.com/kb/1177/kernel-vs-userspace-routers",
-  copyCommand: "Copy command",
+  copyCommand: commonWords.copyCommand,
   openDashboard: "Open the HTTPS dashboard",
 };

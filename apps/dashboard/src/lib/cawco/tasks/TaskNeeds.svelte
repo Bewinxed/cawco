@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * What a task needs from you, first, each reason with the way to act on it
    * here (DESIGN.md, The Stay In Context Rule):
@@ -248,7 +249,7 @@
     {#if failed && lastAttempt}
       <section
         data-slot="needs"
-        aria-label="Its session"
+        aria-label={commonWords.itsSession}
         class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-needs-ground"
         data-reason="failed"
       >
@@ -277,7 +278,7 @@
         <RowFault reason={retryProblem} />
         <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
           <Button
-            label="Try again"
+            label={commonWords.tryAgain}
             onclick={retry}
             pending={retrying}
             pendingLabel="Starting…"

@@ -25,6 +25,7 @@ import type {
   FleetSyncReport,
   MarketplaceLink,
 } from "../../../packages/core/src/fleet";
+import { skillsWords } from "../../../packages/core/src/words/skills";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import { say } from "./mock";
@@ -246,7 +247,9 @@ async function walk(leg: Leg): Promise<void> {
       })();
       try {
         await page.getByRole("button", { name: `More for ${ID}` }).click();
-        await page.getByRole("menuitem", { name: "Fetch again" }).click();
+        await page
+          .getByRole("menuitem", { name: skillsWords.fetchAgain })
+          .click();
         const hash = await eventually(
           "the hub holds the new version",
           () => hubHash(fleet),

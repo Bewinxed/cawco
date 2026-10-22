@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     CONTINUED_IN,
+    commonWords,
     type HarnessKind,
     type PermissionResult,
   } from "@cawco/core";
@@ -1193,7 +1194,7 @@
     title={faultTitle}
   >
     {#snippet action()}
-      <Button onclick={retry} variant="outline">Try again</Button>
+      <Button onclick={retry} variant="outline">{commonWords.tryAgain}</Button>
     {/snippet}
   </EmptyState>
 {/snippet}

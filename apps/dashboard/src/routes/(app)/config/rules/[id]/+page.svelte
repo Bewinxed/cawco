@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import RuleEditor from "#lib/cawco/config/editors/RuleEditor.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -19,7 +20,7 @@
   found={id === "new" || rule !== null}
   loaded={rules !== null}
   problem={store.rules.error}
-  saveLabel={id === "new" ? "Create rule" : "Save changes"}
+  saveLabel={id === "new" ? "Create rule" : commonWords.saveChanges}
   {section}
   what="rule"
 >

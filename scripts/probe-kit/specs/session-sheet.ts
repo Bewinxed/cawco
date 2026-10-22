@@ -164,6 +164,7 @@ import {
   STAGE_ENSURE,
   STAGE_READY_MS,
 } from "../../../packages/core/src/stage";
+import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
 
@@ -1142,11 +1143,11 @@ async function neverDrawnLeg(
     "25: a canvas whose page never comes leaves the cover inside its stage's time and says it couldn't be drawn, why, with Try again and Remove",
     covered === "Compiling…" &&
       !!stuck &&
-      stuck.text.includes("The canvas couldn't be drawn") &&
+      stuck.text.includes(sheetWords.neverDrawnTitle) &&
       stuck.text.includes(
         `The stage never answered within ${STAGE_READY_MS / 1000}s.`
       ) &&
-      stuck.buttons.includes("Try again") &&
+      stuck.buttons.includes(sheetWords.tryAgain) &&
       stuck.buttons.includes("Remove") &&
       took <= STAGE_READY_MS + 20_000,
     `cover first said ${JSON.stringify(covered)}; ${took} ms: ${JSON.stringify(stuck)}`
@@ -1167,7 +1168,9 @@ async function neverDrawnLeg(
     .then(([title, buttons]) => ({ title, buttons }))
     .catch(() => null);
   const stillThere = (await panelArtifacts()).includes("never-drawn");
-  await ask.getByRole("button", { name: "Remove canvas", exact: true }).click();
+  await ask
+    .getByRole("button", { name: sheetWords.removeConfirm, exact: true })
+    .click();
   const gone = await until(
     "the canvas out of the session's artifacts",
     panelArtifacts,
@@ -1182,7 +1185,7 @@ async function neverDrawnLeg(
     before.includes("never-drawn") &&
       asked?.title === "Remove never-drawn?" &&
       asked.buttons.includes("Cancel") &&
-      asked.buttons.includes("Remove canvas") &&
+      asked.buttons.includes(sheetWords.removeConfirm) &&
       stillThere &&
       gone,
     `asked ${JSON.stringify(asked)}; before the confirm ${stillThere ? "kept" : "gone"}; after ${gone ? "gone" : "kept"}`

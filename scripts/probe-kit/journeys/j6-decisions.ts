@@ -10,6 +10,7 @@
  */
 import { join } from "node:path";
 import type { FrameLocator, Locator } from "playwright-core";
+import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { pageProgram, type SeedPage } from "../../decisions-preview/seed";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import { type KitFleet, pressIn } from "../kit";
@@ -26,7 +27,7 @@ import {
 
 const SHAPE = "What shape is the plan?";
 const TRIAL = "How long is the trial?";
-const PER_MACHINE = "Per machine";
+const PER_MACHINE = "One per host";
 const A_MONTH = "A month";
 const PICKS = /picked/;
 const CAW_SHEET = /^Caw, lead of /;
@@ -219,7 +220,7 @@ async function walk(leg: Leg): Promise<void> {
 
   await leg.step(
     "Send the picks: I'm done picking",
-    () => page.getByRole("button", { name: "I'm done picking" }).click(),
+    () => page.getByRole("button", { name: decisionsWords.done }).click(),
     async () => {
       await eventually(
         "the hub holds the page sent, its two picks kept",
@@ -243,7 +244,7 @@ async function walk(leg: Leg): Promise<void> {
         60_000
       );
       await shows(
-        page.getByRole("button", { name: "Make tasks" }),
+        page.getByRole("button", { name: decisionsWords.makeTasks }),
         "the page's next step, Make tasks"
       );
       await eventually(

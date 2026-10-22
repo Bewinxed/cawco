@@ -11,6 +11,7 @@
 </script>
 
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * What acts on the picked tasks, floating at the page's foot while any
    * are picked. "N selected · Move to ▾ · Label ▾ · Archive · Drop
@@ -154,7 +155,7 @@
     </span>
     {#if run.failed}
       <Button onclick={onretry} press="pressable" size="sm" variant="outline"
-        >Try again</Button
+        >{commonWords.tryAgain}</Button
       >
       <Button
         aria-label="Clear the selection"

@@ -98,6 +98,7 @@ import type { Page, Request } from "playwright-core";
 import type { AuthContext } from "ssh2";
 import type { InstallsRead } from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import {
@@ -1010,31 +1011,42 @@ async function walk(
   await openWindow(page, dashboard, "new");
   const failing = await settled(page, "reach", "couldn't be read");
   const readsOnOpen = joinReads;
-  const waiting = await page.evaluate((win) => {
-    const node = document.querySelector<HTMLElement>(win);
-    const copy = [...(node?.querySelectorAll("button") ?? [])].find((one) =>
-      one.textContent?.includes("Copy command")
-    );
-    const said = copy?.getAttribute("aria-describedby");
-    return {
-      well:
-        node
-          ?.querySelector<HTMLElement>("[data-slot=well]")
-          ?.innerText.replace(/\s+/g, " ")
-          .trim() ?? "",
-      copyDisabled: copy?.disabled ?? false,
-      copyWaits: said
-        ? (document.getElementById(said)?.textContent?.trim() ?? "")
-        : "",
-      tryAgain: Boolean(
-        [...(node?.querySelectorAll("button") ?? [])].find((one) =>
-          one.textContent?.includes("Try again")
-        )
-      ),
-    };
-  }, WINDOW);
+  // The words go in as the read's argument: it runs in the page.
+  const waiting = await page.evaluate(
+    ({ win, copyWords, againWords }) => {
+      const node = document.querySelector<HTMLElement>(win);
+      const copy = [...(node?.querySelectorAll("button") ?? [])].find((one) =>
+        one.textContent?.includes(copyWords)
+      );
+      const said = copy?.getAttribute("aria-describedby");
+      return {
+        well:
+          node
+            ?.querySelector<HTMLElement>("[data-slot=well]")
+            ?.innerText.replace(/\s+/g, " ")
+            .trim() ?? "",
+        copyDisabled: copy?.disabled ?? false,
+        copyWaits: said
+          ? (document.getElementById(said)?.textContent?.trim() ?? "")
+          : "",
+        tryAgain: Boolean(
+          [...(node?.querySelectorAll("button") ?? [])].find((one) =>
+            one.textContent?.includes(againWords)
+          )
+        ),
+      };
+    },
+    {
+      win: WINDOW,
+      copyWords: commonWords.copyCommand,
+      againWords: commonWords.tryAgain,
+    }
+  );
   const beforePress = joinReads;
-  await page.locator(WINDOW).getByRole("button", { name: "Try again" }).click();
+  await page
+    .locator(WINDOW)
+    .getByRole("button", { name: commonWords.tryAgain })
+    .click();
   await page.waitForTimeout(300);
   const pressed = joinReads - beforePress;
   kit.check(
@@ -1629,7 +1641,7 @@ async function walk(
     }, WINDOW);
     await page
       .locator(WINDOW)
-      .getByRole("button", { name: "Copy command" })
+      .getByRole("button", { name: commonWords.copyCommand })
       .click();
     const copied = await page
       .locator(WINDOW)

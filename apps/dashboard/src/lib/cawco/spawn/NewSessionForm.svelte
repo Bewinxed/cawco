@@ -3,6 +3,7 @@
     type AccountProvider,
     accountNameAmong,
     CLAUDE_PROVIDER,
+    commonWords,
     contextFitRefusal,
     type EffortLevel,
     HARNESSES,
@@ -1945,7 +1946,7 @@
     if (continueFrom) {
       return "Continue session";
     }
-    return forking ? "Fork session" : "New session";
+    return forking ? "Fork session" : commonWords.newSession;
   });
   /** The form's name as its head says it, for a frame that draws the head (the sheet). */
   export function title(): string {

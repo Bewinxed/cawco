@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * What a project's Decisions tab says of its pages, for the dashboard and
  * the native app alike (WORDS.md; the decided record's copy): its figures,
@@ -79,5 +81,5 @@ export const decisionsWords = {
   /** The empty tab while Caw can't start: a session writes one. */
   emptySession:
     "A session writes decision pages; start one and ask for a page.",
-  newSession: "New session",
+  newSession: commonWords.newSession,
 };

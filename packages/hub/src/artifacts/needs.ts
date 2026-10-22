@@ -30,8 +30,10 @@
  *    ended; …".
  * 5. Not now: the person's ✕, a notice id the item carries
  *    (`notNow`), acknowledged; a new `raisedAt` makes it another.
- * 6. A look: opening it clears "not opened" and the notices; only an answer
- *    clears picks or unsent.
+ * 6. A look: opening it clears "not opened" and the notices, and so does a
+ *    pick made on it wherever it was made (the project's Decisions tab draws
+ *    a page in a frame of its own, with no pane to say it was shown); only
+ *    an answer clears picks or unsent.
  */
 import {
   type ArtifactNeed,
@@ -120,6 +122,15 @@ const asks = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   );
 
 /**
+ * Whether a page or canvas to pick on or judge is shown and never opened
+ * (rule 6): no view has said it had it on screen, and no pick was made on it.
+ */
+const unopened = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
+  (row.does === "pick" || row.does === "judge") &&
+  row.openedRevision === null &&
+  (facts.picks?.made ?? 0) === 0;
+
+/**
  * Whether `row` could wait on the person or notice them at all, read from
  * its facts alone: the rest of its rules need its sessions (their plans,
  * their turns, whether they ended), read only for these.
@@ -128,8 +139,7 @@ export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   !facts.draft &&
   row.heldFor === null &&
   row.does !== "try" &&
-  ((row.openedRevision === null &&
-    (row.does === "pick" || row.does === "judge")) ||
+  (unopened(row, facts) ||
     (facts.picks !== null && facts.picks.made < facts.picks.asked) ||
     facts.unsent > 0 ||
     facts.answers.length > 0 ||
@@ -173,11 +183,7 @@ export const reasonsOf = (
   }
   const retired = movedOn(row.id, facts.asked, steps);
   const reasons: ArtifactReason[] = [];
-  if (
-    !retired &&
-    (row.does === "pick" || row.does === "judge") &&
-    row.openedRevision === null
-  ) {
+  if (!retired && unopened(row, facts)) {
     reasons.push({ kind: "unopened" });
   }
   if (!retired && facts.picks && facts.picks.made < facts.picks.asked) {

@@ -34,6 +34,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 import { open, settle } from "../kit";
@@ -465,7 +466,9 @@ const spec: Spec = {
         .first()
         .click();
       await page.getByLabel("API key", { exact: true }).fill(KEY);
-      await page.getByRole("button", { name: "Send key", exact: true }).click();
+      await page
+        .getByRole("button", { name: accountsWords.key.send, exact: true })
+        .click();
       const joinedLine = page.locator(
         "[data-slot=signed-as] [data-slot=joined]"
       );

@@ -44,6 +44,7 @@ import { userInfo } from "node:os";
 import { join } from "node:path";
 import { connect } from "node:tls";
 import { chromium, type Page } from "playwright-core";
+import { tailnetWords } from "../../../packages/core/src/words/tailnet";
 import { leasePortRange, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -606,16 +607,14 @@ const run = async (kit: Kit) => {
   const [admin, operator] = asking.steps;
   kit.check(
     "3: Needs you says HTTPS on your tailnet, its line, then step 1 the DNS page's switches with its link, step 2 the command whole in its box",
-    asking.name === "HTTPS on your tailnet" &&
-      asking.want ===
-        "Every device on your tailnet opens CawCo over HTTPS once these are done. Each ticks by itself." &&
+    asking.name === tailnetWords.title &&
+      asking.want === tailnetWords.lead &&
       asking.meta.startsWith("Onboarding · Tailscale on ") &&
-      admin?.label === "Turn on MagicDNS, then HTTPS Certificates" &&
-      admin.note ===
-        "On Tailscale's DNS page. Tailscale lists your machine names in the public certificate log." &&
-      admin.link === "Open Tailscale's DNS page" &&
+      admin?.label === tailnetWords.stepMagicDns &&
+      admin.note === tailnetWords.adminNote &&
+      admin.link === tailnetWords.openDnsPage &&
       admin.href === "https://console.tailscale.com/admin/dns" &&
-      operator?.label === "Let CawCo take Tailscale's certificate" &&
+      operator?.label === tailnetWords.stepOperator &&
       operator.note.startsWith("Run it once in a terminal on ") &&
       operator.command === COMMAND &&
       asking.buttons === 0,
@@ -671,13 +670,13 @@ const run = async (kit: Kit) => {
   kit.check(
     "4: the operator's step ticks by itself: its tick and label, no command; the admin step stands with its link",
     ticking.steps[1]?.ticked === true &&
-      ticking.steps[1].label === "Let CawCo take Tailscale's certificate" &&
+      ticking.steps[1].label === tailnetWords.stepOperator &&
       ticking.steps[1].spoken ===
         "Done: Let CawCo take Tailscale's certificate" &&
       ticking.steps[1].command === null &&
       ticking.steps[1].note === "" &&
       ticking.steps[0]?.done === false &&
-      ticking.steps[0].link === "Open Tailscale's DNS page",
+      ticking.steps[0].link === tailnetWords.openDnsPage,
     JSON.stringify(ticking)
   );
 
@@ -692,9 +691,9 @@ const run = async (kit: Kit) => {
     JSON.stringify(off)
   );
   const httpsOff = await until(
-    "Turn on HTTPS Certificates",
+    tailnetWords.stepHttps,
     async () => (await readRow(page)) ?? undefined,
-    (row) => row.steps[0]?.label === "Turn on HTTPS Certificates",
+    (row) => row.steps[0]?.label === tailnetWords.stepHttps,
     30_000
   );
   kit.check(
@@ -720,7 +719,7 @@ const run = async (kit: Kit) => {
   kit.check(
     "4: the admin step ticks by itself, and the command stands whole",
     httpsOn.steps[0]?.ticked === true &&
-      httpsOn.steps[0].label === "Turn on HTTPS Certificates" &&
+      httpsOn.steps[0].label === tailnetWords.stepHttps &&
       httpsOn.steps[0].link === null &&
       httpsOn.steps[1]?.command === COMMAND,
     JSON.stringify(httpsOn)
@@ -752,7 +751,7 @@ const run = async (kit: Kit) => {
     ticked.want ===
       `HTTPS is on. Every device on your tailnet opens CawCo at ${https}.` &&
       ticked.steps.length === 0 &&
-      ticked.button === "Open the HTTPS dashboard" &&
+      ticked.button === tailnetWords.openDashboard &&
       ticked.href === https,
     JSON.stringify(ticked)
   );
@@ -877,7 +876,7 @@ const run = async (kit: Kit) => {
       keepPort: () => true,
       dropPort: () => undefined,
       setSettings: () => undefined,
-    } as unknown as Parameters<typeof createPreviewListeners>[2],
+    } satisfies Parameters<typeof createPreviewListeners>[2],
     // Port mode alone here: no listener holds host mode's lock, so no pass is read.
     {} as Parameters<typeof createPreviewListeners>[3],
     tailnet

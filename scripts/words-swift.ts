@@ -139,6 +139,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/routines.ts", export: "routinesWords", as: "" }],
   },
   {
+    // Caw's head in the top bar: what it says of what needs you.
+    swift: "CawHead",
+    members: [{ file: "words/caw-head.ts", export: "cawHeadWords", as: "" }],
+  },
+  {
     // A project's own views: asking Caw for one.
     swift: "Views",
     members: [{ file: "words/views.ts", export: "viewsWords", as: "" }],

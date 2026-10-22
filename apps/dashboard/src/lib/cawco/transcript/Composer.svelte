@@ -52,7 +52,7 @@
 </script>
 
 <script lang="ts">
-  import { type AvailableCommand, questionsOf } from "@cawco/core";
+  import { type AvailableCommand, commonWords, questionsOf } from "@cawco/core";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
    * and send controls. A parked permission or question is the composer
@@ -3390,7 +3390,7 @@
           <Button
             data-fault-again
             icon={IconRefresh}
-            label="Try again"
+            label={commonWords.tryAgain}
             onclick={faultAgain}
             size="sm"
             variant="ghost"

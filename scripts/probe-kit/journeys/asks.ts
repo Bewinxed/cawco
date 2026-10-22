@@ -13,7 +13,7 @@
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
-import { eventually } from "./suite";
+import { eventually, waiting } from "./suite";
 
 const ASK = /JOURNEY-ASK (\S+)/;
 const TOOL_RESULT = '"tool_result"';
@@ -63,11 +63,9 @@ export interface Parked {
   toolName: string;
 }
 
-/** Every ask the hub holds for the person: `/api/pending`'s frames, each its ask. */
+/** Every ask the hub holds for the person: `/api/pending`'s asks, the artifact lane apart. */
 export const pendingAsks = async (fleet: KitFleet): Promise<Parked[]> =>
-  (await fleet.api<{ payload: Parked }[]>("/api/pending")).map(
-    (frame) => frame.payload
-  );
+  (await waiting(fleet)).asks as Parked[];
 
 /** The file the command writes, in the session's folder. */
 export const markFile = (fleet: KitFleet, token: string) =>

@@ -22,6 +22,7 @@
    * resize, and what was typed in each stays (the draft is the hub's).
    */
   import {
+    commonWords,
     DRAFT_LIMITS,
     type InstallRoute,
     type InstallSignIn,
@@ -536,7 +537,7 @@
                 </p>
                 <Button
                   class="flex-none"
-                  label="Try again"
+                  label={commonWords.tryAgain}
                   onclick={readAgain}
                   pending={rereading}
                   pendingLabel="Reading…"
@@ -655,7 +656,9 @@
                  Rule); the ellipsis breathes while the hub listens. -->
             <Button
               aria-describedby={copyWaits ? "connect-copy-waits" : undefined}
-              aria-label={copied ? "Copied. Listening for it" : "Copy command"}
+              aria-label={copied
+                ? "Copied. Listening for it"
+                : commonWords.copyCommand}
               class="flex-none"
               data-copied={copied || undefined}
               disabled={!line || copied}
@@ -667,7 +670,7 @@
                   class={[
                     "col-start-1 row-start-1 transition-opacity duration-(--dur-morph) ease-out",
                     copied && "opacity-0",
-                  ]}>Copy command</span
+                  ]}>{commonWords.copyCommand}</span
                 >
                 <span
                   aria-hidden="true"

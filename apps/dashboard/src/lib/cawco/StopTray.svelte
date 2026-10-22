@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The running-sessions tray: one tray that changes shape as a stop goes,
    * never a second dialog (Family, benji.org/family-values: trays that
@@ -396,7 +397,7 @@
       case "armed":
         return words.armed(listed);
       case "fail":
-        return "Try again";
+        return commonWords.tryAgain;
       case "done":
         return words.ended;
       case "ending":

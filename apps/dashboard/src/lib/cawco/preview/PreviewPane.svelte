@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     artifactWords,
+    commonWords,
     hostModeDomain,
     machineLabel,
     PREVIEW_LOCKED_MESSAGE,
@@ -3410,7 +3411,7 @@
           <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
-              label="Try again"
+              label={commonWords.tryAgain}
               onclick={() => {
                 probe += 1;
               }}
@@ -3712,7 +3713,7 @@
           <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
-              label="Try again"
+              label={commonWords.tryAgain}
               onclick={retry}
               pending={retrying}
               pendingLabel="Reloading…"
@@ -3866,7 +3867,7 @@
       </p>
       {#if failure?.again === "reload"}
         <Button
-          label="Try again"
+          label={commonWords.tryAgain}
           onclick={retry}
           pending={retrying}
           pendingLabel="Reloading…"
@@ -3875,7 +3876,7 @@
         />
       {:else if failure?.again === "close"}
         <Button
-          label="Try again"
+          label={commonWords.tryAgain}
           onclick={close}
           pending={closing}
           pendingLabel="Closing…"
@@ -3885,7 +3886,7 @@
       {:else if !failure && paneRefused}
         <Button
           data-again
-          label="Try again"
+          label={commonWords.tryAgain}
           onclick={rerun}
           pending={rerunning}
           pendingLabel="Trying again…"

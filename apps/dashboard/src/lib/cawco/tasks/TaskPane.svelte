@@ -28,7 +28,7 @@
    * names it under the title, its mark and its ref a link to it; when its
    * last sync stopped short, the tracker's words under it, with Sync now.
    */
-  import { TRACKER_NAMES } from "@cawco/core";
+  import { commonWords, TRACKER_NAMES } from "@cawco/core";
   import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
   import { type Snippet, untrack } from "svelte";
   import { readDecision } from "#lib/cawco/decisions/decisions-api.js";
@@ -179,7 +179,7 @@
     if (live) {
       return {
         kind: "live" as const,
-        session: sessionTitle(live.instanceId) ?? "Its session",
+        session: sessionTitle(live.instanceId) ?? commonWords.itsSession,
       };
     }
     const open = shown?.kind !== "done" && shown?.kind !== "dropped";
@@ -363,14 +363,14 @@
   /** A session's status word takes its status tint; anything else has none. */
   const TINT: Record<string, BadgeVariant> = {
     Working: "live",
-    "Needs you": "attn",
+    [commonWords.needsYou]: "attn",
     Done: "done",
     Failed: "fail",
   };
   /** And its mark the same tone. */
   const TONE: Record<string, MarkStatus> = {
     Working: "live",
-    "Needs you": "attn",
+    [commonWords.needsYou]: "attn",
     Done: "done",
     Failed: "fail",
   };
@@ -751,7 +751,8 @@
                     />
                     <span
                       class="flex-initial min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap"
-                      >{sessionTitle(attempt.instanceId) ?? "Its session"}</span
+                      >{sessionTitle(attempt.instanceId) ??
+                        commonWords.itsSession}</span
                     >
                     <Badge data-box variant={TINT[word] ?? "secondary"}>
                       {#if word === "Failed"}

@@ -15,6 +15,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
 import { MACHINE, type Reply } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
@@ -185,7 +186,9 @@ async function probe(kit: Kit) {
         faults: group.faults,
       }))
   );
-  const fleetGroup = groups.find((group) => group.head === "The fleet");
+  const fleetGroup = groups.find(
+    (group) => group.head === delegateTypesWords.fleet
+  );
   const projectGroup = groups.find((group) => group.head === PROJECT);
   const brokenGroup = groups.find((group) => group.head === BROKEN_ONLY);
   kit.check(

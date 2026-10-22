@@ -40,6 +40,10 @@ import type { Page } from "playwright-core";
 import { userLayerLabel } from "../../../packages/core/src/claude-dirs";
 import { HOOK_TEMPLATES } from "../../../packages/core/src/hooks";
 import { RULE_TEMPLATES } from "../../../packages/core/src/rules";
+import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
+import { mcpWords } from "../../../packages/core/src/words/mcp";
+import { memoryWords } from "../../../packages/core/src/words/memory";
+import { skillsWords } from "../../../packages/core/src/words/skills";
 import type { Reply } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import { durOf, oneEntrance, recordRuns, runsOn } from "../entrances";
@@ -400,7 +404,7 @@ async function skill({ kit, fleet, page, base }: On, origin: string) {
   const skillDelete = await deleteFromMenu(
     page,
     SKILL,
-    "Remove everywhere",
+    skillsWords.removeEverywhere,
     skillHeld
   );
   kit.check(
@@ -448,7 +452,7 @@ async function pluginAndMarketplace({ kit, fleet, page }: On) {
   const pluginDelete = await deleteFromMenu(
     page,
     PLUGIN_ID,
-    "Remove everywhere",
+    skillsWords.removeEverywhere,
     pluginHeld
   );
   kit.check(
@@ -518,7 +522,7 @@ async function delegateType({ kit, fleet, page, base }: On) {
   const typeDelete = await deleteFromMenu(
     page,
     seeded.name,
-    "Delete delegate type",
+    delegateTypesWords.remove,
     typeHeld
   );
   kit.check(
@@ -608,12 +612,7 @@ async function mcpServer({ kit, fleet, page, base }: On) {
       MCP
     );
   await open(page, `${base}/config/mcp`, `text=${MCP}`);
-  const mcpDelete = await deleteFromMenu(
-    page,
-    MCP,
-    "Remove everywhere",
-    mcpHeld
-  );
+  const mcpDelete = await deleteFromMenu(page, MCP, mcpWords.remove, mcpHeld);
   kit.check(
     "mcp: one pick of Remove everywhere asks nothing and the hub lets it go, sign-in too",
     mcpDelete.asked === 0 && mcpDelete.gone && signIn().length === 0,
@@ -662,7 +661,7 @@ async function memory({ kit, fleet, page, base }: On) {
   const scopedDelete = await deleteFromMenu(
     page,
     SCOPED,
-    "Delete everywhere",
+    memoryWords.deleteEverywhere,
     docHeld(SCOPED)
   );
   kit.check(
@@ -685,7 +684,7 @@ async function memory({ kit, fleet, page, base }: On) {
   const mainDelete = await deleteFromMenu(
     page,
     MAIN_ROW,
-    "Delete everywhere",
+    memoryWords.deleteEverywhere,
     mainHeld
   );
   const emptied = await memoryOf();

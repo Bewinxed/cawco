@@ -17,6 +17,7 @@
   words where it would stand.
 -->
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   import {
     askHubReach,
     PREVIEW_REACH_PATH,
@@ -258,7 +259,7 @@
           </p>
           <Button
             icon={IconRefresh}
-            label="Try again"
+            label={commonWords.tryAgain}
             onclick={() => {
               attempt += 1;
             }}

@@ -231,6 +231,7 @@ async function walk(leg: Leg): Promise<void> {
 const journey: Journey = {
   name: "j4-caw-asks",
   flow: "Caw asks and the person answers: by click, then by number key",
+  host: "the project's Caw runs in a place, a boundary of its own",
   respond: (seen: Seen) => {
     if (!seen.tools) {
       return say("Launch post");

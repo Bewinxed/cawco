@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * BUTTON BENCH: the kit Button's label and its pending wording
    * (pending-content), read by the `button-pending` spec. A label-only
@@ -108,14 +109,14 @@
   />
   <Button
     data-site="lib/cawco/preview/PreviewPane.svelte:2075"
-    label="Try again"
+    label={commonWords.tryAgain}
     pendingLabel="Reloading…"
     size="sm"
     variant="outline"
   />
   <Button
     data-site="lib/cawco/preview/PreviewPane.svelte:2084"
-    label="Try again"
+    label={commonWords.tryAgain}
     pendingLabel="Closing…"
     size="sm"
     variant="outline"
@@ -143,14 +144,14 @@
   />
   <Button
     data-site="lib/cawco/tasks/TaskNeeds.svelte:236"
-    label="Try again"
+    label={commonWords.tryAgain}
     pendingLabel="Starting…"
     size="sm"
     variant="default"
   />
   <Button
     data-site="lib/cawco/tasks/TaskReview.svelte:437"
-    label="Try again"
+    label={commonWords.tryAgain}
     pendingLabel="Starting…"
     size="sm"
     variant="default"
@@ -304,7 +305,7 @@
   />
   <Button
     data-site="routes/(app)/config/updates/+page.svelte:259"
-    label="Check for updates"
+    label={commonWords.checkForUpdates}
     pendingLabel="Checking…"
     size="sm"
     variant="outline"

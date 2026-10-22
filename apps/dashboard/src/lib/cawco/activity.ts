@@ -45,7 +45,7 @@ export function runningSubagents(
 /** The word each state is shown as — the enum is wire vocabulary, not copy. */
 export const ACTIVITY_LABEL: Record<Activity, string> = {
   working: "Working",
-  blocked: "Needs you",
+  blocked: commonWords.needsYou,
   idle: "Idle",
 };
 
@@ -107,3 +107,5 @@ export const UNKNOWN_HINT =
  */
 export const MACHINE_UNREACHABLE_HINT =
   "The hub can't currently reach this machine.";
+
+import { commonWords } from "@cawco/core";

@@ -194,8 +194,11 @@ export interface PageOptions {
    * browser trusts the real edge's: its https origins stay secure contexts.
    */
   ignoreHTTPSErrors?: boolean;
-  /** Scripts installed before the page's own, in order. */
-  init?: (() => void)[];
+  /**
+   * Scripts installed before the page's own, in order: a function (run as
+   * it is, none of this module's scope with it), or a script's source.
+   */
+  init?: ((() => void) | { content: string })[];
   /**
    * Chromium only: every frame in the page's own process, its preview's
    * included, as WebKit runs them and as Chromium does a frame of the same
@@ -272,6 +275,8 @@ function pinnedWebkit(revision: string): string {
 
 /** A spec: one surface, a short list of assertions on the kit's helpers. */
 export interface Spec {
+  /** The command that runs it alone, said with `host`; the spec's own by its name when unsaid. */
+  command?: string;
   /**
    * Why the spec runs on the host, outside every workspace, when it does:
    * it starts workspace boundaries (a delegate's, a stage's, a place's), and
@@ -989,7 +994,7 @@ export class Run {
     if (spec.host && process.env.CAWCO_WORKSPACE) {
       this.onHost.push(spec.name);
       console.log(
-        `HOST ${spec.name}: runs on the host, not in this workspace: ${spec.host}, and ${BOUNDARY_INSIDE}. Run it from a shell outside every workspace, on a checkout of this commit: bun scripts/probe-kit/run.ts ${spec.name}`
+        `HOST ${spec.name}: runs on the host, not in this workspace: ${spec.host}, and ${BOUNDARY_INSIDE}. Run it from a shell outside every workspace, on a checkout of this commit: ${spec.command ?? `bun scripts/probe-kit/run.ts ${spec.name}`}`
       );
       return;
     }

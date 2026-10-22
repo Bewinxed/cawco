@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * The artifact panel's words (Projects spec §5.10; live components spec §5):
  * its title menu and a sheet's inspector, for the dashboard and the native
@@ -20,7 +22,7 @@ export const artifactWords = {
   /** The head's line under the name once the person's Send is in and the session has not changed it since. */
   sentTo: (session: string) => `Sent to ${session}`,
   /** A row's dot, for a screen reader: the person has something to do on it. */
-  waitingOnYou: "Needs you",
+  waitingOnYou: commonWords.needsYou,
 
   // ── Needs you: an artifact waiting on the person (home/NeedsCard.svelte, Files' cards) ──
   /** Shown and never opened: the row's line. */
@@ -69,7 +71,7 @@ export const artifactWords = {
   /** A notice: its session ended with the ask unanswered. */
   ended: (who: string, what: string) => `${who} ended; ${what}`,
   /** Who ended, when the hub no longer holds the session. */
-  itsSession: "Its session",
+  itsSession: commonWords.itsSession,
   neverOpened: (name: string) => `${name} never opened`,
   neverPicked: (count: number, name: string) =>
     count === 1

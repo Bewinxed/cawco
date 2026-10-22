@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * A Configure group that is about machines, with none joined yet: the kit's
    * empty block (DESIGN.md, Empty: a 20px mark, a title, one line saying
@@ -18,7 +19,7 @@
   } = $props();
 </script>
 
-<EmptyState icon={IconLaptop} {line} title="No machines yet">
+<EmptyState icon={IconLaptop} {line} title={commonWords.noMachines}>
   {#snippet action()}
     <Button
       aria-haspopup="dialog"

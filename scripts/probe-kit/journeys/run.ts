@@ -52,10 +52,20 @@ export async function runJourneys(rest: string[]): Promise<number> {
   if (run.failed.length > 0) {
     console.log(`FAILED LEGS:\n${run.failed.join("\n")}`);
   }
+  if (run.onHost.length > 0) {
+    console.log(
+      `NOT RUN HERE, each runs on the host: ${run.onHost.join(", ")}`
+    );
+  }
+  const ran = chosen.length - run.onHost.length;
   console.log(
     run.failures === 0
-      ? `ALL PASS (${chosen.length} journeys, ${minutes} min)`
-      : `${run.failures} FAILED (${chosen.length} journeys, ${minutes} min)`
+      ? `ALL PASS (${ran} journeys, ${minutes} min)`
+      : `${run.failures} FAILED (${ran} journeys, ${minutes} min)`
   );
-  return run.failures === 0 ? 0 : 1;
+  // As the specs' run: 3 when nothing failed but some were left to the host.
+  if (run.failures > 0) {
+    return 1;
+  }
+  return run.onHost.length > 0 ? 3 : 0;
 }

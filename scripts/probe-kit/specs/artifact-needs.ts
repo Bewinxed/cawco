@@ -65,6 +65,7 @@ import {
   unparked,
 } from "../../../packages/core/src/artifact-needs";
 import type { Envelope } from "../../../packages/core/src/index";
+import { artifactWords } from "../../../packages/core/src/words/artifacts";
 import {
   HARNESSES,
   type Harness,
@@ -394,10 +395,10 @@ const notOpened = async (at: At, session: string): Promise<string> => {
     name: "routine-form",
     html: judgePage("Routine form", ["Its schedule line.", "Its run line."]),
   });
-  const line = await lineIs(fleet, id, "New · not opened");
+  const line = await lineIs(fleet, id, artifactWords.notOpened);
   kit.check(
     "reason not opened: a judge page shown and never opened reads 'New · not opened'",
-    line === "New · not opened",
+    line === artifactWords.notOpened,
     String(line)
   );
   const pending = await fleet.api<Envelope[]>("/api/pending");

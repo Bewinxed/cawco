@@ -50,6 +50,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { commonWords } from "../../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen } from "../../../scratch-fleet";
 import {
   handOn,
@@ -326,7 +327,7 @@ async function newSessionLegs(
   spawnLink: string
 ) {
   const openNew = () => openSpawnLink(page, spawnLink);
-  const label = "New session";
+  const label = commonWords.newSession;
   // 1. Typed, attached, reloaded: the same form.
   await openNew();
   const words = "PROBE-PARK first prompt kept";

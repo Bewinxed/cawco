@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The New Session form on a phone: the kit drawer's bottom sheet under
    * 640px (DESIGN.md: "the new-session dialog becomes a bottom sheet"). A
@@ -83,7 +84,7 @@
       }
     }}
     style="--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))"
-    title={form?.title() ?? "New session"}
+    title={form?.title() ?? commonWords.newSession}
     bind:ref={card}
   >
     <NewSessionForm

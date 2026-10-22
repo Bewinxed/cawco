@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * What Configure › Memory says (routes/config/memory, its New document
  * popover and MemoryEditor.svelte), and the parts `scopeWords` (fleet.ts)
@@ -76,7 +78,7 @@ export const memoryWords = {
   showLatest: "Show the latest 5",
   showAll: (count: number) => `Show all ${count}`,
   perMachine: "Per machine",
-  noMachines: "No machines yet",
+  noMachines: commonWords.noMachines,
   landsFirst: " — this lands on the first one that registers.",
   inSyncOn: (count: number) =>
     `In sync on ${count} machine${count === 1 ? "" : "s"}.`,

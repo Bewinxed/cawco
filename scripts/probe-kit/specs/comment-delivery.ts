@@ -63,6 +63,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, pressAt, type Spec, settle } from "../kit";
 import {
@@ -671,7 +672,7 @@ const linkDownChecks = async (on: On, frame: Frame) => {
     !!told?.includes("Comments aren't reaching the agent") &&
       saidIn >= LINK_DOWN_MS - 1000 &&
       lineWords.includes(LINK_DROPPED) &&
-      lineWords.includes("Try again"),
+      lineWords.includes(commonWords.tryAgain),
     `control ${String(told)} after ${saidIn} ms; panel ${JSON.stringify(lineWords)}`
   );
   await shutList(page);
@@ -813,7 +814,7 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   await rowsOf(page);
   await page
     .locator(`${RAIL} [data-pin-list-down]`)
-    .getByRole("button", { name: "Try again" })
+    .getByRole("button", { name: commonWords.tryAgain })
     .click()
     .catch(() => undefined);
   const cleared = await until(

@@ -14,6 +14,7 @@
  * `.length`, `.join(…)` and the helpers in ./helpers.
  */
 import { userLayerLabel } from "../claude-dirs";
+import { commonWords } from "./common";
 
 /** The rail's groups, in its order. */
 export const CONFIG_GROUPS = [
@@ -286,7 +287,7 @@ export const configureWords = {
   /** The toast after a delete, which goes through at once: Undo for as long as the hub keeps it. */
   undo: "Undo",
   /** A row's refused action, said under it, offers it again. */
-  tryAgain: "Try again",
+  tryAgain: commonWords.tryAgain,
   deleted: (what: string) => `Deleted ${what}`,
   removed: (what: string) => `Removed ${what}`,
   unlinked: (what: string) => `Unlinked ${what}`,

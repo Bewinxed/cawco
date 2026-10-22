@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * The preview's states, for the dashboard and the native app alike.
  *
@@ -15,7 +17,7 @@ export const previewWords = {
   stoppedLine:
     "It closed while it ran, most likely because it needed more memory than this device gives a page.",
   /** The state's way back: the page loaded afresh. */
-  tryAgain: "Try again",
+  tryAgain: commonWords.tryAgain,
   /** Try again while the page loads. */
   reloading: "Reloading…",
   /**

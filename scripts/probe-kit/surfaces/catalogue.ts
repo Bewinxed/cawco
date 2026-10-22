@@ -14,10 +14,16 @@
 import type { Locator, Page, WebSocketRoute } from "playwright-core";
 import { deviceDocName } from "../../../packages/core/src/doc-link";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
+import { commonWords } from "../../../packages/core/src/words/common";
+import { CONFIG_SECTIONS } from "../../../packages/core/src/words/configure";
+import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
+import { mcpWords } from "../../../packages/core/src/words/mcp";
+import { memoryWords } from "../../../packages/core/src/words/memory";
+import { skillsWords } from "../../../packages/core/src/words/skills";
 import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
 import { COMPOSER_FIELD, pressAt, pressIn } from "../kit";
-import { exactly, startsWith } from "../words";
+import { exactly, literal, startsWith } from "../words";
 import {
   ANSWERED_PIN,
   commentPins,
@@ -388,7 +394,7 @@ const SCENE_MODE = "bypassPermissions";
 /** A refused send's way back: its row's Choose a mode (MessageRow). */
 const CHOOSE_A_MODE = /^Choose a mode$/;
 /** No machine at all, where a page needs one (config NoMachines' title). */
-const NO_MACHINES = /No machines yet/;
+const NO_MACHINES = new RegExp(literal(commonWords.noMachines));
 /** A model's combobox (ModelCombobox's "Model"). */
 const MODEL_CHIP = /^Model/;
 /** The workflows page's New workflow, its two kinds, and a project menu's upstream row (core upstream-guard.ts `title`). */
@@ -679,7 +685,7 @@ const SIGN_IN_ON = /^Sign in .+ on /;
  */
 const toKeyStep = async (page: Page) => {
   // A search field (role searchbox), found by the words in it.
-  await page.getByPlaceholder("Search providers").fill(KEY_PROVIDER);
+  await page.getByPlaceholder(accountsWords.setup.search).fill(KEY_PROVIDER);
   await page
     .locator("[data-choice]")
     .filter({ hasText: KEY_PROVIDER })
@@ -2005,26 +2011,32 @@ const openFiles = async (page: Page) => {
   await openRail(page);
   await page.locator("[data-sidebar-files]").first().click();
 };
-/** The config sections, each with its page's title (SectionFrame's `h1`, sections.ts `label`). */
+/** The config sections, each with its page's title (SectionFrame's `h1`, sections.ts `label`, from core's CONFIG_SECTIONS). */
 const CONFIG: [string, string][] = [
-  ["accounts", "Accounts"],
-  ["cli-tools", "Command-line tools"],
-  ["connections", "Connections"],
-  ["delegate-types", "Delegate types"],
-  ["devices", "Devices"],
-  ["hooks", "Hooks"],
-  ["mcp", "MCP servers"],
-  ["memory", "Memory files"],
-  ["models", "Models CawCo uses"],
-  ["phone", "Phone"],
-  ["previews", "Previews"],
-  ["rules", "Rules"],
-  ["browsers", "Browsers"],
-  ["skills", "Skills & plugins"],
-  ["spend", "Spend"],
-  ["subagents", "Subagents"],
-  ["updates", "Updates"],
-];
+  "accounts",
+  "cli-tools",
+  "connections",
+  "delegate-types",
+  "devices",
+  "hooks",
+  "mcp",
+  "memory",
+  "models",
+  "phone",
+  "previews",
+  "rules",
+  "browsers",
+  "skills",
+  "spend",
+  "subagents",
+  "updates",
+].map((slug) => {
+  const section = CONFIG_SECTIONS.find((one) => one.slug === slug);
+  if (!section) {
+    throw new Error(`CONFIG_SECTIONS has no ${slug} section`);
+  }
+  return [slug, section.label];
+});
 /** A config section's page title, and a section's rows while the fleet is still being read. */
 const SECTION_TITLE = "h1[data-slot=title]";
 const SKELETON = "[data-slot=skeleton]";
@@ -2037,9 +2049,9 @@ const at = (path: string) =>
 /** Each `new` editor's own field, by section. */
 const NEW_FIELD: Record<string, string> = {
   hooks: field("Hook name"),
-  mcp: field("Server name"),
+  mcp: field(mcpWords.nameLabel),
   subagents: field("new-subagent definition"),
-  "delegate-types": field("Delegate type name"),
+  "delegate-types": field(delegateTypesWords.nameLabel),
 };
 
 /** A config section's editors: each opens on `new` (its route's own word for a new one), and an account's own pages. */
@@ -2153,7 +2165,7 @@ const EDITORS: Record<string, State[]> = {
       // The adopted skill's Remove everywhere: gone from the list at once,
       // Undo in its toast (no ask: deletes.ts).
       name: "removed",
-      act: deletedFrom(MORE_FOR_SKILL, "Remove everywhere"),
+      act: deletedFrom(MORE_FOR_SKILL, skillsWords.removeEverywhere),
       restore: undoDelete('[aria-label="More for tray-check"]'),
       root: "body",
       ready: {
@@ -2177,7 +2189,7 @@ const EDITORS: Record<string, State[]> = {
       name: "filtered",
       act: (page) =>
         page
-          .getByRole("textbox", { name: "Filter memory files" })
+          .getByRole("textbox", { name: memoryWords.filterLabel })
           .fill("no-such-file"),
       root: "body",
       // The kit's EmptyState, its title naming the filter.
@@ -2216,7 +2228,7 @@ const EDITORS: Record<string, State[]> = {
       // The memory's Delete everywhere: its row gone at once, Undo in its
       // toast (no ask: deletes.ts).
       name: "deleted",
-      act: deletedFrom(MORE_FOR_MEMORY, "Delete everywhere"),
+      act: deletedFrom(MORE_FOR_MEMORY, memoryWords.deleteEverywhere),
       restore: undoDelete('[aria-label$="CLAUDE.md"][aria-label^="More for"]'),
       root: "body",
       ready: {
@@ -2288,7 +2300,7 @@ const EDITORS: Record<string, State[]> = {
       route: (s) => `/config/accounts/${s.spare}`,
       act: press(SIGN_IN_ON),
       root: "body",
-      ready: { shows: field("Code from the sign-in page") },
+      ready: { shows: field(accountsWords.signin.codeLabel) },
     },
     {
       // A GitHub Copilot account signed in nowhere: its Sign in on the
@@ -2387,7 +2399,7 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: `${HOME} [role=status]`,
-          says: /^Reading the fleet…$/,
+          says: exactly(commonWords.readingTheFleet),
         },
       },
       {

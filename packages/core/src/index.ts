@@ -74,6 +74,7 @@ export * from "./notifications";
 export * from "./permission-presentation";
 // A session's plan: its steps, its spec, its task's to-dos, and their live frames.
 export * from "./plan";
+export * from "./presence-onboarding";
 // A project's landing gate as its gate.md declares it: the hub reads it, Settings draws it.
 export type {
   DeclaredStep,
@@ -2207,6 +2208,7 @@ export * from "./words/artifacts";
 export * from "./words/blocks";
 export * from "./words/catalog";
 export * from "./words/caw-head";
+export * from "./words/common";
 export * from "./words/configure";
 export * from "./words/connection";
 export * from "./words/connections";

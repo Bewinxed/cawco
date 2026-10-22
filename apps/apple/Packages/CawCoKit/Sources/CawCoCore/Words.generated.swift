@@ -1937,6 +1937,33 @@ public enum Words {
         }
     }
 
+    public enum CawHead {
+        // packages/core/src/words/caw-head.ts `cawHeadWords`
+        /// Something waits on the operator: how many, his label.
+        public static func needs(count: Int) -> String {
+            "Needs you, \(count)"
+        }
+
+        /// The same, his tooltip.
+        public static func needsTip(count: Int) -> String {
+            "\(count) need you"
+        }
+
+        /// Nothing waits, and the fleet is read over a live hub: the one empty answer.
+        public static let caughtUp = "All caught up"
+
+        /// The hub is live and its fleet not read yet: nothing to count from.
+        public static let reading = "Reading the fleet"
+
+        /// The hub is away, so nothing can be counted (why is the connection band's to say).
+        public static let waiting = "Waiting for the hub"
+
+        /// After what he says, while any notice stands: " · 2 notices".
+        public static func notices(count: Int) -> String {
+            " · \(count) \(count == 1 ? "notice" : "notices")"
+        }
+    }
+
     public enum Views {
         // packages/core/src/words/views.ts `viewsWords`
         /// The strip's ghost action, and the head's ⋯ on a phone, while Caw can start.
