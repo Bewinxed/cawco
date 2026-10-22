@@ -2133,7 +2133,7 @@ pins_refused() {
   echo "its error: $(field $hid error)"
   as_user "$hubc" cat /home/cawco/bun-calls.log
   # One sentence, naming the tool, the build and bun, and bun's own words.
-  [[ "$(field $hid error)" == "opencode $PIN, which $NEXT runs, did not go on with bun: error: GET https://registry.npmjs.org/@opencode%2fcli - 503" ]]
+  [[ "$(field $hid error)" == "OpenCode $PIN, which $NEXT runs, did not go on with bun: error: GET https://registry.npmjs.org/@opencode%2fcli - 503" ]]
   as_user "$hubc" grep -q "^bun install -g --trust @opencode/cli@$PIN swaps=" /home/cawco/bun-calls.log
   # Nothing was applied: the build before runs on, its agent never restarted, and OpenCode is where it was.
   [[ "$(build_version $hid)" == $BASE ]]
