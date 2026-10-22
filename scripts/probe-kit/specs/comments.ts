@@ -7874,7 +7874,13 @@ const redrawChecks = async (on: On) => {
     Boolean,
     5000
   );
-  await commentAt(on, value.x + value.w * 0.3, value.y + value.h / 2, null);
+  await commentAt(
+    on,
+    frame,
+    value.x + value.w * 0.3,
+    value.y + value.h / 2,
+    null
+  );
   await settle(on.page, 1300);
   await on.page
     .locator(COMPOSE)
@@ -7908,7 +7914,8 @@ const redrawChecks = async (on: On) => {
       moved: !!pin?.movedAt,
       on: await pillOn(frame, 1, REDRAWN),
     });
-    await settle(on.page, 150);
+    // On the clock, not a settle: the redraws must go on between reads.
+    await on.page.waitForTimeout(150);
   }
   const drawnOn = watched.filter((one) => one.on !== null);
   on.kit.check(
@@ -8043,7 +8050,7 @@ const pinSendChecks = async (on: On) => {
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one comment, then the next
     const b = await screenBox(on, frame, selector);
-    await commentAt(on, b.x + b.w * 0.3, b.y + b.h / 2, words);
+    await commentAt(on, frame, b.x + b.w * 0.3, b.y + b.h / 2, words);
   }
   await on.page.keyboard.press("Escape");
   const pinsNow = async () => (await docOf(frame)).pins;
@@ -8170,7 +8177,13 @@ const pinSendChecks = async (on: On) => {
   await tab.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
   await pageInComment(goneFrame, true);
   const g = await screenBox(there, goneFrame, "#one");
-  await commentAt(there, g.x + g.w * 0.3, g.y + g.h / 2, "Who takes this one?");
+  await commentAt(
+    there,
+    goneFrame,
+    g.x + g.w * 0.3,
+    g.y + g.h / 2,
+    "Who takes this one?"
+  );
   await tab.keyboard.press("Escape");
   const goneRail = await rowsOf(there);
   const goneRow = goneRail.locator(
@@ -8273,6 +8286,7 @@ const pageOnlyChecks = async (on: On, id: string) => {
   const b = await screenBox(there, frame, "#two");
   await commentAt(
     there,
+    frame,
     b.x + b.w * 0.6,
     b.y + b.h / 2,
     "Written with the link down."
@@ -8547,6 +8561,7 @@ const restartChecks = async (on: On) => {
   const b = await screenBox(on, frame, "#one");
   await commentAt(
     on,
+    frame,
     b.x + b.w * 0.3,
     b.y + b.h / 2,
     "Keep my picture through a restart."
@@ -8658,7 +8673,7 @@ const deleteHeadChecks = async (on: On) => {
   for (const selector of ["#one", "#two"]) {
     // biome-ignore lint/performance/noAwaitInLoops: one comment, then the next
     const b = await screenBox(on, frame, selector);
-    await commentAt(on, b.x + b.w * 0.3, b.y + b.h / 2, "Delete me.");
+    await commentAt(on, frame, b.x + b.w * 0.3, b.y + b.h / 2, "Delete me.");
   }
   await on.page.keyboard.press("Escape");
   await on.page.locator(`${PANE} [role='tab'][aria-keyshortcuts='V']`).click();
@@ -9262,6 +9277,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
     const words = await boxIn(frame, "#long");
     await commentAt(
       on,
+      frame,
       pane.x + words.x + words.w * 0.3,
       pane.y + words.y + words.h / 2,
       "This runs long."
