@@ -296,6 +296,76 @@ export const withMovedLine = (text: string, move: CheckoutMove): string =>
   afterMarker(text, movedLine(move));
 
 /**
+ * Where the person is, as a session is told at the start of each turn (hub
+ * server.ts `presenced`, from notifications.ts `person`):
+ * - `on`: on this chat now, or this is their own message: talk normally.
+ *   With `recap`, they are back after being away since `recap.since`, and
+ *   the notes the session kept meanwhile (its plan's "Since" section) ride
+ *   along for it to recap or point to;
+ * - `elsewhere`: here, on another chat or another app: work quietly;
+ * - `away`: away since `since` (HH:MM on the hub's clock; null when no
+ *   device has ever said): work without talking, and keep the notes.
+ */
+export type PresenceSaid =
+  | { kind: "on"; recap?: { notes: string; since: string } }
+  | { kind: "elsewhere" }
+  | { kind: "away"; since: string | null };
+
+/** The heading a session's away notes open with in its plan's spec: `## Since 12:18 (you were away)`. */
+export const awayNotesHeading = (since: string): string =>
+  `## Since ${since} (you were away)`;
+
+/** The first "## Since HH:MM" section of a plan's spec: when it began, and its lines. */
+export const awayNotesOf = (
+  spec: string | undefined
+): { notes: string; since: string } | undefined => {
+  if (!spec) {
+    return;
+  }
+  const lines = spec.split("\n");
+  const at = lines.findIndex((line) => AWAY_HEADING.test(line));
+  if (at < 0) {
+    return;
+  }
+  const since = AWAY_HEADING.exec(lines[at] ?? "")?.[1] ?? "";
+  const end = lines.findIndex(
+    (line, index) => index > at && line.startsWith("## ")
+  );
+  const notes = lines
+    .slice(at + 1, end < 0 ? undefined : end)
+    .join("\n")
+    .trim();
+  return notes ? { since, notes } : undefined;
+};
+
+const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/;
+
+/** What a session reads of the person, at the head of its turn ({@link PresenceSaid}). */
+export const presenceLine = (said: PresenceSaid): string => {
+  switch (said.kind) {
+    case "on":
+      return said.recap
+        ? `[CawCo presence] The person is back on this chat; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}\n\nIf their message asks something specific, answer it in full and point to "Since ${said.recap.since}" in your plan in one line. Otherwise open with a recap of those notes in one to three sentences, then answer. Then fold that section into the rest of your plan's spec with todo_write.`
+        : "[CawCo presence] The person is on this chat now: talk to them normally.";
+    case "elsewhere":
+      return "[CawCo presence] The person is at their desk but not on this chat. Work quietly: keep your plan current with todo_write, and write to them only for what needs them.";
+    case "away": {
+      const heading = awayNotesHeading(said.since ?? "now");
+      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Work without talking: no narration, and no questions in this chat unless you are blocked. Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Tick steps as they finish.`;
+    }
+  }
+};
+
+/**
+ * `text` with the person's presence after it, in a `<system-reminder>`
+ * block: the session reads it, and a transcript's text and Find leave it
+ * out (jsonl-parser text.ts drops every such block). After the text, so a
+ * marker's tag still opens the message.
+ */
+export const withPresenceLine = (text: string, said: PresenceSaid): string =>
+  `${text}${text ? "\n\n" : ""}<system-reminder>\n${presenceLine(said)}\n</system-reminder>`;
+
+/**
  * A hand-off read back into who sent it and what it says. `from` names the
  * sending session, or the workflow and step for a step's brief; `short` is the
  * sending session's 8-character short id, which consumers pair with its full

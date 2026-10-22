@@ -544,6 +544,13 @@ export const damagedHubRecordWords = (
  * a register missed because it raced a spawn shows up on the very next beat.
  */
 export interface HeartbeatPayload {
+  /**
+   * The machine's activity as its desktop reads it (agent activity.ts): in
+   * use, idle, locked or asleep, and how long since its last input. On
+   * every 15s beat and on a beat of its own when it changes; absent where
+   * the machine has no desktop source (no GUI session, no logind).
+   */
+  activity?: import("./notifications").MachineActivity;
   at: number;
   /** The machine's binary update state, live on every beat. */
   binaryUpdate?: import("./binary-updates").BinaryUpdateState;
@@ -1699,6 +1706,10 @@ export type FramePayload =
   | import("./fleet-watch").FleetWatchNoticesFrame
   /** Hub-originated: every law the hub caught broken, whole, on each break. */
   | import("./invariant").LawsBrokenFrame
+  /** Hub-originated: the person's presence and the machines that count toward it. */
+  | import("./notifications").PersonFrame
+  /** Hub-originated: something that needs the person, shown on the desk tab they use. */
+  | import("./notifications").DeskAlertFrame
   /** Hub-originated: every project move, whole, on each change. */
   | import("./move").MovesFrame
   /** Daemon-originated: how far a move's clone or large files are. */

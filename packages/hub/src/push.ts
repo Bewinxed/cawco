@@ -45,7 +45,16 @@
  * - **The gate** (notifications.ts): every push about a session is offered
  *   there and dropped when a client had that session in front at any moment
  *   since the item landed, so nothing the owner saw there reaches a device
- *   afterwards. Every visible push carries the
+ *   afterwards.
+ * - **The person gate**: while the person is here at a desk (notifications.ts
+ *   `person`, the device in use not the phone) and a tab there can show a
+ *   desktop notification, an item about to go out goes to that tab instead
+ *   (`desk_alert`) and is held. When the person goes away (the away clock, a
+ *   lock, Appear away), each held item that still needs them and landed at
+ *   most {@link HELD_RECENT_MS} before their last input goes to the phone as
+ *   it would have; an older one waits on the board (the owner's pick: "only
+ *   items from the last 10 min"). The device in use being the phone, or no
+ *   desk tab able to show it, the push goes as before. Every visible push carries the
  *   last day's cleared collapse ids (`cawco.cleared`), and each clear queues
  *   one background push per device, at most one per device every
  *   {@link BACKGROUND_GAP_MS}, carrying the whole set: APNs keeps only the
@@ -59,9 +68,11 @@ import {
   causeLine,
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
+  type DeskAlertFrame,
   type Envelope,
   type FleetWatchNotice,
   type HarnessKind,
+  HELD_RECENT_MS,
   type Install,
   installName,
   MEMORY_PROPOSAL_TOOL,
@@ -606,6 +617,8 @@ export interface PushOutcome {
 
 export interface PushServices {
   readonly db: DbShape;
+  /** Shows an item on the desk tab the person uses, in place of a phone push. */
+  readonly desk: (frame: DeskAlertFrame) => void;
   readonly lifetime: HubLifetimeShape;
   /** The one gate every push about a session goes through. */
   readonly notifications: Notifications;
@@ -793,6 +806,7 @@ const removeDevice = async (
 
 export const createPush = ({
   db,
+  desk,
   lifetime,
   notifications,
   task,
@@ -991,6 +1005,7 @@ export const createPush = ({
   const answered = (requestId: string): void => {
     const id = askCollapseId(requestId);
     open?.items.delete(id);
+    atDesk.delete(id);
     const [shownId, cover] =
       [...covers].find(([, one]) => one.burst.lead === id) ?? [];
     if (!(shownId && cover)) {
@@ -1061,10 +1076,102 @@ export const createPush = ({
     if (ask && !live.includes(ask)) {
       return;
     }
-    if (live.length > 0) {
-      show(burst, live);
+    const going = holdAtDesk(burst, live, shown);
+    if (going.length > 0) {
+      show(burst, going);
     }
   };
+
+  /**
+   * Items held while the person was at a desk, by collapse id: shown there
+   * as a desktop notification, and sent to the phone only if they leave
+   * while it still needs them ({@link releaseFromDesk}).
+   */
+  const atDesk = new Map<string, Arrival>();
+
+  /**
+   * THE PERSON GATE: with the person here at a desk and a tab there that can
+   * show it, each item the device doesn't show yet goes to that tab and is
+   * held, leaving its burst; what is left goes on to the phone. The phone in
+   * use, or no tab able to show it, holds nothing.
+   */
+  const holdAtDesk = (
+    burst: Burst,
+    live: readonly Arrival[],
+    shown: ReadonlySet<string>
+  ): Arrival[] => {
+    const person = notifications.person();
+    if (person.state !== "here" || person.inUse?.kind === "ios") {
+      return [...live];
+    }
+    const tab = notifications.deskTab();
+    if (!tab) {
+      if (live.some((item) => !shown.has(idOf(item)))) {
+        console.log(
+          `[notify] push ${burst.id}: the person is at a desk, but no tab there can show a desktop notification, so it goes to the phone`
+        );
+      }
+      return [...live];
+    }
+    const going: Arrival[] = [];
+    for (const item of live) {
+      const id = idOf(item);
+      if (shown.has(id)) {
+        going.push(item);
+        continue;
+      }
+      burst.items.delete(id);
+      atDesk.set(id, item);
+      const { sealed } = item.notification;
+      desk({
+        kind: "desk_alert",
+        to: tab,
+        collapseId: id,
+        title: sealed.title,
+        body: sealed.subtitle ? `${sealed.subtitle} · ${sealed.body}` : sealed.body,
+        session: item.instanceId,
+      });
+      console.log(
+        `[notify] push ${id}: held, the person is at a desk; shown on tab ${tab.slice(0, 8)}`
+      );
+    }
+    return going;
+  };
+
+  /**
+   * The person left the desk: each held item that still needs them and
+   * landed at most {@link HELD_RECENT_MS} before their last input goes to
+   * the phone, through a burst as it would have; older ones wait on the board.
+   */
+  const releaseFromDesk = (lastInputAt: number): void => {
+    const floor = lastInputAt - HELD_RECENT_MS;
+    for (const [id, item] of atDesk) {
+      atDesk.delete(id);
+      const landed = item.landedAt.getTime();
+      if (landed < floor) {
+        console.log(
+          `[notify] push ${id}: held at the desk, not sent: it landed ${Math.round((lastInputAt - landed) / 60_000)} min before the person stopped`
+        );
+        continue;
+      }
+      console.log(
+        `[notify] push ${id}: the person is away, so what was held at the desk goes to the phone`
+      );
+      arrive(item, false);
+    }
+  };
+
+  notifications.onPerson((now, before) => {
+    if (now.state === "away" && before.state === "here") {
+      releaseFromDesk(now.lastInputAt ?? Date.now());
+    }
+  });
+
+  notifications.onCleared((ids) => {
+    for (const id of ids) {
+      atDesk.delete(id);
+    }
+  });
 
   /**
    * An item that needs you joins the open burst, or opens one; the burst

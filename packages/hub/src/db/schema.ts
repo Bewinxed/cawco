@@ -3455,6 +3455,29 @@ export const notificationCleared = sqliteTable(
 );
 
 /**
+ * The person's Appear away (notifications.ts), one row keyed `'person'`:
+ * on until they turn it off, through a reload or the hub's restart. Only
+ * the switch and when it was turned on are kept, never a history.
+ */
+export const presenceSettings = sqliteTable("presence_settings", {
+  /** Always `'person'`. */
+  id: text("id").primaryKey(),
+  appearAway: integer("appear_away", { mode: "boolean" }).notNull(),
+  /** When Appear away was turned on; null while it is off. */
+  appearAwayAt: timestamp("appear_away_at"),
+});
+
+/**
+ * A machine whose desktop counts toward whether the person is here
+ * (notifications.ts): the person turned it on in the presence menu. No row
+ * is off: a machine's activity counts only once they opt it in.
+ */
+export const presenceDevices = sqliteTable("presence_devices", {
+  machineId: text("machine_id").primaryKey(),
+  counts: integer("counts", { mode: "boolean" }).notNull(),
+});
+
+/**
  * "Make this a project" (project-offers.ts): the one offer a plain session
  * gets when it outgrows itself. A row means it was offered, so it is never
  * offered again; `answer` stays null while the offer stands.

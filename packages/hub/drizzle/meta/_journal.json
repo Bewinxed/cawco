@@ -1968,6 +1968,13 @@
       "when": 1792646501306,
       "tag": "0288_work_outlives_surface",
       "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "6",
+      "when": 1792662471529,
+      "tag": "0289_owner_presence",
+      "breakpoints": true
     }
   ]
 }

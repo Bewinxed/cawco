@@ -190,6 +190,8 @@ import {
   parkedAsks,
   planChanges,
   plugins,
+  presenceDevices,
+  presenceSettings,
   projectAccounts,
   projectOffers,
   projectPlaces,
@@ -1552,6 +1554,15 @@ export interface DbShape {
     instanceId: string,
     limit: number
   ) => PlanChangeRow[];
+  /** The person's Appear away and the machines that count toward their presence (notifications.ts). */
+  readonly presence: {
+    /** Appear away: on since when, or null while off. */
+    readonly appearAway: () => Date | null;
+    readonly setAppearAway: (on: boolean, at: Date) => void;
+    /** The machines the person opted in. */
+    readonly counted: () => Set<string>;
+    readonly setCounts: (machineId: string, counts: boolean) => void;
+  };
   /** Host mode's preview passes, one per browser (preview-access.ts). */
   readonly previewPasses: PreviewPassesDb;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
@@ -2869,6 +2880,8 @@ const JEV_SETTINGS_ID = "jev";
 const FLEET_WATCH_ID = "fleet-watch";
 /** The one {@link upstreamSettings} row's key. */
 const UPSTREAM_ID = "upstream";
+/** The one {@link presenceSettings} row's key. */
+const PRESENCE_ID = "person";
 
 /**
  * How far back a memory document, a hook or a skill can be taken, each within
@@ -10127,6 +10140,41 @@ const make = async (path: string): Promise<DbShape> => {
               : { lastError: error }
           )
           .where(eq(pushDevices.pairingId, pairingId))
+          .run();
+      },
+    },
+    presence: {
+      appearAway: () => {
+        const row = db
+          .select()
+          .from(presenceSettings)
+          .where(eq(presenceSettings.id, PRESENCE_ID))
+          .get();
+        return row?.appearAway ? (row.appearAwayAt ?? new Date(0)) : null;
+      },
+      setAppearAway: (on, at) => {
+        const set = { appearAway: on, appearAwayAt: on ? at : null };
+        db.insert(presenceSettings)
+          .values({ id: PRESENCE_ID, ...set })
+          .onConflictDoUpdate({ target: presenceSettings.id, set })
+          .run();
+      },
+      counted: () =>
+        new Set(
+          db
+            .select({ machineId: presenceDevices.machineId })
+            .from(presenceDevices)
+            .where(eq(presenceDevices.counts, true))
+            .all()
+            .map((row) => row.machineId)
+        ),
+      setCounts: (machineId, counts) => {
+        db.insert(presenceDevices)
+          .values({ machineId, counts })
+          .onConflictDoUpdate({
+            target: presenceDevices.machineId,
+            set: { counts },
+          })
           .run();
       },
     },

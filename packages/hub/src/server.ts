@@ -144,6 +144,7 @@ import {
   atProviderLimit,
   attachedFileLine,
   attachedFileName,
+  awayNotesOf,
   BOUNDARY_RELAUNCH,
   byPerson,
   CANCEL_BINARY_UPDATE,
@@ -282,6 +283,7 @@ import {
   PREVIEW_WEIGHT,
   PROVIDER_ACCOUNT_KINDS,
   PROVIDER_RETRY,
+  type PresenceSaid,
   type ProviderAccountReading,
   type ProviderChoice,
   type ProviderForecast,
@@ -342,6 +344,7 @@ import {
   WORKSPACE_CREATE_TIMEOUT_MS,
   type WorkInFlight,
   withMovedLine,
+  withPresenceLine,
 } from "@cawco/core";
 import {
   AGENT_RESTARTING,
@@ -2999,6 +3002,8 @@ export const createServer = (
   // Pushes to the iOS app when something newly needs you (push.ts).
   const push = createPush({
     db,
+    desk: (frame) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
     lifetime,
     notifications,
     task: (projectId, id) => tasks.get(projectId, id),
@@ -8446,6 +8451,85 @@ export const createServer = (
     return true;
   };
 
+  /**
+   * The away notes each session was last told to recap, by session: a
+   * section folded or left as it was is not recapped twice.
+   */
+  const recapped = new Map<string, string>();
+
+  /** HH:MM on the hub's clock, as the presence line and the notes' heading say a time. */
+  const clockOf = (at: number): string =>
+    new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(at);
+
+  /**
+   * What the session is told of the person as this send starts its turn
+   * (core injected.ts `presenceLine`): on this chat (the person's own words
+   * always are), here elsewhere, or away since when. The person's own
+   * message after an away stretch carries the notes the session kept in its
+   * plan meanwhile (`awayNotesOf`), once per section, for its recap.
+   */
+  const personSaid = (instanceId: string, human: boolean): PresenceSaid => {
+    const person = notifications.person();
+    if (human || (person.state === "here" && person.on === instanceId)) {
+      const notes = human
+        ? awayNotesOf(db.sessionPlan(instanceId)?.spec ?? undefined)
+        : undefined;
+      if (notes && recapped.get(instanceId) !== notes.notes) {
+        recapped.set(instanceId, notes.notes);
+        return { kind: "on", recap: notes };
+      }
+      return { kind: "on" };
+    }
+    if (person.state === "here") {
+      return { kind: "elsewhere" };
+    }
+    return {
+      kind: "away",
+      since: person.since === null ? null : clockOf(person.since),
+    };
+  };
+
+  /**
+   * The send as its machine is handed it: a copy with the person's presence
+   * after its text ({@link personSaid}, core `withPresenceLine`), read fresh
+   * at every hand, a hand again included, on every harness alike. The
+   * record keeps the send as it was accepted: the person's bubble is their
+   * words alone. A keep-alive ping goes as it is.
+   */
+  const presenced = (envelope: Envelope<SendPayload>): Envelope<SendPayload> => {
+    const { instanceId, message } = envelope.payload;
+    if (isKeepAlive(message)) {
+      return envelope;
+    }
+    const said = personSaid(instanceId, message.origin.kind === "human");
+    const { content } = message.message;
+    let next: typeof content;
+    if (typeof content === "string") {
+      next = withPresenceLine(content, said);
+    } else {
+      const at = content.findLastIndex((part) => part.type === "text");
+      const last = content[at];
+      next =
+        last?.type === "text"
+          ? content.with(at, { ...last, text: withPresenceLine(last.text, said) })
+          : [...content, { type: "text", text: withPresenceLine("", said) }];
+    }
+    console.log(
+      `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.kind === "on" && said.recap ? `, with the notes since ${said.recap.since}` : ""}`
+    );
+    return {
+      ...envelope,
+      payload: {
+        ...envelope.payload,
+        message: { ...message, message: { ...message.message, content: next } },
+      },
+    };
+  };
+
   /** {@link deliverSend}'s session path: the message into the session itself. */
   const deliverToSession = (
     envelope: Envelope<SendPayload>,
@@ -8546,7 +8630,7 @@ export const createServer = (
     }
     if (agent && !owed) {
       toldMove(envelope);
-      sendFrame(agent, envelope);
+      sendFrame(agent, presenced(envelope));
     }
     // Kept for its machine alone, not for its session, an interrupt's hold
     // or its item's finish.
@@ -8932,7 +9016,7 @@ export const createServer = (
       envelope: JSON.stringify(envelope),
       ...(told ? { body: externalizeImages(sentFrame(envelope.payload)) } : {}),
     });
-    sendFrame(agent, envelope);
+    sendFrame(agent, presenced(envelope));
   };
 
   /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */
@@ -9182,7 +9266,13 @@ export const createServer = (
         if (send.owed || send.held || !(send.delivery && send.envelope)) {
           continue;
         }
-        sendFrame(agent, JSON.parse(send.envelope) as Envelope);
+        const envelope = JSON.parse(send.envelope) as Envelope;
+        sendFrame(
+          agent,
+          envelope.verb === "send"
+            ? presenced(envelope as Envelope<SendPayload>)
+            : envelope
+        );
         again += 1;
       }
     }
@@ -31269,6 +31359,11 @@ export const createServer = (
                 recordSessionAddress(ws, message.machineId, claim);
               }
               db.touchAgent(message.machineId);
+              // The machine's desktop, toward whether the person is here.
+              const { activity } = message.payload as HeartbeatPayload;
+              if (activity) {
+                notifications.machine(message.machineId, activity);
+              }
               // A recovered machine can now answer an idle receipt for an overdue schedule.
               detach(keepAliveScheduler.wake(), "keepalive wake");
               if ((message.payload as HeartbeatPayload).custody !== undefined) {
