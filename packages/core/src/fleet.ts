@@ -114,6 +114,20 @@ export const mcpRunsOn = (
     (server.platforms as readonly string[]).includes(platform));
 
 /**
+ * A machine's platform, by the first report that names it: its capabilities
+ * beat (`MachineCapabilities.platform`, Node's `process.platform`), else its
+ * register's `os`, `<process.platform>-<arch>` (agent daemon.ts), which the
+ * hub holds before it sends the machine anything. A platform-scoped server
+ * ({@link mcpRunsOn}) reaches a new machine on its first sync either way.
+ */
+export const machinePlatform = (machine: {
+  machineCapabilities?: { platform: string };
+  os: string;
+}): string | undefined =>
+  machine.machineCapabilities?.platform ??
+  (machine.os.split("-")[0] || undefined);
+
+/**
  * The port an agent serves its MCP gateway on when `CAWCO_MCP_PORT` names
  * none: every production machine. Read it through `mcpGatewayPort()`, never
  * directly.
@@ -1068,9 +1082,7 @@ export interface FleetSyncReport {
   /**
    * What this machine holds on its disk once the sync is done, by hash — the
    * content-carrying rows only, hashed as the hub hashes them. It tells the
-   * hub whose content moved, so running sessions reload. Which bytes a sync
-   * leaves out is never decided from it: the hub reads the disk again
-   * ({@link READ_FLEET_HOLDINGS}) just before every sync.
+   * hub whose content moved, so running sessions reload.
    */
   have?: {
     skills?: Record<string, string>;
@@ -1118,6 +1130,96 @@ export interface FleetSyncReport {
    */
   toolchain?: FleetToolchain;
 }
+
+/**
+ * `fleetDelta(delta: FleetDelta) => FleetAck`: the machine-scoped control
+ * that carries a machine's fleet config, as items (core fleet-items.ts), and
+ * only the items whose hash moved since the machine last acknowledged. The
+ * register's answer is one (`welcome`, WELCOME): the agent writes the
+ * policy (the fleet's denied tools) before it answers, and the hub marks
+ * the machine online on that answer (READY), not as its socket opens. Every
+ * other is a fleet change (`fleetChanged`, hub fleet-sync.ts). The agent
+ * answers as soon as it holds the items (ACK, {@link FleetAck}), or refuses
+ * in its own words (`ok: false`, NACK); what the items come to as its
+ * harnesses converge them follows item by item ({@link FleetConvergeFrame}).
+ */
+export const FLEET_DELTA = "fleetDelta";
+
+/** One item of a delta: its value, or `null` when the machine is to hold it no more. */
+export interface FleetDeltaItem {
+  /** A person's Overwrite of this item on this machine (hub fleet-sync.ts `force`). */
+  force?: true;
+  hash: string;
+  id: string;
+  value: unknown;
+}
+
+export interface FleetDelta {
+  /** Every item the machine is to hold: any it holds that this leaves out goes. */
+  full: boolean;
+  items: FleetDeltaItem[];
+  /** Check every workspace boundary for an access its policy no longer grants (a project folder moved away). */
+  recheck?: true;
+  /** Converge every item, changed or not: the person asked for a sync. */
+  reconverge?: true;
+  rev: number;
+  /** The register's answer (WELCOME): the policy is written before the reply (READY). */
+  welcome: boolean;
+}
+
+/** A machine's answer to a delta (ACK; READY for a welcome): the rev it now holds. */
+export interface FleetAck {
+  rev: number;
+}
+
+/**
+ * What a machine holds of the fleet, as its register says it (`fleetHeld`):
+ * the rev it last acknowledged and each item's hash. The hub's welcome
+ * carries only what differs from it. None for an agent that holds nothing
+ * yet (it started since), which is sent every item.
+ */
+export interface FleetHeld {
+  items: Record<string, string>;
+  rev: number;
+}
+
+/** How long the hub waits for a delta's ACK before the row says so; it goes again on the machine's next heartbeat. */
+export const FLEET_ACK_MS = 15_000;
+
+/** Where one item stands as the machine's harnesses converge it. */
+export type FleetConvergeState = "pending" | "running" | "ok" | "failed";
+
+/** One item's converge, as the machine reports it ({@link FleetConvergeFrame}) and the hub keeps it (`agents.fleet_items`). */
+export interface FleetItemStatus {
+  /** What failed, in the machine's words. */
+  error?: string;
+  hash: string;
+  id: string;
+  /** How long its converge took. */
+  ms?: number;
+  state: FleetConvergeState;
+}
+
+/** The machine's word on items as they move, sent unasked. */
+export interface FleetConvergeFrame {
+  instanceId?: undefined;
+  items: FleetItemStatus[];
+  kind: "fleet_converge";
+  rev: number;
+}
+
+/**
+ * What became of the last delta the hub sent a machine, kept on the
+ * machine's row (`agents.fleet_sync`) apart from its items' converge:
+ * `sent` until it answers; `acked` (for a welcome, the machine is online);
+ * `nacked` in the machine's own words; `unacked` once {@link FLEET_ACK_MS}
+ * passed with no answer, sent again on its next heartbeat.
+ */
+export type FleetSyncOutcome =
+  | { state: "sent"; rev: number; sentAt: number; why: string }
+  | { state: "acked"; rev: number; sentAt: number; at: number }
+  | { state: "nacked"; rev: number; sentAt: number; at: number; error: string }
+  | { state: "unacked"; rev: number; sentAt: number; at: number };
 
 /**
  * One install of a CLI a sync depends on, as the machine found it.
@@ -1267,8 +1369,8 @@ export interface MachineHookScript {
  * The machine-scoped control names, exported so the agent's allowlist, the
  * hub's peeks and the dashboard's calls cannot drift apart.
  *
- * - `syncFleetConfig(config: FleetConfig) => FleetSyncReport` — converge and
- *   report. Idempotent; the hub sends it on register and after any change.
+ * - `fleetDelta(delta: FleetDelta) => FleetAck` — hold the delta's items,
+ *   answer, then converge them ({@link FLEET_DELTA}).
  * - `fleetStatus() => FleetSyncReport` — report without changing anything.
  * - `inspectConfig(cwd?: string) => ConfigInspection` — what the machine
  *   really has, and what a session in `cwd` would see. Read-only.
@@ -1281,20 +1383,11 @@ export interface MachineHookScript {
  *   fleet hook runs from on that machine, as it is on disk, for a compare and
  *   an adoption.
  */
-export const FLEET_SYNC = "syncFleetConfig";
 export const FLEET_STATUS = "fleetStatus";
 export const INSPECT_CONFIG = "inspectConfig";
 export const READ_SKILL_FILES = "readSkillFiles";
 export const READ_MEMORY_FILE = "readMemoryFile";
 export const READ_HOOK_SCRIPT = "readHookScript";
-/**
- * `readFleetHoldings() => FleetHoldings` — the skills and plugins this machine
- * holds now, read off its disk and hashed as the hub hashes them: each
- * harness's own copy, and only a hash every harness that converges that kind
- * holds. The hub asks just before every sync and leaves out the bytes of
- * exactly that, so a wiped or edited copy is carried again in that same sync.
- */
-export const READ_FLEET_HOLDINGS = "readFleetHoldings";
 
 /** What a machine holds, by kind: name → hash of the files on its disk. */
 export type FleetHoldings = NonNullable<FleetSyncReport["have"]>;

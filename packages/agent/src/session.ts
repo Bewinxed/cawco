@@ -7,6 +7,7 @@
  * as neutral messages, with the harness's `raw` event riding along.
  */
 
+import { existsSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -18,7 +19,12 @@ import type {
   ControlResultFrame,
   DaemonPermissionRequestFrame,
   Envelope,
+  FleetAck,
+  FleetConvergeFrame,
+  FleetDelta,
+  FleetHeld,
   FleetHoldings,
+  FleetItemStatus,
   FleetReportFrame,
   FleetSyncReport,
   FramePayload,
@@ -74,8 +80,8 @@ import {
   cacheHit,
   type DeliveryMark,
   deriveTitleFromFirstMessage,
+  FLEET_DELTA,
   FLEET_STATUS,
-  FLEET_SYNC,
   GENERATE_IMAGE,
   type HarnessFailed,
   type HarnessUnanswered,
@@ -97,7 +103,6 @@ import {
   PREVIEW_WEIGHT,
   promptCacheUsage,
   RATE_LIMIT_READ,
-  READ_FLEET_HOLDINGS,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   RESOLVE_PERMISSION,
@@ -159,8 +164,9 @@ import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
-import { fleetSyncRefused } from "./denied-tools";
+import { applyFleetDenials } from "./denied-tools";
 import { placeMemoryAtLaunch } from "./fleet";
+import { FleetDesired, itemStatuses } from "./fleet-desired";
 import { writeFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -968,14 +974,19 @@ export class SessionSupervisor {
   readonly #spinOffs = new Map<string, SpinOff>();
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
-  /**
-   * Fleet syncs asked of this machine, counted as they arrive; each one's
-   * place in that count, by its request. Every sync carries the fleet's
-   * whole desired state, so one that a newer sync has overtaken while it
-   * waited its turn has nothing left to converge (#control).
-   */
-  #fleetSyncsAsked = 0;
-  readonly #fleetSyncTicket = new Map<string, number>();
+  /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-desired.ts). */
+  readonly #desired = new FleetDesired();
+  /** The items deltas moved since the last converge began, and whether one took any away. */
+  readonly #convergeIds = new Set<string>();
+  #convergeRemoved = false;
+  /** A person's Sync: the next converge takes every item, changed or not. */
+  #reconverge = false;
+  /** A converge is queued and not yet begun: a delta meanwhile joins it ({@link #convergeSoon}). */
+  #convergeOwed = false;
+  /** Each harness whose converge threw in the last pass, in its words: every item of that pass failed with it. */
+  #harnessFailures = new Map<HarnessKind, string>();
+  /** Each delta's write of the policy, begun as it arrived and awaited before its answer, by its request. */
+  readonly #fleetDenials = new Map<string, Promise<void>>();
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
   /** Attached sessions whose CLI runs a boundary hook that fails open, until the relaunch that replaces it ({@link BOUNDARY_RELAUNCH}). */
@@ -1227,9 +1238,11 @@ export class SessionSupervisor {
         return Promise.resolve();
       }
     }
-    if (control?.method === FLEET_SYNC && control.requestId) {
-      this.#fleetSyncsAsked += 1;
-      this.#fleetSyncTicket.set(control.requestId, this.#fleetSyncsAsked);
+    if (control?.method === FLEET_DELTA && control.requestId) {
+      this.#fleetDenials.set(
+        control.requestId,
+        this.#holdDelta(control.args?.[0] as FleetDelta)
+      );
     }
     const imageRequest =
       control?.method === GENERATE_IMAGE ? control.requestId : undefined;
@@ -5019,25 +5032,14 @@ export class SessionSupervisor {
     method,
     args = [],
   }: ControlPayload): Promise<void> {
-    if (method === FLEET_SYNC && requestId) {
-      const ticket = this.#fleetSyncTicket.get(requestId);
-      this.#fleetSyncTicket.delete(requestId);
-      // Overtaken while it waited behind the sync before it: the newer one,
-      // queued behind this, converges the fleet as it is now and reports it.
-      // Converging this one too would only delay that (one OpenCode server
-      // that won't start costs every sync 30s, and the syncs queued in a
-      // minute of edits held the machine's report for minutes). It answers
-      // at once; the hub keeps no report from it (`isFleetReport`).
-      if (ticket !== undefined && ticket < this.#fleetSyncsAsked) {
-        this.sink({
-          kind: "control_result",
-          instanceId,
-          requestId,
-          ok: true,
-          result: { superseded: true },
-        });
-        return;
-      }
+    // A delta's policy, written as it arrived: its answer waits on it, and
+    // one that could not write it is refused in those words (NACK).
+    const denials =
+      method === FLEET_DELTA && requestId
+        ? this.#fleetDenials.get(requestId)
+        : undefined;
+    if (requestId) {
+      this.#fleetDenials.delete(requestId);
     }
     try {
       if (method === CONTROL_LIST_SESSIONS) {
@@ -5064,6 +5066,7 @@ export class SessionSupervisor {
       ) {
         throw new Error(`${method} names no setting`);
       }
+      await denials;
       // An interrupted session is idle: nothing it started in its workspace
       // runs on, to end later and wake it, whether or not its process was
       // there to hear the interrupt.
@@ -5203,6 +5206,129 @@ export class SessionSupervisor {
   }
 
   /**
+   * A delta held as it arrives (fleet-desired.ts), in the order the hub sent
+   * them: its items join what this agent holds, and its policy, when it
+   * moved (or a welcome finds no list on disk), is written before anything
+   * else (denied-tools.ts `applyFleetDenials`) and before the agent answers.
+   * The items it moved wait for the next converge ({@link #convergeSoon}).
+   */
+  #holdDelta(delta: FleetDelta | undefined): Promise<void> {
+    if (!delta || typeof delta.rev !== "number") {
+      return Promise.resolve();
+    }
+    const applied = this.#desired.apply(delta);
+    for (const id of applied.changed) {
+      if (id !== "policy") {
+        this.#convergeIds.add(id);
+      }
+    }
+    this.#convergeRemoved ||= applied.removed.length > 0;
+    this.#reconverge ||= delta.reconverge === true;
+    const denied = this.#desired.deniedTools;
+    if (denied && (applied.policy || delta.welcome)) {
+      const write = applyFleetDenials(denied);
+      // Awaited by the delta's answer; a failure is said there.
+      write.catch(() => undefined);
+      return write;
+    }
+    return Promise.resolve();
+  }
+
+  /** The machine's word on items as they move (core `FleetConvergeFrame`). */
+  #converging(rev: number, items: FleetItemStatus[]): void {
+    if (items.length === 0) {
+      return;
+    }
+    this.emit({
+      verb: "frames",
+      machineId: "",
+      payload: {
+        kind: "fleet_converge",
+        rev,
+        items,
+      } satisfies FleetConvergeFrame,
+    });
+  }
+
+  /**
+   * The items deltas moved, converged in one pass once the passes before it
+   * are done ({@link #fleetTurn}): each said running as it begins and ok or
+   * failed, in the harness's words, as it ends. A delta that comes while one
+   * is queued joins it. A delta that moved nothing but the policy converges
+   * nothing; one a person asked for (`reconverge`) converges every item.
+   */
+  #convergeSoon(): void {
+    const owed =
+      this.#convergeIds.size > 0 || this.#convergeRemoved || this.#reconverge;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: set below and cleared by the queued converge, a later turn
+    if (this.#convergeOwed || !owed) {
+      return;
+    }
+    this.#convergeOwed = true;
+    this.#fleetTurn(async () => {
+      this.#convergeOwed = false;
+      const held = new Set(this.#desired.ids());
+      const ids =
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: set by a delta held after this converge was queued
+        (this.#reconverge ? [...held] : [...this.#convergeIds]).filter(
+          (id) => held.has(id) && id !== "policy"
+        );
+      this.#convergeIds.clear();
+      this.#convergeRemoved = false;
+      this.#reconverge = false;
+      const rev = this.#desired.rev ?? 0;
+      this.#converging(
+        rev,
+        ids.map((id) => ({
+          id,
+          hash: this.#desired.hashOf(id),
+          state: "running" as const,
+        }))
+      );
+      const config = this.#desired.config();
+      const started = Date.now();
+      let report: FleetSyncReport | undefined;
+      let thrown: string | undefined;
+      try {
+        report = await this.#syncFleet(config, "syncFleet");
+        if (this.#harnessFailures.size > 0) {
+          thrown = [...this.#harnessFailures]
+            .map(([harness, error]) => `${harness}: ${error}`)
+            .join("\n");
+        }
+      } catch (error) {
+        thrown = errorText(error);
+      }
+      if (thrown) {
+        warn(`the fleet's rev ${rev} did not converge: ${thrown}`);
+      }
+      this.#desired.converged(ids);
+      this.#converging(
+        rev,
+        itemStatuses(this.#desired, ids, report, Date.now() - started, thrown)
+      );
+      if (report) {
+        this.emit({
+          verb: "frames",
+          machineId: "",
+          payload: {
+            kind: "fleet_report",
+            report,
+          } satisfies FleetReportFrame,
+        });
+      }
+      this.#healFleetMcp([...this.#sessions.keys()]);
+    }).catch((error: unknown) =>
+      warn(`the fleet converge failed: ${errorText(error)}`)
+    );
+  }
+
+  /** What this agent holds of the fleet, for its register (core `FleetHeld`). */
+  fleetHeld(): FleetHeld | undefined {
+    return this.#desired.held();
+  }
+
+  /**
    * The machine's fleet report read again and sent to the hub unasked, when a
    * harness's reading of a fleet MCP server moved with no fleet change
    * ({@link onFleetMcpMoved}): the hub's row says what is true now, not what
@@ -5231,6 +5357,55 @@ export class SessionSupervisor {
     );
   }
 
+  /** Each row's launch as last resolved, by its key, with the config it was resolved for ({@link #launcherOf}). */
+  readonly #launched = new Map<
+    string,
+    {
+      asked: string;
+      launcher: Extract<
+        Awaited<ReturnType<typeof resolveMcpLauncher>>,
+        { config: unknown }
+      >;
+    }
+  >();
+
+  /**
+   * A row's launch: the last one resolved for this config, while what it
+   * launches is still on disk, else resolved now. A sync changes only what
+   * changed: one that carries a row as it was (a place added, a skill
+   * moved) resolves nothing for it again, so it runs no `npm view` for it
+   * and no npm error then disables a row that launches (`exactVersion`
+   * failing turned a working server `enabled: false` until the next sync).
+   * A row whose config changed, or whose launch failed, is resolved again;
+   * so is every row once per agent.
+   */
+  async #launcherOf(
+    key: string,
+    config: MachineFleetConfig["mcp"][number]["config"]
+  ): Promise<Awaited<ReturnType<typeof resolveMcpLauncher>>> {
+    const asked = JSON.stringify(config);
+    const kept = this.#launched.get(key);
+    const launched = kept?.launcher;
+    if (
+      kept?.asked === asked &&
+      launched &&
+      (launched.dir === undefined || existsSync(launched.dir)) &&
+      (!(
+        "command" in launched.config && launched.config.command.startsWith("/")
+      ) ||
+        existsSync(launched.config.command))
+    ) {
+      return launched;
+    }
+    const launcher = await resolveMcpLauncher(config);
+    if ("config" in launcher) {
+      this.#launched.set(key, { asked, launcher });
+    } else {
+      this.#launched.delete(key);
+    }
+    return launcher;
+  }
+
   /**
    * The fleet's MCP rows and each project's placed copies as this machine
    * launches them (mcp-launcher.ts), each npx row's package installed first
@@ -5249,7 +5424,10 @@ export class SessionSupervisor {
         rows.map(async (row) => ({
           row,
           launcher: row.enabled
-            ? await resolveMcpLauncher(row.config)
+            ? await this.#launcherOf(
+                row.placeId ? `${row.name}@${row.placeId}` : row.name,
+                row.config
+              )
             : undefined,
         }))
       );
@@ -5470,6 +5648,9 @@ export class SessionSupervisor {
       ...this.#mcpLauncherStates.keys(),
       ...Object.values(mcpByHarness).flatMap((rows) => Object.keys(rows ?? {})),
     ]);
+    if (which === "syncFleet") {
+      this.#harnessFailures = new Map(mcpFailures);
+    }
     for (const [kind, detail] of mcpFailures) {
       mcpByHarness[kind] = Object.fromEntries(
         [...names].map((name) => [
@@ -5592,49 +5773,43 @@ export class SessionSupervisor {
         return await probeTools();
       }
       if (method === "installTool") {
-        return await installTool(
+        const installed = await installTool(
           args[0] as string,
           args[1] as string | undefined
         );
+        // A harness CLI installed here converges what the machine holds of
+        // the fleet, as every harness already here did.
+        if (harnesses().some((adapter) => adapter.kind === args[0])) {
+          this.#reconverge = true;
+          this.#convergeSoon();
+        }
+        return installed;
       }
 
-      // Fleet sync applies to every harness that has a machine profile: the hub
-      // sends one desired state, and each harness converges the parts it
-      // understands onto its own files. Reports merge into one machine word.
-      if (method === FLEET_SYNC) {
+      // A delta, held as it arrived (#holdDelta) with its policy written:
+      // answered at once (ACK; READY for a welcome), its items converged
+      // after (#convergeSoon), each said as it moves. Only the machine's
+      // agent holds the hub's link, and so only it is sent one.
+      if (method === FLEET_DELTA) {
+        const delta = args[0] as FleetDelta;
         // What a workspace's policy reads may have moved with it (a
         // project's folder the hub moved away): every boundary this agent
-        // holds is checked for a narrowed access at once, whether or not it
-        // is the machine's agent, which alone writes the harness config.
-        recheckNarrowed("the fleet's config was synced").catch(() => undefined);
-        // Fleet sync writes machine-wide harness config (claude's, opencode's
-        // and pi's); only the machine's own agent may (see machine-agent.ts).
-        if (!(await isMachineAgent())) {
-          const refused =
-            "this is not the machine's agent, so machine-wide harness config is left to the agent that is";
-          console.warn(`[fleet] sync from the hub refused: ${refused}`);
-          // No sync is coming that this agent would apply: a spawn waiting
-          // for its first is refused now, in these words.
-          fleetSyncRefused(refused);
-          throw new Error(refused);
+        // holds is checked for a narrowed access.
+        if (delta.recheck) {
+          recheckNarrowed("a project's folder moved").catch(() => undefined);
         }
-        const config = args[0] as MachineFleetConfig;
-        const report = await this.#fleetTurn(() => {
+        if (delta.items.length > 0 || delta.reconverge) {
           console.info(
-            `[fleet] sync from the hub: ${config.mcp.length} MCP server(s)`
+            `[fleet] sync from the hub: rev ${delta.rev}, ${delta.items.length} item(s)${delta.full ? " (all it holds)" : ""}${delta.welcome ? ", its welcome" : ""}${delta.reconverge ? ", converging every item" : ""}`
           );
-          return this.#syncFleet(config, "syncFleet");
-        });
-        this.#healFleetMcp([...this.#sessions.keys()]);
-        return report;
+        }
+        this.#convergeSoon();
+        return { rev: delta.rev } satisfies FleetAck;
       }
       if (method === FLEET_STATUS) {
         return await this.#fleetTurn(() =>
           this.#syncFleet(undefined, "fleetStatus")
         );
-      }
-      if (method === READ_FLEET_HOLDINGS) {
-        return await this.#fleetHoldings();
       }
 
       if (CATALOG_METHODS.has(method)) {

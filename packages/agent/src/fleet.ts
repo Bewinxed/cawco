@@ -57,15 +57,10 @@ import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { resolveClaudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
-import {
-  convergeDeniedTools,
-  fleetDenialsSynced,
-  machineDenyList,
-  readFleetDenials,
-} from "./denied-tools";
+import { readFleetDenials, sidecarTurn } from "./denied-tools";
 import { apartSignedOut, readFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome } from "./fs";
-import { readMcpRuntime } from "./mcp-status";
+import { readMcpRuntime, readSettledOnce } from "./mcp-status";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, toolEnv, toolPath } from "./tools";
 import {
@@ -450,8 +445,12 @@ const readFleetMcpRuntime = async (
   );
   return {
     ...signedOut,
-    ...(await readMcpRuntime(
-      Object.fromEntries(read.map((name) => [name, servers[name]]))
+    ...(await readSettledOnce(
+      "claude",
+      Object.fromEntries(
+        read.map((name) => [name, servers[name] as FleetMcpConfig])
+      ),
+      readMcpRuntime
     )),
   };
 };
@@ -2747,38 +2746,32 @@ const converge = async (
     docStates
   );
   const hooks = await syncHooks(config.hooks, managed.hooks, hookStates);
-  // What the machine's own `claude` was denied for the fleet before this sync:
-  // none of it, when the machine had not heard the list (cawco wrote nothing).
-  const before = await readFleetDenials();
-  const deniedBefore =
-    before.kind === "known" ? machineDenyList(before.denials) : [];
-  await writeJson(SIDECAR, {
-    // Kept until every file the fleet's servers were written into is clean.
-    ...(cleaned
-      ? {}
-      : {
-          ...(managed.mcp ? { mcp: managed.mcp } : {}),
-          ...(managed.placedMcp ? { placedMcp: managed.placedMcp } : {}),
-        }),
-    mcpServers,
-    ...installed,
-    skills,
-    deniedTools: config.deniedTools,
-    ...(memory ? { memory } : {}),
-    memoryDocs,
-    hooks,
-    placedMemory,
-    placedSkills,
-  } satisfies Sidecar);
-  // A spawn waiting on the fleet's denials reads them now.
-  fleetDenialsSynced();
-  // The machine's own `claude` follows the fleet at once, not at the next
-  // daemon start: what the fleet no longer denies comes out of
-  // `permissions.deny`, what it now denies goes in.
-  const settings = await convergeDeniedTools(deniedBefore);
-  if (settings.state === "failed" || settings.state === "unsynced") {
-    console.warn(`[fleet] ${SETTINGS_PATH}: ${settings.detail}`);
-  }
+  // The denials are the sync's own write, made as it arrived (denied-tools.ts
+  // `applyFleetDenials`): kept as the sidecar holds them now, in the same
+  // turn of its writes, so a newer sync's list is never written back over.
+  await sidecarTurn(async () => {
+    const denials = await readFleetDenials();
+    await writeJson(SIDECAR, {
+      // Kept until every file the fleet's servers were written into is clean.
+      ...(cleaned
+        ? {}
+        : {
+            ...(managed.mcp ? { mcp: managed.mcp } : {}),
+            ...(managed.placedMcp ? { placedMcp: managed.placedMcp } : {}),
+          }),
+      mcpServers,
+      ...installed,
+      skills,
+      ...(denials.kind === "known"
+        ? { deniedTools: [...denials.denials.deniedTools] }
+        : {}),
+      ...(memory ? { memory } : {}),
+      memoryDocs,
+      hooks,
+      placedMemory,
+      placedSkills,
+    } satisfies Sidecar);
+  });
   // Every account's Claude Code reads its user layer from its own dir: the
   // entries `~/.claude` gained this sync are linked in there too.
   await Promise.all(

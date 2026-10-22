@@ -50,7 +50,7 @@ import {
   isStale,
 } from "../client.svelte";
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
-import { buildConvergence } from "../convergence";
+import { buildConvergence, machineSync, syncNotice } from "../convergence";
 import { machineFaults } from "../fleet-faults";
 import { harnessWords, machineBlocksOf } from "../harness-block.svelte";
 import { hubAuth } from "../hub-auth.svelte";
@@ -885,6 +885,14 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (machine.status !== "online") {
     return "unreachable";
   }
+  // A machine that never synced, or whose last sync failed or went
+  // unanswered, says so first: until one lands it knows no fleet denials
+  // and starts nothing, whatever its harnesses say; with an older report it
+  // runs on what that report says.
+  const sync = syncNotice(machineSync(machine, clock.now), span);
+  if (sync) {
+    return sync;
+  }
   // A harness CLI refused here: nothing of it starts on the machine until it
   // is brought up, from its block or Configure → CLI tools. Each one said:
   // one never hides another.
@@ -904,11 +912,6 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   }
   if (buildConvergence(machine.build, cawco.hubBuild) === "behind") {
     return "behind hub";
-  }
-  // The sync did not land at all: nothing starts there until one does, and
-  // the row says why under it (MachinesList).
-  if (machine.fleetSyncFault) {
-    return "not synced";
   }
   const faults = machineFaults(machine.machineId, machine.fleet);
   if (faults.length === 0) {

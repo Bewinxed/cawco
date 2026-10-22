@@ -10,7 +10,14 @@
  * Those names are never stored in the baseline; they are added here.
  *
  * A machine that has not heard the list, or cannot read the sidecar, spawns
- * nothing until it can: no compiled list stands in for the fleet's.
+ * nothing: no compiled list stands in for the fleet's.
+ *
+ * The list is the policy the hub's welcome carries (core fleet.ts
+ * `FLEET_DELTA`): the agent writes it as the welcome arrives
+ * ({@link applyFleetDenials}), before it answers, and the hub marks the
+ * machine online only on that answer. So a machine online holds the list,
+ * and a spawn waits on nothing but a write already under way: a missing
+ * list at a spawn is a fault, said at once.
  *
  * Two consumers read the resolved denials:
  *  1. The spawn paths (`claude.ts`, `opencode.ts`, `pi.ts`), through
@@ -23,23 +30,15 @@
  * Both read {@link resolvedFleetDenials} — the single source — so they cannot
  * drift from each other.
  */
-import { OWN_LIST_DENIED, opencodeToolsFor } from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+import { clockWords, OWN_LIST_DENIED, opencodeToolsFor } from "@cawco/core";
 import { userLayerPath } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** Every `claude` this user starts reads it, daemon-spawned or not. */
 const SETTINGS = userLayerPath("settings.json");
 
-/** The sidecar the fleet sync writes after every converge. */
+/** The sidecar: the policy as each welcome or delta arrives, what the converge wrote after it. */
 const SIDECAR = userLayerPath("cawco-fleet.json");
-
-/**
- * How long a spawn on a machine that has not heard the fleet's denials waits
- * for its first sync. The hub sends one on every register, so a spawn that
- * reaches a just-connected daemon finds it a moment later.
- */
-const FIRST_SYNC_WAIT_MS = 30_000;
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -65,7 +64,7 @@ export type FleetDenialsRead =
   | { kind: "unsynced"; reason: string }
   | { kind: "unreadable"; reason: string };
 
-const UNSYNCED = `this machine has not had its first fleet sync, so it does not know the fleet's denied tools yet (${SIDECAR})`;
+const UNSYNCED = `this machine has not written the fleet's denied tools (${SIDECAR})`;
 
 /**
  * The fleet's denials as the last sync wrote them, read now. Nothing stands in
@@ -112,29 +111,67 @@ export const readFleetDenials = async (): Promise<FleetDenialsRead> => {
   };
 };
 
-/** Settled by the first fleet sync this daemon writes the sidecar in. */
-let markSynced: () => void = () => undefined;
-const firstSync = new Promise<void>((resolve) => {
-  markSynced = resolve;
-});
+/** The policy write a welcome or delta began last: what a spawn waits on, and all it waits on. */
+let writing: Promise<void> = Promise.resolve();
+
+/** The last policy write's failure, in its words, until a write lands. */
+let lastFailure: { at: number; reason: string } | undefined;
+
+/** The sidecar's writes, one at a time: a delta's policy never lands inside a converge's write of the rest. */
+let sidecarQueue: Promise<unknown> = Promise.resolve();
 
 /**
- * Why this agent refused the hub's fleet sync, the last time it did: a sync
- * it will refuse again is not coming, so a spawn waiting for the first one
- * is refused at once, in these words. Cleared by a sync that lands.
+ * Runs `work`, a write of the sidecar, after every write of it before:
+ * {@link applyFleetDenials}'s, and the converge's own (fleet.ts), which
+ * keeps the denials the sidecar holds as it writes.
  */
-let refusedSync: string | undefined;
-
-/** Called by the fleet sync once the sidecar it wrote carries the denials. */
-export const fleetDenialsSynced = (): void => {
-  refusedSync = undefined;
-  markSynced();
+export const sidecarTurn = <T>(work: () => Promise<T>): Promise<T> => {
+  const next = sidecarQueue.then(work, work);
+  sidecarQueue = next.catch(() => undefined);
+  return next;
 };
 
-/** Called when this agent refused the hub's fleet sync: `reason`, in its words. */
-export const fleetSyncRefused = (reason: string): void => {
-  refusedSync = reason;
-  markSynced();
+/**
+ * The fleet's denials, as a welcome or a delta carried them, into the
+ * sidecar before the agent answers it; then the machine's own `claude`
+ * follows the fleet at once (`permissions.deny` gains what the fleet now
+ * denies, and drops what it denied before and no longer does). Throws in its
+ * own words when the sidecar cannot be written: the agent refuses the delta
+ * with them (NACK), and a spawn refuses with them too.
+ */
+export const applyFleetDenials = (
+  deniedTools: readonly string[]
+): Promise<void> => {
+  const write = (async () => {
+    let before: string[] = [];
+    try {
+      await sidecarTurn(async () => {
+        const read = await readFleetDenials();
+        before = read.kind === "known" ? machineDenyList(read.denials) : [];
+        const file = Bun.file(SIDECAR);
+        // A sidecar that does not parse holds nothing to keep: the converge
+        // after this rewrites it whole, as it always has.
+        const stored = (await file.exists())
+          ? asRecord(await file.json().catch(() => undefined))
+          : undefined;
+        await writeStateFile(
+          SIDECAR,
+          JSON.stringify({ ...stored, deniedTools: [...deniedTools] }, null, 2)
+        );
+      });
+    } catch (error) {
+      const reason = `could not write ${SIDECAR}: ${said(error)}`;
+      lastFailure = { at: Date.now(), reason };
+      throw new Error(reason, { cause: error });
+    }
+    lastFailure = undefined;
+    const settings = await convergeDeniedTools(before);
+    if (settings.state === "failed" || settings.state === "unsynced") {
+      console.warn(`[fleet] ${SETTINGS}: ${settings.detail}`);
+    }
+  })();
+  writing = write.catch(() => undefined);
+  return write;
 };
 
 /** A spawn refused because the fleet's denials are not known here, in words. */
@@ -150,29 +187,23 @@ export class FleetDenialsRefused extends Error {
  * and the settings-convergence path read the sidecar through
  * {@link readFleetDenials}, so they read the same value and cannot drift.
  *
- * A machine that has not heard them waits for its first sync (the hub sends
- * one on register) and says so; one that has not had it within
- * {@link FIRST_SYNC_WAIT_MS}, or whose sidecar cannot be read, refuses with
- * {@link FleetDenialsRefused}. One whose agent refused the hub's sync waits
- * for nothing: it refuses at once, with why ({@link fleetSyncRefused}).
+ * Waits only on a policy write already under way (a welcome that arrived
+ * with the spawn behind it). A machine with no list after that, or whose
+ * sidecar cannot be read, refuses at once with {@link FleetDenialsRefused}:
+ * the hub marks a machine online only once it has written the list, so
+ * none here is a fault, said in words that say which.
  */
 export const resolvedFleetDenials = async (): Promise<FleetDenials> => {
-  let read = await readFleetDenials();
-  if (read.kind === "unsynced" && !refusedSync) {
-    console.info(
-      `[fleet] ${read.reason}: the spawn waits for its first fleet sync`
-    );
-    await readWithin(FIRST_SYNC_WAIT_MS, () => firstSync);
-    read = await readFleetDenials();
-  }
+  await writing;
+  const read = await readFleetDenials();
   switch (read.kind) {
     case "known":
       return read.denials;
     case "unsynced":
       throw new FleetDenialsRefused(
-        refusedSync
-          ? `${read.reason}, and this agent refused the hub's sync: ${refusedSync}`
-          : `${read.reason}, and none came within ${FIRST_SYNC_WAIT_MS / 1000}s`
+        lastFailure
+          ? `${read.reason}: the policy the hub sent at ${clockWords(lastFailure.at)} could not be written (${lastFailure.reason})`
+          : `${read.reason}: the hub marks a machine online only once it has written them, so this start reached the machine before the hub's welcome`
       );
     case "unreadable":
       throw new FleetDenialsRefused(read.reason);

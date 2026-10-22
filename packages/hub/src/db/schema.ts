@@ -22,9 +22,11 @@ import type {
   EffortLevel,
   EndedBy,
   Envelope,
+  FleetItemStatus,
   FleetMcpConfig,
   FleetRefresh,
   FleetScope,
+  FleetSyncOutcome,
   FleetSyncReport,
   HarnessKind,
   HarnessReport,
@@ -404,6 +406,20 @@ export const agents = sqliteTable("agents", {
    * servers and plugins (NEW.md §11). Null until it has been asked once.
    */
   fleet: text("fleet", { mode: "json" }).$type<FleetSyncReport>(),
+  /**
+   * What became of the last delta the hub sent it (core
+   * `FleetSyncOutcome`), kept apart from {@link fleet}: a delta refused or
+   * unanswered leaves the last report as it was. Null until the hub has
+   * sent it one.
+   */
+  fleetSync: text("fleet_sync", { mode: "json" }).$type<FleetSyncOutcome>(),
+  /**
+   * Each fleet item as the machine's harnesses converge it (core
+   * `FleetItemStatus`), by item id. Null until the machine has said.
+   */
+  fleetItems: text("fleet_items", { mode: "json" }).$type<
+    Record<string, FleetItemStatus>
+  >(),
   /**
    * The cawco the daemon is running (NEW.md §12), as it reported at register.
    * Null until a daemon that says so has registered once.

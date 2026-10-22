@@ -9,10 +9,17 @@
  *     denials (agent denied-tools.ts `sessionFleetDenials`, which every
  *     harness's spawn reads) refuse with the parse error and the file's
  *     path. Main answered the compiled four names.
- * (b) A machine with no sidecar yet: the spawn's denials wait for the first
- *     fleet sync and answer the list it wrote, with the harness's own list
- *     and plan mode every session is denied (core `OWN_LIST_DENIED`). Main
- *     answered the compiled four names at once.
+ * (b) A spawn right behind a welcome's policy write waits on that write
+ *     alone and answers the list it wrote, with the harness's own list and
+ *     plan mode every session is denied (core `OWN_LIST_DENIED`); one on a
+ *     machine that never wrote it is refused at once (a machine is online
+ *     only once it has), where main waited 30 s.
+ * (e) A welcome whose policy cannot be written (the Claude dir read-only):
+ *     it fails in the agent's words, naming the file; the spawn behind it
+ *     refuses at once with them; the hub (hub fleet-sync.ts) keeps that
+ *     refusal on the machine's row in those words and does not mark it
+ *     online, where main dropped it; and the dashboard's reading of the row
+ *     (dashboard convergence.ts) gives the machine a notice row.
  * (c) A fleet marketplace whose ssh URL git refuses: the sync runs
  *     `claude plugin marketplace add` once, with the row's URL and no git
  *     config of its own, and the row's detail is git's own refusal. Main ran
@@ -24,10 +31,20 @@
  *
  *   bun scripts/probe-kit/run.ts fallback-refusals
  */
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clockWords, OWN_LIST_DENIED } from "../../../packages/core/src/index";
+import {
+  machineSync,
+  syncNotice,
+} from "../../../apps/dashboard/src/lib/cawco/convergence";
+import {
+  clockWords,
+  type FleetSyncOutcome,
+  OWN_LIST_DENIED,
+} from "../../../packages/core/src/index";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { FleetSync } from "../../../packages/hub/src/fleet-sync";
+import type { HubLifetimeShape } from "../../../packages/hub/src/lifetime";
 import {
   type PlacementInput,
   place,
@@ -70,6 +87,60 @@ const scratchHome = async (): Promise<string> => {
   return home;
 };
 
+/**
+ * The hub's half of a refused welcome (hub fleet-sync.ts): a welcome sent,
+ * then the agent's NACK in `said`, as session.ts `#control` answers it.
+ * What the machine's row kept, and whether it was marked online.
+ */
+const welcomeRefused = (
+  said: string
+): { kept: FleetSyncOutcome[]; readied: boolean } => {
+  const kept: FleetSyncOutcome[] = [];
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const sent: string[] = [];
+  let readied = false;
+  const fleetSync = new FleetSync({
+    lifetime: {
+      after: (ms, run) => {
+        const timer = setTimeout(run, ms);
+        timer.unref();
+        timers.add(timer);
+        return timer;
+      },
+      cancel: (timer) => {
+        if (timer) {
+          clearTimeout(timer);
+        }
+      },
+    } as HubLifetimeShape,
+    name: (machineId) => machineId,
+    desired: () => new Map([["policy", { deniedTools: ["WebSearch"] }]]),
+    send: (_, requestId) => {
+      sent.push(requestId);
+      return true;
+    },
+    ready: () => {
+      readied = true;
+    },
+    keep: (_, next) => kept.push(next),
+    keptItems: () => ({}),
+    keepItems: () => undefined,
+  });
+  fleetSync.welcome("probe-machine", undefined);
+  fleetSync.answered(sent[0] ?? "", {
+    kind: "control_result",
+    requestId: sent[0] ?? "",
+    ok: false,
+    error: said,
+    refusal: { kind: "unknown", message: said },
+  });
+  fleetSync.gone("probe-machine");
+  for (const timer of timers) {
+    clearTimeout(timer);
+  }
+  return { kept, readied };
+};
+
 type Denials = { denied: string[] } | { refused: string };
 
 const spec: Spec = {
@@ -98,33 +169,109 @@ try {
       JSON.stringify(a)
     );
 
-    // (b) No sidecar yet: the first sync's list, once it lands.
+    // (b) A welcome's policy being written as a spawn reads: the spawn waits
+    // on that write alone and answers its list.
     const fresh = await scratchHome();
     const b = await inHome<Denials & { waitedMs?: number }>(
       fresh,
-      `import { writeFile } from "node:fs/promises";
-import * as denials from ${JSON.stringify(join(AGENT, "denied-tools.ts"))};
+      `import * as denials from ${JSON.stringify(join(AGENT, "denied-tools.ts"))};
 const started = performance.now();
-const asked = denials.sessionFleetDenials();
-setTimeout(async () => {
-  await writeFile(${JSON.stringify(projectClaudeDir(fresh, SIDECAR))}, JSON.stringify({ deniedTools: ["WebSearch"] }));
-  // What the fleet sync calls once it has written the sidecar (absent on main).
-  (denials as { fleetDenialsSynced?: () => void }).fleetDenialsSynced?.();
-}, 300);
+// What the agent does as a welcome arrives, a spawn right behind it.
+const writing = denials.applyFleetDenials(["WebSearch"]);
 try {
-  const denied = await asked;
+  const denied = await denials.sessionFleetDenials();
+  await writing;
   console.log(JSON.stringify({ denied, waitedMs: Math.round(performance.now() - started) }));
 } catch (error) {
   console.log(JSON.stringify({ refused: error instanceof Error ? error.message : String(error) }));
 }`
     );
     check(
-      "(b) a machine that never synced waits for its first sync and answers the list it wrote, with the own-list set",
+      "(b) a spawn behind a welcome's policy write answers the list it wrote, with the own-list set",
       "denied" in b &&
         JSON.stringify(b.denied) ===
-          JSON.stringify(["WebSearch", ...OWN_LIST_DENIED]) &&
-        (b.waitedMs ?? 0) >= 250,
+          JSON.stringify(["WebSearch", ...OWN_LIST_DENIED]),
       JSON.stringify(b)
+    );
+    // (b) No policy ever written: refused at once, not after a wait.
+    const never = await scratchHome();
+    const bNever = await inHome<Denials & { waitedMs?: number }>(
+      never,
+      `import * as denials from ${JSON.stringify(join(AGENT, "denied-tools.ts"))};
+const started = performance.now();
+try {
+  console.log(JSON.stringify({ denied: await denials.sessionFleetDenials() }));
+} catch (error) {
+  console.log(JSON.stringify({ refused: error instanceof Error ? error.message : String(error), waitedMs: Math.round(performance.now() - started) }));
+}`
+    );
+    check(
+      "(b) a spawn on a machine that never wrote the policy is refused at once, saying a machine is online only once it has",
+      "refused" in bNever &&
+        bNever.refused.includes("before the hub's welcome") &&
+        (bNever.waitedMs ?? 99_999) < 1000,
+      JSON.stringify(bNever)
+    );
+
+    // (e) A welcome whose policy cannot be written.
+    const locked = await scratchHome();
+    const claudeDir = projectClaudeDir(locked);
+    await chmod(claudeDir, 0o500);
+    const e = await inHome<{
+      refused?: string;
+      syncError?: string;
+      waitedMs: number;
+    }>(
+      locked,
+      `import * as denials from ${JSON.stringify(join(AGENT, "denied-tools.ts"))};
+const started = performance.now();
+let syncError;
+const writing = denials.applyFleetDenials(["WebSearch"]).catch((error) => {
+  syncError = error instanceof Error ? error.message : String(error);
+});
+const refused = await denials.sessionFleetDenials().then(
+  () => undefined,
+  (error) => error instanceof Error ? error.message : String(error)
+);
+await writing;
+console.log(JSON.stringify({ syncError, refused, waitedMs: Math.round(performance.now() - started) }));`
+    );
+    await chmod(claudeDir, 0o700);
+    const lockedSidecar = projectClaudeDir(locked, SIDECAR);
+    check(
+      "(e) a policy that cannot be written fails in the agent's words, naming the file",
+      (e.syncError ?? "").startsWith(`could not write ${lockedSidecar}`),
+      JSON.stringify(e)
+    );
+    check(
+      "(e) the spawn behind it refuses at once, saying the policy the hub sent could not be written, and why",
+      (e.refused ?? "").includes("could not be written") &&
+        (e.refused ?? "").includes(e.syncError ?? "\u0000") &&
+        e.waitedMs < 5000,
+      JSON.stringify(e)
+    );
+    // That refusal as the agent answers its welcome (session.ts `#control`,
+    // NACK), read by the hub (fleet-sync.ts): the row keeps it refused in
+    // those words, the machine is not marked online, and the dashboard gives
+    // it a notice row.
+    const said = e.syncError ?? "";
+    const { kept, readied } = welcomeRefused(said);
+    const outcome = kept.at(-1);
+    check(
+      "(e) the hub's row keeps the welcome refused, in the agent's words, and the machine is not marked online",
+      outcome?.state === "nacked" &&
+        outcome.error === said &&
+        said !== "" &&
+        !readied,
+      JSON.stringify({ kept, readied })
+    );
+    const notice = outcome
+      ? syncNotice(machineSync({ fleetSync: outcome }), () => "1m")
+      : null;
+    check(
+      `(e) the machine gets a notice row: ${notice}`,
+      notice === "sync refused",
+      String(notice)
     );
 
     // (c) A marketplace over an ssh URL git refuses.

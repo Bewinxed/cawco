@@ -127,12 +127,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    outlasts the reset); a move line may say what it ended (`ended`). A
  *    page built for 24 would read the reason from `room`, gone, so it
  *    reloads first.
+ * 26: a machine's row says its fleet as `fleetSync` (the last delta's
+ *    answer: sent, acked, nacked in the machine's words, unacked) and
+ *    `fleetItems` (each item's converge), where it said `fleetSyncFault`.
+ *    A page built for 25 reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 25;
+export const WIRE_PROTOCOL = 26;
 
 /**
  * What a session's stream carries: the changes each frame made to its

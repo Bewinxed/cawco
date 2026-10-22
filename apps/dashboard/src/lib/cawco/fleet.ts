@@ -1210,6 +1210,21 @@ export const pushHook = (machineId: string, id: string): Promise<unknown> =>
     "overwrite this machine"
   );
 
+/** One item that did not set up on a machine, converged again: the hub sends it forced (hub fleet-sync.ts `retry`). */
+export const retryFleetItem = (
+  machineId: string,
+  id: string
+): Promise<unknown> =>
+  send(
+    "/api/fleet/items/retry",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ machineId, id }),
+    },
+    "set this up again"
+  );
+
 /**
  * Asks the hub to push the desired state again — at one machine, or at every
  * machine that is online. A change already syncs itself; this is for the

@@ -42,6 +42,42 @@ export const claudeMcpConnectMs = (env: Record<string, string | undefined>) => {
   const set = Number(env.MCP_TIMEOUT);
   return set > 0 ? Math.min(set, 2_147_483_647) : 30_000;
 };
+/** Each harness's last reading of the fleet's servers, with the servers it read ({@link readSettledOnce}). */
+const lastReadings = new Map<
+  string,
+  { servers: string; states: FleetSyncReport["mcp"] }
+>();
+
+/**
+ * `servers` as `read` reads them for `harness`, unless the last reading was
+ * of these same servers, each to a lasting verdict: then that one. A read
+ * starts every server it is handed, so a fleet sync that carried them as
+ * they were (a place added, a skill moved) started each again for nothing.
+ * One failed or still pending is read again.
+ */
+export const readSettledOnce = async <T>(
+  harness: string,
+  servers: Record<string, T>,
+  read: (servers: Record<string, T>) => Promise<FleetSyncReport["mcp"]>
+): Promise<FleetSyncReport["mcp"]> => {
+  const asked = JSON.stringify(servers);
+  const last = lastReadings.get(harness);
+  if (last?.servers === asked) {
+    return last.states;
+  }
+  const states = await read(servers);
+  if (
+    Object.values(states).some(
+      (item) => item.state === "failed" || item.state === "pending"
+    )
+  ) {
+    lastReadings.delete(harness);
+  } else {
+    lastReadings.set(harness, { servers: asked, states });
+  }
+  return states;
+};
+
 const fleetMcpListeners = new Set<() => void>();
 
 /**

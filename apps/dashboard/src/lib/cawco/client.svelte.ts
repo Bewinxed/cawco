@@ -3567,8 +3567,9 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "stage-clone") {
     return;
   }
-  // A machine's fleet report travels machine → hub only; screens read the hub's row.
-  if (frame.kind === "fleet_report") {
+  // A machine's fleet report and its items' converge travel machine → hub
+  // only; screens read the hub's row.
+  if (frame.kind === "fleet_report" || frame.kind === "fleet_converge") {
     return;
   }
 

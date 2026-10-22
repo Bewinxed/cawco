@@ -1996,6 +1996,13 @@
       "when": 1792736718570,
       "tag": "0292_limit_moves_kept",
       "breakpoints": true
+    },
+    {
+      "idx": 293,
+      "version": "6",
+      "when": 1792738217593,
+      "tag": "0293_fleet_deltas",
+      "breakpoints": true
     }
   ]
 }

@@ -22,8 +22,8 @@ import type {
   DeliveryMark,
   Envelope,
   ErrorFrame,
-  FleetConfig,
-  FleetHoldings,
+  FleetConvergeFrame,
+  FleetHeld,
   FleetHook,
   FleetMcpConfig,
   FleetPlugin,
@@ -230,8 +230,7 @@ import {
   ENDED_STATUSES,
   type EndedBy,
   estimateTokens,
-  FLEET_STATUS,
-  FLEET_SYNC,
+  FLEET_DELTA,
   FLEET_WATCH,
   FLEET_WATCH_LIMITS,
   FRAMES_LOST,
@@ -260,7 +259,6 @@ import {
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   localNameOf,
-  MACHINE_PART_MS,
   type MachineFault,
   type MachineProviderLists,
   MCP_PLATFORMS,
@@ -272,6 +270,7 @@ import {
   machineCalled,
   machineFaultWords,
   machineLabel,
+  machinePlatform,
   mcpRunsOn,
   memoryDocProblem,
   memoryScopeProblem,
@@ -309,7 +308,6 @@ import {
   questionsOf,
   queueWords,
   RATE_LIMIT_READ,
-  READ_FLEET_HOLDINGS,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
@@ -378,8 +376,9 @@ import {
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
-import { detach, failureOf } from "@cawco/core/detach";
+import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
+import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
 import {
   type HandoverCommand,
   type HandoverEvent,
@@ -625,6 +624,7 @@ import {
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
+import { FleetSync } from "./fleet-sync";
 import { refreshOf, skillVersion } from "./fleet-versions";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
@@ -773,7 +773,6 @@ import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import {
   foldPlacedStates,
-  hasProjectRows,
   onPlacesChanged,
   placedCopies,
   placedHooks,
@@ -2387,21 +2386,12 @@ const peekToolStatus = (payload: unknown): ToolStatus | undefined => {
 const isRecord = (value: unknown): boolean =>
   typeof value === "object" && value !== null;
 
-/** A sync's three tables of states, which is what tells a report from any other answer. */
+/** A report's three tables of states, which is what tells a report from any other frame. */
 const isFleetReport = (value: unknown): value is FleetSyncReport =>
   isRecord(value) &&
   isRecord((value as FleetSyncReport).mcp) &&
   isRecord((value as FleetSyncReport).marketplaces) &&
   isRecord((value as FleetSyncReport).plugins);
-
-/** What a machine answered a `syncFleetConfig` with (NEW.md §11). */
-const peekFleetReport = (payload: unknown): FleetSyncReport | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const { result } = payload as { result?: unknown };
-  return isFleetReport(result) ? result : undefined;
-};
 
 /** What the CLI will take as an MCP server name — it keys `~/.claude.json` by it. */
 const MCP_NAME = /^[A-Za-z0-9_-]+$/;
@@ -3719,6 +3709,13 @@ export const createServer = (
     sshTunnels.start();
   });
 
+  /** Whether an agent's contract range holds this hub's (core runtime.ts `protocolRange`). */
+  const speaksContract = (
+    range: { max: number; min: number } | undefined
+  ): boolean =>
+    range !== undefined &&
+    range.min <= protocolRange.max &&
+    range.max >= protocolRange.min;
   /**
    * Why a machine takes no new session start now, or nothing when it does.
    * One the owner paused: nothing starts there until its pause ends
@@ -3758,12 +3755,7 @@ export const createServer = (
         words: `${machineName(machineId)} is installing an update`,
       };
     }
-    const range = agentProtocols.get(machineId);
-    if (
-      !range ||
-      range.min > protocolRange.max ||
-      range.max < protocolRange.min
-    ) {
+    if (!speaksContract(agentProtocols.get(machineId))) {
       return {
         kind: "build",
         words: `${machineName(machineId)} runs a CawCo build older than its hub's, which cannot start sessions for this hub until it installs the hub's build`,
@@ -9342,20 +9334,53 @@ export const createServer = (
    * otherwise a sleeping row points at a conversation that no longer exists.
    */
   /**
-   * Fleet syncs somebody is waiting on, by `requestId` → the machine running
-   * one: what tells a `control_result` that it is carrying a machine's own
-   * account of the fleet config rather than an answer for whoever asked.
+   * The fleet's config to each machine as acknowledged deltas, and what
+   * became of each (fleet-sync.ts): what tells a `control_result` that it
+   * answers a delta rather than whoever asked.
    */
-  const pendingFleet = new Map<string, string>();
-  /** Of those, the syncs, by `requestId` (a status read is none): whose answer says whether a sync landed. */
-  const fleetSyncsOut = new Set<string>();
-  /**
-   * Why the last fleet sync the hub sent each machine did not land, in one
-   * sentence, by its id: said on its row ({@link AgentRow.fleetSyncFault})
-   * until a sync lands there, or its connection ends.
-   */
-  const fleetSyncFaults = new Map<string, string>();
-  /** The fleet MCP changes each of those syncs carries, by `requestId` (fleet-mcp-changes.ts). */
+  const fleetSyncs = new FleetSync({
+    lifetime,
+    name: (machineId) => machineName(machineId),
+    desired: (machineId) => machineFleetItems(machineId),
+    send: (machineId, requestId, delta) => {
+      const agent = registry.agent(machineId);
+      if (!agent) {
+        return false;
+      }
+      // The fleet MCP changes this delta carries, for the sessions there
+      // once the machine's converge reports (`keepFleetReport`).
+      const riding = mcpChanges.ride(machineId);
+      if (riding.size > 0) {
+        fleetMcpRiding.set(machineId, riding);
+      }
+      sendFrame(agent, {
+        verb: "control",
+        machineId,
+        payload: {
+          requestId,
+          method: FLEET_DELTA,
+          args: [delta],
+        } satisfies ControlPayload,
+      } satisfies Envelope<ControlPayload>);
+      return true;
+    },
+    ready: (machineId) => {
+      db.markAgentReady(machineId);
+      publishInstances(machineId);
+    },
+    keep: (machineId, outcome) => {
+      db.setAgentFleetSync(machineId, outcome);
+      publishInstances(machineId);
+    },
+    keptItems: (machineId) =>
+      db.listAgents().find((row) => row.machineId === machineId)?.fleetItems ??
+      {},
+    keepItems: (machineId, items) => {
+      db.setAgentFleetItems(machineId, items);
+      publishInstances(machineId);
+    },
+  });
+  /** The fleet MCP changes the last delta to each machine carried, by machine, until its converge reports (fleet-mcp-changes.ts). */
   const fleetMcpRiding = new Map<string, RidingChanges>();
   /**
    * Controls a REST call is waiting on, by `requestId`. A dashboard's control is
@@ -11886,7 +11911,7 @@ export const createServer = (
       });
     },
     write: (choices) => db.putSupervisorConfig(choices),
-    synced: () => fanOutFleet(),
+    synced: () => fleetChanged(),
   };
 
   /**
@@ -16979,15 +17004,18 @@ export const createServer = (
       return {
         ...row,
         custody: visibleCustody,
-        status: registry.agent(row.machineId) ? "online" : "offline",
+        // Online while its agent holds a link and, when it speaks this
+        // hub's contract, once it has answered its welcome (fleet-sync.ts).
+        status:
+          registry.agent(row.machineId) &&
+          (fleetSyncs.isReady(row.machineId) ||
+            !speaksContract(agentProtocols.get(row.machineId)))
+            ? "online"
+            : "offline",
         // Additive and live, like `status` above: present only for a machine that
         // has actually reported one on this connection.
         ...(binaryUpdateStates.get(row.machineId)
           ? { binaryUpdate: binaryUpdateStates.get(row.machineId) }
-          : {}),
-        // Live as well: why the sync this connection was sent did not land.
-        ...(fleetSyncFaults.get(row.machineId)
-          ? { fleetSyncFault: fleetSyncFaults.get(row.machineId) }
           : {}),
       };
     });
@@ -18487,171 +18515,74 @@ export const createServer = (
   );
   relayJourney.watch();
 
-  /** The fleet content a machine holds on its disk now; nothing when it cannot say. */
-  const readHoldings = async (machineId: string): Promise<FleetHoldings> => {
-    const answer = await callAgent(
-      machineId,
-      READ_FLEET_HOLDINGS,
-      [],
-      READ_TIMEOUT_MS
-    );
-    // Not what it holds: every byte is sent (fanOutFleet), heavier, never wrong.
-    switch (answer.kind) {
-      case "unanswered":
-        console.warn(
-          `[hub] fleet holdings: ${silentWords(machineId, answer)}; every byte is sent`
-        );
-        return {};
-      case "answered":
-        return answer.value.ok &&
-          typeof answer.value.result === "object" &&
-          answer.value.result !== null
-          ? (answer.value.result as FleetHoldings)
-          : {};
-      default:
-        throw unreachable(answer);
-    }
-  };
-
   /**
-   * Sends the machine what the fleet's Claude Code is supposed to be able to
-   * reach (NEW.md §11): every MCP server, marketplace and plugin, for the
-   * machine to converge on and report back. Sent when a machine reports what
-   * its harnesses can do (once per connection) and after any change, so a
-   * machine that joins tomorrow needs nobody to remember it.
+   * What the fleet's harnesses on `machineId` are to hold (NEW.md §11), as
+   * items (core fleet-items.ts): every MCP server, marketplace, plugin,
+   * skill, memory document and hook, the policy (the fleet's denied tools)
+   * among them, with each project's rows placed at its places there. Built
+   * on demand from what the hub holds now, and fast: nothing is read off the
+   * machine and nothing waited for (fleet-sync.ts diffs it against what the
+   * machine acknowledged, so only what moved is sent).
    */
-  const pushFleetConfig = (
-    machineId: string,
-    agent: HubSocket,
-    config: FleetConfig
-  ): void => {
-    // Taken with `config`, before anything below reads the fleet again: every
-    // change it carries is in the files this sync writes.
-    const riding = mcpChanges.ride(machineId);
-    // Startup discovery finishes before any harness can see a remote fleet URL.
-    // The control result arrives through pendingFleet.
-    detach(
-      mcpReady
-        .then(async () => {
-          await fleetMcp.ready();
-          const current = new Map(
-            db.fleetConfig().mcp.map((row) => [row.name, row])
+  const machineFleetItems = (machineId: string): FleetItems => {
+    const config = db.fleetConfig();
+    // A directory on the hub's disk names nothing on any other machine, so
+    // only the hub's own machine links it; every other one is told which
+    // marketplaces those are and installs their plugins from the bytes.
+    const hubOnly =
+      ownMachineIdRead === machineId
+        ? new Set<string>()
+        : new Set(
+            config.marketplaces
+              .filter(({ source }) => isHubDirectory(source))
+              .map(({ name }) => name)
           );
-          // A directory on the hub's disk names nothing on any other machine, so
-          // only the hub's own machine links it; every other one is told which
-          // marketplaces those are and installs their plugins from the bytes.
-          const hubOnly = (await isHubMachine(machineId))
-            ? new Set<string>()
-            : new Set(
-                config.marketplaces
-                  .filter(({ source }) => isHubDirectory(source))
-                  .map(({ name }) => name)
-              );
-          const hubErrors = new Map(
-            hubOnly.size
-              ? db
-                  .listPlugins()
-                  .flatMap(({ id, error }) =>
-                    error ? [[id, error] as const] : []
-                  )
-              : []
-          );
-          // What the machine holds is read off its disk now, and only those bytes
-          // are left out: a copy that was wiped or edited since its last report is
-          // carried in this same sync. A read that fails or does not answer holds
-          // nothing, so every byte goes — heavier, never wrong.
-          const held = await readHoldings(machineId);
-          const places = db.listProjects().flatMap((project) => project.places);
-          // A server scoped to platforms reaches only a machine whose register
-          // reported one of them (`machine_capabilities.platform`); any other
-          // is not sent it, so its agent removes what it had and probes nothing.
-          const platform = db
-            .listAgents()
-            .find((row) => row.machineId === machineId)
-            ?.machineCapabilities?.platform;
-          const mcpRows = config.mcp.flatMap((row) => {
-            const latest = current.get(row.name);
-            return latest && mcpRunsOn(latest, platform) ? [latest] : [];
-          });
-          const outbound = fleetMcp.syncConfig(
-            {
-              ...config,
-              // The fleet's own, for every folder; a project's are placed below.
-              skills: unbound(config.skills).map((skill) =>
-                held.skills?.[skill.name] === skill.hash
-                  ? { ...skill, files: undefined }
-                  : skill
-              ),
-              // A project-bound skill and MCP server once per place of its
-              // project on this machine (project-placements.ts); a placed skill
-              // always carries its files, as each place is its own copy.
-              placedSkills: placedCopies(config.skills, places, machineId),
-              placedMcp: placedCopies(mcpRows, places, machineId),
-              // A project's memory documents, likewise once per place.
-              placedMemory: placedCopies(
-                config.placedMemory,
-                places,
-                machineId
-              ),
-              pluginPayloads: config.pluginPayloads.map((plugin) =>
-                // Keyed by the fleet's id: two marketplaces may each carry a
-                // plugin of the same name, and a machine holds both.
-                held.plugins?.[`${plugin.name}@${plugin.marketplace}`] ===
-                plugin.hash
-                  ? { ...plugin, files: undefined }
-                  : plugin
-              ),
-              hubOnlyMarketplaces: [...hubOnly],
-              // What the hub could not carry of a hub-only marketplace reaches that
-              // machine no other way, so the hub's reason goes with the row.
-              plugins: config.plugins.map((plugin) => {
-                const error = hubErrors.get(plugin.id);
-                return error && hubOnly.has(pluginMarketplace(plugin.id))
-                  ? { ...plugin, error }
-                  : plugin;
-              }),
-              mcp: unbound(mcpRows),
-              // A project-bound hook once per place of its project on this
-              // machine, with that place as its cwd (project-placements.ts).
-              hooks: placedHooks(config.hooks, places, machineId),
-            },
-            hubHttpUrl()
-          );
-          const requestId = crypto.randomUUID();
-          const payload: ControlPayload = {
-            requestId,
-            method: FLEET_SYNC,
-            args: [outbound],
-          };
-          pendingFleet.set(requestId, machineId);
-          fleetSyncsOut.add(requestId);
-          if (riding.size > 0) {
-            fleetMcpRiding.set(requestId, riding);
-          }
-          sendFrame(agent, {
-            verb: "control",
-            machineId,
-            payload,
-          } satisfies Envelope<ControlPayload>);
-        })
-        .catch((error: unknown) => {
-          // Never sent: the machine waits for a sync that is not coming, and
-          // its row says why.
-          noteFleetSyncFault(
-            machineId,
-            `The hub could not send this machine its fleet sync: ${failureOf(error)}`
-          );
-          throw error;
-        }),
-      "fleet sync"
+    const hubErrors = new Map(
+      hubOnly.size
+        ? db
+            .listPlugins()
+            .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
+        : []
     );
-  };
-
-  /** A sync that did not land on `machineId`, said in the hub's log and on its row. */
-  const noteFleetSyncFault = (machineId: string, sentence: string): void => {
-    console.warn(`[fleet] sync → ${machineName(machineId)}: ${sentence}`);
-    fleetSyncFaults.set(machineId, sentence);
-    publishInstances(machineId);
+    const places = db.listProjects().flatMap((project) => project.places);
+    // A server scoped to platforms reaches only a machine of one of them,
+    // by whichever of its reports came first (core `machinePlatform`: its
+    // capabilities, else its register's `os`); any other is not sent it, so
+    // its agent removes what it had and probes nothing.
+    const targetRow = db
+      .listAgents()
+      .find((agentRow) => agentRow.machineId === machineId);
+    const platform = targetRow ? machinePlatform(targetRow) : undefined;
+    const mcpRows = config.mcp.filter((row) => mcpRunsOn(row, platform));
+    return fleetItemsOf(
+      fleetMcp.syncConfig(
+        {
+          ...config,
+          // The fleet's own, for every folder; a project's are placed below.
+          skills: unbound(config.skills),
+          // A project-bound skill and MCP server once per place of its
+          // project on this machine (project-placements.ts).
+          placedSkills: placedCopies(config.skills, places, machineId),
+          placedMcp: placedCopies(mcpRows, places, machineId),
+          // A project's memory documents, likewise once per place.
+          placedMemory: placedCopies(config.placedMemory, places, machineId),
+          hubOnlyMarketplaces: [...hubOnly],
+          // What the hub could not carry of a hub-only marketplace reaches
+          // that machine no other way, so the hub's reason goes with the row.
+          plugins: config.plugins.map((plugin) => {
+            const error = hubErrors.get(plugin.id);
+            return error && hubOnly.has(pluginMarketplace(plugin.id))
+              ? { ...plugin, error }
+              : plugin;
+          }),
+          mcp: unbound(mcpRows),
+          // A project-bound hook once per place of its project on this
+          // machine, with that place as its cwd (project-placements.ts).
+          hooks: placedHooks(config.hooks, places, machineId),
+        },
+        hubHttpUrl()
+      )
+    );
   };
 
   /**
@@ -18741,94 +18672,6 @@ export const createServer = (
         },
       } satisfies Envelope<ControlPayload>);
     }
-  };
-
-  /** The harnesses installed on a machine that converge the fleet, as its reports say. */
-  const fleetHarnesses = (machineId: string): string =>
-    (
-      db.listAgents().find((row) => row.machineId === machineId)?.harnesses ??
-      []
-    )
-      .filter((report) => report.installed && report.capabilities.fleet)
-      .map((report) => report.harness)
-      .sort()
-      .join(",");
-  /** Each machine's connection a fleet sync last went out on, by its id ({@link sendFleetSync}). */
-  const fleetSyncedLinks = new Map<string, string>();
-  /**
-   * Each starting connection's first fleet sync, held for the harnesses its
-   * register named whose reports have not come yet ({@link awaitHarnesses}).
-   */
-  const awaitedHarnesses = new Map<
-    string,
-    { cap: HubTimer; kinds: Set<string>; link: string }
-  >();
-
-  const sendFleetSync = (
-    machineId: string,
-    agent: HubSocket,
-    why: string
-  ): void => {
-    // Fleet sync converges each harness's own files. The register's sync goes
-    // before the machine's harnesses have reported (they follow on its first
-    // beat); only a report with no fleet-capable harness is a machine with
-    // nothing to converge.
-    const reports = db
-      .listAgents()
-      .find((row) => row.machineId === machineId)?.harnesses;
-    if (
-      reports &&
-      reports.length > 0 &&
-      !reports.some((report) => report.capabilities.fleet)
-    ) {
-      return;
-    }
-
-    // Always sent, a fleet with no rows too: it carries the denied tools, and
-    // a machine spawns nothing until it has heard them.
-    console.info(`[fleet] sync → ${machineName(machineId)}: ${why}`);
-    fleetSyncedLinks.set(machineId, agent.id);
-    // A sync out on the connection is its first: nothing is held for it now.
-    lifetime.cancel(awaitedHarnesses.get(machineId)?.cap);
-    awaitedHarnesses.delete(machineId);
-    pushFleetConfig(machineId, agent, db.fleetConfig());
-  };
-
-  /**
-   * A connection's first fleet sync waits for every harness its register
-   * named (`harnessKinds`: the agent's adapters, whose reports follow one
-   * beat each, agent daemon.ts `reannounce`), so a starting machine is
-   * synced once, on its whole set, rather than once per report, each sync
-   * booting OpenCode's location to read the fleet's servers again. A report
-   * that never comes is a read the agent gave up after
-   * {@link MACHINE_PART_MS} (`readPart`): then the sync goes on what came.
-   * Every sync after the first goes out when it is asked.
-   */
-  const awaitHarnesses = (
-    machineId: string,
-    agent: HubSocket,
-    kinds: readonly string[]
-  ): void => {
-    lifetime.cancel(awaitedHarnesses.get(machineId)?.cap);
-    awaitedHarnesses.set(machineId, {
-      link: agent.id,
-      kinds: new Set(kinds),
-      cap: lifetime.after(MACHINE_PART_MS, () => {
-        const held = awaitedHarnesses.get(machineId);
-        // A register again on a connection already synced holds nothing.
-        if (
-          held?.link !== agent.id ||
-          fleetSyncedLinks.get(machineId) === agent.id
-        ) {
-          return;
-        }
-        sendFleetSync(
-          machineId,
-          agent,
-          `its harnesses known (${fleetHarnesses(machineId) || "none"}), but for ${[...held.kinds].join(", ")}, which did not report within ${MACHINE_PART_MS / 1000} s`
-        );
-      }),
-    });
   };
 
   /**
@@ -19164,16 +19007,14 @@ export const createServer = (
     }
   };
 
-  const fanOutFleet = (): void => {
+  /**
+   * The one way a fleet change reaches the machines: each ready machine is
+   * sent the items that moved for it, 250 ms after the last change, and one
+   * whose items did not move is sent nothing (fleet-sync.ts).
+   */
+  const fleetChanged = (why = "the fleet changed"): void => {
     toolsMayHaveChanged();
-    for (const machineId of registry.machineIds()) {
-      const agent = registry.agent(machineId);
-      if (!agent) {
-        continue;
-      }
-      sendFleetSync(machineId, agent, "the fleet changed");
-      publishInstances(machineId);
-    }
+    fleetSyncs.changed(why);
   };
 
   /**
@@ -19272,7 +19113,7 @@ export const createServer = (
     console.log(
       `[hub] ${what}: the fleet's copy changed; telling the machines`
     );
-    fanOutFleet();
+    fleetChanged();
   };
 
   /**
@@ -19456,7 +19297,7 @@ export const createServer = (
       };
     }
     const marketplace = db.putMarketplace({ name, source });
-    fanOutFleet();
+    fleetChanged();
     return { source, marketplace };
   };
 
@@ -19527,7 +19368,7 @@ export const createServer = (
       return;
     }
     if (fetched) {
-      fanOutFleet();
+      fleetChanged();
     }
     const unfetched = db
       .listSkills()
@@ -19577,7 +19418,7 @@ export const createServer = (
       moved = true;
     }
     if (moved) {
-      fanOutFleet();
+      fleetChanged();
     }
   };
   /**
@@ -19922,47 +19763,22 @@ export const createServer = (
     });
 
   // A place added or removed: every dashboard reads the projects again, and
-  // its machine is sent its fleet config again, so the project's hooks, MCP
-  // servers, skills and memory documents reach the new place or leave the
-  // old one. Only when the project has any; a place of a project without
-  // them changes nothing on its machine.
-  onPlacesChanged((machineId, projectId) => {
+  // its machine is sent what moved there: the project's hooks, MCP servers,
+  // skills and memory documents reach the new place or leave the old one. A
+  // place of a project with none of them moves nothing, and nothing is sent.
+  onPlacesChanged((machineId) => {
     projectsChanged();
-    const agent = registry.agent(machineId);
-    const fleet = db.fleetConfig();
-    if (
-      !agent ||
-      (projectId &&
-        !hasProjectRows(
-          [
-            ...fleet.hooks,
-            ...fleet.mcp,
-            ...fleet.skills,
-            ...fleet.placedMemory,
-          ],
-          projectId
-        ))
-    ) {
-      return;
-    }
-    sendFleetSync(machineId, agent, "a place changed");
-    publishInstances(machineId);
+    fleetSyncs.changed("a place changed", { machineId });
   });
 
   /**
-   * A project's folder was moved away (its delete, a merge): every machine is
-   * sent its fleet config again, and its agent checks each workspace
-   * boundary there for an access its policy no longer grants (agent
-   * boundary.ts `recheckNarrowed`): a workspace of that project read the
-   * folder, and its boundary must not go on reading it.
+   * A project's folder was moved away (its delete, a merge): every machine's
+   * agent checks each workspace boundary there for an access its policy no
+   * longer grants (agent boundary.ts `recheckNarrowed`): a workspace of that
+   * project read the folder, and its boundary must not go on reading it.
    */
   const projectFolderMoved = (): void => {
-    for (const { machineId } of db.listAgents()) {
-      const agent = registry.agent(machineId);
-      if (agent) {
-        sendFleetSync(machineId, agent, "a project folder moved");
-      }
-    }
+    fleetSyncs.changed("a project folder moved", { recheck: true });
   };
 
   const mcpChanges = new FleetMcpChanges(db.fleetConfig().mcp);
@@ -19983,11 +19799,17 @@ export const createServer = (
       machineId: "",
       payload: { kind: "fleet_mcp", servers },
     } satisfies Envelope<FramePayload>);
-    fanOutFleet();
+    fleetChanged();
   };
   const fleetMcp = new FleetMcp(db, announceMcp, lifetime);
   const mcpReady = Promise.all(
     db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
+  );
+  // Startup discovery settles the fleet's URL servers; what it moved goes to
+  // the machines then, as any change does.
+  detach(
+    mcpReady.then(() => fleetChanged("the hub's MCP discovery finished")),
+    "fleet MCP discovery"
   );
 
   /**
@@ -20995,15 +20817,6 @@ export const createServer = (
         at: Date.now(),
       });
       publishInstances(message.machineId);
-    }
-    // A sync or a status a dashboard asked for answers with the same
-    // report a register's does, and the row is the hub's either way.
-    const method = peek(message.payload, "method");
-    if (requestId && (method === FLEET_SYNC || method === FLEET_STATUS)) {
-      pendingFleet.set(requestId, message.machineId);
-      if (method === FLEET_SYNC) {
-        fleetSyncsOut.add(requestId);
-      }
     }
     noteControl(message);
     return true;
@@ -22115,7 +21928,7 @@ export const createServer = (
     if (asked.template) {
       await tasks.applyTemplate(created.id, asked.template, YOU_ACTOR);
       // Its template's starter skills reach the checkout it was made from.
-      fanOutFleet();
+      fleetChanged();
     }
     // Your prompt sets the project up whether its Caw is on or off.
     return asked.setup
@@ -22572,7 +22385,7 @@ export const createServer = (
     // The template's starter skills go to the project's places, and the old one's leave.
     setTemplate: (id, template) => {
       db.setProjectTemplate(id, template);
-      fanOutFleet();
+      fleetChanged();
     },
     attempts: db.projectAttempts,
     commentSaid: db.taskCommentSaid,
@@ -22620,7 +22433,7 @@ export const createServer = (
       }
     }
     if (found) {
-      fanOutFleet();
+      fleetChanged();
     }
   };
   offBoot.push(() => detach(recordTemplates(), "project templates"));
@@ -26323,16 +26136,16 @@ export const createServer = (
         return rule ? ruleRowsOf([rule])[0] : null;
       }
       case "hook":
-        fanOutFleet();
+        fleetChanged();
         return db.getFleetHook(key) ?? null;
       case "skill":
-        fanOutFleet();
+        fleetChanged();
         return db.listSkills().find((row) => row.name === key) ?? null;
       case "plugin":
-        fanOutFleet();
+        fleetChanged();
         return db.listPlugins().find((row) => row.id === key) ?? null;
       case "marketplace":
-        fanOutFleet();
+        fleetChanged();
         return (
           db.fleetConfig().marketplaces.find((row) => row.name === key) ?? null
         );
@@ -26346,13 +26159,13 @@ export const createServer = (
       case "delegateType":
         return delegateTypes.get(key) ?? null;
       case "memory":
-        fanOutFleet();
+        fleetChanged();
         return {
           memory: db.getFleetMemory() ?? null,
           docs: db.listFleetMemoryDocs(),
         };
       case "memoryDoc":
-        fanOutFleet();
+        fleetChanged();
         return db.getFleetMemoryDoc(key) ?? null;
       case "connection":
         return connections.returned(key);
@@ -26537,7 +26350,7 @@ export const createServer = (
           toolCallKeys,
           (id) => withSessionPresence(db.getInstancesByIds([id]))[0]?.status,
           {
-            changed: fanOutFleet,
+            changed: () => fleetChanged("a workflow changed"),
             check: async (name, workflowId) => {
               await Promise.all(
                 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: verify discovery and the ownership marker before a workflow can claim a skill on each connected machine.
@@ -28788,7 +28601,7 @@ export const createServer = (
         if (trashed === undefined) {
           return status(404, `the fleet links no marketplace ${params.name}`);
         }
-        fanOutFleet();
+        fleetChanged();
         return undoable(trashed);
       })
       .put(
@@ -28803,7 +28616,7 @@ export const createServer = (
           // The route answers now, the row marked `fetching`; the outcome is
           // a `fleet.fetch` frame (`fetchPlugins`).
           detach(
-            fetchPlugins([params.id]).finally(() => fanOutFleet()),
+            fetchPlugins([params.id]).finally(() => fleetChanged()),
             "plugin resolve"
           );
           const row = db.listPlugins().find(({ id }) => id === params.id);
@@ -28822,7 +28635,7 @@ export const createServer = (
             return status(404, `no plugin ${params.id} in this fleet`);
           }
           db.putPlugin({ id: params.id, enabled: body.enabled });
-          fanOutFleet();
+          fleetChanged();
           const row = db.listPlugins().find(({ id }) => id === params.id);
           return row
             ? pluginRow(row)
@@ -28858,7 +28671,7 @@ export const createServer = (
         if (trashed === undefined) {
           return status(404, `the fleet installs no plugin ${params.id}`);
         }
-        fanOutFleet();
+        fleetChanged();
         return undoable(trashed);
       })
       // A plain skill is resolved here, once for the whole fleet: the hub
@@ -28935,7 +28748,7 @@ export const createServer = (
               ),
               files,
             });
-            fanOutFleet();
+            fleetChanged();
             return skill;
           }
 
@@ -28957,7 +28770,7 @@ export const createServer = (
           detach(
             fetchSkill(params.name, body.source).then((fetched) => {
               if (fetched === "same") {
-                fanOutFleet();
+                fleetChanged();
               }
             }),
             "skill fetch"
@@ -28989,7 +28802,7 @@ export const createServer = (
           if (!row) {
             return status(404, `no skill ${params.name}`);
           }
-          fanOutFleet();
+          fleetChanged();
           return skillRow(row);
         }
       )
@@ -29078,7 +28891,7 @@ export const createServer = (
           return status(404, `the fleet keeps no skill ${params.name}`);
         }
         skillChoices.delete(params.name);
-        fanOutFleet();
+        fleetChanged();
         return undoable(trashed);
       })
       // What one skill used to be, newest first, without its files.
@@ -29114,7 +28927,7 @@ export const createServer = (
             // A restore is no fetch: what the last one came to no longer
             // says what the row holds.
             db.noteSource({ skill: skill.name }, { lastRefresh: null });
-            fanOutFleet();
+            fleetChanged();
             return skillRow(
               db.listSkills().find((row) => row.name === skill.name) ?? skill
             );
@@ -29188,11 +29001,11 @@ export const createServer = (
             }
           }
 
-          pushFleetConfig(body.machineId, agent, {
-            ...config,
-            skills: config.skills.map((skill) =>
-              skill.name === params.name ? { ...skill, force: true } : skill
-            ),
+          // Sent forced, and kept forced on the machine until a converge
+          // writes it, whatever delta comes meanwhile (fleet-sync.ts).
+          fleetSyncs.force(body.machineId, [`skill:${params.name}`]);
+          fleetSyncs.changed(`an overwrite of skill ${params.name}`, {
+            machineId: body.machineId,
           });
           publishInstances(body.machineId);
           return { ok: true };
@@ -29273,7 +29086,7 @@ export const createServer = (
           }
           keepReplacedMemory(body.content);
           const memory = db.setFleetMemory(body.content);
-          fanOutFleet();
+          fleetChanged();
           return memory;
         }
       )
@@ -29304,7 +29117,7 @@ export const createServer = (
         if (trashed === undefined) {
           return status(404, "the fleet keeps no memory");
         }
-        fanOutFleet();
+        fleetChanged();
         return undoable(trashed);
       })
       // One document. Same save as the main file's, keyed by its path —
@@ -29374,7 +29187,7 @@ export const createServer = (
             content: body.content,
             ...(body.scope ? { scope: body.scope } : {}),
           });
-          fanOutFleet();
+          fleetChanged();
           return doc;
         }
       )
@@ -29397,7 +29210,7 @@ export const createServer = (
           if (trashed === undefined) {
             return status(404, `the fleet keeps no ${body.path}`);
           }
-          fanOutFleet();
+          fleetChanged();
           return undoable(trashed);
         }
       )
@@ -29466,7 +29279,7 @@ export const createServer = (
               path: body.path,
               content: theirs.content,
             });
-            fanOutFleet();
+            fleetChanged();
             return doc;
           }
 
@@ -29489,7 +29302,7 @@ export const createServer = (
           }
 
           const memory = db.setFleetMemory(read.copy.content);
-          fanOutFleet();
+          fleetChanged();
           return memory;
         }
       )
@@ -29558,17 +29371,17 @@ export const createServer = (
             }
           }
 
-          pushFleetConfig(body.machineId, agent, {
-            ...config,
-            memory: {
-              ...config.memory,
-              ...(forced === undefined ? { force: true } : {}),
-              docs: config.memory.docs.map((doc) =>
-                forced === undefined || doc.path === forced
-                  ? { ...doc, force: true }
-                  : doc
-              ),
-            },
+          fleetSyncs.force(
+            body.machineId,
+            forced === undefined
+              ? [
+                  "memory",
+                  ...config.memory.docs.map((doc) => `memoryDoc:${doc.path}`),
+                ]
+              : [`memoryDoc:${forced}`]
+          );
+          fleetSyncs.changed(`an overwrite of ${forced ?? "the memory"}`, {
+            machineId: body.machineId,
           });
           publishInstances(body.machineId);
           return { ok: true };
@@ -29607,13 +29420,13 @@ export const createServer = (
               path: version.path,
               content: version.content,
             });
-            fanOutFleet();
+            fleetChanged();
             return doc;
           }
 
           keepReplacedMemory(version.content);
           const memory = db.setFleetMemory(version.content);
-          fanOutFleet();
+          fleetChanged();
           return memory;
         }
       )
@@ -29688,7 +29501,7 @@ export const createServer = (
           }
 
           const hook = db.putFleetHook({ ...draft, id: params.id });
-          fanOutFleet();
+          fleetChanged();
           return hook;
         }
       )
@@ -29706,7 +29519,7 @@ export const createServer = (
         if (trashed === undefined) {
           return status(404, `the fleet keeps no hook ${params.id}`);
         }
-        fanOutFleet();
+        fleetChanged();
         return undoable(trashed);
       })
       // What one hook used to be, newest first, without the material. `?hookId=`
@@ -29749,7 +29562,7 @@ export const createServer = (
             scope: version.scope,
             projectId: version.projectId,
           });
-          fanOutFleet();
+          fleetChanged();
           return hook;
         }
       )
@@ -29817,7 +29630,7 @@ export const createServer = (
 
           keepHookVersion(current);
           const hook = db.putFleetHook({ ...draft, id: body.id });
-          fanOutFleet();
+          fleetChanged();
           return hook;
         }
       )
@@ -29887,34 +29700,47 @@ export const createServer = (
             }
           }
 
-          pushFleetConfig(body.machineId, agent, {
-            ...config,
-            hooks: config.hooks.map((hook) =>
-              body.id === undefined || hook.id === body.id
-                ? { ...hook, force: true }
-                : hook
-            ),
+          const ids = forced.map((hook) => hook.id);
+          // Each hook's copies, one per place it is bound to there.
+          fleetSyncs.force(
+            body.machineId,
+            [...machineFleetItems(body.machineId).keys()].filter((item) =>
+              ids.some((id) => item.startsWith(`hook:${id}@`))
+            )
+          );
+          fleetSyncs.changed(`an overwrite of hook(s) ${ids.join(", ")}`, {
+            machineId: body.machineId,
           });
           publishInstances(body.machineId);
           return { ok: true };
         }
       )
-      // The click for a machine that drifted, or for the whole fleet: the same
-      // sync a register sends, asked for on purpose.
+      // The click for a machine that drifted, or for the whole fleet: what
+      // moved goes, and every item the machine holds converges again.
       .post(
         "/api/fleet/sync",
         { body: t.Object({ machineId: t.Optional(t.String()) }) },
         ({ body, status }) => {
-          if (!body.machineId) {
-            fanOutFleet();
-            return { ok: true };
-          }
-          const agent = registry.agent(body.machineId);
-          if (!agent) {
+          if (body.machineId && !registry.agent(body.machineId)) {
             return status(404, machineFault(body.machineId, "offline"));
           }
-          sendFleetSync(body.machineId, agent, "asked for");
-          publishInstances(body.machineId);
+          fleetSyncs.changed("asked for", {
+            reconverge: true,
+            ...(body.machineId ? { machineId: body.machineId } : {}),
+          });
+          return { ok: true };
+        }
+      )
+      // A person's Retry of one item that failed to converge on a machine:
+      // sent forced, so its machine converges it again.
+      .post(
+        "/api/fleet/items/retry",
+        { body: t.Object({ machineId: t.String(), id: t.String() }) },
+        ({ body, status }) => {
+          if (!registry.agent(body.machineId)) {
+            return status(404, machineFault(body.machineId, "offline"));
+          }
+          fleetSyncs.retry(body.machineId, body.id);
           return { ok: true };
         }
       )
@@ -31445,12 +31271,6 @@ export const createServer = (
               );
               // Its canvases' stages are reachable again: no doc says otherwise.
               artifacts.machineBack(message.machineId);
-              awaitHarnesses(
-                message.machineId,
-                ws,
-                (message.payload as { harnessKinds?: string[] }).harnessKinds ??
-                  []
-              );
               // A project Caw could not set up while no machine was online is set up now.
               soon(() => {
                 caw.machineOnline();
@@ -31504,6 +31324,13 @@ export const createServer = (
                   locations.delete(id);
                 }
               }
+              // An agent that speaks this hub's contract is online once it has
+              // written the fleet's policy its welcome carries (READY,
+              // fleet-sync.ts); one older is online as it registers, its
+              // starts held until it installs this hub's build (`startHold`).
+              const speaks = speaksContract(
+                peekBuild(message.payload)?.protocol
+              );
               db.upsertAgent({
                 machineId: message.machineId,
                 hostname:
@@ -31511,7 +31338,17 @@ export const createServer = (
                 os: peek(message.payload, "os") ?? "unknown",
                 build: peekBuild(message.payload),
                 home: peekHome(message.payload),
+                online: !speaks,
               });
+              // Its welcome first, before anything the register starts
+              // there: the policy it carries is what a start reads.
+              if (speaks) {
+                fleetSyncs.gone(message.machineId);
+                fleetSyncs.welcome(
+                  message.machineId,
+                  (message.payload as { fleetHeld?: FleetHeld }).fleetHeld
+                );
+              }
               // A register from a daemon with nothing to say leaves standing what
               // the beats said — the same tolerance `build` gets on the row.
               const registered = peekBinaryUpdate(message.payload);
@@ -31928,6 +31765,8 @@ export const createServer = (
                 recordSessionAddress(ws, message.machineId, claim);
               }
               db.touchAgent(message.machineId);
+              // A delta it did not acknowledge goes again (fleet-sync.ts).
+              fleetSyncs.heartbeat(message.machineId);
               // The machine's desktop, toward whether the person is here.
               const { activity } = message.payload as HeartbeatPayload;
               if (activity) {
@@ -32063,7 +31902,6 @@ export const createServer = (
               // or tools runs here, off the part it reads.
               const reported = peekHarnesses(message.payload);
               if (reported) {
-                const convergingBefore = fleetHarnesses(message.machineId);
                 // A report with no word (Claude's, its dirs unanswered) is
                 // filed with the last word kept of that harness; with none
                 // kept, it is not filed, and the harness reads as not
@@ -32108,37 +31946,6 @@ export const createServer = (
                     unread: claudeReport?.unreadAccounts ?? [],
                   });
                 }
-                // A connection no sync has gone out on yet is sent one once
-                // its harnesses are known: the register no longer carries
-                // their reports (aca170f8f), only their names, and its first
-                // sync waits for each (awaitHarnesses); a sync's content needs
-                // none of them, so one sent already (a fleet change) is that
-                // sync. A later report (Claude's sign-ins read again and changed, one per
-                // harness on a re-announce) syncs only when it moved which
-                // harnesses here converge the fleet: one installed since,
-                // or gone. Any other is no fleet change, and a sync then
-                // started every fleet server in a location again.
-                if (fleetSyncedLinks.get(message.machineId) !== ws.id) {
-                  const held = awaitedHarnesses.get(message.machineId);
-                  for (const report of reported) {
-                    held?.kinds.delete(report.harness);
-                  }
-                  if (held?.link !== ws.id || held.kinds.size === 0) {
-                    sendFleetSync(
-                      message.machineId,
-                      ws,
-                      `its harnesses known (${fleetHarnesses(message.machineId) || "none"})`
-                    );
-                  }
-                } else if (
-                  fleetHarnesses(message.machineId) !== convergingBefore
-                ) {
-                  sendFleetSync(
-                    message.machineId,
-                    ws,
-                    `the harnesses converging the fleet are now ${fleetHarnesses(message.machineId) || "none"}`
-                  );
-                }
               }
               const tools = peekTools(message.payload);
               if (tools.length > 0) {
@@ -32149,8 +31956,25 @@ export const createServer = (
               // has asked every tool for its version.
               const capabilities = peekMachineCapabilities(message.payload);
               if (capabilities) {
+                const before = db
+                  .listAgents()
+                  .find((row) => row.machineId === message.machineId);
                 db.setAgentCapabilities(message.machineId, capabilities);
                 publishInstances(message.machineId);
+                // A platform other than the one its register's `os` named
+                // (core `machinePlatform`) moves which platform-scoped
+                // servers it runs: what moved goes.
+                if (
+                  before &&
+                  machinePlatform(before) !== capabilities.platform
+                ) {
+                  fleetSyncs.changed(
+                    `its platform is ${capabilities.platform}`,
+                    {
+                      machineId: message.machineId,
+                    }
+                  );
+                }
               }
               // What the machine's own pi and OpenCode stores hold, moved into
               // accounts on each connection and whenever they change under it
@@ -32327,12 +32151,23 @@ export const createServer = (
                 );
                 break;
               }
-              // The machine's fleet report, sent unasked when a reading moved
-              // with no fleet change: kept as a sync's answer is.
+              // The machine's fleet report, sent unasked as a converge ends or
+              // a reading moved with no fleet change: kept, and the fleet MCP
+              // changes its last delta carried go to the sessions there.
               if (kind === "fleet_report") {
                 const { report } = message.payload as FleetReportFrame;
                 if (isFleetReport(report)) {
-                  keepFleetReport(message.machineId, ws, report, undefined);
+                  const riding = fleetMcpRiding.get(message.machineId);
+                  fleetMcpRiding.delete(message.machineId);
+                  keepFleetReport(message.machineId, ws, report, riding);
+                }
+                break;
+              }
+              // Its items as they converge (fleet-sync.ts): kept on its row.
+              if (kind === "fleet_converge") {
+                const { items } = message.payload as FleetConvergeFrame;
+                if (Array.isArray(items)) {
+                  fleetSyncs.converged(message.machineId, items);
                 }
                 break;
               }
@@ -32373,7 +32208,7 @@ export const createServer = (
                 kind === "control_result" &&
                 message.requestId !== undefined &&
                 (pendingInstalls.has(message.requestId) ||
-                  pendingFleet.has(message.requestId));
+                  fleetSyncs.has(message.requestId));
               if (kind === "scratch_worktree" && message.instanceId) {
                 const row = db.ownedInstance(
                   message.instanceId,
@@ -33795,32 +33630,16 @@ export const createServer = (
               // A sync answering, whoever asked for it: the machine's own account
               // of what it now has is the hub's to keep, and the reply still goes
               // wherever it was going.
+              // A refusal is kept too, in the machine's words, on its row.
               if (
                 message.requestId &&
                 kind === "control_result" &&
-                pendingFleet.has(message.requestId)
+                fleetSyncs.has(message.requestId)
               ) {
-                pendingFleet.delete(message.requestId);
-                const synced = fleetSyncsOut.delete(message.requestId);
-                const riding = fleetMcpRiding.get(message.requestId);
-                fleetMcpRiding.delete(message.requestId);
-                const peeked = peekFleetReport(message.payload);
-                const answer = message.payload as ControlResult;
-                if (synced && !answer.ok) {
-                  // The machine refused the sync, or failed applying it: it
-                  // has no fleet from it, and its row says why.
-                  noteFleetSyncFault(
-                    message.machineId,
-                    `Its fleet sync was not applied there: ${answer.error ?? "its agent gave no reason"}`
-                  );
-                }
-                if (peeked) {
-                  // Landed: the row says the report, and no fault it had.
-                  if (synced) {
-                    fleetSyncFaults.delete(message.machineId);
-                  }
-                  keepFleetReport(message.machineId, ws, peeked, riding);
-                }
+                fleetSyncs.answered(
+                  message.requestId,
+                  message.payload as ControlResult
+                );
               }
               // A control a route is waiting on: the reply is that request's
               // answer and nobody else's news.
@@ -33998,14 +33817,7 @@ export const createServer = (
               pendingInstalls.delete(requestId);
             }
           }
-          for (const [requestId, syncing] of pendingFleet) {
-            if (syncing === machineId) {
-              pendingFleet.delete(requestId);
-              fleetSyncsOut.delete(requestId);
-            }
-          }
-          // Its next register sends a sync of its own, which says again.
-          fleetSyncFaults.delete(machineId);
+          fleetSyncs.gone(machineId);
           db.markAgentOffline(machineId);
           // Its update state was true of a connection that has just ended.
           binaryUpdateStates.delete(machineId);

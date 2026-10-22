@@ -629,9 +629,13 @@ await Bun.write(
 
 // ── The machine's first fleet sync ──────────────────────────────────────
 // A fleet with nothing in it, converged by the agent's own sync before any
-// spawn: it writes the sidecar a spawn reads the fleet's denials from
-// (denied-tools.ts `resolvedFleetDenials`), so no spawn waits for a hub
-// this probe does not run.
+// spawn: its denials written first, as a sync's are as it arrives
+// (denied-tools.ts `applyFleetDenials`), into the sidecar a spawn reads them
+// from (`resolvedFleetDenials`), so no spawn waits for a hub this probe does
+// not run.
+const { applyFleetDenials } =
+  await import("../packages/agent/src/denied-tools");
+await applyFleetDenials([]);
 const { syncFleetConfig } = await import("../packages/agent/src/fleet");
 await syncFleetConfig({
   deniedTools: [],
