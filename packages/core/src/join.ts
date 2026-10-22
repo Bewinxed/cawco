@@ -44,11 +44,6 @@ export interface JoinAddress {
 export interface JoinInfo {
   /** Tailscale first, then every non-internal IPv4 the hub's machine has. */
   addresses: JoinAddress[];
-  /**
-   * Whether this hub can give out an installer: only a build carrying the
-   * release-signing key can (core release-key.ts).
-   */
-  canInstall: boolean;
   hubHostname: string;
   /** The public key the hub's SSH adds sign in with, or null when it has none. */
   sshPublicKey: string | null;

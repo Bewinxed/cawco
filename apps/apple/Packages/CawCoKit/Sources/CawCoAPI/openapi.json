@@ -44625,10 +44625,6 @@
               "$ref": "#/components/schemas/JoinAddress"
             }
           },
-          "canInstall": {
-            "description": "Whether this hub can give out an installer: only a build carrying the\nrelease-signing key can (core release-key.ts).",
-            "type": "boolean"
-          },
           "hubHostname": {
             "type": "string"
           },
@@ -44642,7 +44638,6 @@
         },
         "required": [
           "addresses",
-          "canInstall",
           "hubHostname",
           "sshPublicKey"
         ]

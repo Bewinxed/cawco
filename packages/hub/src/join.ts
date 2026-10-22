@@ -700,7 +700,6 @@ export const joinRoutes = ({
       addresses: await joinAddresses(),
       sshPublicKey: sshPublicKey(),
       hubHostname: hostname(),
-      canInstall: Boolean(RELEASE_PUBLIC_KEY),
     }))
     .get("/api/installs", () => installs.read())
     .put(

@@ -23,6 +23,7 @@
     machineHue,
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { tickingClock } from "../motion/clock.svelte";
   import { connect, phone } from "./installs.svelte";
   import StepMark from "./StepMark.svelte";
@@ -61,25 +62,30 @@
   );
 
   /** The second line's words, and whether they read stuck. */
-  const line = $derived.by(() => {
+  /** The step it is on, or how it ended: words that morph as they change (The Steady Swap Rule). */
+  const words = $derived.by(() => {
     if (install.state !== "running") {
       return causeLine(install);
     }
     if (!current) {
       return "Starting";
     }
-    const step =
-      install.route === "ssh" &&
+    return install.route === "ssh" &&
       ["fetch", "install", "agent"].includes(current.step)
-        ? `Installing · ${current.words}`
-        : current.words;
-    if (current.limit !== null) {
-      return past
-        ? `${step} · ${clockOf(elapsed)} of ${clockOf(current.limit)} · Past its limit`
-        : `${step} · ${clockOf(elapsed)}`;
-    }
-    return `${step} · ${clockOf(elapsed)}`;
+      ? `Installing · ${current.words}`
+      : current.words;
   });
+  /** How long it has been on that step, against its limit where it has one: a clock, never morphed. */
+  const time = $derived.by(() => {
+    if (!(install.state === "running" && current)) {
+      return "";
+    }
+    if (current.limit !== null && past) {
+      return ` · ${clockOf(elapsed)} of ${clockOf(current.limit)} · Past its limit`;
+    }
+    return ` · ${clockOf(elapsed)}`;
+  });
+  const line = $derived(`${words}${time}`);
 
   const lead = $derived.by(() => {
     switch (install.state) {
@@ -169,8 +175,10 @@
       ]}
     >
       <StepMark state={lead} size="sm" />
-      <span class="num min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-        >{line}</span
+      <span class="flex min-w-0 whitespace-nowrap" data-box
+        ><span class="min-w-0 overflow-clip text-ellipsis"
+          ><MorphText text={words} /></span
+        ><span class="num flex-none">{time}</span></span
       >
     </span>
   </span>
