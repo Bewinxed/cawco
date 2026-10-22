@@ -32,10 +32,16 @@
  *     its row stays with no session, and the graph draws its card picked.
  * (f) A later session's create of the page's name in the project is a
  *     revision of that page: the same artifact, its picks kept.
+ * (h) In WebKit, on the project's decision graph (the built dashboard), a
+ *     card new to the graph fades up by one animation on itself
+ *     (DecisionNode, motion `appearOnMount`) over --dur-fade: never by a
+ *     `@starting-style` transition, which WebKit sometimes skips for an
+ *     element just added (bugs.webkit.org 275184). Every run the page makes
+ *     is recorded as it is made, from before its own scripts.
  */
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -100,6 +106,83 @@ const cardHead = (page: Page, id: string) =>
     };
   }, id);
 
+declare global {
+  interface Window {
+    /** Every run the page made, as it made it (`recordRuns`). */
+    probeRuns?: {
+      duration: number;
+      kind: string;
+      target: Element | null;
+    }[];
+  }
+}
+
+/**
+ * Before the page's own scripts: every run it makes, as it makes it. A Web
+ * Animation as `Element.animate` makes it; a CSS transition or animation as
+ * its `transitionrun` / `animationstart` says.
+ */
+function recordRuns(): void {
+  const runs: NonNullable<Window["probeRuns"]> = [];
+  window.probeRuns = runs;
+  const seen = new WeakSet<Animation>();
+  const keep = (one: Animation) => {
+    if (seen.has(one)) {
+      return;
+    }
+    seen.add(one);
+    runs.push({
+      kind: one.constructor.name,
+      duration: Number(one.effect?.getTiming().duration ?? 0),
+      target: (one.effect as KeyframeEffect | null)?.target ?? null,
+    });
+  };
+  const made = Element.prototype.animate;
+  Element.prototype.animate = function animate(
+    this: Element,
+    ...args: Parameters<Element["animate"]>
+  ) {
+    const animation = made.apply(this, args);
+    keep(animation);
+    return animation;
+  };
+  const started = (event: Event) => {
+    const at = event.target instanceof Element ? event.target : null;
+    for (const animation of at?.getAnimations() ?? []) {
+      keep(animation);
+    }
+  };
+  for (const type of ["transitionrun", "animationstart"]) {
+    addEventListener(type, started, true);
+  }
+}
+
+/** Each card the graph drew, and the runs on it and on Svelte Flow's node box round it. */
+function cardRuns(): {
+  card: string;
+  runs: { kind: string; duration: number; on: string }[];
+}[] {
+  const runs = window.probeRuns ?? [];
+  return [...document.querySelectorAll("[data-slot=decision-node]")].map(
+    (card) => {
+      const box = card.closest(".svelte-flow__node");
+      return {
+        card: card.querySelector("[data-slot=name]")?.textContent?.trim() ?? "",
+        runs: runs
+          .filter(
+            (one) =>
+              one.duration > 0 && (one.target === card || one.target === box)
+          )
+          .map((one) => ({
+            kind: one.kind,
+            duration: one.duration,
+            on: one.target === card ? "card" : "node box",
+          })),
+      };
+    }
+  );
+}
+
 interface Broken {
   after?: Record<string, string[]>;
   options?: Record<string, string[]>;
@@ -116,6 +199,52 @@ interface GraphRead {
 interface Read {
   program?: string;
   state: Record<string, { options: string[] }>;
+}
+
+/**
+ * (h) On the project's graph, in WebKit: each card new to it fades up by
+ * one animation on itself, over --dur-fade, never a @starting-style
+ * transition.
+ */
+async function graphEntrances(
+  kit: Kit,
+  fleet: KitFleet,
+  projectId: string
+): Promise<void> {
+  const dashboard = await fleet.dashboard();
+  const graphTab = await kit.page("desk", { engine: "webkit", theme: "light" });
+  await graphTab.addInitScript(recordRuns);
+  await graphTab.goto(
+    `${dashboard}/project/${projectId}?view=decisions&mode=graph`
+  );
+  await graphTab.waitForSelector(
+    "[data-slot=decision-graph] [data-slot=decision-node]",
+    { timeout: 30_000 }
+  );
+  await graphTab.waitForTimeout(600);
+  const fade = await graphTab.evaluate(() => {
+    const said = getComputedStyle(document.documentElement)
+      .getPropertyValue("--dur-fade")
+      .trim();
+    const n = Number.parseFloat(said);
+    return said.endsWith("ms") ? n : n * 1000;
+  });
+  const cards = await graphTab.evaluate(cardRuns);
+  const wrong = cards.filter(
+    ({ runs }) =>
+      !(
+        runs.length === 1 &&
+        runs[0]?.on === "card" &&
+        runs[0]?.kind !== "CSSTransition" &&
+        Math.abs((runs[0]?.duration ?? 0) - fade) < 1
+      )
+  );
+  kit.check(
+    `(h) in WebKit, each card new to the graph fades up by one animation on itself over --dur-fade (${fade}ms), never a @starting-style transition`,
+    cards.length > 0 && wrong.length === 0,
+    JSON.stringify(wrong.length ? wrong : cards).slice(0, 600)
+  );
+  await graphTab.close();
 }
 
 const run = async (kit: Kit) => {
@@ -309,6 +438,8 @@ const run = async (kit: Kit) => {
     JSON.stringify({ ...pickedHead, decidedLine })
   );
   await tab.close();
+
+  await graphEntrances(kit, fleet, projectId);
 
   const folderFile = (path: string) =>
     fleet

@@ -303,6 +303,30 @@ export function appear(_node: Element) {
 }
 
 /**
+ * `appear` for an element a library mounts in its own blocks (a Svelte Flow
+ * node, the decision graph's and the Canvas view's cards): attached, it
+ * fades the element in as it mounts, one Web Animation on the element
+ * itself. Never by `@starting-style`, which WebKit sometimes skips for an
+ * element just added (bugs.webkit.org 275184, comment 8). With reduced
+ * motion it stands at once, as the stylesheet's fade it replaces did.
+ * `when` says whether this mount is an arrival (the Canvas view's first
+ * layout is drawn in place).
+ */
+export function appearOnMount(
+  when: (node: HTMLElement) => boolean = () => true
+): (node: HTMLElement) => void {
+  return (node) => {
+    if (!(motionOk.current && when(node))) {
+      return;
+    }
+    node.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: dur("--dur-fade"),
+      easing: CURVE.out,
+    });
+  };
+}
+
+/**
  * A floating tag coming and going over the transcript's foot ("Jump to
  * latest", the catch-up): it rises 8px and grows from .96 as it fades in,
  * and sinks back out. `token` is its duration: --dur-panel in, --dur-exit

@@ -6,12 +6,15 @@
    * it, and its place is saved to its page's artifact on release.
    */
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
+  import { appearOnMount } from "../../motion/curves.svelte";
 
   let { data }: NodeProps = $props();
   const node = $derived(data as { name: string; picked: boolean });
 </script>
 
+<!-- A card new to the graph fades up where it lands (`appearOnMount`). -->
 <div
+  {@attach appearOnMount()}
   data-slot="decision-node"
   class="group flex w-c-decision-node-w min-h-c-decision-node-h cursor-grab items-center gap-space-2 rounded-lg bg-surface-raised px-space-3 py-space-2 shadow-tile"
   data-picked={node.picked || undefined}
