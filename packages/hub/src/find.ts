@@ -24,6 +24,9 @@
  */
 import {
   type AgentRow,
+  type ArtifactNeedNoticePart,
+  type ArtifactNeedsRead,
+  artifactWords,
   FIND_KINDS,
   type FindAnswer,
   type FindConversation,
@@ -38,6 +41,8 @@ import {
   type MomentAuthor,
   machineLabel,
   type NeutralSessionInfo,
+  noticePartWords,
+  reasonLine,
   type StageKind,
   type ThreadSummary,
   type TranscriptAnswer,
@@ -114,11 +119,10 @@ const PAGES_KEPT = 16;
 const THREAD_MOMENTS = 3;
 
 /**
- * How far back the waiting list looks: what was made, revised, reported or
- * moved to a stage of yours in this many days. Nothing recorded which
- * revision of an artifact you had on screen before `opened_revision` did,
- * so an older artifact can't be told apart from one you looked at; the
- * answer says the window.
+ * How far back the waiting list looks for reports and tasks: what was
+ * reported or moved to a stage of yours in this many days; the answer says
+ * the window. Artifacts are Needs you's, whatever their age: they leave by
+ * its rules (artifacts/needs.ts).
  */
 export const WAITING_DAYS = 14;
 
@@ -232,6 +236,12 @@ export const cursorAt = (offset: number): string =>
   Buffer.from(String(offset), "utf8").toString("base64url");
 
 export interface FindDeps {
+  /**
+   * Needs you's artifacts and their notices (artifacts/needs.ts): what waits
+   * on the person's eyes among the artifacts, by the one rule Needs you
+   * lists them by.
+   */
+  artifactNeeds: () => ArtifactNeedsRead;
   /** One machine's transcript answer, or why it gave none. */
   askMachine: (
     machineId: string,
@@ -1290,11 +1300,6 @@ export const createFind = (deps: FindDeps) => {
       const now = Date.now();
       const from = now - WAITING_DAYS * 24 * 3_600_000;
       const held = namesNow(now);
-      // What the person has seen is read as it stands, not as the names
-      // held it: a look or a `shown` ack a moment ago counts at once.
-      const artifactRows = new Map(
-        db.find.artifacts().map((row) => [row.id, row])
-      );
       const lookedAt = db.find.lookedAt();
       const titleOf = (id: string) => {
         const row = held.conversations.get(id)?.row;
@@ -1302,7 +1307,7 @@ export const createFind = (deps: FindDeps) => {
       };
       const waitingTasks = await deps.tasksWaiting();
       const items: WaitingItem[] = [
-        ...artifactsWaiting(held, artifactRows, from, titleOf),
+        ...artifactsWaiting(held, deps.artifactNeeds(), titleOf),
         ...reportsWaiting(db.find.workItems(), held, lookedAt, from, titleOf),
         ...waitingTasks.tasks
           .filter((task) => task.since >= from)
@@ -1337,44 +1342,73 @@ type TitleOf = (id: string) => { id: string; title: string } | null;
  * person looked (`artifacts.opened_revision`), or with picks to make, made or
  * revised since `from`.
  */
+/** A notice's part as Jump's row says it beside its name. */
+const partWhy = (part: ArtifactNeedNoticePart, name: string): string => {
+  switch (part.kind) {
+    case "changed":
+      return artifactWords.changedCount(part.count);
+    case "closed":
+      return artifactWords.newAnswers(part.count);
+    case "ended":
+      return noticePartWords(part, name);
+    default: {
+      const unhandled: never = part;
+      throw new Error(`unhandled notice: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
 const artifactsWaiting = (
   held: Names,
-  rows: Map<string, { openedRevision: number | null; revision: number }>,
-  from: number,
+  lane: ArtifactNeedsRead,
   titleOf: TitleOf
-): WaitingItem[] =>
-  held.entries.flatMap((entry): WaitingItem[] => {
-    const { result } = entry;
-    if (result.kind !== "artifact" && result.kind !== "decision") {
-      return [];
-    }
-    const row = rows.get(result.id);
-    if (!row || (result.lastActivity ?? 0) < from) {
-      return [];
-    }
-    const opened = row.openedRevision;
-    const unopened = opened === null || opened < row.revision;
-    if (!(unopened || result.picksToMake)) {
-      return [];
-    }
-    let why = "picks to make";
-    if (unopened) {
-      why = opened === null ? "unseen" : "new revision";
-    }
-    return [
-      {
-        kind: result.kind,
-        artifactKind: result.artifactKind,
-        id: result.id,
-        title: result.title,
-        project: result.project,
-        conversation: titleOf(result.conversation.id),
-        revision: row.revision,
-        since: result.lastActivity ?? Date.now(),
-        why,
-      },
-    ];
-  });
+): WaitingItem[] => {
+  const found = new Map(
+    held.entries.flatMap(({ result }) =>
+      result.kind === "artifact" || result.kind === "decision"
+        ? [[result.id, result] as const]
+        : []
+    )
+  );
+  /** One of them as Jump names it: the find engine's own result, else the lane's words. */
+  const named = (
+    id: string,
+    instanceId: string | null,
+    name: string
+  ): Omit<WaitingItem, "since" | "why"> => {
+    const result = found.get(id);
+    return result
+      ? {
+          kind: result.kind,
+          artifactKind: result.artifactKind,
+          id,
+          title: result.title,
+          project: result.project,
+          conversation: titleOf(result.conversation.id),
+        }
+      : {
+          kind: "artifact",
+          id,
+          title: name,
+          project: null,
+          conversation: instanceId ? titleOf(instanceId) : null,
+        };
+  };
+  return [
+    ...lane.needs.map((need): WaitingItem => ({
+      ...named(need.artifactId, need.instanceId, need.name),
+      artifactKind: need.artifactKind,
+      since: need.raisedAt,
+      why: reasonLine(need.pending),
+    })),
+    ...lane.notices.map((notice): WaitingItem => ({
+      ...named(notice.artifactId, notice.instanceId, notice.name),
+      artifactKind: notice.artifactKind,
+      since: notice.at,
+      why: notice.parts.map((part) => partWhy(part, notice.name)).join(" · "),
+    })),
+  ];
+};
 
 /**
  * Reports to one of the person's own sessions they have not looked at

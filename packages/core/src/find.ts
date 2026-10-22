@@ -325,7 +325,7 @@ export interface WaitingItem {
   /** When it began waiting, ms epoch: made, revised, reported, moved to its stage. */
   since: number;
   title: string;
-  /** Why it waits, in a few words: "unseen", "new revision", "picks to make", "unread", the stage. */
+  /** Why it waits, in a few words: an artifact's Needs-you line ("3 of 9 picked · 2 unsent") or its notice's, "unread", the stage. */
   why: string;
 }
 

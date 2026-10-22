@@ -125,13 +125,17 @@ export interface ArtifactPending {
 export const notNowId = (id: string, raisedAt: number): string =>
   `artifact-not-now:${id}:${raisedAt}`;
 
-/** The address that opens session `instanceId` with artifact `id` in its panel at `stop`. */
+/**
+ * The address that opens artifact `id` in its panel at `stop`, in `view`:
+ * the session that holds it, or for one a project's Caw made, the thread
+ * his turn answered (`thread:<id>`), which shows his panel.
+ */
 export const artifactStopHref = (
-  instanceId: string,
+  view: string,
   id: string,
   stop: ArtifactStop
 ): string => {
-  const base = `/session/${encodeURIComponent(instanceId)}?artifact=${encodeURIComponent(id)}`;
+  const base = `/session/${encodeURIComponent(view)}?artifact=${encodeURIComponent(id)}`;
   if ("pin" in stop) {
     return `${base}&stop=pin:${stop.pin}`;
   }

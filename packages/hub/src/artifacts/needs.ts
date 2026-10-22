@@ -11,8 +11,10 @@
  * picks, notes, pins and ink written and not sent; an agent's answer on an
  * open pin newer than the person's look at it (core comments.ts
  * `newAnswer`). Never: a `try` preview, a `draw` canvas with nothing
- * pinned, a draft, and anything whose move is the session's (sent picks it
- * hasn't read, a canvas's changes, one handed up and not opened).
+ * pinned, a draft, and one the person can't act on yet: handed up to a
+ * parent that hasn't opened it, or a maker's change held for it. Picks sent
+ * that the session hasn't read yet are its move, and ask nothing more of
+ * the person; what is still unpicked is still theirs (rule 1).
  *
  * How it leaves, by rule:
  * 1. Answered: its reasons go as they are answered, a partial answer
@@ -57,6 +59,8 @@ export interface ArtifactAsked {
   by: string;
   movedAt?: string;
   step?: string;
+  /** The Caw thread a lead's turn answered as it asked: where its item opens, his panel beside it. */
+  thread?: string;
 }
 
 /** What an artifact's doc and row say, read once per change of either. */
@@ -75,6 +79,8 @@ export interface ArtifactFacts {
   firstUnpicked: string | null;
   /** The first pin, by number, that holds something not sent. */
   firstUnsentPin: number | null;
+  /** Handed up to a parent session that hasn't opened it, or a maker's change held for it: not the person's yet. */
+  handed: boolean;
   /** When the person last had it on screen (a view's word), ISO. */
   lookedAt: string | null;
   picks: { asked: number; made: number } | null;
@@ -82,8 +88,6 @@ export interface ArtifactFacts {
   pins: number;
   /** When its session last published or changed it (`meta.revisedAt`), ISO. */
   revisedAt: string | null;
-  /** The session's move: sent picks unread, a canvas's changes unread, handed up and not opened. */
-  sessionOwes: boolean;
   /** What Send sends now: picks and notes since the last Send, pins with anything unsent, loose ink. */
   unsent: number;
 }
@@ -109,7 +113,7 @@ const ms = (iso: string | null | undefined): number => {
 const asks = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   !(
     facts.draft ||
-    facts.sessionOwes ||
+    facts.handed ||
     row.heldFor !== null ||
     row.does === "try" ||
     (row.does === "draw" && facts.pins === 0)
@@ -202,6 +206,12 @@ export const stopOf = (
   }
 };
 
+/** Where its item opens: the thread a lead asked in, else the session that holds it. */
+const viewOf = (row: ArtifactRow, facts: ArtifactFacts): string =>
+  facts.asked?.thread && facts.asked.by === row.instanceId
+    ? `thread:${facts.asked.thread}`
+    : (row.instanceId as string);
+
 /** Its pending state as its own list reads it (Files, the panel's menu): null when it asks nothing now. */
 export const pendingOf = (
   row: ArtifactRow,
@@ -242,7 +252,7 @@ export const needOf = (
     pending,
     raisedAt,
     stop,
-    href: artifactStopHref(row.instanceId, row.id, stop),
+    href: artifactStopHref(viewOf(row, facts), row.id, stop),
     notNow: notNowId(row.id, raisedAt),
     unsent: facts.unsent,
   };
@@ -318,6 +328,6 @@ export const noticeOf = (
     href:
       row.instanceId === null
         ? null
-        : artifactStopHref(row.instanceId, row.id, stop),
+        : artifactStopHref(viewOf(row, facts), row.id, stop),
   };
 };

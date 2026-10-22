@@ -23,7 +23,8 @@
  * - the writer moved on: artifact_create of a pick page makes the session's
  *   current step wait on it (its plan's `waitsOn`); ticking that step takes
  *   it out. One made with no step in progress stands past its own turn's
- *   end, and leaves when the session's next turn ends.
+ *   end, and leaves when the session's next turn ends: on Claude Code,
+ *   OpenCode and pi alike, each calling the tool its own way.
  * - superseded: a same-name create revises it: one item, same id, its line
  *   in place.
  * - session ended: its conversation gone, it leaves Needs you and is one
@@ -38,9 +39,10 @@
  *   arcs, artifacts among them.
  * - A session's Files card of a waiting artifact wears the needs-you dot
  *   centred on its picture's top-right corner, its reason on its meta line.
- * - The push of a turn that left an artifact waiting: `artifact-<id>`, the
- *   ask its sealed body, `cawco.kind` artifact, `CAWCO_TURN_OPEN`; a look at
- *   the artifact clears it.
+ * - The push of a turn that left an artifact waiting, on each harness:
+ *   `artifact-<id>` in the turn push's place, the ask its sealed body,
+ *   `cawco.kind` artifact, `CAWCO_TASK_OPEN` (Open only); a look at the
+ *   artifact clears it.
  * - The artifact row's boxes at 390, 680 and 1440, in Chromium and WebKit,
  *   with one item and with many, a 40-word ask among them: nothing spills
  *   the list sideways, its lines stand in order inside the row, and its ✕
@@ -58,8 +60,17 @@ import {
   noticePartWords,
   reasonLine,
 } from "../../../packages/core/src/artifact-needs";
-import type { Envelope } from "../../../packages/core/src/index";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  CLAUDE_CONVERSATION_GONE,
+  type Envelope,
+} from "../../../packages/core/src/index";
+import {
+  HARNESSES,
+  type Harness,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import {
   type Engine,
   type Kit,
@@ -72,11 +83,12 @@ import {
   type View,
 } from "../kit";
 
-const CREATE = "mcp__cawco__artifact_create";
-const TODO = "mcp__cawco__todo_write";
+/** CawCo's tools by their own names: each harness offers them its way ({@link callTool}). */
+const CREATE = "artifact_create";
+const TODO = "todo_write";
+/** OpenCode's code mode: its one tool runs code that calls the MCP servers' tools. */
+const CODE_MODE = "execute";
 const COMMAND = /PROBE-CALL:(\d+)/g;
-/** The id in artifact_create's answer, as the tool result carries it. */
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
 /** The bar's Files item, by its name ("Files, 20"). */
@@ -129,20 +141,44 @@ const issued = new Set<string>();
 const answered = new Map<string, string>();
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
-/** Calls `name` with `input`, loading it through ToolSearch first when it is deferred. */
-const callTool = (request: Seen, name: string, input: object): Reply => {
-  if (request.toolNames.includes(name)) {
-    return { everyMs: 5, words: [], tool: { name, input } };
+/**
+ * Calls CawCo's tool `name` with `input` as the harness offers it: Claude
+ * Code's `mcp__cawco__<name>` (found through ToolSearch first when it is
+ * deferred), pi's own name for it, OpenCode's code mode. Answers the reply
+ * and whether it is the call itself.
+ */
+const callTool = (
+  request: Seen,
+  name: string,
+  input: object
+): { called: boolean; reply: Reply } => {
+  const call = (tool: string, args: object) => ({
+    called: true,
+    reply: { everyMs: 5, words: [], tool: { name: tool, input: args } },
+  });
+  const named = [`mcp__cawco__${name}`, `cawco_${name}`, name].find((one) =>
+    request.toolNames.includes(one)
+  );
+  if (named) {
+    return call(named, input);
+  }
+  if (request.toolNames.includes(CODE_MODE)) {
+    return call(CODE_MODE, {
+      code: `return await tools.cawco.${name}(${JSON.stringify(input)});`,
+    });
   }
   if (!request.toolNames.includes("ToolSearch")) {
-    return text(`${name} is not offered`);
+    return { called: false, reply: text(`${name} is not offered`) };
   }
   return {
-    everyMs: 5,
-    words: [],
-    tool: {
-      name: "ToolSearch",
-      input: { query: `select:${name}`, max_results: 1 },
+    called: false,
+    reply: {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:mcp__cawco__${name}`, max_results: 1 },
+      },
     },
   };
 };
@@ -162,12 +198,30 @@ const respond = (request: Seen): Reply => {
     }
     return text("done");
   }
-  const reply = callTool(request, ask.name, ask.input);
-  if (reply.tool?.name === ask.name) {
+  const { called, reply } = callTool(request, ask.name, ask.input);
+  if (called) {
     issued.add(marker);
   }
   return reply;
 };
+
+/** The session's artifact of `name`, as its list on the hub names it: what a tool call made. */
+const madeNamed = async (
+  fleet: KitFleet,
+  session: string,
+  name: string
+): Promise<string> =>
+  (
+    (await until(
+      `${name} on the hub`,
+      () =>
+        fleet.api<{ id: string; name: string }[]>(
+          `/api/instances/${session}/artifacts`
+        ),
+      (list) => list.some((one) => one.name === name),
+      30_000
+    ).catch(() => [])) as { id: string; name: string }[]
+  ).find((one) => one.name === name)?.id ?? "";
 
 /* ── The stand-in phone: every push Cawrier is handed, opened with its key ── */
 
@@ -394,19 +448,9 @@ const picks = async (at: At, session: string) => {
     `${unsent}; unsent ${need?.unsent}`
   );
   await pressIn(frame, "[data-dp-send]");
-  // The session reads what was sent (artifact_read): the move is the person's again.
-  await until(
-    "the Send on the hub",
-    () =>
-      fleet.api<{ sentAt: string | null }>(
-        `/api/instances/${session}/artifacts/${id}`
-      ),
-    (read) => !!read.sentAt,
-    15_000
-  ).catch(() => undefined);
   const partial = await lineIs(fleet, id, "1 of 3 picked");
   kit.check(
-    "rule 1, answered in part: once the Send is read, the picks not made stand ('1 of 3 picked'), the unsent reason gone",
+    "rule 1, answered in part: the Send takes the unsent reason, the picks not made stand ('1 of 3 picked')",
     partial === "1 of 3 picked",
     String(partial)
   );
@@ -559,14 +603,14 @@ const movedOn = async (at: At, session: string) => {
       },
     ],
   });
-  const made = await call(session, CREATE, {
+  await call(session, CREATE, {
     kind: "page",
     does: "pick",
     ask: "Pick the head for the phone project page",
     name: "phone-head",
     html: kitPage("The phone page's head", ["head", "size"]),
   });
-  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const id = await madeNamed(fleet, session, "phone-head");
   const plan = await fleet.api<{
     steps: { id: string; waitsOn?: { artifactId: string; card?: string } }[];
   }>(`/api/instances/${session}/plan`);
@@ -593,14 +637,14 @@ const movedOn = async (at: At, session: string) => {
     String(ticked)
   );
   const calledAt = Date.now();
-  const next = await call(session, CREATE, {
+  await call(session, CREATE, {
     kind: "page",
     does: "pick",
     ask: "Pick the color for the home tile",
     name: "tile-color",
     html: kitPage("The home tile's color", ["color"]),
   });
-  const nextId = next.match(ANSWERED_ID)?.[1] ?? "";
+  const nextId = await madeNamed(fleet, session, "tile-color");
   // Its own turn ends (the call answered, the mock's last words after it): it stands.
   await until(
     "the asking turn's end",
@@ -685,7 +729,8 @@ const ended = async (at: At, session: string) => {
   await page.close();
   // Its conversation gone, as the hub records Claude Code's refusal to resume it.
   fleet.write(
-    "UPDATE instances SET last_error_kind = 'conversation-gone' WHERE id = ?",
+    "UPDATE instances SET last_error = ?, last_error_kind = 'conversation-gone' WHERE id = ?",
+    CLAUDE_CONVERSATION_GONE,
     session
   );
   const left = await lineIs(fleet, id, null);
@@ -702,57 +747,100 @@ const ended = async (at: At, session: string) => {
   );
 };
 
-/** The push of a turn that left an artifact waiting, and its clear by a look. */
-const pushed = async (
+/** How long the push's burst stays open after an arrival, and a little more: a leg's push goes as itself. */
+const BURST_QUIET_MS = 35_000;
+
+/**
+ * On one harness: a turn that makes a pick page leaves it standing past its
+ * own end, and pushes it (`artifact-<id>`, its ask sealed, `cawco.kind`
+ * artifact, Open only) in that turn's push's place; on Claude Code a look at
+ * it clears the push. The session's next turn ending, with no step waiting
+ * on it, takes it out of Needs you (rule 2).
+ */
+const onHarness = async (
   at: At,
-  session: string,
+  harness: Harness,
   phone: ReturnType<typeof standInPhone>
-): Promise<string> => {
+): Promise<void> => {
   const { fleet, kit, call } = at;
-  const ask = "Pick the head for the phone project page";
-  const made = await call(session, CREATE, {
+  const session = await fleet.spawn(
+    harness,
+    `Asking on ${harness}`,
+    fleet.repo
+  );
+  const name = `head-${harness}`;
+  const ask = `Pick the head for the ${harness} page`;
+  // Nothing else of the fleet's in the push's burst: it goes as itself.
+  await Bun.sleep(BURST_QUIET_MS);
+  const calledAt = Date.now();
+  await call(session, CREATE, {
     kind: "page",
     does: "pick",
     ask,
-    name: "push-head",
-    html: kitPage("The head", ["head"]),
+    name,
+    html: kitPage(`The ${harness} head`, ["head"]),
   });
-  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const id = await madeNamed(fleet, session, name);
+  await until(
+    `the ${harness} asking turn's end`,
+    () => turnEndedAt(fleet, session),
+    (end) => end > calledAt,
+    60_000
+  ).catch(() => 0);
+  const stands = await lineIs(fleet, id, "New · not opened · 0 of 1 picked");
   const push = await until(
-    "the artifact's push",
+    `the ${harness} artifact's push`,
     () => phone.pushed.find((one) => one.collapseId === `artifact-${id}`),
     Boolean,
     PUSH_MS
   ).catch(() => undefined);
   const sealed = push?.payload.e ? await phone.open(push.payload.e) : null;
   kit.check(
-    "push: the turn that left it waiting pushed under artifact-<id>, its sealed body the ask, cawco.kind artifact, category CAWCO_TURN_OPEN (Open only)",
+    `${harness}: the turn that made it ended and it stands ('New · not opened · 0 of 1 picked')`,
+    stands === "New · not opened · 0 of 1 picked",
+    String(stands)
+  );
+  kit.check(
+    `${harness} push: the turn that left it waiting pushed under artifact-<id> in its turn push's place, its sealed body the ask, cawco.kind artifact, CAWCO_TASK_OPEN (Open only)`,
     !!push &&
       sealed?.body === ask &&
       push.payload.cawco?.kind === "artifact" &&
       push.payload.cawco.artifactId === id &&
-      push.payload.aps?.category === "CAWCO_TURN_OPEN" &&
+      push.payload.cawco.instanceId === session &&
+      push.payload.aps?.category === "CAWCO_TASK_OPEN" &&
       !phone.pushed.some((one) => one.collapseId === `turn-${session}`),
     JSON.stringify({
       push: push?.payload.cawco,
+      collapseIds: phone.pushed.map((one) => one.collapseId),
       category: push?.payload.aps?.category,
       sealed,
     })
   );
-  const page = await ownTab(at, id);
-  const cleared = await until(
-    "the push cleared by a look",
-    () => fleet.logs("hub"),
-    (logs) => logs.includes(`cleared (look): artifact-${id}`),
-    LANE_MS
-  ).catch(() => "");
+  let expected = "New · not opened · 0 of 1 picked";
+  if (harness === "claude") {
+    const page = await ownTab(at, id);
+    const cleared = await until(
+      "the push cleared by a look",
+      () => fleet.logs("hub"),
+      (logs) => logs.includes(`cleared (look): artifact-${id}`),
+      LANE_MS
+    ).catch(() => "");
+    kit.check(
+      "push: a look at the artifact clears it",
+      cleared.includes(`cleared (look): artifact-${id}`),
+      "no `cleared (look)` line for it in the hub's log"
+    );
+    await page.close();
+    expected = "0 of 1 picked";
+  }
+  const before = await lineOf(fleet, id);
+  await fleet.send(session, "PROBE-NEXT go on with something else");
+  const turned = await lineIs(fleet, id, null, 120_000);
   kit.check(
-    "push: a look at the artifact clears it",
-    cleared.includes(`cleared (look): artifact-${id}`),
-    "no `cleared (look)` line for it in the hub's log"
+    `${harness}, rule 2, the writer moved on: with no step waiting on it, it leaves Needs you once the session's next turn ends`,
+    before === expected && turned === null,
+    `before the next turn: ${before}; after it: ${turned}`
   );
-  await page.close();
-  return id;
 };
 
 /* ── The dashboard: the count and arcs, Files' dot, the row's boxes ─────── */
@@ -1011,8 +1099,10 @@ const run = async (kit: Kit) => {
   const presence = await supersededAndNotNow(at, parking);
   const ending = await fleet.spawn("claude", "Ending", fleet.repo);
   await ended(at, ending);
-  const pushing = await fleet.spawn("claude", "Pushing", fleet.repo);
-  await pushed(at, pushing, phone);
+  for (const harness of HARNESSES) {
+    // biome-ignore lint/performance/noAwaitInLoops: one harness at a time, each push out before the next
+    await onHarness(at, harness, phone);
+  }
   await filesDot(at, parking, presence);
   // Many items, a 40-word ask among them.
   const many = await fleet.spawn("claude", "Many asks", fleet.repo);

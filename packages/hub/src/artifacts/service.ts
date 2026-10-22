@@ -1122,6 +1122,8 @@ export type PageFrom =
 export interface ArtifactServiceDeps {
   /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
   acknowledged: () => readonly string[];
+  /** The Caw thread a project's lead's turn answers now (caw.ts `askThread`); none for any other session. */
+  askThread: (instance: InstanceRow) => string | undefined;
   /**
    * Where session `instance`'s own browser opens artifact `row`, which it
    * may read (`artifact_browse`, server.ts `browseAt`): its address, behind
@@ -4610,7 +4612,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const mark = factsMark(row);
     const kept = factsKept.get(row.id);
     if (kept?.mark === mark) {
-      return heldNext ? { ...kept.facts, sessionOwes: true } : kept.facts;
+      return heldNext ? { ...kept.facts, handed: true } : kept.facts;
     }
     const doc = docs.doc(row.id);
     const meta = doc.getMap("meta");
@@ -4620,10 +4622,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       doc.getMap("pins").toJSON() as Record<string, Pin>
     ).sort((a, b) => a.number - b.number);
     const { owed, loose } = marksOwed(doc);
-    const unread = db.changes(row.id, { after: row.readSeq, by: "person" });
-    const picksAwaiting = unread.some(
-      ({ key, seq }) => key in state && seq <= row.deliveredSeq
-    );
     const answered = pins.filter((pin) => !pin.resolvedAt && newAnswer(pin));
     const facts: ArtifactFacts = {
       ...picksFacts(row, state),
@@ -4641,10 +4639,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       lookedAt: (meta.get("lookedAt") as string | undefined) ?? null,
       pins: pins.length,
       revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
-      sessionOwes:
-        meta.get(HANDED) === true ||
-        picksAwaiting ||
-        (row.kind === "canvas" && unread.length > 0),
+      handed: meta.get(HANDED) === true,
       unsent:
         Object.entries(state).filter(
           ([key, entry]) => key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
@@ -4653,7 +4648,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         loose.length,
     };
     factsKept.set(row.id, { facts, mark });
-    return heldNext ? { ...facts, sessionOwes: true } : facts;
+    return heldNext ? { ...facts, handed: true } : facts;
   };
 
   /**
@@ -4717,10 +4712,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       row.does === "pick" || row.does === "judge"
         ? deps.waitOn(writer.id, row.id)
         : null;
+    const thread = deps.askThread(writer);
     const asked: ArtifactAsked = {
       by: writer.id,
       at: new Date().toISOString(),
       ...(step ? { step } : {}),
+      ...(thread ? { thread } : {}),
     };
     docs.transact(row.id, "hub", (doc) =>
       doc.getMap("meta").set("asked", asked)

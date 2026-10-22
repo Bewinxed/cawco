@@ -421,10 +421,8 @@ export const rowOf = (
   reason: Reason = "name"
 ): Row => finish(result, result.lastActivity, drawnOf(result, reason), now);
 
+/** A report's why as its row's word; an artifact's is already its words (Needs you's line). */
 const WHY_WORD: Record<string, string> = {
-  unseen: "Unseen",
-  "new revision": "New revision",
-  "picks to make": "Picks to make",
   unread: "Unread",
   "unread, failed": "Unread, failed",
 };

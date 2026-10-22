@@ -152,8 +152,6 @@ export const PUSH_CATEGORIES = {
   permissionOpenOnly: "CAWCO_PERMISSION_OPEN",
   question: "CAWCO_QUESTION",
   turn: "CAWCO_TURN",
-  /** The turn's push for a turn that left an artifact waiting on the person: Open only. */
-  turnOpenOnly: "CAWCO_TURN_OPEN",
   task: "CAWCO_TASK",
   taskOpenOnly: "CAWCO_TASK_OPEN",
   attempt: "CAWCO_ATTEMPT",
@@ -1347,7 +1345,8 @@ export const createPush = ({
   /**
    * The turn's push when it left an artifact waiting on the person: the
    * artifact's ask as its sealed body, under the artifact's own collapse id
-   * so a revision's push replaces it, Open only. About no session for the
+   * so a revision's push replaces it, Open only (`CAWCO_TASK_OPEN`, the
+   * Open-only category every installed app registers). About no session for the
    * gate: a look at the artifact clears it (`still`), never a look at its
    * session, and its own work running does not hold it, since the artifact
    * waits on the person whatever else runs.
@@ -1374,7 +1373,8 @@ export const createPush = ({
             project,
             firstLine(left.ask) ?? NEEDS_YOU
           ),
-          category: PUSH_CATEGORIES.turnOpenOnly,
+          // Open only, the category every installed app registers so.
+          category: PUSH_CATEGORIES.taskOpenOnly,
           collapseId: artifactCollapseId(left.artifactId),
           threadId: row.projectId ?? row.id,
           data: {

@@ -59,6 +59,8 @@ export const artifactWords = {
   /** A notice: a revision with nothing asked. */
   changedSince: (name: string, count: number) =>
     `${name}: ${count} changed since you looked`,
+  /** The same where its name already stands (Jump's waiting row). */
+  changedCount: (count: number) => `${count} changed since you looked`,
   /** A notice: resolved pins whose closing answer is unread. */
   closedAnswers: (name: string, count: number, pin: number) =>
     count === 1

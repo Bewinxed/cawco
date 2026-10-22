@@ -1105,6 +1105,11 @@ public enum Words {
             "\(name): \(count) changed since you looked"
         }
 
+        /// The same where its name already stands (Jump's waiting row).
+        public static func changedCount(count: Int) -> String {
+            "\(count) changed since you looked"
+        }
+
         /// A notice: resolved pins whose closing answer is unread.
         public static func closedAnswers(name: String, count: Int, pin: Int) -> String {
             count == 1 ? "\(name): pin \(pin) resolved with an answer" : "\(name): \(count) pins resolved with answers"

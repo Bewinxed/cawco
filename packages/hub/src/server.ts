@@ -12570,6 +12570,7 @@ export const createServer = (
       );
     },
     acknowledged: () => noticesSeen.ids(),
+    askThread: (instance) => caw.askThread(instance),
     needsMoved: () => artifactLane.moved(),
     // A look at the artifact takes its push down.
     looked: (id) => {
@@ -22645,6 +22646,7 @@ export const createServer = (
           .list()
           .flatMap((ask) => (ask.instanceId ? [ask.instanceId] : []))
       ),
+    artifactNeeds: () => artifactLane.now(),
     threads: () => caw.allThreads(),
     stageKinds: async (projectId) =>
       new Map(
