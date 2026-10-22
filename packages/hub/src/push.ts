@@ -1152,7 +1152,7 @@ export const createPush = ({
       const landed = item.landedAt.getTime();
       if (landed < floor) {
         console.log(
-          `[notify] push ${id}: held at the desk, not sent: it landed ${Math.round((lastInputAt - landed) / 60_000)} min before the person stopped`
+          `[notify] push ${id}: held at the desk, not sent: it landed ${((lastInputAt - landed) / 60_000).toFixed(1)} min before the person stopped`
         );
         continue;
       }
