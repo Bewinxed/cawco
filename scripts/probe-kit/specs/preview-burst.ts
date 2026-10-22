@@ -26,11 +26,16 @@
  *    reach the front than 5.
  * 2. Each of 20 cold opens (a fresh browser context, so no cache) draws
  *    its every frame, its page reports no error, and no response is 502.
+ * 3. On the dashboard's own stage (its vite.config.ts, sheet-weight's
+ *    stage), a canvas of 40 icons from its barrel (`#lib/icons.js`), opened
+ *    cold through the same chain: every frame drawn, no failed module, and
+ *    the icons come as the one module Vite pre-bundles of `@cawco/icons`,
+ *    no `~icons/…` module asked for (each was a request of its own).
  *
  *   bun scripts/probe-kit/run.ts preview-burst
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import http2 from "node:http2";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
@@ -54,6 +59,47 @@ const BRIDGE_FILE = join(ROOT, "packages/agent/src/preview-bridge.ts");
 const BRIDGE_MODULE = /packages\/agent\/src\/preview-bridge\.ts$/;
 const STORIES = "src/Icons.stories.js";
 const WHY = new RegExp(`<meta name="${PREVIEW_WHY_META}" content="([^"]*)">`);
+
+/** The dashboard, staged as its own canvases are (sheet-weight's stage). */
+const APP = join(ROOT, "apps/dashboard");
+/** Leg 3's scratch states file, under `src/` (SvelteKit serves only that); gone when the spec ends. */
+const APP_SCRATCH = "src/lib/cawco/probe-preview-burst";
+const APP_STORIES = `${APP_SCRATCH}/Forty.stories.ts`;
+/** Leg 3's cold opens. */
+const APP_OPENS = 3;
+/** How many of the barrel's icons leg 3's canvas draws. */
+const APP_ICONS = 40;
+/** A module unplugin-icons makes on request, one per icon. */
+const ICON_MODULE = "/~icons/";
+/** The icon package as Vite's optimizer serves it, pre-bundled (`@cawco/icons` flattened), under the stage's cache dir (stage-host `CACHE_DIR`). */
+const ICONS_DEP = "/deps/@cawco_icons.js";
+
+/** Leg 3's component: {@link APP_ICONS} icons from the dashboard's barrel, as a product component imports them. */
+const FORTY = `<script lang="ts">
+  import * as icons from "#lib/icons.js";
+
+  const shown = Object.entries(icons)
+    .filter(([name]) => name.startsWith("Icon"))
+    .slice(0, ${APP_ICONS})
+    .map(([, icon]) => icon);
+</script>
+
+<div class="forty">
+  {#each shown as Icon, at (at)}<Icon />{/each}
+</div>
+
+<style>
+  .forty { display: grid; grid-template-columns: repeat(10, 16px); gap: 4px; width: 196px; }
+</style>
+`;
+
+const FORTY_STORIES = `import Forty from "./Forty.svelte";
+
+export default { title: "Probe/Forty", component: Forty, args: {} };
+
+/** Forty of the barrel's icons. */
+export const All = { args: {} };
+`;
 
 /** Headers no HTTP/2 answer carries (RFC 9113 §8.2.2). */
 const CONNECTION_HEADERS = new Set([
@@ -129,8 +175,12 @@ export const All = {};
   return dir;
 }
 
-/** The stage host on `port`, started as the daemon starts it (component-canvas `stageOf`). */
-async function stage(dir: string, port: number): Promise<ChildProcess> {
+/** The stage host of the project at `dir` on `port`, started as the daemon starts it (component-canvas `stageOf`); `kit` for a SvelteKit project. */
+async function stage(
+  dir: string,
+  port: number,
+  kit: boolean
+): Promise<ChildProcess> {
   const { buildStageHost } =
     await import("../../../packages/agent/src/stage-host/build");
   mkdirSync(join(dir, ".cawco/stage"), { recursive: true });
@@ -142,7 +192,7 @@ async function stage(dir: string, port: number): Promise<ChildProcess> {
       CAWCO_STAGE: "1",
       CAWCO_STAGE_PORT: String(port),
       CAWCO_STAGE_FRAMEWORK: "svelte",
-      CAWCO_STAGE_KIT: "0",
+      CAWCO_STAGE_KIT: kit ? "1" : "0",
       CAWCO_STAGE_TOOLCHAIN: "vite",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -154,10 +204,10 @@ async function stage(dir: string, port: number): Promise<ChildProcess> {
   child.stdout?.on("data", hear);
   child.stderr?.on("data", hear);
   await until(
-    "the stage's ready",
+    `the stage's ready in ${dir}`,
     () => words,
     (text) => text.includes('"cawco":"ready"'),
-    60_000
+    120_000
   );
   return child;
 }
@@ -166,20 +216,20 @@ async function stage(dir: string, port: number): Promise<ChildProcess> {
  * The bridge as preview-bridge.ts runs it, but for its join into a
  * workspace's network: a socat on the module's own listen address
  * (`bridgeListen`, read from the module itself at `?real`, which Bun loads
- * past this swap), each connection carried to the stage's port on this
- * loopback.
+ * past this swap), each connection carried to the port the preview names on
+ * this loopback.
  */
-function standInBridge(stagePort: number): void {
+function standInBridge(): void {
   const real = `${BRIDGE_FILE}?real`;
   const contents = `import { existsSync } from "node:fs";
 import { bridgeListen } from ${JSON.stringify(real)};
 export class WorkspaceDown extends Error {}
 const bridges = new Map();
-export const reachWorkspace = async (instanceId) => {
+export const reachWorkspace = async (instanceId, _workspace, port) => {
   const held = bridges.get(instanceId);
   if (held) return held.socket;
   const socket = ${JSON.stringify(SCRATCH)} + "/" + instanceId + ".sock";
-  const proc = Bun.spawn(["socat", bridgeListen(socket), "TCP:127.0.0.1:${stagePort}"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  const proc = Bun.spawn(["socat", bridgeListen(socket), "TCP:127.0.0.1:" + port], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
   const deadline = Date.now() + 3000;
   while (!existsSync(socket) && Date.now() < deadline) await Bun.sleep(10);
   bridges.set(instanceId, { proc, socket });
@@ -371,10 +421,16 @@ interface Open {
   errors: string[];
   failed: string[];
   frames: number;
+  /** Requests for a `~icons/…` module of its own. */
+  iconModules: number;
+  /** Requests for the pre-bundled icon package's module ({@link ICONS_DEP}). */
+  iconsDep: number;
   modules: number;
   ms: number;
   protocols: Set<string>;
   refused: string[];
+  /** Answers of 400 or over, by path and status. */
+  unanswered: string[];
 }
 
 /** One cold open of the canvas at `url`: its report, and every answer its page was given. */
@@ -387,9 +443,18 @@ async function openCold(kit: Kit, url: string): Promise<Open> {
   const failed: string[] = [];
   const protocols = new Set<string>();
   const reading: Promise<void>[] = [];
+  const unanswered: string[] = [];
   let modules = 0;
+  let iconModules = 0;
+  let iconsDep = 0;
   page.on("response", (response) => {
     modules += 1;
+    const path = decodeURIComponent(new URL(response.url()).pathname);
+    iconModules += path.includes(ICON_MODULE) ? 1 : 0;
+    iconsDep += path.endsWith(ICONS_DEP) ? 1 : 0;
+    if (response.status() >= 400) {
+      unanswered.push(`${path} ${response.status()}`);
+    }
     if (response.status() === 502) {
       reading.push(
         response
@@ -447,6 +512,9 @@ async function openCold(kit: Kit, url: string): Promise<Open> {
   return {
     ms,
     modules,
+    iconModules,
+    iconsDep,
+    unanswered,
     frames: frames.length,
     drawn: frames.filter((one) => one.state === "drawn").length,
     errors: report
@@ -458,13 +526,20 @@ async function openCold(kit: Kit, url: string): Promise<Open> {
   };
 }
 
-const run = async (kit: Kit) => {
-  mkdirSync(SCRATCH, { recursive: true });
-  const dir = project();
-  const stagePort = await freePort();
-  // Before any agent module loads: the stage host's build imports them.
-  standInBridge(stagePort);
-  const stageHost = await stage(dir, stagePort);
+/**
+ * The proxy chain in front of the stage on `stagePort`: the agent's
+ * listener for a preview of that port in a workspace, the hub's listener
+ * relaying to it, and the front over HTTP/2. `canvas`: a states file's
+ * canvas at the front.
+ */
+async function chain(
+  stagePort: number,
+  tls: { cert: string; key: string }
+): Promise<{
+  canvas: (file: string) => string;
+  edge: Awaited<ReturnType<typeof front>>;
+  stop: () => Promise<void>;
+}> {
   const { startPreview, stopPreview } =
     await import("../../../packages/agent/src/preview");
   const instanceId = crypto.randomUUID();
@@ -481,11 +556,83 @@ const run = async (kit: Kit) => {
     { port: stagePort, workspace },
     { address: "127.0.0.1", port: agent.port, token }
   );
-  const edge = await front(
-    await scratchCertificate(SCRATCH, ["localhost"]),
-    hub.port
-  );
-  const url = `https://localhost:${edge.port}/@cawco/canvas?file=${encodeURIComponent(STORIES)}&spec=${encodeURIComponent(JSON.stringify({ name: "Burst" }))}`;
+  const edge = await front(tls, hub.port);
+  return {
+    edge,
+    canvas: (file) =>
+      `https://localhost:${edge.port}/@cawco/canvas?file=${encodeURIComponent(file)}&spec=${encodeURIComponent(JSON.stringify({ name: "Burst" }))}`,
+    stop: async () => {
+      edge.stop();
+      hub.stop();
+      await stopPreview({ instanceId });
+    },
+  };
+}
+
+/**
+ * 3. The dashboard's own canvas of {@link APP_ICONS} icons from its barrel,
+ * on its stage (its vite.config.ts, as every canvas of its components
+ * loads), opened cold through the same chain: every frame drawn, nothing
+ * failed, and the icons come as the one pre-bundled module (`@cawco/icons`,
+ * the config's `optimizeDeps.include`), no `~icons/…` module asked for.
+ */
+async function dashboardIcons(
+  kit: Kit,
+  tls: { cert: string; key: string }
+): Promise<void> {
+  const dir = join(APP, APP_SCRATCH);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "Forty.svelte"), FORTY);
+  writeFileSync(join(APP, APP_STORIES), FORTY_STORIES);
+  const port = await freePort();
+  let stageHost: ChildProcess | undefined;
+  let proxied: Awaited<ReturnType<typeof chain>> | undefined;
+  try {
+    stageHost = await stage(APP, port, true);
+    proxied = await chain(port, tls);
+    const opens: Open[] = [];
+    for (let open = 0; open < APP_OPENS; open += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: each open cold and alone
+      opens.push(await openCold(kit, proxied.canvas(APP_STORIES)));
+    }
+    const said = opens
+      .map(
+        (one, at) =>
+          `open ${at + 1}: ${one.modules} responses, ${one.iconModules} of them ~icons modules, the icon package's module ${one.iconsDep}×; ${one.drawn}/${one.frames} drawn in ${one.ms} ms; failed ${[...one.unanswered, ...one.failed].slice(0, 3).join("; ") || "none"}; errors ${JSON.stringify(one.errors.slice(0, 2))}`
+      )
+      .join(" | ");
+    kit.check(
+      `3: the dashboard's canvas of ${APP_ICONS} barrel icons, opened cold ${APP_OPENS} times through the proxy: every frame drawn, no failed module, and the icons come as one pre-bundled module, no ~icons module of its own`,
+      opens.every(
+        (one) =>
+          one.frames > 0 &&
+          one.drawn === one.frames &&
+          one.errors.length === 0 &&
+          one.failed.length === 0 &&
+          one.unanswered.length === 0 &&
+          one.iconModules === 0 &&
+          one.iconsDep === 1
+      ),
+      said
+    );
+  } finally {
+    await proxied?.stop();
+    stageHost?.kill("SIGTERM");
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const run = async (kit: Kit) => {
+  mkdirSync(SCRATCH, { recursive: true });
+  const dir = project();
+  const stagePort = await freePort();
+  // Before any agent module loads: the stage host's build imports them.
+  standInBridge();
+  const stageHost = await stage(dir, stagePort, false);
+  const tls = await scratchCertificate(SCRATCH, ["localhost"]);
+  const proxied = await chain(stagePort, tls);
+  const { edge } = proxied;
+  const url = proxied.canvas(STORIES);
   try {
     const opens: Open[] = [];
     let peak = 0;
@@ -519,11 +666,10 @@ const run = async (kit: Kit) => {
         : `${OPENS} of ${OPENS} drew, ${opens.map((one) => `${one.drawn}/${one.frames} in ${one.ms} ms`).join(", ")}`
     );
   } finally {
-    edge.stop();
-    hub.stop();
-    await stopPreview({ instanceId });
+    await proxied.stop();
     stageHost.kill("SIGTERM");
   }
+  await dashboardIcons(kit, tls);
 };
 
 const spec: Spec = { name: "preview-burst", run };

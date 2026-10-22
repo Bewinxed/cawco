@@ -49,6 +49,7 @@
         "@atlaskit/pragmatic-drag-and-drop": "^4.0.0",
         "@atlaskit/pragmatic-drag-and-drop-hitbox": "^3.0.0",
         "@cawco/core": "workspace:*",
+        "@cawco/icons": "workspace:*",
         "@codemirror/commands": "^6.11.1",
         "@codemirror/lang-javascript": "^6.2.5",
         "@codemirror/language": "^6.12.4",
@@ -276,6 +277,15 @@
         "typescript-json-schema": "0.68.0",
       },
     },
+    "packages/icons": {
+      "name": "@cawco/icons",
+      "version": "0.1.0",
+      "devDependencies": {
+        "svelte": "5.57.2",
+        "typescript": "npm:@typescript/typescript6@^6.0.2",
+        "unplugin-icons": "^24.0.0",
+      },
+    },
     "packages/jsonl-parser": {
       "name": "@cawco/jsonl-parser",
       "version": "0.1.0",
@@ -483,6 +493,8 @@
     "@cawco/dashboard": ["@cawco/dashboard@workspace:apps/dashboard"],
 
     "@cawco/hub": ["@cawco/hub@workspace:packages/hub"],
+
+    "@cawco/icons": ["@cawco/icons@workspace:packages/icons"],
 
     "@cawco/jsonl-parser": ["@cawco/jsonl-parser@workspace:packages/jsonl-parser"],
 

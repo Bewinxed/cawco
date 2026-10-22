@@ -13,6 +13,7 @@ import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
+import IconsBundled from "unplugin-icons/rolldown";
 import Icons from "unplugin-icons/vite";
 import {
   defineConfig,
@@ -511,6 +512,21 @@ export default defineConfig(({ command }) => {
       dedupe: ["bits-ui"],
     },
     optimizeDeps: {
+      /**
+       * The icon barrel's Solar icons (@cawco/icons), pre-bundled into one
+       * module: every icon was a request of its own, each `~icons/solar/*`
+       * compiled on demand, and a component canvas's cold open sent about
+       * 150 of them at once through the preview proxy. Vite pre-bundles a
+       * dependency ("By default, linked packages not inside `node_modules`
+       * are not pre-bundled. Use this option to force a linked package to be
+       * pre-bundled", vite.dev/config/dep-optimization-options). Without
+       * unplugin-icons' own Rolldown build in the optimizer, the bundle keeps
+       * an import of each `~icons/solar/*.svelte`, as many requests as
+       * before (measured on Vite 8.3.4); with it, each icon's `.svelte` is
+       * made there and vite-plugin-svelte's optimizer plugin compiles it in.
+       */
+      include: ["@cawco/icons"],
+      rolldownOptions: { plugins: [IconsBundled({ compiler: "svelte" })] },
       // svelte-streamdown, svelte-sonner and vaul-svelte are compiled like the
       // app's own components, so their stylesheets pass through
       // streamdownOverlayOwn and vendorComponentSheets in dev as in the build:
