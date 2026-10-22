@@ -514,10 +514,10 @@ const run = async (kit: Kit) => {
     '5: a token typed only by its group is checked as that type: color.paper "#fff" and a 1.25rem scale.ratio under a group typed number are each refused by the DTCG check, naming the token, and tokens.json stays as it was',
     wroteBad.refused &&
       wroteBad.text.includes("not DTCG 2025.10") &&
-      wroteBad.text.includes("/color/paper") &&
+      wroteBad.text.includes("tokens.json color.paper") &&
       wroteRatio.refused &&
       wroteRatio.text.includes("not DTCG 2025.10") &&
-      wroteRatio.text.includes("/scale/ratio") &&
+      wroteRatio.text.includes("tokens.json scale.ratio") &&
       (await disk("tokens.json"))?.toString() === tokensBefore,
     `#fff ${wroteBad.refused ? "refused" : "written"}: ${wroteBad.text.slice(0, 300)}; ratio ${wroteRatio.refused ? "refused" : "written"}: ${wroteRatio.text.slice(0, 300)}`
   );

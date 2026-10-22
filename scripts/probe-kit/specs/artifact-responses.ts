@@ -429,7 +429,7 @@ const run = async (kit: Kit) => {
   const answer = reading.answer ?? "";
   // The words it reads (hub presenters/artifacts.ts): the choice's pick, and
   // its note whole as typed, in JSON's quotes, so its line break is kept.
-  const songLine = answer.split("\n").find((row) => row.includes("song"));
+  const songLine = answer.split("\n").find((row) => row.startsWith("- song:"));
   kit.check(
     "5: the agent calls artifact_read with the notice's id and since, and reads the pick and the final note as typed, no Return at its end",
     reading.input?.id === id &&
