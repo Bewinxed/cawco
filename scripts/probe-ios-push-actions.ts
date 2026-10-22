@@ -1114,6 +1114,8 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
     } as unknown as RegistryShape,
   });
   const attemptPush = createPush({
+    // An attempt's push only: no artifact waits on anyone here.
+    artifactWaiting: () => false,
     db,
     desk: () => undefined,
     lifetime,

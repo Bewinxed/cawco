@@ -58,8 +58,10 @@ import {
   type ArtifactNeed,
   type ArtifactNeedNotice,
   type ArtifactNeedsRead,
+  type ArtifactReason,
   noticePartWords,
   reasonLine,
+  reasonShort,
   unparked,
 } from "../../../packages/core/src/artifact-needs";
 import type { Envelope } from "../../../packages/core/src/index";
@@ -99,7 +101,7 @@ const PUSH_MS = 60_000;
 
 /** A 40-word ask under the ask's 160 characters. */
 const LONG_ASK =
-  "Pick one of the two new heads for the phone page so we can ship it to the app and the site and say why it is the one we want for all of the next pages too";
+  "Pick one of the two new heads for the app page so we can ship it to the app and the site and say why it is the one we want for all of the new pages we do next";
 
 /** The kit page's example card, which each page's own cards replace. */
 const EXAMPLE_CARD =
@@ -962,7 +964,7 @@ const countAndArcs = async (at: At) => {
 };
 
 const filesDot = async (at: At, session: string, id: string) => {
-  const { kit, base } = at;
+  const { kit, base, fleet } = at;
   const page = await kit.page("desk");
   await open(page, `${base}/session/${session}`, "[data-needs-caw]");
   await page.getByRole("button", { name: FILES_ITEM }).first().click();
@@ -998,16 +1000,24 @@ const filesDot = async (at: At, session: string, id: string) => {
       ink: fill ? getComputedStyle(fill).backgroundColor : "",
     };
   });
+  // Its strongest reason as the hub lists it now: opening the session put
+  // it in front, a look that took "not opened" away.
+  const listed = (
+    await fleet.api<
+      { id: string; pending: { pending: ArtifactReason[] } | null }[]
+    >(`/api/instances/${session}/artifacts`)
+  ).find((one) => one.id === id)?.pending?.pending[0];
   kit.check(
-    "the Files card wears the dot: a 6px needs-you dot centred on its picture's top-right corner, the picture cut round it, its reason on its meta line",
+    "the Files card wears the dot: a 6px needs-you dot centred on its picture's top-right corner, the picture cut round it, its strongest reason on its meta line as the hub lists it",
     !!read.dot &&
       !!read.well &&
       Math.abs(read.dot.x - read.well.right) <= 0.5 &&
       Math.abs(read.dot.y - read.well.top) <= 0.5 &&
       Math.abs(read.dot.size - 6) <= 0.5 &&
       read.cut &&
-      read.reason === "New",
-    JSON.stringify(read)
+      !!listed &&
+      read.reason === reasonShort(listed),
+    JSON.stringify({ ...read, listed })
   );
   await page.close();
 };
@@ -1033,9 +1043,10 @@ const rowBoxes = async (at: At, engine: Engine, view: View, label: string) => {
   await settle(page, 400);
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every row's every box against the row and the list, each failure named, in one read of the page
   const read = await page.evaluate(() => {
-    const list = document.querySelector(
-      '[data-slot="list"]'
-    ) as HTMLElement | null;
+    // Caw's panel's own list: the home's lists are `list` slots too.
+    const list = document
+      .querySelector('[aria-labelledby="caw-needs"]')
+      ?.closest<HTMLElement>('[data-slot="list"]');
     const rows = [
       ...document.querySelectorAll<HTMLElement>(
         '[aria-labelledby="caw-needs"] [data-slot="row"][data-kind="artifact"]'
