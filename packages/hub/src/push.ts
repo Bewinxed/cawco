@@ -61,8 +61,11 @@ import {
   type Envelope,
   type FleetWatchNotice,
   type HarnessKind,
+  type Install,
+  installName,
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
+  outcomeLine,
   type PairingRequest,
   type PermissionRequestFrame,
   PROJECT_SETTINGS_TOOL,
@@ -80,6 +83,7 @@ import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   askCollapseId,
+  installCollapseId,
   messageCollapseId,
   type Notifications,
   needsCollapseId,
@@ -264,6 +268,11 @@ export type PushData =
       /** A device asks to pair: Approve and Deny answer it by its code. */
       kind: "pairing";
       userCode: string;
+    }
+  | {
+      /** An install of a machine ended: opens its window on its outcome. */
+      kind: "install";
+      installId: string;
     }
   | { kind: "test" };
 
@@ -1850,6 +1859,37 @@ export const createPush = ({
         threadId: "pairing",
         data: { kind: "pairing", userCode: request.userCode },
       });
+    },
+
+    /**
+     * An install of a machine ended while nobody may be watching (installs.ts):
+     * its outcome in the band's own words, the machine as the title. A join
+     * is told as a notice, a failure as needing you; the person's act on the
+     * outcome takes it down ({@link installSettled}).
+     */
+    install(install: Install): void {
+      const collapseId = installCollapseId(install.id);
+      const alert = alertOf(
+        installName(install),
+        null,
+        install.state === "joined" ? "In the fleet" : outcomeLine(install)
+      );
+      console.log(
+        `[push] install ${install.id} ${install.state}: sent as ${collapseId}`
+      );
+      replace({
+        shown: alert,
+        sealed: alert,
+        category: PUSH_CATEGORIES.needs,
+        collapseId,
+        threadId: "install",
+        data: { kind: "install", installId: install.id },
+      });
+    },
+
+    /** The person acted on that install's outcome, here or anywhere: its push comes down. */
+    installSettled(id: string): void {
+      notifications.clear([installCollapseId(id)], "settled");
     },
 
     /** That pairing was answered, here or anywhere, or expired: its push comes down. */

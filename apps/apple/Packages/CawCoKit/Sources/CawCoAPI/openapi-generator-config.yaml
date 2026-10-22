@@ -94,6 +94,11 @@ typeOverrides:
     HookEvent: OpenEnums.HookEvent
     HubAuthMode: OpenEnums.HubAuthMode
     InboundVia: OpenEnums.InboundVia
+    InstallCheck: OpenEnums.InstallCheck
+    InstallRoute: OpenEnums.InstallRoute
+    InstallSignIn: OpenEnums.InstallSignIn
+    InstallState: OpenEnums.InstallState
+    InstallStep: OpenEnums.InstallStep
     InstanceRowEffort: OpenEnums.InstanceRowEffort
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource

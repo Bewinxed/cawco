@@ -40,11 +40,12 @@
   import { browser, dev } from "$app/env";
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
-  import AddMachineDialog from "./AddMachineDialog.svelte";
   import { deletePreview } from "./artifact-api";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import { barStrip } from "./bar-strip.svelte";
   import { cawco } from "./client.svelte";
+  import ConnectWindow from "./connect/ConnectWindow.svelte";
+  import { connect } from "./connect/installs.svelte";
   import { continuing } from "./continue.svelte";
   import EdgePull from "./EdgePull.svelte";
   import FilesFloat from "./files/FilesFloat.svelte";
@@ -924,6 +925,25 @@
   const filesCounted = $derived(
     files.session ? filesCount(files.session) : null
   );
+  /**
+   * Add machine's window, opened from the machines in the phone's sheet (a
+   * way in, an install's row): the sheet goes as its drawer rises, and the
+   * window gives the focus back to what invoked the sheet, the burger.
+   */
+  $effect(() => {
+    if (!connect.open) {
+      return;
+    }
+    untrack(() => {
+      if (railOpen && !railed) {
+        if (connect.anchor?.closest("[data-rail-sheet]")) {
+          connect.anchor = burger;
+        }
+        railOpen = false;
+      }
+    });
+  });
+
   /** Files' drawer, from the sidebar's row: the sidebar goes as it rises. */
   function openFilesSheet() {
     files.returnTo = burger;
@@ -1428,8 +1448,9 @@
     <!-- Files on a phone: the house bottom drawer. -->
     <FilesSheet />
   {/if}
-  <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
-  <AddMachineDialog />
+  <!-- One Add machine window for every entry that adds one, and every
+       install's row that opens it again (connect/installs.svelte.ts). -->
+  <ConnectWindow />
   <!-- One New Session form for every opener (the rail's rows, the phone's
        Start session, a `?spawn=` link, the session strip's "+", a project's
        Spin off) and every session menu's Continue (spawn/new-session,

@@ -24,6 +24,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou, IconNotices } from "#lib/icons.js";
   import RebalanceNotices from "../accounts/RebalanceNotices.svelte";
+  import InstallNotice from "../connect/InstallNotice.svelte";
+  import { connect } from "../connect/installs.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { reflow } from "../motion/rows.svelte";
   import type { Notice } from "../updates/model";
@@ -94,9 +96,17 @@
   const updateShown = $derived(updated !== null || reloading);
   /** The hub's notices record is damaged: one row says so, with Reset. */
   const damaged = $derived(feed.noticesDamaged);
-  /** The notices standing: the update, each moved login and rebalance, or the damaged record. */
+  /** Machines Add machine brought in, until their outcome is acknowledged (connect/). */
+  const joined = $derived(
+    connect.installs.filter((one) => one.state === "joined")
+  );
+  /** The notices standing: the update, each moved login and rebalance, each machine joined, or the damaged record. */
   const noticeCount = $derived(
-    (updateShown ? 1 : 0) + moved.length + rebalanced.length + (damaged ? 1 : 0)
+    (updateShown ? 1 : 0) +
+      moved.length +
+      rebalanced.length +
+      joined.length +
+      (damaged ? 1 : 0)
   );
 
   let resetting = $state(false);
@@ -115,7 +125,10 @@
   }
   /** Every notice but a goodbye has an id to acknowledge. */
   const clearable = $derived(
-    updated !== null || moved.length > 0 || rebalanced.length > 0
+    updated !== null ||
+      moved.length > 0 ||
+      rebalanced.length > 0 ||
+      joined.length > 0
   );
   /** The update is all the panel holds: there is room for its notes. */
   const alone = $derived(
@@ -148,6 +161,10 @@
     ];
     if (ids.length > 0) {
       feed.acknowledge(ids);
+    }
+    // A machine brought in is acknowledged as closing its outcome does: its install goes.
+    for (const install of joined) {
+      connect.remove(install.id).catch(() => undefined);
     }
   }
 </script>
@@ -329,6 +346,11 @@
             />
           </li>
         {/if}
+        {#each joined as install (install.id)}
+          <li data-flip>
+            <InstallNotice {install} {onchoose} />
+          </li>
+        {/each}
       </ul>
     </section>
   {/if}

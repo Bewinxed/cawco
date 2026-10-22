@@ -36,6 +36,7 @@ import {
   type HubAuthFrame,
   type HubAuthMode,
   type HubAuthState,
+  INSTALL_CODE_HEADER,
   MACHINE_PROOF_HEADER,
   MACHINE_PROOF_SKEW_MS,
   type OwnerDevice,
@@ -53,6 +54,9 @@ import { Elysia, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import { HUB_SELF_HEADER, isHubSelf } from "./hub-self";
 import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
+
+/** A machine's own row, which its join wait reads (cli await-joined.ts). */
+const AGENT_ROW = /^\/api\/agents\/([^/]+)$/;
 
 /** What a request is, once its credential is read. */
 export type Caller =
@@ -81,6 +85,8 @@ type Access = "open" | "tool" | "session" | "machine" | "machine-proof";
 const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/health$/, "open"],
   ["GET", /^\/install\.sh$/, "open"],
+  // A command route's installer says how it ended; its one-time code is its credential.
+  ["POST", /^\/api\/installs\/code\/[^/]+\/ended$/, "open"],
   ["GET", /^\/api\/auth$/, "open"],
   ["POST", /^\/api\/pair$/, "open"],
   ["POST", /^\/api\/pair\/poll$/, "open"],
@@ -256,6 +262,12 @@ export interface HubAuthHooks {
   readonly changed: (frame: HubAuthFrame) => void;
   /** A device was removed: its open sockets close. */
   readonly deviceRemoved: (deviceId: string) => void;
+  /**
+   * A machine's join wait named an install's one-time code (cli
+   * await-joined.ts): the install hears it, ties the machine to itself and
+   * admits it when it waits (installs.ts `heard`).
+   */
+  readonly installCode: (code: string, machineId: string) => void;
   /**
    * Pairing was just turned on: every machine connected now is admitted and
    * handed its key, and every dashboard socket without a device closes, so
@@ -603,6 +615,13 @@ export const createHubAuth = ({
   const gate = (request: Request, address: string | null) => {
     const path = new URL(request.url).pathname;
     const header: Headers = (name) => request.headers.get(name);
+    // A command route's join wait asks after its own row with its install's
+    // code, admitted or not: the code is heard before anything is refused.
+    const code = request.method === "GET" ? header(INSTALL_CODE_HEADER) : null;
+    const asked = code ? AGENT_ROW.exec(path)?.[1] : undefined;
+    if (code && asked) {
+      hooks?.installCode(code, decodeURIComponent(asked));
+    }
     const caller = classify(
       header,
       request.method,
@@ -1096,6 +1115,8 @@ export const createHubAuth = ({
       );
 
   return {
+    /** Admits a machine that waits to be admitted, as an Admit click does: an install's code is the person's say-so. */
+    admit,
     allows,
     callerOf,
     classify,

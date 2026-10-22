@@ -15,6 +15,7 @@
 import type {
   ApprovedActionView,
   FleetWatchNotice,
+  Install,
   LocalName,
   NeutralSessionInfo,
   PairingRequest,
@@ -44,6 +45,7 @@ import {
   isFailed,
   isStale,
 } from "../client.svelte";
+import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence } from "../convergence";
 import { machineFaults } from "../fleet-faults";
 import { hubAuth } from "../hub-auth.svelte";
@@ -459,6 +461,20 @@ export interface AdmissionItem {
 }
 
 /**
+ * An install of a machine that failed or was lost (hub installs.ts): it
+ * opens Add machine's window on its outcome, where it is acted on.
+ */
+export interface InstallItem {
+  href: string;
+  install: Install;
+  key: string;
+  kind: "install";
+  place: string;
+  raisedAt: number;
+  title: string;
+}
+
+/**
  * A project's task waiting on you, as the hub says (its stage is of kind
  * `you`, or its last session failed): it opens the task, its deliverable and
  * the way to act on it first.
@@ -492,6 +508,7 @@ export type NeedsItem =
   | RelayItem
   | PairingItem
   | AdmissionItem
+  | InstallItem
   | TaskItem;
 
 /**
@@ -1231,6 +1248,18 @@ class Home {
       href: "/config/devices",
       raisedAt: machine.since,
     }));
+    // An install that ended badly needs the person: its window says what to do.
+    const failedInstalls: NeedsItem[] = connect.band
+      .filter((one) => one.state === "failed" || one.state === "lost")
+      .map((one) => ({
+        kind: "install" as const,
+        key: `install:${one.id}`,
+        install: one,
+        title: one.target || one.hostname || "New machine",
+        place: "",
+        href: `?${INSTALL_PARAM}=${encodeURIComponent(one.id)}`,
+        raisedAt: one.endedAt ?? one.startedAt,
+      }));
     const waitingTasks: NeedsItem[] = cawco.projects.flatMap((project) =>
       (this.#waiting[project.id] ?? []).map((task) => ({
         kind: "task" as const,
@@ -1258,6 +1287,7 @@ class Home {
       ...relaying,
       ...pairings,
       ...admissions,
+      ...failedInstalls,
       ...waitingTasks,
     ].sort(
       (a, b) =>

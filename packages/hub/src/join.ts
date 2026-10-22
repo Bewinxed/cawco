@@ -1,7 +1,8 @@
 /**
  * Adding a machine: the install script every new machine runs, the addresses
- * it could reach this hub on, and the SSH add that runs the script for the
- * operator.
+ * it could reach this hub on, the commands and checks an SSH add runs for the
+ * operator (installs.ts runs the add itself and keeps every install), and
+ * their routes.
  *
  * A machine joins by running `/install.sh`, which installs the signed binary
  * release of this hub's channel and ends in `cawco binary-install agent`.
@@ -34,37 +35,25 @@ import { connect } from "node:net";
 import { homedir, hostname, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import {
-  INSTALL_JOINED,
   INSTALL_STEP_PREFIX,
-  JOIN_WAIT_STEP,
+  type InstallSignIn,
   type JoinAddress,
   type JoinInfo,
   SSH_ADD_RUNNING_HEADER,
-  type SshJoinJob,
   type SshJoinProblem,
 } from "@cawco/core";
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
 import { readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
 import { generateInstallScript } from "@cawco/core/install-script";
-import { LineSplitter } from "@cawco/core/lines";
 import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { Elysia, t } from "elysia";
 import { DB_PATH, HUB_PORT } from "./config";
-import type { HubLifetimeShape } from "./lifetime";
+import { INSTALL_CODE, type Installs } from "./installs";
 import { localHubName } from "./mdns";
-import {
-  CONNECT_S,
-  type SshTunnels,
-  sshOptions,
-  type TunnelOpen,
-  type TunnelOutcome,
-  type TunnelRefusal,
-} from "./ssh-tunnels";
+import { CONNECT_S } from "./ssh-tunnels";
 
 /** How long a short command gets to answer. Our choice. */
 const OUTPUT_MS = 3000;
@@ -200,14 +189,25 @@ const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/;
 export const installScript = (
   hub: string,
   releaseHost?: string,
-  sshAdd?: { channel: "stable" | "nightly"; version: string }
+  sshAdd?: { channel: "stable" | "nightly"; version: string },
+  code?: string
 ): string =>
   generateInstallScript({
     hub,
     origin: `https://github.com/${RELEASE_REPOSITORY}`,
     releaseHost,
     sshAdd,
+    code,
   });
+
+/**
+ * What a command whose code no longer works runs on the machine: one line
+ * saying so, and an exit that leaves the machine as it was.
+ */
+const VOID_SCRIPT = `#!/bin/sh
+printf '%s\\n' "cawco: this command was stopped from the dashboard, so it installs nothing. Nothing on this machine was changed. Copy a new command there." >&2
+exit 1
+`;
 
 /**
  * The query an SSH add's install command fetches the script with
@@ -217,24 +217,11 @@ export const installScript = (
  */
 const SSH_ADD_QUERY = "add=ssh";
 
-/** How long a finished SSH add stays readable, for a dialog opened late. */
-const JOB_TTL_MS = 60 * 60 * 1000;
-/** Output kept per add. The steps are a dozen lines; `bun install` is the bulk. */
-const MAX_LINES = 2000;
-/**
- * How long a clean exit waits for the hub to see the machine. `join` itself
- * already waited for it, so this only covers the socket racing the exit.
- */
-const REGISTER_GRACE_MS = 15_000;
-
 /**
  * A target `ssh` reads as a destination and nothing else: no leading dash (an
  * option), no whitespace (a second argument once a shell splits it).
  */
-const TARGET = /^[^-\s][^\s]*$/;
-
-/** A remote shell's line ending, which a pty-less SSH session can still send. */
-const CARRIAGE_RETURN = /\r$/;
+export const TARGET = /^[^-\s][^\s]*$/;
 
 /**
  * A line of the report Bun prints for an error a build left uncaught: its
@@ -243,14 +230,14 @@ const CARRIAGE_RETURN = /\r$/;
  * error's own line (`error: …`) says what happened, and the person never
  * reads a build's source.
  */
-const STACK_LINE =
+export const STACK_LINE =
   /^(?:\d+ \| |\s*\^+\s*$|\s+at \S.*:\d+:\d+\)?$|Bun v\d+\.\d+\.\d+ \()/;
 
 /** What starts the line an add's failure says the hub's own words on. */
-const HUB_SAID = "this hub: ";
+export const HUB_SAID = "this hub: ";
 
 /** A password `ssh` could not be handed on askpass's one line. */
-const LINE_BREAK = /[\r\n]/;
+export const LINE_BREAK = /[\r\n]/;
 
 /**
  * The askpass program a password add runs `ssh` with. `ssh` runs it once
@@ -288,58 +275,38 @@ const askpass = (): string => {
 const PUBLIC_KEY = /^(\S+ [A-Za-z0-9+/]+=*)(?: (.*))?$/;
 const PLAIN_COMMENT = /^[\w@.:,+=/ -]*$/;
 
+/**
+ * The environment a password add's `ssh` runs with: {@link ASKPASS} answers
+ * its one prompt from `ssh`'s stdin.
+ */
+export const ASKPASS_ENV = (): Record<string, string> => ({
+  SSH_ASKPASS: askpass(),
+  SSH_ASKPASS_REQUIRE: "force",
+});
+
 /** The trust command's step line, worded as the install script words its own. */
-const TRUST_STEP = "adding this hub's SSH key";
+export const TRUST_STEP = "adding this hub's SSH key";
 
 /**
  * The step the remote command prints before it fetches the install script,
  * which tells the dialog the install runs on the machine now.
  */
-const DOWNLOAD_STEP = "downloading the install script from ";
+export const DOWNLOAD_STEP = "downloading the install script from ";
 
 /**
  * The step the hub says once its own connection carries a port on the
  * machine to it: the first line of an add whose connection has signed in.
  */
-const CARRY_STEP = "carrying this hub to the machine on its port ";
+export const CARRY_STEP = "carrying this hub to the machine on its port ";
 
 /** The step the hub says as it finds the build an SSH add leaves the machine on: its update channel's newest (binary-updates.ts `offered`). */
-const OFFER_STEP = "finding the build this hub offers its fleet";
+export const OFFER_STEP = "finding the build this hub offers its fleet";
 
 /**
  * The step the hub says as it gives the machine its key over its own
  * connection (ssh-tunnels.ts `admit`): the add is the person admitting it.
  */
-const KEY_STEP = "giving the machine its key to this hub";
-
-/**
- * The steps a machine fails on when it will not do what its forward needs,
- * each naming the setting and its fix (https://man.openbsd.org/sshd_config.5).
- * The hub reaches a machine added over SSH only through that forward, so
- * there is no other way to try.
- * - AllowTcpForwarding: "no to prevent all TCP forwarding, local to allow
- *   local (from the perspective of ssh(1)) forwarding only or remote to
- *   allow remote forwarding only".
- * - GatewayPorts: "yes to force remote port forwardings to bind to the
- *   wildcard address": anyone the machine's network reaches would reach the
- *   hub, so the add stops before the hub is forwarded there.
- */
-const refusalStep = (refusal: TunnelRefusal): string => {
-  switch (refusal.kind) {
-    case "forwarding":
-      return "forwarding a port on the machine to this hub, which its SSH server refuses: set AllowTcpForwarding yes (or remote) in its sshd_config and restart sshd";
-    case "exposed":
-      return `forwarding a port on the machine to this hub, which its SSH server would open on ${refusal.bound.join(", ")}, not only its loopback: set GatewayPorts no in its sshd_config and restart sshd`;
-    case "held":
-      return `forwarding port ${refusal.port} on the machine to this hub, which another program there holds: stop it, then Retry`;
-    case "failed":
-      return `${refusal.step} (${refusal.said})`;
-    default: {
-      const unhandled: never = refusal;
-      throw new Error(`unhandled refusal: ${JSON.stringify(unhandled)}`);
-    }
-  }
-};
+export const KEY_STEP = "giving the machine its key to this hub";
 
 /**
  * How long the machine's `curl` gets for the install script as a whole,
@@ -353,7 +320,7 @@ const DOWNLOAD_MAX_S = 60;
  * CODES: 6 the name did not resolve, 7 the connection failed, 28 it timed
  * out); any other is the hub answering, and the download step's failure.
  */
-const UNREACHED = new Set([6, 7, 28]);
+export const UNREACHED = new Set([6, 7, 28]);
 
 /**
  * The line the install command prints when the machine's curl fails, its exit
@@ -361,7 +328,7 @@ const UNREACHED = new Set([6, 7, 28]);
  * words. Not a step line ({@link INSTALL_STEP_PREFIX}): the step it failed on
  * is still the download.
  */
-const CURL_EXIT = "cawco-curl-exit: ";
+export const CURL_EXIT = "cawco-curl-exit: ";
 
 /**
  * The install, once signed in: its step line, then the script from the hub
@@ -387,7 +354,7 @@ export const installCommand = (hubUrl: string): string =>
  * quote). A key whose comment could not stand in that command is added
  * without the comment; a comment is a label, never part of the key.
  */
-const trustCommand = (key: string): string | null => {
+export const trustCommand = (key: string): string | null => {
   const [, blob, comment] = PUBLIC_KEY.exec(key) ?? [];
   if (!blob) {
     return null;
@@ -422,46 +389,8 @@ const trustCommand = (key: string): string | null => {
  * Measured against OpenSSH 10.2's sshd: a silent remote command outlived a
  * killed `ssh`; under the watchdog it was gone within 4 s.
  */
-const remoteCommand = (body: string): string =>
+export const remoteCommand = (body: string): string =>
   `exec sh -c 'p=$PPID; ( while ps -p "$p" >/dev/null 2>&1; do sleep 1; done; [ "$$" -gt 1 ] && kill -TERM "-$$" ) >/dev/null 2>&1 & w=$!; ${body}; s=$?; kill "$w" 2>/dev/null; exit $s'`;
-
-/**
- * The step an add fails on when `ssh` ended before the remote command said
- * anything: ssh refused the session. Once the hub has reached the machine's
- * port and found its host key as it knows it ({@link beforeSsh}), that is
- * the sign-in, most often; but `ssh` exits 255 for every failure of its own
- * (ssh(1) EXIT STATUS), so which one is in ssh's words, shown below it.
- */
-const SIGN_IN_STEP = "signing in over SSH";
-
-/**
- * What went wrong once `ssh` ran, off its exit and the lines the remote
- * command printed that are CawCo's own (its step lines, curl's exit status
- * on {@link CURL_EXIT}): the download through the hub's connection, a
- * machine that never came online, or the step it stopped on. Whether the
- * machine was reachable, and its host key, are settled before `ssh` runs
- * ({@link beforeSsh}), never read off ssh's words.
- */
-export const problemOf = (
-  lines: readonly string[],
-  exitCode: number,
-  machineId: string | null
-): SshJoinProblem => {
-  const steps = lines.filter((line) => line.startsWith(INSTALL_STEP_PREFIX));
-  const last = steps.at(-1)?.slice(INSTALL_STEP_PREFIX.length);
-  const curled = lines.findLast((line) => line.startsWith(CURL_EXIT));
-  if (
-    last?.startsWith(DOWNLOAD_STEP) &&
-    curled !== undefined &&
-    UNREACHED.has(Number(curled.slice(CURL_EXIT.length)))
-  ) {
-    return { kind: "download" };
-  }
-  if (exitCode === 0 && machineId) {
-    return { kind: "unregistered" };
-  }
-  return { kind: "step", step: last ?? SIGN_IN_STEP };
-};
 
 /**
  * Where `ssh` connects for a target, as `ssh -G` resolves it after its config
@@ -697,391 +626,38 @@ export const beforeSsh = async (
   return (await hostKeyChanged(to)) ? { kind: "host-key" } : undefined;
 };
 
-/**
- * Why the hub's own connection to the machine did not come up: what the
- * machine would not do once signed in, else what its `ssh` said.
- */
-const tunnelProblem = (
-  outcome: Extract<TunnelOutcome, { kind: "ended" }>
-): SshJoinProblem =>
-  outcome.refusal
-    ? { kind: "step", step: refusalStep(outcome.refusal) }
-    : problemOf(outcome.lines, outcome.code ?? 255, null);
+/** A sign-in way, as the routes take it. */
+const SIGN_IN = t.Union([
+  t.Literal("key"),
+  t.Literal("password"),
+  t.Literal("by-hand"),
+]);
 
-interface JoinDeps {
-  /**
-   * Why the hub did not take the last register through SSH record `id`'s
-   * forward, in words (server.ts `registerProven`), taken once; undefined
-   * when it took it, or none came.
-   */
-  readonly heard: (id: string) => string | undefined;
-  /** Runs each finished job's forgetting until the hub closes. */
-  readonly lifetime: HubLifetimeShape;
-  /** The build the fleet is offered (binary-updates.ts), which an SSH add leaves its machine on; the words why there is none. */
-  readonly offered: () => Promise<
+const DRAFT = t.Object({
+  route: t.Union([t.Literal("ssh"), t.Literal("command"), t.Null()]),
+  target: t.String({ maxLength: 500 }),
+  port: t.String({ maxLength: 10 }),
+  signIn: SIGN_IN,
+  address: t.Union([t.String({ maxLength: 500 }), t.Null()]),
+});
+
+/**
+ * The install routes: the installer itself, the hub's addresses and key,
+ * the installs (installs.ts) and the draft, the command route's code's end,
+ * and the SSH add's routes as the shipped apps call them, projected from the
+ * same installs.
+ */
+export const joinRoutes = ({
+  installs,
+  offered,
+}: {
+  installs: Installs;
+  /** The build the fleet is offered (binary-updates.ts), which an SSH add's script installs; the words why there is none. */
+  offered: () => Promise<
     { channel: "stable" | "nightly"; version: string } | { refused: string }
   >;
-  /** Whether the hub holds a live socket from this machine right now. */
-  readonly online: (machineId: string) => boolean;
-  /** The connections the hub holds to the machines it added over SSH. */
-  readonly tunnels: SshTunnels;
-}
-
-/** How long a stopped `ssh` gets to close its connection before its group is killed outright. Our choice. */
-const STOP_GRACE_MS = 3000;
-
-/** An add while it runs: the `ssh` it waits on now, the connection it asked for, and its run as a whole, settled. */
-interface Run {
-  child: Bun.Subprocess | null;
-  ended: Promise<void>;
-  /** Settles when the person stops the add: a wait on the hub's connection stops waiting. */
-  readonly halt: Promise<null>;
-  readonly halted: () => void;
-  stopped: boolean;
-  tunnel: TunnelOpen | null;
-}
-
-export const joinRoutes = ({
-  heard,
-  lifetime,
-  offered,
-  online,
-  tunnels,
-}: JoinDeps) => {
-  const jobs = new Map<string, SshJoinJob>();
-  const runs = new Map<string, Run>();
-
-  const fail = (job: SshJoinJob, problem: SshJoinProblem): void => {
-    job.problem = problem;
-    job.state = "failed";
-  };
-
-  /**
-   * An install that has exited: done once the hub has the machine online,
-   * else what went wrong. A register the hub did not take through record
-   * `record`'s forward means the add got as far as the join, whatever the
-   * machine's build printed: that wait is the step, and the hub's words
-   * why are the add's last line.
-   */
-  const settle = async (job: SshJoinJob, record: string): Promise<void> => {
-    const { machineId, exitCode } = job;
-    if (exitCode === 0 && machineId) {
-      const deadline = Date.now() + REGISTER_GRACE_MS;
-      while (!online(machineId) && Date.now() < deadline) {
-        // biome-ignore lint/performance/noAwaitInLoops: a poll — each check must see the registry after the previous wait
-        await Bun.sleep(500);
-      }
-      if (online(machineId)) {
-        job.state = "done";
-        return;
-      }
-    }
-    const said = heard(record);
-    if (said !== undefined) {
-      take(job, `${HUB_SAID}${said}`);
-      fail(job, { kind: "step", step: JOIN_WAIT_STEP });
-      return;
-    }
-    fail(job, problemOf(job.lines, exitCode ?? -1, machineId));
-  };
-
-  /** One line of the add's output, kept as the dialog reads it; never a line of a stack trace. */
-  const take = (job: SshJoinJob, line: string): void => {
-    const clean = line.replace(CARRIAGE_RETURN, "");
-    if (STACK_LINE.test(clean)) {
-      return;
-    }
-    if (clean.startsWith(INSTALL_JOINED)) {
-      job.machineId = clean.slice(INSTALL_JOINED.length).trim();
-    }
-    job.lines.push(clean);
-    if (job.lines.length > MAX_LINES) {
-      job.lines.splice(0, job.lines.length - MAX_LINES);
-    }
-  };
-
-  const collect = async (
-    job: SshJoinJob,
-    stream: ReadableStream<Uint8Array>
-  ): Promise<void> => {
-    const decoder = new TextDecoder();
-    const lines = new LineSplitter();
-    for await (const chunk of stream) {
-      for (const line of lines.push(decoder.decode(chunk, { stream: true }))) {
-        take(job, line);
-      }
-    }
-    const rest = lines.push(decoder.decode());
-    for (const line of rest) {
-      take(job, line);
-    }
-    if (lines.pending) {
-      take(job, lines.end());
-    }
-  };
-
-  /**
-   * One `ssh` session of an add, its output into the job's lines, answering
-   * its exit. With `password` it signs in by password alone, through
-   * {@link ASKPASS} on `ssh`'s stdin; without it, by key with no prompt at
-   * all (BatchMode). `-n` keeps that stdin from the remote command: `ssh`
-   * hands the session /dev/null. `ssh` leads a process group of its own
-   * (`detached`, setsid), so a stop ends it and its askpass together.
-   */
-  const session = async (
-    job: SshJoinJob,
-    run: Run,
-    password: string | null,
-    body: string
-  ): Promise<number> => {
-    const child = Bun.spawn(
-      [
-        "ssh",
-        "-n",
-        ...(password === null
-          ? ["-o", "BatchMode=yes"]
-          : [
-              "-o",
-              "PreferredAuthentications=password,keyboard-interactive",
-              "-o",
-              "PubkeyAuthentication=no",
-              "-o",
-              "NumberOfPasswordPrompts=1",
-            ]),
-        ...sshOptions(job.port),
-        "--",
-        job.target,
-        remoteCommand(body),
-      ],
-      {
-        stdin:
-          password === null
-            ? "ignore"
-            : new TextEncoder().encode(`${password}\n`),
-        stdout: "pipe",
-        stderr: "pipe",
-        detached: true,
-        env:
-          password === null
-            ? process.env
-            : {
-                ...process.env,
-                SSH_ASKPASS: askpass(),
-                SSH_ASKPASS_REQUIRE: "force",
-              },
-      }
-    );
-    run.child = child;
-    const [, , code] = await Promise.all([
-      collect(job, child.stdout),
-      collect(job, child.stderr),
-      child.exited,
-    ]);
-    run.child = null;
-    return code;
-  };
-
-  /**
-   * The add, in order: a password add's one connection adds the hub's key;
-   * the hub's own connection to the machine opens with it, carrying a port
-   * on the machine to the hub; the install runs by key and joins through
-   * that port. A connection this add made is the hub's to hold once the
-   * machine is online, and goes with an add that fails or stops.
-   */
-  const add = async (
-    job: SshJoinJob,
-    run: Run,
-    trust: { password: string; command: string } | null
-  ): Promise<void> => {
-    const stopped = await Promise.race([
-      beforeSsh(job.target, job.port),
-      run.halt,
-    ]);
-    if (run.stopped) {
-      return;
-    }
-    if (stopped) {
-      fail(job, stopped);
-      return;
-    }
-    if (trust) {
-      const code = await session(job, run, trust.password, trust.command);
-      if (run.stopped) {
-        return;
-      }
-      if (code !== 0) {
-        job.exitCode = code;
-        fail(job, problemOf(job.lines, code, null));
-        return;
-      }
-    }
-    const tunnel = tunnels.open(job.target, job.port, (line) =>
-      take(job, line)
-    );
-    run.tunnel = tunnel;
-    const outcome = await Promise.race([tunnel.outcome, run.halt]);
-    if (run.stopped || outcome === null) {
-      return;
-    }
-    if (outcome.kind === "ended") {
-      if (tunnel.fresh) {
-        tunnels.abandon(tunnel.id);
-      }
-      job.exitCode = outcome.code;
-      fail(job, tunnelProblem(outcome));
-      return;
-    }
-    await install(job, run, tunnel, outcome.port);
-  };
-
-  /**
-   * What an install needs before it runs, once the hub's connection is up:
-   * the build the add leaves the machine on, known before anything is
-   * written there (its script names it, `/install.sh?add=ssh`), then the
-   * machine's key. Whether the install may run; a step that failed fails
-   * the add, in its words.
-   */
-  const prepare = async (
-    job: SshJoinJob,
-    run: Run,
-    tunnel: TunnelOpen
-  ): Promise<boolean> => {
-    const failed = (step: string, said: string): false => {
-      take(job, said);
-      if (tunnel.fresh) {
-        tunnels.abandon(tunnel.id);
-      }
-      fail(job, { kind: "step", step });
-      return false;
-    };
-    take(job, `${INSTALL_STEP_PREFIX}${OFFER_STEP}`);
-    const offer = await offered();
-    if (run.stopped) {
-      return false;
-    }
-    if ("refused" in offer) {
-      return failed(OFFER_STEP, `${HUB_SAID}${offer.refused}`);
-    }
-    take(job, `${INSTALL_STEP_PREFIX}${KEY_STEP}`);
-    const unkept = await tunnels.admit(tunnel.id);
-    if (run.stopped) {
-      return false;
-    }
-    return unkept ? failed(KEY_STEP, unkept) : true;
-  };
-
-  /**
-   * The install, by key, through `port` on the machine, once the hub's
-   * connection carries it; done once the machine is online, when the hub
-   * holds that connection from then on.
-   */
-  const install = async (
-    job: SshJoinJob,
-    run: Run,
-    tunnel: TunnelOpen,
-    port: number
-  ): Promise<void> => {
-    job.hubUrl = `http://127.0.0.1:${port}`;
-    take(job, `${INSTALL_STEP_PREFIX}${CARRY_STEP}${port}`);
-    if (!(await prepare(job, run, tunnel))) {
-      return;
-    }
-    job.exitCode = await session(job, run, null, installCommand(job.hubUrl));
-    if (run.stopped) {
-      return;
-    }
-    // A machine already joined over this connection installs nothing new and
-    // says no `joined as`: it is the machine the connection was held for.
-    job.machineId ??= tunnel.machineId;
-    await settle(job, tunnel.id);
-    if (job.state === "done" && job.machineId) {
-      tunnels.joined(tunnel.id, job.machineId);
-    } else if (tunnel.fresh) {
-      tunnels.abandon(tunnel.id);
-    }
-  };
-
-  const start = (
-    target: string,
-    port: number | null,
-    trust: { password: string; command: string } | null
-  ) => {
-    const job: SshJoinJob = {
-      id: crypto.randomUUID(),
-      target,
-      port,
-      hubUrl: "",
-      state: "running",
-      lines: [],
-      exitCode: null,
-      machineId: null,
-      problem: null,
-    };
-    jobs.set(job.id, job);
-    let halted = (): void => undefined;
-    const halt = new Promise<null>((resolve) => {
-      halted = () => resolve(null);
-    });
-    const run: Run = {
-      child: null,
-      ended: Promise.resolve(),
-      halt,
-      halted,
-      stopped: false,
-      tunnel: null,
-    };
-    run.ended = add(job, run, trust)
-      .then(() => {
-        if (run.stopped) {
-          job.state = "stopped";
-        }
-      })
-      .finally(() => {
-        runs.delete(job.id);
-        lifetime.after(JOB_TTL_MS, () => jobs.delete(job.id));
-      });
-    runs.set(job.id, run);
-    detach(run.ended, "machine join");
-    return job;
-  };
-
-  /**
-   * Stops an add that runs: a connection it made goes, and the `ssh` it
-   * waits on is asked to end (TERM, so `ssh` closes the connection), then
-   * killed if it has not within {@link STOP_GRACE_MS}. Answers once the run
-   * has ended and reads `stopped`. On the machine, the closed connection
-   * ends the remote command's watchdog's wait, and it ends the command
-   * ({@link remoteCommand}).
-   */
-  const stop = async (run: Run): Promise<void> => {
-    run.stopped = true;
-    run.halted();
-    if (run.tunnel?.fresh) {
-      tunnels.abandon(run.tunnel.id);
-    }
-    const { child } = run;
-    // `ssh` leads its own group (spawned `detached`): the group is `ssh` and
-    // the askpass it may be running. One already ended reads `gone`.
-    const leader = child ? spawnedPid(child) : undefined;
-    if (child && leader) {
-      signalGroup(leader, "SIGTERM");
-      const exit = await readWithin(STOP_GRACE_MS, () => child.exited);
-      switch (exit.kind) {
-        case "answered":
-          break;
-        case "unanswered":
-          signalGroup(leader, "SIGKILL");
-          break;
-        default: {
-          const unhandled: never = exit;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
-    }
-    await run.ended;
-  };
-
-  return new Elysia()
+}) =>
+  new Elysia()
     .get("/install.sh", async ({ request, status, set }) => {
       const host = request.headers.get("host");
       if (!(host && HOST_HEADER.test(host))) {
@@ -1093,6 +669,16 @@ export const joinRoutes = ({
           "This hub's build cannot install machines yet: it carries no release key to check a download against, so it would hand out an installer that verifies nothing. Install a released build of CawCo on this hub to enable it."
         );
       }
+      const query = new URL(request.url).searchParams;
+      const code = query.get("code");
+      // The command route's line: step one of its install, or a code that no longer works.
+      if (
+        code !== null &&
+        !(INSTALL_CODE.test(code) && installs.fetched(code))
+      ) {
+        set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
+        return VOID_SCRIPT;
+      }
       const installation = await readInstallation();
       // An SSH add's script installs the build the fleet is offered.
       const offer =
@@ -1103,13 +689,118 @@ export const joinRoutes = ({
         return status(409, offer.refused);
       }
       set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
-      return installScript(`http://${host}`, installation?.releaseHost, offer);
+      return installScript(
+        `http://${host}`,
+        installation?.releaseHost,
+        offer,
+        code ?? undefined
+      );
     })
     .get("/api/join", async (): Promise<JoinInfo> => ({
       addresses: await joinAddresses(),
       sshPublicKey: sshPublicKey(),
       hubHostname: hostname(),
+      canInstall: Boolean(RELEASE_PUBLIC_KEY),
     }))
+    .get("/api/installs", () => installs.read())
+    .put(
+      "/api/installs/draft",
+      { body: t.Union([DRAFT, t.Null()]) },
+      ({ body }) => {
+        installs.setDraft(body);
+        return installs.read();
+      }
+    )
+    .post(
+      "/api/installs",
+      {
+        body: t.Union([
+          t.Object({
+            route: t.Literal("ssh"),
+            target: t.String({ maxLength: 500 }),
+            port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
+            signIn: SIGN_IN,
+            password: t.Optional(t.String({ maxLength: 4096 })),
+          }),
+          t.Object({
+            route: t.Literal("command"),
+            address: t.String({ maxLength: 500 }),
+          }),
+        ]),
+      },
+      ({ body, status }) => {
+        const started =
+          body.route === "ssh"
+            ? installs.startSsh({
+                target: body.target,
+                port: body.port,
+                signIn: body.signIn as InstallSignIn,
+                password: body.password,
+              })
+            : installs.startCommand(body.address);
+        return "status" in started
+          ? status(started.status, started.message)
+          : started;
+      }
+    )
+    .get(
+      "/api/installs/:id/output",
+      ({ params, status }) =>
+        installs.output(params.id) ??
+        status(404, "No install with that id on this hub.")
+    )
+    .post("/api/installs/:id/stop", async ({ params, status }) => {
+      const stopped = await installs.stop(params.id);
+      if (!stopped) {
+        return status(404, "No install with that id on this hub.");
+      }
+      return "status" in stopped && typeof stopped.status === "number"
+        ? status(stopped.status, (stopped as { message: string }).message)
+        : installs.read();
+    })
+    .post(
+      "/api/installs/:id/retry",
+      {
+        body: t.Object({
+          password: t.Optional(t.String({ maxLength: 4096 })),
+        }),
+      },
+      ({ params, body, status }) => {
+        const again = installs.retry(params.id, body.password);
+        if (!again) {
+          return status(404, "No install with that id on this hub.");
+        }
+        return "status" in again ? status(again.status, again.message) : again;
+      }
+    )
+    .delete("/api/installs/:id", ({ params, status }) => {
+      const gone = installs.remove(params.id);
+      if (gone === false) {
+        return status(404, "No install with that id on this hub.");
+      }
+      return gone === true
+        ? installs.read()
+        : status(gone.status, gone.message);
+    })
+    .post(
+      "/api/installs/code/:code/ended",
+      {
+        body: t.Object({
+          status: t.Numeric(),
+          said: t.Optional(t.String({ maxLength: 2000 })),
+          host: t.Optional(t.String({ maxLength: 255 })),
+        }),
+      },
+      ({ params, body, status }) =>
+        installs.ended(
+          params.code,
+          body.status,
+          body.said ?? "",
+          body.host ?? ""
+        )
+          ? { ok: true }
+          : status(410, "That code no longer names a running install.")
+    )
     .post(
       "/api/machines/ssh",
       {
@@ -1123,83 +814,49 @@ export const joinRoutes = ({
         }),
       },
       ({ body, status }) => {
-        const target = body.target.trim();
-        if (!TARGET.test(target)) {
-          return status(
-            422,
-            "Enter the SSH target as user@host or a Host from ~/.ssh/config, with no spaces and no leading dash."
-          );
+        const password = body.password ?? "";
+        const started = installs.startSsh({
+          target: body.target,
+          port: body.port,
+          signIn: password === "" ? "key" : "password",
+          password,
+        });
+        if ("status" in started) {
+          return status(started.status, started.message);
         }
-        // One add of a machine at a time: two share its record and its
-        // connection, and each writes the machine a new key and runs the
-        // install over the other's (ssh-tunnels.ts `admit`), so the key the
-        // hub keeps and the one on the machine can differ. The running one's
-        // id goes with the refusal, for the dialog to show its progress.
-        const running = [...jobs.values()].find(
-          (job) =>
-            job.state === "running" &&
-            job.target === target &&
-            job.port === (body.port ?? null)
-        );
-        if (running) {
+        if (started.existing) {
           // A plain answer, not a declared status: the route's typed answers
           // are what the frozen iOS app's generated client switches over.
           return new Response(
-            `An SSH add of ${target} is already running (${running.id}): it goes on, and a new one can start once it has ended.`,
+            `An SSH add of ${started.install.target} is already running (${started.install.id}): it goes on, and a new one can start once it has ended.`,
             {
               status: 409,
               headers: {
                 "content-type": "text/plain; charset=utf-8",
-                [SSH_ADD_RUNNING_HEADER]: running.id,
+                [SSH_ADD_RUNNING_HEADER]: started.install.id,
               },
             }
           );
         }
-        const password = body.password ?? "";
-        if (LINE_BREAK.test(password)) {
-          return status(
-            422,
-            "That password has a line break, which SSH cannot be handed. Check it, or add this hub's key to the machine yourself, then try again."
-          );
-        }
-        const key = password === "" ? null : sshPublicKey();
-        if (password !== "" && !key) {
-          return status(
-            422,
-            `This hub has no SSH key to add to the machine yet. Create one on ${hostname()} with ssh-keygen -t ed25519, then try again.`
-          );
-        }
-        const command = key === null ? null : trustCommand(key);
-        if (key !== null && command === null) {
-          return status(
-            422,
-            "This hub's SSH public key is not a key line ssh-copy-id would add. Check ~/.ssh on the hub's machine, then try again."
-          );
-        }
-        return start(
-          target,
-          body.port ?? null,
-          command === null ? null : { password, command }
-        );
+        const job = installs.job(started.install.id);
+        return job ?? status(404, "No SSH add with that id on this hub.");
       }
     )
     .get("/api/machines/ssh/:id", ({ params, status }) => {
-      const job = jobs.get(params.id);
+      const job = installs.job(params.id);
       return job ?? status(404, "No SSH add with that id on this hub.");
     })
     .post("/api/machines/ssh/:id/stop", async ({ params, status }) => {
-      const job = jobs.get(params.id);
+      const job = installs.job(params.id);
       if (!job) {
         return status(404, "No SSH add with that id on this hub.");
       }
-      const run = runs.get(params.id);
-      if (!run) {
+      const stopped = await installs.stop(params.id);
+      if (stopped && "message" in stopped) {
         return status(
           409,
           `That SSH add to ${job.target} has already ended, so there is nothing to stop.`
         );
       }
-      await stop(run);
-      return job;
+      return installs.job(params.id) ?? job;
     });
-};

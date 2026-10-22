@@ -546,11 +546,12 @@
       // tells of a press on one after its click has already done so. The
       // file floating beside Files is Files' own, and so is a picture it
       // opened (the lightbox's PhotoSwipe root, appended to the body, is no
-      // layer of bits-ui's).
+      // layer of bits-ui's). Add machine's window and its output stand over
+      // the machines while their installs' rows arrive in it: the list stays.
       if (
         event.target instanceof Element &&
         event.target.closest(
-          "[data-bar-group], [data-files-float], .cawco-pswp"
+          "[data-bar-group], [data-files-float], .cawco-pswp, [data-connect-window], [data-connect-output]"
         )
       ) {
         event.preventDefault();
@@ -588,7 +589,7 @@
         {#if one.card === "caw"}
           <CawPanel feed={liveFeed} onchoose={close} quiet={cawQuiet()} />
         {:else if one.card === "machines"}
-          <MachinesList onleave={close} />
+          <MachinesList />
         {:else if one.card === "files"}
           <FilesFace onclose={close} />
         {:else}

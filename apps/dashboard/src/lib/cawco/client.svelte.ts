@@ -148,6 +148,7 @@ import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { currentClientId } from "./client-id";
+import { takeInstallsFrame } from "./connect/installs.svelte";
 import { devDebug } from "./dev-debug";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
@@ -3295,6 +3296,11 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "hub_auth") {
     takeAuthFrame(frame);
+    return;
+  }
+
+  if (frame.kind === "installs") {
+    takeInstallsFrame(frame);
     return;
   }
 

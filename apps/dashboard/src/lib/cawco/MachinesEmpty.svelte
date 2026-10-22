@@ -5,7 +5,7 @@
    * New project: Caw at 80px over a title and one line.
    *
    * - `none`, no machine registered: the two ways in as icon cards, each
-   *   opening the Connect a machine dialog on its tab.
+   *   opening Add machine's window on its route (connect/).
    * - `offline`, machines registered and none online: one line and Check
    *   machines, which opens the top bar's Machines popover, where they are
    *   listed greyed.
@@ -22,8 +22,9 @@
     iconCardVariants,
   } from "#lib/components/ui/icon-card/index.js";
   import { barGlass } from "./bar-glass.svelte";
+  import { connect } from "./connect/installs.svelte";
+  import { CONNECT_WAYS } from "./connect/ways";
   import Caw from "./home/Caw.svelte";
-  import { addMachine, JOIN_WAYS } from "./join/join.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";
   import { ListSwap } from "./motion/list-swap.svelte";
   import CardFace from "./project/CardFace.svelte";
@@ -99,15 +100,18 @@
               look: "card",
             })}
           >
-            {#each JOIN_WAYS as card, index (card.way)}
+            {#each CONNECT_WAYS as card, index (card.route)}
               <button
                 data-slot="icon-card"
                 aria-haspopup="dialog"
                 class={iconCardVariants({ class: "select-none" })}
-                data-open={addMachine.open && addMachine.way === card.way
+                data-open={connect.open &&
+                connect.id === null &&
+                connect.fields.route === card.route
                   ? ""
                   : undefined}
-                onclick={() => addMachine.show(card.way)}
+                onclick={(event) =>
+                  connect.openNew(event.currentTarget, card.route)}
                 type="button"
                 style:animation={enter.rowAnim(index)}
               >

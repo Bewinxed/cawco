@@ -127,6 +127,16 @@ export default defineConfig([
     "src/lib/cawco/HoverPanel.svelte": ["block-size", "inline-size"],
     "src/lib/cawco/MachinesEmpty.svelte": ["animation"],
     "src/lib/cawco/MachinesList.svelte": ["color"],
+    // Add machine's window stands where its anchor and its height put it,
+    // read every frame its height tweens and as the keyboard rises.
+    "src/lib/cawco/connect/ConnectWindow.svelte": [
+      "bottom",
+      "left",
+      "max-height",
+      "top",
+      "transform-origin",
+    ],
+    "src/lib/cawco/connect/InstallRow.svelte": ["color"],
     "src/lib/cawco/OlderRows.svelte": ["animation", "inline-size"],
     "src/lib/cawco/Shell.svelte": ["height"],
     "src/lib/cawco/UnlockKeychain.svelte": ["min-height"],

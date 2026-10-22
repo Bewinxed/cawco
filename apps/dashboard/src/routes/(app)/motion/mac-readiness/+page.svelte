@@ -7,6 +7,7 @@
    */
   import type { SshJoinJob } from "@cawco/core";
   import { onMount } from "svelte";
+  import AddMachineDialog from "#lib/cawco/AddMachineDialog.svelte";
   import { addMachine, sshJoin } from "#lib/cawco/join/join.svelte.js";
   import type { Readiness } from "#lib/cawco/join/readiness.svelte.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
@@ -102,6 +103,10 @@
 </script>
 
 <svelte:head><title>Mac readiness | CawCo</title></svelte:head>
+
+<!-- The dialog this bench drives: the product opens Add machine's window
+     (connect/) now, so the old dialog stands here alone until it is deleted. -->
+<AddMachineDialog />
 
 <nav
   aria-label="Readiness state"

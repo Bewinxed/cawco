@@ -1,5 +1,6 @@
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import { CAWCO_ENV, CAWCO_HUB_PORT } from "./index";
+import { INSTALL_CODE_ENV } from "./install";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { RELEASE_PUBLIC_KEY } from "./release-key";
 
@@ -34,6 +35,12 @@ const shellQuote = (value: string): string =>
  * machine stays on the new build: removing it would leave the machine with
  * no CawCo at all, where it had one before.
  *
+ * A command route's script (`code`, hub installs.ts) carries its install's
+ * one-time code: it hands it to `cawco binary-install` (whose join wait names
+ * it to the hub, which admits that machine), and says its end to the hub
+ * however it ends: its exit status, its refusal's words, and the host it
+ * ran on.
+ *
  * `origin` is the GitHub repository releases are published to. `releaseHost`
  * and `publicKey` exist so a proof can stand a local folder and a throwaway
  * key in for them; a real installer takes the embedded key.
@@ -44,7 +51,10 @@ export const generateInstallScript = ({
   publicKey = RELEASE_PUBLIC_KEY,
   releaseHost,
   sshAdd,
+  code,
 }: {
+  /** The command route's install's one-time code (hub installs.ts). */
+  code?: string;
   origin: string;
   hub?: string;
   publicKey?: string;
@@ -81,16 +91,37 @@ ${sshAdd ? `  OFFERED=${shellQuote(sshAdd.version)}\n` : ""}
   UPGRADE_FROM=""
   PREV_CURRENT=""
   PREV_KEEPER=""
-
+  FAILED=""
+${
+  hub && code
+    ? `  CODE=${shellQuote(code)}
+  export ${INSTALL_CODE_ENV}="$CODE"
+`
+    : ""
+}
   say() { printf '${INSTALL_STEP_PREFIX}%s\\n' "$*"; }
-  fail() { printf 'cawco: %s\\n' "$*" >&2; exit 1; }
-
+  fail() { FAILED="$*"; printf 'cawco: %s\\n' "$*" >&2; exit 1; }
+${
+  hub && code
+    ? `  # The hub hears how this ended, whichever way: the install it belongs to is waiting.
+  report_end() {
+    curl -fsS -m 10 -o /dev/null --data-urlencode "status=$1" --data-urlencode "said=$FAILED" --data-urlencode "host=$(uname -n 2>/dev/null || :)" "$HUB/api/installs/code/$CODE/ended" 2>/dev/null || :
+  }
+`
+    : ""
+}
   # Whatever this run created is removed if it does not finish; before the
   # first file is placed there is nothing to remove. A machine that had
   # CawCo gets its build's links back until the new build's setup begins,
   # and keeps the new build from then on.
   undo() {
-    [ "$?" != 0 ] || return 0
+    status=$?
+${
+  hub && code
+    ? `    report_end "$status"
+`
+    : ""
+}    [ "$status" != 0 ] || return 0
     set +e
     if [ -n "$UPGRADE_FROM" ]; then
       if [ "$SETUP_BEGAN" = 0 ]; then

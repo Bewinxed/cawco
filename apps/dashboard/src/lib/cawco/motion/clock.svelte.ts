@@ -9,7 +9,9 @@
  * One rule, here: a clock does not run while the element it writes into is
  * not on show — scrolled out of the viewport or inside a subtree nothing
  * renders (`watchRendered`), the tab hidden, or the phone's navigation sheet
- * over the page. It comes back reading the time now.
+ * over the page. A clock inside that sheet (an install's row in its machines
+ * list) is on show while the sheet is open, not under it. It comes back
+ * reading the time now.
  */
 import type { Attachment } from "svelte/attachments";
 import { watchRendered } from "#lib/utils/rendered.js";
@@ -82,7 +84,11 @@ export function tickingClock(running: () => boolean): Clock {
   let now = $state(Date.now());
   let drawn = $state(false);
   let inView = $state(false);
-  const onShow = $derived(drawn && inView && !tabHidden && !navSheet.open);
+  /** Its element stands in the navigation sheet itself (Shell's `data-rail-sheet`), not under it. */
+  let inSheet = $state(false);
+  const onShow = $derived(
+    drawn && inView && !tabHidden && (inSheet || !navSheet.open)
+  );
 
   $effect(() => {
     if (!(running() && onShow)) {
@@ -101,6 +107,7 @@ export function tickingClock(running: () => boolean): Clock {
     },
     watch: (node: Element) => {
       hear();
+      inSheet = node.closest("[data-rail-sheet]") !== null;
       // Rendered and on screen are two questions, and a clock asks both.
       // `watchRendered` answers only the first: content an ancestor skips has
       // no layout, and one merely scrolled past the fold is still laid out

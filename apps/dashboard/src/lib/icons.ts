@@ -185,6 +185,12 @@ export {
   default as IconToolQuestion,
 } from "~icons/solar/question-circle-bold-duotone";
 export { default as IconDot } from "~icons/solar/record-circle-bold-duotone";
+/**
+ * A step not reached yet: the hollow record (Add machine's steps and their
+ * rows in the machines list), in the line-duotone cut so it reads as a ring
+ * beside the solid done, current and failed marks.
+ */
+export { default as IconFuture } from "~icons/solar/record-circle-line-duotone";
 export { default as IconRefresh } from "~icons/solar/refresh-bold-duotone";
 /** Working: the session status glyph (DESIGN.md, Session status); and a starter that refreshes something, on its half-ink body (StarterCards). */
 export {
@@ -229,6 +235,8 @@ export { default as IconMoveTab } from "~icons/solar/square-transfer-horizontal-
 /** A release's New section (ReleaseNotes). */
 export { default as IconStars } from "~icons/solar/stars-bold-duotone";
 export { default as IconStop } from "~icons/solar/stop-bold-duotone";
+/** An install stopped by the person: its status glyph (Add machine). */
+export { default as IconStopped } from "~icons/solar/stop-circle-bold-duotone";
 export { default as IconSun } from "~icons/solar/sun-bold-duotone";
 export { default as IconLab } from "~icons/solar/test-tube-bold-duotone";
 export { default as IconTrash } from "~icons/solar/trash-bin-minimalistic-bold-duotone";

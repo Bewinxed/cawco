@@ -9,6 +9,9 @@
 import { hostname } from "node:os";
 import {
   type AgentRow,
+  INSTALL_CODE_ENV,
+  INSTALL_CODE_HEADER,
+  INSTALL_LIST_LIMIT_MS,
   INSTALL_STEP_PREFIX,
   JOIN_WAIT_STEP,
 } from "@cawco/core";
@@ -21,7 +24,7 @@ import {
   refusalSince,
 } from "@cawco/core/machine-key";
 
-const JOIN_TIMEOUT_MS = 90_000;
+const JOIN_TIMEOUT_MS = INSTALL_LIST_LIMIT_MS;
 const LOCAL_NETWORK_URL =
   /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
@@ -29,15 +32,20 @@ const LOCAL_NETWORK_URL =
  * This machine's own row, as this machine (core machine-key.ts): a hub that
  * requires paired devices answers it to the admitted machine, and tells one
  * it has not admitted yet that it must pair. Within 5 s, body and all.
+ * An install by a command names its one-time code on every read (the
+ * installer hands it over in {@link INSTALL_CODE_ENV}): the hub ties this
+ * machine to that install, and admits it, the command being the person's
+ * say-so.
  */
 const readOwnRow = (
   hubUrl: string,
   id: string
 ): Promise<Bounded<{ pairing: string | null; row?: AgentRow }>> =>
   readWithin(5000, async (signal) => {
+    const code = process.env[INSTALL_CODE_ENV];
     const response = await machineFetch(
       `${hubUrl}/api/agents/${encodeURIComponent(id)}`,
-      { signal }
+      { signal, ...(code ? { headers: { [INSTALL_CODE_HEADER]: code } } : {}) }
     );
     const pairing = response.headers.get("x-cawco-pairing");
     if (!response.ok) {
@@ -64,7 +72,7 @@ const readOwnRow = (
 export async function awaitJoined(hubUrl: string): Promise<void> {
   const id = await machineId();
   // Its own step, so an add that fails here names this wait, never the
-  // service step before it (hub join.ts `problemOf` reads the last step).
+  // service step before it (hub installs.ts reads the last step).
   console.log(`${INSTALL_STEP_PREFIX}${JOIN_WAIT_STEP}`);
   const since = Date.now();
   const deadline = since + JOIN_TIMEOUT_MS;

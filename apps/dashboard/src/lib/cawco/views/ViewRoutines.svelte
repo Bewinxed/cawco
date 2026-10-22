@@ -8,6 +8,7 @@
   import CantStart from "#lib/cawco/CantStart.svelte";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
+  import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
@@ -16,7 +17,6 @@
     unreachable,
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
-  import { addMachine } from "#lib/cawco/join/join.svelte.js";
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -1149,7 +1149,7 @@
   <Button
     aria-haspopup="dialog"
     label="Add machine"
-    onclick={() => addMachine.show()}
+    onclick={(event) => connect.openNew(event.currentTarget)}
     variant="outline"
   />
 {/snippet}

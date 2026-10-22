@@ -2191,6 +2191,7 @@ const attach = (
         frame.kind === "workflow" ||
         frame.kind === "fleet_mcp" ||
         frame.kind === "moves" ||
+        frame.kind === "installs" ||
         frame.kind === "move_progress" ||
         frame.kind === "command_queue" ||
         frame.kind === "stage" ||

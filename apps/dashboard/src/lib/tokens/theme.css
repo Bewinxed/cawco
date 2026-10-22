@@ -339,6 +339,11 @@
   --spacing-c-toolbar-ctl: var(--c-toolbar-ctl);
   --spacing-c-find-w: var(--c-find-w);
   --spacing-c-new-session-pop-w: var(--c-new-session-pop-w);
+  --spacing-c-connect-max-h: var(--c-connect-max-h);
+  --spacing-c-step-rail-x: var(--c-step-rail-x);
+  --spacing-c-step-rail-top: var(--c-step-rail-top);
+  --spacing-c-step-rail-gap: var(--c-step-rail-gap);
+  --spacing-c-connect-w: var(--c-connect-w);
   --spacing-c-panel-w: var(--c-panel-w);
   --spacing-c-signin-pop-w: var(--c-signin-pop-w);
   --spacing-c-caw-panel-h: var(--c-caw-panel-h);

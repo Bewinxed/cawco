@@ -3724,6 +3724,241 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/InstallCheck`.
+    public enum InstallCheck: OpenEnum {
+        case arch
+        case curl
+        case openssl
+        case os
+        case sha256
+        case systemd
+        case tar
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "arch": self = .arch
+            case "curl": self = .curl
+            case "openssl": self = .openssl
+            case "os": self = .os
+            case "sha256": self = .sha256
+            case "systemd": self = .systemd
+            case "tar": self = .tar
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .arch: "arch"
+            case .curl: "curl"
+            case .openssl: "openssl"
+            case .os: "os"
+            case .sha256: "sha256"
+            case .systemd: "systemd"
+            case .tar: "tar"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.arch, .curl, .openssl, .os, .sha256, .systemd, .tar]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/InstallRoute`.
+    public enum InstallRoute: OpenEnum {
+        case command
+        case ssh
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "command": self = .command
+            case "ssh": self = .ssh
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .command: "command"
+            case .ssh: "ssh"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.command, .ssh]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/InstallSignIn`.
+    public enum InstallSignIn: OpenEnum {
+        case byHand
+        case key
+        case password
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "by-hand": self = .byHand
+            case "key": self = .key
+            case "password": self = .password
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .byHand: "by-hand"
+            case .key: "key"
+            case .password: "password"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.byHand, .key, .password]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/InstallState`.
+    public enum InstallState: OpenEnum {
+        case failed
+        case joined
+        case lost
+        case running
+        case stopped
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "failed": self = .failed
+            case "joined": self = .joined
+            case "lost": self = .lost
+            case "running": self = .running
+            case "stopped": self = .stopped
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .failed: "failed"
+            case .joined: "joined"
+            case .lost: "lost"
+            case .running: "running"
+            case .stopped: "stopped"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.failed, .joined, .lost, .running, .stopped]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/InstallStep`.
+    public enum InstallStep: OpenEnum {
+        case agent
+        case fetch
+        case install
+        case key
+        case listed
+        case path
+        case run
+        case signIn
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "agent": self = .agent
+            case "fetch": self = .fetch
+            case "install": self = .install
+            case "key": self = .key
+            case "listed": self = .listed
+            case "path": self = .path
+            case "run": self = .run
+            case "sign-in": self = .signIn
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .agent: "agent"
+            case .fetch: "fetch"
+            case .install: "install"
+            case .key: "key"
+            case .listed: "listed"
+            case .path: "path"
+            case .run: "run"
+            case .signIn: "sign-in"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.agent, .fetch, .install, .key, .listed, .path, .run, .signIn]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/InstanceRowEffort`.
     public enum InstanceRowEffort: OpenEnum {
         case high

@@ -89,6 +89,9 @@ export const taskCollapseId = (projectId: string, taskId: string): string =>
 /** A device asking to pair (hub-auth.ts), by the code it shows: one per pairing. */
 export const pairingCollapseId = (userCode: string): string =>
   collapseOf("pairing", userCode);
+/** An install of a machine that ended (installs.ts): one per install. */
+export const installCollapseId = (id: string): string =>
+  collapseOf("install", id);
 /** A burst of things that need you shown as one notification (push.ts), by when it began. */
 export const needsCollapseId = (firstAt: number): string =>
   collapseOf("needs", firstAt.toString(36));

@@ -2,12 +2,17 @@
   import { machineLabel } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
-   * The machines as a list: each machine (its menu on right-click or
-   * long-press: update, reload, log in, unlock, forget), then Add machine.
-   * With no machine yet it is the empty fleet's compact form: one line and
-   * the two ways in, each opening Connect a machine on its tab. Shown in the
-   * wide bar's Machines popover and in the phone's sidebar; `onleave` is
-   * called before a row opens a dialog, so the place it stands in can close.
+   * The machines as a list: every install under way or waiting on the
+   * person first (connect/InstallRow: the place Add machine's work is
+   * parked, one press back into its window), then each machine (its menu on
+   * right-click or long-press: update, reload, log in, unlock, forget), a
+   * machine being brought back drawn as its install's row in its own place,
+   * then Add machine. With no machine yet it is the empty fleet's compact
+   * form: one line and the two ways in, each opening Add machine on its
+   * route. The list reflows as rows come and go (Nothing Jumps). Shown in
+   * the wide bar's Machines popover and in the phone's sidebar; the popover
+   * stays open under Add machine's window, so an install's row arrives in
+   * it as the install starts and the window parks into it.
    */
   import {
     MachineRow,
@@ -17,17 +22,35 @@
   import { IconPlus } from "#lib/icons.js";
   import { barGlass } from "./bar-glass.svelte";
   import { cawco, type Machine } from "./client.svelte";
+  import InstallRow from "./connect/InstallRow.svelte";
+  import { connect } from "./connect/installs.svelte";
+  import { CONNECT_WAYS } from "./connect/ways";
   import { home } from "./home/home-state.svelte";
   import { answerMachine, hubAuth } from "./hub-auth.svelte";
   import { failureWords } from "./hub-read";
-  import { addMachine, JOIN_WAYS } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
   import { pausedWords } from "./machine-pause";
+  import { reflow } from "./motion/rows.svelte";
   import RowFault from "./RowFault.svelte";
   import { cellFor } from "./updates/model";
   import { updates } from "./updates/updates.svelte";
 
-  let { onleave }: { onleave?: () => void } = $props();
+  /** Each machine the fleet lists that an install is bringing back: its row is that install's. */
+  const returning = $derived(
+    new Map(
+      connect.band
+        .filter((one) => one.returning !== null)
+        .map((one) => [one.returning as string, one])
+    )
+  );
+  /** The installs with no machine row of their own to grow out of. */
+  const newcomers = $derived(
+    connect.band.filter(
+      (one) =>
+        one.returning === null ||
+        !cawco.machines.some((machine) => machine.machineId === one.returning)
+    )
+  );
 
   /** The waiting machine an answer is on its way for, and the hub's refusal of the last. */
   let answering = $state<string | null>(null);
@@ -190,23 +213,35 @@
     <RowFault reason={admitRefused} />
   {/if}
 {/if}
+{#if newcomers.length > 0}
+  <!-- Installs under way or waiting on the person: each one press back into its window. -->
+  <ul
+    data-slot="list"
+    data-installs
+    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-row px-0 pt-0 pb-space-1"
+    {@attach reflow()}
+  >
+    {#each newcomers as install, index (install.id)}
+      <li data-install={install.id}>
+        <InstallRow {index} {install} />
+      </li>
+    {/each}
+  </ul>
+{/if}
 {#if cawco.machines.length === 0}
   <!-- No machine yet: the empty fleet's two ways in, as rows. -->
   <p class="m-0 px-space-2 pt-space-1 pb-space-2 type-meta text-ink-muted">
     Connect a machine to run sessions
   </p>
   <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
-    {#each JOIN_WAYS as way (way.way)}
+    {#each CONNECT_WAYS as way (way.route)}
       {@const Icon = way.icon}
       <li>
         <button
           data-slot="row"
           aria-haspopup="dialog"
           class="select-none flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset"
-          onclick={() => {
-            onleave?.();
-            addMachine.show(way.way);
-          }}
+          onclick={(event) => connect.openNew(event.currentTarget, way.route)}
           type="button"
         >
           <span
@@ -227,41 +262,51 @@
     {/each}
   </ul>
 {:else}
-  <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
+  <ul
+    data-slot="list"
+    class="m-0 flex list-none flex-col gap-space-row p-0"
+    {@attach reflow()}
+  >
     {#each cawco.machines as machine, index (machine.machineId)}
       {@const up = machine.status === "online"}
       {@const live = liveOn(machine.machineId)}
       {@const fault = faultOf(machine.machineId)}
       {@const update = updateOf(machine)}
       {@const updateFailed = updateFault(machine)}
+      {@const back = returning.get(machine.machineId)}
       <li
         data-machine={machine.machineId}
         style:--fault-end="var(--space-2)"
         style:--fault-indent="calc(var(--space-2) * 2 + var(--icon-md))"
       >
-        <MachineMenu {machine}>
-          <div
-            data-slot="row"
-            class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset"
-            tabindex="-1"
-          >
-            <MachineRow
-              hue={machineHue(index, up)}
-              icon={machineIcon(machine.os ?? "")}
-              meta={[
-                `${live} live`,
-                pausedWords(machine),
-                fault,
-                update && !update.fail ? update.text : undefined,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              name={machineLabel(machine.hostname)}
-              presence={presenceOf(up, fault)}
-            />
-          </div>
-        </MachineMenu>
-        <RowFault again={updateFailed?.again} reason={updateFailed?.reason} />
+        {#if back}
+          <!-- A machine coming back: its own row grows into its install's, its name kept. -->
+          <InstallRow {index} install={back} os={machine.os ?? ""} />
+        {:else}
+          <MachineMenu {machine}>
+            <div
+              data-slot="row"
+              class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset"
+              tabindex="-1"
+            >
+              <MachineRow
+                hue={machineHue(index, up)}
+                icon={machineIcon(machine.os ?? "")}
+                meta={[
+                  `${live} live`,
+                  pausedWords(machine),
+                  fault,
+                  update && !update.fail ? update.text : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                name={machineLabel(machine.hostname)}
+                presence={presenceOf(up, fault)}
+              />
+            </div>
+          </MachineMenu>
+          <RowFault again={updateFailed?.again} reason={updateFailed?.reason} />
+        {/if}
       </li>
     {/each}
   </ul>
@@ -269,10 +314,7 @@
     data-slot="row"
     data-add
     class="select-none mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 items-center gap-space-2 rounded-ee-sm rounded-es-sm border-t border-t-border-hairline px-space-2 py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-c-row-h hover:bg-surface-hover"
-    onclick={() => {
-      onleave?.();
-      addMachine.show();
-    }}
+    onclick={(event) => connect.openNew(event.currentTarget)}
     type="button"
   >
     <IconPlus aria-hidden="true" class="size-icon-md" />

@@ -51,6 +51,9 @@ export * from "./harness";
 export * from "./hooks";
 export * from "./hub-auth";
 export * from "./injected";
+// Adding a machine: one install, kept by the hub from its start to the
+// person's act on its outcome (hub installs.ts), and its window's steps.
+export * from "./install";
 // The system's laws, named and checked in the running product: `invariant()`.
 export * from "./invariant";
 // Adding a machine: the join routes' shapes and the install script's step
@@ -1679,6 +1682,8 @@ export type FramePayload =
   | import("./frames").ProjectCapFrame
   | import("./actions").ActionsFrame
   | import("./hub-auth").HubAuthFrame
+  /** Hub-originated: every install and the draft, whole, on each change. */
+  | import("./install").InstallsFrame
   | import("./frames").ProjectStopFrame
   | import("./frames").DelegateEventFrame
   /** Hub-originated: every open fleet-watch notice, whole, on each change. */

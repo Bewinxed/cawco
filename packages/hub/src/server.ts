@@ -606,6 +606,7 @@ import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
 import { createHubTools } from "./hub-tools";
 import { createIngress, ingressRoutes } from "./ingress";
+import { createInstalls } from "./installs";
 import { jevAccess } from "./jev";
 import { JevFailed, jevAttach, jevType, offLine } from "./jev-placement";
 import { createJevTasks, phoneRequestRoutes } from "./jev-tasks";
@@ -6443,6 +6444,40 @@ export const createServer = (
     sshKeys: {
       pending: () => db.sshMachines.pendingKeys(),
       adopted: (id) => db.sshMachines.update(id, { pendingKey: null }),
+    },
+  });
+  /**
+   * Every install of a machine, kept from its start to the person's act on
+   * its outcome (installs.ts): any dashboard reads them, a reload finds them,
+   * and a restart finds a running one again as lost.
+   */
+  const installs = createInstalls({
+    dbPath: DB_PATH,
+    lifetime,
+    tunnels: sshTunnels,
+    fleet: () =>
+      db.listAgents().map((row) => ({
+        machineId: row.machineId,
+        hostname: row.hostname,
+        online: Boolean(registry.agent(row.machineId)),
+      })),
+    admit: (machineId) => {
+      hubAuth.admit(machineId);
+    },
+    changed: (frame) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: frame,
+      } satisfies Envelope<FramePayload>),
+    outcome: (install) => push.install(install),
+    settled: (id) => push.installSettled(id),
+    // Read when an add asks, once the hub has started: both stand further down.
+    offered: () => binaryUpdates.offered(),
+    heard: (record) => {
+      const said = sshAddHeard.get(record);
+      sshAddHeard.delete(record);
+      return said;
     },
   });
   /**
@@ -16944,6 +16979,9 @@ export const createServer = (
     // A pairing waiting on the person pushes to the app; settled, its push comes down.
     asked: (request) => push.pairing(request),
     settled: (userCode) => push.pairingSettled(userCode),
+    installCode: (code, machineId) => {
+      installs.heard(code, machineId);
+    },
     changed: (frame) =>
       registry.broadcast({
         verb: "frames",
@@ -25349,17 +25387,7 @@ export const createServer = (
         viewRoutes(views, blocks),
         blockRoutes(blocks),
         noticesSeen.routes,
-        joinRoutes({
-          offered: binaryUpdates.offered,
-          heard: (record) => {
-            const said = sshAddHeard.get(record);
-            sshAddHeard.delete(record);
-            return said;
-          },
-          lifetime,
-          online: (machineId) => Boolean(registry.agent(machineId)),
-          tunnels: sshTunnels,
-        }),
+        joinRoutes({ installs, offered: () => binaryUpdates.offered() }),
         binaryUpdates.routes,
         workflowRoutes(
           db,

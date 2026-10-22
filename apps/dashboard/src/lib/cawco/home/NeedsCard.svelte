@@ -103,6 +103,7 @@
     submitCommand,
     takeOverBrowser,
   } from "../client.svelte";
+  import { causeLine } from "../connect/words";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
   import CopyBox from "../join/CopyBox.svelte";
@@ -181,6 +182,8 @@
         return pairingWords.asks(item.request.userCode);
       case "admission":
         return "Waits to join your fleet. Admitted, it runs sessions like your other machines.";
+      case "install":
+        return causeLine(item.install);
       case "task":
         return item.reason === "review"
           ? `Review the draft: it waits on you in ${item.stage}`
@@ -305,6 +308,10 @@
         return ["Machine", item.machine.platform, item.place]
           .filter(Boolean)
           .join(" · ");
+      case "install":
+        return item.install.route === "ssh"
+          ? "Add machine · over SSH"
+          : "Add machine · by a command";
       case "action":
       case "ask":
       case "cap":
@@ -662,6 +669,8 @@
         <IconLock aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "admission"}
         <IconServer aria-hidden="true" class="size-icon-md" />
+      {:else if item.kind === "install"}
+        <IconError aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "task"}
         {#if item.reason === "failed"}
           <IconError aria-hidden="true" class="size-icon-md" />

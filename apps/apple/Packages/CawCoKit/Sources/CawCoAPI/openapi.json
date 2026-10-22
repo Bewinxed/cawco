@@ -16878,6 +16878,518 @@
         }
       }
     },
+    "/api/installs": {
+      "get": {
+        "operationId": "getApiInstalls",
+        "responses": {
+          "200": {
+            "description": "getApiInstalls 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallsRead"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "route": {
+                        "type": "string",
+                        "const": "ssh"
+                      },
+                      "target": {
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      "port": {
+                        "minimum": 1,
+                        "maximum": 65535,
+                        "type": "integer"
+                      },
+                      "signIn": {
+                        "type": "string",
+                        "enum": [
+                          "key",
+                          "password",
+                          "by-hand"
+                        ]
+                      },
+                      "password": {
+                        "maxLength": 4096,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "route",
+                      "target",
+                      "signIn"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "route": {
+                        "type": "string",
+                        "const": "command"
+                      },
+                      "address": {
+                        "maxLength": 500,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "route",
+                      "address"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstalls",
+        "responses": {
+          "200": {
+            "description": "postApiInstalls 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallStarted"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiInstalls 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstalls 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installs/draft": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "route": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "ssh"
+                      },
+                      {
+                        "type": "string",
+                        "const": "command"
+                      }
+                    ]
+                  },
+                  "target": {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  "port": {
+                    "maxLength": 10,
+                    "type": "string"
+                  },
+                  "signIn": {
+                    "type": "string",
+                    "enum": [
+                      "key",
+                      "password",
+                      "by-hand"
+                    ]
+                  },
+                  "address": {
+                    "maxLength": 500,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "target",
+                  "port",
+                  "signIn",
+                  "address"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiInstallsDraft",
+        "responses": {
+          "200": {
+            "description": "putApiInstallsDraft 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallsRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiInstallsDraft 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installs/{id}/output": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstallsByIdOutput",
+        "responses": {
+          "200": {
+            "description": "getApiInstallsByIdOutput 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiInstallsByIdOutput 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installs/{id}/stop": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstallsByIdStop",
+        "responses": {
+          "200": {
+            "description": "postApiInstallsByIdStop 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallsRead"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiInstallsByIdStop 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiInstallsByIdStop 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstallsByIdStop 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installs/{id}/retry": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "maxLength": 4096,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstallsByIdRetry",
+        "responses": {
+          "200": {
+            "description": "postApiInstallsByIdRetry 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallStarted"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiInstallsByIdRetry 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiInstallsByIdRetry 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstallsByIdRetry 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installs/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiInstallsById",
+        "responses": {
+          "200": {
+            "description": "deleteApiInstallsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallsRead"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiInstallsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiInstallsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiInstallsById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installs/code/{code}/ended": {
+      "post": {
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "said": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "host": {
+                    "maxLength": 255,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstallsCodeByCodeEnded",
+        "responses": {
+          "200": {
+            "description": "postApiInstallsCodeByCodeEnded 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstallsCodeByCodeEnded200"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "postApiInstallsCodeByCodeEnded 410",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstallsCodeByCodeEnded 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/machines/ssh": {
       "post": {
         "requestBody": {
@@ -16917,6 +17429,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SshJoinJob"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesSsh 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiMachinesSsh 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -27578,6 +28110,17 @@
           "seen"
         ]
       },
+      "postApiInstallsCodeByCodeEnded200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "getApiBinaryUpdatesMachines200": {
         "type": "object",
         "properties": {
@@ -32818,6 +33361,9 @@
             "$ref": "#/components/schemas/ActionsFrame"
           },
           {
+            "$ref": "#/components/schemas/InstallsFrame"
+          },
+          {
             "$ref": "#/components/schemas/ProjectStopFrame"
           },
           {
@@ -32899,6 +33445,7 @@
             "local.name": "#/components/schemas/LocalNameFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
+            "installs": "#/components/schemas/InstallsFrame",
             "project.stop": "#/components/schemas/ProjectStopFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "fleet_watch.notices": "#/components/schemas/FleetWatchNoticesFrame",
@@ -44078,6 +44625,10 @@
               "$ref": "#/components/schemas/JoinAddress"
             }
           },
+          "canInstall": {
+            "description": "Whether this hub can give out an installer: only a build carrying the\nrelease-signing key can (core release-key.ts).",
+            "type": "boolean"
+          },
           "hubHostname": {
             "type": "string"
           },
@@ -44091,6 +44642,7 @@
         },
         "required": [
           "addresses",
+          "canInstall",
           "hubHostname",
           "sshPublicKey"
         ]
@@ -44111,6 +44663,543 @@
         "required": [
           "label",
           "url"
+        ]
+      },
+      "InstallsRead": {
+        "description": "`GET /api/installs`, and the `installs` frame every change sends.",
+        "type": "object",
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/InstallDraft"
+          },
+          "installs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Install"
+            }
+          }
+        },
+        "required": [
+          "installs"
+        ]
+      },
+      "InstallDraft": {
+        "description": "What the person filled in before anything started: kept by the hub, never a password.",
+        "type": "object",
+        "properties": {
+          "address": {
+            "description": "The command route's chosen address.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "description": "The command route's one-time code, minted by the hub as the route is\nchosen so the line can be shown before it is copied; it works from the\nmoment Copy command starts its install. Never sent by a dashboard.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "port": {
+            "type": "string"
+          },
+          "route": {
+            "$ref": "#/components/schemas/InstallRoute",
+            "description": "Null until a route is chosen (Route, the window's first step)."
+          },
+          "signIn": {
+            "$ref": "#/components/schemas/InstallSignIn"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "port",
+          "signIn",
+          "target"
+        ]
+      },
+      "InstallSignIn": {
+        "description": "How an SSH install signs in: the hub's key, a password once, or a key the person put there.",
+        "type": "string",
+        "enum": [
+          "by-hand",
+          "key",
+          "password"
+        ]
+      },
+      "Install": {
+        "description": "One install, as the hub keeps it and every dashboard reads it.",
+        "type": "object",
+        "properties": {
+          "address": {
+            "description": "The command route's hub address, as the line names it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "checks": {
+            "description": "The checks the installer has passed, and the one it failed.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "check": {
+                  "$ref": "#/components/schemas/InstallCheck"
+                },
+                "passed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "check",
+                "passed"
+              ]
+            }
+          },
+          "command": {
+            "description": "The command route's one line, while its code works.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "endedAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hostname": {
+            "description": "The name the fleet shows the machine by, once it is known.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "machineId": {
+            "description": "The machine it joined as, once known.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "port": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "unreachable"
+                    ]
+                  },
+                  "detail": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "detail",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "host-key"
+                    ]
+                  },
+                  "host": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "host",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "sign-in"
+                    ]
+                  },
+                  "said": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "said"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "forwarding"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "exposed"
+                    ]
+                  },
+                  "bound": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "bound",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "port-held"
+                    ]
+                  },
+                  "port": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "port"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  },
+                  "said": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "said"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "download"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "unsigned"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "check"
+                    ]
+                  },
+                  "check": {
+                    "$ref": "#/components/schemas/InstallCheck"
+                  },
+                  "said": {
+                    "type": "string"
+                  },
+                  "user": {
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  }
+                },
+                "required": [
+                  "check",
+                  "kind",
+                  "said",
+                  "user"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "step"
+                    ]
+                  },
+                  "said": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "said"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "never-online"
+                    ]
+                  },
+                  "mac": {
+                    "type": "boolean"
+                  },
+                  "local": {
+                    "type": "boolean"
+                  },
+                  "keyRefused": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "keyRefused",
+                  "kind",
+                  "local",
+                  "mac"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "lost"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
+          },
+          "problemStep": {
+            "$ref": "#/components/schemas/InstallStep",
+            "description": "The step it failed or stopped on."
+          },
+          "returning": {
+            "description": "A machine already in the fleet this install brings back: its row grows into the install's.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "route": {
+            "$ref": "#/components/schemas/InstallRoute"
+          },
+          "signedIn": {
+            "type": "boolean"
+          },
+          "signIn": {
+            "$ref": "#/components/schemas/InstallSignIn"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/InstallState"
+          },
+          "steps": {
+            "description": "Each step started, in order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstallMark"
+            }
+          },
+          "tail": {
+            "description": "The output's last lines, for the window's well.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target": {
+            "description": "`user@host`, or a Host from the hub user's `~/.ssh/config`; empty for the command route.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "checks",
+          "command",
+          "endedAt",
+          "hostname",
+          "id",
+          "machineId",
+          "port",
+          "returning",
+          "route",
+          "signedIn",
+          "startedAt",
+          "state",
+          "steps",
+          "tail",
+          "target"
+        ]
+      },
+      "InstallCheck": {
+        "type": "string",
+        "enum": [
+          "arch",
+          "curl",
+          "openssl",
+          "os",
+          "sha256",
+          "systemd",
+          "tar"
+        ]
+      },
+      "InstallRoute": {
+        "type": "string",
+        "enum": [
+          "command",
+          "ssh"
+        ]
+      },
+      "InstallState": {
+        "description": "`running` while it goes; `failed`, `stopped` and `lost` stand until the\nperson acts on them; `joined` once the fleet lists the machine online.",
+        "type": "string",
+        "enum": [
+          "failed",
+          "joined",
+          "lost",
+          "running",
+          "stopped"
+        ]
+      },
+      "InstallMark": {
+        "description": "One step as it ran: when it started, and when it ended (null while it runs).",
+        "type": "object",
+        "properties": {
+          "endedAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "step": {
+            "$ref": "#/components/schemas/InstallStep"
+          }
+        },
+        "required": [
+          "endedAt",
+          "startedAt",
+          "step"
+        ]
+      },
+      "InstallStep": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "fetch",
+          "install",
+          "key",
+          "listed",
+          "path",
+          "run",
+          "sign-in"
+        ]
+      },
+      "InstallStarted": {
+        "description": "What `POST /api/installs` answers: the install, and whether it was one already running for that machine.",
+        "type": "object",
+        "properties": {
+          "existing": {
+            "type": "boolean"
+          },
+          "install": {
+            "$ref": "#/components/schemas/Install"
+          }
+        },
+        "required": [
+          "existing",
+          "install"
+        ]
+      },
+      "InstallOutput": {
+        "description": "`GET /api/installs/:id/output`.",
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "lines"
         ]
       },
       "SshJoinJob": {
@@ -58372,6 +59461,31 @@
         },
         "required": [
           "actions",
+          "kind"
+        ]
+      },
+      "InstallsFrame": {
+        "description": "The frame the hub sends every dashboard when an install or the draft changes.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "installs"
+            ]
+          },
+          "draft": {
+            "$ref": "#/components/schemas/InstallDraft"
+          },
+          "installs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Install"
+            }
+          }
+        },
+        "required": [
+          "installs",
           "kind"
         ]
       },

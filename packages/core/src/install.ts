@@ -1,0 +1,298 @@
+/**
+ * An install: one attempt to bring a machine into the fleet, kept by the hub
+ * (hub installs.ts) from the moment it starts until the person acts on its
+ * outcome, so any device and any reload finds it. Two routes: over SSH, the
+ * hub signs in and runs the installer through its own connection (hub
+ * join.ts); by a command, the person runs one line on the machine, and the
+ * line carries a one-time code that ties what the machine does to this
+ * install (its fetch of the installer, its join, the installer's end).
+ *
+ * The words are the dashboard's (connect/); the hub says which step, which
+ * check and which kind of problem, decided by what it measured.
+ */
+
+/** The header the installer's join wait sends its install's one-time code in (cli await-joined.ts). */
+export const INSTALL_CODE_HEADER = "x-cawco-install-code";
+
+/** The variable the command route's installer hands its one-time code to `cawco binary-install` in. */
+export const INSTALL_CODE_ENV = "CAWCO_INSTALL_CODE";
+
+/** How long the agent waits for the hub to list it (cli await-joined.ts `JOIN_TIMEOUT_MS`). */
+export const INSTALL_LIST_LIMIT_MS = 90_000;
+
+/** How long the hub waits after a clean exit for the machine to come online (hub join.ts). */
+export const INSTALL_GRACE_MS = 15_000;
+
+/**
+ * How long the command route's install may run on the machine before it
+ * reads as stuck: the agent's wait and the hub's grace, folded together.
+ */
+export const COMMAND_INSTALL_LIMIT_MS =
+  INSTALL_LIST_LIMIT_MS + INSTALL_GRACE_MS;
+
+export type InstallRoute = "ssh" | "command";
+
+/** How an SSH install signs in: the hub's key, a password once, or a key the person put there. */
+export type InstallSignIn = "key" | "password" | "by-hand";
+
+/** The steps of an install over SSH, in order. */
+export const SSH_STEPS = [
+  "sign-in",
+  "path",
+  "key",
+  "fetch",
+  "install",
+  "agent",
+  "listed",
+] as const;
+
+/** The steps of an install by a command: the three the hub can see. */
+export const COMMAND_STEPS = ["run", "install", "listed"] as const;
+
+export type InstallStep =
+  (typeof SSH_STEPS)[number] | (typeof COMMAND_STEPS)[number];
+
+/** What the installer needs on the machine, each a check it makes (core install-script.ts). */
+export const INSTALL_CHECKS = [
+  "os",
+  "arch",
+  "curl",
+  "tar",
+  "sha256",
+  "systemd",
+  "openssl",
+] as const;
+
+export type InstallCheck = (typeof INSTALL_CHECKS)[number];
+
+/**
+ * The step whose work a check serves: the platform and the download's tools
+ * for the fetch, the service manager and the signature's tool for the
+ * install. The installer makes them all before it fetches anything.
+ */
+export const CHECK_STEP: Record<InstallCheck, InstallStep> = {
+  os: "fetch",
+  arch: "fetch",
+  curl: "fetch",
+  tar: "fetch",
+  sha256: "fetch",
+  systemd: "install",
+  openssl: "install",
+};
+
+/** One step as it ran: when it started, and when it ended (null while it runs). */
+export interface InstallMark {
+  endedAt: number | null;
+  startedAt: number;
+  step: InstallStep;
+}
+
+/** Why an install did not finish. */
+export type InstallProblem =
+  /** The hub could not reach the machine on that address and port: `detail` says how, by its errno. */
+  | { kind: "unreachable"; detail: string }
+  /** The machine's SSH host key is not the one the hub knew. */
+  | { kind: "host-key"; host: string }
+  /** ssh refused the sign-in: `said` is ssh's own last words. */
+  | { kind: "sign-in"; said: string }
+  /** The machine's sshd will not carry the hub to it. */
+  | { kind: "forwarding" }
+  /** It would, but beyond its loopback (GatewayPorts). */
+  | { kind: "exposed"; bound: string[] }
+  /** Another program on the machine holds the port the forward picked. */
+  | { kind: "port-held"; port: number }
+  /** Handing the machine its key over the hub's connection failed. */
+  | { kind: "key"; said: string }
+  /** The installer did not come through the hub's connection. */
+  | { kind: "download" }
+  /** This hub is a build without the release-signing key: it has no installer to give. */
+  | { kind: "unsigned" }
+  /** The hub could not find the build it offers its fleet, which an SSH add leaves the machine on: its words why. */
+  | { kind: "offer"; said: string }
+  /** A check of the installer's failed on the machine. */
+  | { kind: "check"; check: InstallCheck; said: string; user: string | null }
+  /** A step of the installer's failed for another reason (a checksum, no build, a command in the way). */
+  | { kind: "step"; said: string }
+  /** Everything ran, but the hub never listed the machine online. */
+  | { kind: "never-online"; mac: boolean; local: boolean; keyRefused: boolean }
+  /** The hub restarted mid-install and lost track of it. */
+  | { kind: "lost" };
+
+/**
+ * `running` while it goes; `failed`, `stopped` and `lost` stand until the
+ * person acts on them; `joined` once the fleet lists the machine online.
+ */
+export type InstallState = "running" | "failed" | "stopped" | "lost" | "joined";
+
+/** One install, as the hub keeps it and every dashboard reads it. */
+export interface Install {
+  /** The command route's hub address, as the line names it. */
+  address: string | null;
+  /** The checks the installer has passed, and the one it failed. */
+  checks: { check: InstallCheck; passed: boolean }[];
+  /** The command route's one line, while its code works. */
+  command: string | null;
+  endedAt: number | null;
+  /** The name the fleet shows the machine by, once it is known. */
+  hostname: string | null;
+  id: string;
+  /** The machine it joined as, once known. */
+  machineId: string | null;
+  port: number | null;
+  problem: InstallProblem | null;
+  /** The step it failed or stopped on. */
+  problemStep: InstallStep | null;
+  /** A machine already in the fleet this install brings back: its row grows into the install's. */
+  returning: string | null;
+  route: InstallRoute;
+  signedIn: boolean;
+  signIn: InstallSignIn | null;
+  startedAt: number;
+  state: InstallState;
+  /** Each step started, in order. */
+  steps: InstallMark[];
+  /** The output's last lines, for the window's well. */
+  tail: string[];
+  /** `user@host`, or a Host from the hub user's `~/.ssh/config`; empty for the command route. */
+  target: string;
+}
+
+/** What the person filled in before anything started: kept by the hub, never a password. */
+export interface InstallDraft {
+  /** The command route's chosen address. */
+  address: string | null;
+  /**
+   * The command route's one-time code, minted by the hub as the route is
+   * chosen so the line can be shown before it is copied; it works from the
+   * moment Copy command starts its install. Never sent by a dashboard.
+   */
+  code?: string | null;
+  port: string;
+  /** Null until a route is chosen (Route, the window's first step). */
+  route: InstallRoute | null;
+  signIn: InstallSignIn;
+  target: string;
+}
+
+/** `GET /api/installs`, and the `installs` frame every change sends. */
+export interface InstallsRead {
+  draft: InstallDraft | null;
+  installs: Install[];
+}
+
+/** The frame the hub sends every dashboard when an install or the draft changes. */
+export interface InstallsFrame extends InstallsRead {
+  kind: "installs";
+}
+
+/** `POST /api/installs`. */
+export type InstallStart =
+  | {
+      route: "ssh";
+      target: string;
+      port?: number;
+      signIn: InstallSignIn;
+      /** Only for `signIn: "password"`: one sign-in, then forgotten. */
+      password?: string;
+    }
+  | { route: "command"; address: string };
+
+/** What `POST /api/installs` answers: the install, and whether it was one already running for that machine. */
+export interface InstallStarted {
+  existing: boolean;
+  install: Install;
+}
+
+/** `GET /api/installs/:id/output`. */
+export interface InstallOutput {
+  lines: string[];
+}
+
+/** The step an install is on now: the last one started and not ended. */
+export const currentStep = (install: Install): InstallMark | null => {
+  const last = install.steps.at(-1);
+  return last && last.endedAt === null ? last : null;
+};
+
+/** The steps of an install's route, in order. */
+export const stepsOf = (route: InstallRoute): readonly InstallStep[] =>
+  route === "ssh" ? SSH_STEPS : COMMAND_STEPS;
+
+/** The limit a step reads stuck past, ms; null when it has none. */
+export const stepLimit = (
+  route: InstallRoute,
+  step: InstallStep
+): number | null => {
+  if (route === "ssh") {
+    return step === "listed" ? INSTALL_LIST_LIMIT_MS : null;
+  }
+  return step === "install" ? COMMAND_INSTALL_LIMIT_MS : null;
+};
+
+/** The host part of an SSH target: `deploy@build-01.example.net` → `build-01.example.net`. */
+export const targetHost = (target: string): string =>
+  target.slice(target.lastIndexOf("@") + 1);
+
+/** Each step in the person's words, by route. */
+export const stepWords = (route: InstallRoute, step: InstallStep): string => {
+  if (route === "command") {
+    // The command route's own words; its "listed" is the SSH route's.
+    if (step === "run") {
+      return "Waiting for the command to run on it";
+    }
+    if (step === "install") {
+      return "Installing on it";
+    }
+  }
+  return SSH_STEP_WORDS[step];
+};
+
+const SSH_STEP_WORDS: Record<InstallStep, string> = {
+  "sign-in": "Signing in",
+  path: "Opening its path to the hub",
+  key: "Giving it its key",
+  fetch: "Fetching the signed build",
+  install: "Installing",
+  agent: "Starting the agent",
+  listed: "Waiting for the hub to list it",
+  run: "Waiting for the command to run on it",
+};
+
+/** Each check in the person's words: what the installer needs on the machine. */
+export const CHECK_WORDS: Record<InstallCheck, string> = {
+  os: "Linux or macOS",
+  arch: "x86_64 or arm64",
+  curl: "curl",
+  tar: "tar",
+  sha256: "SHA-256",
+  systemd: "systemd user services",
+  openssl: "openssl",
+};
+
+/** What an install is called: the machine's name once known, else how it is reached. */
+export const installName = (install: Install): string =>
+  install.hostname ?? (install.target || "New machine");
+
+/** An outcome in one line, as the band, the window's head and a push say it. */
+export const outcomeLine = (install: Install): string => {
+  switch (install.state) {
+    case "joined":
+      return `${installName(install)} is in the fleet.`;
+    case "lost":
+      return "The hub restarted during the install and lost it.";
+    case "stopped":
+      return install.signedIn
+        ? "Stopped after it signed in"
+        : "Stopped before it signed in";
+    case "failed":
+      return install.problemStep
+        ? `Failed at ${stepWords(install.route, install.problemStep)}`
+        : "Failed";
+    case "running":
+      return stepWords(
+        install.route,
+        currentStep(install)?.step ??
+          (install.route === "ssh" ? "sign-in" : "run")
+      );
+  }
+};

@@ -18,7 +18,9 @@
    * list (MachinesList) in the glass's one card (GlassCard): it comes down
    * out of the glass, or the card hanging there changes to it in place. The
    * home's Check machines opens it too (bar-glass `open`). A phone has no
-   * room for it in the bar: the machines are in its sidebar.
+   * room for it in the bar: the machines are in its sidebar. A machine being
+   * added counts as soon as its install runs, and an install that failed
+   * turns the glyph to attention until the person acts on it (connect/).
    */
   import { machineLabel } from "@cawco/core";
   import { mergeProps } from "bits-ui";
@@ -26,6 +28,7 @@
   import { IconServer } from "#lib/icons.js";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
+  import { connect } from "./connect/installs.svelte";
   import { home } from "./home/home-state.svelte";
 
   /**
@@ -34,15 +37,27 @@
    * machines), then the live one, which wins straight from the server's
    * with no empty moment between.
    */
+  const adding = $derived(
+    connect.installs.filter(
+      (one) =>
+        one.state === "running" &&
+        !cawco.machines.some((machine) => machine.machineId === one.returning)
+    ).length
+  );
+  /** Installs that ended badly and wait on the person. */
+  const unsettled = $derived(
+    connect.band.filter((one) => one.state !== "running").length
+  );
   const count = $derived(
-    cawco.fleetRead || cawco.machines.length > 0
+    (cawco.fleetRead || cawco.machines.length > 0
       ? cawco.machines.length
-      : ((page.data as { machineCount?: number | null }).machineCount ?? 0)
+      : ((page.data as { machineCount?: number | null }).machineCount ?? 0)) +
+      adding
   );
   /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
   const tone = $derived.by(() => {
     if (home.exceptions.length === 0) {
-      return;
+      return unsettled > 0 ? "attn" : undefined;
     }
     return cawco.machines.some((machine) => machine.status !== "online")
       ? "fail"
@@ -54,10 +69,11 @@
       count > 0
         ? `${count} ${count === 1 ? "machine" : "machines"}`
         : "Machines";
-    const stuck = home.exceptions.length;
+    const stuck = home.exceptions.length + unsettled;
+    const added = adding > 0 ? `, ${adding} being added` : "";
     return stuck > 0
-      ? `${machines}, ${stuck} ${stuck === 1 ? "needs" : "need"} attention`
-      : machines;
+      ? `${machines}${added}, ${stuck} ${stuck === 1 ? "needs" : "need"} attention`
+      : `${machines}${added}`;
   });
   const names = new Intl.ListFormat("en", { type: "conjunction" });
   /**
@@ -82,7 +98,9 @@
   });
 </script>
 
-<Tip label={tip}>
+<!-- Its tip stands down while the machines card hangs under it: the card says
+     it all, and a tip left over the card's first rows covered them. -->
+<Tip disabled={barGlass.open === "machines"} label={tip}>
   {#snippet children(tipProps)}
     <button
       data-machines

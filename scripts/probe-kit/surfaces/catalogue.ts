@@ -335,8 +335,9 @@ const recentOpen = async (page: Page) => {
     .waitFor();
 };
 
-/** Connect a machine's title, which its dialog and drawer open with. */
-const CONNECT_A_MACHINE = /^Connect a machine/;
+/** Add machine's window (connect/), and its title before an install starts. */
+const CONNECT_WINDOW = "[data-connect-window][data-state=open]";
+const ADD_MACHINE_TITLE = /^Add machine$/;
 /** The stored transcript's title, as its row says it. */
 const STORED_TITLE = /Sketch the tray's empty state/;
 /** The usage page's project filter, opened. */
@@ -2353,19 +2354,21 @@ export const SURFACES: Surface[] = [
         ready: { shows: SUB_MENU, says: PAUSE_ENDS },
       },
       {
-        // The machines list's Add machine: Connect a machine, on its
-        // one-command tab (the command, and the wait for the machine).
+        // The machines list's Add machine: its window on Route, then on
+        // Reach by a command (the hub's addresses, one per kind, and the line).
         name: "add-machine",
         widths: ["desk"],
         act: async (page) => {
           await press(MACHINES)(page);
           await press(ADD_MACHINE)(page);
-          await page.getByRole("tab", { name: "With one command" }).click();
+          await page
+            .locator(`${CONNECT_WINDOW} button[data-route=command]`)
+            .click();
         },
         root: "body",
         ready: {
-          shows: `${OPEN_DIALOG} [role=tab][aria-selected=true]`,
-          says: /^With one command$/,
+          shows: `${CONNECT_WINDOW}[data-step=reach] #connect-reaches`,
+          says: /^It reaches the hub at$/,
         },
       },
       // The studio online and its keychain's unlock sent (`studioRouted`,
@@ -4589,8 +4592,8 @@ export const SURFACES: Surface[] = [
         },
       },
       {
-        // Its first way to connect one pressed: Connect a machine, the
-        // dialog on a desk and the bottom drawer on a phone.
+        // Its first way to connect one pressed: Add machine's window on
+        // Reach over SSH, a popover on a desk and the drawer on a phone.
         name: "connect",
         hub: "unregistered",
         act: async (page) => {
@@ -4603,9 +4606,8 @@ export const SURFACES: Surface[] = [
         },
         root: "body",
         ready: {
-          // The dialog is named by its title; the drawer by its label.
-          shows: `${OPEN_DIALOG}, [data-slot=drawer-content][data-state=open]`,
-          says: CONNECT_A_MACHINE,
+          shows: `${CONNECT_WINDOW}[data-step=reach] #connect-title`,
+          says: ADD_MACHINE_TITLE,
         },
       },
       // A session on the machine that went away: what its pane can still show.

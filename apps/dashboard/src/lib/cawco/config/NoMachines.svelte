@@ -8,7 +8,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconLaptop } from "#lib/icons.js";
-  import { addMachine } from "../join/join.svelte";
+  import { connect } from "../connect/installs.svelte";
 
   let {
     line,
@@ -23,7 +23,7 @@
     <Button
       aria-haspopup="dialog"
       label="Add machine"
-      onclick={() => addMachine.show()}
+      onclick={(event) => connect.openNew(event.currentTarget)}
       variant="outline"
     />
   {/snippet}

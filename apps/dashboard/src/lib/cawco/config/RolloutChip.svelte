@@ -29,10 +29,10 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import type { Machine } from "../client.svelte";
+  import AddMachineLink from "../connect/AddMachineLink.svelte";
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";
   import { causeOf, type FaultScope } from "../fleet-faults";
-  import AddMachineLink from "../join/AddMachineLink.svelte";
   import { machineOs } from "../machine";
   import { appear } from "../motion/curves.svelte";
 

@@ -1,0 +1,599 @@
+<script lang="ts">
+  /**
+   * Reach: how the hub reaches the machine, on the route chosen.
+   *
+   * Over SSH: where it is (`user@host` or a Host the hub's ssh knows, a port
+   * when it isn't 22), how it signs in (the hub's key; a password once,
+   * which plants the hub's key and is then forgotten; or a key the person
+   * puts there, its line shown to copy), the promise that the person may
+   * leave, and what the installer needs. Everything is checked here before
+   * anything starts, its words on the line kept under the field, the field
+   * shaking once. A second Add machine for a machine mid-install opens that
+   * install.
+   *
+   * By a command: the hub's addresses one per kind with where each works,
+   * the one line with its one-time code, what it may ask, what it does on
+   * a machine that has CawCo, what the installer needs. Copy command is the
+   * start: the install's row arrives in the band and the hub listens.
+   *
+   * The route chip switches routes in place: the panes cross-fade inside
+   * the body's resize, and nothing typed is lost (the draft is the hub's).
+   */
+  import type { InstallRoute, InstallSignIn } from "@cawco/core";
+  import { tick } from "svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
+  import { IconChevronDown } from "#lib/icons.js";
+  import {
+    CURVE,
+    crossIn,
+    crossOut,
+    dur,
+    motionOk,
+  } from "../motion/curves.svelte";
+  import { departBox } from "../motion/share.svelte";
+  import Checklist, { departChecks } from "./Checklist.svelte";
+  import Choice from "./Choice.svelte";
+  import { connect, phone } from "./installs.svelte";
+  import MonoWell from "./MonoWell.svelte";
+  import PasswordField from "./PasswordField.svelte";
+
+  const route = $derived(connect.fields.route as InstallRoute);
+  const join = $derived(connect.join);
+  /** The hub has no SSH key: nothing can sign in by key, nor plant one. */
+  const noKey = $derived(join !== null && join.sshPublicKey === null);
+
+  const ROUTES = [
+    { value: "ssh" as const, words: "over SSH" },
+    { value: "command" as const, words: "by a command" },
+  ];
+  const SIGN_INS: { value: InstallSignIn; words: string; says?: string }[] = [
+    { value: "key", words: "with the hub's key" },
+    {
+      value: "password",
+      words: "with a password, once",
+      says: "It plants the hub's key, then the hub forgets it.",
+    },
+    { value: "by-hand", words: "with a key I put there myself" },
+  ];
+
+  /**
+   * The hub's key, by hand: a two-line well on the desk. On a phone one line
+   * when it follows the hub's-key variant and two after the password one, so
+   * either neighbour stands 36px or more from it (the height ladder).
+   */
+  let cameFrom = $state<InstallSignIn>("key");
+  const keyRows = $derived(phone.current && cameFrom !== "password" ? 1 : 2);
+  const keyLines = $derived.by(() => {
+    const key = join?.sshPublicKey ?? "";
+    if (keyRows === 1) {
+      return [key];
+    }
+    // Two lines: the one line wrapped at its middle, so the whole key shows.
+    const half = Math.ceil(key.length / 2);
+    return [key.slice(0, half), key.slice(half)];
+  });
+
+  /** The port's field stands open: asked for, or holding a port. */
+  let portOpen = $state(false);
+  let portField = $state<HTMLInputElement | null>(null);
+
+  /** The check's words under the field, empty until there are any. */
+  let said = $state("");
+  $effect(() => {
+    // A password typed again clears the words the last check said of it.
+    if (connect.password) {
+      said = "";
+    }
+  });
+  let targetField = $state<HTMLInputElement | null>(null);
+  let pending = $state(false);
+  let refused = $state("");
+
+  function edit(patch: Partial<typeof connect.fields>) {
+    connect.fields = { ...connect.fields, ...patch };
+    said = "";
+    refused = "";
+    connect.saveDraft();
+  }
+
+  /** The field shakes once on a refusal; with less motion it only says why. */
+  function shake(field: HTMLElement | null) {
+    if (!(field && motionOk.current)) {
+      return;
+    }
+    field.animate(
+      [
+        { translate: "0 0" },
+        { translate: "-4px 0" },
+        { translate: "4px 0" },
+        { translate: "-2px 0" },
+        { translate: "0 0" },
+      ],
+      { duration: dur("--dur-panel"), easing: CURVE.out }
+    );
+  }
+
+  const PORT = /^\d+$/;
+  const SPACE = /\s/;
+  const SCHEME = /^https?:\/\//;
+  const LINE_BREAK = /[\r\n]/;
+  /** What stops an SSH install before anything starts, in words; empty when nothing does. */
+  function check(): string {
+    const target = connect.fields.target.trim();
+    if (!target) {
+      return "Type the machine's address: user@host, or a Host from the hub's ~/.ssh/config.";
+    }
+    if (SPACE.test(target)) {
+      return "An address has no spaces: user@host, or a Host from the hub's ~/.ssh/config.";
+    }
+    if (target.startsWith("-")) {
+      return "An address can't start with a dash.";
+    }
+    const port = connect.fields.port.trim();
+    if (
+      port &&
+      !(PORT.test(port) && Number(port) >= 1 && Number(port) <= 65_535)
+    ) {
+      return "The port is a whole number from 1 to 65535.";
+    }
+    if (connect.fields.signIn === "password") {
+      if (!connect.password) {
+        return "Type the machine's password for its one sign-in.";
+      }
+      if (LINE_BREAK.test(connect.password)) {
+        return "That password has a line break, which SSH can't be handed.";
+      }
+    }
+    return "";
+  }
+
+  async function addOverSsh() {
+    said = check();
+    if (said) {
+      shake(targetField);
+      return;
+    }
+    const target = connect.fields.target.trim();
+    const port = connect.fields.port.trim()
+      ? Number(connect.fields.port)
+      : null;
+    // A machine mid-install: its window, at Running.
+    const running = connect.runningFor(target, port);
+    if (running) {
+      connect.openInstall(running.id, connect.anchor, connect.from);
+      return;
+    }
+    pending = true;
+    departChecks();
+    if (targetField) {
+      departBox("connect-title", targetField, false);
+    }
+    try {
+      await connect.start({
+        route: "ssh",
+        target,
+        ...(port === null ? {} : { port }),
+        signIn: connect.fields.signIn,
+        ...(connect.fields.signIn === "password"
+          ? { password: connect.password }
+          : {}),
+      });
+    } catch (error) {
+      refused = (error as Error).message;
+      shake(targetField);
+    } finally {
+      pending = false;
+    }
+  }
+
+  // ---- By a command ------------------------------------------------------
+
+  /** The four kinds of address, each with where it works; the hub's first of each. */
+  const KINDS = [
+    {
+      kind: "tailscale",
+      name: "Tailscale",
+      where: "anywhere on the tailnet",
+      missing: ["No Tailscale address", "Tailscale isn't on the hub's machine"],
+      match: (label: string) => label === "Tailscale",
+    },
+    {
+      kind: "tailscale-dns",
+      name: "Tailscale name",
+      where: "anywhere on the tailnet",
+      missing: ["No Tailscale name", "MagicDNS is off on the tailnet"],
+      match: (label: string) => label === "Tailscale DNS",
+    },
+    {
+      kind: "lan",
+      name: "This network only",
+      where: "not for a Mac",
+      missing: ["No network address", "the hub's machine has none"],
+      match: (label: string) =>
+        !["Tailscale", "Tailscale DNS", "On this network"].includes(label),
+    },
+    {
+      kind: "local",
+      name: "This network or ZeroTier",
+      where: "not for a Mac",
+      missing: ["No .local name", "it is off on the hub"],
+      match: (label: string) => label === "On this network",
+    },
+  ] as const;
+
+  const addresses = $derived(
+    KINDS.map((kind) => ({
+      ...kind,
+      address:
+        join?.addresses.find((one) => kind.match(one.label))?.url ?? null,
+    }))
+  );
+
+  /** The address chosen: the draft's, else the first the hub has. */
+  const address = $derived(
+    connect.fields.address &&
+      addresses.some((one) => one.address === connect.fields.address)
+      ? connect.fields.address
+      : (addresses.find((one) => one.address)?.address ?? null)
+  );
+  const code = $derived(connect.hubDraft?.code ?? null);
+  const line = $derived(
+    address && code ? `curl -fsSL ${address}/install.sh?code=${code} | sh` : ""
+  );
+  /** The draft has a code once the hub has kept the route: ask it to. */
+  $effect(() => {
+    if (route === "command" && connect.known && !code) {
+      connect.saveDraft(true);
+    }
+  });
+
+  const clipboard = new UseClipboard();
+  /** "Copied · Listening for it…" while the copy settles, before Running. */
+  let copied = $state(false);
+  async function copyCommand() {
+    if (!(address && line)) {
+      return;
+    }
+    pending = true;
+    refused = "";
+    try {
+      await clipboard.copy(line);
+      copied = true;
+      departChecks();
+      await connect.start({ route: "command", address }, dur("--dur-hold"));
+    } catch (error) {
+      copied = false;
+      refused = (error as Error).message;
+    } finally {
+      pending = false;
+    }
+  }
+
+  /** Reach reads the hub's addresses and key as it opens: they change on the hub's machine. */
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; Reach draws the addresses and key when they land
+    void connect.loadJoin();
+  });
+
+  /** While the hub has no key, it is asked again now and then: this changes on its own once it exists. */
+  $effect(() => {
+    if (!(noKey && route === "ssh")) {
+      return;
+    }
+    const again = setInterval(() => {
+      connect.loadJoin().catch(() => undefined);
+    }, 3000);
+    return () => clearInterval(again);
+  });
+
+  const user = $derived(
+    connect.fields.target.includes("@")
+      ? connect.fields.target.slice(0, connect.fields.target.indexOf("@"))
+      : "its login user"
+  );
+</script>
+
+<div class="flex flex-col gap-space-3">
+  <div class="mark-line flex items-center gap-space-2">
+    <span class="type-body text-ink-strong">Bring it in</span>
+    <span data-box
+      ><Choice
+        label="Bring it in"
+        onchoose={(next) => edit({ route: next })}
+        options={ROUTES}
+        value={route}
+      /></span
+    >
+  </div>
+
+  <div class="grid">
+    {#key route}
+      <div
+        class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-3"
+        in:crossIn
+        out:crossOut
+      >
+        {#if route === "ssh"}
+          <div class="flex flex-col gap-space-1">
+            <div class="flex items-center gap-space-2">
+              <label
+                for="connect-target"
+                class="flex-none type-body text-ink-strong">Reach it at</label
+              >
+              <input
+                bind:this={targetField}
+                id="connect-target"
+                data-autofocus
+                autocapitalize="off"
+                autocomplete="off"
+                spellcheck="false"
+                aria-describedby="connect-said"
+                aria-invalid={said ? "true" : undefined}
+                class="h-c-input-h min-w-0 flex-1 rounded-md border border-border-control bg-surface-raised px-space-3 font-mono type-body text-ink-strong shadow-xs outline-none transition-control placeholder:text-ink-subtle focus-inset aria-invalid:border-error-9"
+                placeholder="deploy@build-01.example.net"
+                value={connect.fields.target}
+                oninput={(event) => edit({ target: event.currentTarget.value })}
+                onkeydown={(event) => {
+                  if (event.key === "Enter") {
+                    addOverSsh().catch(() => undefined);
+                  }
+                }}
+              />
+              <!-- The port: "Port 22 ▾" until it is asked for, then its field in
+                   the same cell, so nothing beside it moves. -->
+              <span class="grid w-c-port-field-w flex-none" data-box>
+                {#if portOpen || connect.fields.port}
+                  <input
+                    bind:this={portField}
+                    id="connect-port"
+                    aria-label="Port"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    class="num col-start-1 row-start-1 h-c-input-h w-full min-w-0 rounded-md border border-border-control bg-surface-raised px-space-2 text-center type-body text-ink-strong shadow-xs outline-none transition-control placeholder:text-ink-subtle focus-inset"
+                    placeholder="22"
+                    value={connect.fields.port}
+                    oninput={(event) =>
+                      edit({ port: event.currentTarget.value })}
+                    onblur={() => {
+                      portOpen = false;
+                    }}
+                  />
+                {:else}
+                  <button
+                    type="button"
+                    data-slot="port"
+                    aria-label="Port 22. Change the port"
+                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-c-input-h w-full items-center justify-center gap-space-1 rounded-md border border-border-control bg-surface-raised type-body text-ink-strong shadow-xs transition-control hover:bg-surface-hover"
+                    onclick={async () => {
+                      portOpen = true;
+                      await tick();
+                      portField?.focus();
+                    }}
+                  >
+                    <span class="num">Port 22</span>
+                    <IconChevronDown
+                      aria-hidden="true"
+                      class="size-icon-sm text-ink-muted"
+                    />
+                  </button>
+                {/if}
+              </span>
+            </div>
+            <p
+              id="connect-said"
+              aria-live="polite"
+              class="m-0 min-h-lh ps-c-row-lead type-meta text-status-fail-ink"
+            >
+              {said || refused}
+            </p>
+          </div>
+
+          {#if noKey}
+            <div data-slot="no-key" class="flex flex-col gap-space-2">
+              <p class="m-0 type-body text-pretty text-ink-strong">
+                The hub has no SSH key yet. Make one on the hub's machine; this
+                changes on its own once it exists.
+              </p>
+              <MonoWell
+                copy="ssh-keygen -t ed25519"
+                copyLabel="Copy ssh-keygen -t ed25519"
+                label="The command that makes the hub's key"
+                lines={["ssh-keygen -t ed25519"]}
+              />
+            </div>
+          {:else}
+            <div class="flex flex-col gap-space-2">
+              <div class="mark-line flex items-center gap-space-2">
+                <span class="type-body text-ink-strong">Sign in</span>
+                <span data-box
+                  ><Choice
+                    label="Sign in"
+                    onchoose={(next) => {
+                      connect.password = "";
+                      cameFrom = connect.fields.signIn;
+                      edit({ signIn: next });
+                    }}
+                    options={SIGN_INS}
+                    value={connect.fields.signIn}
+                  /></span
+                >
+              </div>
+              {#if connect.fields.signIn === "password"}
+                <PasswordField
+                  id="connect-password"
+                  label="The machine's password, for one sign-in"
+                  onenter={() => {
+                    addOverSsh().catch(() => undefined);
+                  }}
+                  placeholder={connect.passwordLost
+                    ? "Type it again: a reload forgets a password"
+                    : "Its password, used once"}
+                />
+              {:else if connect.fields.signIn === "by-hand" && join?.sshPublicKey}
+                <div class="flex flex-col gap-space-1">
+                  <MonoWell
+                    copy={join.sshPublicKey}
+                    copyLabel="Copy the hub's public key"
+                    label="The hub's public key"
+                    lines={keyLines}
+                    rows={keyRows}
+                  />
+                  <p class="m-0 type-meta text-ink-muted">
+                    Put it in ~/.ssh/authorized_keys for {user}.
+                  </p>
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          <p class="m-0 type-meta text-ink-muted">
+            You can leave. The install carries on without you.
+          </p>
+          <Checklist />
+          <div class="flex justify-end">
+            <Button
+              disabled={noKey}
+              label="Add machine"
+              onclick={addOverSsh}
+              {pending}
+              pendingLabel="Adding…"
+              title={noKey ? "The hub needs an SSH key first" : undefined}
+              variant="default"
+            />
+          </div>
+        {:else}
+          <div class="flex flex-col gap-space-2">
+            <p id="connect-reaches" class="m-0 type-body text-ink-strong">
+              It reaches the hub at
+            </p>
+            {#if connect.joinFailed}
+              <p class="m-0 type-meta text-pretty text-status-fail-ink">
+                The hub's addresses couldn't be read. {connect.joinFailed} Close Add
+                machine and open it again to read them again.
+              </p>
+            {:else}
+              <div
+                role="radiogroup"
+                aria-labelledby="connect-reaches"
+                class="flex flex-col"
+              >
+                {#each addresses as row (row.kind)}
+                  <!-- biome-ignore lint/a11y/noLabelWithoutControl: the address's radio stands inside it -->
+                  <label
+                    data-address={row.kind}
+                    class={[
+                      "mark-line flex min-h-c-btn-h-sm items-center gap-space-2 rounded-sm px-space-1 py-space-row coarse:min-h-c-row-h",
+                      row.address ? "hover:bg-surface-hover" : "opacity-50",
+                    ]}
+                  >
+                    <input
+                      type="radio"
+                      name="connect-address"
+                      class="size-icon-md flex-none accent-action-solid"
+                      data-box
+                      disabled={!row.address}
+                      checked={row.address !== null && row.address === address}
+                      onchange={() => edit({ address: row.address })}
+                    />
+                    {#if row.address}
+                      <!-- On a phone, where it works stands under the address. -->
+                      <span
+                        data-box
+                        class={[
+                          "flex min-w-0 flex-1",
+                          phone.current
+                            ? "flex-col"
+                            : "items-center gap-space-2",
+                        ]}
+                      >
+                        <span
+                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap font-mono type-label text-ink-strong"
+                          >{row.address.replace(SCHEME, "")}</span
+                        >
+                        <span
+                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
+                          >{row.name} · {row.where}</span
+                        >
+                      </span>
+                    {:else}
+                      <!-- A missing kind keeps its row's shape: what is missing,
+                           then why, where an address would stand. -->
+                      <span
+                        data-box
+                        class={[
+                          "flex min-w-0 flex-1",
+                          phone.current
+                            ? "flex-col"
+                            : "items-center gap-space-2",
+                        ]}
+                      >
+                        <span
+                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-muted"
+                          >{row.missing[0]}</span
+                        >
+                        <span
+                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
+                          >{row.missing[1]}</span
+                        >
+                      </span>
+                    {/if}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <MonoWell
+            label="The command to run on the machine"
+            lines={[line || "Reading the hub's addresses…"]}
+          />
+          <div class="flex flex-col gap-space-1">
+            <p class="m-0 type-meta text-ink-muted">
+              In a real terminal it may ask you questions there.
+            </p>
+            <p class="m-0 type-meta text-pretty text-ink-muted">
+              Already has CawCo? From this hub it's harmless. From another hub
+              it moves here.
+            </p>
+          </div>
+          <Checklist />
+          {#if refused}
+            <p class="m-0 type-meta text-status-fail-ink" aria-live="polite">
+              {refused}
+            </p>
+          {/if}
+          <div class="flex justify-end">
+            <!-- Both wordings stand in one cell, as wide as the wider, so the
+                 button never changes width as the copy lands (The Steady Swap
+                 Rule); the ellipsis breathes while the hub listens. -->
+            <Button
+              aria-label={copied ? "Copied. Listening for it" : "Copy command"}
+              data-copied={copied || undefined}
+              disabled={!line || copied}
+              onclick={copyCommand}
+              variant="default"
+            >
+              <span class="grid" data-box>
+                <span
+                  class={[
+                    "col-start-1 row-start-1 transition-opacity duration-(--dur-morph) ease-out",
+                    copied && "opacity-0",
+                  ]}>Copy command</span
+                >
+                <span
+                  aria-hidden="true"
+                  class={[
+                    "col-start-1 row-start-1 transition-opacity duration-(--dur-morph) ease-out",
+                    !copied && "opacity-0",
+                  ]}
+                  >Copied · Listening for it<span class="breathe loops">…</span
+                  ></span
+                >
+              </span>
+            </Button>
+          </div>
+        {/if}
+      </div>
+    {/key}
+  </div>
+</div>

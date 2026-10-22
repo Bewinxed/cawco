@@ -40,7 +40,7 @@
  * (l) On a real OpenSSH sshd, Stop ends the command on the machine too
  *     (sshd signals none started without a terminal), and an add that runs
  *     to its end leaves no watchdog behind.
- * (k) The dialog's password field, masked, with its show/hide toggle.
+ * (k) Add machine's password field, masked, with its show/hide toggle.
  * (f) The password is in no job's lines, the hub's log or its database.
  *
  * (b) and (h) are timed: a wrong password ends the add, it never spins.
@@ -192,8 +192,6 @@ const modesOf = (dir: string, file: string): string =>
   existsSync(file)
     ? `${statSync(dir).mode.toString(8).slice(-3)} ${statSync(file).mode.toString(8).slice(-3)}`
     : "none";
-
-const OVER_SSH = /Over SSH/;
 
 /** The step an add fails on when ssh ended before the machine ran anything (hub join.ts `SIGN_IN_STEP`). */
 const SIGN_IN = "signing in over SSH";
@@ -353,17 +351,33 @@ async function realSshd(
   }
 }
 
-/** (k) The dialog's password field: masked, and its toggle flips it. */
+/** (k) Add machine's password field (connect/PasswordField): masked, and its toggle flips it. */
 async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
   const page = await kit.page("desk");
-  await open(page, `${await fleet.dashboard()}/`, "button[aria-haspopup]");
-  await page.getByRole("button", { name: OVER_SSH }).first().click();
-  await page.waitForSelector("#join-password");
+  // Add machine's window on Reach, over SSH, signing in with a password once.
+  await fetch(`${fleet.base}/api/installs/draft`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      route: "ssh",
+      target: "",
+      port: "",
+      signIn: "password",
+      address: null,
+    }),
+  });
+  await open(
+    page,
+    `${await fleet.dashboard()}/?install=new`,
+    "[data-connect-window]"
+  );
+  await page.waitForSelector("#connect-password");
   const fieldNow = () =>
     page.evaluate(() => {
-      const input = document.querySelector<HTMLInputElement>("#join-password");
+      const input =
+        document.querySelector<HTMLInputElement>("#connect-password");
       const toggle = document.querySelector<HTMLButtonElement>(
-        'button[aria-controls="join-password"]'
+        'button[aria-controls="connect-password"]'
       );
       return {
         type: input?.type,

@@ -952,22 +952,23 @@ exit $code
  * connection is the download, by curl's exit status, never its words: the
  * hub's own install command (`installCommand`) run by `sh` against a port
  * nothing listens on, with a German curl first on PATH, its lines read by the
- * hub's `problemOf`.
+ * hub's `problemOf` (installs.ts).
  */
 const curlExit = async (kit: Kit, scratch: string): Promise<void> => {
   const join_ = (await import("../../../packages/hub/src/join")) as {
     installCommand?: (hubUrl: string) => string;
+  };
+  const installs_ = (await import("../../../packages/hub/src/installs")) as {
     problemOf?: (
       lines: readonly string[],
-      exitCode: number,
-      machineId: string | null
+      exitCode: number
     ) => { kind: string };
   };
-  if (!(join_.installCommand && join_.problemOf)) {
+  if (!(join_.installCommand && installs_.problemOf)) {
     kit.check(
       "L: an install whose curl cannot reach the hub is the download, by curl's exit status, whatever curl says",
       false,
-      "hub join.ts exports no installCommand and problemOf"
+      "hub join.ts exports no installCommand, or installs.ts no problemOf"
     );
     return;
   }
@@ -984,7 +985,7 @@ const curlExit = async (kit: Kit, scratch: string): Promise<void> => {
     join_.installCommand(`http://127.0.0.1:${closedPort()}`)
   );
   const lines = `${ran.stdout}${ran.stderr}`.split("\n").filter(Boolean);
-  const problem = join_.problemOf(lines, ran.exitCode, null);
+  const problem = installs_.problemOf(lines, ran.exitCode);
   kit.check(
     "L: an install whose curl cannot reach the hub is the download, by curl's exit status, whatever curl says",
     problem.kind === "download",

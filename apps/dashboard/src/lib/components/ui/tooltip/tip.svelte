@@ -49,6 +49,12 @@
   $effect(() => {
     ontoggle?.(open);
   });
+  // Disabled while it stands open (what it names opened over it): it goes, not only stops reopening.
+  $effect(() => {
+    if (disabled) {
+      open = false;
+    }
+  });
   /** The pointer rests on a control inside the trigger, which speaks for itself. */
   let inside = $state(false);
   let touched = false;
