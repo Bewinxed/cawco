@@ -9,6 +9,20 @@
  * No model. Claude's sign-ins are read as the real harness reads them
  * ({@link detected}), so the hub places the proof's sessions on an account.
  *
+ * The fleet reaches a proof machine as it reaches a real one. Its Claude
+ * reports that it converges the fleet, as the real adapter's report does
+ * (claude.ts `CLAUDE_CAPABILITIES`, whose `fleet` the hub's sync gate reads,
+ * server.ts `sendFleetSync`), and converges it with the real adapter's own
+ * functions (fleet.ts `syncFleetConfig`, `fleetStatus`, `fleetHoldings`): the
+ * Claude Code the machine has installed links what the fleet names, and the
+ * sync writes the fleet's denied tools beside it. Every spawn reads those
+ * denials first, as every real adapter's does (denied-tools.ts
+ * `sessionFleetDenials`): a machine that has not had its first sync waits for
+ * it, and refuses once none comes. A stub that reported no fleet and never
+ * read the denials was a machine no sync reached and whose sessions started
+ * anyway, so no rig could see a machine that never got its first sync
+ * (2026-10-22: two machines added over SSH, every session on them refused).
+ *
  * Every adapter is a {@link Harness}, checked as one: an ability the daemon
  * reaches that the real adapters have and this stub does not is an optional
  * member of the interface, which this stub simply has none of (no provider
@@ -22,6 +36,12 @@ import {
   accountReports,
   claudeSignins,
 } from "../../packages/agent/src/accounts";
+import { sessionFleetDenials } from "../../packages/agent/src/denied-tools";
+import {
+  fleetHoldings,
+  fleetStatus,
+  syncFleetConfig,
+} from "../../packages/agent/src/fleet";
 import type { Harness } from "../../packages/agent/src/harness";
 import { KeeperPool } from "../../packages/agent/src/keepers";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
@@ -199,12 +219,20 @@ function session(
 }
 
 /**
+ * What Claude can do here, as far as the hub reads it of a proof machine:
+ * converge the fleet, as the real adapter reports (claude.ts
+ * `CLAUDE_CAPABILITIES.fleet`), and nothing a model would do.
+ */
+const CLAUDE_REPORTED = { ...CAPABILITIES_NONE, fleet: true };
+
+/**
  * What Claude reports on this machine, as the real Claude harness reports it:
  * every CawCo account dir (`~/.cawco/accounts/<id>/claude`) and what the
- * installed Claude Code's own `claude auth status` says of it there, and the
- * machine's Claude word from those. A proof machine is signed in by giving it
- * an account dir holding a credential and `oauthAccount`, as `claude auth
- * login` would leave it. The other harnesses report no sign-in.
+ * installed Claude Code's own `claude auth status` says of it there, the
+ * machine's Claude word from those, and that it converges the fleet. A proof
+ * machine is signed in by giving it an account dir holding a credential and
+ * `oauthAccount`, as `claude auth login` would leave it. The other harnesses
+ * report no sign-in.
  */
 const detected = async (kind: HarnessKind): Promise<MachineHarnessReport> => {
   if (kind !== "claude") {
@@ -219,8 +247,18 @@ const detected = async (kind: HarnessKind): Promise<MachineHarnessReport> => {
     harness: kind,
     installed: false,
     ...claudeSignins(await accountReports()),
-    capabilities: CAPABILITIES_NONE,
+    capabilities: CLAUDE_REPORTED,
   };
+};
+
+/** The real Claude adapter's fleet convergence (claude.ts `syncFleet`, `fleetStatus`, `fleetHoldings`). */
+const claudeFleet: Pick<
+  Harness,
+  "fleetHoldings" | "fleetStatus" | "syncFleet"
+> = {
+  syncFleet: (config) => syncFleetConfig(config),
+  fleetStatus: () => fleetStatus(),
+  fleetHoldings: () => fleetHoldings(),
 };
 
 const registry = new Map<HarnessKind, Harness>();
@@ -265,6 +303,7 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
   };
   const adapter: Harness = {
     ...adoption,
+    ...(kind === "claude" ? claudeFleet : {}),
     kind,
     auth: "unauthenticated",
     capabilities: CAPABILITIES_NONE,
@@ -294,6 +333,10 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
       if (!held) {
         throw new Error("The proof harness holds no opencode sessions");
       }
+      // The fleet's denials before anything starts, as every real adapter
+      // reads them: a machine that has not heard them waits for its first
+      // fleet sync, and refuses in its words once none comes.
+      await sessionFleetDenials();
       const procId = procIdFor(held, ctx.instanceId);
       const client = await keepers.current();
       await keepers.replaceElsewhere(procId, client);

@@ -1,9 +1,11 @@
 /**
  * THE ONE CLOCK THE TIMED STEPS OF AN UPDATE READ THEIR LENGTHS FROM: the
  * trial window a build has to answer in, the hold that confirms it, a failed
- * attempt's retry delay, and how long a retiring keeper (or a keeper job no
- * keeper runs from) must sit empty before it goes. Each is written beside its
- * timer and passed through {@link timerMs}.
+ * attempt's retry delay, how long a retiring keeper (or a keeper job no
+ * keeper runs from) must sit empty before it goes, how long a drain waits on
+ * the work in flight, and how often the agent reads its Claude accounts'
+ * sign-ins again. Each is written beside its timer and passed through
+ * {@link timerMs}.
  *
  * In this build every length is the one written. The stage 2 container proof's
  * builds (scripts/build-binary.ts, `stubHarness`) are compiled with

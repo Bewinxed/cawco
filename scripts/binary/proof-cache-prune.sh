@@ -39,7 +39,7 @@ recipes=$(mktemp -d "${TMPDIR:-/tmp}/proof-recipes.XXXXXX")
 trap 'rm -rf "$recipes"' EXIT
 said=$({ bash "$here/prove-stage1.sh" --tags-only "$recipes/stage1" && bash "$here/prove-stage2.sh" --tags-only "$recipes/stage2"; })
 current=()
-for name in stage1-clean stage1-systemd host machine; do
+for name in stage1-clean stage1-systemd host machine bare; do
   tag=$(sed -n "s/^$name=//p" <<< "$said")
   [[ $tag == localhost/cawco-proof-$name:* ]] || { echo "proof cache: the recipes did not say the $name image's tag (they said: $said); no image is removed" >&2; exit 1; }
   current+=("$tag")

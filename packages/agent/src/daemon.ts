@@ -91,6 +91,7 @@ import {
   type BrowserViewersArgs,
   isBrowserKey,
 } from "@cawco/core/browser";
+import { timerMs } from "@cawco/core/clock";
 import {
   CUSTODY_BOUND_MS,
   type HandoverCommand,
@@ -427,8 +428,12 @@ const activityNow = (): { activity?: MachineActivity } => {
 const HUB_SILENT_MS = 15_000;
 const USAGE_INTERVAL = Duration.seconds(60);
 const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
-/** How often every CawCo account dir's `auth status` is read again. */
-const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
+/**
+ * How often every CawCo account dir's `auth status` is read again: a minute,
+ * read through the clock the update's timed steps read (core clock.ts), so
+ * the stage 2 proof waits on these reads at the pace it runs the update.
+ */
+const CLAUDE_LOGIN_CHECK_INTERVAL_MS = timerMs(60_000);
 /**
  * How often each of pi's settings, models and sign-in files is looked at
  * (a stat) for a change. Ours: a change reaches the hub within this and the

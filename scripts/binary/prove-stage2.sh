@@ -49,8 +49,10 @@ export TMPDIR
 # The builds (scripts/binary/build-stage2.ts): two of this tree.
 export BASE=0.0.1-test.2 NEXT=0.0.1-test.3
 # The proof's own pace for the update's timed steps (packages/core/src/clock.ts, replaced in proof builds by
-# scripts/binary/proof-clock.ts): the trial window (180 s), the confirm hold (60 s), the first retry delay (60 s) and
-# how long a retiring keeper sits empty (20 s) run this many times faster.
+# scripts/binary/proof-clock.ts): the trial window (180 s), the confirm hold (60 s), the first retry delay (60 s), how
+# long a retiring keeper sits empty (20 s), a drain's wait on the work in flight (45 s, agent binary-update.ts
+# DRAIN_MS) and the agent's re-read of its Claude accounts' sign-ins (60 s, daemon.ts CLAUDE_LOGIN_CHECK_INTERVAL_MS)
+# run this many times faster. The rigs prove each step's order; the lengths are the product's.
 PROOF_TIME_SCALE=6
 # The stand-ins are as slow and as late as production gets, never faster: what reached the person on 2026-10-16 came
 # from slowness the rigs did not have.
@@ -69,12 +71,13 @@ export CLAUDE_LATE_S
 
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
-RIGS=(install sshadd held3455 spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry pins workspace runaway memory capped)
+RIGS=(sshadd admitted held3455 spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry
+  pins workspace wsarchive runaway memory capped slowfleet bare nightlyjoin)
 # How many systemd machines each rig boots (its `machines` refuses any other count): what it holds of the host user's
 # inotify instances while it runs.
-declare -A RIG_MACHINES=([install]=2 [sshadd]=3 [held3455]=1 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
-  [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [pins]=1 [workspace]=2 [runaway]=1
-  [memory]=1 [capped]=2)
+declare -A RIG_MACHINES=([sshadd]=3 [admitted]=2 [held3455]=1 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1
+  [swapkill]=1 [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [pins]=1 [workspace]=2
+  [wsarchive]=2 [runaway]=1 [memory]=1 [capped]=2 [slowfleet]=2 [bare]=2 [nightlyjoin]=2)
 # THE HOST USER'S INOTIFY INSTANCES are every rig's to share. The kernel charges an instance to its user in each user
 # namespace up to the initial one, and every rootless container's namespace is the host user's, so all machines of
 # every rig, and the host user's own processes, draw on one fs.inotify.max_user_instances (384 on obelisk). Run A of
@@ -156,9 +159,18 @@ EOF
   # the installer put in the user's ~/.local: the launcher ~/.local/bin/claude, an absolute link to the version under
   # ~/.local/share/claude (\$XDG_DATA_HOME/claude when set, which `su -` leaves unset), at the same paths, so the link
   # holds. Not the ~/.claude and ~/.claude.json it also writes: the machine's own Claude dir stays untouched.
+  # A bare machine (the `bare` image) is the same with none of what a workspace needs: no bubblewrap or socat, and no
+  # git, installed or in its package source. A person's fresh server is so until someone installs them.
   local claude_version
   claude_version=$(sdk_claude_version) || return 1
-  cat > "$out/images/machine.Containerfile" <<EOF
+  machine_recipe 'socat bubblewrap ' 'openssl git' '' > "$out/images/machine.Containerfile"
+  machine_recipe '' openssl ' && ! command -v git && ! command -v socat && ! command -v bwrap' > "$out/images/bare.Containerfile"
+}
+# A machine's recipe (see write_images): the tools it has beyond the base ($1, each followed by a space), the packages
+# its local package source holds ($2), and the checks that it has none of them installed beyond openssl ($3).
+machine_recipe() {
+  local tools=$1 debs=$2 absent=$3
+  cat <<EOF
 FROM $BASE_LOCAL AS claude
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \\
@@ -171,8 +183,8 @@ RUN apt-get update \\
 FROM $BASE_LOCAL
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \\
- && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap openssh-server openssh-client iproute2 \\
- && apt-get install -y --download-only openssl git \\
+ && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo ${tools}openssh-server openssh-client iproute2 \\
+ && apt-get install -y --download-only $debs \\
  && mkdir /debs && cp /var/cache/apt/archives/*.deb /debs/ \\
  && apt-get install -y --no-install-recommends dpkg-dev \\
  && (cd /debs && dpkg-scanpackages . > Packages) \\
@@ -189,7 +201,7 @@ RUN apt-get update \\
  && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE CAWCO_PROOF_RETIRING_LIST_MS=$PROOF_RETIRING_LIST_MS CAWCO_HEAVY_ADMITTED=stage2-proof\\n' > /etc/systemd/user.conf.d/proof.conf
 COPY --from=claude --chown=cawco:cawco /home/cawco/.local /home/cawco/.local
 RUN HOME=/tmp/claude-check /home/cawco/.local/bin/claude --version | grep -F '$claude_version' \\
- && rm -rf /tmp/claude-check && ! command -v openssl
+ && rm -rf /tmp/claude-check && ! command -v openssl$absent
 EOF
 }
 
@@ -253,6 +265,8 @@ orchestrate() {
     feed broken ok stable 0.0.1-test.10 1010101010101010101010101010101010101010 "$out/shared/broken-cawco" "$key" 31 "$schema" & pids+=($!)
     feed migrating ok stable 0.0.1-test.8 8888888888888888888888888888888888888888 "$out/shared/migrating-cawco" "$key" 32 "$((schema + 1))" & pids+=($!)
     feed swapbroken ok stable 0.0.1-test.6 3434343434343434343434343434343434343434 "$out/shared/broken-cawco" "$key" 34 "$schema" & pids+=($!)
+    # The newer build on the nightly channel, beside base's older one on stable: a nightly hub's fleet (nightlyjoin).
+    feed nightly ok nightly "$NEXT" 3333333333333333333333333333333333333333 "$bins/cawco-3" "$key" 30 "$schema" & pids+=($!)
     feed refusals tampered stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" tamper & pids+=($!)
     feed refusals badsig stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" bad-signature & pids+=($!)
     feed refusals nosig stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" no-signature & pids+=($!)
@@ -278,17 +292,18 @@ orchestrate() {
     done
   }
   echo "preparing (images and fixtures at once)"
-  proof_images "$out/images" host machine > "$out/images/tags" 2> "$out/logs/images.log" &
+  proof_images "$out/images" host machine bare > "$out/images/tags" 2> "$out/logs/images.log" &
   images=$!
   step "write the fixtures" "$out/logs/fixtures.log" fixtures
   step "publish every feed the rigs take" "$out/logs/feeds.log" feeds
   wait "$images" || { echo "setup failed at: the images (log: $out/logs/images.log)" >&2; tail -n 20 "$out/logs/images.log" >&2; exit 3; }
   HOST_IMAGE=$(sed -n 's/^host=//p' "$out/images/tags")
   MACHINE_IMAGE=$(sed -n 's/^machine=//p' "$out/images/tags")
-  echo "setup: images and fixtures ($((SECONDS - STARTED))s): $HOST_IMAGE, $MACHINE_IMAGE"
+  BARE_IMAGE=$(sed -n 's/^bare=//p' "$out/images/tags")
+  echo "setup: images and fixtures ($((SECONDS - STARTED))s): $HOST_IMAGE, $MACHINE_IMAGE, $BARE_IMAGE"
 
   # ---------------------------------------------------------------- the rigs, at once
-  export out bins here self schema HOST_IMAGE MACHINE_IMAGE
+  export out bins here self schema HOST_IMAGE MACHINE_IMAGE BARE_IMAGE
   cap=${PROOF_RIGS:-${#SELECTED_RIGS[@]}}
   # The machines the host user's inotify instances leave room for (see INOTIFY_PER_MACHINE): its limit, less what its
   # own processes hold now and the reserve. Too little for one rig of two machines, and nothing would run: said, with
@@ -458,6 +473,11 @@ SH
 fi
 echo "$1" > "$HOME/.cawco-proof/claude-late"
 EOF
+# What a page a session previews answers (sshadd): one HTTP response naming the machine it runs on, for socat's
+# SYSTEM to run per connection.
+cat > "$dir/preview-answer.sh" <<'EOF'
+printf 'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\npreview of %s\n' "$(hostname)"
+EOF
 cat > "$dir/diagnose-machine.sh" <<'EOF'
 binary="$HOME/.local/share/cawco/binary"
 data="$HOME/.local/share/cawco"
@@ -498,10 +518,10 @@ if [[ -n $IMAGE_ONLY ]]; then
   trap 'rm -f "$TMPDIR"' EXIT
   write_images || exit 1
   if [[ -n $TAGS_ONLY ]]; then
-    for name in host machine; do echo "$name=$(proof_image_tag "$out/images" "$name")"; done
+    for name in host machine bare; do echo "$name=$(proof_image_tag "$out/images" "$name")"; done
     exit 0
   fi
-  proof_images "$out/images" host machine || { echo "the images failed to build" >&2; exit 1; }
+  proof_images "$out/images" host machine bare || { echo "the images failed to build" >&2; exit 1; }
   exit 0
 fi
 if [[ -z ${RIG:-} ]]; then
@@ -747,14 +767,17 @@ wait_until() {
     sleep 0.5
   done
 }
-# A feed the orchestrator published, put where this rig's release host serves it, by hard links.
+# A feed the orchestrator published, put where this rig's release host serves it, by hard links: each channel it
+# published in place of what that channel served, every other channel as it was.
 use_feed() {
-  local name=$1 sub
-  for sub in "$out/feeds/$name"/*/; do
-    sub=$(basename "$sub")
+  local name=$1 dir sub channel
+  for dir in "$out/feeds/$name"/*/*/; do
+    dir=${dir%/}
+    channel=$(basename "$dir")
+    sub=$(basename "$(dirname "$dir")")
     mkdir -p "$rigdir/release/$sub"
-    rm -rf "$rigdir/release/$sub/stable"
-    cp -al "$out/feeds/$name/$sub/stable" "$rigdir/release/$sub/stable"
+    rm -rf "$rigdir/release/$sub/$channel"
+    cp -al "$dir" "$rigdir/release/$sub/$channel"
   done
 }
 put_policy() { hub_api /api/binary-updates/settings -X PUT -H 'content-type: application/json' -d "{\"channel\":\"$1\",\"autoUpdate\":$2}"; }
@@ -945,12 +968,13 @@ export -f diagnose as_user put_executable user_exec proof_runner run_script need
 # ---------------------------------------------------------------- a rig's machines
 
 # boot CONTAINER IP HOSTNAME [linger|nolinger] [EXTRA PODMAN RUN OPTION...]
-# Each machine holds 65,536 tasks (see the machine image above), and is a real systemd machine.
+# Each machine holds 65,536 tasks (see the machine image above), and is a real systemd machine, of the machine image
+# or the one BOOT_IMAGE names.
 boot() {
   local c=$1 ip=$2 name=$3 linger=${4:-linger} t0=$SECONDS created up
   shift $(( $# < 4 ? $# : 4 ))
   $P run -d --name "$c" --hostname "$name" --systemd=always --pids-limit=65536 --network "$net" --ip "$ip" \
-    --mount "type=bind,src=$out/shared,dst=/shared,ro" "$@" "$MACHINE_IMAGE" /sbin/init > /dev/null
+    --mount "type=bind,src=$out/shared,dst=/shared,ro" "$@" "${BOOT_IMAGE:-$MACHINE_IMAGE}" /sbin/init > /dev/null
   created=$((SECONDS - t0))
   wait_until 90 "[[ \$($P exec $c systemctl is-system-running 2>/dev/null) =~ ^(running|degraded)\$ ]]"
   up=$((SECONDS - t0))
@@ -987,6 +1011,8 @@ machines() {
     case $role in
       hub) boot "$hubc" "$hub_ip" hub linger --add-host "$preview_name:127.0.0.1" & ;;
       joiner) boot "$joinerc" "$joiner_ip" joiner linger --security-opt unmask=ALL & ;;
+      # The joined machine as a bare server is (the bare image): no bubblewrap, socat or git.
+      bare) BOOT_IMAGE=$BARE_IMAGE boot "$joinerc" "$joiner_ip" joiner linger --security-opt unmask=ALL & ;;
       fresh) boot "$freshc" "$fresh_ip" fresh nolinger & ;;
       # A machine the hub adds over SSH: its sshd serves root and the user, by key; the installer turns lingering on
       # for root itself, and the user's is on as a person's own machine has it.
@@ -1003,12 +1029,12 @@ export -f machines
 
 # ---------------------------------------------------------------- installing and joining, a check or a rig's setup
 
-# The hub installs from the rig's feed (build $1): pristine first (no git, Bun, Node or openssl), and the installer
-# places none of git, Bun or Node.
+# The hub installs from the rig's feed (build $1, from channel $2 when one is named, the installer's own otherwise):
+# pristine first (no git, Bun, Node or openssl), and the installer places none of git, Bun or Node.
 install_hub() {
-  local version=$1
+  local version=$1 channel=${2:-}
   as_user "$hubc" sh -c 'for tool in git bun node openssl; do if command -v $tool > /dev/null; then echo "$tool is already there"; exit 1; fi; done; echo pristine'
-  as_user "$hubc" sh /shared/installer.sh
+  as_user "$hubc" env ${channel:+CAWCO_CHANNEL=$channel} sh /shared/installer.sh
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   as_user "$hubc" curl -fsS -o /dev/null http://127.0.0.1:3000/
   # The binary's dashboard serves every address its socket names: the loopback port too, and [::1] where the
@@ -1041,12 +1067,18 @@ join_machine() {
 # The machines given (hub, joiner) are signed in to one CawCo account, made through the hub's API, each in its own
 # dir; the hub records each sign-in before the first session starts. A Claude session runs only on such a machine.
 signed_in_on() { hub_api /api/accounts | json "d => d.signins.filter(s => s.accountId === '$1' && s.state === 'signed-in').map(s => s.machineId).sort().join(' ')"; }
-sign_in() {
-  need_hub
-  local aid role c ids=()
+# A CawCo account made through the hub's API; its id is kept in $rigdir/account-id.
+new_account() {
+  local aid
   aid=$(hub_api /api/accounts -X POST -H 'content-type: application/json' -d '{"provider":"anthropic","kind":"subscription"}' | json 'd => d.id')
   [[ -n $aid ]]
   echo "$aid" > "$rigdir/account-id"
+}
+sign_in() {
+  need_hub
+  local aid role c ids=()
+  new_account
+  aid=$(cat "$rigdir/account-id")
   for role in "$@"; do
     c=${role}c
     c=${!c}
@@ -1067,14 +1099,14 @@ fleet() {
   setup "install the hub from $version" install_hub "$version"
   export hid
   hid=$(machine_id hub)
-  if [[ " $roles " == *" joiner "* ]]; then
+  if [[ " $roles " == *" joiner "* || " $roles " == *" bare "* ]]; then
     setup "join the second machine to the hub" join_machine
     export jid
     jid=$(machine_id joiner)
   fi
   [[ -z $signed ]] || setup "sign in $signed to a CawCo account" sign_in $signed
 }
-export -f install_hub join_machine signed_in_on sign_in
+export -f install_hub join_machine signed_in_on new_account sign_in
 
 # ---------------------------------------------------------------- the person's side of an update, its stand-ins slow
 # What reached the person through updates on 2026-10-16, which no rig saw while its stand-ins were fast: a message
@@ -1190,8 +1222,9 @@ update_sends_delivered() {
 # CLAUDE_LATE_S late, past the agent's 20 s bound on it (accounts.ts `authStatusIn`): from before the update until a
 # late read of it had ended (cut at the bound, or answered under a longer one) and 15 s past the last read that ended
 # (the agent's report follows its reads within 2 s, slow-harness-cli.ts), the hub said signed-in at every sample it
-# answered. The 15 s run from the last read, not the first: the agent reads each minute, and a fixed wait after the
-# first could end a moment after another read, with no sample of the hub's word on it.
+# answered. The 15 s run from the last read, not the first: the agent reads each minute (a sixth of one here, the
+# proof's pace), and a fixed wait after the first could end a moment after another read, with no sample of the hub's
+# word on it.
 update_signin_kept() {
   local c machine since bad last
   [[ -s "$rigdir/outcomes-of" ]] || { echo "ASSERTION FAILED: the update's check ended before the sign-in was watched"; return 1; }
@@ -1224,12 +1257,13 @@ export -f signin_state signin_sampler claude_late claude_calls auth_reads_ended_
 
 # ================================================================ THE RIGS
 
-# ---------------------------------------------------------------- install: a pristine machine installs the hub, and
-# another joins it. A nightly whose installer cannot bring up a hub (user units, linger, sudo openssl) or whose
-# Connect a machine is broken reaches no one.
-# The relay on two computers: the joined machine's agent reaches the hub across the rig's network and serves the
-# hub's dashboard on the joined machine's own loopback (agent hub-loopback.ts); the hub's own agent, which the hub's
-# register answer names its own computer (`hostsHub`), carries nothing there, where the dashboard socket is 3455.
+# A pristine machine installing the hub, and another joining it, is every rig's setup (`fleet`: install_hub,
+# join_machine, with their assertions): a nightly whose installer cannot bring up a hub (user units, linger, sudo
+# openssl) or whose Connect a machine is broken fails every rig at that step, by name.
+# The relay on two computers (the capped rig's first check): the joined machine's agent reaches the hub across the
+# rig's network and serves the hub's dashboard on the joined machine's own loopback (agent hub-loopback.ts); the hub's
+# own agent, which the hub's register answer names its own computer (`hostsHub`), carries nothing there, where the
+# dashboard socket is 3455.
 loopback_carried() {
   need_hub
   wait_until 60 'as_user "$joinerc" curl -fsS --max-time 5 http://127.0.0.1:3455/session | grep -q _app/immutable'
@@ -1248,23 +1282,21 @@ loopback_carried() {
     || { echo "ASSERTION FAILED: the hub machine's agent does not say the hub is its own computer, or serves it"; return 1; }
 }
 export -f loopback_carried
-rig_install() {
-  use_feed base
-  setup "boot the machines: hub joiner" machines hub joiner
-  setup_done
-  check "pristine container installs the hub, and the hub answers" "install_hub $BASE"
-  check "a second container joins the hub" join_machine 600 "pristine container installs the hub, and the hub answers"
-  check "the joined machine's localhost:3455 is the hub's dashboard, carried by its agent; the hub's own agent carries nothing" loopback_carried 300 "a second container joins the hub"
-}
 
 # ---------------------------------------------------------------- sshadd: Connect a machine › Over SSH, the real way
 # The hub adds machines over SSH as the dashboard's dialog does (`POST /api/machines/ssh`, hub join.ts): its own
 # connection to the machine, the key it writes there (ssh-tunnels.ts `admit`), the hub's own install.sh fetched
 # through its forward, the release from this rig's feed, a real systemd --user install, and the agent joining through
-# the forward. One machine is added as root, one as a normal user, each its own container (one machine id each).
+# the forward. One machine is added as root, one as a normal user, each its own container (one machine id each), both
+# at once, as the owner added two on 2026-10-22.
 # On nightly 4839 a fresh root machine (uwucloud, 2026-10-21) registered with no key and was held for an Admit; after
-# the Admit its heartbeats were refused "register first" every 15 s. Nothing here is a stand-in: only the machines
-# are containers, and no address outside the rig's internal network is touched.
+# the Admit its heartbeats were refused "register first" every 15 s. On 2026-10-22 two machines added over SSH came up
+# online and never had their first fleet sync, so every session on them was refused for hours, while this rig stopped
+# at "online". So each machine goes on to real work after its add: the fleet's first sync on its disk, a session asked
+# for a second after the add said done running, a preview of that session answering through the hub, nothing it asked
+# the hub refused, and Install now applied. Each is signed in to a CawCo account before its add (an account dir, and on
+# root's machine a Claude Code of root's own), as a person's machine with Claude Code is. Nothing here is a stand-in:
+# only the machines are containers, and no address outside the rig's internal network is touched.
 
 # The hub's journal, whole, or since epoch seconds $1.
 hub_journal() { as_user "$hubc" sh -c "journalctl --user --no-pager -o cat -u cawco-hub.service ${1:+--since @$1} ${2:+--until @$2} || true"; }
@@ -1290,6 +1322,69 @@ ssh_trust() {
   if $P exec "$sshrootc" test -e /root/.local/share/cawco; then echo "ASSERTION FAILED: root on sshroot has CawCo before the add"; return 1; fi
   [[ "$(untouched "$sshuserc")" == untouched ]]
 }
+# A command on SSH machine $1 as the user CawCo is added for there ($2: root, or the user), in that user's session.
+as_added() {
+  local c=$1 user=$2
+  shift 2
+  if [[ $user == root ]]; then
+    $P exec --user root --workdir /root --env HOME=/root --env XDG_RUNTIME_DIR=/run/user/0 \
+      --env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus "$c" "$@"
+  else
+    as_user "$c" "$@"
+  fi
+}
+# The agent's journal on SSH machine $1 for user $2, whole or since epoch seconds $3.
+added_agent_journal() { as_added "$1" "$2" sh -c "journalctl --user --no-pager -o cat -u cawco-agent.service ${3:+--since @$3} || true"; }
+# Both machines signed in before their adds, as a person's machine with Claude Code is: an account dir of the rig's
+# CawCo account (account-dir.sh) in the home of the user CawCo is added for (root's Claude Code is ssh_trust's).
+ssh_sign_in_before() {
+  need_hub
+  local aid
+  new_account
+  aid=$(cat "$rigdir/account-id")
+  as_added "$sshrootc" root sh /shared/account-dir.sh "$aid"
+  as_added "$sshuserc" cawco sh /shared/account-dir.sh "$aid"
+}
+# Runs function $1 for both SSH machines at once, root's (`$sshrootc sshroot root $sshroot_ip /root`) and the user's
+# (`$sshuserc sshuser cawco $sshuser_ip /home/cawco`), each in a subshell of its own with the check's -e and trace;
+# then says each one's output and exit status, and fails when either failed.
+on_both() {
+  local fn=$1 root user rc_root=0 rc_user=0
+  ( "$fn" "$sshrootc" sshroot root "$sshroot_ip" /root ) > "$rigdir/$fn-sshroot.out" 2>&1 &
+  root=$!
+  ( "$fn" "$sshuserc" sshuser cawco "$sshuser_ip" /home/cawco ) > "$rigdir/$fn-sshuser.out" 2>&1 &
+  user=$!
+  wait "$root" || rc_root=$?
+  wait "$user" || rc_user=$?
+  echo "======== root on sshroot: exit $rc_root"
+  cat "$rigdir/$fn-sshroot.out"
+  echo "======== the user on sshuser: exit $rc_user"
+  cat "$rigdir/$fn-sshuser.out"
+  (( rc_root == 0 && rc_user == 0 ))
+}
+# When the hub last took a frame of machine $2 as its registered connection's, in epoch ms: its row's lastSeenAt, which
+# every heartbeat the hub takes moves (db.ts touchAgent), read through the API function $1 (hub_api, or owner_api
+# once the hub requires paired devices).
+last_seen() { "$1" /api/agents | json "d => { const a = d.find(r => r.machineId === '$2'); return a?.lastSeenAt ? new Date(a.lastSeenAt).getTime() : 0; }"; }
+# Two heartbeats of machine $2 taken after epoch ms $3, read through $1: its lastSeenAt moved past $3, then past that
+# again. Each comes within the agent's beat (15 s); 60 s for each is the ceiling.
+two_beats_taken() {
+  local api=$1 id=$2 after=$3 first
+  wait_until 60 '(( $(last_seen "$api" "$id") > after ))' || { echo "ASSERTION FAILED: the hub took no heartbeat of $id within 60 s"; return 1; }
+  first=$(last_seen "$api" "$id")
+  wait_until 60 '(( $(last_seen "$api" "$id") > first ))' || { echo "ASSERTION FAILED: the hub took no second heartbeat of $id within 60 s of its first"; return 1; }
+  echo "two heartbeats of $id taken, the last at $(last_seen "$api" "$id")"
+}
+# Asks for a session on machine $2 one second after epoch ms $1, the person's next step once an add says done; what
+# the hub answered is kept in $rigdir/ssh-start-$3.txt (`rc <exit> at <epoch ms>`, then its words), for
+# ssh_session_ran.
+ssh_start_after() {
+  local left rc=0 said
+  left=$(( $1 + 1000 - $(now_ms) ))
+  (( left <= 0 )) || sleep "$(( left / 1000 )).$(printf '%03d' $(( left % 1000 )))"
+  said=$(start_session "$2" "sshadd-$3-1" 2>&1) || rc=$?
+  printf 'rc %s at %s\n%s\n' "$rc" "$(now_ms)" "$said" > "$rigdir/ssh-start-$3.txt"
+}
 # What a failed SSH add check is read by: the add's lines, the hub's journal, and on the machine its agent's journal
 # and where its key is.
 ssh_add_said() {
@@ -1303,14 +1398,14 @@ ssh_add_said() {
     as_user "$c" sh -c 'journalctl --user --no-pager -o cat -n 80 -u cawco-agent.service; ls -la ~/.config/cawco 2>&1' || true
   fi
 }
-# Adds `user@ip` (machine container $1, hostname $2) over SSH and waits for the add to end; then: done, no Admit
-# asked of anyone (no "waits to be admitted", no row), the machine online, its first register proved the add's key
-# (no hold at all), and over 40 s, past two heartbeats, none of its heartbeats refused.
+# Adds `user@ip` (machine container $1, hostname $2, user $3, address $4) over SSH and waits for the add to end; then:
+# done, and a second later a session asked for on the machine (ssh_start_after); no Admit asked of anyone (no "waits
+# to be admitted", no row), the machine online, its first register proved the add's key (no hold at all), and two of
+# its heartbeats taken, none refused.
 ssh_add_joins() {
-  local c=$1 name=$2 user=$3 ip=$4 since job state id refused rows
+  local c=$1 name=$2 user=$3 ip=$4 since job state id refused rows done_ms
   need_hub
   since=$(date +%s)
-  echo "$since" > "$rigdir/ssh-since-$name"
   job=$(hub_api /api/machines/ssh -X POST -H 'content-type: application/json' -d "{\"target\":\"$user@$ip\"}" | json 'd => d.id')
   [[ -n $job ]]
   echo "$job" > "$rigdir/ssh-add-$name.job"
@@ -1322,9 +1417,11 @@ ssh_add_joins() {
   wait_until 900 '[[ "$(hub_api /api/machines/ssh/'"$job"' | json "d => d.state")" != running ]]' || { ssh_add_said "$c" "$user" "$job"; return 1; }
   state=$(hub_api "/api/machines/ssh/$job" | json 'd => d.state')
   [[ $state == done ]] || { echo "ASSERTION FAILED: the SSH add of $user@$ip ended $state"; ssh_add_said "$c" "$user" "$job"; return 1; }
+  done_ms=$(now_ms)
   id=$(machine_id "$name")
   [[ -n $id ]] || { echo "ASSERTION FAILED: no machine named $name on the hub"; ssh_add_said "$c" "$user" "$job"; return 1; }
   echo "$id" > "$rigdir/ssh-id-$name"
+  ssh_start_after "$done_ms" "$id" "$name"
   if hub_journal "$since" | grep -F "machine $id (" | grep -q "waits to be admitted"; then
     echo "ASSERTION FAILED: the hub held $user@$ip for an Admit"; ssh_add_said "$c" "$user" "$job"; return 1
   fi
@@ -1335,98 +1432,203 @@ ssh_add_joins() {
     echo "ASSERTION FAILED: $name's agent registered without the add's key and was held for the add (no Admit row, but its first register proved nothing)"
     ssh_add_said "$c" "$user" "$job"; return 1
   fi
-  sleep 40
+  two_beats_taken hub_api "$id" "$done_ms" || { hub_journal "$since" | grep -F "$id" | tail -n 20; return 1; }
   refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
   [[ $refused == 0 ]] || { echo "ASSERTION FAILED: $refused of $name's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 20; return 1; }
   [[ "$(hub_api "/api/agents/$id" | json 'd => d.status')" == online ]]
 }
-# Once the SSH add of machine container $1 (hostname $2, as $3) is done: its first fleet sync landed (the sidecar holds
-# the fleet's denied tools, and the agent's journal says the sync), a Claude session started there runs, the hub's row
-# says no sync that did not land, and the hub refused nothing anonymous since the add. niftybot and uwucloud
-# (2026-10-22), each added over SSH, refused every session ("Not started: this machine has not had its first fleet
-# sync … none came within 30s") while the hub logged `[hub-auth] refused anonymous GET /api/binary-updates/settings`:
-# their installs never recorded the hub they joined, so their agents refused every fleet sync as not the machine's.
-ssh_add_works() {
-  local c=$1 name=$2 user=$3 id since home session journal anonymous fault
+ssh_adds_at_once() {
   need_hub
-  id=$(cat "$rigdir/ssh-id-$name")
-  since=$(cat "$rigdir/ssh-since-$name")
-  [[ -n $id && -n $since ]]
-  if [[ $user == root ]]; then home=/root; else home=/home/$user; fi
-  # The install recorded the hub the machine joined as the address its agent reaches it by: the add's own.
-  local joined_at reached_at
-  joined_at=$($P exec "$c" sh -c "cat $home/.config/cawco/config.json 2> /dev/null || true" | json 'd => d.hubUrl ?? ""')
-  reached_at=$(hub_api "/api/machines/ssh/$(cat "$rigdir/ssh-add-$name.job")" | json 'd => d.hubUrl')
-  [[ -n $reached_at && $joined_at == "$reached_at" ]] || { echo "ASSERTION FAILED: $name's config.json names the hub it joined as \"$joined_at\", its agent reaches it at \"$reached_at\""; return 1; }
-  sidecar_denies() { $P exec "$c" sh -c "cat $home/.claude/cawco-fleet.json 2> /dev/null || true" | json 'd => Array.isArray(d.deniedTools)'; }
-  wait_until 60 '[[ "$(sidecar_denies)" == true ]]' || { echo "ASSERTION FAILED: $name has no fleet sidecar holding the fleet's denied tools ($home/.claude/cawco-fleet.json)"; ssh_add_said "$c" "$user" "$(cat "$rigdir/ssh-add-$name.job")"; return 1; }
-  if [[ $user == root ]]; then
-    journal=$($P exec "$c" sh -c 'XDG_RUNTIME_DIR=/run/user/0 journalctl --user --no-pager -o cat -u cawco-agent.service' || true)
-  else
-    journal=$(as_user "$c" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service' || true)
-  fi
-  grep -qF "[fleet] sync from the hub: " <<< "$journal" || { echo "ASSERTION FAILED: $name's agent never says a fleet sync from the hub"; grep -F "[fleet]" <<< "$journal" | tail -n 20; return 1; }
+  date +%s > "$rigdir/ssh-adds-since"
+  on_both ssh_add_joins
+}
+# Whether machine $1's user $2 has heard the fleet's denials: its sidecar $3 holds a deniedTools list.
+fleet_denials_known() { [[ "$(as_added "$1" "$2" sh -c 'cat "$1" 2> /dev/null || true' sh "$3" | json 'd => Array.isArray(d.deniedTools)')" == true ]]; }
+# The fleet's first sync reached the added machine. Its install recorded the hub it joined as the address its agent
+# reaches it by, the add's own (config.json `hubUrl`, cli joined-hub.ts): niftybot and uwucloud, added over SSH on
+# 2026-10-22, recorded none, so their agents took themselves for not the machine's own and refused every sync. The
+# fleet's sidecar in its Claude dir (~/.claude/cawco-fleet.json, agent denied-tools.ts), which every spawn reads before
+# it starts anything, holds the fleet's deniedTools; its agent says it synced from the hub and never that it refused a
+# sync; and the hub's row says no sync that did not land (`fleetSyncFault`).
+ssh_fleet_synced() {
+  local c=$1 name=$2 user=$3 home=$5 sidecar="$5/.claude/cawco-fleet.json" joined reached journal fault
+  joined=$(as_added "$c" "$user" sh -c 'cat "$1" 2> /dev/null || true' sh "$home/.config/cawco/config.json" | json 'd => d.hubUrl ?? ""')
+  reached=$(hub_api "/api/machines/ssh/$(cat "$rigdir/ssh-add-$name.job")" | json 'd => d.hubUrl')
+  [[ -n $reached && $joined == "$reached" ]] \
+    || { echo "ASSERTION FAILED: $name's config.json names the hub it joined as \"$joined\", and its agent reaches it at \"$reached\""; return 1; }
+  wait_until 120 'fleet_denials_known "$c" "$user" "$sidecar"' || {
+    echo "ASSERTION FAILED: $name's $sidecar holds no deniedTools: $(as_added "$c" "$user" sh -c 'cat "$1" 2>&1' sh "$sidecar" | head -c 400)"
+    added_agent_journal "$c" "$user" | grep -F "[fleet]" | tail -n 10
+    return 1
+  }
+  journal=$(added_agent_journal "$c" "$user")
+  grep -qF "[fleet] sync from the hub" <<< "$journal" || { echo "ASSERTION FAILED: $name's agent never says it synced from the hub"; grep -F "[fleet]" <<< "$journal" | tail -n 20; return 1; }
   if grep -qE "not this machine's agent|sync from the hub refused" <<< "$journal"; then
     echo "ASSERTION FAILED: $name's agent refused the hub's fleet sync"; grep -E "not this machine's agent|sync from the hub refused" <<< "$journal" | tail -n 5; return 1
   fi
-  session="ssh-$name-session"
-  start_session "$id" "$session"
-  wait_until 120 "session_running $session" || { echo "ASSERTION FAILED: the session on $name does not run: $(hub_api /api/instances | json "d => JSON.stringify(d.find(r => r.id === '$session'))")"; return 1; }
-  stop_session "$id" "$session" || true
-  fault=$(hub_api "/api/agents/$id" | json 'd => d.fleetSyncFault ?? ""')
+  fault=$(hub_api "/api/agents/$(cat "$rigdir/ssh-id-$name")" | json 'd => d.fleetSyncFault ?? ""')
   [[ -z $fault ]] || { echo "ASSERTION FAILED: the hub says $name's fleet sync did not land: $fault"; return 1; }
-  anonymous=$(hub_journal "$since" | grep -F "[hub-auth] refused anonymous" || true)
-  [[ -z $anonymous ]] || { echo "ASSERTION FAILED: since the add of $name the hub refused anonymous calls:"; echo "$anonymous" | tail -n 20; return 1; }
+  echo "$name's agent: $(grep -F "[fleet] sync from the hub" <<< "$journal" | tail -n 1)"
 }
-# A machine that joins by itself, on a hub that requires paired devices, is held; the person admits it, and from
-# then on it is the machine's registered connection: online, and over 40 s none of its frames refused "register
-# first". The user machine is taken off the hub first (its agent stopped, its key gone on both sides), then joins
-# the hub's own address with the hub's install.sh, as the dialog's one command hands it out.
+# The session asked for a second after the add said done (ssh_start_after) runs: the hub took the start, and its row
+# reads running within 90 s (a machine yet to hear the fleet's denials holds a spawn up to 30 s for its first sync,
+# agent denied-tools.ts FIRST_SYNC_WAIT_MS, then refuses it).
+ssh_session_ran() {
+  local c=$1 name=$2 user=$3 id="sshadd-$2-1"
+  [[ -s "$rigdir/ssh-start-$name.txt" ]] || { echo "ASSERTION FAILED: the add's check asked for no session on $name"; return 1; }
+  echo "== the start a second after the add: $(cat "$rigdir/ssh-start-$name.txt")"
+  head -n 1 "$rigdir/ssh-start-$name.txt" | grep -q '^rc 0 ' \
+    || { echo "ASSERTION FAILED: the hub refused the session asked for a second after $name's add said done: $(tail -n +2 "$rigdir/ssh-start-$name.txt")"; return 1; }
+  wait_until 90 "session_running $id" || {
+    echo "ASSERTION FAILED: the session asked for on $name a second after its add said done reads $(hub_api /api/instances | json "d => JSON.stringify(d.find(r => r.id === '$id') ?? null)" | head -c 600)"
+    added_agent_journal "$c" "$user" | grep -E "\[fleet\]|Not started|$id" | tail -n 20
+    return 1
+  }
+}
+# The session $3's identity as its process on machine $1 (user $2) has it: CAWCO_INSTANCE_ID, CAWCO_SESSION_CREDENTIAL
+# and CAWCO_HUB_URL from the environment of the process the session holds, one NAME=value a line.
+session_env_on() {
+  as_added "$1" "$2" sh -c 'for p in $(pgrep -x sleep); do
+    if tr "\0" "\n" < "/proc/$p/environ" 2> /dev/null | grep -qx "CAWCO_INSTANCE_ID=$1"; then
+      tr "\0" "\n" < "/proc/$p/environ" | grep -E "^CAWCO_(INSTANCE_ID|SESSION_CREDENTIAL|HUB_URL)="
+      exit 0
+    fi
+  done
+  exit 1' sh "$3"
+}
+# A session's preview on the added machine answers through the hub: a page listens on the machine's loopback (a
+# transient unit of its user's, socat answering preview-answer.sh), the session asked for after the add opens a preview
+# of its port as a session does, its `artifact_create` tool called through `cawco tool` in the session's own
+# environment, and the hub's preview port for that session answers with the page.
+export SSH_PREVIEW_PORT=5197
+ssh_preview() {
+  local c=$1 name=$2 user=$3 home=$5 id="sshadd-$2-1" vars port
+  on_exit "as_added $c $user systemctl --user stop cawco-proof-preview.service > /dev/null 2>&1"
+  as_added "$c" "$user" systemd-run --user --quiet --unit=cawco-proof-preview socat \
+    "TCP-LISTEN:$SSH_PREVIEW_PORT,bind=127.0.0.1,fork,reuseaddr" "SYSTEM:sh /shared/preview-answer.sh"
+  wait_until 30 '[[ "$(as_added "$c" "$user" curl -sS --max-time 2 "http://127.0.0.1:$SSH_PREVIEW_PORT/" 2>&1 || true)" == *"preview of $name"* ]]'
+  mapfile -t vars < <(session_env_on "$c" "$user" "$id")
+  [[ " ${vars[*]} " == *" CAWCO_SESSION_CREDENTIAL="* ]] \
+    || { echo "ASSERTION FAILED: the process of session $id on $name carries no credential: ${vars[*]%%=*}"; return 1; }
+  as_added "$c" "$user" env "${vars[@]}" "$home/.local/bin/cawco" tool artifact_create \
+    "{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the page and say whether it answers\",\"name\":\"sshadd-preview\",\"port\":$SSH_PREVIEW_PORT}" \
+    > "$rigdir/ssh-preview-$name.open" 2>&1 \
+    || { echo "ASSERTION FAILED: the session's artifact_create on $name failed: $(cat "$rigdir/ssh-preview-$name.open")"; return 1; }
+  echo "the session's artifact_create answered: $(cat "$rigdir/ssh-preview-$name.open")"
+  wait_until 60 'port=$(run_script "$hubc" /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$id" 2> "$rigdir/ssh-preview-$name.err")' \
+    || { echo "ASSERTION FAILED: the hub opened no preview port for $id: $(cat "$rigdir/ssh-preview-$name.err")"; return 1; }
+  wait_until 60 '[[ "$(as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$port/" 2>&1 || true)" == *"preview of $name"* ]]' || {
+    echo "ASSERTION FAILED: the hub's preview port $port for $id answered: $(as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$port/" 2>&1 | head -c 400)"
+    added_agent_journal "$c" "$user" | grep -iE "preview|bridge|401" | tail -n 10
+    return 1
+  }
+  echo "the hub's preview port $port for $id answers: preview of $name"
+}
+# Nothing either added machine asked the hub since the adds began was refused: the hub's journal has no
+# `[hub-auth] refused` (the gate's line for every request it refuses, hub-auth.ts), and neither machine's agent
+# journal says a call to the hub "answered 401" (what the gate answers a request without the machine's proof).
+ssh_no_refusals() {
+  need_hub
+  local since refused c user said bad=0
+  since=$(cat "$rigdir/ssh-adds-since")
+  refused=$(hub_journal "$since" | grep -F "[hub-auth] refused" || true)
+  [[ -z $refused ]] || { echo "ASSERTION FAILED: the hub refused requests since the adds:"; echo "$refused" | tail -n 20; bad=1; }
+  for pair in "$sshrootc root" "$sshuserc cawco"; do
+    read -r c user <<< "$pair"
+    said=$(added_agent_journal "$c" "$user" "$since" | grep -F "answered 401" || true)
+    [[ -z $said ]] || { echo "ASSERTION FAILED: the agent of $user on $c was answered 401:"; echo "$said" | tail -n 20; bad=1; }
+  done
+  (( bad == 0 ))
+}
+# Install now on the added machine applies the new build: the machine is offered it, its download from the hub goes
+# through the add's forward with the machine's proof, a helper applies it, and nothing it asked the hub meanwhile was
+# refused (as ssh_no_refusals reads).
+ssh_install_now() {
+  local c=$1 name=$2 user=$3 id since said
+  id=$(cat "$rigdir/ssh-id-$name")
+  since=$(date +%s)
+  wait_until 120 '[[ "$(field $id availableVersion)" == $NEXT ]]' \
+    || { echo "ASSERTION FAILED: $name was not offered $NEXT: $(hub_api /api/binary-updates/machines | json "d => JSON.stringify(d.machines['$id'] ?? null)")"; return 1; }
+  echo "Install now answered: $(install_now_request "$id")"
+  wait_until 400 '[[ "$(build_version $id)" == $NEXT && "$(phase $id)" == installed ]]' || {
+    echo "ASSERTION FAILED: Install now left $name on $(build_version "$id"), $(phase "$id"): $(field "$id" error)"
+    added_agent_journal "$c" "$user" "$since" | grep -E "\[update\]|401" | tail -n 20
+    return 1
+  }
+  said=$(added_agent_journal "$c" "$user" "$since" | grep -F "answered 401" || true)
+  [[ -z $said ]] || { echo "ASSERTION FAILED: through its update $name's agent was answered 401:"; echo "$said" | tail -n 10; return 1; }
+}
+ssh_install_now_both() {
+  need_hub
+  local since refused
+  since=$(date +%s)
+  use_feed next
+  learn > /dev/null
+  on_both ssh_install_now
+  refused=$(hub_journal "$since" | grep -F "[hub-auth] refused" || true)
+  [[ -z $refused ]] || { echo "ASSERTION FAILED: the hub refused requests through the updates:"; echo "$refused" | tail -n 10; return 1; }
+}
+export -f hub_journal ssh_trust as_added added_agent_journal ssh_sign_in_before on_both last_seen two_beats_taken \
+  ssh_start_after ssh_add_said ssh_add_joins ssh_adds_at_once fleet_denials_known ssh_fleet_synced ssh_session_ran \
+  session_env_on ssh_preview ssh_no_refusals ssh_install_now ssh_install_now_both
+rig_sshadd() {
+  use_feed base
+  setup "boot the machines: hub sshroot sshuser" machines hub sshroot sshuser
+  setup "install the hub from $BASE" install_hub "$BASE"
+  setup "give the hub's SSH key to root on sshroot and the user on sshuser" ssh_trust
+  setup "sign root on sshroot and the user on sshuser in to a CawCo account before their adds" ssh_sign_in_before
+  setup_done
+  check "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused" ssh_adds_at_once 1200
+  check "each added machine has had its first fleet sync: its install recorded the hub it joined, the fleet sidecar in its Claude dir holds the fleet's deniedTools, its agent says it synced from the hub and refused none, and the hub's row says no sync that did not land" "on_both ssh_fleet_synced" 300 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
+  check "a session asked for a second after each add said done runs" "on_both ssh_session_ran" 300 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
+  check "that session's preview on each added machine answers through the hub" "on_both ssh_preview" 300 "a session asked for a second after each add said done runs"
+  check "nothing either added machine asked the hub was refused: no [hub-auth] refused in the hub's journal since the adds, no answered 401 in either agent's journal" ssh_no_refusals 120 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
+  check "Install now on each added machine applies the new build, its download through the add's forward with the machine's proof, nothing refused" ssh_install_now_both 900 "SSH adds of two fresh machines at once, one as root and one as a normal user, each install CawCo under systemd and join: a second add of either while it runs is refused 409 naming it, no Admit asked or listed, each first register proves its add's key, online, and two of its heartbeats taken with none refused"
+}
+
+# ---------------------------------------------------------------- admitted: a machine joins a hub that requires paired
+# devices by itself (nightly 4839, uwucloud, 2026-10-21: after its Admit the machine's heartbeats were refused
+# "register first" every 15 s). It is held with none of its frames refused "register first"; the person admits it, and
+# from then on it is the machine's registered connection: online, and two of its heartbeats taken, none refused. A
+# fresh machine runs the hub's own install.sh with no terminal, as the dialog's one command hands it out.
 owner_api() { as_user "$hubc" curl -fsS -H "Authorization: Owner $(cat "$rigdir/owner-token")" "http://127.0.0.1:3456$1" "${@:2}"; }
 admitted_heartbeats() {
-  local id since out rc=0 refused
+  local id since out rc=0 refused joining admitted_ms waiting
   need_hub
-  id=$(cat "$rigdir/ssh-id-sshuser")
-  [[ -n $id ]]
-  as_user "$sshuserc" systemctl --user stop cawco-agent.service
-  as_user "$sshuserc" rm -f /home/cawco/.config/cawco/machine-key
-  wait_until 60 '[[ "$(hub_api /api/agents/'"$id"' | json "d => d.status")" != online ]]'
-  hub_api "/api/agents/$id" -X DELETE > /dev/null
   hub_api /api/auth/pairing -X PUT -H 'content-type: application/json' -d '{"required":true,"kind":"app","name":"stage2 proof"}' | json 'd => d.token' > "$rigdir/owner-token"
   [[ -s "$rigdir/owner-token" ]]
   since=$(date +%s)
-  as_user "$sshuserc" curl -fsS "http://$hub_ip:3456/install.sh" -o /tmp/join.sh
+  as_user "$joinerc" curl -fsS "http://$hub_ip:3456/install.sh" -o /tmp/join.sh
   out="$rigdir/held-join.out"
-  as_user "$sshuserc" sh /tmp/join.sh > "$out" 2>&1 &
-  local joining=$!
-  wait_until 180 '[[ "$(owner_api /api/machines/waiting | json "d => d.some(m => m.machineId === \"'"$id"'\")")" == true ]]' || { cat "$out"; hub_journal "$since" | tail -n 60; return 1; }
-  local admitted_at
-  admitted_at=$(date +%s)
-  refused=$(hub_journal "$since" "$admitted_at" | grep -cF "not machine $id's registered one" || true)
-  [[ $refused == 0 ]] || { echo "ASSERTION FAILED: while held, $refused of the machine's frames were refused \"register first\""; hub_journal "$since" "$admitted_at" | grep -F "$id" | tail -n 30; return 1; }
+  as_user "$joinerc" sh /tmp/join.sh > "$out" 2>&1 &
+  joining=$!
+  # Its row waits to be admitted: the one row there is (the hub's own machine was admitted as pairing went on).
+  wait_until 300 '[[ "$(owner_api /api/machines/waiting | json "d => d.length")" == 1 ]]' || { cat "$out"; hub_journal "$since" | tail -n 60; return 1; }
+  waiting=$(owner_api /api/machines/waiting)
+  echo "waiting to be admitted: $waiting"
+  id=$(json 'd => d[0].machineId' <<< "$waiting")
+  [[ -n $id ]]
+  refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
+  [[ $refused == 0 ]] || { echo "ASSERTION FAILED: while held, $refused of the machine's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
   owner_api "/api/machines/waiting/$id/admit" -X POST > /dev/null
   wait "$joining" || rc=$?
   cat "$out"
   [[ $rc == 0 ]] || { echo "ASSERTION FAILED: the join exited $rc"; hub_journal "$since" | tail -n 60; return 1; }
   grep -q 'waiting to be admitted' "$out"
   [[ "$(owner_api "/api/agents/$id" | json 'd => d.status')" == online ]]
-  sleep 40
+  admitted_ms=$(now_ms)
+  two_beats_taken owner_api "$id" "$admitted_ms" || { hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
   refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
   [[ $refused == 0 ]] || { echo "ASSERTION FAILED: after the Admit, $refused of the machine's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
   [[ "$(owner_api "/api/agents/$id" | json 'd => d.status')" == online ]]
 }
-export -f hub_journal ssh_trust ssh_add_said ssh_add_joins ssh_add_works owner_api admitted_heartbeats
-rig_sshadd() {
+export -f owner_api admitted_heartbeats
+rig_admitted() {
   use_feed base
-  setup "boot the machines: hub sshroot sshuser" machines hub sshroot sshuser
+  setup "boot the machines: hub joiner" machines hub joiner
   setup "install the hub from $BASE" install_hub "$BASE"
-  setup "give the hub's SSH key to root on sshroot and the user on sshuser" ssh_trust
   setup_done
-  check "an SSH add of a fresh machine as root installs CawCo for root under systemd and joins: a second add of it while it runs is refused 409 naming it, no Admit asked or listed, its first register proves the add's key, online, its heartbeats taken" "ssh_add_joins $sshrootc sshroot root $sshroot_ip" 1200
-  check "an SSH add of a fresh machine as a normal user installs and joins the same way" "ssh_add_joins $sshuserc sshuser cawco $sshuser_ip" 1200
-  check "the machine added over SSH as root has its first fleet sync (its sidecar holds the fleet's denied tools, its agent says the sync), a Claude session starts there, and the hub refused nothing anonymous since the add" "ssh_add_works $sshrootc sshroot root" 300 "an SSH add of a fresh machine as root installs CawCo for root under systemd and joins: a second add of it while it runs is refused 409 naming it, no Admit asked or listed, its first register proves the add's key, online, its heartbeats taken"
-  check "the machine added over SSH as a normal user has its first fleet sync, a Claude session starts there, and the hub refused nothing anonymous since the add" "ssh_add_works $sshuserc sshuser cawco" 300 "an SSH add of a fresh machine as a normal user installs and joins the same way"
-  check "a machine that joins a hub requiring paired devices by itself is held with none of its frames refused register first, the person admits it, and it is the machine's registered connection: online, none refused after either" admitted_heartbeats 900 "an SSH add of a fresh machine as a normal user installs and joins the same way"
+  check "a machine that joins a hub requiring paired devices by itself is held with none of its frames refused register first, the person admits it, and it is the machine's registered connection: online, two heartbeats taken, none refused after either" admitted_heartbeats 900
 }
 
 # ---------------------------------------------------------------- held3455: something else holds 127.0.0.1:3455
@@ -2044,8 +2246,9 @@ joiner_command_mid_drain() {
   start_session "$jid" outcome-1 > /dev/null
   wait_until 60 'session_running outcome-1'
   update_outcomes_start "$joinerc" "$jid" outcome-1 nosends
-  # Auto-update on: the joined machine's own pass stages the hub's build and drains on that command for 45 s. The
-  # command outlasts the drain, so the build waits, staged, for it to end.
+  # Auto-update on: the joined machine's own pass stages the hub's build and drains on that command (agent
+  # binary-update.ts DRAIN_MS: 45 s, a sixth of it at the proof's pace). The command outlasts the drain, so the build
+  # waits, staged, for it to end.
   put_policy stable true
   wait_until 200 '[[ "$(phase $jid)" == ready && -n "$(field $jid waitingOn)" ]]'
   as_user "$joinerc" test -s "$STAGED"
@@ -2055,8 +2258,9 @@ joiner_command_mid_drain() {
   as_user "$joinerc" sh -c 'printf "[Unit]\nDescription=CawCo sessiond 0.0.0-stray\n[Service]\nExecStart=/bin/false\n" > "$1" && systemctl --user daemon-reload' sh "$STRAY_UNIT"
   wait_until 90 'as_user "$joinerc" test ! -e "$STRAY_UNIT"'
   as_user "$joinerc" test -s "$STAGED"
-  # Fresh work in flight, then the first command ends: the next pass drains on the new one for 45 s, saying
-  # installing, before it starts any helper.
+  # Fresh work in flight, then the first command ends: the next pass drains on the new one for its DRAIN_MS, saying
+  # installing, before it starts any helper. The drain is the window Install now must land in, so from the moment the
+  # machine says installing the check asks the machine one thing (no helper has started) and then sends it.
   held=$(start_hold 602 /tmp)
   read -r -a second <<< "$held"
   on_exit "hub_api /api/workflows/${second[0]} -X DELETE > /dev/null"
@@ -2067,8 +2271,8 @@ joiner_command_mid_drain() {
   # The next pass now, not at the poll a minute on: the hub's check has every online machine look (a pass like any).
   learn
   wait_until 150 '[[ "$(phase $jid)" == installing ]]'
-  as_user "$joinerc" test ! -e /home/cawco/.local/share/cawco/binary/apply.lock
-  [[ "$(apply_starts "$joinerc" "$NEXT")" == 0 ]]
+  as_user "$joinerc" sh -c 'b=/home/cawco/.local/share/cawco/binary; test ! -e "$b/apply.lock" && ! grep -q "start $1 keeperOnly=false" "$b/apply.log" 2> /dev/null' sh "$NEXT" \
+    || { echo "ASSERTION FAILED: a helper started applying $NEXT before Install now was sent"; return 1; }
   # Install now lands in that pass's drain.
   answer=$(install_now_request "$jid")
   echo "the joined machine answered: $answer"
@@ -2682,6 +2886,42 @@ workspace_across_update() {
   [[ "$(child_pids "$joinerc" "boundary-$id-$new")" =~ ^[0-9]+$ ]]
   [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
 }
+# The archive's workspace, a rig of its own (wsarchive): opened, then both machines update with it open and nothing
+# running in it, so the delegate's next command runs and its boundary is handed over to a generation of the new
+# build's form, held by the new build's keeper. There the delegate starts its server again (a `setsid -f` listener)
+# and shows it as a preview the stage serves, answering by port: what the archive ends is a post-update generation's,
+# as an owner's workspace is once the fleet has updated under it.
+workspace_updated_serving() {
+  need_hub
+  local id gen new new_inner
+  id=$(cat "$rigdir/ws-id")
+  gen=$(ws_gen)
+  use_feed next
+  learn
+  install_now_request "$hid" > /dev/null
+  wait_until 400 '[[ "$(build_version $hid)" == $NEXT && "$(phase $hid)" == installed ]]'
+  learn
+  wait_until 120 '[[ "$(field $jid availableVersion)" == $NEXT ]]'
+  install_now_request "$jid" > /dev/null
+  wait_until 400 '[[ "$(build_version $jid)" == $NEXT && "$(phase $jid)" == installed ]]'
+  [[ "$(ws_exec 'cat README.md')" == proof ]]
+  wait_until 120 '[[ -n "$(ws_gen)" && "$(ws_gen)" != "'"$gen"'" ]]' || { echo "ASSERTION FAILED: the boundary was not handed over to the new build's form after the update"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
+  new=$(ws_gen)
+  echo "generation $gen is handed over to $new"
+  wait_until 60 '[[ "$(holder_of "$joinerc" "boundary-'"$id"'-'"$new"'")" == "$(endpoint_of $NEXT)" ]]'
+  read -r _ new_inner _ <<< "$(ws_place "$new")"
+  [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
+  ws_listener_start gen-new
+  wait_until 30 '[[ "$(ws_listener_pid gen-new)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no listener runs after the command that started it ended"; ws_listener_why "$new_inner"; return 1; }
+  ws_descends "$(ws_listener_pid gen-new)" "$new_inner" || return 1
+  ws_served_script
+  ws_preview_open
+  [[ "$(ws_served_pid)" =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: no served listener runs once its preview was made: $(cat "$rigdir/ws-preview-open")"; return 1; }
+  ws_descends "$(ws_served_pid)" "$new_inner" || return 1
+  wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$(ns_of "$new_inner")"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$new_inner"; return 1; }
+  ws_item_live || { echo "ASSERTION FAILED: after the update the work item is $(ws_item_says)"; return 1; }
+}
 # Archiving the workspace ends everything its boundary started: a `setsid -f` listener and every other process that
 # descends from its sandbox's init, with the sandbox itself (boundary.ts closeBoundary).
 workspace_archive_ends_all() {
@@ -2690,8 +2930,8 @@ workspace_archive_ends_all() {
   id=$(cat "$rigdir/ws-id")
   gen=$(ws_gen)
   read -r _ inner _ <<< "$(ws_place "$gen")"
-  # The `setsid -f` listener the update's check started again in this generation, and the preview's server the stage
-  # runs there, answering its preview by port (the across check ends in port mode, with the port it read last).
+  # The `setsid -f` listener started in this post-update generation, and the preview's server the stage runs there,
+  # answering its preview by port (workspace_updated_serving).
   wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$(ns_of "$inner")"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$inner"; return 1; }
   listener=$(ws_listener_pid gen-new)
   served=$(ws_served_pid)
@@ -2727,7 +2967,7 @@ workspace_archive_ends_all() {
   [[ -z "$(ws_served_pid)" ]] || { echo "ASSERTION FAILED: a served listener $(ws_served_pid) runs after the archive"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
 export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from
@@ -2737,10 +2977,18 @@ rig_workspace() {
   check "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" workspace_opens 600
   check "a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener, and the preview's served server, kept or started again by the stage, answers by port and by host behind the lock; once the preview and the listener stop the next command runs in the new build's boundary and the old one closes, and the preview made again is served in the new generation in both modes" workspace_across_update 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
   check "the workspace's judge answers every call its hook is handed from before the joined machine's update until well after it, through the boundary kept, its keeper retiring and the handover to a new generation" ws_judge_answers_after_update 300
-  check "archiving a workspace ends a setsid listener, its preview's served server and every other process its sandbox started" workspace_archive_ends_all 300 "a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener, and the preview's served server, kept or started again by the stage, answers by port and by host behind the lock; once the preview and the listener stop the next command runs in the new build's boundary and the old one closes, and the preview made again is served in the new generation in both modes"
   check "the session that delegated, running on the joined machine before both updates and held on by its retiring keeper that answers its listing late, is the same process after them, reattached and running" update_session_reattached 300
   check "every message sent to the session that delegated while the hub's machine and then the joined machine update, the hub restarting under some, reaches the session once the machine is back, once each" update_sends_delivered 600
   check "the joined machine's Claude account reads signed in all through its update with a workspace open, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
+}
+# The workspace's archive on a workspace of its own, which updates on its own: the archive ends a post-update
+# generation's processes, and the across check's long update no longer waits on it (workspace_updated_serving).
+rig_wsarchive() {
+  fleet base "$BASE" "hub joiner" "hub joiner"
+  setup_done
+  check "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" workspace_opens 600
+  check "with the workspace open both machines update; its next command runs and its boundary is handed over to the new build's form, where its server and the preview the stage serves start again" workspace_updated_serving 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
+  check "archiving a workspace ends a setsid listener, its preview's served server and every other process its sandbox started" workspace_archive_ends_all 300 "with the workspace open both machines update; its next command runs and its boundary is handed over to the new build's form, where its server and the preview the stage serves start again"
 }
 
 # ---------------------------------------------------------------- one session's runaway is its own
@@ -2995,7 +3243,182 @@ rig_memory() {
 rig_capped() {
   fleet base "$BASE" "hub joiner"
   setup_done
+  check "the joined machine's localhost:3455 is the hub's dashboard, carried by its agent; the hub's own agent carries nothing" loopback_carried 300
   check "the keeper's children run each in a cgroup of its own in its delegated cgroup, all of them capped below the keeper's reserve" keeper_children_capped 600
+}
+
+# ---------------------------------------------------------------- slowfleet: a machine joins a fleet that has things
+# for it to fetch, and no way out to fetch them. On 2026-10-22 two machines came up online and every session on them
+# was refused for hours: a machine spawns nothing until a fleet sync has written the fleet's denied tools (agent
+# denied-tools.ts, which holds a spawn 30 s for the first sync and then refuses it), and its first sync could not get
+# there. Here the hub holds two MCP servers run with npx and a plugin before the machine joins, and the rig's network is
+# internal (the setup looks at the npm registry from the machine and is refused). The machine is signed in before it
+# joins, as a person's machine with Claude Code is. A session asked for 5 s after the machine is online runs, and
+# within 120 s of its join the machine's row shows its first sync's outcome: a report the sync made after the join,
+# naming each of the fleet's servers and its plugin with a state, or the hub's sentence that it did not land
+# (`fleetSyncFault`).
+export SLOW_MCP="proof-everything proof-memory" SLOW_PLUGIN=commit-commands@claude-plugins-official
+# The fleet's rows before anyone joins: each server run as `npx -y <package>`, as the fleet's catalog adds one, and a
+# plugin of Claude Code's own marketplace, saved through the hub's API as the dashboard saves them.
+slow_fleet_rows() {
+  need_hub
+  local answer
+  answer=$(as_user "$hubc" curl -sS --max-time 300 -w '\nHTTP %{http_code}' -X PUT -H 'content-type: application/json' \
+    -d '{"config":{"command":"npx","args":["-y","@modelcontextprotocol/server-everything"]}}' http://127.0.0.1:3456/api/fleet/mcp/proof-everything)
+  echo "proof-everything: $answer"
+  [[ $answer == *"HTTP 200" ]]
+  answer=$(as_user "$hubc" curl -sS --max-time 300 -w '\nHTTP %{http_code}' -X PUT -H 'content-type: application/json' \
+    -d '{"config":{"command":"npx","args":["-y","@modelcontextprotocol/server-memory"]}}' http://127.0.0.1:3456/api/fleet/mcp/proof-memory)
+  echo "proof-memory: $answer"
+  [[ $answer == *"HTTP 200" ]]
+  answer=$(as_user "$hubc" curl -sS --max-time 60 -w '\nHTTP %{http_code}' -X PUT -H 'content-type: application/json' -d '{}' \
+    "http://127.0.0.1:3456/api/fleet/plugins/$SLOW_PLUGIN")
+  echo "$SLOW_PLUGIN: $answer"
+  [[ $answer == *"HTTP 200" ]]
+}
+# The joiner has no route out: the npm registry does not answer it.
+no_route_out() {
+  if as_user "$joinerc" curl -sS --max-time 5 -o /dev/null https://registry.npmjs.org/; then
+    echo "ASSERTION FAILED: the joined machine reaches registry.npmjs.org, so this rig has a route out"
+    return 1
+  fi
+  echo "the joined machine has no route out"
+}
+# The joiner signed in before it joins: an account dir of the rig's CawCo account, which its agent reads as it first
+# registers.
+slow_sign_in_before() {
+  need_hub
+  new_account
+  as_user "$joinerc" sh /shared/account-dir.sh "$(cat "$rigdir/account-id")"
+}
+slow_fleet_join_starts() {
+  need_hub
+  local online_ms id left
+  now_ms > "$rigdir/slow-join-started"
+  join_machine
+  online_ms=$(now_ms)
+  echo "$online_ms" > "$rigdir/slow-online-ms"
+  id=$(machine_id joiner)
+  [[ -n $id ]]
+  left=$(( online_ms + 5000 - $(now_ms) ))
+  (( left <= 0 )) || sleep "$(( left / 1000 )).$(printf '%03d' $(( left % 1000 )))"
+  start_session "$id" slowfleet-1 || { echo "ASSERTION FAILED: the hub refused the session asked for 5 s after the machine was online"; return 1; }
+  wait_until 60 'session_running slowfleet-1' || {
+    echo "ASSERTION FAILED: the session asked for 5 s after the machine was online reads $(hub_api /api/instances | json "d => JSON.stringify(d.find(r => r.id === 'slowfleet-1') ?? null)" | head -c 600)"
+    as_user "$joinerc" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service | grep -E "\[fleet\]|Not started|slowfleet-1" | tail -n 20'
+    return 1
+  }
+}
+# What the machine's row says of its sync: `fault <the hub's sentence>` when one did not land, else
+# `<at> <server>:<state>... <plugin>:<state>` from its report, empty while it has neither.
+slow_fleet_report() {
+  hub_api /api/agents | json "d => { const a = d.find(r => r.hostname === 'joiner'); if (a?.fleetSyncFault) return 'fault ' + a.fleetSyncFault; const f = a?.fleet; if (!f) return ''; return [f.at, ...'$SLOW_MCP'.split(' ').map(n => n + ':' + (f.mcp?.[n]?.state ?? 'none')), '$SLOW_PLUGIN:' + (f.plugins?.['$SLOW_PLUGIN']?.state ?? 'none')].join(' '); }"
+}
+# A sync's outcome on the row: the hub's sentence that it did not land, or a report made after the join naming every row.
+slow_fleet_said() {
+  [[ $1 == "fault "* ]] && return 0
+  [[ -n $1 && $1 != *":none"* ]] && (( ${1%% *} >= $2 ))
+}
+slow_fleet_outcome() {
+  need_hub
+  local joined left report
+  joined=$(cat "$rigdir/slow-join-started")
+  left=$(( 120 - ($(now_ms) - $(cat "$rigdir/slow-online-ms")) / 1000 ))
+  (( left > 0 )) || left=1
+  wait_until "$left" 'report=$(slow_fleet_report) && slow_fleet_said "$report" "$joined"' || {
+    echo "ASSERTION FAILED: 120 s after the join the machine's row shows no sync outcome naming every server and the plugin: '$(slow_fleet_report)'"
+    as_user "$joinerc" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service | grep -F "[fleet" | tail -n 20'
+    hub_journal | grep -F "[fleet" | tail -n 10
+    return 1
+  }
+  echo "the machine's row: $report"
+}
+export -f slow_fleet_rows no_route_out slow_sign_in_before slow_fleet_join_starts slow_fleet_report slow_fleet_said slow_fleet_outcome
+rig_slowfleet() {
+  use_feed base
+  setup "boot the machines: hub joiner" machines hub joiner
+  setup "install the hub from $BASE" install_hub "$BASE"
+  setup "the hub's fleet holds two MCP servers run with npx and a plugin" slow_fleet_rows
+  setup "the joined machine has no route out" no_route_out
+  setup "sign the machine in to a CawCo account before it joins" slow_sign_in_before
+  setup_done
+  check "a machine joins a fleet holding two npx MCP servers and a plugin with no route out, and a session asked for 5 s after it is online runs" slow_fleet_join_starts 600
+  check "within 120 s of the join the joined machine's row shows its first sync's outcome: a report naming each of the fleet's MCP servers and its plugin, or why it did not land" slow_fleet_outcome 180
+}
+
+# ---------------------------------------------------------------- bare: a machine with none of what a workspace needs
+# (the bare image: no bubblewrap, socat or git), as a person's fresh server is, joined and signed in. A delegate from
+# its home folder either works (its session runs, and a command through its workspace's executor runs when it has
+# one), or is refused in words that name what to install (agent boundary.ts names each host tool it lacks with its
+# package): never a refusal that leaves the person to work out the fix.
+bare_delegate_from_home() {
+  need_hub
+  local answer body item delegate words
+  start_session "$jid" bareparent-1 > /dev/null
+  wait_until 60 'session_running bareparent-1'
+  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"bareparent-1\",\"title\":\"Delegate from home on a bare machine\",\"prompt\":\"The stage 2 proof's bare machine.\",\"harness\":\"claude\",\"model\":\"stub\",\"cwd\":\"/home/cawco\",\"machineId\":\"$jid\",\"lands\":\"none\",\"checks\":[{\"name\":\"Run true\",\"command\":\"true\"}]}")
+  echo "the hub answered the delegation: $answer"
+  if [[ $answer == *"HTTP 200" ]]; then
+    body=$(sed '$d' <<< "$answer")
+    item=$(json 'd => d.workItemId' <<< "$body")
+    delegate=$(json 'd => d.instanceId' <<< "$body")
+    [[ -n $item && -n $delegate ]]
+    wait_until 120 'session_running "$delegate" || [[ -n "$(hub_api "/api/work-items/$item" | json "d => [\"starting\", \"running\"].includes(d.state) ? \"\" : d.state")" ]]'
+    if session_running "$delegate"; then
+      echo "the delegate runs on the bare machine: $(hub_api "/api/work-items/$item" | json 'd => d.state')"
+      json 'd => d.workspaceId ?? ""' <<< "$body" > "$rigdir/ws-id"
+      [[ -s "$rigdir/ws-id" ]] || return 0
+      ws_json boundary.json 'd => d.path' > "$rigdir/ws-clone"
+      [[ "$(ws_exec 'echo ran')" == ran ]] || { echo "ASSERTION FAILED: a command through the delegate's workspace did not run"; return 1; }
+      return 0
+    fi
+    words=$(hub_api "/api/work-items/$item" | json 'd => `${d.state}: ${d.error ?? ""}`')
+  else
+    words=$(sed '$d' <<< "$answer")
+  fi
+  echo "the delegation was refused: $words"
+  [[ $words =~ [Ii]nstall && $words =~ (git|bubblewrap|socat) ]] \
+    || { echo "ASSERTION FAILED: the refusal names nothing to install (git, bubblewrap or socat): $words"; return 1; }
+}
+export -f bare_delegate_from_home
+rig_bare() {
+  fleet base "$BASE" "hub bare" "hub joiner"
+  setup_done
+  check "on a machine with no bubblewrap, socat or git a delegate from its home folder works, or is refused in words naming what to install" bare_delegate_from_home 300
+}
+
+# ---------------------------------------------------------------- nightlyjoin: a machine added by the dialog's command
+# route (`POST /api/installs` with route `command`: the line `curl …/install.sh?code=… | sh`) to a hub on the nightly
+# channel, while an older build is the newest stable, installs the hub's build. The installer takes the channel
+# CAWCO_CHANNEL names, stable when unset (core install-script.ts), and the hub's /install.sh names the fleet's channel
+# and build only for an SSH add (hub join.ts), so the command route installed the older stable beside a nightly hub.
+command_route_installs_hubs_build() {
+  need_hub
+  local answer command rc=0 id hub_version
+  answer=$(ws_post /api/installs "{\"route\":\"command\",\"address\":\"http://$hub_ip:3456\"}")
+  echo "the hub answered the command route: $answer"
+  [[ $answer == *"HTTP 200" ]]
+  command=$(sed '$d' <<< "$answer" | json 'd => d.install.command')
+  [[ $command == "curl -fsSL http://$hub_ip:3456/install.sh?code="*" | sh" ]] || { echo "ASSERTION FAILED: the command route's line is '$command'"; return 1; }
+  as_user "$joinerc" sh -c "$command" > "$rigdir/command-join.out" 2>&1 || rc=$?
+  cat "$rigdir/command-join.out"
+  [[ $rc == 0 ]] || { echo "ASSERTION FAILED: the command route's line exited $rc"; return 1; }
+  wait_until 120 '[[ "$(hub_api /api/agents | json "d => d.find(a => a.hostname === \"joiner\")?.status")" == online ]]'
+  id=$(machine_id joiner)
+  hub_version=$(hub_api /health | json 'd => d.build?.version')
+  [[ $hub_version == "$NEXT" ]]
+  [[ "$(build_version "$id")" == "$hub_version" ]] \
+    || { echo "ASSERTION FAILED: the command route installed $(build_version "$id") on the joined machine, not the hub's $hub_version (the fleet's channel is nightly; $BASE is the newest stable)"; return 1; }
+}
+export -f command_route_installs_hubs_build
+rig_nightlyjoin() {
+  use_feed base
+  use_feed nightly
+  setup "boot the machines: hub joiner" machines hub joiner
+  setup "install the hub from $NEXT on the nightly channel" install_hub "$NEXT" nightly
+  setup "the fleet's channel is nightly" put_policy nightly false
+  setup_done
+  check "a machine added by the command route to a nightly hub, an older build the newest stable, installs the hub's build" command_route_installs_hubs_build 600
 }
 
 echo "rig $RIG: started"

@@ -104,7 +104,17 @@ const RETRY_DELAYS_MIN = [1, 5, 30, 60];
 
 /** How often a drain looks again. */
 const DRAIN_POLL_MS = 1000;
-/** How long the drain's fence outlives the drain, for the helper to be launched in. */
+/**
+ * How long a drain gives the work in flight to end: the fleet's
+ * {@link UPDATE_DRAIN_MS}, read through the clock the update's timed steps
+ * read (core clock.ts), so the stage 2 proof runs it at the pace it runs the
+ * others.
+ */
+const DRAIN_MS = timerMs(UPDATE_DRAIN_MS);
+/**
+ * How long the drain's fence outlives the drain, for the helper to be
+ * launched in: the time a process takes to start, which no clock shortens.
+ */
 const DRAIN_GRACE_MS = 15_000;
 /** The updater's name for its fence on this agent ({@link raiseFence}). */
 const FENCE = "update";
@@ -1479,7 +1489,7 @@ export class BinaryUpdater {
    * hub when the hub restarts too, so nothing new that a restart would cut
    * starts from here, and the hub is told the machine is installing, so it
    * keeps new session starts. The work already in flight then gets
-   * {@link UPDATE_DRAIN_MS} to end. Nothing left: replace. Something left: a
+   * {@link DRAIN_MS} to end. Nothing left: replace. Something left: a
    * person's Install now, or an auto-update that has waited
    * {@link RESTART_WAIT_CAP_MS}, replaces anyway and the state records what it cut;
    * otherwise the fence comes down and a later tick looks again. Work that
@@ -1503,7 +1513,7 @@ export class BinaryUpdater {
     }
     this.#outlasted.clear();
     try {
-      await this.#raiseFence(hub, UPDATE_DRAIN_MS + DRAIN_GRACE_MS);
+      await this.#raiseFence(hub, DRAIN_MS + DRAIN_GRACE_MS);
       // Said in memory and to the hub, never written: an agent that dies
       // mid-drain comes back `ready`, not `installing` with no helper.
       this.#state = {
@@ -1514,7 +1524,7 @@ export class BinaryUpdater {
       this.#report(this.#state);
       await this.#tellHub();
       let reading = await readReadiness(hub);
-      const deadline = Date.now() + UPDATE_DRAIN_MS;
+      const deadline = Date.now() + DRAIN_MS;
       while (!reading.ready && Date.now() < deadline) {
         // biome-ignore lint/performance/noAwaitInLoops: a poll; each look must see the work the previous one saw end
         await Bun.sleep(DRAIN_POLL_MS);
