@@ -45,12 +45,12 @@ const asJson = (answer: unknown): Presented => JSON.stringify(answer);
 export const RESPONSE_FORMATS = ["concise", "detailed"] as const;
 export type ResponseFormat = (typeof RESPONSE_FORMATS)[number];
 
-/** `response_format`, the same on every tool that has a whole record to give. */
-const responseFormat = () =>
-  z
-    .enum(RESPONSE_FORMATS)
-    .optional()
-    .describe("detailed: the whole record, as JSON");
+/**
+ * `response_format`, the same on every tool that has a whole record to give.
+ * Its meaning is said once, in the server's instructions (delegation-tools.ts
+ * `ANSWERS`), not again on each of the tools that carry it.
+ */
+const responseFormat = () => z.enum(RESPONSE_FORMATS).optional();
 
 export interface McpTool {
   annotations?: ToolAnnotations;

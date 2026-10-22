@@ -36,6 +36,7 @@
  * completed `[td-n]` step ticks that to-do, `finish_item` asks once about the
  * to-dos still open, and steps left open become `(proposed)` to-dos.
  */
+
 import type {
   BriefTarget,
   CheckoutMove,
@@ -162,6 +163,7 @@ import {
   WouldWait,
   whenStopped,
 } from "./machine-pause";
+import { handle } from "./presenters/words";
 import {
   FOLDER_FILE_LIMIT,
   FolderRefusal,
@@ -373,7 +375,7 @@ export class WorkspaceHoldsWork extends WorkItemRefusal {
         : excluded.join(", ");
     super(
       409,
-      `Workspace ${held.workspaceId} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`
+      `Workspace ${handle(held.workspaceId)} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`
     );
     this.held = held;
   }
@@ -1862,7 +1864,7 @@ const refusedLine = (
   } else if (refusal.step === "push") {
     said = `${step.push} was refused`;
   }
-  return `${head}: ${said}.${fenced(refusal.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${workspace.id}.`;
+  return `${head}: ${said}.${fenced(refusal.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${handle(workspace.id)}.`;
 };
 
 /**
@@ -2641,7 +2643,7 @@ export const createWorkItems = ({
       console.log(`[work-items] ${item.id}: ${SESSION_GONE}`);
       report(
         standIn(item),
-        `${failed ? `${item.title} failed` : `${item.title}'s follow-up ended; its landed work stays`}: ${SESSION_GONE}. The hub has no row for its session ${item.instanceId.slice(0, 8)} any more, so nothing can run it or call finish_item. Delegate the work again if it is still needed.\n\n[Work item ${ended.id} is ${ended.state} in workspace ${ended.workspaceId}.]`,
+        `${failed ? `${item.title} failed` : `${item.title}'s follow-up ended; its landed work stays`}: ${SESSION_GONE}. The hub has no row for its session ${item.instanceId.slice(0, 8)} any more, so nothing can run it or call finish_item. Delegate the work again if it is still needed.\n\n[Work item ${handle(ended.id)} is ${ended.state} in workspace ${handle(ended.workspaceId)}.]`,
         failed
       );
     }
@@ -3192,7 +3194,7 @@ export const createWorkItems = ({
       : "";
     report(
       row,
-      `Workspace ${workspace.id} of “${latest.title}” on ${work.machine} holds ${work.holds} (${work.size} at ${workspace.path}) that is nowhere else, so it was kept, not retired.${named} It is yours to decide: continue it (delegate with workspace: "${workspace.id}", or with from: "${workspace.id}" for a fresh delegate on its commits), or discard it (discard_workspace with workspace: "${workspace.id}"), which saves that work to a carry in ~/.cawco/carries on ${work.machine} and removes the clone.`,
+      `Workspace ${handle(workspace.id)} of “${latest.title}” on ${work.machine} holds ${work.holds} (${work.size} at ${workspace.path}) that is nowhere else, so it was kept, not retired.${named} It is yours to decide: continue it (delegate with workspace: "${handle(workspace.id)}", or with from: "${handle(workspace.id)}" for a fresh delegate on its commits), or discard it (discard_workspace with workspace: "${handle(workspace.id)}"), which saves that work to a carry in ~/.cawco/carries on ${work.machine} and removes the clone.`,
       false,
       true,
       `Workspace ${workspace.id.slice(0, 8)} holds ${work.holds}: continue it or discard it.`
@@ -3707,7 +3709,7 @@ export const createWorkItems = ({
     if (workspace.state === "archived") {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} is already archived.`
+        `Workspace ${handle(workspace.id)} is already archived.`
       );
     }
     if (workspace.checksFor) {
@@ -3719,7 +3721,7 @@ export const createWorkItems = ({
     if (live) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
+        `Workspace ${handle(workspace.id)} has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. Stop it before archiving the workspace.`
       );
     }
     // Even with `discard`: a discard lets go of the clone's own work, never
@@ -3729,7 +3731,7 @@ export const createWorkItems = ({
     if (places) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`
+        `Workspace ${handle(workspace.id)} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`
       );
     }
     const skip = handedOver(workspace);
@@ -3752,7 +3754,7 @@ export const createWorkItems = ({
     if (unconfirmed.length > 0) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
+        `Workspace ${handle(workspace.id)} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
       );
     }
     const closed = await closeWorkspace(
@@ -3789,18 +3791,18 @@ export const createWorkItems = ({
   /** Why an archived workspace is not cut again ({@link recuttable}), in words. */
   const archivedWords = (workspace: WorkspaceRow): string => {
     if (workspace.carry) {
-      return `its workspace ${workspace.id} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone.`;
+      return `its workspace ${handle(workspace.id)} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone.`;
     }
     if (workspace.checksFor) {
-      return `its workspace ${workspace.id} is archived: its clone and boundary are gone.`;
+      return `its workspace ${handle(workspace.id)} is archived: its clone and boundary are gone.`;
     }
     const taker = db
       .workspacesCutFrom(workspace.id)
       .find((cut) => cut.cutFrom?.landed);
     if (taker) {
-      return `its workspace ${workspace.id} retired: its work went on in workspace ${taker.id}, cut from it, which landed it, so it is not cut again; workspace ${taker.id} is where that work goes on.`;
+      return `its workspace ${handle(workspace.id)} retired: its work went on in workspace ${handle(taker.id)}, cut from it, which landed it, so it is not cut again; workspace ${handle(taker.id)} is where that work goes on.`;
     }
-    return `its workspace ${workspace.id} retired with no word of the commit its clone was on, so it is not cut again: a cut anywhere else could leave its commits behind.`;
+    return `its workspace ${handle(workspace.id)} retired with no word of the commit its clone was on, so it is not cut again: a cut anywhere else could leave its commits behind.`;
   };
 
   /** Each workspace's cut under way ({@link recut}): one at a time. */
@@ -3842,7 +3844,9 @@ export const createWorkItems = ({
     const { head } = workspace;
     if (!head) {
       return Promise.reject(
-        new Error(`workspace ${workspace.id}: ${archivedWords(workspace)}`)
+        new Error(
+          `workspace ${handle(workspace.id)}: ${archivedWords(workspace)}`
+        )
       );
     }
     const work = (async (): Promise<WorkspaceRow> => {
@@ -3864,7 +3868,7 @@ export const createWorkItems = ({
       const path = cutPath(workspace.machineId, checkout.path);
       if (path !== workspace.path) {
         throw new Error(
-          `workspace ${workspace.id} was cut again at ${path}, not at its own path ${workspace.path}`
+          `workspace ${handle(workspace.id)} was cut again at ${path}, not at its own path ${workspace.path}`
         );
       }
       if (projectId && db.project(projectId)) {
@@ -3962,7 +3966,7 @@ export const createWorkItems = ({
     if (workspace.checksFor) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} runs the landing gate's iOS build for workspace ${workspace.checksFor} on its machine and takes no work item. Delegate with workspace ${workspace.checksFor}, or without workspace to start a new one.`
+        `Workspace ${handle(workspace.id)} runs the landing gate's iOS build for workspace ${handle(workspace.checksFor)} on its machine and takes no work item. Delegate with workspace ${handle(workspace.checksFor)}, or without workspace to start a new one.`
       );
     }
     const items = db.workItemsIn(workspace.id);
@@ -3970,7 +3974,7 @@ export const createWorkItems = ({
     if (live) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} already has a live work item: ${live.title} (${live.id}) is ${live.state}. A workspace runs one work item at a time; wait for its report, or delegate without workspace to start a new one.`
+        `Workspace ${handle(workspace.id)} already has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. A workspace runs one work item at a time; wait for its report, or delegate without workspace to start a new one.`
       );
     }
     return { workspace, previous: items[0] };
@@ -4131,20 +4135,20 @@ export const createWorkItems = ({
     ) {
       throw new WorkItemRefusal(
         403,
-        `Workspace ${source.id} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`
+        `Workspace ${handle(source.id)} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`
       );
     }
     if (source.state === "archived" || source.checksFor) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${source.id} has no branch to cut from: ${source.checksFor ? "it runs a landing gate's build" : "it is archived, its clone gone"}. Delegate without from.`
+        `Workspace ${handle(source.id)} has no branch to cut from: ${source.checksFor ? "it runs a landing gate's build" : "it is archived, its clone gone"}. Delegate without from.`
       );
     }
     const live = items.find((item) => LIVE.has(item.state));
     if (live) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${source.id} has a live work item, ${live.title} (${live.id}), so its branch is still moving. Wait for its report, or stop it with stop_delegate, then delegate with from.`
+        `Workspace ${handle(source.id)} has a live work item, ${live.title} (${handle(live.id)}), so its branch is still moving. Wait for its report, or stop it with stop_delegate, then delegate with from.`
       );
     }
     return source;
@@ -4217,7 +4221,7 @@ export const createWorkItems = ({
       });
     } catch (error) {
       await closeWorkspace(workspace, "unmade");
-      const words = `Workspace ${workspace.id} could not be cut from workspace ${source.id}, so it was archived: ${error instanceof Error ? error.message : String(error)}`;
+      const words = `Workspace ${handle(workspace.id)} could not be cut from workspace ${handle(source.id)}, so it was archived: ${error instanceof Error ? error.message : String(error)}`;
       throw error instanceof WorkItemRefusal
         ? new WorkItemRefusal(error.status, words, { cause: error })
         : new Error(words, { cause: error });
@@ -4474,7 +4478,7 @@ export const createWorkItems = ({
       const { reason } = unconfirmed;
       throw new WorkItemRefusal(
         409,
-        `The last attempt's session in workspace ${workspace.id} was told to stop and has not confirmed it, so no fresh session starts beside it: ${reason instanceof Error ? reason.message : String(reason)} Retry once its machine has ended it.`
+        `The last attempt's session in workspace ${handle(workspace.id)} was told to stop and has not confirmed it, so no fresh session starts beside it: ${reason instanceof Error ? reason.message : String(reason)} Retry once its machine has ended it.`
       );
     }
     if (up.length > 0) {
@@ -4529,7 +4533,7 @@ export const createWorkItems = ({
       if (live) {
         throw new WorkItemRefusal(
           409,
-          `Workspace ${workspace.id} already has a live work item: ${live.title} (${live.id}) is ${live.state}. A workspace runs one work item at a time.`
+          `Workspace ${handle(workspace.id)} already has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. A workspace runs one work item at a time.`
         );
       }
     };
@@ -5575,7 +5579,7 @@ export const createWorkItems = ({
       counts.some((count) => !Number.isInteger(count))
     ) {
       throw new Error(
-        `git in workspace ${workspace.id} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
+        `git in workspace ${handle(workspace.id)} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
       );
     }
     return counts.some((count) => count > 0);
@@ -5651,7 +5655,7 @@ export const createWorkItems = ({
       const result = await run(cmd, GIT_TIMEOUT_MS);
       if (result.exitCode !== 0) {
         throw new Error(
-          `the hub could not read ${what} in workspace ${workspace.id}: ${failedWith(result)}`
+          `the hub could not read ${what} in workspace ${handle(workspace.id)}: ${failedWith(result)}`
         );
       }
       return result.stdout;
@@ -7523,7 +7527,7 @@ export const createWorkItems = ({
         .then(
           () => recutDone?.(instanceId),
           (error: unknown) => {
-            const reason = `Its workspace ${workspace.id} retired and could not be cut again: ${error instanceof Error ? error.message : String(error)}`;
+            const reason = `Its workspace ${handle(workspace.id)} retired and could not be cut again: ${error instanceof Error ? error.message : String(error)}`;
             console.warn(`[workspaces] ${instanceId}: ${reason}`);
             recutFailed?.(instanceId, reason);
           }
@@ -7684,7 +7688,7 @@ export const createWorkItems = ({
         }
         if (!(await withClone(workspace))) {
           throw new Error(
-            `the clone of workspace ${workspace.id} is gone from ${machineName(workspace.machineId)}`
+            `the clone of workspace ${handle(workspace.id)} is gone from ${machineName(workspace.machineId)}`
           );
         }
         continuing.set(itemId, (continuing.get(itemId) ?? 0) + 1);
@@ -8070,7 +8074,7 @@ export const createWorkItems = ({
       if (!isHeld(workspace)) {
         throw new WorkItemRefusal(
           409,
-          `Workspace ${workspace.id} is ${workspace.state}, not held: what a workspace holds is read on its machine once its work has ended and its boundary is closed, and kept with it while it is held.`
+          `Workspace ${handle(workspace.id)} is ${workspace.state}, not held: what a workspace holds is read on its machine once its work has ended and its boundary is closed, and kept with it while it is held.`
         );
       }
       return heldWork(workspace);
@@ -8207,7 +8211,7 @@ export const createWorkItems = ({
       if (!ours) {
         throw new WorkItemRefusal(
           403,
-          `Workspace ${workspace.id} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`
+          `Workspace ${handle(workspace.id)} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`
         );
       }
       return inWorkspaceTurn(workspace.id, () =>

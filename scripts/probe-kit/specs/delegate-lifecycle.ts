@@ -445,7 +445,9 @@ const aheadGoesFrom = async (
   check(
     "(c) a hand-off to a cold delegate with a commit and a clean tree is refused naming delegate with from, Jev not asked",
     refused.isError &&
-      refused.text.includes(`delegate with from: "${ahead.workspaceId}"`) &&
+      refused.text.includes(
+        `delegate with from: "${ahead.workspaceId.slice(0, 8)}"`
+      ) &&
       refused.text.includes("1 commit on no remote") &&
       attachCalls(jev) === asked,
     `${refused.text.slice(0, 1500)}; Jev asked ${attachCalls(jev) - asked} time(s)`

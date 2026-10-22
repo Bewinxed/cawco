@@ -256,17 +256,19 @@ const run = async (kit: Kit) => {
   check(
     "(c) the parent discards the workspace into a carry, and the child can no longer act: the parent's handoff is refused naming the discard",
     !discarded.isError &&
-      discarded.text.startsWith(`Discarded workspace ${started.workspaceId}`) &&
+      discarded.text.startsWith(
+        `Discarded workspace ${started.workspaceId.slice(0, 8)}`
+      ) &&
       handoff.isError &&
       handoff.text.includes(
-        `its workspace ${started.workspaceId} was discarded`
+        `its workspace ${started.workspaceId.slice(0, 8)} was discarded`
       ),
     `discard: ${discarded.text.slice(0, 300)}; handoff: ${handoff.text.slice(0, 600)}`
   );
   check(
-    "(c) the discard's answer names the page the child left, by its link and id, and says artifact_delete removes it from here",
+    "(c) the discard's answer names the page the child left, by its link and handle, and says artifact_delete removes it from here",
     discarded.text.includes(`cawco:artifact/${page.id}`) &&
-      discarded.text.includes(`(page ${page.id})`) &&
+      discarded.text.includes(`(page ${page.id.slice(0, 8)})`) &&
       discarded.text.includes(
         "Their sessions can no longer act, so artifact_delete removes them from here."
       ),
@@ -289,7 +291,7 @@ const run = async (kit: Kit) => {
   const late = await callAs(fleet, parent, "artifact_delete", { id: page.id });
   check(
     "(e) the parent's artifact_delete succeeds, and the page is gone from the hub",
-    !late.isError && late.text.includes('"showing"') && !pageOf(fleet),
+    !late.isError && late.text.includes("Your panel") && !pageOf(fleet),
     `${late.text.slice(0, 600)}; row ${JSON.stringify(pageOf(fleet) ?? null)}`
   );
 };

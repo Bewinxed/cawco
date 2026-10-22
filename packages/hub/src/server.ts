@@ -724,6 +724,7 @@ import {
   readMarketplace,
   resolveMarketplacePlugins,
 } from "./plugins";
+import { handle as idHandle } from "./presenters/words";
 import {
   createPreviewListeners,
   embedKey,
@@ -12528,7 +12529,8 @@ export const createServer = (
     }
     const listed = sessions
       .map(
-        ({ row }) => `${artifactLink(row.id, row.name)} (${row.kind} ${row.id})`
+        ({ row }) =>
+          `${artifactLink(row.id, row.name)} (${row.kind} ${idHandle(row.id)})`
       )
       .join(", ");
     const now = sessions.every(({ session }) => stranded(session));
@@ -30166,8 +30168,8 @@ export const createServer = (
             return {
               text: `${
                 carry
-                  ? `Discarded workspace ${workspace.id}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
-                  : `Archived workspace ${workspace.id}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`
+                  ? `Discarded workspace ${idHandle(workspace.id)}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
+                  : `Archived workspace ${idHandle(workspace.id)}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`
               }${leftoverWords(workspace.id, body.from)}`,
             };
           } catch (error) {

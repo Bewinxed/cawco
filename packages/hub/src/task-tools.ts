@@ -259,7 +259,7 @@ export const ownsParameter = () =>
   z
     .array(z.string())
     .describe(
-      "Globs of the repository's files the work owns, from its root, like ['src/theme/**']. Two live items whose globs overlap in one repository never run at once: the later waits, queued."
+      "Globs from the repository's root, like ['src/theme/**']: two live items whose globs overlap in one repository never run at once; the later waits."
     );
 
 /** A group of work items under one parent: `delegate`'s and the task tools' one shape. */
@@ -270,7 +270,7 @@ export const groupParameter = () =>
     .min(1)
     .max(64)
     .describe(
-      "Work that belongs together, like 'theme': items in one group under one parent report once, together, when all have ended; a failure still reports at once."
+      "Items in one group under one parent report once, together, when all have ended; a failure reports at once."
     );
 
 /**

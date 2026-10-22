@@ -122,7 +122,8 @@ const artifactWords = (artifact: ResultArtifact): string => {
       return `${shown}${artifact.url}`;
     case "artifact":
       return `${shown}artifact ${handle(artifact.artifactId)}`;
-    default:
+    case "file":
+    case "post":
       return `${shown}${artifact.path}`;
   }
 };
