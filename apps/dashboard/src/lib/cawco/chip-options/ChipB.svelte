@@ -97,8 +97,8 @@
   const Sprite = $derived(sessionSprite(chip.seed ?? chip.label));
 </script>
 
-<span class="relative">
-  <button
+<span class="relative"
+  ><button
     aria-controls={panelId}
     aria-expanded={open}
     aria-haspopup="dialog"
@@ -147,6 +147,5 @@
       </span>
     {/if}
     <span data-slot="label">{chip.label}</span>
-  </button>
-  <ChipPeek chip={{ ...chip, state }} id={panelId} {open} />
-</span>
+  </button><ChipPeek chip={{ ...chip, state }} id={panelId} {open} /></span
+>

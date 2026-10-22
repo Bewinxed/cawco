@@ -109,8 +109,8 @@
   const glyph = "size-icon-sm";
 </script>
 
-<span class="relative">
-  <button
+<span class="relative"
+  ><button
     aria-controls={panelId}
     aria-expanded={open}
     aria-haspopup="dialog"
@@ -125,7 +125,15 @@
     type="button"
   >
     {#if chip.kind === "pin"}
-      <span class="inline-flex flex-none" data-box data-slot="mark">
+      <!-- PinMark rings its pill and its dot in surface-raised, its ground on a
+           page; on the chip that ring is drawn in the chip's own ground, so it
+           reads as a cut and leaves no pale band, and the dot stands in the
+           pill's corner, inside the chip and clear of the label. -->
+      <span
+        class="inline-flex flex-none *:ring-(color:--chip-ground) **:data-dot:end-0 **:data-dot:top-0 **:data-dot:ring-(color:--chip-ground)"
+        data-box
+        data-slot="mark"
+      >
         <PinMark
           dot={state === "unread" ? "unread" : null}
           gone={state === "gone"}
@@ -209,6 +217,5 @@
     <span data-slot="label"
       >{chip.kind === "plan" ? `Plan · ${chip.label}` : chip.label}</span
     >
-  </button>
-  <ChipPeek chip={{ ...chip, state }} id={panelId} {open} />
-</span>
+  </button><ChipPeek chip={{ ...chip, state }} id={panelId} {open} /></span
+>

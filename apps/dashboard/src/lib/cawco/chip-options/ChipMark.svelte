@@ -2,7 +2,8 @@
   /**
    * The chip's 18px mark slot (`--c-row-mark`): a filled identity tile
    * (`fill`, on the mark overlay, the glyph in `mark-glyph`) or the bare
-   * glyph in `ink-muted`, with the status dot at its top-right corner,
+   * glyph in `ink-muted`, with the status dot in its top-right corner:
+   * flush with its end, so the label keeps the chip's whole gap, and
    * lowered by `--dot-y` so its top stands half the chip's pad inside the
    * chip's ground rather than past its edge. With
    * a dot the face is cut away round it (TreeMark's hole mask), so the dot
@@ -36,7 +37,7 @@
     data-tile={fill ? "" : undefined}
     style:--fill={fill}
     style:--hole="calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
-    style:--hole-mask={"radial-gradient(circle at 100% var(--dot-y), transparent calc(var(--hole) - var(--c-tree-mark-hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--c-tree-mark-hole-edge)))"}
+    style:--hole-mask={"radial-gradient(circle at calc(100% - var(--status-dot-size) / 2) var(--dot-y), transparent calc(var(--hole) - var(--c-tree-mark-hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--c-tree-mark-hole-edge)))"}
   >
     {@render children()}
   </span>

@@ -6,11 +6,11 @@
 
 <script lang="ts">
   /**
-   * The house status dot (TreeMark's): `--status-dot-size` across, centred
-   * on its mark's right edge at `--dot-y` (ChipMark's: half the chip's pad
-   * below the corner's line, so the whole dot stands inside the chip's
-   * ground), the mark cut away round it by `--status-dot-cut` (ChipMark's
-   * mask). Needs you echoes three loops and
+   * The house status dot (TreeMark's): `--status-dot-size` across, in its
+   * mark's top-right corner: flush with the mark's end, so the chip's gap
+   * stands whole between it and the label, its centre at `--dot-y`
+   * (ChipMark's: its top half the chip's pad inside the chip's ground). The
+   * mark is cut away round it by `--status-dot-cut` (ChipMark's mask). Needs you echoes three loops and
    * then stands still (PinMark's echo). A machine's presence: online and
    * away filled in their presence inks, off a hollow `--presence-off` ring.
    */
@@ -29,11 +29,10 @@
 
 <span
   aria-hidden="true"
-  class="absolute z-1 top-(--dot-top) -end-(--dot-off) size-(--status-dot-size) rounded-pill bg-(color:--dot) data-[tone=off]:inset-ring-(length:--status-dot-cut) data-[tone=off]:inset-ring-presence-off"
+  class="absolute z-1 top-(--dot-top) end-0 size-(--status-dot-size) rounded-pill bg-(color:--dot) data-[tone=off]:inset-ring-(length:--status-dot-cut) data-[tone=off]:inset-ring-presence-off"
   data-slot="dot"
   data-tone={tone}
   style:--dot={INK[tone]}
-  style:--dot-off="calc(var(--status-dot-size) / 2)"
   style:--dot-top="calc(var(--dot-y) - var(--status-dot-size) / 2)"
 >
   {#if tone === "attn"}

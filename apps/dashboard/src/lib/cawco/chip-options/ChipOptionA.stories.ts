@@ -88,10 +88,16 @@ export const LongName = {
 export const OneChip = scenes.single;
 
 /** A working session's peek, open over its chip. */
-export const PeekSession = scenes.peekSession;
+export const PeekSession = {
+  ...scenes.peekSession,
+  parameters: { viewport: 440 },
+};
 
 /** A task's peek in review, open over its chip. */
-export const PeekTask = scenes.peekTask;
+export const PeekTask = { ...scenes.peekTask, parameters: { viewport: 320 } };
 
 /** A sent decision card's peek, open over its chip. */
-export const PeekDecisionCard = scenes.peekDecision;
+export const PeekDecisionCard = {
+  ...scenes.peekDecision,
+  parameters: { viewport: 400 },
+};
