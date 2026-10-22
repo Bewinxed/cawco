@@ -965,7 +965,7 @@ try {
     (await keeper.list()).procs.find(
       (proc) => proc.procId === procIdFor("pi", PI)
     )?.head ?? 0;
-  const piSession = await pi.adopt(PI, adopted.ctx, { head });
+  const piSession = await pi.adopt(spec, adopted.ctx, { head });
   piSession.attached?.();
   // Through the session's own subscription: `piSnapshot` is for a host no
   // session is attached to, and ends the subscription it reads on.

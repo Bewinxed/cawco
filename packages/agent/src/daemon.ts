@@ -1374,25 +1374,6 @@ export const adoptable = (
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
-/** That restore as `SessionSupervisor.takeHeld` wants it: where it runs, and its conversation. */
-export const custodyRow = (
-  payload: SpawnPayload
-): {
-  instanceId: string;
-  cwd: string;
-  sessionId: string | null;
-  processGeneration?: string;
-  keepAliveTurn?: string;
-  permissionMode?: SpawnPayload["permissionMode"];
-} => ({
-  instanceId: payload.instanceId,
-  cwd: payload.cwd,
-  sessionId: payload.resume?.sessionKey ?? null,
-  processGeneration: payload.processGeneration,
-  ...(payload.permissionMode ? { permissionMode: payload.permissionMode } : {}),
-  ...(payload.keepAliveTurn ? { keepAliveTurn: payload.keepAliveTurn } : {}),
-});
-
 /**
  * What the register says about this machine's sessions: what every keeper is
  * still holding, the current one and any retiring one, and what each harness
@@ -2469,7 +2450,7 @@ const attach = (
               supervisor.takeHeld(
                 command.unit as (typeof SESSION_PROC_KINDS)[number],
                 ackPayload,
-                custodyRow(envelope.payload as SpawnPayload),
+                envelope.payload as SpawnPayload,
                 proc
               );
               adopted.push(command.id);

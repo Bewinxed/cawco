@@ -108,6 +108,7 @@ import {
   SESSION_DIR_READ,
   VERIFY_SESSION_CREDENTIAL,
   WITHDRAW_PERMISSION,
+  type WorkspaceRef,
   withWorktreeLine,
   worstFleetState,
 } from "@cawco/core";
@@ -202,20 +203,23 @@ import { cloneHolding, workspaceHolding } from "./workspace-records";
  * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
  */
 export interface SessiondAdoption {
+  /**
+   * Takes back the child `spec`'s session runs in. `spec` is the spawn the
+   * hub sent for it, read by the same rules as a launch's, so the session
+   * runs under every option it launched with (its mode, a lead's gate, a
+   * fence, its denials, its account).
+   */
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   adopt(
-    instanceId: string,
+    spec: SpawnPayload,
     ctx: HarnessContext,
     options: {
       /** The hub's mark as a seq in this child's ring; absent follows from `head`. */
       afterSeq?: number;
       /** The ring's last seq off the same welcome. */
       head: number;
-      sessionId: string | null;
       /** {@link turnRunning}'s answer for this child. */
       turnRunning: boolean;
-      /** The stored mode, known before the attach replays a parked ask. */
-      permissionMode?: SpawnPayload["permissionMode"];
     }
   ): Promise<HarnessSession>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
@@ -252,21 +256,20 @@ const errorText = (problem: unknown): string =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** A surviving child one reattach has claimed, and what it decided about it. */
+/**
+ * A surviving child one reattach has claimed, and what it decided about it.
+ * `spec` is the spawn the hub sent for its session (server.ts `restore`),
+ * whole: an attach runs under every option its launch ran under, from that
+ * one source ({@link SessionSupervisor.#sessionContext}, the adapter's
+ * `adopt`).
+ */
 interface Claimed {
   proc: { epoch: string; head: number; pid: number };
-  row: {
-    instanceId: string;
-    cwd: string;
-    sessionId?: string | null;
-    processGeneration?: string;
-    keepAliveTurn?: string;
-    permissionMode?: SpawnPayload["permissionMode"];
-  };
   /** Whether its turn was running when its ring was read. */
   running: boolean;
   /** Lets go of the claim, for a reattach waiting on this row. */
   settle: () => void;
+  spec: SpawnPayload;
 }
 
 /**
@@ -2856,18 +2859,15 @@ export class SessionSupervisor {
             );
           });
           if (proc) {
-            const row = {
-              instanceId,
-              cwd: workdir,
-              sessionId: payload.resume.sessionKey,
-              processGeneration: payload.processGeneration,
-              keepAliveTurn: payload.keepAliveTurn,
-              permissionMode: payload.permissionMode,
-            };
             const running = await candidate.turnRunning(instanceId, proc.head);
             await this.#adoptClaimed(
               candidate as Harness & SessiondAdoption,
-              { row, proc, running, settle: settleClaim },
+              {
+                spec: { ...payload, cwd: workdir },
+                proc,
+                running,
+                settle: settleClaim,
+              },
               Object.fromEntries(this.#ingested),
               stopped
             );
@@ -2959,34 +2959,16 @@ export class SessionSupervisor {
         place && !spec.reattachOnly
           ? await adapter.spill?.(spec, workdir, place.id)
           : undefined;
-      // A work item's spawn names its workspace and its project, the
-      // workspace's: its boundary reads that project's folder.
-      const boundary = await boundaryFor(
-        place,
-        spec.harness === "claude"
-          ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
-          : undefined,
-        spec.workspace ? spec.projectId : undefined,
-        spill?.dir
-      );
       const holder: { session: HarnessSession | null } = { session: null };
-      const ctx = this.#context(
-        instanceId,
+      const { boundary, ctx } = await this.#sessionContext(
+        spec,
         workdir,
         adapter,
         holder,
-        spec.processGeneration,
-        boundary && place ? { boundary, workspace: place.id } : undefined,
-        grant?.sessionCredential,
+        place,
         !!spec.reattachOnly,
-        // Its browser tool's door (browser/door.ts): its workspace's, else
-        // its own. A fenced session takes no fleet server, so has none.
-        spec.fence
-          ? undefined
-          : () =>
-              place
-                ? browserDoor(place.id)
-                : browserDoor(instanceId, spec.projectId)
+        spill?.dir,
+        grant?.sessionCredential
       );
 
       if (spec.resume) {
@@ -3170,6 +3152,57 @@ export class SessionSupervisor {
       }
       this.#fail(instanceId, error, payload.processGeneration);
     }
+  }
+
+  /**
+   * Where a session runs, read from its spawn, and the context it runs with:
+   * its workspace's boundary (a work item's, a project lead's place, or the
+   * workspace clone its folder is in) and its browser's door. One reading
+   * for a launch and for a child taken back after an agent restart
+   * ({@link #adoptClaimed}), so a session taken back is bounded as it was
+   * launched. `recovery`: a child taken back, not a launch. `spill` is a
+   * launch's own folder (`Harness.spill`); a launch passes the credential
+   * its grant gave, and an attach none (its process proves its own).
+   */
+  async #sessionContext(
+    spec: SpawnPayload,
+    workdir: string,
+    adapter: Harness,
+    holder: { session: HarnessSession | null },
+    place: WorkspaceRef | undefined,
+    recovery: boolean,
+    spill?: string,
+    sessionCredential?: string
+  ): Promise<{ boundary: Boundary | undefined; ctx: SessiondAwareContext }> {
+    // A work item's spawn names its workspace and its project, the
+    // workspace's: its boundary reads that project's folder.
+    const boundary = await boundaryFor(
+      place,
+      spec.harness === "claude"
+        ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
+        : undefined,
+      spec.workspace ? spec.projectId : undefined,
+      spill
+    );
+    const ctx = this.#context(
+      spec.instanceId,
+      workdir,
+      adapter,
+      holder,
+      spec.processGeneration,
+      boundary && place ? { boundary, workspace: place.id } : undefined,
+      sessionCredential,
+      recovery,
+      // Its browser tool's door (browser/door.ts): its workspace's, else
+      // its own. A fenced session takes no fleet server, so has none.
+      spec.fence
+        ? undefined
+        : () =>
+            place
+              ? browserDoor(place.id)
+              : browserDoor(spec.instanceId, spec.projectId)
+    );
+    return { boundary, ctx };
   }
 
   /**
@@ -3554,16 +3587,16 @@ export class SessionSupervisor {
    */
   #holdChild(
     claude: Harness & SessiondAdoption,
-    row: Claimed["row"],
+    spec: SpawnPayload,
     proc: Claimed["proc"],
     ingested: Record<string, IngestMark>
   ): void {
-    const { instanceId } = row;
+    const { instanceId } = spec;
     const stop = new AbortController();
     this.#attaching.set(instanceId, stop);
     this.#turnPending.add(instanceId);
     const job = (this.#queues.get(instanceId) ?? Promise.resolve())
-      .then(() => this.#attachHeld(claude, row, proc, ingested, stop.signal))
+      .then(() => this.#attachHeld(claude, spec, proc, ingested, stop.signal))
       .catch((problem: unknown) => {
         warn(`custody ${instanceId}: its attach failed: ${errorText(problem)}`);
       })
@@ -3585,12 +3618,12 @@ export class SessionSupervisor {
   /** {@link #holdChild}'s attach, run from the session's queue. */
   async #attachHeld(
     claude: Harness & SessiondAdoption,
-    row: Claimed["row"],
+    spec: SpawnPayload,
     proc: Claimed["proc"],
     ingested: Record<string, IngestMark>,
     stopped: AbortSignal
   ): Promise<void> {
-    const { instanceId } = row;
+    const { instanceId } = spec;
     // Started or attached by what ran ahead of it in the queue.
     if (this.#sessions.has(instanceId)) {
       return;
@@ -3611,7 +3644,7 @@ export class SessionSupervisor {
       }
       await this.#adoptClaimed(
         claude,
-        { row, proc, running, settle: claim.resolve },
+        { spec, proc, running, settle: claim.resolve },
         ingested,
         stopped
       );
@@ -3619,7 +3652,7 @@ export class SessionSupervisor {
       if (!this.#sessions.has(instanceId) && this.#busy.delete(instanceId)) {
         this.#emitPulse(instanceId, true);
       }
-      await this.#heldNotAttached(claude, row, proc, problem, stopped);
+      await this.#heldNotAttached(claude, spec, proc, problem, stopped);
     } finally {
       if (this.#adopting.get(instanceId) === claim.promise) {
         this.#adopting.delete(instanceId);
@@ -3637,12 +3670,12 @@ export class SessionSupervisor {
    */
   async #heldNotAttached(
     claude: Harness & SessiondAdoption,
-    row: Claimed["row"],
+    spec: SpawnPayload,
     proc: Claimed["proc"],
     problem: unknown,
     stopped: AbortSignal
   ): Promise<void> {
-    const { instanceId, processGeneration } = row;
+    const { instanceId, processGeneration } = spec;
     if (stopped.aborted) {
       console.info(
         `[custody] ${instanceId}: its attach let go for a stop: ${errorText(problem)}`
@@ -3715,13 +3748,13 @@ export class SessionSupervisor {
   /** {@link #attachHeld}'s attach of one held child, its turn decided. */
   async #adoptClaimed(
     claude: Harness & SessiondAdoption,
-    { row, proc, running, settle }: Claimed,
+    { spec, proc, running, settle }: Claimed,
     ingested: Record<string, IngestMark>,
     stopped?: AbortSignal
   ): Promise<void> {
-    if (!(await isDirectory(row.cwd))) {
+    if (!(await isDirectory(spec.cwd))) {
       this.#recoveryUnavailable(
-        { ...row, harness: claude.kind, reattachOnly: true },
+        { ...spec, harness: claude.kind, reattachOnly: true },
         "The recovery directory is no longer available."
       );
       return;
@@ -3733,59 +3766,56 @@ export class SessionSupervisor {
     // names lines that no longer exist, and one from an earlier process
     // under the same id names another ring. Disk transcripts cover the
     // middle.
-    const mark = ingested[row.instanceId];
+    const mark = ingested[spec.instanceId];
     const cursor = resumeCursor(procEpoch(proc.epoch, proc.pid), mark);
     if (cursor !== undefined && mark) {
-      this.#ingested.set(row.instanceId, mark);
+      this.#ingested.set(spec.instanceId, mark);
     } else {
-      this.#ingested.delete(row.instanceId);
+      this.#ingested.delete(spec.instanceId);
     }
     // A held CLI in a workspace is attached only once that workspace's hook
     // is in this build's form, which the agent writes as it starts; others'
     // are not waited for.
-    const workspace = await workspaceHolding(row.cwd);
+    const workspace = await workspaceHolding(spec.cwd);
     if (workspace) {
       await custodyProbe(hookArmed(workspace.id), stopped);
     }
     const holder: { session: HarnessSession | null } = { session: null };
-    const ctx = this.#context(
-      row.instanceId,
-      row.cwd,
+    // Placed and bounded as its launch was, from the same spawn.
+    const { ctx } = await this.#sessionContext(
+      spec,
+      spec.cwd,
       claude,
       holder,
-      row.processGeneration,
-      undefined,
-      undefined,
+      spec.workspace ?? (await cloneHolding(spec.cwd)),
       true
     );
     // Read off its keeper, never asked of the child: this ends.
-    const session = await claude.adopt(row.instanceId, ctx, {
+    const session = await claude.adopt(spec, ctx, {
       ...(cursor === undefined ? {} : { afterSeq: cursor }),
       head: proc.head,
-      sessionId: row.sessionId ?? null,
       turnRunning: running,
-      permissionMode: row.permissionMode,
     });
     holder.session = session;
     // Attached: the live child is this session's process from here, running.
-    this.#sessions.set(row.instanceId, session);
+    this.#sessions.set(spec.instanceId, session);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
-    void this.#dateActivity(row.instanceId, claude, session, row.cwd);
+    void this.#dateActivity(spec.instanceId, claude, session, spec.cwd);
     session.attached?.();
-    if (this.#busy.has(row.instanceId)) {
-      this.#emitPulse(row.instanceId, true);
+    if (this.#busy.has(spec.instanceId)) {
+      this.#emitPulse(spec.instanceId, true);
     }
-    this.#adopting.delete(row.instanceId);
+    this.#adopting.delete(spec.instanceId);
     settle();
-    console.info(`[custody] ${row.instanceId}: attached to its live process`);
+    console.info(`[custody] ${spec.instanceId}: attached to its live process`);
     // Asked of the child, which answers when it can, ahead of what is sent
     // to it ({@link #settleAttached}).
     await this.#settleAttached(
-      row.instanceId,
+      spec.instanceId,
       session,
       claude,
-      row.permissionMode,
-      row.processGeneration,
+      spec.permissionMode,
+      spec.processGeneration,
       stopped
     );
   }
@@ -3869,23 +3899,24 @@ export class SessionSupervisor {
   takeHeld(
     kind: (typeof SESSION_PROC_KINDS)[number],
     ackPayload: unknown,
-    row: Claimed["row"],
+    spec: SpawnPayload,
     proc: Claimed["proc"]
   ): "attached" | "held" {
     const adoption = this.#adoption(kind);
     if (!adoption) {
       throw new Error(`${kind} keeps no children on sessiond to take back`);
     }
-    if (row.keepAliveTurn) {
-      this.#keepAlive.set(row.instanceId, row.keepAliveTurn);
+    if (spec.keepAliveTurn) {
+      this.#keepAlive.set(spec.instanceId, spec.keepAliveTurn);
     }
-    if (this.#sessions.has(row.instanceId)) {
+    if (this.#sessions.has(spec.instanceId)) {
       return "attached";
     }
     if (!(
-      this.#adopting.has(row.instanceId) || this.#attaching.has(row.instanceId)
+      this.#adopting.has(spec.instanceId) ||
+      this.#attaching.has(spec.instanceId)
     )) {
-      this.#holdChild(adoption, row, proc, readIngested(ackPayload));
+      this.#holdChild(adoption, spec, proc, readIngested(ackPayload));
     }
     return "held";
   }

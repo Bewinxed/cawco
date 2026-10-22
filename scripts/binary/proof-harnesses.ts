@@ -267,7 +267,7 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
   // What the supervisor's reattach reaches on a sessiond-backed adapter,
   // checked against the shape it reads.
   const adoption: SessiondAdoption = {
-    adopt: async (instanceId, ctx) => {
+    adopt: async ({ instanceId }, ctx) => {
       const kept = held ?? "claude";
       const proc = await keepers.holding(procIdFor(kept, instanceId));
       if (!proc) {

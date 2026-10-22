@@ -113,12 +113,18 @@ export class PiHarness extends PiProfile implements Harness {
     return (await piSnapshot(instanceId)).busy;
   }
 
+  /**
+   * A pi host taken back after an agent restart. Its gate, denials and
+   * model are the host's own, set as it started and kept in its process;
+   * the agent's side reads its account as a launch does, from the spawn the
+   * hub sent ({@link withAccountReads}).
+   */
   adopt(
-    instanceId: string,
+    spec: SpawnPayload,
     ctx: HarnessContext,
     options: { afterSeq?: number; head: number }
   ): Promise<HarnessSession> {
-    return adoptPi(instanceId, ctx, options);
+    return adoptPi(spec.instanceId, withAccountReads(spec, ctx), options);
   }
 
   async reattach(
@@ -130,7 +136,7 @@ export class PiHarness extends PiProfile implements Harness {
       (one) => one.alive && one.procId === procIdFor("pi", spec.instanceId)
     );
     return proc
-      ? await this.adopt(spec.instanceId, withAccountReads(spec, ctx), {
+      ? await this.adopt(spec, ctx, {
           head: proc.head,
           afterSeq: resumeCursor(procEpoch(proc.epoch, proc.pid), ctx.ingested),
         })

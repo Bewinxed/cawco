@@ -1604,53 +1604,95 @@ const fleetMcpFor = async (
     : { servers, denied: [`mcp__${CHROME_DEVTOOLS}`] };
 };
 
+/** The caller's options a spawn carries, as a Claude session reads them. */
+interface CallerOptions {
+  disallowedTools?: string[];
+  env?: Record<string, string | undefined>;
+  mcpServers?: Record<string, McpServerConfig>;
+  [option: string]: unknown;
+}
+
 /**
- * The caller's options a session launches with: its account's config dir in
- * its env, and the tools of a chrome-devtools it cannot take denied. Answers
- * the fleet's MCP servers ({@link fleetMcpFor}) it takes as it starts, apart
- * from the launch's: `ClaudeSession` sets them through `setMcpServers`. A
- * caller's server keeps a name it shares with one of the fleet's. A fenced
+ * What a session runs under, read from the spawn the hub sent for it: the
+ * caller's options with its account's config dir in their env, its mode,
+ * model and effort, the conversation it goes on with, its skills and
+ * denials, and how the hub marked it (a project's Caw, a fence) with its
+ * scoped memory. One reading ({@link sessionSpecOf}) for a launch and for
+ * an attach after an agent restart: the hub sends an attach the same spawn
+ * it launches the session with (hub server.ts `restore`, its row's lead,
+ * fence, mode and denials on it), so Caw's gate, a fence, Full Send and
+ * every other rule of the session hold across a restart.
+ */
+interface SessionSpec {
+  denyTools: string[] | undefined;
+  effort: EffortLevel | undefined;
+  /** CawCo's MCP server alone, from no source but the launch ({@link SpawnPayload.fence}). */
+  fence: boolean;
+  /** Its scoped memory documents ({@link SpawnPayload.instructions}). */
+  instructions: readonly SessionInstruction[];
+  /** A project's Caw: his shell and edit calls are the hub's gate's ({@link SpawnPayload.lead}). */
+  lead: boolean;
+  model: string | undefined;
+  options: CallerOptions;
+  permissionMode: import("@cawco/core").PermissionMode | undefined;
+  persistSession: boolean | undefined;
+  resume: SpawnPayload["resume"];
+  skills: string[] | undefined;
+}
+
+/** `spec` as the session it starts or takes back runs it, on `account`'s config dir (none: the machine's own). */
+const sessionSpecOf = (
+  spec: SpawnPayload,
+  account: string | undefined
+): SessionSpec => {
+  const options = spec.options as CallerOptions | undefined;
+  return {
+    denyTools: spec.denyTools,
+    effort: spec.effort,
+    fence: spec.fence === true,
+    instructions: spec.instructions ?? [],
+    lead: spec.lead === true,
+    model: spec.model,
+    options: {
+      ...options,
+      env: {
+        ...options?.env,
+        ...(account
+          ? accountEnv(account)
+          : {
+              CLAUDE_CONFIG_DIR: undefined,
+              CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
+            }),
+      },
+    },
+    permissionMode: spec.permissionMode,
+    persistSession: spec.persistSession,
+    resume: spec.resume,
+    skills: spec.skills,
+  };
+};
+
+/**
+ * The fleet's MCP servers a session takes as it launches ({@link
+ * fleetMcpFor}), apart from the caller's: `ClaudeSession` sets them through
+ * `setMcpServers`. A caller's server keeps a name it shares with one of the
+ * fleet's. `denied`: the tools of a chrome-devtools it cannot take. A fenced
  * session takes no fleet server.
  */
-const launchOptions = async (
-  spec: SpawnPayload,
-  ctx: HarnessContext,
-  account: string | undefined
-): Promise<{
-  fleet: Record<string, McpServerConfig>;
-  options: Record<string, unknown>;
-}> => {
-  const options = spec.options as
-    | {
-        disallowedTools?: string[];
-        env?: Record<string, string | undefined>;
-        mcpServers?: Record<string, McpServerConfig>;
-      }
-    | undefined;
-  const env = {
-    ...options?.env,
-    ...(account
-      ? accountEnv(account)
-      : {
-          CLAUDE_CONFIG_DIR: undefined,
-          CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
-        }),
-  };
-  const fleet =
-    spec.fence === true
-      ? { servers: {}, denied: [] }
-      : await fleetMcpFor(ctx, ctx.cwd);
+const launchFleet = async (
+  session: SessionSpec,
+  ctx: HarnessContext
+): Promise<{ fleet: Record<string, McpServerConfig>; denied: string[] }> => {
+  const fleet = session.fence
+    ? { servers: {}, denied: [] }
+    : await fleetMcpFor(ctx, ctx.cwd);
   return {
     fleet: Object.fromEntries(
       Object.entries(fleet.servers).filter(
-        ([name]) => !options?.mcpServers?.[name]
+        ([name]) => !session.options.mcpServers?.[name]
       )
     ),
-    options: {
-      ...options,
-      env,
-      disallowedTools: [...(options?.disallowedTools ?? []), ...fleet.denied],
-    },
+    denied: fleet.denied,
   };
 };
 
@@ -1889,37 +1931,21 @@ class ClaudeSession implements HarnessSession {
     instanceId: string,
     ctx: HarnessContext,
     workdir: string,
-    options: unknown,
-    permissionMode: import("@cawco/core").PermissionMode | undefined,
-    model: string | undefined,
-    effort: EffortLevel | undefined,
-    resume: SpawnPayload["resume"],
-    persistSession: boolean | undefined,
-    skills: string[] | undefined,
-    denyTools: string[] | undefined,
-    /** What the fleet denies this session, resolved once by `spawn()` via {@link sessionFleetDenials}. */
+    /** What it runs under, from its spawn ({@link sessionSpecOf}): the same on a launch and an attach. */
+    session: SessionSpec,
+    /** What the fleet denies this session ({@link sessionFleetDenials}), resolved once by `spawn()` or `adopt()`. */
     fleetDenyList: readonly string[],
     /**
-     * How the hub marked the spawn: a project's Caw ({@link SpawnPayload.lead})
-     * asks the hub before each shell and edit call; a fenced session
-     * ({@link SpawnPayload.fence}) has CawCo's MCP server alone, from no
-     * source but this launch. `instructions` are the scoped memory documents
-     * it launches with ({@link SpawnPayload.instructions}); an attach
-     * launches nothing and passes none. `conversationKept` says, for a
-     * resumed conversation, whether its transcript is still on disk.
+     * What only a launch has: `conversationKept` says, for a resumed
+     * conversation, whether its transcript is still on disk; `fleetMcp` is
+     * the fleet's servers it takes as it starts ({@link launchFleet}). An
+     * attach starts nothing and passes neither.
      */
     {
-      lead,
-      fence,
-      instructions = [],
       conversationKept,
       fleetMcp,
     }: {
-      lead: boolean;
-      fence: boolean;
-      instructions?: readonly SessionInstruction[];
       conversationKept?: () => Promise<boolean>;
-      /** The fleet's servers it takes as it starts ({@link fleetMcpFor}); none for an attach, which starts nothing. */
       fleetMcp?: Record<string, McpServerConfig>;
     },
     /**
@@ -1944,6 +1970,19 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
+    const {
+      options,
+      permissionMode,
+      model,
+      effort,
+      resume,
+      persistSession,
+      skills,
+      denyTools,
+      lead,
+      fence,
+      instructions,
+    } = session;
     // Before the `Query` below exists: an attach replays the asks the previous
     // host left open as soon as it does, and they are decided in this mode.
     this.#mode = new SessionMode(permissionMode);
@@ -2165,8 +2204,9 @@ class ClaudeSession implements HarnessSession {
 
     // Load skills natively: push /skill messages into the input stream before
     // any user prompt. The SDK handles them as slash commands — same as the
-    // user typing /skill-name in the session.
-    if (skills?.length) {
+    // user typing /skill-name in the session. A launch's alone: a child taken
+    // back loaded them when it started.
+    if (skills?.length && !sessiond.attach) {
       for (const skill of skills) {
         input.push({
           type: "user",
@@ -4200,24 +4240,24 @@ export class ClaudeHarness implements Harness {
     // and does not hold a move for a turn's end that a session held at its
     // limit never reaches.
     await keepWakeups(ctx.instanceId, { all: 0, once: 0 });
-    const launch = await launchOptions(spec, ctx, account);
+    const session = sessionSpecOf(spec, account);
+    const launch = await launchFleet(session, ctx);
     return new ClaudeSession(
       ctx.instanceId,
       ctx,
       ctx.cwd,
-      launch.options,
-      spec.permissionMode,
-      spec.model,
-      spec.effort,
-      spec.resume,
-      spec.persistSession,
-      spec.skills,
-      spec.denyTools,
+      {
+        ...session,
+        options: {
+          ...session.options,
+          disallowedTools: [
+            ...(session.options.disallowedTools ?? []),
+            ...launch.denied,
+          ],
+        },
+      },
       fleetDenyList,
       {
-        lead: spec.lead === true,
-        fence: spec.fence === true,
-        instructions: spec.instructions ?? [],
         ...(conversationKept ? { conversationKept } : {}),
         fleetMcp: launch.fleet,
       },
@@ -4236,12 +4276,10 @@ export class ClaudeHarness implements Harness {
     if (!proc) {
       return undefined;
     }
-    return this.adopt(ctx.instanceId, ctx, {
+    return this.adopt(spec, ctx, {
       afterSeq: resumeCursor(procEpoch(proc.epoch, proc.pid), ctx.ingested),
       head: proc.head,
-      sessionId: spec.resume?.sessionKey ?? null,
       turnRunning: await this.turnRunning(ctx.instanceId, proc.head),
-      permissionMode: spec.permissionMode,
     });
   }
 
@@ -4313,19 +4351,17 @@ export class ClaudeHarness implements Harness {
    * the ring no longer holds it, which is announced as a gap.
    */
   async adopt(
-    instanceId: string,
+    spec: SpawnPayload,
     ctx: HarnessContext,
     options: {
       afterSeq?: number;
       /** The ring's last seq as sessiond listed it. */
       head: number;
-      sessionId: string | null;
       /** {@link turnRunning}'s answer for this child. */
       turnRunning: boolean;
-      /** The mode the hub stored for it: the asks replayed at attach are decided in it. */
-      permissionMode?: import("@cawco/core").PermissionMode;
     }
   ): Promise<HarnessSession> {
+    const { instanceId } = spec;
     const { head, turnRunning } = options;
     const procId = procIdFor("claude", instanceId);
     // The keeper that holds it, current or retiring: the session keeps that
@@ -4361,7 +4397,7 @@ export class ClaudeHarness implements Harness {
     // The wake-ups the session had scheduled as its last turn in the ring
     // ended: what its `Stop` hook was told ({@link scheduledWakeups}).
     let wakeups: Wakeups | undefined;
-    let { sessionId } = options;
+    let sessionId = spec.resume?.sessionKey ?? null;
     // `head` is the listing's, taken before every earlier row was adopted; a
     // ring that has since dropped past it ends the read rather than stalling
     // every later row behind this one ({@link readRing}).
@@ -4417,11 +4453,16 @@ export class ClaudeHarness implements Harness {
         text: `cawco: sessiond's replay window overflowed; this transcript resumes at line ${start + 1}`,
       } as unknown as NeutralMessage);
     }
-    // The stored mode goes in at construction, ahead of the prelude's asks.
-    // The launch options it also sets are never used: nothing is spawned,
-    // so the SDK is handed the `claude` on PATH, not the version gate's: a
-    // process that runs already is taken back whatever its version, and
-    // retired at rest ({@link ClaudeSession.outdated}).
+    // It runs under what its spawn says, read as a launch reads it
+    // ({@link sessionSpecOf}): its mode goes in at construction, ahead of
+    // the prelude's asks, and Caw's gate, a fence and its caller's MCP
+    // servers with it. Its account is the one its process runs on, which the
+    // hub sends an attach. What only a launch uses (its flags, its fleet
+    // servers, the fleet's denials it was started with) its CLI holds
+    // already: nothing is spawned, so the SDK is handed the `claude` on
+    // PATH, not the version gate's: a process that runs already is taken
+    // back whatever its version, and retired at rest ({@link
+    // ClaudeSession.outdated}).
     const executable = resolveClaudeExecutable();
     if (!executable) {
       throw new Error(CLAUDE_NOT_INSTALLED);
@@ -4430,17 +4471,9 @@ export class ClaudeHarness implements Harness {
       instanceId,
       ctx,
       ctx.cwd,
-      undefined,
-      options.permissionMode,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+      sessionSpecOf(spec, spec.accountDir?.accountId),
       [],
-      // An attach launches nothing: its launch's MCP servers and settings are its own.
-      { lead: false, fence: false },
+      {},
       {
         client,
         procId,
