@@ -16,7 +16,14 @@
  *     with a scrim, the scrim is;
  *  2. a real press there (a click, or a tap on the phone) closes the layer
  *     and the control takes the press (its click arrives);
- *  3. opened again, Escape closes it and the focus is back on its trigger.
+ *  3. opened again, Escape closes it and the focus is back on its trigger;
+ *  4. on its first open, every kit floating surface the act brought onto
+ *     the page (a popover, a dropdown or context menu or their submenus, a
+ *     select, the Files float) came in by one animation on itself, `popIn`
+ *     (motion/pop) over --dur-pop: never `@starting-style` transitions,
+ *     which WebKit sometimes skips for an element just added
+ *     (bugs.webkit.org 275184). Watched, never held: the run plays as the
+ *     person sees it.
  *
  *   bun scripts/probe-kit/run.ts web dismiss-layers [--states=usage-popover/open,…] [--engines=chromium,webkit] [--views=desk,phone]
  */
@@ -299,6 +306,17 @@ function pickOutside(args: { layer: string; scrim: string; shows: string }): {
 
 declare global {
   interface Window {
+    /** Every run that started since the act began, with its target (`watchEntrances`). */
+    probeEntrances?: {
+      done: boolean;
+      runs: {
+        duration: number;
+        easing: string;
+        kind: string;
+        start: number | null;
+        target: Element | null;
+      }[];
+    };
     /** What of the press on the picked control bubbled to the document. */
     probeSeen?: string[];
     /** Whether the click arrived at the page's control found at the point. */
@@ -469,12 +487,106 @@ interface Leg {
 const showsOf = ({ state, scene }: Leg): string =>
   (typeof state.ready === "function" ? state.ready(scene) : state.ready).shows;
 
+/** Every kit floating surface: what bits-ui's contents and the Files float draw. */
+const KIT_SURFACE = [
+  "popover-content",
+  "dropdown-menu-content",
+  "dropdown-menu-sub-content",
+  "context-menu-content",
+  "context-menu-sub-content",
+  "select-content",
+]
+  .map((slot) => `[data-slot="${slot}"]`)
+  .concat("[data-files-float]")
+  .join(", ");
+
+/**
+ * From now on, every run the page starts, as it is first listed, with its
+ * target: a frame loop, for two seconds. Nothing is held.
+ */
+function watchEntrances(): void {
+  const seen = new Set(document.getAnimations());
+  const watch: NonNullable<Window["probeEntrances"]> = {
+    done: false,
+    runs: [],
+  };
+  window.probeEntrances = watch;
+  let frame = 0;
+  const look = () => {
+    frame += 1;
+    for (const run of document.getAnimations()) {
+      if (seen.has(run)) {
+        continue;
+      }
+      seen.add(run);
+      const timing = run.effect?.getTiming();
+      watch.runs.push({
+        kind: run.constructor.name,
+        duration: Number(timing?.duration ?? 0),
+        easing: String(timing?.easing ?? ""),
+        start: run.startTime === null ? null : Number(run.startTime),
+        target: (run.effect as KeyframeEffect | null)?.target ?? null,
+      });
+    }
+    if (frame < 120) {
+      requestAnimationFrame(look);
+    } else {
+      watch.done = true;
+    }
+  };
+  requestAnimationFrame(look);
+}
+
+/**
+ * Each kit floating surface the watched act brought onto the page, and the
+ * runs that played on it: its slot, and each run's kind, length and easing.
+ * A run of no length (Svelte's lead-in before its keyframes) is none.
+ */
+function entrances(surface: string): {
+  slot: string;
+  runs: { duration: number; easing: string; kind: string }[];
+}[] {
+  const runs = window.probeEntrances?.runs ?? [];
+  const surfaces = new Map<Element, typeof runs>();
+  for (const run of runs) {
+    const at = run.target?.closest(surface);
+    // A card that hangs (HangCard, `data-hang`) draws its own motion.
+    if (
+      at &&
+      run.target === at &&
+      run.duration > 0 &&
+      !at.closest("[data-hang]")
+    ) {
+      surfaces.set(at, [...(surfaces.get(at) ?? []), run]);
+    }
+  }
+  for (const el of document.querySelectorAll(surface)) {
+    if (
+      !(surfaces.has(el) || el.closest("[data-hang]")) &&
+      el.getAnimations().length === 0
+    ) {
+      surfaces.set(el, []);
+    }
+  }
+  return [...surfaces].map(([el, list]) => ({
+    slot: el.getAttribute("data-slot") ?? "files-float",
+    runs: list.map(({ duration, easing, kind }) => ({
+      duration,
+      easing,
+      kind,
+    })),
+  }));
+}
+
 /** `state`'s route opened fresh, its act done and the step after it, the layer standing open. */
-async function openState(on: Leg): Promise<void> {
+async function openState(on: Leg, watch = false): Promise<void> {
   const { page, base, route, state, scene, view } = on;
   await open(page, `${base}${route}`, "body");
   await page.evaluate(markHittable, { layer: LAYER, selectors: OUTSIDE });
   await on.before?.(page);
+  if (watch) {
+    await page.evaluate(watchEntrances);
+  }
   await state.act?.(page, scene);
   await page
     .locator(showsOf(on))
@@ -486,15 +598,45 @@ async function openState(on: Leg): Promise<void> {
   await on.after?.(page, view);
 }
 
+/** 4: each kit floating surface the act brought on came in by one `popIn`. */
+async function entered(kit: Kit, on: Leg): Promise<void> {
+  const { page, label } = on;
+  const pop = await page.evaluate(() =>
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--dur-pop")
+    )
+  );
+  const seen = await page.evaluate(entrances, KIT_SURFACE);
+  if (seen.length === 0) {
+    kit.note(`${label}: brings no kit floating surface onto the page`);
+    return;
+  }
+  const faults = seen.filter(
+    ({ runs }) =>
+      !(
+        runs.length === 1 &&
+        runs[0]?.kind !== "CSSTransition" &&
+        Math.abs((runs[0]?.duration ?? 0) - pop) < 1
+      )
+  );
+  kit.check(
+    `${label}: each kit floating surface it brought on came in by one animation on itself, popIn over --dur-pop (${pop}ms), not @starting-style`,
+    faults.length === 0,
+    JSON.stringify(faults.length ? faults : seen).slice(0, 500)
+  );
+}
+
 async function leg(kit: Kit, on: Leg): Promise<void> {
   const { page, view, label } = on;
-  // 1 and 2: an outside control takes the hit and the press, and the layer closes.
+  // 1 and 2: an outside control takes the hit and the press, and the layer
+  // closes; 4, how each kit surface came in, watched as it opened.
   try {
-    await openState(on);
+    await openState(on, true);
   } catch (error) {
     kit.check(`${label}: opens`, false, String(error).split("\n")[0]);
     return;
   }
+  await entered(kit, on);
   const pick = await page.evaluate(pickOutside, {
     layer: LAYER,
     scrim: SCRIM,

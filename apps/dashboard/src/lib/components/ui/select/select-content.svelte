@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { popIn } from "#lib/cawco/motion/pop.svelte.js";
   import {
     drawn,
     own,
@@ -62,7 +63,11 @@
     {#snippet child({ props, wrapperProps, open })}
       {#if forceMount || drawn(props)}
         <div {...wrapperProps} style:pointer-events={pressable(open)}>
-          <div {...own(props)} style:pointer-events={pressable(open)}>
+          <div
+            {...own(props)}
+            style:pointer-events={pressable(open)}
+            in:popIn|global
+          >
             <SelectScrollUpButton />
             <SelectPrimitive.Viewport
               class={cn(

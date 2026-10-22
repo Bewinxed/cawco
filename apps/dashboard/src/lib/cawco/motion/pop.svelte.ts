@@ -1,70 +1,94 @@
 /**
- * A floating surface an `{#if}` adds and removes comes and goes the way the
- * kit's surfaces do (`floatingSurface`): out of what it stands on, growing
- * from the pop scale as it fades in (`popIn`, the pop tier on the drawer
- * curve), and back into it as it fades out (`popOut`, the exit tier). One
- * Web Animation each way, so its open and its close each run on one clock.
+ * A floating surface comes and goes the way the kit's surfaces do
+ * (`floatingSurface`): out of what it stands on, growing from the pop scale
+ * as it fades in (`popIn`, the pop tier on the drawer curve), and back into
+ * it as it fades out (`popOut`, the exit tier). One Web Animation each way,
+ * so its open and its close each run on one clock. With reduced motion,
+ * only the fade.
  *
- * The entrance is this transition, never the stylesheet's `@starting-style`:
- * WebKit sometimes runs no starting-style transition for an element just
- * added to the page (bugs.webkit.org 275184, comment 8: "transitions are
- * sometimes not applied when adding elements", Safari 18.4), and the
- * surface popped in whole. A surface that uses these takes the kit's
- * `motion: "hang"` look and no `data-state="open"`, so no CSS transition of
- * its own outranks them.
+ * Every floating surface's entrance is `popIn`, never the stylesheet's
+ * `@starting-style`: WebKit sometimes runs no starting-style transition for
+ * an element just added to the page (bugs.webkit.org 275184, comment 8:
+ * "transitions are sometimes not applied when adding elements", Safari
+ * 18.4), and the surface popped in whole. The kit's contents (popover,
+ * dropdown and context menus and their submenus, select) put it on the
+ * element they draw, global, since bits-ui's presence opens them through
+ * blocks nested in theirs. A surface that leaves by `popOut` too takes the
+ * kit's `motion: "hang"` look and no `data-state`, so no CSS transition of
+ * its own outranks it; the kit's own contents still leave by `data-closed`.
  *
- * `side` is the side of its anchor it stands on, as its `data-side` says:
- * one hung under its field (`bottom`, the default) rises up into it and
- * comes down out of it; one standing over its row (`top`, the delegate
- * tray's shelf, the plan, the `/` menu) the other way.
+ * `side` is the side of its anchor it stands on: its `data-side` (bits-ui
+ * sets it on every content) unless given. It comes in from toward that
+ * anchor, by --pop-rise: from above when it stands under (`bottom`, the
+ * default), from below over (`top`), from its anchor's side beside it.
+ * `hangs`: a card that hangs (HangCard) draws its own motion (motion/hang),
+ * which with reduced motion runs nothing: only that fade is this one's.
  */
 import type { TransitionConfig } from "svelte/transition";
 import { dur, easeDrawer, motionOk } from "./curves.svelte";
 
-interface Side {
-  side?: "bottom" | "top";
+type Side = "bottom" | "top" | "left" | "right";
+
+interface Pop {
+  hangs?: boolean;
+  side?: Side;
 }
 
-/** The surface's travel: the pop scale it grows from, and its rise toward what it stands on. */
-function travel(node: HTMLElement, side: Side["side"]) {
+/** Which way it travels toward its anchor, per side it stands on. */
+const TOWARD: Record<Side, [number, number]> = {
+  bottom: [0, -1],
+  top: [0, 1],
+  left: [1, 0],
+  right: [-1, 0],
+};
+
+const sideOf = (node: HTMLElement, side: Side | undefined): Side => {
+  const said = side ?? node.dataset.side;
+  return said && said in TOWARD ? (said as Side) : "bottom";
+};
+
+/** The surface at `t` of its way out of its anchor: 0 at the anchor, 1 standing. */
+function drawnAt(node: HTMLElement, side: Side) {
   const styles = getComputedStyle(node);
-  return {
-    scale: Number.parseFloat(styles.getPropertyValue("--pop-scale")),
-    rise:
-      Number.parseFloat(styles.getPropertyValue("--pop-rise")) *
-      (side === "top" ? 1 : -1),
-  };
+  const scale = Number.parseFloat(styles.getPropertyValue("--pop-scale"));
+  const rise = Number.parseFloat(styles.getPropertyValue("--pop-rise"));
+  const [dx, dy] = TOWARD[side];
+  return (t: number) =>
+    `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: ${(dx * (1 - t) * rise).toFixed(2)}px ${(dy * (1 - t) * rise).toFixed(2)}px`;
 }
 
-const at = (t: number, scale: number, rise: number) =>
-  `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: 0 ${((1 - t) * rise).toFixed(2)}px`;
+const fade = (): TransitionConfig => ({
+  duration: dur("--dur-control"),
+  css: (t) => `opacity: ${t}`,
+});
 
 export function popIn(
   node: HTMLElement,
-  { side = "bottom" }: Side = {}
+  { side, hangs = false }: Pop = {}
 ): TransitionConfig {
   if (!motionOk.current) {
-    return { duration: dur("--dur-control"), css: (t) => `opacity: ${t}` };
+    return fade();
   }
-  const { scale, rise } = travel(node, side);
+  if (hangs) {
+    return { duration: 0 };
+  }
   return {
     duration: dur("--dur-pop"),
     easing: easeDrawer,
-    css: (t) => at(t, scale, rise),
+    css: drawnAt(node, sideOf(node, side)),
   };
 }
 
 export function popOut(
   node: HTMLElement,
-  { side = "bottom" }: Side = {}
+  { side }: Pop = {}
 ): TransitionConfig {
   if (!motionOk.current) {
-    return { duration: dur("--dur-control"), css: (t) => `opacity: ${t}` };
+    return fade();
   }
-  const { scale, rise } = travel(node, side);
   return {
     duration: dur("--dur-exit"),
     easing: easeDrawer,
-    css: (t) => at(t, scale, rise),
+    css: drawnAt(node, sideOf(node, side)),
   };
 }

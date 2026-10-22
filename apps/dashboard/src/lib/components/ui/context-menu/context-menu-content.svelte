@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { popIn } from "#lib/cawco/motion/pop.svelte.js";
   import {
     drawn,
     own,
@@ -87,6 +88,7 @@
               {...own(snippet.props)}
               inert={!snippet.open}
               style:pointer-events={pressable(snippet.open)}
+              in:popIn|global={{ hangs: motion === "hang" }}
             >
               {@render children?.()}
             </div>

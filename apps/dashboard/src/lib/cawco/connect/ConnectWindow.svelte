@@ -24,6 +24,7 @@
    *   rest cross-fading.
    */
   import { tick, untrack } from "svelte";
+  import type { TransitionConfig } from "svelte/transition";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconClose } from "#lib/icons.js";
   import { page } from "$app/state";
@@ -38,6 +39,7 @@
     pinned,
   } from "../motion/curves.svelte";
   import { morph } from "../motion/morph.svelte";
+  import { popIn } from "../motion/pop.svelte";
   import { closeInto, land } from "../motion/share.svelte";
   import { connect, INSTALL_PARAM, parkedAt, phone } from "./installs.svelte";
   import OutcomeStep from "./OutcomeStep.svelte";
@@ -422,6 +424,36 @@
     };
   }
 
+  /**
+   * How it comes onto the page: on a desk as every floating surface does
+   * (`popIn`, from above the place it hangs under), on a phone as its
+   * drawer rises from the screen's foot over --dur-panel; with reduced
+   * motion a fade. Never by `@starting-style`, which WebKit sometimes skips
+   * for an element just added (motion/pop). Reopened from its row it comes
+   * out of the row's box instead (`arrive`), and this stands aside; added
+   * closed, it has nothing to show.
+   */
+  function enter(node: HTMLElement): TransitionConfig {
+    const row = rowOf(connect.id);
+    if (
+      node.dataset.state !== "open" ||
+      (row && connect.anchor === row && !phone.current)
+    ) {
+      return { duration: 0 };
+    }
+    if (!phone.current) {
+      return popIn(node, { side: "bottom" });
+    }
+    if (!motionOk.current) {
+      return { duration: dur("--dur-control"), css: (t) => `opacity: ${t}` };
+    }
+    return {
+      duration: dur("--dur-panel"),
+      easing: easeDrawer,
+      css: (_t, u) => `translate: 0 ${(u * 100).toFixed(2)}%`,
+    };
+  }
+
   /** Reopened from a row: it comes back out of the row's box, the reverse of its flight. */
   async function arrive(node: HTMLElement): Promise<void> {
     await tick();
@@ -520,11 +552,12 @@
     role="dialog"
     aria-modal="false"
     data-safe-bottom={phone.current || undefined}
+    in:enter
     class={[
       "fixed z-(--layer-float) flex flex-col bg-surface-raised text-ink-strong",
       phone.current
-        ? "inset-x-0 bottom-0 max-h-c-sheet-max-h overflow-y-auto overscroll-contain rounded-t-lg border-t border-t-border-hairline pb-(--safe-bottom) shadow-drawer transition-[opacity,translate] duration-(--dur-panel) ease-drawer data-[state=closed]:translate-y-full data-[state=closed]:duration-(--dur-exit) data-[state=closed]:ease-out starting:data-[state=open]:translate-y-full motion-reduce:transition-opacity motion-reduce:data-[state=closed]:translate-y-0 motion-reduce:data-[state=closed]:opacity-0 motion-reduce:starting:data-[state=open]:translate-y-0 motion-reduce:starting:data-[state=open]:opacity-0"
-        : "max-h-c-connect-max-h w-c-connect-w overflow-y-auto overscroll-contain rounded-lg border border-border-control shadow-overlay transition-opacity duration-(--dur-pop) ease-drawer data-[state=closed]:opacity-0 data-[state=closed]:duration-(--dur-exit) starting:data-[state=open]:opacity-0 motion-safe:transition-[opacity,translate,scale] motion-safe:data-[state=closed]:scale-(--pop-scale) motion-safe:starting:data-[state=open]:scale-(--pop-scale) motion-safe:data-[state=closed]:-translate-y-(--pop-rise) motion-safe:starting:data-[state=open]:-translate-y-(--pop-rise)",
+        ? "inset-x-0 bottom-0 max-h-c-sheet-max-h overflow-y-auto overscroll-contain rounded-t-lg border-t border-t-border-hairline pb-(--safe-bottom) shadow-drawer transition-[opacity,translate] duration-(--dur-panel) ease-drawer data-[state=closed]:translate-y-full data-[state=closed]:duration-(--dur-exit) data-[state=closed]:ease-out motion-reduce:transition-opacity motion-reduce:data-[state=closed]:translate-y-0 motion-reduce:data-[state=closed]:opacity-0"
+        : "max-h-c-connect-max-h w-c-connect-w overflow-y-auto overscroll-contain rounded-lg border border-border-control shadow-overlay transition-opacity duration-(--dur-pop) ease-drawer data-[state=closed]:opacity-0 data-[state=closed]:duration-(--dur-exit) motion-safe:transition-[opacity,translate,scale] motion-safe:data-[state=closed]:scale-(--pop-scale) motion-safe:data-[state=closed]:-translate-y-(--pop-rise)",
     ]}
     style:bottom={phone.current ? `${keyboard}px` : undefined}
     style:max-height={phone.current && room > 0
