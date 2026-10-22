@@ -44,7 +44,7 @@ import {
   signal as signalPid,
 } from "../packages/core/src/signal";
 import { PINNED_BUN, TARGETS } from "./build-binary";
-import { heavySlot } from "./lib/heavy-run";
+import { requireDiskRoom } from "./lib/disk-room";
 import { publishRelease } from "./publish-release";
 import { signingPem, takeSigningKey, underSigningEnv } from "./release-signing";
 
@@ -263,8 +263,7 @@ async function run(
     detached: true,
     // The live environment, always: Bun hands a child the one this process
     // started with otherwise ("Defaults to process.env as it was when the
-    // current Bun process launched", bun.com/reference/bun/Spawn/SpawnOptions/env),
-    // and the build's heavy-run admission (`build`) is set in it since.
+    // current Bun process launched", bun.com/reference/bun/Spawn/SpawnOptions/env).
     env: { ...process.env, ...env },
   });
   running.add(child);
@@ -999,33 +998,12 @@ const versionAndNotes = async (
 };
 
 /**
- * The memory one build reaches, in GiB: its heavy-run admission's peak
- * (core heavy-run.ts), taken for the whole build, its proofs and compiles
- * included, each of which takes none of its own beneath it. From the
- * journal, obelisk, 2026-10-19: "cawco-nightly-7c34d9be6.service: Consumed
- * 15min 31.083s CPU time over 8min 33.717s wall clock time, 17.2G memory
- * peak", and 11.8G for the next one, which failed at stage 2.
- */
-const RELEASE_PEAK_GIB = 18;
-
-/**
- * One commit, built, signed and (unless a newer one is queued) promoted, as
- * one of the machine's heavy runs: it starts once the machine admits its
- * peak ({@link RELEASE_PEAK_GIB}) beside the probes and gates already
- * running, waiting in the heavy-run queue's words until then, and holds that
- * admission until it ends.
+ * One commit, built, signed and (unless a newer one is queued) promoted. It
+ * starts at once, beside whatever else runs, with room on the disk
+ * (lib/disk-room.ts).
  */
 const build = async (current: Request): Promise<void> => {
-  const heavy = await heavySlot({ peakGib: RELEASE_PEAK_GIB });
-  try {
-    await buildAdmitted(current);
-  } finally {
-    heavy.release();
-  }
-};
-
-/** {@link build} under its admission. */
-const buildAdmitted = async (current: Request): Promise<void> => {
+  requireDiskRoom(`The release of ${current.commit.slice(0, 12)}`);
   const building = performance.now();
   // No build is released unproven: without podman the container proofs cannot run.
   if (!Bun.which("podman")) {

@@ -1,11 +1,11 @@
 /**
  * A timing leg counts only while the MACHINE is quiet: the whole machine's
- * CPU and memory pressure (core heavy-run.ts `machinePressure`, Linux PSI
+ * CPU and memory pressure (core machine-room.ts `machinePressure`, Linux PSI
  * `/proc/pressure/cpu` and `/proc/pressure/memory`, "some" avg10: the share
  * of the last 10 s in which some task anywhere waited) under
  * {@link QUIET_LIMIT} at the leg's start, middle and end. It is the reading
- * the machine's heavy-run admission reads, so a leg and the gate that let
- * its run in never read different things.
+ * a session's start reads for memory, so the two never read different
+ * things.
  *
  * Before 2026-10-19 a leg read its own cgroup's `cpu.pressure`, which counts
  * only its own tasks' waits: tab-return's wait read "PSI some avg10 0.14 /
@@ -23,7 +23,7 @@ import {
   MACHINE_PRESSURE,
   type MachinePressure,
   machinePressure,
-} from "../../packages/core/src/heavy-run";
+} from "../../packages/core/src/machine-room";
 
 /** The most of either pressure, a percent of the last 10 s, at which a leg still counts. */
 export const QUIET_LIMIT = 1.0;

@@ -13,7 +13,6 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { BrowserContext, Page, Request } from "playwright-core";
-import { heavySlot } from "../../lib/heavy-run";
 import { MACHINE, until } from "../../scratch-fleet";
 import {
   type Attach,
@@ -179,12 +178,9 @@ export class Servers {
 
 /**
  * `vite dev` against `hub`: the `/motion/` benches' server (the kit's own
- * is against no hub). The run's heavy-run slot is held from here for the
- * process's life (heavy-run.ts: a run holds its slot its whole heavy life;
- * one process holds one, however many of its parts ask).
+ * is against no hub).
  */
 async function devServer(hub: string) {
-  await heavySlot();
   const lease = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,

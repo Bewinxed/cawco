@@ -400,6 +400,30 @@ export const setSessionLimits = (
 };
 
 /**
+ * Every live child of every keeper this agent has a connection open to, each
+ * once by pid, as each keeper lists it now: the current keeper's and those of
+ * keepers still retiring. A keeper that does not answer its listing is left
+ * out of this reading.
+ */
+export const keeperChildren = async (): Promise<SessiondProcInfo[]> => {
+  const listed = await Promise.all(
+    [...openClients].map((client) =>
+      client.list().then(
+        (welcome) => welcome.procs,
+        () => [] as SessiondProcInfo[]
+      )
+    )
+  );
+  const byPid = new Map<number, SessiondProcInfo>();
+  for (const proc of listed.flat()) {
+    if (proc.alive) {
+      byPid.set(proc.pid, proc);
+    }
+  }
+  return [...byPid.values()];
+};
+
+/**
  * Every keeper's word that one of its children reached a limit
  * (`proc.limit`), once however many connections heard it: the supervisor
  * says it on the sessions it touches (session.ts).

@@ -4,7 +4,6 @@ import {
   type CommandQueueFrame,
   type CommandResult,
   type CommandRun,
-  HEAVY_GATE_ENV,
   QUEUE_MARKER,
   QUEUE_SLOTS,
   QUEUE_WAIT_MAX_MS,
@@ -369,14 +368,8 @@ export async function runWorkflowCommand(
     const child = spawn(file, args, {
       cwd,
       detached: true,
-      // The executor enters the boundary in `$PWD`: it names `cwd`. A landing
-      // gate's step carries its gate's words, so a heavy run it starts goes
-      // first (core heavy-run.ts).
-      env: {
-        ...hostEnvironment(),
-        PWD: cwd,
-        ...(named?.gate ? { [HEAVY_GATE_ENV]: named.gate } : {}),
-      },
+      // The executor enters the boundary in `$PWD`: it names `cwd`.
+      env: { ...hostEnvironment(), PWD: cwd },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];

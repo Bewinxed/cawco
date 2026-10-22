@@ -6029,7 +6029,6 @@ public enum OpenEnums {
         case boundary
         case build
         case folder
-        case heavy
         case sim
         case template
         /// A value this app does not know: a newer hub's.
@@ -6040,7 +6039,6 @@ public enum OpenEnums {
             case "boundary": self = .boundary
             case "build": self = .build
             case "folder": self = .folder
-            case "heavy": self = .heavy
             case "sim": self = .sim
             case "template": self = .template
             default: self = .unrecognized(rawValue)
@@ -6052,7 +6050,6 @@ public enum OpenEnums {
             case .boundary: "boundary"
             case .build: "build"
             case .folder: "folder"
-            case .heavy: "heavy"
             case .sim: "sim"
             case .template: "template"
             case let .unrecognized(rawValue): rawValue
@@ -6063,7 +6060,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.boundary, .build, .folder, .heavy, .sim, .template]
+        public static let allCases: [Self] = [.boundary, .build, .folder, .sim, .template]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

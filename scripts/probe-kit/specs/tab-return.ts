@@ -51,8 +51,7 @@
  * interaction by Event Timing. A WebKit return is a person's press
  * (`pressBack`), timed by the event's own stamp, with the dashboard's first
  * animation frames after it. Each return is a leg gated on the whole
- * machine's CPU and memory pressure (quiet.ts `quietLeg`), the reading
- * heavy-run admission reads. Every number is written to `numbers.json`.
+ * machine's CPU and memory pressure (quiet.ts `quietLeg`). Every number is written to `numbers.json`.
  *
  * The busy session streams as the spec lets it: once seeded, its live turns
  * run only while the busy tab is away (one per `TURN_MS` of the absence) and

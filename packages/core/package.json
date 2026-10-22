@@ -25,7 +25,7 @@
     "./binary-wrapper": "./src/binary-wrapper.ts",
     "./process-identity": "./src/process-identity.ts",
     "./signal": "./src/signal.ts",
-    "./heavy-run": "./src/heavy-run.ts",
+    "./machine-room": "./src/machine-room.ts",
     "./live-processes": "./src/live-processes.ts",
     "./detach": "./src/detach.ts",
     "./lines": "./src/lines.ts",

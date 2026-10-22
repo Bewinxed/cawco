@@ -109,7 +109,6 @@ import {
   KEEPERS_ASK_AGAIN_MS,
   type ListedWorkspace,
 } from "@cawco/core/handover";
-import { HEAVY_RUN_HELD_ENV } from "@cawco/core/heavy-run";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import {
   currentEndpoint,
@@ -197,7 +196,6 @@ import { runtimeSockets } from "./browser/runtime";
 import { bunNodeShim } from "./bun-node-shim";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
-import { cawcoCommand } from "./git-credential";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import {
   closeGitDoor,
@@ -383,6 +381,43 @@ const readPlace = async (
     return;
   }
   return { outer, inner, idle };
+};
+
+/**
+ * What runs in workspace `workspace`'s boundary whose keeper child is `host`
+ * (the current generation's or a retiring one's), for a reading of what its
+ * commands left (agent leak-watch.ts). Linux: its sandbox, its init and every
+ * process it held when its runner was ready; every process of the sandbox
+ * descends from that init. macOS: of `pids`, every process that answers to
+ * that generation's name ({@link answering}), wherever it moved. Undefined
+ * when no generation of the workspace has that host.
+ */
+export const sandboxOf = async (
+  workspace: string,
+  host: number,
+  pids: readonly number[]
+): Promise<
+  | { idle: readonly number[]; inner: number }
+  | { members: readonly number[] }
+  | undefined
+> => {
+  const generations = [
+    await readHeld(workspace).catch(() => undefined),
+    ...(await readRetiring(workspace)),
+  ];
+  const held = generations.find((one) => one?.pid === host);
+  if (!held) {
+    return;
+  }
+  if (process.platform === "darwin") {
+    return {
+      members: answering(
+        inBoundaries(pids.map((pid) => ({ pid }))),
+        membershipName(workspace, held.gen)
+      ),
+    };
+  }
+  return await readPlace(workspace, held.gen);
 };
 
 export const shellQuote = (value: string): string =>
@@ -852,17 +887,6 @@ const watchHost = async (
  *   workspace's build runs them inside the boundary. It runs with a home of its own
  *   ({@link writeXcodeHome}), so what Foundation puts under `~/Library/Caches`
  *   (SwiftPM's manifest cache among it) lands in the workspaces' cache.
- * - A compile through either (`swift build`, `test` or `run`; an xcodebuild
- *   `build`, `build-for-testing`, `test`, `archive`, `analyze` or `install`)
- *   is one of the machine's heavy runs: it runs under the agent's own
- *   `cawco heavy-run` (core heavy-run.ts), which starts it once a slot is
- *   free and the machine has room, unless a run it is under already holds
- *   one (`CAWCO_HEAVY_RUN_HELD`). `test-without-building` compiles nothing:
- *   Maestro's runner, on a simulator whose slot holds the run.
- * - `xcrun simctl boot` is a heavy run too, as a simulator mac-slot.sh boots
- *   is: on 2026-10-19 the Mac had a third simulator booted outside
- *   mac-slot.sh while it paged at a load of 800. Every other `xcrun` call
- *   runs as it is.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
@@ -947,10 +971,6 @@ const writeShims = async (id: string, runtime: string): Promise<void> => {
   const { port, token } = logRelay();
   const cache = workspaceCacheDir();
   const swiftpm = shellQuote(join(cache, "swiftpm"));
-  // A compile is one of the machine's heavy runs (core heavy-run.ts), held by
-  // this agent's `cawco heavy-run` until it ends; one under a run already held
-  // (build-both.sh, mac-slot.sh, a probe kit run) takes none.
-  const heavyRunLine = `[ -n "\${${HEAVY_RUN_HELD_ENV}:-}" ] || exec ${cawcoCommand("heavy-run").map(shellQuote).join(" ")} "$(printf '%q ' "\${run[@]}")"`;
   await Promise.all([
     writeWhole(
       join(bin, "swift"),
@@ -967,9 +987,7 @@ case "\${1:-}" in
       *" --scratch-path"* | *" --build-path"*) ;;
       *) scratch=(--scratch-path ${swiftpm}/build/"$(/sbin/md5 -q -s "$PWD")") ;;
     esac
-    run=("$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@")
-    ${heavyRunLine}
-    exec "\${run[@]}"
+    exec "$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@"
     ;;
 esac
 exec "$swift" "$@"
@@ -984,7 +1002,6 @@ exec "$swift" "$@"
 xcodebuild=$(/usr/bin/xcrun --find xcodebuild) || exit 1
 flags=
 builds=
-compiles=
 packages=
 args=()
 for arg in "$@"; do
@@ -996,7 +1013,6 @@ for arg in "$@"; do
     build | build-for-testing | test | archive | analyze | install)
       args+=("$arg")
       builds=1
-      compiles=1
       ;;
     test-without-building | clean | installsrc | -resolvePackageDependencies)
       args+=("$arg")
@@ -1015,28 +1031,13 @@ done
 # A home of its own, whose Caches, Logs and org.swift.swiftpm are the workspaces' cache.
 mkdir -p ${XCODE_OWN_LIBRARY.map((name) => shellQuote(join(xcodeLibraryCache(), name))).join(" ")} || exit 1
 export CFFIXED_USER_HOME=${shellQuote(xcodeHomeOf(id))}
-run=("$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData.noindex"))} "\${args[@]}")
-[ -z "$compiles" ] || ${heavyRunLine}
-exec "\${run[@]}"
+exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData.noindex"))} "\${args[@]}"
 `,
       0o755
     ),
-    // A simulator boot is one of the machine's heavy runs, as mac-slot.sh's
-    // are: it waits for a slot and the machine's room (memory and swap
-    // among it), then the boot runs and the slot goes once it returns.
-    writeWhole(
-      join(bin, "xcrun"),
-      `#!/bin/bash
-# CawCo workspace ${id}: xcrun, a simulator boot waiting for the machine's room.
-if [ "\${1:-}" = simctl ] && [ "\${2:-}" = boot ]; then
-  run=(/usr/bin/xcrun "$@")
-  ${heavyRunLine}
-  exec "\${run[@]}"
-fi
-exec /usr/bin/xcrun "$@"
-`,
-      0o755
-    ),
+    // The xcrun a build before this one wrote, which waited on a heavy-run
+    // slot through a `cawco heavy-run` that no longer exists.
+    rm(join(bin, "xcrun"), { force: true }),
     writeWhole(
       join(bin, "log"),
       `#!/bin/sh
@@ -4018,8 +4019,8 @@ const AGENT_LOOK_MS = 200;
 /**
  * macOS: {@link endSessionWork} in workspace `workspace`. What was born
  * before the earliest of the agent's own commands running there is ended at
- * once, a leftover holding the heavy-run slot a landing gate's step waits
- * for among it, so the gate runs. What was born since may be one of those
+ * once, so a landing gate's step finds nothing of the session's running
+ * beside it. What was born since may be one of those
  * commands' own, moved out of its tree ({@link agentWork}): it is ended once
  * the commands running then have, a landing's push and gate step run to
  * their end, and so on while the agent's commands come. Meanwhile the
@@ -4077,8 +4078,7 @@ const stillRunning = async (ones: readonly Worker[]): Promise<Worker[]> => {
  * command it cuts off by killing its own shell, which reaches the executor
  * and never the command inside the boundary, and a background command
  * outlived the interrupt that was to stop it (two delegates on the Mac,
- * 2026-10-20, holding its one heavy-run slot: a slot is a `flock`, let go as
- * its holder ends).
+ * 2026-10-20).
  *
  * Each is told to end (SIGTERM), so a keeper's trap frees what it holds,
  * and given {@link WORK_GRACE_MS}; then everything of the session's still

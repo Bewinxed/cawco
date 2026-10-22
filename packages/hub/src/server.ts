@@ -254,6 +254,7 @@ import {
   isLoopbackSource,
   joinProviders,
   type LastErrorKind,
+  LEAK_FOUND,
   LIMIT_REACHED,
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
@@ -1195,6 +1196,11 @@ const CARRY_ON_CUT = "Carry on from where it stopped.";
 
 /** The system origin name of the hub's word that a session at its account's limit may go on (at-limit.ts `CARRY_ON_ORIGIN`). */
 const LIMIT_ORIGIN = "limit";
+
+/** The system origin name of the hub's word that something a session started leaks (core `LEAK_FOUND`). */
+const LEAK_ORIGIN = "leak";
+/** The leaks told so far, by session and leak, most recent last: one an agent says again (after a restart) is told once. */
+const LEAKS_KEPT = 4096;
 
 /**
  * A machine's word on one carry, or the hub's when the call to the machine
@@ -25203,6 +25209,40 @@ export const createServer = (
     });
   };
 
+  /** The leaks each session was told of, by `<session> <leak>` ({@link LEAKS_KEPT}). */
+  const leaksTold = new Set<string>();
+  /**
+   * A leak its machine found in what a session started (core `LEAK_FOUND`):
+   * the session is told in the hub's word ({@link tellSession}), once per
+   * leak. One from a machine that does not run the session is nobody's.
+   */
+  const tellLeak = (
+    machineId: string,
+    instanceId: string,
+    said: { uuid?: unknown; content?: unknown }
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (
+      !row ||
+      row.machineId !== machineId ||
+      typeof said.uuid !== "string" ||
+      typeof said.content !== "string"
+    ) {
+      return;
+    }
+    const key = `${row.id} ${said.uuid}`;
+    if (leaksTold.has(key)) {
+      return;
+    }
+    leaksTold.add(key);
+    const [oldest] = leaksTold;
+    if (leaksTold.size > LEAKS_KEPT && oldest !== undefined) {
+      leaksTold.delete(oldest);
+    }
+    console.warn(`[leak] ${row.id}: ${said.content}`);
+    tellSession(row.id, said.content, LEAK_ORIGIN);
+  };
+
   /**
    * What fleet watch did about a session, or told it as a lead (core
    * `FLEET_WATCH`): kept on its row and folded into what its screens show
@@ -32274,6 +32314,20 @@ export const createServer = (
                   transcripts.ingest(
                     row.id,
                     message.payload as TranscriptPayload
+                  );
+                  break;
+                }
+                // Something the session started leaks (agent leak-watch.ts):
+                // the session is told, once per leak, in the hub's own word.
+                // Nothing is stopped.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === LEAK_FOUND
+                ) {
+                  tellLeak(
+                    message.machineId,
+                    message.instanceId,
+                    frame.message as { uuid?: unknown; content?: unknown }
                   );
                   break;
                 }

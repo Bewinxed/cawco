@@ -43,9 +43,8 @@ export const PAUSE_ORIGIN = "machine-pause";
 /** How a caller has the hub run a command on a machine (server.ts `runOnMachine`). */
 export interface CommandOptions {
   /**
-   * The run is a step of a work item's landing gate, in these words: its
-   * machine runs it so (core `CommandRun.gate`), and a heavy run it starts
-   * there takes the next free slot before any other run.
+   * The run is a step of a work item's landing gate, in these words (core
+   * `CommandRun.gate`).
    */
   readonly gate?: string;
   /**
@@ -82,7 +81,7 @@ export interface CommandOptions {
 
 /**
  * A `noWait` run ({@link CommandOptions}) that would have waited: `message`
- * is what for, as a status says it ("queued for a heavy-run slot behind …",
+ * is what for, as a status says it ("queued for the Mac's build slot behind …",
  * "Omars-MacBook-Pro is paused until 00:57").
  */
 export class WouldWait extends Error {}

@@ -1,13 +1,13 @@
 /**
  * A session's start waits while its machine's room on memory fails, and is
  * never refused for it (packages/agent session.ts `#roomForStart`, core
- * heavy-run.ts `measureMemoryRoom`).
+ * machine-room.ts `measureMemoryRoom`).
  *
  * On a scratch fleet whose agent reads its memory as full (the memory
- * thresholds set to 0: `CAWCO_HEAVY_MEMORY_STALL_MAX` on Linux,
- * `CAWCO_HEAVY_SWAP_USED_MAX_PCT` on the Mac), a Claude session is started:
+ * thresholds set to 0: `CAWCO_ROOM_MEMORY_STALL_MAX` on Linux,
+ * `CAWCO_ROOM_SWAP_USED_MAX_PCT` on the Mac), a Claude session is started:
  *
- * - its row holds a `room` line, in the heavy-run queue's words ("this
+ * - its row holds a `room` line, in the machine's readings ("this
  *   machine's measured room: …", the failing reading marked ✗), and the
  *   agent's log says the start waits;
  * - past the hub's 120 s spawn wait (hub config.ts `SPAWN_START_TIMEOUT_MS`)
@@ -34,10 +34,10 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.hubUp();
   fleet.fileAccount();
   fleet.launch("agent", [], {
-    CAWCO_HEAVY_MEMORY_STALL_MAX: "0",
-    CAWCO_HEAVY_SWAP_USED_MAX_PCT: "0",
-    // Read on its own room, not inside the fleet's admission (scratch-fleet.ts).
-    CAWCO_HEAVY_ADMITTED: undefined,
+    CAWCO_ROOM_MEMORY_STALL_MAX: "0",
+    CAWCO_ROOM_SWAP_USED_MAX_PCT: "0",
+    // Read on its own room, not as a machine the fleet brought up (scratch-fleet.ts).
+    CAWCO_INSIDE_RUN: undefined,
   });
   await fleet.agentUp();
   await fleet.accountSignedIn();
@@ -71,7 +71,7 @@ const run = async (kit: Kit): Promise<void> => {
     60_000
   ).catch(() => undefined);
   kit.check(
-    "the session's transcript says why its start waits, in the heavy-run queue's words",
+    "the session's transcript says why its start waits, in the machine's readings",
     // The queue's words open the sentence after the start's own, capitalised.
     !!line?.includes("This machine's measured room:") && line.includes("✗"),
     line ?? "no room line"

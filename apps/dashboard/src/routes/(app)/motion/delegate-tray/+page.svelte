@@ -4,7 +4,7 @@
    * no hub. The real SessionPane and the group's composer lent to it as
    * PaneLeaf lends it, over a conversation whose plan has eight steps and
    * which has twelve delegates working: running, starting, waiting on a
-   * heavy-run slot (a long state that has to truncate in its chip) and
+   * the Mac's build slot (a long state that has to truncate in its chip) and
    * queued behind files another item owns. Only the client's state is
    * seeded (dev's `__cawcoDebug`).
    *
@@ -81,7 +81,7 @@
   const SAID: [string, string][] = [
     [
       "Hand the tab and plan work out, one delegate each.",
-      "Twelve are out. Three wait for a heavy-run slot on the build machine and two are queued behind files another item owns; the rest are running.",
+      "Twelve are out. Three wait for the Mac's build slot and two are queued behind files another item owns; the rest are running.",
     ],
     [
       "Tell me when any of them needs me.",

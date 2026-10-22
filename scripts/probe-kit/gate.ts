@@ -24,7 +24,7 @@ bun run typecheck
 export const APPLE_GATE = `---
 bash apps/apple/scripts/build-both.sh ios --gate
   name: iOS build compiles
-  on: apps/apple, scripts/lib/heavy-run.sh
+  on: apps/apple, scripts/lib/disk-room.sh
   needs: apple
   timeout: 30m
 ---

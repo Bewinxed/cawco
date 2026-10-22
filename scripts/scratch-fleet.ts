@@ -43,7 +43,7 @@ import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
-import { HEAVY_ADMITTED_ENV } from "../packages/core/src/heavy-run";
+import { INSIDE_RUN_ENV } from "../packages/core/src/machine-room";
 import {
   darwinUserDirs,
   socketPathProblem,
@@ -58,7 +58,7 @@ import {
   spawnedPid,
 } from "../packages/core/src/signal";
 import { ensureDeps } from "./lib/deps";
-import { type HeavySlot, heavySlot } from "./lib/heavy-run";
+import { requireDiskRoom } from "./lib/disk-room";
 import { welcomed } from "./lib/keeper-dial";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 import { STAND_INS_ENV, type StandIns } from "./stand-ins/index";
@@ -350,7 +350,7 @@ function ephemeralPorts(): { first: number; last: number } {
 /** Every lease covers one block of this many ports: blocks never overlap, so leases never do. */
 const LEASE_BLOCK = 16;
 
-/** Where port leases are held: the workspaces' shared cache, the one tree every workspace's boundary and the host's shells all write (core heavy-run.ts keeps its slots there too). */
+/** Where port leases are held: the workspaces' shared cache, the one tree every workspace's boundary and the host's shells all write. */
 const LEASES_DIR = join(workspaceCacheDir(), "port-leases");
 
 /** A run's hold on a block of ports: its first `count` as `first-last`, and its release. */
@@ -1536,12 +1536,7 @@ export interface SendSnapshot {
  * returns what drives it. Nothing runs until the probe launches it. A setup
  * that fails takes what it made and started with it.
  *
- * A fleet is a heavy run for its whole life: it holds one of the machine's
- * slots (lib/heavy-run.ts `heavySlot`) from its setup until `close`, since
- * its hub, agent, keeper and sessions weigh on the machine for as long as
- * they run. It waits for the slot as any heavy run does, while none is free
- * or the machine has no room. Under a run that holds one already (the probe
- * kit's), it counts once.
+ * It starts at once, with room on the disk (lib/disk-room.ts).
  */
 /**
  * Where a fleet's hub listens (`bind`, its `HOST`) and the address its
@@ -1561,7 +1556,7 @@ export async function scratchFleet(options: {
   /** A promise holds the request until it settles: a spec paces a session's turns. */
   respond: (request: Seen) => Reply | Promise<Reply>;
 }) {
-  const heavy = await heavySlot();
+  requireDiskRoom(`The scratch fleet ${options.name}`);
   const dirs = new FleetDirs();
   // Its hub's preview ports, held from every other run on the machine until it closes.
   const previews = await leasePortRange(PREVIEW_PORTS);
@@ -1569,12 +1564,11 @@ export async function scratchFleet(options: {
   // Its services' own ports, held the same way.
   const ports = new PortPool();
   try {
-    return await standUp(options, dirs, heavy, { previews, ports });
+    return await standUp(options, dirs, { previews, ports });
   } catch (error) {
     await dirs.remove();
     ports.release();
     previews.release();
-    heavy.release();
     throw error;
   }
 }
@@ -1586,7 +1580,6 @@ async function standUp(
     respond: (request: Seen) => Reply | Promise<Reply>;
   },
   dirs: FleetDirs,
-  heavy: HeavySlot,
   { previews, ports }: { ports: PortPool; previews: PortLease }
 ) {
   const hub = options.hub ?? { bind: "127.0.0.1", at: "127.0.0.1" };
@@ -1933,13 +1926,13 @@ async function standUp(
     CAWCO_DEBUG: "1",
     CAWCO_MACHINE_ID: MACHINE,
     CAWCO_SESSIOND_ENDPOINT: sessiondSocket,
-    // Its machines run inside the fleet's own heavy-run admission (core
-    // heavy-run.ts `HEAVY_ADMITTED_ENV`, as stage 2's rig machines do): a
+    // Its machines are ones a run brought up for itself (core
+    // machine-room.ts `INSIDE_RUN_ENV`, as stage 2's rig machines are): a
     // session start there waits on no reading of the host's memory, which
     // the host's other work moves. On 2026-10-19 limit-stall's delegates
     // sat 3 to 9 minutes each on obelisk's 13 to 63% memory stall (another
     // workspace's boundary, 106 GB available) and never started.
-    [HEAVY_ADMITTED_ENV]: options.name,
+    [INSIDE_RUN_ENV]: options.name,
     ANTHROPIC_BASE_URL: mockBase,
     CLAUDE_CODE_TMPDIR: claudeTmp,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
@@ -2894,7 +2887,7 @@ async function standUp(
       payload: { instanceId },
     });
 
-  /** Stops everything this fleet started and its mock, then lets its heavy-run slot go. */
+  /** Stops everything this fleet started and its mock. */
   const close = async () => {
     socket?.close();
     // The added machines', agents first: a frozen one is thawed to hear it,
@@ -2921,7 +2914,6 @@ async function standUp(
     await mock.stop(true);
     ports.release();
     previews.release();
-    heavy.release();
   };
   /** Deletes the sandbox, the HOME and the runtime dir beside it (and every added machine's), unless `keep`. */
   const clean = async (keep: boolean) => {

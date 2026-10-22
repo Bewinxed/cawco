@@ -22,21 +22,19 @@
  * compiles them. A published release leaves its own tree's builds alone in the
  * cache (release.ts runs proof-cache-prune.sh).
  *
- * A heavy run: it holds one of the machine's slots (lib/heavy-run.ts) for
- * its whole life, waiting for one when all are held.
+ * It starts only with room on the disk (lib/disk-room.ts).
  */
 import { copyFile, mkdir, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildBinary } from "../build-binary";
-import { heavySlot } from "../lib/heavy-run";
+import { diskRoomOrExit } from "../lib/disk-room";
 
 const [, , output] = Bun.argv;
 if (!output?.startsWith("/")) {
   throw new Error("Usage: bun scripts/binary/build-stage2.ts /absolute/output");
 }
-// Held until this process exits: the kernel frees it then.
-await heavySlot();
+diskRoomOrExit("The stage-2 build");
 const run = async (argv: string[], cwd?: string) => {
   const child = Bun.spawn(argv, {
     stdout: "inherit",

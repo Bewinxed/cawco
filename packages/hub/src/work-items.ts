@@ -2118,7 +2118,7 @@ export const createWorkItems = ({
    * its gate's steps on every machine included, through the runner that
    * started each (server.ts `runOnMachine`, `how.stop`). Before 2026-10-18 a
    * stop ended a landing only at its next turn or push: three stopped items'
-   * iOS steps waited on in the Mac's heavy-run queue, one for 1 h 22 m.
+   * iOS steps waited on in the Mac's queue, one for 1 h 22 m.
    */
   const landingStops = new Map<string, AbortController>();
   /**
@@ -5792,8 +5792,7 @@ export const createWorkItems = ({
     /**
      * How a step's commands run: a pause that cancels one hands it back
      * here; in the turn, one that would wait throws {@link WouldWait}; the
-     * item's end cancels it; a heavy run it starts goes first, as a gate's
-     * (core heavy-run.ts).
+     * item's end cancels it.
      */
     const asStep = (step: GateStep): CommandOptions => ({
       onWait: queued,

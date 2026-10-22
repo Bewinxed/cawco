@@ -596,8 +596,7 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       `ssh-keygen -q -t ed25519 -N '' -f '${key}'`
     );
   }
-  // The hub first: a fleet may wait long for the machine's heavy-run slot,
-  // and the sshd's port, an ephemeral one, is the kernel's to hand to
+  // The hub first: the sshd's port, an ephemeral one, is the kernel's to hand to
   // anyone until sshd holds it, so sshd starts once the hub is up.
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   fleet.launch("hub", [], {
