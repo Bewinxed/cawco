@@ -339,15 +339,21 @@ const BASELINES_ROOT =
 
 /** A capture that differs from its approved baseline, for the owner's review page. */
 export interface Changed {
-  /** The approved baseline's png. */
-  baseline: string;
-  /** The region that changed, device px; null when the sizes differ. */
+  /** The approved baseline's png; null where none is approved yet. */
+  baseline: string | null;
+  /** The region that changed with room round it, device px; null when the sizes differ. */
   box: { height: number; width: number; x: number; y: number } | null;
-  /** This run's capture's png. */
+  /** This run's capture's png: the candidate baseline. */
   capture: string;
+  /** pixelmatch's picture of what changed, cut to `box`; null when the sizes differ. */
+  diff: string | null;
   /** The capture's name, as `--approve <spec>:<entry>` names it. */
   entry: string;
+  /** Pixels that differ; null when the sizes differ. */
+  pixels: number | null;
   spec: string;
+  /** The catalogue surface it shows (surfaces/catalogue.ts): the review page's one decision. */
+  surface: string;
 }
 
 export interface Kit {

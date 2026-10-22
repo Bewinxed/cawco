@@ -122,6 +122,7 @@ const spec: Spec = {
         // Read before the capture's comparison, as the picture was taken.
         const dump = await page.evaluate(pageDump);
         const differs = await diff(kit, page, entry, {
+          surface: surface.name,
           clip,
           ...(state.mask ? { mask: state.mask(page) } : {}),
         });

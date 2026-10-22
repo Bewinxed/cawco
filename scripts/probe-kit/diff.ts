@@ -5,7 +5,8 @@
  * and a count of pixels allowed to differ). Nothing here asks anyone to look:
  * a failed diff writes the region that changed, cropped, beside the capture
  * for a reviewer, and names its path, and hands the change to the run for
- * the owner's review page (`--review`, review.ts).
+ * the owner's review page (`--review`, review.ts): a capture that differs
+ * is a FAIL until the owner approves it or the code draws the baseline again.
  *
  * `--approve <spec>` writes the spec's captures as its baselines, and
  * `--approve <spec>:<name>,…` the captures named alone (`kit.approves`): the
@@ -28,6 +29,8 @@ export interface DiffOptions {
   mask?: Locator[];
   /** Pixels allowed to differ (pixelmatch's count). */
   maxDiffPixels?: number;
+  /** The catalogue surface the capture shows: its decision on the review page. */
+  surface: string;
   /** pixelmatch's per-pixel threshold, 0 to 1. */
   threshold?: number;
 }
@@ -42,7 +45,7 @@ export async function diff(
   kit: Kit,
   page: Page,
   name: string,
-  options: DiffOptions = {}
+  options: DiffOptions
 ): Promise<boolean> {
   const shot = await page.screenshot({
     clip: options.clip,
@@ -61,6 +64,15 @@ export async function diff(
     return false;
   }
   if (!existsSync(baseline)) {
+    kit.changed({
+      entry: name,
+      surface: options.surface,
+      baseline: null,
+      capture,
+      box: null,
+      diff: null,
+      pixels: null,
+    });
     kit.note(
       `${name}: no approved baseline; capture for the owner's review at ${capture}`
     );
@@ -69,7 +81,15 @@ export async function diff(
   const want = PNG.sync.read(await readFile(baseline));
   const got = PNG.sync.read(shot);
   if (want.width !== got.width || want.height !== got.height) {
-    kit.changed({ entry: name, baseline, capture, box: null });
+    kit.changed({
+      entry: name,
+      surface: options.surface,
+      baseline,
+      capture,
+      box: null,
+      diff: null,
+      pixels: null,
+    });
     kit.check(
       `${name} matches its baseline`,
       false,
@@ -91,13 +111,21 @@ export async function diff(
     kit.check(`${name} matches its baseline`, true, `${differing} px differ`);
     return false;
   }
-  const box = changedBox(out, 8);
+  // One box for the crop and the review page's two pictures, so the three line up.
+  const box = changedBox(out, 48);
   const cut = new PNG({ width: box.width, height: box.height });
   PNG.bitblt(out, cut, box.x, box.y, box.width, box.height, 0, 0);
   const crop = join(kit.out, `${name}.diff.png`);
   await writeFile(crop, PNG.sync.write(cut));
-  // The owner's review page (`--review`) cuts both pictures wider than this.
-  kit.changed({ entry: name, baseline, capture, box: changedBox(out, 48) });
+  kit.changed({
+    entry: name,
+    surface: options.surface,
+    baseline,
+    capture,
+    box,
+    diff: crop,
+    pixels: differing,
+  });
   kit.check(
     `${name} matches its baseline`,
     false,
