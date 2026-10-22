@@ -216,8 +216,12 @@ ${
     *) fail "CawCo has builds for x86_64 and arm64 machines; this one is $(uname -m)." ;;
   esac
   TARGET="$OS-$ARCH"
-  case "$CHANNEL" in stable|nightly) ;; *) fail "CAWCO_CHANNEL must be stable or nightly." ;; esac
-
+${
+  offer
+    ? ""
+    : `  case "$CHANNEL" in stable|nightly) ;; *) fail "CAWCO_CHANNEL must be stable or nightly." ;; esac
+`
+}
   for tool in curl tar; do
     command -v "$tool" >/dev/null 2>&1 || fail "$tool is needed to download CawCo and this machine has none. Install it with the system's package manager, then run this again."
   done
