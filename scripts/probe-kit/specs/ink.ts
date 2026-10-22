@@ -63,6 +63,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   pressIn,
   type Spec,
   settle,
@@ -809,9 +810,9 @@ const menuChecks = async (on: On, frame: Frame) => {
     5000
   );
   if (tap) {
-    await on.page.mouse.click(tap.x, tap.y);
+    await pressAt(frame, tap);
     await on.page.waitForTimeout(350);
-    await on.page.mouse.click(tap.x, tap.y + 40);
+    await pressAt(frame, { x: tap.x, y: tap.y + 40 });
     await on.page.waitForTimeout(350);
   }
   doc = await docOf(frame);
@@ -873,7 +874,7 @@ const edgeChecks = async (on: On, frame: Frame) => {
   await on.page.waitForTimeout(350);
   const at = await until("the icon", () => iconPoint(on, frame), Boolean, 5000);
   if (at) {
-    await on.page.mouse.click(at.x, at.y);
+    await pressAt(frame, at);
     await on.page.waitForTimeout(400);
   }
   const seen = await frame.evaluate(() => {
@@ -913,7 +914,7 @@ const edgeChecks = async (on: On, frame: Frame) => {
     // A tap on the centre closes it.
     const now = await iconPoint(on, frame);
     if (now) {
-      await on.page.mouse.click(now.x, now.y);
+      await pressAt(frame, now);
     }
     await on.page.waitForTimeout(300);
   }
@@ -1363,7 +1364,7 @@ const reducedChecks = async (on: On) => {
     5000
   );
   if (at) {
-    await on.page.mouse.click(at.x, at.y);
+    await pressAt(frame as Frame, at);
     await on.page.waitForTimeout(60);
   }
   const opening = await chromeOf(frame as Frame);

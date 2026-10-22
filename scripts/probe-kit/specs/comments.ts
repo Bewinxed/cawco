@@ -243,7 +243,14 @@ import { houseFacePieces } from "../../../packages/core/src/house-faces";
 import { pinName } from "../../../packages/core/src/pin-name";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
-import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
+import {
+  COMPOSER,
+  type Kit,
+  open,
+  pressAt as pressFramePoint,
+  type Spec,
+  settle,
+} from "../kit";
 import {
   docOf,
   dragFromIcon,
@@ -4617,7 +4624,7 @@ const mapPressChecks = async (on: On) => {
       frame.evaluate((n) => performance.mark(n), name);
     const main = await traceMain(on.page, async () => {
       await mark("press");
-      await on.page.mouse.click(outer.x + x, outer.y + y);
+      await pressFramePoint(frame, { x: outer.x + x, y: outer.y + y });
       await on.page.waitForTimeout(2000);
       await mark("press-after");
     });

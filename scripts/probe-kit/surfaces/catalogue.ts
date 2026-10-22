@@ -15,7 +15,7 @@ import type { Locator, Page, WebSocketRoute } from "playwright-core";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
-import { COMPOSER_FIELD, pressIn } from "../kit";
+import { COMPOSER_FIELD, pressAt, pressIn } from "../kit";
 import { exactly, startsWith } from "../words";
 import {
   ANSWERED_PIN,
@@ -1334,7 +1334,10 @@ const composeOn = async (page: Page) => {
   if (!box) {
     throw new Error("the preview's heading has no box");
   }
-  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+  await pressAt(frame, {
+    x: box.x + box.width * 0.3,
+    y: box.y + box.height / 2,
+  });
   await page
     .locator(COMPOSER_PLACED)
     .filter({ visible: true })
@@ -1362,7 +1365,10 @@ const dropPin = async (page: Page) => {
   if (!pill) {
     throw new Error("pin 1's pill has no box");
   }
-  await page.mouse.click(pill.x + pill.width / 2, pill.y + pill.height / 2);
+  await pressAt(frame, {
+    x: pill.x + pill.width / 2,
+    y: pill.y + pill.height / 2,
+  });
   // Its thread stands clear of its pill: beside it where the well allows,
   // else the foot sheet (DESIGN.md, A thread beside its pin). Placed once
   // the page has said where the pill stands (its overlay's `cawco:pin-at`,
@@ -1665,7 +1671,10 @@ const pinWith = async (page: Page, target: string, words: string) => {
   if (!box) {
     throw new Error(`the preview's ${target} has no box`);
   }
-  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+  await pressAt(page.frameLocator(PREVIEW_FRAME), {
+    x: box.x + box.width * 0.3,
+    y: box.y + box.height / 2,
+  });
   const composer = page
     .locator("[data-slot=pin-composer]")
     .filter({ visible: true })
@@ -4225,10 +4234,10 @@ export const SURFACES: Surface[] = [
             }
             // Left of the heading's pills (pressed at 0.3) and clear of the
             // gone pin's thread at the well's top-right.
-            await page.mouse.click(
-              box.x + box.width * 0.12,
-              box.y + box.height / 2
-            );
+            await pressAt(frame, {
+              x: box.x + box.width * 0.12,
+              y: box.y + box.height / 2,
+            });
           }
         ),
         root: "body",

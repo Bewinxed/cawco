@@ -57,6 +57,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   pressIn,
   type Spec,
   settle,
@@ -309,7 +310,7 @@ const runSpec = async (kit: Kit) => {
 /**
  * The rail and the empty canvas as DESIGN.md draws them (Artifact panel,
  * canvas and ink), from geometry and computed style: the tool group 11px
- * in, 34px boxes at 5px, the chosen one on surface-pressed, the groups apart,
+ * in, 34px boxes at the concentric 4px, the chosen one on surface-pressed, the groups apart,
  * Excalidraw's own chrome gone; an empty canvas made by the agent says so,
  * shows the empty recipe, and its Draw picks the pen.
  */
@@ -375,10 +376,10 @@ const emptyChecks = async (on: OnCanvas) => {
     };
   });
   on.kit.check(
-    "rail: tools --space-3 (11px) in and --space-2 (7px) down in the panel (no host chrome over it), 34px boxes at 5px, the chosen one on surface-pressed, the two groups apart, Excalidraw's chrome hidden",
+    "rail: tools --space-3 (11px) in and --space-2 (7px) down in the panel (no host chrome over it), 34px boxes at the concentric 4px (the group's 12px less its 7px inset and 1px edge), the chosen one on surface-pressed, the two groups apart, Excalidraw's chrome hidden",
     rail.tools?.join() === "11,7" &&
       rail.boxes.every((size) => size === "34×34") &&
-      rail.radius === "5px" &&
+      rail.radius === "4px" &&
       rail.chosenFill &&
       rail.apart &&
       rail.chrome.length > 0 &&
@@ -541,10 +542,10 @@ const imageChecks = async (on: OnCanvas) => {
     )
     .boundingBox()) as { x: number; y: number; width: number; height: number };
   await pressIn(frame, '.rail-box[aria-label^="Select"]');
-  await page.mouse.click(
-    well.x + well.width * 0.3,
-    well.y + well.height * 0.75
-  );
+  await pressAt(frame, {
+    x: well.x + well.width * 0.3,
+    y: well.y + well.height * 0.75,
+  });
   await pasteFile(frame, { kind: "red" });
   const here = await until(
     "the pasted image with its file",
@@ -991,11 +992,11 @@ const pressChecks = async (on: OnCanvas, id: string, hubId: string) => {
   // 12. A press on Hub, then one on the empty canvas.
   const now = await screenOf(on, frame, hubId);
   if (now) {
-    await on.page.mouse.click(now.x, now.y);
+    await pressAt(frame, now);
   }
   const box = await on.page.locator(PANEL_CANVAS).boundingBox();
   if (box) {
-    await on.page.mouse.click(box.x + 60, box.y + box.height - 60);
+    await pressAt(frame, { x: box.x + 60, y: box.y + box.height - 60 });
   }
   const heard = await until(
     "two presses at the dashboard's host",

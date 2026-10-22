@@ -9,7 +9,7 @@
  * asked with the comments notice and the person's words.
  */
 import type { Seen } from "../../scratch-fleet";
-import type { KitFleet } from "../kit";
+import { type KitFleet, pressAt } from "../kit";
 import { say } from "./mock";
 import {
   eventually,
@@ -113,10 +113,10 @@ async function walk(leg: Leg): Promise<void> {
       if (!line) {
         unmet("the first line has no box in the preview");
       }
-      await page.mouse.click(
-        line.x + line.width * 0.3,
-        line.y + line.height / 2
-      );
+      await pressAt(preview, {
+        x: line.x + line.width * 0.3,
+        y: line.y + line.height / 2,
+      });
       await composer.waitFor({ timeout: 10_000 });
       await composer.getByRole("combobox").fill(words);
       await composer

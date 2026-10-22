@@ -269,8 +269,12 @@ const dialogWith = async (
   storage: Record<string, unknown>
 ) => {
   await open(page, `${base}/session`, "body");
+  // Nothing kept from the dialog before: the remembered prefs are the case's
+  // alone, and the form as the tab last left it (NewSessionForm's
+  // `cawco:new-session-form`, in the tab's own storage) goes too.
   await page.evaluate((entries) => {
     localStorage.clear();
+    sessionStorage.clear();
     for (const [key, value] of Object.entries(entries)) {
       localStorage.setItem(key, JSON.stringify(value));
     }

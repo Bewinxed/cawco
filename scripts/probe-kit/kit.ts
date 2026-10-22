@@ -1651,7 +1651,22 @@ export async function pressIn(
     );
     await frames(root.page());
     await pressed.scrollIntoViewIfNeeded();
-    await uncovered(pressed, named, through);
+    await uncovered(
+      async () => {
+        const handle = await pressed.elementHandle();
+        const inner = await handle?.ownerFrame();
+        if (!(handle && inner)) {
+          throw new Error(`${named}: not in a frame`);
+        }
+        const point = await handle.evaluate((el: Element) => {
+          const box = el.getBoundingClientRect();
+          return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        });
+        return { inner, point };
+      },
+      named,
+      through
+    );
     await (tap ? pressed.tap() : pressed.click());
     const took = await element.evaluate(
       (el: Element) => (el as unknown as { __kitTook: boolean }).__kitTook
@@ -1665,9 +1680,80 @@ export async function pressIn(
   );
 }
 
-/** Waits up to {@link UNCOVER_MS} for nothing around `pressed`'s frame to stand over its centre, else fails naming what does. */
+/**
+ * Presses the top page's point `at` (its viewport's pixels, as
+ * `page.mouse.click` takes them), a point inside `frame`, once nothing in
+ * the pages around the frame stands over it: the press of a Comment or Draw
+ * mode at a point, or of a canvas's shape, with {@link pressIn}'s check
+ * ({@link coverOver}), failing the same way, naming the cover.
+ */
+export async function pressAt(
+  frame: Frame | FrameLocator,
+  at: { x: number; y: number },
+  {
+    through = null,
+  }: {
+    /** A layer in a page around the frame that takes the press on purpose ({@link coverOver}). */
+    through?: string | null;
+  } = {}
+): Promise<void> {
+  const inner =
+    "owner" in frame
+      ? await (await frame.owner().elementHandle())?.contentFrame()
+      : frame;
+  if (!inner) {
+    throw new Error(`(${at.x}, ${at.y}): its frame is not on the page`);
+  }
+  await uncovered(
+    async () => ({ inner, point: await pointIn(inner, at) }),
+    `the point (${Math.round(at.x)}, ${Math.round(at.y)}) in ${inner.url()}`,
+    through
+  );
+  await inner.page().mouse.click(at.x, at.y);
+}
+
+/**
+ * The top page's point `at` as a point in `inner`'s own viewport: through
+ * each `<iframe>`'s box down the chain, outermost first (its border and
+ * padding, and any scale a transform puts on it), the inverse of
+ * {@link coverOver}'s mapping.
+ */
+async function pointIn(
+  inner: Frame,
+  at: { x: number; y: number }
+): Promise<{ x: number; y: number }> {
+  const chain: Frame[] = [];
+  for (let one: Frame | null = inner; one?.parentFrame();) {
+    chain.unshift(one);
+    one = one.parentFrame();
+  }
+  let point = at;
+  for (const child of chain) {
+    // biome-ignore lint/performance/noAwaitInLoops: each level maps the point the level around it gave
+    const element = await child.frameElement();
+    point = await element.evaluate((el: Element, p) => {
+      const box = el.getBoundingClientRect();
+      const html = el as HTMLElement;
+      const style = getComputedStyle(el);
+      const scale = html.offsetWidth > 0 ? box.width / html.offsetWidth : 1;
+      return {
+        x:
+          (p.x - box.left) / scale -
+          html.clientLeft -
+          Number.parseFloat(style.paddingLeft),
+        y:
+          (p.y - box.top) / scale -
+          html.clientTop -
+          Number.parseFloat(style.paddingTop),
+      };
+    }, point);
+  }
+  return point;
+}
+
+/** Waits up to {@link UNCOVER_MS} for nothing around a frame to stand over the point `read` gives in it, else fails naming what does. */
 async function uncovered(
-  pressed: Locator,
+  read: () => Promise<{ inner: Frame; point: { x: number; y: number } }>,
   named: string,
   through: string | null
 ): Promise<void> {
@@ -1675,20 +1761,12 @@ async function uncovered(
   let cover: string | null = null;
   do {
     // biome-ignore lint/performance/noAwaitInLoops: each read waits on the page the one before it saw
-    const handle = await pressed.elementHandle();
-    const inner = await handle?.ownerFrame();
-    if (!(handle && inner)) {
-      throw new Error(`${named}: not in a frame`);
-    }
-    const point = await handle.evaluate((el: Element) => {
-      const box = el.getBoundingClientRect();
-      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-    });
+    const { inner, point } = await read();
     cover = await coverOver(inner, point, through);
     if (!cover) {
       return;
     }
-    await pressed.page().waitForTimeout(100);
+    await inner.page().waitForTimeout(100);
   } while (performance.now() < deadline);
   throw new Error(
     `${named}: the page around its frame covers it: ${cover}, for ${UNCOVER_MS / 1000}s`
