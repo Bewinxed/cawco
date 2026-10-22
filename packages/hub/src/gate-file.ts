@@ -359,25 +359,43 @@ export const readGate = (content: string): GateReading => {
 
 /** The project's gate as its folder holds it now. */
 export const projectGate = async (projectId: string): Promise<ProjectGate> => {
-  let content: string;
-  try {
-    ({ content } = await readFolderFile(projectId, GATE_FILE));
-  } catch (error) {
-    if (error instanceof FolderRefusal && error.status === 404) {
-      return { kind: "none" };
-    }
-    throw error;
+  const reading = await gateReading(projectId);
+  if (!reading) {
+    return { kind: "none" };
   }
-  const reading = readGate(content);
   if (!reading.ok) {
     return { kind: "unreadable", problems: reading.problems };
   }
-  return {
-    kind: "declared",
-    steps: reading.steps,
-    ...(reading.cawEdits ? { cawEdits: reading.cawEdits } : {}),
-    ...(reading.ship ? { ship: reading.ship } : {}),
-  };
+  return reading.cawEdits
+    ? { kind: "declared", steps: reading.steps, cawEdits: reading.cawEdits }
+    : { kind: "declared", steps: reading.steps };
+};
+
+/** gate.md as the project's folder holds it now, read; undefined with no gate.md. */
+const gateReading = async (
+  projectId: string
+): Promise<GateReading | undefined> => {
+  try {
+    const { content } = await readFolderFile(projectId, GATE_FILE);
+    return readGate(content);
+  } catch (error) {
+    if (error instanceof FolderRefusal && error.status === 404) {
+      return;
+    }
+    throw error;
+  }
+};
+
+/**
+ * The project's `Ship:` command, as its gate.md declares it now (ship.ts
+ * runs it); undefined when it declares none, or gate.md does not read (no
+ * item lands through such a gate).
+ */
+export const projectShip = async (
+  projectId: string
+): Promise<string | undefined> => {
+  const reading = await gateReading(projectId);
+  return reading?.ok ? reading.ship : undefined;
 };
 
 /** The files the project's Caw may edit, as its gate.md declares them now. */

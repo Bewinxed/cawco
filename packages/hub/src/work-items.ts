@@ -140,6 +140,7 @@ import {
   GATE_FILE,
   lastCapable,
   projectGate,
+  projectShip,
 } from "./gate-file";
 import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
@@ -6862,10 +6863,8 @@ export const createWorkItems = ({
     if (!(item.lands === "main" && landing.landed?.onto && sha)) {
       return "Not shipped: only work that lands on main ships, and this item put nothing there.";
     }
-    const declared = item.projectId
-      ? await projectGate(item.projectId)
-      : ({ kind: "none" } as const);
-    if (!(declared.kind === "declared" && declared.ship && item.projectId)) {
+    const ship = item.projectId ? await projectShip(item.projectId) : undefined;
+    if (!(ship && item.projectId)) {
       return `Not shipped: this project's ${GATE_FILE} declares no Ship: command, so the hub has nothing to ship it with. The nightly ships it.`;
     }
     const hub = hubMachineId();
@@ -6876,7 +6875,7 @@ export const createWorkItems = ({
     try {
       return await shipLanded({
         checkout,
-        command: declared.ship,
+        command: ship,
         commit: sha,
         notes,
       });
