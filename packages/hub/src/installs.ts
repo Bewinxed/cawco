@@ -201,9 +201,9 @@ export interface InstallsDeps {
 }
 
 /** A refusal before anything starts: the status and the words. */
-export interface Refused {
+export interface Refused<Status extends 409 | 422 = 409 | 422> {
   message: string;
-  status: 409 | 422;
+  status: Status;
 }
 
 /** An IPv4 or IPv6 address: it names a machine whole, never by a first label. */
@@ -890,7 +890,7 @@ export const createInstalls = (deps: InstallsDeps) => {
   /** The password add's trust step, or why there is none. */
   const trustFor = (
     password: string
-  ): { password: string; command: string } | Refused => {
+  ): { password: string; command: string } | Refused<422> => {
     if (LINE_BREAK.test(password)) {
       return {
         status: 422,
@@ -932,7 +932,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     port?: number;
     signIn: InstallSignIn;
     password?: string;
-  }): InstallStarted | Refused {
+  }): InstallStarted | Refused<422> {
     const target = body.target.trim();
     if (!TARGET.test(target)) {
       return {
