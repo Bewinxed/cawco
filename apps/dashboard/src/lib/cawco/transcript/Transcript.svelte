@@ -3047,7 +3047,11 @@
    * inside virtua's observer, after the frame's layout and before its paint.
    * The list's new height is still Svelte state there, so the pin flushes it
    * into virtua's container first, keeps the list whole (`keepWhole`), and
-   * reads the height the frame will paint.
+   * reads the height the frame will paint. A row that flush mounts (the
+   * range grown with the view) is observed at the next frame, not inside
+   * the delivery (patches/virtua@0.53.4.patch): observed there, WebKit
+   * reported "ResizeObserver loop completed with undelivered notifications"
+   * as an ask left under a reader at the tail (composer-layers).
    *
    * It pins in the call itself. It used to wait two microtasks: the landing
    * asked virtua to `scrollToIndex` the last row, and virtua aims such a

@@ -512,15 +512,64 @@ const surfacesRead = (): Surface[] => {
 
 /**
  * With `LAYERS_TRACE_RO=1`: every ResizeObserver delivery, with the box it
- * reported and where its observer was made, and on a "ResizeObserver loop"
- * error the deliveries of the 50ms before it, logged as `RO-TRACE …`. What
- * names the observer that resized a box inside its own delivery.
+ * reported, where its observer was made, and what it wrote (the DOM changes
+ * its callback made, then those of the microtasks after it, and any
+ * `animate()` it started), and on a "ResizeObserver loop" error the
+ * deliveries of the 50ms before it and of the frame after, logged as
+ * `RO-TRACE …`. What names the observer that resized a box inside its own
+ * delivery.
  */
 function traceObservers(): void {
   const Native = window.ResizeObserver;
-  const log: { at: number; made: string; boxes: string[] }[] = [];
+  interface Delivery {
+    at: number;
+    boxes: string[];
+    made: string;
+    /** What it wrote: in its callback, then (`after`) in the microtasks after it. */
+    wrote: string[];
+  }
+  const log: Delivery[] = [];
+  /** The delivery whose callback, or the microtasks after it, runs now. */
+  let current: Delivery | null = null;
   const box = (el: Element) =>
     `${el.tagName.toLowerCase()}${el.getAttribute("data-slot") ? `[${el.getAttribute("data-slot")}]` : ""}.${String(el.getAttribute("class") ?? "").slice(0, 40)}`;
+  const change = (record: MutationRecord) => {
+    const at =
+      record.target instanceof Element
+        ? record.target
+        : (record.target.parentElement ?? document.documentElement);
+    return `${record.type === "attributes" ? `@${record.attributeName}` : record.type} on ${box(at)}`;
+  };
+  const wrote = (
+    into: Delivery | null,
+    records: MutationRecord[],
+    when: string
+  ) => {
+    if (into && into.wrote.length < 12) {
+      into.wrote.push(
+        ...records.slice(0, 6).map((one) => `${when}${change(one)}`)
+      );
+    }
+  };
+  const writes = new MutationObserver((records) =>
+    wrote(current, records, "after ")
+  );
+  writes.observe(document, {
+    attributes: true,
+    characterData: true,
+    childList: true,
+    subtree: true,
+  });
+  const { animate } = Element.prototype;
+  Element.prototype.animate = function (
+    this: Element,
+    ...args: Parameters<Element["animate"]>
+  ) {
+    if (current && current.wrote.length < 12) {
+      current.wrote.push(`animate on ${box(this)}`);
+    }
+    return animate.apply(this, args);
+  };
   window.ResizeObserver = class extends Native {
     constructor(callback: ResizeObserverCallback) {
       const made = (new Error("where this observer was made").stack ?? "")
@@ -528,23 +577,44 @@ function traceObservers(): void {
         .slice(1, 4)
         .join(" < ");
       super((entries, observer) => {
-        log.push({
+        wrote(current, writes.takeRecords(), "after ");
+        const one: Delivery = {
           at: performance.now(),
           made,
           boxes: entries.map(
             (entry) =>
               `${box(entry.target)} ${Math.round(entry.contentRect.width)}x${Math.round(entry.contentRect.height)}`
           ),
-        });
+          wrote: [],
+        };
+        log.push(one);
         if (log.length > 300) {
           log.shift();
         }
+        current = one;
         callback(entries, observer);
+        wrote(one, writes.takeRecords(), "");
+        // Its microtasks run before any task: past them, nothing is its.
+        setTimeout(() => {
+          if (current === one) {
+            current = null;
+          }
+        }, 0);
       });
     }
   };
   addEventListener("error", (event: ErrorEvent) => {
     if (String(event.message).includes("ResizeObserver loop")) {
+      // The deliveries of the 50ms before it: among them the one whose
+      // answer resized a box it had passed.
+      const now = performance.now();
+      console.warn(
+        `RO-TRACE before ${JSON.stringify(
+          log
+            .filter((one) => now - one.at <= 50)
+            .map((one) => ({ ...one, boxes: one.boxes.slice(0, 6) }))
+        )}`
+      );
       // What was left undelivered is delivered in the next frame: the
       // deliveries just after the error name it.
       const from = log.length;
