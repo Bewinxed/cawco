@@ -136,15 +136,6 @@ if [[ -n ${CAWCO_WORKSPACE:-} && $PLATFORM != ios ]]; then
   echo "Signed builds, device builds and TestFlight run from the orchestrator's shell, not a CawCo workspace: hand the commit to your parent. Here, build the iOS Simulator only: build-both.sh ios [--compile-only]." >&2
   exit 2
 fi
-# Built on this Mac, the build is a heavy run here: one of this machine's slots
-# (scripts/lib/heavy-run.ts) for this shell's life. Over SSH it is the Mac's:
-# the Mac side runs under the installed `cawco heavy-run` there (below).
-if [[ $(uname -s) == Darwin ]]; then
-  # shellcheck source=../../../scripts/lib/heavy-run.sh
-  source scripts/lib/heavy-run.sh
-  heavy_run bash apps/apple/scripts/build-both.sh "$@"
-fi
-
 # Pass the authoritative workspace inventory from this host, never the Mac's
 # copies. Fail before retirement if the inventory cannot be read. The gate's
 # root is the repository's, never a spent workspace's.
@@ -456,11 +447,6 @@ DISK_ROOM=$(<scripts/lib/disk-room.sh)
 printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q LOG_RUN=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
   "$PLATFORM" "$COMPILE_ONLY" "$LOG_RUN" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
-# Over SSH the Mac side is one of the Mac's heavy runs, held by its installed
-# `cawco heavy-run` until the Mac side ends; its queue lines come back here.
-if [[ -z $APPLE_ROOT ]]; then
-  printf -v COMMAND '"$HOME"/.local/bin/cawco heavy-run %q' "$COMMAND"
-fi
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&
 # descriptors. Each FIFO is opened once and its name removed at once.

@@ -34,7 +34,6 @@ import {
   tryShare,
   unlock,
 } from "../../packages/core/src/flock";
-import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
   type HubAddress,
@@ -842,12 +841,7 @@ const benchHub = (): string => {
 
 /**
  * What one run holds across its specs: the browsers, the build and its
- * servers, and the machine's heavy-run slot (lib/heavy-run.ts) they run
- * under. The run takes the slot as it first builds, serves, opens a browser
- * or stands a fleet up, waiting while none is free or the machine has no
- * room, and holds it until `close`: a fleet's sessions, its servers and its
- * Chromium weigh on the machine for as long as they run, not only while
- * they start. Each `run.ts` process is a run of its own and holds its own.
+ * servers. Each `run.ts` process is a run of its own, and starts at once.
  */
 export class Run {
   failures = 0;
@@ -864,13 +858,6 @@ export class Run {
   /** The descriptor holding the checkout's build shared while this run serves it. */
   private output: number | null = null;
   private readonly browsers = new Map<string, Promise<Browser>>();
-  private slot: Promise<HeavySlot> | null = null;
-
-  /** The run's heavy-run slot, taken the first time it starts anything heavy. */
-  heavy(): Promise<HeavySlot> {
-    this.slot ??= heavySlot();
-    return this.slot;
-  }
 
   /**
    * The checkout's build of this tree, the first time a spec needs it, held
@@ -878,20 +865,18 @@ export class Run {
    */
   build(): Promise<void> {
     this.built ??= (async () => {
-      await this.heavy();
       this.output = await builtOutput();
     })();
     return this.built;
   }
 
-  /** The dashboard served (`serve`), under the run's slot; a server lost before its run is done fails the run. */
-  private async startServer(
+  /** The dashboard served (`serve`); a server lost before its run is done fails the run. */
+  private startServer(
     how: "dev" | "preview",
     hub: string,
     port?: number,
     host?: string
   ): Promise<Served> {
-    await this.heavy();
     return serve(
       how,
       hub,
@@ -972,7 +957,7 @@ export class Run {
           env,
         }),
     } satisfies Record<Engine, () => Promise<Browser>>;
-    const launched = this.heavy().then(() => launch[engine]());
+    const launched = launch[engine]();
     this.browsers.set(key, launched);
     return launched;
   }
@@ -1065,8 +1050,6 @@ export class Run {
         return (await served).base;
       },
       fleet: async (respond, hub) => {
-        // Under the run's slot, taken by the build: the fleet's own hold
-        // (scratch-fleet.ts) counts once in this process.
         // Built before the fleet starts, never between its start and the
         // dashboard's: the build runs once per run, so a fleet left waiting
         // on it ran its sessions on for the build's length when its spec
@@ -1232,8 +1215,6 @@ export class Run {
       unlock(this.output);
       this.output = null;
     }
-    (await this.slot?.catch(() => undefined))?.release();
-    this.slot = null;
   }
 }
 

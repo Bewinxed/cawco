@@ -319,8 +319,18 @@ export const CUSTODY_HELD = "custody_held";
 export const LIMIT_REACHED = "limit_reached";
 
 /**
+ * Something a session started leaks: a process whose memory keeps climbing
+ * past its machine's threshold, or processes left running after the command
+ * that started them ended (agent leak-watch.ts). The agent's frame to the hub
+ * (`content` names what, where and the measurement; `uuid` names the leak, so
+ * one said again is told once), and the hub tells the session in its own
+ * word, a message it reads (hub server.ts `tellSession`). Nothing is stopped.
+ */
+export const LEAK_FOUND = "leak_found";
+
+/**
  * A session's start waits for its machine's memory: the machine's room on
- * memory (core heavy-run.ts `measureMemoryRoom`: swap read back, swap left,
+ * memory (core machine-room.ts `measureMemoryRoom`: swap read back, swap left,
  * memory stall or pressure) fails, so its process is not started yet. The
  * agent's frame to the hub (`content`, {@link roomHeldSentence}), and the
  * hub's line in the session's transcript, kept on its row. Drawn as a note
@@ -2399,8 +2409,8 @@ export const CONTROL_CANCEL_COMMAND = "cancelCommand";
 
 /**
  * The line a command prints, on stdout or stderr, as it starts and stops
- * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh,
- * build-both.sh and the heavy-run gate, core heavy-run.ts, print it):
+ * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh and
+ * build-both.sh print it):
  *
  *   CAWCO-QUEUE wait <slot>: <who holds it, and for how long>
  *   CAWCO-QUEUE held <slot>
@@ -2424,7 +2434,6 @@ export const QUEUE_SLOTS = {
   boundary: "its workspace's boundary to start",
   build: "the Mac's build slot",
   folder: "its turn in its folder",
-  heavy: "a heavy-run slot",
   sim: "a simulator slot",
   template: "the simulator template lock",
 } as const;
@@ -2441,22 +2450,12 @@ export const QUEUE_WAIT_MAX_MS = 3 * 60 * 60 * 1000;
 export interface CommandRun {
   /**
    * The run is a step of a work item's landing gate, in these words (`the
-   * landing gate of “Fix the tray” (153fd0db): iOS build compiles`): the
-   * machine runs it with {@link HEAVY_GATE_ENV} set to them, so a heavy run
-   * it starts takes the next free slot before any other run there (core
-   * heavy-run.ts).
+   * landing gate of “Fix the tray” (153fd0db): iOS build compiles`).
    */
   gate?: string;
   id: string;
   queueMaxMs: number;
 }
-
-/**
- * Set in a landing gate step's environment by the machine that runs it
- * ({@link CommandRun.gate}), to the words that name the gate: a heavy run
- * started under it is a gate's, and goes first (core heavy-run.ts).
- */
-export const HEAVY_GATE_ENV = "CAWCO_HEAVY_GATE";
 
 /** A command's wait for a slot: which, and who holds it (the marker's words). */
 export interface CommandQueue {

@@ -8,8 +8,7 @@
  * another one), on Linux and on macOS alike.
  *
  * The owner paused all work but the cutover; two interrupted delegates on
- * the Mac kept running their builds and probes, and held the Mac's one
- * heavy-run slot the cutover's landing gates needed (2026-10-20).
+ * the Mac kept running their builds and probes (2026-10-20).
  *
  * The parent is a Claude session that calls its CawCo tools when the probe
  * tells it to (`PROBE-CMD <n> <tool> <target> [words]`). The delegate's
@@ -47,23 +46,6 @@
  *     was never cut off.
  * l3. Within 15 s of the landing, the `sleep` it left is not alive.
  *
- * Nothing a sweep waits for keeps a delegate's leftover alive. The fleet's
- * heavy runs have one slot (`CAWCO_HEAVY_RUNS=1`) and every room reading of
- * both systems opened, so only the slot decides, and each takes it through
- * this checkout's own scripts/lib/heavy-run.sh, which resolves its packages
- * from this checkout's node_modules (a copy in the scratch repository has
- * none, so Bun has to auto-install them; inside a macOS boundary its
- * `heavy_run` ended with no slot). A third delegate commits, leaves a
- * `sleep 600.061` that holds the slot, which the slot's own record names
- * (`slot-*` under the workspaces' cache, core heavy-run.ts), and finishes;
- * its landing gate's step queues behind it, its gate ticket there naming it;
- * then its parent interrupts it:
- *
- * g1. Within 15 s of interrupt_delegate the leftover holding the slot is not
- *     alive.
- * g2. The gate step takes the slot and runs.
- * g3. The item lands: done, and the hub's main holds its commit.
- *
  * macOS: what a boundary started before profiles carried membership names
  * ends once its workspace is gone, at the agent's start (agent boundary.ts
  * `endPreTagLeftovers`). The probe starts two such boundaries itself, each
@@ -81,16 +63,8 @@
  *
  *   bun scripts/probe-kit/run.ts delegate-kill
  */
-import {
-  chmod,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   commandLines,
   seatbeltLetsLookUp,
@@ -107,7 +81,6 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { declareGate } from "../gate";
 import type { Kit, Spec } from "../kit";
 
 const TOOLS = {
@@ -127,57 +100,7 @@ const LANDED_LEFT = "600.031";
 const PUSH_HELD_S = 30;
 /** The ref the landing pushes, as the push's command names it (hub landing.ts `attempt`). */
 const PUSHED_REF = "HEAD:refs/heads/main";
-const GATE_BRIEF = "PROBE-GATE-G";
 const LIVE_BRIEF = "PROBE-LIVE-P";
-/** This checkout's heavy-run, which every heavy run of the gate leg takes its slot through. */
-const HEAVY_RUN = join(
-  import.meta.dir,
-  "..",
-  "..",
-  "..",
-  "scripts",
-  "lib",
-  "heavy-run.sh"
-);
-/** One shell word, whatever it holds. */
-const word = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
-/**
- * What a heavy run of the gate leg takes its slot with (core heavy-run.ts):
- * this probe's own bun first on `PATH` (heavy-run.sh runs `bun`, and a probe
- * started as `~/.bun/bin/bun` over ssh has none on its PATH, which its fleet
- * hands on); no slot already held (`CAWCO_HEAVY_RUN_HELD`, which this probe's
- * own admission exports); one slot; a peak far under a slot, so the memory
- * there is never what decides; no disk floor; and every room reading opened,
- * Linux's (memory and CPU stall, swap left) and the Mac's (CPU busy, swap
- * read back and swapped out) alike. Only the slot decides.
- */
-const ONE_SLOT = [
-  `PATH=${word(dirname(process.execPath))}:"$PATH"`,
-  "CAWCO_HEAVY_RUN_HELD=",
-  "CAWCO_HEAVY_RUNS=1",
-  "CAWCO_HEAVY_PEAK_GIB=0.01",
-  "CAWCO_MIN_FREE_GB=0",
-  "CAWCO_HEAVY_RESERVE_GIB=0",
-  "CAWCO_HEAVY_MEMORY_STALL_MAX=101",
-  "CAWCO_HEAVY_CPU_STALL_MAX=101",
-  "CAWCO_HEAVY_SWAP_FREE_MIN_PCT=0",
-  "CAWCO_HEAVY_CPU_BUSY_MAX=101",
-  "CAWCO_HEAVY_SWAPIN_MAX_MIB=1000000000",
-  "CAWCO_HEAVY_SWAP_USED_MAX_PCT=1000000000",
-].join(" ");
-/** The names the gate leg's two heavy runs take their slot under, as each one's record says it. */
-const LEFT_RUN = "probe-left-G";
-const GATE_RUN = "probe-gate-G";
-/** The gate step's log, in its workspace's scratch dir. */
-const STEP_LOG = "probe-gate-steps.log";
-/** The gate's one step: it takes the slot, then says so in its log. */
-const GATE = `---\n${ONE_SLOT} bash -c 'source "$1" && heavy_run ${GATE_RUN} && printf "TOOK gate %s\\n" "$(date +%s)" >> "$TMPDIR/${STEP_LOG}"' heavy ${word(HEAVY_RUN)}\n  name: heavy gate step\n---\n`;
-/** What the gate delegate leaves running, holding the slot. */
-const SLOT_LEFT = "600.061";
-/** The leftover's own words, in its workspace's scratch dir: why it took no slot, when it took none. */
-const LEFT_ERR = "probe-left.err";
-/** Made by the leftover once it holds the slot, in its workspace's scratch dir. */
-const LEFT_HELD = "probe-left.held";
 /** The host process the first delegate's command signals ({@link hostWitness}). */
 const WITNESS = "600.051";
 /** The pre-tag pairs the probe starts: a retired workspace's, a live one's. */
@@ -317,52 +240,6 @@ const landReply = (request: Seen): Reply => {
   return text("done");
 };
 
-/** How far the gate delegate is: its commit and slot, its finish_item found, then called. */
-const gating: Record<"committed" | "finished" | "searched", boolean> = {
-  committed: false,
-  finished: false,
-  searched: false,
-};
-
-/** What the gate delegate read last: the hub's words to it (a landing handed back, a gate that failed), for a failing leg to say. */
-let gateHeard = "";
-
-/**
- * The gate delegate: commits, leaves a `sleep` that holds the heavy-run slot,
- * double-forked into a session of its own, and waits until it holds it (its
- * own words on stderr when it took none); then finishes. The `sleep`'s
- * argument goes in as an argument, so only the `sleep` itself, once its shell
- * holds the slot and execs it, reads as `sleep 600.061`.
- */
-const gateReply = (request: Seen): Reply => {
-  gateHeard = request.all.slice(-1500);
-  if (!gating.committed) {
-    gating.committed = true;
-    const holder = `( ${ONE_SLOT} perl -MPOSIX -e 'fork and exit; POSIX::setsid(); exec @ARGV' bash -c 'source "$1" && heavy_run ${LEFT_RUN} && : > "$TMPDIR/${LEFT_HELD}" && exec sleep "$2"' heavy ${word(HEAVY_RUN)} ${SLOT_LEFT} > /dev/null 2> "$TMPDIR/${LEFT_ERR}" & )`;
-    const held = `for _ in $(seq 600); do [ -e "$TMPDIR/${LEFT_HELD}" ] && break; sleep 0.2; done; [ -e "$TMPDIR/${LEFT_HELD}" ] || { cat "$TMPDIR/${LEFT_ERR}" >&2; exit 1; }`;
-    return useTool("Bash", {
-      command: `printf 'G\\n' > g.txt && git add g.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit G' && ${holder} && ${held}`,
-      description: "Commit, and leave a build holding the heavy-run slot",
-      timeout: 180_000,
-    });
-  }
-  if (!gating.finished && request.toolNames.includes(FINISH)) {
-    gating.finished = true;
-    return useTool(FINISH, {
-      headline: "Committed G.",
-      summary: "Committed G.\n\nNot run: none.",
-    });
-  }
-  if (
-    !(gating.finished || gating.searched) &&
-    request.toolNames.includes("ToolSearch")
-  ) {
-    gating.searched = true;
-    return useTool("ToolSearch", { query: `select:${FINISH}`, max_results: 1 });
-  }
-  return text("done");
-};
-
 /** Whether the fourth delegate has started the command that holds its turn open. */
 let liveStarted = false;
 
@@ -388,9 +265,6 @@ const respond = (request: Seen): Reply => {
   }
   if (request.all.includes(LAND_BRIEF)) {
     return landReply(request);
-  }
-  if (request.all.includes(GATE_BRIEF)) {
-    return gateReply(request);
   }
   if (request.all.includes(LIVE_BRIEF)) {
     return liveReply();
@@ -862,225 +736,6 @@ const landLegs = async (rig: Rig): Promise<PreTag | string | undefined> => {
   return gone;
 };
 
-/** A heavy run's record in the slots' dir (core heavy-run.ts `Written`): who holds a slot, or waits on a gate's ticket. */
-interface HeavyRecord {
-  command: string;
-  gate?: string;
-  pid: number;
-}
-
-/** A slot's file, or a gate's ticket: `slot-<i>`, `gate-<arrival>-<pid>` (core heavy-run.ts). */
-const HEAVY_FILE = /^(slot-\d+|gate-\d{15}-\d+)$/;
-
-/** A slot's or ticket's record, or none while its run has not written it whole: a holder empties its file, then writes its name (core heavy-run.ts `readHolder`). */
-const recordOf = (raw: string): HeavyRecord | undefined => {
-  try {
-    return JSON.parse(raw) as HeavyRecord;
-  } catch {
-    // Not written whole yet.
-  }
-};
-
-/** The fleet's heavy-run slots and gate tickets, each with the record its run wrote, read on the host. */
-const heavyFiles = async (
-  dir: string
-): Promise<{ name: string; record?: HeavyRecord }[]> =>
-  Promise.all(
-    (await readdir(dir).catch(() => [] as string[]))
-      .filter((name) => HEAVY_FILE.test(name))
-      .map(async (name) => ({
-        name,
-        record: recordOf(
-          await readFile(join(dir, name), "utf8").catch(() => "")
-        ),
-      }))
-  );
-
-/** `/proc/<pid>/status`'s `NStgid`: a process's pid in each pid namespace it is in, outermost first. */
-const NS_TGIDS = /^NStgid:\s*(.+)$/m;
-const SPACES = /\s+/;
-
-/**
- * The pid process `pid` (as this probe sees it) has in the innermost pid
- * namespace it is in, which is the pid its own shell reads as `$$`: on Linux
- * the last of its `NStgid`, "the value in successively nested inner
- * namespaces" (proc_pid_status(5)), so inside a boundary its pid in the
- * boundary's own pid namespace; elsewhere its pid. None once it is gone.
- */
-const innerPid = async (pid: number): Promise<number | undefined> => {
-  if (process.platform !== "linux") {
-    return pid;
-  }
-  const status = await readFile(`/proc/${pid}/status`, "utf8").catch(() => "");
-  const last = NS_TGIDS.exec(status)?.[1]?.trim().split(SPACES).at(-1);
-  return last ? Number(last) : undefined;
-};
-
-/** What names each heavy run of the gate leg in the process table: its name, and, once the leftover's shell has exec'd it, its `sleep`. */
-const RUN_SEEN: Record<string, readonly string[]> = {
-  [LEFT_RUN]: [LEFT_RUN, `sleep ${SLOT_LEFT}`],
-  [GATE_RUN]: [GATE_RUN],
-};
-
-/**
- * This probe's pid for the process heavy run `record` names, while it is
- * alive. A record holds the pid its run's shell had (`$$`, core
- * heavy-run.ts), which inside a Linux boundary is its pid in the boundary's
- * own pid namespace, where every boundary counts from 1: the process is the
- * one whose command names the run and whose innermost pid is the record's.
- */
-const hostPidOf = async (record: HeavyRecord): Promise<number | undefined> => {
-  const seen = RUN_SEEN[record.command] ?? [record.command];
-  const named = (await commandLines()).filter(
-    ({ pid, command }) =>
-      pid !== process.pid && seen.some((one) => command.includes(one))
-  );
-  const inner = await Promise.all(named.map(({ pid }) => innerPid(pid)));
-  return named.find((_, at) => inner[at] === record.pid)?.pid;
-};
-
-/** A heavy run as a slot's or a ticket's record names it, and its process here. */
-interface HeavyRun {
-  /** Its process's pid as this probe sees it ({@link hostPidOf}). */
-  host: number;
-  record: HeavyRecord;
-}
-
-/**
- * The run named `command` on a `slot` it holds or a `gate` ticket it waits
- * on, while that run is alive: a slot's record outlives its hold, and a
- * ticket its holder (core heavy-run.ts), so the run's process decides.
- */
-const heavyRun = async (
-  dir: string,
-  kind: "slot" | "gate",
-  command: string
-): Promise<HeavyRun | undefined> => {
-  const records = (await heavyFiles(dir)).flatMap(({ name, record }) =>
-    name.startsWith(`${kind}-`) && record?.command === command ? [record] : []
-  );
-  const hosts = await Promise.all(records.map(hostPidOf));
-  const at = hosts.findIndex((one) => one !== undefined);
-  const [found, here] = [records[at], hosts[at]];
-  return found && here !== undefined
-    ? { host: here, record: found }
-    : undefined;
-};
-
-/** The slots' dir in words, for a failing leg to say: each record's pid as its run saw it, and its process here. */
-const heavySaid = async (dir: string): Promise<string> => {
-  const files = await heavyFiles(dir);
-  const hosts = await Promise.all(
-    files.map(({ record }) => (record ? hostPidOf(record) : undefined))
-  );
-  return (
-    files
-      .map(({ name, record }, at) =>
-        record
-          ? `${name}: ${record.command} (pid ${record.pid} where it ran, ${hosts[at] === undefined ? "gone" : `alive as pid ${hosts[at]} here`})`
-          : `${name}: no record`
-      )
-      .join("; ") || "empty"
-  );
-};
-
-/** g1, g2 and g3, on the gate delegate. */
-const gateLegs = async (rig: Rig): Promise<void> => {
-  const { check } = rig;
-  const g1 =
-    "g1: within 15 s of interrupt_delegate, its leftover holding the heavy-run slot its gate step waits for is not alive";
-  await rm(hookOf(rig), { force: true });
-  const slots = join(rig.home, ".cawco", "workspace-cache", "heavy-runs");
-  await mkdir(slots, { recursive: true });
-  const project = rig.bare.slice(rig.bare.lastIndexOf("/") + 1, -".git".length);
-  await declareGate(rig.fleet.base, project, GATE);
-  const gated = await rig.delegate(
-    "Gate",
-    `${GATE_BRIEF}: commit, then finish.`
-  );
-  const gWorkspace =
-    (await until(
-      "its workspace",
-      () => rig.workspaceOf(gated.workItemId),
-      Boolean,
-      120_000
-    )) ?? "";
-  const scratch = join(rig.home, ".cawco", "tmp", gWorkspace.slice(0, 8));
-  const gateLog = () =>
-    readFile(join(scratch, STEP_LOG), "utf8").catch(() => "");
-  const leftSaid = async () =>
-    (await readFile(join(scratch, LEFT_ERR), "utf8").catch(() => "")).trim() ||
-    "nothing";
-  const leftover = await until(
-    `its ${SLOT_LEFT} holding the one heavy-run slot`,
-    () => heavyRun(slots, "slot", LEFT_RUN),
-    Boolean,
-    300_000
-  ).catch(() => undefined);
-  if (!leftover) {
-    check(
-      g1,
-      false,
-      `its leftover never held the slot. The slots: ${await heavySaid(slots)}; the leftover said: ${await leftSaid()}; the delegate last read: ${JSON.stringify(gateHeard)}`
-    );
-    return;
-  }
-  const queued = await until(
-    "its gate step queued on the slot",
-    () => heavyRun(slots, "gate", GATE_RUN),
-    Boolean,
-    600_000
-  ).catch(() => undefined);
-  if (!queued) {
-    check(
-      g1,
-      false,
-      `its gate step never queued on the slot. The slots: ${await heavySaid(slots)}; its item: ${JSON.stringify(rig.itemRow(gated.workItemId))}; the delegate last read: ${JSON.stringify(gateHeard)}`
-    );
-    return;
-  }
-  const holding = await heavyRun(slots, "slot", LEFT_RUN);
-  const gInterruptedAt = Date.now();
-  await rig.command("interrupt", gated.instanceId);
-  const afterGate = await until(
-    `${SLOT_LEFT} not alive`,
-    alive,
-    (found) => !found.has(SLOT_LEFT),
-    15_000
-  ).catch(() => alive());
-  const leftNow = await hostPidOf(leftover.record);
-  const heldAtInterrupt = holding?.host === leftover.host;
-  check(
-    g1,
-    heldAtInterrupt && leftNow === undefined && !afterGate.has(SLOT_LEFT),
-    `the slot was held by ${LEFT_RUN} (pid ${leftover.record.pid} where it ran, ${leftover.host} here) ${heldAtInterrupt ? "at the interrupt" : "until before the interrupt"}, ${GATE_RUN} queued behind it (${queued.record.gate ?? "no gate named"}, pid ${queued.record.pid} where it ran, ${queued.host} here); ${Math.round((Date.now() - gInterruptedAt) / 1000)} s after: ${leftNow === undefined ? "the leftover is gone" : `the leftover is alive as pid ${leftNow}`}, markers ${said(afterGate)}; the slots: ${await heavySaid(slots)}`
-  );
-
-  // g2
-  const took = await until(
-    "the gate step took the slot",
-    gateLog,
-    (log) => log.includes("TOOK gate"),
-    120_000
-  ).catch(() => gateLog());
-  check(
-    "g2: the gate step takes the slot and runs",
-    took.includes("TOOK gate"),
-    took.trim() || `its step log is empty; the slots: ${await heavySaid(slots)}`
-  );
-
-  // g3: waited for only once its gate has run; a gate that never ran lands nothing.
-  const gRow = took.includes("TOOK gate")
-    ? await rig.itemEnded(gated.workItemId).catch(() => undefined)
-    : rig.itemRow(gated.workItemId);
-  const gMain = await rig.mainLog();
-  check(
-    "g3: the item lands: done, and the hub's main holds its commit",
-    gRow?.state === "done" && gMain.includes("Delegate commit G"),
-    `${gRow?.state ?? "no row"} ${`${gRow?.error ?? ""}\n${gRow?.result ?? ""}`.slice(0, 1500)}\nmain: ${gMain.join(" | ")}; the delegate last read: ${JSON.stringify(gateHeard)}`
-  );
-};
-
 /**
  * p1 and p2: the landing delegate's pre-tag pair (`gone`, started while its
  * push was held, {@link landLegs}); a fourth delegate whose turn stays open
@@ -1180,7 +835,6 @@ const run = async (kit: Kit) => {
   try {
     await firstLegs(rig);
     const gone = await landLegs(rig);
-    await gateLegs(rig);
     if (gone !== undefined) {
       await preTagLegs(rig, gone);
     }

@@ -140,10 +140,10 @@ EOF
   # root cgroup pids.max", systemd-system.conf(5)), give every unit of the user's 307 tasks, under one session's own
   # limit of 8,192. So each machine holds 65,536 tasks (`boot`), and these drop-ins give each unit of the user's 49,152,
   # with no lower limit on the user's slice or manager. The user's service manager runs every unit and job (hub,
-  # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps, and inside this
-  # proof's heavy-run admission (CAWCO_HEAVY_ADMITTED, core heavy-run.ts): the proof was admitted for its machines as
-  # it started, and a session start in one waits on no reading of the host's memory, which its own rigs move (on
-  # 2026-10-19 a run's session starts were held 63 s on the host's memory stall while its 24 machines ran).
+  # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps, and as machines this
+  # proof brought up for itself (CAWCO_INSIDE_RUN, core machine-room.ts): a session start in one waits on no reading of
+  # the host's memory, which its own rigs move (on 2026-10-19 a run's session starts were held 63 s on the host's
+  # memory stall while its 24 machines ran).
   # No system service takes a kernel keyring of its own (KeyringMode=inherit for every service, a top-level `service.d`
   # drop-in: systemd.unit(5), "a top-level drop-in with type.d/ … allows altering or adding to the settings of all
   # corresponding unit files"). systemd.exec(5): KeyringMode "Defaults to private for services of the system service
@@ -200,7 +200,7 @@ RUN apt-get update \\
  && printf '[Service]\\nKeyringMode=inherit\\n' > /etc/systemd/system/service.d/proof-keyring.conf \\
  && printf '[Service]\\nTasksMax=infinity\\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \\
  && printf '[Slice]\\nTasksMax=infinity\\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \\
- && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE CAWCO_PROOF_RETIRING_LIST_MS=$PROOF_RETIRING_LIST_MS CAWCO_HEAVY_ADMITTED=stage2-proof\\n' > /etc/systemd/user.conf.d/proof.conf
+ && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE CAWCO_PROOF_RETIRING_LIST_MS=$PROOF_RETIRING_LIST_MS CAWCO_INSIDE_RUN=stage2-proof\\n' > /etc/systemd/user.conf.d/proof.conf
 COPY --from=claude --chown=cawco:cawco /home/cawco/.local /home/cawco/.local
 RUN HOME=/tmp/claude-check /home/cawco/.local/bin/claude --version | grep -F '$claude_version' \\
  && rm -rf /tmp/claude-check && ! command -v openssl$absent
@@ -217,13 +217,6 @@ orchestrate() {
   done
   free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
   (( free_gb >= 25 )) || { echo "only ${free_gb}G is free where $out is; the proof needs 25G (each rig's machines are vfs copies of the image; a full disk made podman fail with 'database or disk is full' in an earlier run)" >&2; exit 2; }
-  # A heavy run (scripts/lib/heavy-run.ts) for this shell's whole life, its cleanup included, admitted for its own peak:
-  # 18 GiB, from obelisk's journal on 2026-10-19, "cawco-nightly-7c34d9be6.service: Consumed 15min 31.083s CPU time
-  # over 8min 33.717s wall clock time, 17.2G memory peak", a release whose run held a whole stage 2. Under
-  # scripts/release.ts it takes nothing of its own (CAWCO_HEAVY_RUN_HELD: the release's admission holds it).
-  # shellcheck source=../lib/heavy-run.sh
-  source "$here/../lib/heavy-run.sh"
-  CAWCO_HEAVY_PEAK_GIB=18 heavy_run bash "$0" "$@"
   STARTED=$SECONDS
   mkdir -p "$out/tmp" "$out/shared" "$out/feeds" "$out/rigs" "$out/logs" "$out/images"
   orchestrator_done() {

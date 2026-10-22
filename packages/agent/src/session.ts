@@ -80,6 +80,7 @@ import {
   holdingWords,
   INSTALL_SESSION_CREDENTIAL,
   isGitUrl,
+  LEAK_FOUND,
   LIMIT_REACHED,
   type LimitHolder,
   lastErrorKindOf,
@@ -120,7 +121,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
-import { keepRoomSampled, measureMemoryRoom } from "@cawco/core/heavy-run";
+import { keepRoomSampled, measureMemoryRoom } from "@cawco/core/machine-room";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -137,6 +138,7 @@ import {
   endSessionWork,
   hookArmed,
   recheckNarrowed,
+  sandboxOf,
   shellQuote,
 } from "./boundary";
 import {
@@ -171,6 +173,7 @@ import { harnesses, harness as harnessOf } from "./harnesses";
 import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
 import { type KeeperReading, withKeepers } from "./keepers";
+import { watchLeaks } from "./leak-watch";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
 import { retireInstalls, syncInstalls } from "./mcp-install";
@@ -336,7 +339,7 @@ const warn = (message: string): void => {
  * the hub's 120 s for the whole carry (hub `CARRY_TIMEOUT_MS`), so the hub
  * always hears the machine's own reason, never "not answering". Ours.
  */
-/** How often a start waiting for memory measures the room again: the heavy-run queue's own pace (core heavy-run.ts). */
+/** How often a start waiting for memory measures the room again. Ours: the readings span 10 s, and a start held a few seconds past the room's return costs nothing. */
 const ROOM_POLL_MS = 3000;
 const CARRY_KEEPERS_MS = 15_000;
 const CARRY_STOP_MS = 30_000;
@@ -801,6 +804,12 @@ export class SessionSupervisor {
     );
     onFleetMcpMoved(() => this.#reportFleet());
     keeperLimits.on("limit", (message) => this.#limitReached(message));
+    watchLeaks({
+      targetOf: (procId, pid) => this.#touched(procId, pid),
+      sandboxOf,
+      tell: (instanceIds, id, content) =>
+        this.#leakFound(instanceIds, id, content),
+    });
     // The Mac's readings kept a window deep, so a start reads the room at once.
     keepRoomSampled();
     setInterval(() => {
@@ -2526,7 +2535,7 @@ export class SessionSupervisor {
 
   /**
    * A launch waits here while its machine's room on memory fails (core
-   * heavy-run.ts `measureMemoryRoom`: swap read back, swap left, memory
+   * machine-room.ts `measureMemoryRoom`: swap read back, swap left, memory
    * stall or pressure), measured again every {@link ROOM_POLL_MS}. Never
    * refused: the session's transcript says once why it waits, in the
    * machine's readings ({@link ROOM_HELD}), and the hub waits on its start
@@ -3984,29 +3993,7 @@ export class SessionSupervisor {
    */
   #limitReached(message: SessiondLimit): void {
     const proc = parseProcId(message.procId);
-    let holder: LimitHolder;
-    let instanceIds: string[];
-    switch (proc.kind) {
-      case "claude":
-      case "pi":
-        holder = "session";
-        instanceIds = [proc.instanceId];
-        break;
-      case "boundary":
-        holder = "workspace";
-        instanceIds = [...this.#placed]
-          .filter(([, placed]) => placed.boundaryPid === message.pid)
-          .map(([instanceId]) => instanceId);
-        break;
-      case "opencode-server":
-        holder = "opencode-server";
-        instanceIds =
-          this.#adapter("opencode").sessionsOn?.(message.procId) ?? [];
-        break;
-      case "judge":
-        holder = "session";
-        instanceIds = [];
-    }
+    const { holder, instanceIds } = this.#touched(message.procId, message.pid);
     const content = limitSentence(holder, message.limit, message.max);
     warn(
       `${message.procId}: ${content} (${message.group}, ${message.limit} ${message.count}; told ${instanceIds.length ? instanceIds.join(", ") : "no session"})`
@@ -4024,6 +4011,67 @@ export class SessionSupervisor {
           type: "system",
           subtype: LIMIT_REACHED,
           uuid: `limit-${message.group}-${message.limit}-${message.count}`,
+          session_id: "",
+          content,
+        } as unknown as NeutralMessage,
+      });
+    }
+  }
+
+  /**
+   * The sessions keeper child `procId` (its process `pid`) runs: a session's
+   * own process its own (its procId names it), a workspace's boundary every
+   * session whose commands run in it (by its pid), OpenCode's server every
+   * session it holds; a judge none. With what the child is to them, and the
+   * workspace a boundary is.
+   */
+  #touched(
+    procId: string,
+    pid: number
+  ): { holder: LimitHolder; instanceIds: string[]; workspace?: string } {
+    const proc = parseProcId(procId);
+    switch (proc.kind) {
+      case "claude":
+      case "pi":
+        return { holder: "session", instanceIds: [proc.instanceId] };
+      case "boundary": {
+        const placed = [...this.#placed].filter(
+          ([, one]) => one.boundaryPid === pid
+        );
+        const workspace = placed.find(([, one]) => one.workspace)?.[1]
+          .workspace;
+        return {
+          holder: "workspace",
+          instanceIds: placed.map(([instanceId]) => instanceId),
+          ...(workspace ? { workspace } : {}),
+        };
+      }
+      case "opencode-server":
+        return {
+          holder: "opencode-server",
+          instanceIds: this.#adapter("opencode").sessionsOn?.(procId) ?? [],
+        };
+      case "judge":
+        return { holder: "session", instanceIds: [] };
+    }
+  }
+
+  /**
+   * SOMETHING A SESSION STARTED LEAKS, AND THE SESSIONS IT TOUCHED ARE TOLD
+   * (leak-watch.ts): each gets the agent's frame ({@link LEAK_FOUND}), which
+   * the hub sends it as its own word. In order with what else is owed the
+   * hub, and on the next connection when this one is down.
+   */
+  #leakFound(instanceIds: string[], id: string, content: string): void {
+    for (const instanceId of instanceIds) {
+      this.#sayGone({
+        kind: "frame",
+        instanceId,
+        harness: this.#placed.get(instanceId)?.harness ?? "claude",
+        message: {
+          type: "system",
+          subtype: LEAK_FOUND,
+          uuid: id,
           session_id: "",
           content,
         } as unknown as NeutralMessage,

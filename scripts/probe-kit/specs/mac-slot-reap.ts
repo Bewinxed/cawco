@@ -16,7 +16,7 @@
  * r3. The next `mac-slot.sh build` to start deletes that simulator, and says
  *     so.
  *
- * Its own build runs run `true`, under this spec's heavy run. It kills only
+ * Its own build runs run `true`. It kills only
  * the keeper of the slot it took, and deletes that slot's simulator itself if
  * a leg leaves it. macOS only.
  *
@@ -34,7 +34,6 @@ import {
   signalGroup,
   spawnedPid,
 } from "../../../packages/core/src/signal";
-import { heavySlot } from "../../lib/heavy-run";
 import { macSim } from "../../lib/mac-sim";
 import type { Kit, Spec } from "../kit";
 
@@ -87,7 +86,6 @@ const device = async (udid: string): Promise<Device | undefined> => {
  */
 const buildRun = async (): Promise<{ ended: boolean; said: string }> => {
   const child = Bun.spawn(["bash", SLOT_SCRIPT, "build", "--", "true"], {
-    env: { ...process.env, CAWCO_HEAVY_RUN_HELD: "1" },
     stdin: "ignore",
     stdout: "ignore",
     stderr: "pipe",
@@ -117,7 +115,6 @@ const spec: Spec = {
       return;
     }
     const { check } = kit;
-    const heavy = await heavySlot();
     let udid = "";
     try {
       const sim = await macSim();
@@ -185,7 +182,6 @@ const spec: Spec = {
         await Bun.$`xcrun simctl shutdown ${udid}`.quiet().nothrow();
         await Bun.$`xcrun simctl delete ${udid}`.quiet().nothrow();
       }
-      heavy.release();
     }
   },
 };

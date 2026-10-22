@@ -114,8 +114,8 @@
   const GAP = 7;
   const MORE = 59;
   /**
-   * The fewest characters of its title, and of its state ("queued for a
-   * heavy-run slot behind 2 checks, 4m", "2 questions"), a chip in the row
+   * The fewest characters of its title, and of its state ("queued for the
+   * Mac's build slot behind 2 builds, 4m", "2 questions"), a chip in the row
    * shows: cut shorter, either reads as noise, so the chip goes into "+N"
    * instead. A state this short or shorter is shown whole.
    */
@@ -479,7 +479,7 @@
    * mark, its state glyph, its padding and gaps), its title's floor and its
    * state's (`textFloor`), never under CHIP. Both texts give way down to
    * their floors, which each holds as its least width, so a long state
-   * ("queued for a heavy-run slot behind …") is cut inside its chip instead
+   * ("queued for the Mac's build slot behind …") is cut inside its chip instead
    * of widening it. The fit counts these, and each chip in the row is held
    * to its own, so the count and the row cannot disagree.
    *

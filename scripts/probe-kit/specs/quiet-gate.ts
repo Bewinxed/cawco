@@ -1,6 +1,6 @@
 /**
  * A timing leg waits until the MACHINE is quiet, not only its own cgroup
- * (quiet.ts `quietLeg`, core heavy-run.ts `machinePressure`). On the host,
+ * (quiet.ts `quietLeg`, core machine-room.ts `machinePressure`). On the host,
  * from a shell outside every workspace: the load is a user unit of its own
  * (`systemd-run --user`), a cgroup apart from the spec's, which a workspace
  * cannot start.

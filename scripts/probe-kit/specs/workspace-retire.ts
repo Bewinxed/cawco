@@ -79,7 +79,7 @@
  *     git clone", its file standing. A sweep then changes nothing, and the
  *     hub's log holds no "not retired" line for any of the three and one
  *     "held" line for S.
- * (d) A heavy run, and build-both.sh, refuse to start below the free-space
+ * (d) `bun run typecheck`, and build-both.sh, refuse to start below the free-space
  *     threshold (here forced up with CAWCO_MIN_FREE_GB), exit 3, with one
  *     sentence naming the free space and the biggest folders. build-both.sh
  *     builds on the Mac: from a CawCo workspace on Linux it cannot reach it,
@@ -417,13 +417,11 @@ interface Sweep {
   retired: { workspaceId: string }[];
 }
 
-/** A command's exit code and stderr, run with no heavy-run slot of this process's. */
+/** A command's exit code and stderr, run with the free-space threshold out of reach. */
 const refused = async (
   command: string
 ): Promise<{ code: number; stderr: string }> => {
-  // This spec holds a slot; a child that inherits the mark takes none and checks nothing.
-  const { CAWCO_HEAVY_RUN_HELD: _held, ...inherited } = process.env;
-  const env = { ...inherited, CAWCO_MIN_FREE_GB: UNREACHABLE_GB };
+  const env = { ...process.env, CAWCO_MIN_FREE_GB: UNREACHABLE_GB };
   const ran = await Bun.$`bash -c ${command}`
     .cwd(ROOT)
     .env(env)
@@ -432,18 +430,16 @@ const refused = async (
   return { code: ran.exitCode, stderr: ran.stderr.toString().trim() };
 };
 
-/** (d) Heavy runs and Apple builds refuse to start without room on the disk. */
+/** (d) A typecheck and Apple builds refuse to start without room on the disk. */
 const diskPhase = async (kit: Kit): Promise<void> => {
-  const heavy = await refused(
-    "source scripts/lib/heavy-run.sh && heavy_run probe-heavy-run && echo STARTED"
-  );
+  const typecheck = await refused("bun scripts/typecheck.ts");
   kit.check(
-    "(d) a heavy run refuses below the threshold: exit 3, one sentence, nothing started",
-    heavy.code === 3 &&
-      REFUSAL.test(heavy.stderr) &&
-      heavy.stderr.split("\n").length === 1 &&
-      heavy.stderr.startsWith("probe-heavy-run did not start:"),
-    `exit ${heavy.code}: ${heavy.stderr}`
+    "(d) bun run typecheck refuses below the threshold: exit 3, one sentence, nothing started",
+    typecheck.code === 3 &&
+      REFUSAL.test(typecheck.stderr) &&
+      typecheck.stderr.split("\n").length === 1 &&
+      typecheck.stderr.startsWith("bun run typecheck did not start:"),
+    `exit ${typecheck.code}: ${typecheck.stderr}`
   );
   const build = await refused(
     "bash apps/apple/scripts/build-both.sh ios --compile-only"

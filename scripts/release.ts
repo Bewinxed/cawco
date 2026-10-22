@@ -72,7 +72,7 @@ import {
   signBundle,
 } from "./binary/sign-agent-bundle";
 import { PINNED_BUN, TARGETS } from "./build-binary";
-import { heavySlot } from "./lib/heavy-run";
+import { requireDiskRoom } from "./lib/disk-room";
 import {
   createDraft,
   deleteDraft,
@@ -144,20 +144,6 @@ const proofVerdicts = join(
   "cawco-release",
   "proof-verdicts"
 );
-
-/**
- * The memory one build reaches, in GiB: its heavy-run admission's peak (core
- * heavy-run.ts), taken for the whole build, its proofs and compiles
- * included, each of which takes none of its own beneath it. Built from what
- * runs at once now: before, 17.2 GiB with lint and typecheck done before any
- * build ("cawco-nightly-7c34d9be6.service: … 17.2G memory peak", obelisk,
- * 2026-10-19); lint's peak (its checks at once, 10.3 GiB summed for its
- * 14 s, 2026-10-23) and typecheck's (5.9 GB) now overlap it, and the seven
- * compiles at once peaked at 10.5 GB summed (sampled every 0.5 s,
- * 2026-10-22) where one at a time took 2.6 GB. Our call until the next run's
- * journal line gives its measured peak: 34.
- */
-const RELEASE_PEAK_GIB = 34;
 
 /** The three trees a build of `commit` runs in: one builds, one lints, one typechecks. */
 const treesOf = (commit: string) => {
@@ -1247,8 +1233,7 @@ const runCommand: Runner = async (
     detached: true,
     // The live environment, always: Bun hands a child the one this process
     // started with otherwise ("Defaults to process.env as it was when the
-    // current Bun process launched", bun.com/reference/bun/Spawn/SpawnOptions/env),
-    // and the build's heavy-run admission (`build`) is set in it since.
+    // current Bun process launched", bun.com/reference/bun/Spawn/SpawnOptions/env).
     env: { ...process.env, ...env },
   });
   running.add(child);
@@ -1606,23 +1591,12 @@ try {
 }
 
 /**
- * One commit, built, signed and (unless a newer one is queued) promoted, as
- * one of the machine's heavy runs: it starts once the machine admits its
- * peak ({@link RELEASE_PEAK_GIB}) beside the probes and gates already
- * running, waiting in the heavy-run queue's words until then, and holds that
- * admission until it ends.
+ * One commit, built, signed and (unless a newer one is queued) promoted. It
+ * starts at once, beside whatever else runs, with room on the disk
+ * (lib/disk-room.ts); its steps run as their graph says.
  */
 const build = async (current: Request): Promise<void> => {
-  const heavy = await heavySlot({ peakGib: RELEASE_PEAK_GIB });
-  try {
-    await buildAdmitted(current);
-  } finally {
-    heavy.release();
-  }
-};
-
-/** {@link build} under its admission: its steps run as their graph says. */
-const buildAdmitted = async (current: Request): Promise<void> => {
+  requireDiskRoom(`The release of ${current.commit.slice(0, 12)}`);
   const building = performance.now();
   const trees = treesOf(current.commit);
   const staging = stagingOf(current.commit);
