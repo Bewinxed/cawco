@@ -19,6 +19,9 @@
  *    `flex-shrink: 1`, the machine's OS mark lies inside the meta's box and
  *    the meta does not overflow (scrollWidth ≤ clientWidth + 1); at 320 the
  *    asker ellipsizes (scrollWidth > clientWidth).
+ * 3. Budget, a project past its daily cap: the row says "Reached its daily
+ *    budget · Caw paused", and nothing in it is a currency sign or a money
+ *    figure (DESIGN.md, The Spend Stays On Usage Rule).
  *
  *   bun scripts/probe-kit/run.ts held-post-row
  */
@@ -82,6 +85,7 @@ const readRow = (story: string) => {
     metaBox: box(meta),
     markBox: box(mark),
     metaScroll: meta ? meta.scrollWidth - meta.clientWidth : -1,
+    all: (row.textContent ?? "").replace(/\s+/g, " ").trim(),
   };
 };
 
@@ -190,6 +194,15 @@ const spec: Spec = {
           JSON.stringify(row)
         );
       }
+
+      // 3. A project past its budget says so in words, never the amount.
+      const budget = await read("Budget");
+      kit.check(
+        '3: Budget: the cap\'s row reads "Reached its daily budget · Caw paused", with no currency sign or money figure anywhere in the row',
+        budget?.want === "Reached its daily budget · Caw paused" &&
+          !/[$€£¥]|\bUSD\b|\d+\.\d{2}\b/.test(budget.all),
+        JSON.stringify(budget)
+      );
     } finally {
       stage.kill("SIGTERM");
     }

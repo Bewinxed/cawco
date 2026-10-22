@@ -3,8 +3,9 @@
  * owner (Component Story Format 3, live components): each post as the hub
  * parks it (core upstream-post.ts `describePost`, permission-presentation.ts
  * `presentPermission`), named by its own title over where it goes, the
- * session that asked on its last line. The meta's args are every story's; a
- * story's own args are what it changes.
+ * session that asked on its last line; and a project past its budget, in
+ * words. The meta's args are every story's; a story's own args are what it
+ * changes.
  */
 import {
   type PermissionPresentation,
@@ -151,4 +152,31 @@ export const LongNames = {
 export const LongNamesNarrow = {
   args: { item: long },
   parameters: { viewport: 320 },
+};
+
+/**
+ * A project past its spend cap, as home-state lists it: words only, the
+ * amounts left to the Usage page (DESIGN.md, The Spend Stays On Usage Rule).
+ */
+export const Budget = {
+  args: {
+    item: {
+      kind: "cap",
+      key: "cap:probe-project",
+      cap: {
+        inherited: false,
+        onCap: "quiet",
+        period: "day",
+        reached: true,
+        resetsAt: Date.now() + 6 * 3_600_000,
+        spentUsd: 12.4,
+        startsAt: Date.now() - 18 * 3_600_000,
+        usd: 10,
+      },
+      title: "cockpit",
+      place: "Budget reached",
+      href: "/usage?project=probe-project",
+      raisedAt: undefined,
+    } as NeedsItem,
+  },
 };
