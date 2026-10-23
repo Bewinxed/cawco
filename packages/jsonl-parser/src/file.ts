@@ -66,6 +66,30 @@ export interface ReadResult {
   reset: boolean;
 }
 
+/**
+ * The longest a parse holds its thread before it lets the loop take a turn.
+ * A whole transcript is parsed on the reader's own thread (an agent's, a
+ * hub's), and a 90 MB one is over a second of unbroken work: an agent asked
+ * for 128 tails at once, each starting a whole parse into its cache, held
+ * its loop 3.8 s (agent-loop probe, 2026-10-24). Ours: 8 ms, half a frame.
+ */
+const PARSE_SLICE_MS = 8;
+
+/** `records`, gathered, with a turn of the loop after each {@link PARSE_SLICE_MS} of parsing. */
+async function gathered<T>(records: Iterable<T>): Promise<T[]> {
+  const out: T[] = [];
+  let slice = performance.now();
+  for (const record of records) {
+    out.push(record);
+    if (performance.now() - slice >= PARSE_SLICE_MS) {
+      // biome-ignore lint/performance/noAwaitInLoops: the await is the yield; the parse goes on where it stopped
+      await new Promise((resolve) => setImmediate(resolve));
+      slice = performance.now();
+    }
+  }
+  return out;
+}
+
 /** Parse an entire transcript file. */
 export async function readTranscript(
   path: string,
@@ -74,7 +98,7 @@ export async function readTranscript(
   const stats = newStats();
   const buf = await readBytes(path);
   const whole = completeLines(buf);
-  const records = [...parseRecords(whole, { ...options, stats })];
+  const records = await gathered(parseRecords(whole, { ...options, stats }));
   return {
     records,
     stats,
@@ -108,9 +132,9 @@ export async function readTranscriptTail(
   }
   const stats = newStats();
   const whole = completeLines(await readBytes(path, from));
-  const records = [
-    ...parseRecords(whole, { ...options, stats, baseOffset: from, baseLine: lineBase }),
-  ];
+  const records = await gathered(
+    parseRecords(whole, { ...options, stats, baseOffset: from, baseLine: lineBase }),
+  );
   return {
     records,
     stats,

@@ -20,7 +20,6 @@
  * (`opencode-session.ts` turns them into frames).
  */
 
-import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
@@ -104,6 +103,7 @@ import {
   SessionAddressRefused,
 } from "../harness";
 import { KeeperPool } from "../keepers";
+import { syncSection } from "../loop-watch";
 import { isMachineAgent } from "../machine-agent";
 import { fleetMcpMoved, MCP_CONNECT_MS } from "../mcp-status";
 import { gaugeTables } from "../memory";
@@ -151,6 +151,7 @@ import {
   unreachable,
   waitForMcp,
 } from "./opencode-client";
+import { readOpencodeDb } from "./opencode-db";
 import {
   catalogLaunchEnv,
   holdsCatalog,
@@ -1150,8 +1151,7 @@ const storedSessions = (
   dbPath: string,
   query: { directory?: string; id?: string }
 ): StoredSession[] => {
-  const db = new Database(dbPath, { readonly: true });
-  try {
+  return readOpencodeDb(dbPath, [] as StoredSession[], (db) => {
     // A database 2.0 is still making (an account server's first start) has
     // no sessions table yet, and so no session.
     if (
@@ -1170,9 +1170,7 @@ const storedSessions = (
            AND (?1 IS NULL OR directory = ?1)`
       )
       .all(query.directory ?? null, query.id ?? null);
-  } finally {
-    db.close();
-  }
+  });
 };
 
 /** Every database's sessions `query` names, each once (a session a move left half-way is in two). */
@@ -1222,7 +1220,9 @@ const sessionsOnMachine = (query: {
 }): StoredSession[] => {
   const seen = new Map<string, StoredSession>();
   for (const dbPath of opencodeDatabases()) {
-    for (const session of storedSessions(dbPath, query)) {
+    for (const session of syncSection("OpenCode sessions listed (SQLite)", () =>
+      storedSessions(dbPath, query)
+    )) {
       if (!seen.has(session.id)) {
         seen.set(session.id, session);
       }
@@ -1816,8 +1816,8 @@ export class OpencodeHarness implements Harness {
    * Null when opencode.json is missing or malformed.
    */
   async #hashConfig(): Promise<string | null> {
-    const config = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
-    if (!config) {
+    const configHashed = await this.#configFileHash();
+    if (configHashed === null) {
       return null;
     }
     // The placed servers' revision too: a location takes its place's as it
@@ -1831,9 +1831,9 @@ export class OpencodeHarness implements Harness {
     // The catalog too: a server reads it only as it starts.
     const catalog = holdsCatalog() ? await this.#catalogDigest() : "";
     if (!(placed || (fleet && Object.keys(fleet).length > 0) || catalog)) {
-      return configHash(config);
+      return configHashed;
     }
-    const hash = createHash("sha256").update(configHash(config));
+    const hash = createHash("sha256").update(configHashed);
     if (placed) {
       hash.update(`placed:${placed}`);
     }
@@ -1841,6 +1841,36 @@ export class OpencodeHarness implements Harness {
       hash.update(`fleet:${canonicalizeJson(fleet)}`);
     }
     return hash.update(catalog).digest("hex");
+  }
+
+  /** opencode.json's text when it was last hashed, and its {@link configHash}. */
+  #configHashed: { hash: string; text: string } | undefined;
+
+  /**
+   * {@link configHash} of opencode.json as it is on disk now, computed again
+   * only when its text changed: the watcher asks every 2 s. Null when it is
+   * missing or malformed.
+   */
+  async #configFileHash(): Promise<string | null> {
+    const text = await readFile(OPENCODE_CONFIG, "utf8").catch(() => null);
+    if (text === null) {
+      return null;
+    }
+    if (this.#configHashed?.text === text) {
+      return this.#configHashed.hash;
+    }
+    let config: unknown;
+    try {
+      config = JSON.parse(text);
+    } catch {
+      return null;
+    }
+    if (!config) {
+      return null;
+    }
+    const hash = configHash(config as Record<string, unknown>);
+    this.#configHashed = { hash, text };
+    return hash;
   }
 
   /**
@@ -3409,7 +3439,9 @@ export class OpencodeHarness implements Harness {
         }
         await Bun.sleep(5000);
       }
-      backupV1Database(xdgDataHome());
+      syncSection("OpenCode 1.x database backed up (SQLite)", () =>
+        backupV1Database(xdgDataHome())
+      );
       await retireV1Plugins();
     })().catch((error: unknown) => {
       this.#cutover = null;
@@ -5340,7 +5372,9 @@ export class OpencodeHarness implements Harness {
       ),
       `the waiting sends of ${sessionKey}`
     );
-    const entries = toTranscript(sessionKey, messages, waiting);
+    const entries = syncSection("OpenCode transcript built", () =>
+      toTranscript(sessionKey, messages, waiting)
+    );
     const callByChild = new Map<string, string>();
     for (const message of messages) {
       if (message.type !== "assistant") {
@@ -5364,7 +5398,9 @@ export class OpencodeHarness implements Harness {
       }
       // biome-ignore lint/performance/noAwaitInLoops: children are appended in this order; parallel reads would reorder subagents
       const childMessages = await allMessages(client, child.id);
-      const childEntries = toTranscript(child.id, childMessages);
+      const childEntries = syncSection("OpenCode transcript built", () =>
+        toTranscript(child.id, childMessages)
+      );
       for (const entry of childEntries) {
         entry.parent_tool_use_id = callID;
       }

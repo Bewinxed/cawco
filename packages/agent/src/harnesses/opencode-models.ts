@@ -254,15 +254,30 @@ class OpencodeModels {
    * day (models.dev's hourly syncs).
    */
   digest(providers: Iterable<string>): string {
+    const ids = [...new Set(providers)].sort();
+    const key = ids.join("\u0000");
+    // The same providers of the same held copy: the digest it gave. The
+    // config watcher asks every 2 s, and canonicalising those entries each
+    // time was most of the agent's loop (agent-loop probe's CPU profile,
+    // 2026-10-24).
+    const last = this.#digested;
+    if (last && last.catalog === this.#catalog && last.key === key) {
+      return last.value;
+    }
     const catalog = this.#catalog ?? {};
     const entries = Object.fromEntries(
-      [...new Set(providers)].sort().map((id) => [id, catalog[id] ?? null])
+      ids.map((id) => [id, catalog[id] ?? null])
     );
-    return createHash("sha256")
+    const value = createHash("sha256")
       .update(canonical(entries))
       .digest("hex")
       .slice(0, 16);
+    this.#digested = { catalog: this.#catalog, key, value };
+    return value;
   }
+
+  /** The last {@link digest}: of which held copy, for which providers. */
+  #digested: { catalog: unknown; key: string; value: string } | undefined;
 
   /**
    * A provider's name as the catalog gives it, which `opencode auth login`

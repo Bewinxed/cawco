@@ -21,6 +21,7 @@ import {
 import type { TranscriptDoc } from "@cawco/jsonl-parser";
 import { TranscriptIndex } from "@cawco/jsonl-parser/fts5";
 import { readOpenCodeDocs } from "@cawco/jsonl-parser/opencode";
+import { inFlight, syncSection } from "../loop-watch";
 
 /** The `meta` key prefix of each OpenCode database's watermark, followed by its path. */
 const WATERMARK = "opencode_watermark:";
@@ -132,7 +133,7 @@ export class TranscriptSearchService {
    */
   sync(): Promise<void> {
     if (!this.#syncing) {
-      this.#syncing = this.#syncOnce()
+      this.#syncing = inFlight("search index syncs", this.#syncOnce())
         .then(
           () => {
             if (this.#failing !== null) {
@@ -169,9 +170,11 @@ export class TranscriptSearchService {
     const watermarks = new Map<string, number>();
     for (const dbPath of opencodeDatabases()) {
       const key = `${WATERMARK}${dbPath}`;
-      const read = readOpenCodeDocs(dbPath, {
-        since: this.#openCodeWatermarks.get(key) ?? 0,
-      });
+      const read = syncSection("search: OpenCode messages read (SQLite)", () =>
+        readOpenCodeDocs(dbPath, {
+          since: this.#openCodeWatermarks.get(key) ?? 0,
+        })
+      );
       docs.push(...read.docs);
       meta[key] = String(read.watermark);
       watermarks.set(key, read.watermark);

@@ -15,7 +15,6 @@
  * out, and OpenCode's copy carries a marker where a rotating refresh token
  * would be.
  */
-import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, rm } from "node:fs/promises";
@@ -52,6 +51,8 @@ import type {
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { removeAccountDir } from "./accounts";
+import { readOpencodeDb } from "./harnesses/opencode-db";
+import { syncSection } from "./loop-watch";
 
 // ── The store ────────────────────────────────────────────────────────────
 
@@ -970,82 +971,53 @@ const machineOpencodeDb = (): string => join(opencodeDataDir(), "opencode.db");
  * it). Never their values. "absent" for a database 2.0 has not made or
  * converted yet.
  */
-const opencodeOwnRows = (): string => {
-  if (!existsSync(machineOpencodeDb())) {
-    return "absent";
-  }
-  try {
-    const db = new Database(machineOpencodeDb(), { readonly: true });
-    try {
-      return JSON.stringify(
+const opencodeOwnRows = (): string =>
+  syncSection("OpenCode's own sign-ins read (SQLite)", () =>
+    readOpencodeDb(machineOpencodeDb(), "absent", (db) =>
+      JSON.stringify(
         db.query("SELECT id, time_updated FROM credential ORDER BY id").all()
-      );
-    } finally {
-      db.close();
-    }
-  } catch {
-    return "absent";
-  }
-};
+      )
+    )
+  );
 
 /**
  * When each of OpenCode's own sign-ins on this machine last changed (a
  * sign-in, a refresh, a removal), by credential id, read-only, never their
  * values. Empty for a database 2.0 has not made yet.
  */
-export const opencodeOwnChanges = (): Record<string, number> => {
-  if (!existsSync(machineOpencodeDb())) {
-    return {};
-  }
-  try {
-    const db = new Database(machineOpencodeDb(), { readonly: true });
-    try {
-      return Object.fromEntries(
+export const opencodeOwnChanges = (): Record<string, number> =>
+  syncSection("OpenCode's own sign-ins read (SQLite)", () =>
+    readOpencodeDb(machineOpencodeDb(), {}, (db) =>
+      Object.fromEntries(
         (
           db.query("SELECT id, time_updated FROM credential").all() as {
             id: string;
             time_updated: number;
           }[]
         ).map((row) => [row.id, row.time_updated])
-      );
-    } finally {
-      db.close();
-    }
-  } catch {
-    return {};
-  }
-};
+      )
+    )
+  );
 
 /**
  * What kind each of OpenCode's own active sign-ins on this machine is
  * (`oauth`, `key`, …), by its integration, read-only: the type alone, never
  * its value. Empty for a database 2.0 has not made yet.
  */
-export const opencodeOwnSignInTypes = (): Record<string, string> => {
-  if (!existsSync(machineOpencodeDb())) {
-    return {};
-  }
-  try {
-    const db = new Database(machineOpencodeDb(), { readonly: true });
-    try {
-      return Object.fromEntries(
-        (
-          db
-            .query(
-              "SELECT integration_id, json_extract(value, '$.type') AS type FROM credential WHERE active = 1"
-            )
-            .all() as { integration_id: string | null; type: string | null }[]
-        ).flatMap((row) =>
-          row.integration_id && row.type ? [[row.integration_id, row.type]] : []
-        )
-      );
-    } finally {
-      db.close();
-    }
-  } catch {
-    return {};
-  }
-};
+export const opencodeOwnSignInTypes = (): Record<string, string> =>
+  readOpencodeDb(machineOpencodeDb(), {}, (db) =>
+    Object.fromEntries(
+      (
+        db
+          .query(
+            "SELECT integration_id, json_extract(value, '$.type') AS type FROM credential WHERE active = 1"
+          )
+          .all() as { integration_id: string | null; type: string | null }[]
+      ).flatMap((row) =>
+        row.integration_id && row.type ? [[row.integration_id, row.type]] : []
+      )
+    )
+  );
 
 /**
  * The providers OpenCode's own sign-ins on this machine are for (each active
@@ -1053,27 +1025,16 @@ export const opencodeOwnSignInTypes = (): Record<string, string> => {
  * machine's server sends requests to with them. None for a database 2.0 has
  * not made yet.
  */
-export const opencodeOwnIntegrations = (): string[] => {
-  if (!existsSync(machineOpencodeDb())) {
-    return [];
-  }
-  try {
-    const db = new Database(machineOpencodeDb(), { readonly: true });
-    try {
-      return (
-        db
-          .query(
-            "SELECT DISTINCT integration_id FROM credential WHERE active = 1"
-          )
-          .all() as { integration_id: string | null }[]
-      ).flatMap((row) => (row.integration_id ? [row.integration_id] : []));
-    } finally {
-      db.close();
-    }
-  } catch {
-    return [];
-  }
-};
+export const opencodeOwnIntegrations = (): string[] =>
+  readOpencodeDb(machineOpencodeDb(), [] as string[], (db) =>
+    (
+      db
+        .query(
+          "SELECT DISTINCT integration_id FROM credential WHERE active = 1"
+        )
+        .all() as { integration_id: string | null }[]
+    ).flatMap((row) => (row.integration_id ? [row.integration_id] : []))
+  );
 
 /**
  * A fingerprint of pi's and OpenCode's own stores as they are now: it

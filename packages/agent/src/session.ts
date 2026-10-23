@@ -189,6 +189,7 @@ import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
+import { inFlight } from "./loop-watch";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpGateOf, mcpHost } from "./mcp-host";
 import { retireInstalls, syncInstalls } from "./mcp-install";
@@ -667,6 +668,9 @@ const CATALOG_READS = new Set([
   CONTROL_READ_SESSION_CONTEXT,
 ]);
 
+/** Stored transcripts read at once ({@link SessionSupervisor.#transcriptRead}). Ours: the hub's settle reads ask four of a machine at once (server.ts `SETTLE_READS_PER_MACHINE`); a page's and Find's reads take the rest. */
+const TRANSCRIPT_READS_AT_ONCE = 8;
+
 /** A catalog read that took this long or longer says so in the log, with what it read. */
 const CATALOG_SLOW_MS = 1000;
 
@@ -986,6 +990,35 @@ export class SessionSupervisor {
   readonly #spinOffs = new Map<string, SpinOff>();
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
+
+  /** Transcript reads running now ({@link TRANSCRIPT_READS_AT_ONCE} at most), and those waiting their turn. */
+  #transcriptReading = 0;
+  readonly #transcriptTurns: (() => void)[] = [];
+
+  /**
+   * One stored transcript's read, {@link TRANSCRIPT_READS_AT_ONCE} at a
+   * time. Each read's parse is a few milliseconds of the loop, and reads
+   * that finish together run back to back before any timer: 128 at once
+   * held the agent's loop a second (agent-loop probe, 2026-10-24). One long
+   * read takes one turn, so it holds up no more than that.
+   */
+  async #transcriptRead<T>(read: () => Promise<T>): Promise<T> {
+    if (this.#transcriptReading >= TRANSCRIPT_READS_AT_ONCE) {
+      await new Promise<void>((resolve) => this.#transcriptTurns.push(resolve));
+    } else {
+      this.#transcriptReading += 1;
+    }
+    try {
+      return await read();
+    } finally {
+      const next = this.#transcriptTurns.shift();
+      if (next) {
+        next();
+      } else {
+        this.#transcriptReading -= 1;
+      }
+    }
+  }
   /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-desired.ts). */
   readonly #desired = new FleetDesired();
   /** The items deltas moved since the last converge began, and whether one took any away. */
@@ -1329,8 +1362,14 @@ export class SessionSupervisor {
         (!envelope.instanceId && CATALOG_READS.has(control.method)))
     ) {
       // #control sinks its own answer, success or failure.
-      return (this.#queues.get(key) ?? Promise.resolve()).then(() =>
-        this.#route(envelope)
+      const behind = this.#queues.get(key) ?? Promise.resolve();
+      return inFlight(
+        control.method === "getSessionMessages"
+          ? "transcript reads"
+          : `${control.method} reads`,
+        control.method === "getSessionMessages"
+          ? behind.then(() => this.#transcriptRead(() => this.#route(envelope)))
+          : behind.then(() => this.#route(envelope))
       );
     }
     // A command behind another in its folder says so as it queues (folderTurn).
@@ -1338,11 +1377,20 @@ export class SessionSupervisor {
       control?.method === CONTROL_RUN_COMMAND
         ? folderTurn(control.args, this.#queues.has(key))
         : undefined;
-    const queue = (this.#queues.get(key) ?? Promise.resolve())
-      .then(() => {
-        folder?.start();
-        return this.#route(envelope);
-      })
+    const routed = (this.#queues.get(key) ?? Promise.resolve()).then(() => {
+      folder?.start();
+      return this.#route(envelope);
+    });
+    const queue = (
+      envelope.verb === "spawn"
+        ? inFlight(
+            (envelope.payload as SpawnPayload).reattachOnly
+              ? "reattaches"
+              : "starts",
+            routed
+          )
+        : routed
+    )
       .finally(() => folder?.end())
       .catch((error: unknown) => {
         warn(`${envelope.verb} failed: ${error}`);

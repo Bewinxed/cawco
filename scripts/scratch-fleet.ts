@@ -2351,7 +2351,9 @@ async function standUp(
     method: string,
     args: unknown[],
     ms = 60_000,
-    instanceId?: string
+    instanceId?: string,
+    /** The harness a machine-scoped catalog call is addressed at (`getSessionMessages`, say). */
+    harness?: Harness
   ): Promise<{ error?: string; ok: boolean; result?: unknown }> => {
     const ws = await dashboard();
     const requestId = crypto.randomUUID();
@@ -2380,6 +2382,7 @@ async function standUp(
         requestId,
         payload: {
           ...(instanceId ? { instanceId } : {}),
+          ...(harness ? { harness } : {}),
           requestId,
           method,
           args,

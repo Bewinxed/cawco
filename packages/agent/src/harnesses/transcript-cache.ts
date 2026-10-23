@@ -19,6 +19,7 @@
 import { stat } from "node:fs/promises";
 import type { Checkpoint, LocatedRecord } from "@cawco/jsonl-parser";
 import { readTranscript, readTranscriptTail } from "@cawco/jsonl-parser";
+import { inFlight } from "../loop-watch.ts";
 import { gauge } from "../memory.ts";
 import { CHAIN_TYPES } from "./claude-transcript.ts";
 
@@ -37,6 +38,15 @@ export interface CachedSession {
 }
 
 const DEFAULT_BUDGET_BYTES = 256 * 1024 * 1024;
+
+/**
+ * Whole parses at once. Every tail read of a transcript the cache does not
+ * hold starts one ({@link readSessionEnd}'s populate), so a wave of the hub's
+ * reads started one per session: 128 at once held 2.5 GB of heap and the
+ * agent's loop 3.8 s (agent-loop probe, 2026-10-24). Ours: two keep a
+ * reader's second phase quick without a wave's worth of heap.
+ */
+const PARSES_AT_ONCE = 2;
 
 /**
  * Parsed-record object graphs measure ~2x their source bytes on the heap
@@ -169,7 +179,34 @@ export class TranscriptCache {
     return this.fullRead(path);
   }
 
+  /** Whole parses running now ({@link PARSES_AT_ONCE} at most), and those waiting their turn. */
+  private parsing = 0;
+  private readonly parseTurns: (() => void)[] = [];
+
+  /**
+   * A whole transcript read and parsed into the cache, counted in flight
+   * (loop-watch.ts), {@link PARSES_AT_ONCE} at a time: each holds its file
+   * and about twice its size in records until it is cached.
+   */
   private async fullRead(path: string): Promise<CachedSession> {
+    if (this.parsing >= PARSES_AT_ONCE) {
+      await new Promise<void>((resolve) => this.parseTurns.push(resolve));
+    } else {
+      this.parsing += 1;
+    }
+    try {
+      return await inFlight("whole transcript parses", this.parseWhole(path));
+    } finally {
+      const next = this.parseTurns.shift();
+      if (next) {
+        next();
+      } else {
+        this.parsing -= 1;
+      }
+    }
+  }
+
+  private async parseWhole(path: string): Promise<CachedSession> {
     const result = await readTranscript(path, { prefilter: CHAIN_TYPES });
     const entry: CachedSession = {
       records: result.records,

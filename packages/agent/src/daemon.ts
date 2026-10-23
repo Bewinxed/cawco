@@ -235,6 +235,7 @@ import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
+import { phase, syncSection, watchLoop } from "./loop-watch";
 import { holdHubLink, isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
@@ -2082,6 +2083,7 @@ const attach = (
       if (command.kind === "register") {
         firstRegisterSpawnedNothing(url);
         sendRegister();
+        phase("registered, taking custody back");
         yield* Effect.logInfo(`registered with ${url}`);
         markLive();
         reportServedCatalog(
@@ -2599,6 +2601,7 @@ const attach = (
           );
         }
         if (supervisor.completeCustody(epoch)) {
+          phase("running");
           Effect.runFork(
             Effect.logInfo(
               `custody recovered: ${supervisor.instanceIds.length} session(s) attached, ${adopted.length} taken back this time`
@@ -3427,7 +3430,9 @@ export const startDaemon = (rediscover = false) =>
     // The agent's memory, by what holds it (memory.ts): once its first usage
     // scan and search sync have ended, and on its own clock from the start, so
     // an agent that never reaches its hub still says it.
-    const logMemory = Effect.suspend(() => Effect.logInfo(memoryLine()));
+    const logMemory = Effect.suspend(() =>
+      Effect.logInfo(syncSection("memory line (heap walk)", memoryLine))
+    );
     yield* Effect.forkScoped(
       Effect.promise(() => Promise.all([scanner.scanned, search.synced])).pipe(
         Effect.andThen(logMemory)
@@ -3820,6 +3825,7 @@ export const startDaemon = (rediscover = false) =>
       search.turns(query as TranscriptTurnsQuery)
     );
 
+    phase("connecting");
     yield* Effect.logInfo(
       `cawco agent ${identity.machineId} connecting to ${url}`
     );
@@ -3890,6 +3896,8 @@ export const startDaemon = (rediscover = false) =>
 export const runDaemon = (rediscover = false): void => {
   // No log line prints a session credential.
   redactConsole();
+  // A stall of its loop names what held it (loop-watch.ts).
+  watchLoop((line) => console.warn(line));
   // A broken law crashes the agent (core invariant.ts): sessiond keeps the
   // sessions' processes across its restart.
   lawPolicy("crash");

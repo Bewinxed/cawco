@@ -15,6 +15,7 @@ import {
   listClaudeFiles,
   opencodeDatabases,
 } from "@cawco/core/paths";
+import { syncSection } from "../loop-watch";
 import { gauge } from "../memory";
 import { parseClaudeLine } from "./scan-claude";
 import { scanOpencode } from "./scan-opencode";
@@ -665,7 +666,10 @@ export class UsageScanner {
     for (const dbPath of opencodeDatabases()) {
       const key = `opencode_max_time_updated:${dbPath}`;
       const since = fresh ? 0 : (this.#meta(key) ?? 0);
-      const latest = scanOpencode(dbPath, since, (rec) => this.#ingest(rec));
+      const latest = syncSection(
+        "usage: OpenCode messages scanned (SQLite)",
+        () => scanOpencode(dbPath, since, (rec) => this.#ingest(rec))
+      );
       if (latest !== since) {
         this.#setMeta.run(key, latest);
       }
