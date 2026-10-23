@@ -74,6 +74,7 @@ import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_CONTEXT_USAGE,
+  CONTROL_FLEET_SETTINGS,
   CONTROL_FORGET_ACCOUNT,
   CONTROL_INTERRUPT,
   CONTROL_JOIN_ACCOUNT_LOGIN,
@@ -2119,6 +2120,14 @@ class ClaudeSession implements HarnessSession {
   #ownedMcp: Set<string> | undefined;
   /** Launched with CawCo's MCP server alone ({@link SpawnPayload.fence}): it takes no fleet server. */
   readonly #fence: boolean;
+  /** A project's Caw ({@link SpawnPayload.lead}): its flag settings carry his gate's rules. */
+  readonly #lead: boolean;
+  /**
+   * The flag settings its CLI holds as CawCo last set them: as launched, then
+   * as each {@link #takeFleetSettings} applied them. Unknown at an attach,
+   * where the agent before may have applied any.
+   */
+  #flagSettings: Record<string, unknown> | undefined;
   readonly #workdir: string;
   /** The config dir its CLI runs in (`CLAUDE_CONFIG_DIR`): its account's, or none for the machine's own. */
   readonly #configDir: string | undefined;
@@ -2197,6 +2206,7 @@ class ClaudeSession implements HarnessSession {
     this.#launchMcp = new Set(Object.keys(mcpServers));
     this.#ownedMcp = fleetMcp ? new Set(Object.keys(fleetMcp)) : undefined;
     this.#fence = fence;
+    this.#lead = lead;
     this.#workdir = workdir;
     const env = sessionEnv(
       (options as { env?: Record<string, string | undefined> } | undefined)
@@ -2214,6 +2224,18 @@ class ClaudeSession implements HarnessSession {
     this.#turn = turn;
     const extraArgs = sessionExtraArgs(options, fence, lead);
 
+    const launchedOptions = sessionSettingsOptions(
+      ctx.boundary,
+      lead,
+      fence,
+      placedHooks,
+      fleetSettings
+    );
+    // What a launch hands its CLI; an attach starts nothing, and keeps
+    // whatever its CLI was handed.
+    this.#flagSettings = fleetMcp
+      ? (launchedOptions.settings as Record<string, unknown>)
+      : undefined;
     const handle = query({
       prompt: input,
       options: {
@@ -2313,13 +2335,7 @@ class ClaudeSession implements HarnessSession {
         // A work item's session runs every shell command inside its
         // workspace's boundary, through its shell prefix (`sessionEnv`); the
         // hook the CLI itself runs judges every other call's paths.
-        ...sessionSettingsOptions(
-          ctx.boundary,
-          lead,
-          fence,
-          placedHooks,
-          fleetSettings
-        ),
+        ...launchedOptions,
         ...scratchDirectory(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
@@ -3376,6 +3392,9 @@ class ClaudeSession implements HarnessSession {
       this.#fleetMcp = taking.catch(() => undefined);
       return await taking;
     }
+    if (method === CONTROL_FLEET_SETTINGS) {
+      return await this.#takeFleetSettings();
+    }
     if (method === CONTROL_MCP_FLEET_HEAL) {
       const healing = this.#fleetMcp.then(() => this.#healFleetMcp());
       this.#fleetMcp = healing.catch(() => undefined);
@@ -3600,6 +3619,52 @@ class ClaudeSession implements HarnessSession {
       (configured[name] as { url?: string } | undefined)?.url ===
         proxiedFleetMcpUrl(name)
     );
+  }
+
+  /**
+   * The fleet's hooks and Claude Code settings placed at its folder taken
+   * again (fleet-harness-set.ts), asked by the machine at the session's
+   * attach and after each fleet sync, as OpenCode and pi read the set at each
+   * call: its flag settings made as a launch now would make them
+   * ({@link sessionSettingsOptions}), and each top-level key that moved
+   * applied to the running CLI through `applyFlagSettings`, a key no longer
+   * there cleared ("Successive calls shallow-merge top-level keys … Pass
+   * `null` for a key to clear it from the flag layer", sdk.d.ts 0.3.302).
+   * `hooks` goes whole, the boundary's entry in it. A fenced session takes
+   * none of the fleet's.
+   */
+  async #takeFleetSettings(): Promise<{ applied: string[] }> {
+    if (this.#fence) {
+      return { applied: [] };
+    }
+    const set = await readFleetHarnessSet();
+    const next = sessionSettingsOptions(
+      this.#ctx.boundary,
+      this.#lead,
+      false,
+      placedAt(set.placedHooks, this.#workdir),
+      launchedSettings(set, this.#workdir)
+    ).settings as Record<string, unknown>;
+    const before = this.#flagSettings;
+    const patch: Record<string, unknown> = Object.fromEntries(
+      Object.entries(next).filter(
+        ([key, value]) =>
+          !before || JSON.stringify(before[key]) !== JSON.stringify(value)
+      )
+    );
+    for (const key of Object.keys(before ?? {})) {
+      if (!(key in next)) {
+        patch[key] = null;
+      }
+    }
+    if (Object.keys(patch).length === 0) {
+      return { applied: [] };
+    }
+    await this.#handle.applyFlagSettings(
+      patch as Parameters<Query["applyFlagSettings"]>[0]
+    );
+    this.#flagSettings = next;
+    return { applied: Object.keys(patch) };
   }
 
   /**

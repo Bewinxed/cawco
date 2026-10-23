@@ -58,6 +58,7 @@ import {
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
   CONTROL_CARRY_SESSIONS,
+  CONTROL_FLEET_SETTINGS,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
   CONTROL_INTERRUPT,
@@ -5327,8 +5328,12 @@ export class SessionSupervisor {
    * connected with none of the tools the proxy lists (claude.ts
    * `#healFleetMcp`). After a fleet sync and at an attach, which every
    * session meets at an agent restart, so sessions a past burst left without
-   * a server's tools heal with no new sign-in. One at a time, so a pass over
-   * a machine's sessions is never a burst of its own. Nothing waits on it.
+   * a server's tools heal with no new sign-in. Then each takes the fleet's
+   * hooks and Claude Code settings placed at its folder again (claude.ts
+   * `#takeFleetSettings`), so one placed while it runs reaches its next
+   * tool call, as OpenCode's and pi's read the set at each call. One at a
+   * time, so a pass over a machine's sessions is never a burst of its own.
+   * Nothing waits on it.
    */
   #healFleetMcp(instanceIds: string[]): void {
     this.#healing = this.#healing.then(async () => {
@@ -5342,6 +5347,13 @@ export class SessionSupervisor {
           await session.control(CONTROL_MCP_FLEET_HEAL, []);
         } catch (error) {
           warn(`fleet MCP heal of ${instanceId} failed: ${errorText(error)}`);
+        }
+        try {
+          await session.control(CONTROL_FLEET_SETTINGS, []);
+        } catch (error) {
+          warn(
+            `the fleet's hooks and settings did not reach ${instanceId}: ${errorText(error)}`
+          );
         }
       }
     });
