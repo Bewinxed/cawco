@@ -724,8 +724,6 @@ export const STREAM_RELAY_WORDS = {
   copyRecord: "Copy record",
   copyForwards: "Copy forwards",
   copyCommand: "Copy command",
-  copied: "Copied",
-  copyFailed: "Copy failed",
   routerDone: (how: RelayMapHow | undefined) =>
     how
       ? `Ports open on the router (${how})`

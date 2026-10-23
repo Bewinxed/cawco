@@ -30,16 +30,24 @@
   } from "@cawco/core/stream-relay";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
-  import CopyBox from "#lib/cawco/CopyBox.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import JourneyCard from "#lib/cawco/journey/JourneyCard.svelte";
+  import JourneyCopy from "#lib/cawco/journey/JourneyCopy.svelte";
+  import JourneyStep from "#lib/cawco/journey/JourneyStep.svelte";
+  import JourneySummary from "#lib/cawco/journey/JourneySummary.svelte";
+  import {
+    CONTROLS,
+    FAIL,
+    type JourneyMark as Mark,
+    META,
+    NOTE,
+  } from "#lib/cawco/journey/journey.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
-  import { IconError, IconMonitor, IconSuccess } from "#lib/icons.js";
+  import { IconMonitor } from "#lib/icons.js";
 
   let {
     view = "journey",
@@ -114,7 +122,6 @@
   );
 
   /** How a step's mark reads: its tick, its failure, work running, or its number. */
-  type Mark = "done" | "failed" | "working" | "standing" | "waiting";
   function markOf(step: RelayStep): Mark {
     switch (step.state) {
       case "done":
@@ -174,15 +181,6 @@
   let token = $state("");
   /** The name typed, where none is known yet. */
   let typed = $state("");
-
-  /** The phone's copy row: one step's body is shown at a time, so one clipboard serves it. */
-  const clipboard = new UseClipboard();
-  const copyWord = (label: string): string => {
-    if (clipboard.status === "success") {
-      return words.copied;
-    }
-    return clipboard.status === "failure" ? words.copyFailed : label;
-  };
 
   /** Stop and Remove, asked in place under the summary (DESIGN.md, Asking in the page). */
   const asker = new Asker<AskHereRequest>();
@@ -328,133 +326,7 @@
   const busy = $derived(
     summary?.state === "pulling" || summary?.state === "starting"
   );
-
-  /** The words of a copy box, each a unit that never breaks inside: a parenthesis is one ("(DNS only, no proxy)"). */
-  const unitsOf = (text: string): string[] =>
-    text.match(/\([^)]*\)|\S+/g) ?? [text];
-
-  /** A step's note: meta, muted; a failure's in the fail ink. */
-  const NOTE = "min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere";
-  const FAIL =
-    "min-w-0 text-meta text-status-fail-ink text-pretty wrap-anywhere";
-  /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line, at every width. */
-  const META = "min-w-0 max-w-full truncate text-meta text-ink-muted";
-  /** A step's controls: side by side, each the column's width in a narrow card (one grid column), `space-2` apart. */
-  const CONTROLS =
-    "flex min-w-0 flex-wrap items-center gap-space-2 @max-field-group:grid @max-field-group:grid-cols-1";
-  /** The words under the title: on the title's edge (the lead column and `space-3`), on the card's own edge in a narrow card. */
-  const UNDER_TITLE =
-    "flex min-w-0 flex-col ps-(--title-edge) @max-field-group:ps-0";
 </script>
-
-{#snippet stepMark(mark: Mark, n: number)}
-  <span class="mark-cell">
-    <span
-      class="grid size-icon-md place-items-center text-ink-muted"
-      data-slot="step-mark"
-    >
-      {#if mark === "done"}
-        <IconSuccess
-          aria-hidden="true"
-          class="size-icon-md text-status-done-ink"
-        />
-      {:else if mark === "failed"}
-        <IconError
-          aria-hidden="true"
-          class="size-icon-md text-status-fail-ink"
-        />
-      {:else if mark === "working"}
-        <Spinner aria-hidden="true" role="none" />
-      {:else}
-        <!-- A step's number, no fill: in the muted ink on the control edge
-             while it waits, in the strong ink on the outline button's edge
-             (3:1) while it stands on you, so neither reads as a tick. -->
-        <span
-          aria-hidden="true"
-          class={[
-            "box-border grid size-full place-items-center rounded-pill border bg-transparent text-meta leading-none num before:content-data-n",
-            mark === "standing"
-              ? "border-border-button-outline text-ink-strong"
-              : "border-border-control text-ink-muted",
-          ]}
-          data-n={n}
-        ></span>
-      {/if}
-    </span>
-  </span>
-{/snippet}
-
-<!-- Something to paste elsewhere: the house's copy box in a wide card; in a
-     narrow one the text across the card, wrapping between its units (a
-     parenthesis stays whole), or clamped to two lines (`clamp`), and Copy on
-     a full-width row of its own, naming what it copies. Copy takes the whole
-     text, as it reads, either way. -->
-{#snippet copyable(
-  label: string,
-  text: string,
-  copyLabel: string,
-  clamp: boolean
-)}
-  <div class="min-w-0 @max-field-group:hidden" data-box>
-    <CopyBox {label} {text} wrap />
-  </div>
-  <div
-    class="hidden min-w-0 flex-col gap-space-2 @max-field-group:flex"
-    data-box
-  >
-    <!-- The box keeps its edge and padding; the clamp is on the words
-         inside it, so a third line is cut at the words' edge, never shown
-         in the box's padding. -->
-    <code
-      class="block min-w-0 rounded-md border border-border-control bg-surface-hover px-space-3 py-space-2 font-mono text-meta text-ink-strong"
-      title={text}
-      ><span class={clamp ? "line-clamp-2" : "block"} data-slot="copy-words"
-        ><span class="sr-only">{label}:{" "}</span
-        >{#each unitsOf(text) as unit, index (index)}{#if index > 0}{" "}{/if}<span
-            class={[
-              "inline-block max-w-full",
-              unit.startsWith("(") ? "whitespace-nowrap" : "wrap-anywhere",
-            ]}
-            data-unit>{unit}</span
-          >{/each}</span
-      ></code
-    >
-    <Button
-      class="w-full"
-      label={copyWord(copyLabel)}
-      onclick={() => clipboard.copy(text)}
-      size="sm"
-      variant="secondary"
-    />
-  </div>
-{/snippet}
-
-<!-- The title's line: the card's mark in the lead column (Caw's panel's
-     28px one); in a narrow card, where the steps take the card's own edge,
-     the mark stands in the steps' mark column and the title on their
-     labels' edge. -->
-{#snippet head(done: boolean)}
-  <div
-    class="mark-line flex min-w-0 items-center gap-space-3 @max-field-group:gap-space-2"
-  >
-    <span
-      class="grid w-c-row-lead flex-none place-items-center text-ink-muted @max-field-group:w-icon-md"
-      data-box
-    >
-      {#if done}
-        <IconSuccess
-          aria-hidden="true"
-          class="size-icon-md text-status-done-ink"
-        />
-      {:else}
-        <IconMonitor aria-hidden="true" class="size-icon-md" />
-      {/if}
-    </span>
-    <h3 class="min-w-0 text-label text-ink-strong text-balance">
-      {words.title}
-    </h3>
-  </div>
-{/snippet}
 
 {#snippet refused()}
   {#if refusal}
@@ -548,12 +420,11 @@
       </p>
     {:else}
       <p class={NOTE}>{findingOf(step)}</p>
-      {@render copyable(
-        words.recordLabel,
-        words.record(step.name, machineNow.address),
-        words.copyRecord,
-        false
-      )}
+      <JourneyCopy
+        copyLabel={words.copyRecord}
+        label={words.recordLabel}
+        text={words.record(step.name, machineNow.address)}
+      />
     {/if}
     <p class={NOTE}>{words.nameWhy(step.name)}</p>
     <div class={CONTROLS}>
@@ -620,15 +491,14 @@
   {:else if step.step === "router"}
     {#if step.state === "refused"}
       <p class={NOTE}>{words.routerRefused}</p>
-      {@render copyable(
-        words.forwardsLabel,
-        words.forwards(
+      <JourneyCopy
+        copyLabel={words.copyForwards}
+        label={words.forwardsLabel}
+        text={words.forwards(
           machineNow.lan ?? machineNow.address,
           step.http ?? false
-        ),
-        words.copyForwards,
-        false
-      )}
+        )}
+      />
     {:else}
       <p class={NOTE}>{words.routerAsk}</p>
       <div class={CONTROLS}>
@@ -645,12 +515,12 @@
     {/if}
   {:else if step.step === "runtime"}
     <p class={NOTE}>{words.runtimeNote(step, machineNow.name)}</p>
-    {@render copyable(
-      words.commandLabel,
-      words.runtimeCommand(step),
-      words.copyCommand,
-      true
-    )}
+    <JourneyCopy
+      clamp
+      copyLabel={words.copyCommand}
+      label={words.commandLabel}
+      text={words.runtimeCommand(step)}
+    />
   {:else if step.step === "certificate"}
     {#if step.state === "failed"}
       <p class={FAIL}>{step.why}</p>
@@ -751,90 +621,68 @@
 {/snippet}
 
 {#snippet journey()}
-  <section
-    aria-label={words.title}
-    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2 text-body"
+  <JourneyCard
+    class="text-body"
     data-relay-journey
+    icon={IconMonitor}
+    title={words.title}
+    under="gap-space-3"
   >
-    {@render head(false)}
-    <div
-      class="{UNDER_TITLE} gap-space-3"
-      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
-    >
-      {#if lead}
-        <p
-          class="text-body text-ink-strong text-pretty @max-field-group:hidden"
-        >
-          {domain ? words.leadDomain(domain) : words.leadPlain}
-        </p>
-        <p
-          class="hidden text-body text-ink-strong text-pretty @max-field-group:block"
-        >
-          {domain ? words.leadDomainShort(domain) : words.leadPlainShort}
-        </p>
-      {/if}
-      <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
-      <ol class="m-0 grid list-none gap-space-3 p-0" role="list">
-        {#each steps as step, index (step.step)}
-          <!-- Only the open step stands on the person; another that will
+    {#if lead}
+      <p class="text-body text-ink-strong text-pretty @max-field-group:hidden">
+        {domain ? words.leadDomain(domain) : words.leadPlain}
+      </p>
+      <p
+        class="hidden text-body text-ink-strong text-pretty @max-field-group:block"
+      >
+        {domain ? words.leadDomainShort(domain) : words.leadPlainShort}
+      </p>
+    {/if}
+    <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
+    <ol class="m-0 grid list-none gap-space-3 p-0" role="list">
+      {#each steps as step, index (step.step)}
+        <!-- Only the open step stands on the person; another that will
                ask once it is reached waits in the meantime. -->
-          {@const mark =
-            index !== open && markOf(step) === "standing"
-              ? "waiting"
-              : markOf(step)}
-          <li
-            class="mark-line grid grid-cols-mark-fluid items-start gap-x-space-2 gap-y-space-1 text-label"
-            data-open={index === open || undefined}
-            data-state={step.state}
-            data-step={step.step}
-          >
-            {@render stepMark(mark, index + 1)}
-            <span
-              class={[
-                "min-w-0 text-label wrap-anywhere",
-                mark === "done" || mark === "waiting"
-                  ? "text-ink-muted"
-                  : "text-ink-strong",
-              ]}
-              data-slot="step-label"
-              >{#if SAID[mark]}<span class="sr-only">{SAID[mark]}{" "}</span
-                >{/if}{labelOf(step)}</span
-            >
-            {#if index === open && hasBody(step)}
-              <div
-                class="col-start-2 flex min-w-0 flex-col gap-space-2 @max-field-group:col-span-2 @max-field-group:col-start-1"
-                data-box
-                data-slot="step-body"
-              >
-                {@render stepBody(step)}
-                {@render refused()}
-              </div>
-            {/if}
-          </li>
-        {/each}
-      </ol>
-      {#if open === -1}
-        {@render refused()}
-      {/if}
-      {#if row}
-        <p class={META} data-relay-meta>
-          {words.rowMeta(machine?.name ?? null, candidates)}
-        </p>
-      {/if}
-      {#if later}
-        <div class="flex justify-end">
-          <Button
-            class="-me-space-3"
-            disabled={pending !== null}
-            label={words.later}
-            onclick={() => act("later")}
-            size="sm"
-            variant="ghost"
-          />
-        </div>
-      {/if}
-    </div>
-  </section>
+        {@const mark =
+          index !== open && markOf(step) === "standing"
+            ? "waiting"
+            : markOf(step)}
+        <JourneyStep
+          body={hasBody(step)}
+          label={labelOf(step)}
+          {mark}
+          n={index + 1}
+          open={index === open}
+          said={SAID[mark]}
+          state={step.state}
+          step={step.step}
+        >
+          {@render stepBody(step)}
+          {@render refused()}
+        </JourneyStep>
+      {/each}
+    </ol>
+    {#if open === -1}
+      {@render refused()}
+    {/if}
+    {#if row}
+      <p class={META} data-relay-meta>
+        {words.rowMeta(machine?.name ?? null, candidates)}
+      </p>
+    {/if}
+    {#if later}
+      <div class="flex justify-end">
+        <Button
+          class="-me-space-3"
+          disabled={pending !== null}
+          label={words.later}
+          onclick={() => act("later")}
+          size="sm"
+          variant="ghost"
+        />
+      </div>
+    {/if}
+  </JourneyCard>
 {/snippet}
 
 {#if face === "entry" && domain}
@@ -869,59 +717,50 @@
   </section>
 {:else if face === "start"}
   <!-- Settings › Browsers before anyone set it up: why, and Set up. -->
-  <section
-    aria-label={words.title}
-    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2"
+  <JourneyCard
     data-relay-start
+    icon={IconMonitor}
+    title={words.title}
+    under="items-start gap-space-3"
   >
-    {@render head(false)}
-    <div
-      class="{UNDER_TITLE} items-start gap-space-3"
-      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
-    >
-      <p class="text-body text-ink-strong text-pretty wrap-anywhere">
-        {domain ? words.leadDomain(domain) : words.leadPlain}
-      </p>
-      <Button
-        class="@max-field-group:w-full"
-        data-relay-set-up
-        label={words.setUp}
-        onclick={() => act("set-up")}
-        pending={pending === "set-up"}
-      />
-      {@render refused()}
-    </div>
-  </section>
+    <p class="text-body text-ink-strong text-pretty wrap-anywhere">
+      {domain ? words.leadDomain(domain) : words.leadPlain}
+    </p>
+    <Button
+      class="@max-field-group:w-full"
+      data-relay-set-up
+      label={words.setUp}
+      onclick={() => act("set-up")}
+      pending={pending === "set-up"}
+    />
+    {@render refused()}
+  </JourneyCard>
 {:else if face === "done" && summary}
   <!-- Needs you's ticked row: the relay's tick, where it is live, and where
        it is seen from now on. -->
-  <section
-    aria-label={words.title}
-    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2"
+  <JourneyCard
     data-relay-done
+    done
+    icon={IconMonitor}
+    title={words.title}
+    under="items-start gap-space-2"
   >
-    {@render head(true)}
-    <div
-      class="{UNDER_TITLE} items-start gap-space-2"
-      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
-    >
-      <p class="text-body text-ink-strong text-pretty wrap-anywhere">
-        {words.doneRow(summary.name ?? summary.machine.address)}
+    <p class="text-body text-ink-strong text-pretty wrap-anywhere">
+      {words.doneRow(summary.name ?? summary.machine.address)}
+    </p>
+    {#if row}
+      <p class={META} data-relay-meta>
+        {words.rowMeta(summary.machine.name, candidates)}
       </p>
-      {#if row}
-        <p class={META} data-relay-meta>
-          {words.rowMeta(summary.machine.name, candidates)}
-        </p>
-      {/if}
-      <Button
-        class="@max-field-group:w-full"
-        href="/config/browsers"
-        label={words.openSettings}
-        size="sm"
-        variant="secondary"
-      />
-    </div>
-  </section>
+    {/if}
+    <Button
+      class="@max-field-group:w-full"
+      href="/config/browsers"
+      label={words.openSettings}
+      size="sm"
+      variant="secondary"
+    />
+  </JourneyCard>
 {:else if face === "summary" && summary}
   <!-- The relay once it has gone live, one grid: who and where, with Stop
        (or Start relay) and Remove at the trailing edge (last, under
@@ -929,166 +768,147 @@
        destructive control); its ports; then each line with its one action in
        a trailing column of its own, so those actions stand on one edge at
        one width. -->
-  <section
-    aria-label={words.title}
-    class="@container min-w-0 max-w-c-measure"
+  <JourneySummary
+    {badge}
     data-relay-summary
+    hook="relay"
+    label={words.title}
+    name={summary.machine.name}
   >
-    <div
-      class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-field-group:grid-cols-1"
-    >
-      <div class="flex min-w-0 flex-col gap-space-1">
-        <div class="flex min-w-0 flex-wrap items-center gap-space-2">
-          <span
-            class="min-w-0 text-label text-ink-strong wrap-anywhere"
-            data-relay-machine>{summary.machine.name}</span
-          >
-          <Badge data-relay-state variant={badge.tint}
-            ><span>{badge.said}</span></Badge
-          >
-        </div>
-        <p
-          class="min-w-0 text-meta text-ink-muted wrap-anywhere"
-          data-relay-line
-        >
-          <code class="font-mono text-ink-strong"
-            >{summary.machine.address}</code
-          >{#if summary.name}{" · "}<code class="font-mono text-ink-strong"
-              >{summary.name}</code
-            >{/if}
-        </p>
-      </div>
-      <div
-        class="flex flex-wrap items-center gap-space-4 @max-field-group:order-last @max-field-group:justify-self-start"
-      >
-        {#if summary.state === "stopped" || summary.state === "failed"}
-          <Button
-            data-relay-start-again
-            disabled={pending !== null}
-            label={words.startRelay}
-            onclick={() => act("start")}
-            pending={pending === "start"}
-            size="sm"
-            variant="outline"
-          />
-        {:else}
-          <!-- The machine runs one relay command at a time: a stop sent
-               while it starts would wait out the start. -->
-          <Button
-            aria-describedby={busy ? "relay-stop-wait" : undefined}
-            aria-expanded={asking("relay-stop")}
-            class="@max-field-group:-ms-space-3"
-            data-relay-stop
-            disabled={asking("relay-stop") || busy}
-            label={words.stop}
-            onclick={() => askStop(summary)}
-            size="sm"
-            variant="ghost"
-          />
-        {/if}
+    {#snippet line()}
+      <code class="font-mono text-ink-strong">{summary.machine.address}</code
+      >{#if summary.name}{" · "}<code class="font-mono text-ink-strong"
+          >{summary.name}</code
+        >{/if}
+    {/snippet}
+    {#snippet actions()}
+      {#if summary.state === "stopped" || summary.state === "failed"}
         <Button
-          aria-expanded={asking("relay-remove")}
-          data-relay-remove
-          disabled={asking("relay-remove")}
-          label={words.remove}
-          onclick={() => askRemove(summary)}
-          size="sm"
-          variant="destructive"
-        />
-      </div>
-      {#if busy}
-        <p
-          class="col-span-full text-meta text-ink-muted text-pretty"
-          data-relay-wait
-          id="relay-stop-wait"
-        >
-          {words.stopWhileStarting}
-        </p>
-      {/if}
-      {#if summary.ports.length > 0}
-        <ul
-          aria-label={words.portsLabel}
-          class="col-span-full m-0 flex min-w-0 list-none flex-wrap gap-space-2 p-0"
-          data-relay-ports
-        >
-          {#each summary.ports as port (port.name)}
-            <li>
-              <Badge
-                data-relay-port={port.name}
-                variant={port.up ? "done" : "fail"}
-                ><span>{port.name} {port.up ? "up" : "down"}</span></Badge
-              >
-            </li>
-          {/each}
-        </ul>
-        {#each summary.ports.filter((port) => port.error) as port (port.name)}
-          <p
-            class="col-span-full min-w-0 text-meta text-ink-muted wrap-anywhere"
-            data-relay-port-error={port.name}
-          >
-            <span class="text-ink-strong">{port.name}:</span>
-            {port.error}
-          </p>
-        {/each}
-      {/if}
-      {#if summary.why}
-        <p class="col-span-full {FAIL}" data-relay-why>
-          {#if summary.whyCommand && summary.why.includes(summary.whyCommand)}
-            {@const at = summary.why.indexOf(summary.whyCommand)}
-            {summary.why.slice(0, at)}<code class="font-mono text-ink-strong"
-              >{summary.whyCommand}</code
-            >{summary.why.slice(at + summary.whyCommand.length)}
-          {:else}
-            {summary.why}
-          {/if}
-        </p>
-      {/if}
-      <div
-        class="col-span-full grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-field-group:grid-cols-1 @max-field-group:justify-items-start"
-      >
-        <p
-          class="min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere"
-          data-relay-proven
-        >
-          {#if summary.endsAt}{words.certificateEnds(
-              summary.endsAt
-            )}{" · "}{/if}{summary.proven
-            ? words.provenBy(summary.proven.device, summary.proven.at)
-            : words.notProven}
-        </p>
-        <Button
-          data-relay-check-again
-          disabled={pending !== null || summary.state !== "live"}
-          label={words.checkAgain}
-          onclick={() => act("check-again")}
-          pending={pending === "check-again"}
+          data-relay-start-again
+          disabled={pending !== null}
+          label={words.startRelay}
+          onclick={() => act("start")}
+          pending={pending === "start"}
           size="sm"
           variant="outline"
         />
-        {#if !summary.name}
-          <p class="min-w-0 text-meta text-ink-muted text-pretty">
-            {words.noName}
-          </p>
-          <Button
-            data-relay-add-name
-            disabled={pending !== null}
-            label={words.addName}
-            onclick={() => act("add-name")}
-            pending={pending === "add-name"}
-            size="sm"
-            variant="outline"
-          />
+      {:else}
+        <!-- The machine runs one relay command at a time: a stop sent
+             while it starts would wait out the start. -->
+        <Button
+          aria-describedby={busy ? "relay-stop-wait" : undefined}
+          aria-expanded={asking("relay-stop")}
+          class="@max-field-group:-ms-space-3"
+          data-relay-stop
+          disabled={asking("relay-stop") || busy}
+          label={words.stop}
+          onclick={() => askStop(summary)}
+          size="sm"
+          variant="ghost"
+        />
+      {/if}
+      <Button
+        aria-expanded={asking("relay-remove")}
+        data-relay-remove
+        disabled={asking("relay-remove")}
+        label={words.remove}
+        onclick={() => askRemove(summary)}
+        size="sm"
+        variant="destructive"
+      />
+    {/snippet}
+    {#if busy}
+      <p
+        class="col-span-full text-meta text-ink-muted text-pretty"
+        data-relay-wait
+        id="relay-stop-wait"
+      >
+        {words.stopWhileStarting}
+      </p>
+    {/if}
+    {#if summary.ports.length > 0}
+      <ul
+        aria-label={words.portsLabel}
+        class="col-span-full m-0 flex min-w-0 list-none flex-wrap gap-space-2 p-0"
+        data-relay-ports
+      >
+        {#each summary.ports as port (port.name)}
+          <li>
+            <Badge
+              data-relay-port={port.name}
+              variant={port.up ? "done" : "fail"}
+              ><span>{port.name} {port.up ? "up" : "down"}</span></Badge
+            >
+          </li>
+        {/each}
+      </ul>
+      {#each summary.ports.filter((port) => port.error) as port (port.name)}
+        <p
+          class="col-span-full min-w-0 text-meta text-ink-muted wrap-anywhere"
+          data-relay-port-error={port.name}
+        >
+          <span class="text-ink-strong">{port.name}:</span>
+          {port.error}
+        </p>
+      {/each}
+    {/if}
+    {#if summary.why}
+      <p class="col-span-full {FAIL}" data-relay-why>
+        {#if summary.whyCommand && summary.why.includes(summary.whyCommand)}
+          {@const at = summary.why.indexOf(summary.whyCommand)}
+          {summary.why.slice(0, at)}<code class="font-mono text-ink-strong"
+            >{summary.whyCommand}</code
+          >{summary.why.slice(at + summary.whyCommand.length)}
+        {:else}
+          {summary.why}
         {/if}
-      </div>
-      <!-- Under Stop and Remove in every layout: in a narrow card they move
-           last, and the question they ask moves with them. -->
-      <div class="col-span-full min-w-0 @max-field-group:order-last">
-        {@render refused()}
-        <AskHere {asker} at="relay-stop" />
-        <AskHere {asker} at="relay-remove" />
-      </div>
+      </p>
+    {/if}
+    <div
+      class="col-span-full grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-field-group:grid-cols-1 @max-field-group:justify-items-start"
+    >
+      <p
+        class="min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere"
+        data-relay-proven
+      >
+        {#if summary.endsAt}{words.certificateEnds(
+            summary.endsAt
+          )}{" · "}{/if}{summary.proven
+          ? words.provenBy(summary.proven.device, summary.proven.at)
+          : words.notProven}
+      </p>
+      <Button
+        data-relay-check-again
+        disabled={pending !== null || summary.state !== "live"}
+        label={words.checkAgain}
+        onclick={() => act("check-again")}
+        pending={pending === "check-again"}
+        size="sm"
+        variant="outline"
+      />
+      {#if !summary.name}
+        <p class="min-w-0 text-meta text-ink-muted text-pretty">
+          {words.noName}
+        </p>
+        <Button
+          data-relay-add-name
+          disabled={pending !== null}
+          label={words.addName}
+          onclick={() => act("add-name")}
+          pending={pending === "add-name"}
+          size="sm"
+          variant="outline"
+        />
+      {/if}
     </div>
-  </section>
+    <!-- Under Stop and Remove in every layout: in a narrow card they move
+           last, and the question they ask moves with them. -->
+    <div class="col-span-full min-w-0 @max-field-group:order-last">
+      {@render refused()}
+      <AskHere {asker} at="relay-stop" />
+      <AskHere {asker} at="relay-remove" />
+    </div>
+  </JourneySummary>
 {:else}
   {@render journey()}
 {/if}
