@@ -11,7 +11,7 @@
  * holds it: the mode takes its three segments back, then, on a pane
  * {@link WORDS_FROM}px or wider, Send and then Comments their words.
  */
-import type { Snippet } from "svelte";
+import type { Component, Snippet } from "svelte";
 
 /** One of the pane's controls: drawn in the head while it fits, else as More's entries. */
 export interface HeadItem {
@@ -19,8 +19,8 @@ export interface HeadItem {
   bar: Snippet;
   /** Its one-button form (the mode's chosen glyph opening the three): its narrowest, taken first, `bar` once the room left holds it. */
   compact?: Snippet;
-  /** Its count, said on More while this stands in it and only above 0 (Comments' open pins), under the name `of` gives it. */
-  count?: { n: number; of: string };
+  /** Its count, said on More while this stands in it and only above 0 (Comments' open pins), beside its own `glyph` so More says what it counts, under the name `of` gives it. */
+  count?: { glyph: Component; n: number; of: string };
   /** More rules it off from its neighbours: a group of entries (the mode, the canvas view). */
   group?: boolean;
   key: string;

@@ -9,7 +9,8 @@
    * the head's own title (SideSurface's `title`; DESIGN.md, The Role, Not
    * Size Rule, The Mark Line Rule), its padding the title's inset there.
    * `count`: a glyph and the count it holds on one line (a pane head's
-   * More). `look`: the trigger by its role.
+   * More: menu-dots, then the counted control's own glyph and its count),
+   * at `space-2` in so the three stand where Send keeps its room. `look`: the trigger by its role.
    * `attach`: the composer's Attach (DESIGN.md, Composer: "34px Attach
    * (raised, control edge) … at the concentric 4px radius. They scale to
    * 0.97 on press"); while the composer's controls are inert under an ask
@@ -20,7 +21,7 @@
       face: {
         title:
           "mark-line type-label min-w-0 gap-space-1 px-space-2 text-ink-strong",
-        count: "mark-line",
+        count: "mark-line px-space-2",
       },
       look: {
         attach:

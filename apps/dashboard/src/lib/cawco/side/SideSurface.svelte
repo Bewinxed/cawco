@@ -505,8 +505,11 @@
         >
           <IconMore />
           {#if moreCount}
-            <span data-slot="more-count" class="text-ink-muted num"
-              >{moreCount.n}</span
+            <!-- The count says what it counts: its control's own glyph beside it (Comments' chat-square), so "⋯ 2" never reads as two things in More. -->
+            <span
+              data-slot="more-count"
+              class="inline-flex items-center gap-space-1 text-ink-muted num"
+              ><moreCount.glyph />{moreCount.n}</span
             >
           {/if}
         </DropdownMenu.Trigger>

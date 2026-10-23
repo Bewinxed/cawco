@@ -35,7 +35,8 @@
  *
  * The panel (the bench) at 390, 523 and 720, light and dark:
  * 8. (330 too, where the mode stands as one button; and 8h, at 330 with
- *    Send standing, Comments in More at 0 and 2 open pins.)
+ *    Send standing, Comments in More at 0 and 2 open pins; and 8j, at 390
+ *    and 680, the open count said as Comments' wherever Comments stands.)
  *    The name is whole or ellipsed, never under another control; every
  *    head control is 44px tall or reaches 44px through its ::after under a
  *    finger; the controls past the head's room stand in More, in head
@@ -3117,6 +3118,109 @@ async function moreHoldsComments(
   await page.close();
 }
 
+/**
+ * 8j: the open comments' count is said as Comments' wherever Comments
+ * stands, at a phone's 390 pane and a 680 one, with Send standing and 2
+ * open pins (DESIGN.md, Artifact panel: "Comments in More keeps its open
+ * count on More"). Read from the boxes: what stands; the count's box and
+ * text, on Comments or on More; and, on More, the glyph inside the count's
+ * box, held to the Comments entry's own glyph, so "⋯ 2" never reads as
+ * two things in More.
+ */
+async function headCountLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  width: number,
+  theme: "light" | "dark"
+): Promise<void> {
+  const page = await kit.page(width < 640 ? "phone" : "desk", {
+    theme,
+    scale: 2,
+  });
+  await page.setViewportSize({ width: width + 40, height: 844 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  const doc = await serveDoc(page);
+  await page.goto(
+    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
+  );
+  await page.waitForSelector("[data-bench-pane] [data-slot=send]", {
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(2500);
+  doc.pins(2);
+  await page.waitForTimeout(1200);
+  const head = "[data-bench-pane] [data-slot=side-head]";
+  const read = await page.evaluate((sel) => {
+    const el = document.querySelector(sel) as HTMLElement;
+    const boxOf = (one: Element | null) => {
+      if (!one) {
+        return null;
+      }
+      const box = one.getBoundingClientRect();
+      return `x${Math.round(box.x)} w${Math.round(box.width)} h${Math.round(box.height)}`;
+    };
+    const comments = el.querySelector(
+      ":scope > [data-head-item=comments]:not([hidden]) [data-slot=comments]"
+    );
+    const more = el.querySelector(":scope > [data-slot=more]");
+    const moreCount = more?.querySelector("[data-slot=more-count]") ?? null;
+    return {
+      head: Math.round(el.clientWidth),
+      standing: [...el.children]
+        .filter((one) => !(one as HTMLElement).hidden)
+        .map((one) => {
+          const it = one as HTMLElement;
+          return `${it.dataset.headItem ?? it.dataset.slot ?? it.tagName}${it.dataset.form === "compact" ? "(compact)" : ""} ${boxOf(one)}`;
+        }),
+      commentsCount: comments
+        ? `${comments.querySelector("[data-slot=count]")?.textContent?.trim() ?? "none"} ${boxOf(comments.querySelector("[data-slot=count]"))}`
+        : "not standing",
+      moreCount: moreCount
+        ? `${moreCount.textContent?.trim()} ${boxOf(moreCount)}`
+        : "none",
+      moreCountGlyph:
+        moreCount?.querySelector("svg")?.innerHTML.replace(/\s+/g, " ") ??
+        "none",
+      moreLabel: more?.getAttribute("aria-label") ?? "no More",
+    };
+  }, head);
+  let entryGlyph = "none";
+  if (read.moreCount !== "none") {
+    await page.locator(`${head} [data-slot=more]`).click();
+    const entry = page
+      .locator("[data-slot=dropdown-menu-content] [role=menuitem]")
+      .filter({ hasText: "Comments" });
+    entryGlyph =
+      (await entry.locator("svg").first().innerHTML()).replace(/\s+/g, " ") ??
+      "none";
+    await page.keyboard.press("Escape");
+  }
+  const { moreCountGlyph, ...said } = read;
+  kit.note(`8j ${width} ${theme}: ${JSON.stringify(said)}`);
+  const onComments = read.commentsCount.startsWith("2 x");
+  const onMore =
+    read.moreCount.startsWith("2 x") &&
+    moreCountGlyph !== "none" &&
+    moreCountGlyph === entryGlyph &&
+    read.moreLabel === "More, Comments 2 open";
+  kit.check(
+    `8j: ${width} ${theme}, Send standing, 2 open: the count 2 stands as Comments' (${onComments ? "on Comments" : "on More, beside Comments' own glyph"}), never a bare figure on More`,
+    onComments !== onMore && (width < 640 || onComments),
+    JSON.stringify({
+      ...said,
+      moreCountGlyphIsComments: moreCountGlyph === entryGlyph,
+      moreCountGlyph: moreCountGlyph === "none" ? "none" : "drawn",
+    })
+  );
+  await page.close();
+}
+
 /** 8i: Comments itself in the head, at 720, at 0 open pins and at 2: its count drawn only above 0, its name saying it only then. */
 async function commentsCount(
   kit: Kit,
@@ -3647,11 +3751,28 @@ async function sweeps(kit: Kit, bench: string, stage: Stage): Promise<void> {
   }
 }
 
+/** 8j at 390 and 680, then 8h, in each scheme: the open count wherever Comments stands. */
+async function countLegs(kit: Kit, bench: string, stage: Stage): Promise<void> {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 680]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+      await headCountLeg(kit, bench, stage, width, theme);
+    }
+    await moreHoldsComments(kit, bench, stage, theme);
+  }
+}
+
+/** The legs `CANVAS_DESIGN` runs alone on the bench by their name. */
+const ALONE: Record<
+  string,
+  (kit: Kit, bench: string, stage: Stage) => Promise<void>
+> = { sweep: sweeps, desk: deskLeg, count: countLegs };
+
 const spec: Spec = {
   name: "canvas-design",
   run: async (kit) => {
     const stage = await stageOf();
-    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash); `=sweep` the head's W0–W4 alone; `=desk` leg D alone.
+    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash); `=sweep` the head's W0–W4 alone; `=desk` leg D alone; `=count` legs 8j and 8h alone.
     const only = process.env.CANVAS_DESIGN;
     try {
       if (only === "switch") {
@@ -3677,12 +3798,9 @@ const spec: Spec = {
         await backLeg(kit, bench, stage);
         return;
       }
-      if (only === "sweep") {
-        await sweeps(kit, await kit.bench(), stage);
-        return;
-      }
-      if (only === "desk") {
-        await deskLeg(kit, await kit.bench(), stage);
+      const alone = ALONE[only ?? ""];
+      if (alone) {
+        await alone(kit, await kit.bench(), stage);
         return;
       }
       for (const theme of only === "head" ? [] : (["light", "dark"] as const)) {
@@ -3718,6 +3836,8 @@ const spec: Spec = {
             .join("; ")
         );
         await moreHoldsComments(kit, bench, stage, theme);
+        await headCountLeg(kit, bench, stage, 390, theme);
+        await headCountLeg(kit, bench, stage, 680, theme);
         await commentsCount(kit, bench, stage, theme);
         await mapLeg(kit, bench, stage, 720, theme);
         await mapLeg(kit, bench, stage, 390, theme);

@@ -33,6 +33,13 @@
  *    whole width.
  * 6. At 1440, a session's rename field in the rail's row is its words'
  *    column widened by the bleed on each side, and stands clear of Peek.
+ * 7. At 1440 and 390, light and dark, the board's quiet words hold 4.5:1
+ *    on what they stand on (WCAG 2.2, type-meta and type-label are not
+ *    large text): each column head's name, count and kind word, and each
+ *    card's id, title and muted lines (its foot: to-dos and labels, the
+ *    line its "attempt working" stands on), as computed, against the
+ *    fills under them composited as the browser paints them.
+ *    `PROJECT_DETAILS=ink` runs 7 alone.
  *
  *   bun scripts/probe-kit/run.ts web project-details
  */
@@ -229,8 +236,10 @@ const setUp = async (kit: Kit): Promise<Setup> => {
     { name: "Details", machineId: MACHINE, cwd: src }
   );
   for (let n = 1; n <= TASKS; n += 1) {
+    // The first carries a to-do and a label: its foot is a card's muted line (7).
     await fleet.api(`/api/projects/${project.id}/tasks`, {
       title: `Task ${n}`,
+      ...(n === 1 ? { todos: ["One"], labels: ["probe"] } : {}),
     });
   }
   const base = await fleet.dashboard();
@@ -727,8 +736,101 @@ const rename = async (kit: Kit, { fleet, url }: Setup) => {
   await page.close();
 };
 
+/** 7. The board's quiet words, each as computed over the fills under it composited, with its contrast. */
+const readInk = (page: Page) =>
+  page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 1;
+    c.height = 1;
+    const ctx = c.getContext("2d", {
+      willReadFrequently: true,
+    }) as CanvasRenderingContext2D;
+    /** `css` painted over `under` (rgb), as the browser composites it. */
+    const over = (under: number[], css: string): number[] => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = `rgb(${under.join(" ")})`;
+      ctx.fillRect(0, 0, 1, 1);
+      ctx.fillStyle = css;
+      ctx.fillRect(0, 0, 1, 1);
+      return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+    };
+    const lum = (rgb: number[]) => {
+      const [r = 0, g = 0, b = 0] = rgb.map((v) => {
+        const s = v / 255;
+        return s <= 0.040_45 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: number[], b: number[]) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+      return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+    };
+    const read = (what: string, el: Element | null) => {
+      if (!el) {
+        return null;
+      }
+      const fills: string[] = [];
+      for (let at: Element | null = el; at; at = at.parentElement) {
+        fills.unshift(getComputedStyle(at).backgroundColor);
+      }
+      const bg = fills.reduce(over, [255, 255, 255]);
+      const ink = getComputedStyle(el).color;
+      const fg = over(bg, ink);
+      return {
+        what,
+        ink,
+        under: fills.filter((f) => f !== "rgba(0, 0, 0, 0)").at(-1) ?? "",
+        ratio: Math.round(ratio(fg, bg) * 100) / 100,
+      };
+    };
+    const column = document.querySelector('[data-slot="column"]');
+    const card = document.querySelector(
+      '[data-slot="project-page"] [data-task-card]:has([data-slot="foot"])'
+    );
+    return [
+      read("column name", column?.querySelector('[data-slot="name"]') ?? null),
+      read(
+        "column count",
+        column?.querySelector('[data-slot="count"]') ?? null
+      ),
+      read("column kind", column?.querySelector('[data-slot="kind"]') ?? null),
+      read("card id", card?.querySelector('[data-slot="id"]') ?? null),
+      read("card title", card?.querySelector('[data-slot="title"]') ?? null),
+      read("card foot", card?.querySelector('[data-slot="foot"]') ?? null),
+      read(
+        "card to-dos",
+        card?.querySelector('[data-slot="foot"] [data-slot="num"]') ?? null
+      ),
+    ];
+  });
+
+const inkLegs = async (kit: Kit, { url }: Setup) => {
+  for (const { view, name } of LEGS) {
+    for (const theme of THEMES) {
+      const page = await kit.page(view, { theme });
+      await open(
+        page,
+        url,
+        '[data-slot="project-page"] [data-task-card]:has([data-slot="foot"])'
+      );
+      await settle(page, 300);
+      const read = await readInk(page);
+      kit.check(
+        `${name} ${theme}: 7. the board's quiet words (column name, count, kind; card id, title, foot) each hold 4.5:1 on what they stand on`,
+        read.every((one) => one !== null && one.ratio >= 4.5),
+        JSON.stringify(read)
+      );
+      await page.close();
+    }
+  }
+};
+
 const run = async (kit: Kit) => {
   const setup = await setUp(kit);
+  await inkLegs(kit, setup);
+  if (process.env.PROJECT_DETAILS === "ink") {
+    return;
+  }
   for (const { view, name } of LEGS) {
     for (const theme of THEMES) {
       await leg(kit, setup, view, name, theme);

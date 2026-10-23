@@ -3040,7 +3040,7 @@
         priority: HEAD_PRIORITY.comments,
         bar: commentsBar,
         menu: commentsMenu,
-        count: { n: listOpen ? 0 : openCount, of: "Comments" },
+        count: { glyph: IconChat, n: listOpen ? 0 : openCount, of: "Comments" },
         words: true,
       });
     }

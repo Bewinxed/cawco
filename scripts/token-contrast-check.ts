@@ -150,6 +150,33 @@ const PAIRS: Pair[] = [
     floor: TEXT,
     source: S.subtle,
   })),
+  // A board column's head on its band (TaskColumn: the stage's name in
+  // ink-strong, its count and kind word in ink-subtle, a muted line).
+  ...(
+    [
+      ["ink-strong", S.inks],
+      ["ink-muted", S.inks],
+      ["ink-subtle", S.subtle],
+    ] as const
+  ).map(([ink, source]) => ({
+    label: `${ink} on surface-band (a board column's head)`,
+    fg: ink,
+    bg: ["surface-band"],
+    floor: TEXT,
+    source,
+  })),
+  // A picked task card's quiet lines (TaskCard on selected-bg: its id in
+  // ink-subtle, its "attempt working" line and foot in ink-muted). The id
+  // measures under its floor in both schemes: ink-subtle is the weakest mix
+  // that holds on fill, hover and raised, not on the selection wash.
+  ...(["ink-muted", "ink-subtle"] as const).map((ink) => ({
+    label: `${ink} on selected-bg (a picked task card)`,
+    fg: ink,
+    bg: ["selected-bg"],
+    floor: TEXT,
+    source: ink === "ink-subtle" ? S.subtle : S.inks,
+    ...(ink === "ink-subtle" ? { known: { light: 4.24, dark: 4.22 } } : {}),
+  })),
   // White on coral: the action, every gradient stop, hover, the chosen chip.
   ...(
     [
