@@ -433,6 +433,7 @@ import {
 } from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { leakWords } from "@cawco/core/words/leaks";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -26070,7 +26071,7 @@ export const createServer = (
     asked: NamedSpawn | { refusal: string }
   ): void => {
     if ("refusal" in asked) {
-      console.warn(`[hub] refused spawn: ${asked.refusal}`);
+      console.warn(spawnWords.refusedLine(asked.refusal));
       sendFrame(ws, failure(message, asked.refusal));
       return;
     }
@@ -26079,13 +26080,13 @@ export const createServer = (
     const before = rowNamed(message.instanceId);
     const settled = settleMode(message.machineId, asked, reviveMode(before));
     if ("refusal" in settled) {
-      console.warn(`[hub] refused spawn: ${settled.refusal}`);
+      console.warn(spawnWords.refusedLine(settled.refusal));
       sendFrame(ws, refusedStart(message, settled));
       return;
     }
     const launched = atLaunchDir(message.instanceId, settled.payload);
     if ("refusal" in launched) {
-      console.warn(`[hub] refused spawn: ${launched.refusal}`);
+      console.warn(spawnWords.refusedLine(launched.refusal));
       sendFrame(ws, failure(message, launched.refusal));
       return;
     }
@@ -26097,7 +26098,7 @@ export const createServer = (
         })
       : {};
     if ("refusal" in placed) {
-      console.warn(`[hub] refused spawn: ${placed.refusal}`);
+      console.warn(spawnWords.refusedLine(placed.refusal));
       sendFrame(ws, failure(message, placed.refusal));
       return;
     }
@@ -34042,7 +34043,7 @@ export const createServer = (
               // see `enforceRowSessionKey`.
               const start = namedSpawn(message.payload as SpawnPayload);
               if ("refusal" in start) {
-                console.warn(`[hub] refused spawn: ${start.refusal}`);
+                console.warn(spawnWords.refusedLine(start.refusal));
                 sendFrame(ws, failure(message, start.refusal));
                 break;
               }
@@ -34057,7 +34058,7 @@ export const createServer = (
                   start
                 );
               if (refusal) {
-                console.warn(`[hub] refused spawn: ${refusal}`);
+                console.warn(spawnWords.refusedLine(refusal));
                 sendFrame(ws, failure(message, refusal));
                 break;
               }

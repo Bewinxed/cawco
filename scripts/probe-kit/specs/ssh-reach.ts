@@ -130,6 +130,7 @@ import {
 } from "../../../packages/core/src/signal";
 import type { RelayAnswer } from "../../../packages/core/src/stream-relay";
 import { connectWords } from "../../../packages/core/src/words/connect";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { ACCOUNT, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { machineBin } from "../ssh-target";
@@ -853,7 +854,7 @@ async function sessionStarts(
     );
   const tookMs = Date.now() - started;
   const refusedSpawn = (await spawnLines()).filter((line) =>
-    line.includes("[hub] refused spawn")
+    line.includes(spawnWords.refused)
   );
   const onBox = fleet.query<{ last_error: string | null; status: string }>(
     "SELECT status, last_error FROM instances WHERE machine_id = ? ORDER BY created_at DESC LIMIT 1",
