@@ -31,11 +31,11 @@
   import InstallRow from "./connect/InstallRow.svelte";
   import { connect } from "./connect/installs.svelte";
   import { CONNECT_WAYS } from "./connect/ways";
-  import { itemWords } from "./convergence";
-  import { retryFleetItem } from "./fleet";
+  import { retryFleetItems } from "./fleet";
   import { home } from "./home/home-state.svelte";
   import { answerMachine, hubAuth } from "./hub-auth.svelte";
   import { failureWords } from "./hub-read";
+  import ItemFaults from "./ItemFaults.svelte";
   import MachineMenu from "./MachineMenu.svelte";
   import { pausedWords } from "./machine-pause";
   import { reflow } from "./motion/rows.svelte";
@@ -354,16 +354,10 @@
               ? "It refused the fleet's last change. CawCo sends it again on its own."
               : undefined}
           />
-          <!-- Each item that did not set up, in the machine's words, with its own Retry. -->
-          {#each Object.values(machine.fleetItems ?? {}).filter((item) => item.state === "failed") as item (item.id)}
-            <RowFault
-              again={() => retryFleetItem(machine.machineId, item.id)}
-              againLabel="Retry"
-              data-item-fault={item.id}
-              details={item.error}
-              reason={`${itemWords(item.id)} did not set up.`}
-            />
-          {/each}
+          <ItemFaults
+            items={Object.values(machine.fleetItems ?? {})}
+            retry={(ids) => retryFleetItems(machine.machineId, ids)}
+          />
         {/if}
       </li>
     {/each}

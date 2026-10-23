@@ -1215,19 +1215,19 @@ export const pushHook = (machineId: string, id: string): Promise<unknown> =>
     "overwrite this machine"
   );
 
-/** One item that did not set up on a machine, converged again: the hub sends it forced (hub fleet-sync.ts `retry`). */
-export const retryFleetItem = (
+/** The items that did not set up on a machine, converged again: the hub sends them forced in one delta (hub fleet-sync.ts `retry`). */
+export const retryFleetItems = (
   machineId: string,
-  id: string
+  ids: readonly string[]
 ): Promise<unknown> =>
   send(
     "/api/fleet/items/retry",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId, id }),
+      body: JSON.stringify({ machineId, ids }),
     },
-    "set this up again"
+    "set these up again"
   );
 
 /**

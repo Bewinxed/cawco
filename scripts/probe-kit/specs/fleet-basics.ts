@@ -251,26 +251,25 @@ const spec: Spec = {
       JSON.stringify(items)
     );
 
-    // (d) The dashboard's row for the machine: the npx row's item that did
-    // not set up, in npm's words, with its own Retry; pressed, the item
-    // converges again.
+    // (d) The dashboard's row for the machine: the npx row's item that
+    // didn't set up, in npm's words, in its cause's group with one Retry;
+    // pressed, the item converges again.
     const page = await kit.page("desk");
     await open(page, await fleet.dashboard(), "[data-machines]");
     await page.locator("[data-machines]").click();
     const machineLi = page.locator(`li[data-machine="${MACHINE}"]`);
-    const itemFault = machineLi.locator(`[data-item-fault="${npxItem}"]`);
-    const itemShown = await itemFault
-      .getByText(`MCP server ${HELD_ROW} did not set up.`)
-      .waitFor({ timeout: 30_000 })
-      .then(
-        () => true,
-        () => false
-      );
+    const itemFault = machineLi
+      .locator("[data-fault-group]")
+      .filter({ hasText: `MCP server ${HELD_ROW} didn't set up.` });
+    const itemShown = await itemFault.waitFor({ timeout: 30_000 }).then(
+      () => true,
+      () => false
+    );
     const meta = (await machineLi.locator('[data-slot="meta"]').innerText())
       .replaceAll("\n", " ")
       .trim();
     check(
-      `(d) the machine's row in the dashboard: "${meta}", and "MCP server ${HELD_ROW} did not set up." with a Retry`,
+      `(d) the machine's row in the dashboard: "${meta}", and "MCP server ${HELD_ROW} didn't set up." with a Retry`,
       itemShown &&
         meta.includes("not set up") &&
         (await itemFault.getByRole("button", { name: "Retry" }).count()) === 1,

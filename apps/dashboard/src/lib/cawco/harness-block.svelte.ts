@@ -105,7 +105,7 @@ export function harnessBlockOf(
     spec,
     why:
       kind === "not-installed"
-        ? `${spec.name} isn't installed on ${name}, so CawCo can't start a ${spec.name} session${harness === "claude" ? " or sign an account in" : ""} there. Install ${spec.name}, and CawCo runs it as soon as it's on.`
+        ? `${spec.name} isn't installed on ${name}, so CawCo can't start ${spec.name} sessions${harness === "claude" ? " or sign an account in" : ""} there. Install ${spec.name}, and CawCo runs it as soon as it's on.`
         : (report.authReason ??
           `${spec.name}${report.version ? ` ${report.version}` : ""} on ${name} isn't one CawCo runs. ${harnessWords.press({ kind, spec })} on this machine, and CawCo runs it again.`),
     fix: fixOf(spec, tool),

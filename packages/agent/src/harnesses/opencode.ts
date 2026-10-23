@@ -5480,6 +5480,13 @@ export class OpencodeHarness implements Harness {
       mcp,
       ...(memory ? { memory } : {}),
     });
+    if (!(await this.#runsHere())) {
+      // Its files are written, for the OpenCode put on later; with none
+      // that CawCo runs here there is no server to start or read, so the
+      // sync stops at them rather than failing every item of the pass.
+      report.mcp = {};
+      return report;
+    }
     const serversMoved =
       canonicalizeJson(
         await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP)
@@ -5512,10 +5519,24 @@ export class OpencodeHarness implements Harness {
     return report;
   }
 
+  /**
+   * An OpenCode CawCo runs is here (tools.ts `toolGate`). One missing, or at
+   * another version, is said where it blocks (the machine's harness block),
+   * once; the fleet's sync and reads leave its server alone, so its refusal
+   * never fails the items every other harness converged
+   * (niftybot.art, 2026-10-23: 141 of 141 "not set up", each with
+   * "OpenCode isn't installed on this machine").
+   */
+  async #runsHere(): Promise<boolean> {
+    return !(await toolGate(OPENCODE_SPEC)).refused;
+  }
+
   async fleetStatus(): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(OPENCODE_SIDECAR);
     const report: FleetSyncReport = {
-      mcp: await this.#readFleetMcp(sidecar.mcp ?? [], "latest"),
+      mcp: (await this.#runsHere())
+        ? await this.#readFleetMcp(sidecar.mcp ?? [], "latest")
+        : {},
       marketplaces: {},
       plugins: {},
       skills: {},

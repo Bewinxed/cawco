@@ -7,7 +7,7 @@
 
 import { existsSync, realpathSync } from "node:fs";
 import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
-import { platform, tmpdir } from "node:os";
+import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type {
   ToolFootprint,
@@ -309,6 +309,68 @@ const bears = async (
   return locks.some(Boolean);
 };
 
+/** The bin dirs Homebrew links into, which a service manager's PATH may not hold while the person's shell does. */
+const BREW_BINS = [
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  "/home/linuxbrew/.linuxbrew/bin",
+];
+
+/** `path` as a person reads it: under the home as `~/…`. */
+const shownPath = (path: string): string => {
+  const home = homedir();
+  return isUnder(path, home) ? `~${path.slice(home.length)}` : path;
+};
+
+const realOf = (path: string): string => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+};
+
+/**
+ * Where the copy of `spec` CawCo runs is ({@link toolBinary}: the one every
+ * probe, gate and spawn takes), and the other copies on the machine it
+ * passes over, as a sentence's tail: "at ~/.bun/bin/pi", then "CawCo runs
+ * that one and passes over the one at /opt/homebrew/bin/pi." The Mac's pi
+ * read 1.2.0 off a stray `~/.bun/bin/pi` while the shell ran Homebrew's
+ * 1.3.0, and the row named neither (2026-10-23).
+ */
+const copyWords = (
+  spec: ToolSpec,
+  path: string
+): { at: string; others: string } => {
+  const runs = realOf(path);
+  const copies = new Set([runs]);
+  const others: string[] = [];
+  const candidates = [
+    ...everyBin(spec.bin),
+    ...(spec.wellKnownPaths ?? []).map((each) => expandHome(each)),
+    ...BREW_BINS.map((dir) => join(dir, spec.bin)),
+  ];
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) {
+      continue;
+    }
+    const real = realOf(candidate);
+    if (!copies.has(real)) {
+      copies.add(real);
+      others.push(shownPath(candidate));
+    }
+  }
+  const [first, ...rest] = others;
+  let passed = "";
+  if (first) {
+    passed =
+      rest.length === 0
+        ? ` CawCo runs that one and passes over the one at ${first}.`
+        : ` CawCo runs that one and passes over the ones at ${new Intl.ListFormat("en", { type: "conjunction" }).format(others)}.`;
+  }
+  return { at: `at ${shownPath(path)}`, others: passed };
+};
+
 /** Where this machine's copy of a tool is, and the catalog method that put it there. */
 const findCopy = async (spec: ToolSpec): Promise<Found | undefined> => {
   const path = await toolBinary(spec);
@@ -463,7 +525,7 @@ export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
     sawTool(spec.id, "missing");
     return {
       refused: "not-installed",
-      words: `${spec.name} isn't installed on this machine, so CawCo can't start a ${spec.name} session there. Install ${spec.name}, and CawCo runs it as soon as it's on.`,
+      words: `${spec.name} isn't installed on this machine, so CawCo can't start ${spec.name} sessions there. Install ${spec.name}, and CawCo runs it as soon as it's on.`,
     };
   }
   const file = await realpath(path).catch(() => path);
@@ -489,11 +551,12 @@ export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
   const update = spec.exactVersion
     ? `Install ${spec.name} ${spec.exactVersion}`
     : `Update ${spec.name}`;
+  const where = copyWords(spec, path);
   return {
     path,
     ...(version ? { version } : {}),
     refused: "version",
-    words: `${spec.name} ${version ?? "(it said no version)"} on this machine isn't one CawCo runs (${wanted(spec)}), so no ${spec.name} session starts there. ${update} on this machine, and CawCo runs it again: nothing was started.`,
+    words: `${spec.name} ${version ?? "(it said no version)"} ${where.at} on this machine isn't one CawCo runs (${wanted(spec)}), so no ${spec.name} session starts there. ${update} on this machine, and CawCo runs it again: nothing was started.${where.others}`,
   };
 };
 
@@ -515,12 +578,13 @@ export const probeTool = async (
   const version = await probeVersion(spec, at.path);
   sawTool(spec.id, version ?? "unsaid");
   const method = at.method ? { method: at.method.label } : {};
+  const where = copyWords(spec, at.path);
   // A tool whose own updates CawCo rides runs at its floor or newer.
   if (spec.minVersion && !(version && !olderThan(version, spec.minVersion))) {
     return {
       id: spec.id,
       state: "failed",
-      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${spec.minVersion} or newer. Update it to put a newer one on.`,
+      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed ${where.at}${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${spec.minVersion} or newer. Update it to put a newer one on.${where.others}`,
       ...(version ? { version } : {}),
       ...method,
       at: Date.now(),
@@ -532,7 +596,7 @@ export const probeTool = async (
     return {
       id: spec.id,
       state: "failed",
-      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${want}. ${refused ? `${refused}.` : "Install it again to put that one on."}`,
+      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed ${where.at}${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${want}. ${refused ? `${refused}.` : "Install it again to put that one on."}${where.others}`,
       ...(version ? { version } : {}),
       ...method,
       at: Date.now(),

@@ -166,7 +166,59 @@ export function itemWords(id: string): string {
       return `hook ${name}`;
     case "policy":
       return "the fleet's denied tools";
+    case "hubOnly":
+      return "the hub-only marketplaces";
     default:
       return id;
   }
+}
+
+/**
+ * A machine's failed items gathered by the cause it gave for each, the
+ * group with most items first: 141 items that failed for one reason are one
+ * failure, said once, with one Retry (the machines panel).
+ */
+export interface FailureGroup {
+  /** What the machine said, word for word; `undefined` when it said nothing. */
+  cause: string | undefined;
+  /** The items, in their words' order. */
+  items: FleetItemStatus[];
+}
+
+export function failureGroups(
+  items: Iterable<FleetItemStatus>
+): FailureGroup[] {
+  const byCause = Map.groupBy(
+    [...items].filter((item) => item.state === "failed"),
+    (item) => item.error?.trim() || undefined
+  );
+  return [...byCause]
+    .map(([cause, group]) => ({
+      cause,
+      items: group.toSorted((a, b) =>
+        itemWords(a.id).localeCompare(itemWords(b.id))
+      ),
+    }))
+    .sort((a, b) => b.items.length - a.items.length);
+}
+
+/**
+ * A group's reason, in the error formula: what happened (the one item by
+ * name, or the count), then the machine's cause as a sentence of its own.
+ */
+export function failureReason(group: FailureGroup): string {
+  const [first] = group.items;
+  const what =
+    group.items.length === 1 && first
+      ? `${itemWords(first.id)} didn't set up.`
+      : `${group.items.length} items didn't set up.`;
+  const cause = group.cause?.replace(/\s+/g, " ");
+  return `${what} ${cause ?? "The machine gave no reason."}`;
+}
+
+/** A group's Show details: each item by name, one to a line; none for a group of one, which its reason names. */
+export function failureDetails(group: FailureGroup): string | undefined {
+  return group.items.length > 1
+    ? group.items.map((item) => itemWords(item.id)).join("\n")
+    : undefined;
 }

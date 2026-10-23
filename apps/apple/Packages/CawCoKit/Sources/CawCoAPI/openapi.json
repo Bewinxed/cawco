@@ -25392,13 +25392,17 @@
                   "machineId": {
                     "type": "string"
                   },
-                  "id": {
-                    "type": "string"
+                  "ids": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
                   "machineId",
-                  "id"
+                  "ids"
                 ]
               }
             }

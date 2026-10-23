@@ -330,10 +330,15 @@ export class FleetSync {
     this.#deps.keepItems(machineId, kept);
   }
 
-  /** A person's Retry of one failed item on a machine: sent forced, so it converges again. */
-  retry(machineId: string, id: string): void {
-    this.force(machineId, [id]);
-    this.changed(`a retry of ${id}`, { machineId });
+  /** A person's Retry of failed items on a machine: sent forced, so they converge again. */
+  retry(machineId: string, ids: string[]): void {
+    this.force(machineId, ids);
+    this.changed(
+      ids.length === 1
+        ? `a retry of ${ids[0]}`
+        : `a retry of ${ids.length} items`,
+      { machineId }
+    );
   }
 
   /** The machine's connection closed: nothing on it answers now, and its next register is welcomed. */

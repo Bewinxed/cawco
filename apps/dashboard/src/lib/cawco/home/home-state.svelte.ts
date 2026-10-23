@@ -916,14 +916,34 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
     return "behind hub";
   }
   const faults = machineFaults(machine.machineId, machine.fleet);
-  if (faults.length === 0) {
-    return null;
+  // A server waiting on a sign-in is the person's to give, in Configure ›
+  // MCP servers, not a sync that failed: said by its name, once, however
+  // many harnesses report it (obelisk-of-light read "sync failed" for
+  // ElevenLabs' needs-auth alone, 2026-10-23).
+  const signIns = [
+    ...new Set(
+      faults
+        .filter((fault) => fault.cause === "needs-auth")
+        .map((fault) => fault.key)
+    ),
+  ];
+  const broken = faults.filter((fault) => fault.cause !== "needs-auth");
+  const words: string[] = [];
+  if (signIns.length === 1) {
+    words.push(`${signIns[0]} needs sign-in`);
+  } else if (signIns.length > 1) {
+    words.push(`${signIns.length} servers need sign-in`);
   }
-  // Something that did not answer in time is slow, not broken: said so only
-  // while that is all there is.
-  return faults.every((fault) => fault.cause === "timed-out")
-    ? "sync slow"
-    : "sync failed";
+  if (broken.length > 0) {
+    // Something that did not answer in time is slow, not broken: said so
+    // only while that is all there is.
+    words.push(
+      broken.every((fault) => fault.cause === "timed-out")
+        ? "sync slow"
+        : "sync failed"
+    );
+  }
+  return words.length > 0 ? words.join(" · ") : null;
 }
 
 /* ── The model ─────────────────────────────────────────────────────── */

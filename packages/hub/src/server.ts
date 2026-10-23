@@ -7209,7 +7209,7 @@ export const createServer = (
 
   /** Why a spawn that names no permission mode does not start ({@link settleMode}). */
   const unchosenMode = (machineId: string, harness: string): string =>
-    `A permission mode must be chosen for a ${harness} session on ${machineName(machineId)}, and none was. Choose one, then start it again. Nothing was started.`;
+    `A permission mode must be chosen for the ${harness} session on ${machineName(machineId)}, and none was. Choose one, then start it again. Nothing was started.`;
 
   /**
    * The mode a revive, restore or relaunch runs on: the row's own, else the
@@ -7240,7 +7240,7 @@ export const createServer = (
       return undefined;
     }
     return modes.length === 0
-      ? `${harness} has no permission modes, so a ${harness} session cannot run in "${mode}".`
+      ? `${harness} has no permission modes, so no ${harness} session can run in "${mode}".`
       : `${harness} on this machine has no "${mode}" permission mode; it offers ${modes.join(", ")}.`;
   };
 
@@ -30121,16 +30121,22 @@ export const createServer = (
           return { ok: true };
         }
       )
-      // A person's Retry of one item that failed to converge on a machine:
-      // sent forced, so its machine converges it again.
+      // A person's Retry of the items that failed to converge on a machine
+      // for one cause (the machines panel's group): sent forced in one
+      // delta, so its machine converges them again.
       .post(
         "/api/fleet/items/retry",
-        { body: t.Object({ machineId: t.String(), id: t.String() }) },
+        {
+          body: t.Object({
+            machineId: t.String(),
+            ids: t.Array(t.String(), { minItems: 1 }),
+          }),
+        },
         ({ body, status }) => {
           if (!registry.agent(body.machineId)) {
             return status(404, machineFault(body.machineId, "offline"));
           }
-          fleetSyncs.retry(body.machineId, body.id);
+          fleetSyncs.retry(body.machineId, body.ids);
           return { ok: true };
         }
       )

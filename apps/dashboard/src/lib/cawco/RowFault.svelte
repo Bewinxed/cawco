@@ -129,32 +129,35 @@
         >
           {said}
         </p>
-        {#if details}
-          <Button
-            data-details
-            aria-controls={detailsId}
-            aria-expanded={shown}
-            class="flex-none"
-            label={shown ? shellWords.hideDetails : shellWords.showDetails}
-            onclick={() => {
-              shown = !shown;
-            }}
-            size="xs"
-            variant="ghost"
-          />
-        {/if}
-        {#if again}
-          <Button
-            data-again
-            class="flex-none"
-            icon={IconRefresh}
-            label={againLabel}
-            onclick={tryAgain}
-            pending={trying}
-            pendingLabel={againPending}
-            size="xs"
-            variant="ghost"
-          />
+        {#if details || again}
+          <!-- One cluster at the trailing edge, beside the reason or on the line under it, so Show details and Retry never part and every row's stand in the same place. -->
+          <span data-slot="actions" class="ms-auto flex flex-none gap-space-1">
+            {#if details}
+              <Button
+                data-details
+                aria-controls={detailsId}
+                aria-expanded={shown}
+                label={shown ? shellWords.hideDetails : shellWords.showDetails}
+                onclick={() => {
+                  shown = !shown;
+                }}
+                size="xs"
+                variant="ghost"
+              />
+            {/if}
+            {#if again}
+              <Button
+                data-again
+                icon={IconRefresh}
+                label={againLabel}
+                onclick={tryAgain}
+                pending={trying}
+                pendingLabel={againPending}
+                size="xs"
+                variant="ghost"
+              />
+            {/if}
+          </span>
         {/if}
       </div>
       {#if command}

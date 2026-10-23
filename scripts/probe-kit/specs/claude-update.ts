@@ -663,9 +663,10 @@ async function piLeg(run: Run): Promise<void> {
   const atStart = await blockOn(page);
   check(
     "6. a pi start refused for the version fails in the gate's words, and its composer shows Update pi",
-    lastError.includes(
-      `pi ${PI_OLD} on this machine isn't one CawCo runs (${PI_VERSION_FLOOR} or newer)`
-    ) &&
+    lastError.includes(`pi ${PI_OLD} at `) &&
+      lastError.includes(
+        ` on this machine isn't one CawCo runs (${PI_VERSION_FLOOR} or newer)`
+      ) &&
       atStart?.harness === "pi" &&
       atStart.press === "Update pi",
     `error ${lastError}; block ${JSON.stringify(atStart)}`
