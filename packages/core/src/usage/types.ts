@@ -211,6 +211,20 @@ export interface UsageSpend {
   weekStart: number;
 }
 
+/**
+ * One machine's line in a `kind: 'usage'` frame's `limits`, a BRIDGE (hub
+ * scripts/wire-compat.ts) for TestFlight ios 20261018, which reads limits
+ * per machine: its OpenCode Go plan, and the limits of the first Claude
+ * account signed in there. Goes once that build is no longer installable,
+ * 2027-01-16.
+ */
+export interface UsageLimitsReading {
+  fetchedAt: string | number | Date;
+  machineId: string;
+  openCodeGo: OpenCodeGoLimits | null;
+  payload: ClaudeLimits;
+}
+
 /** One Claude account's own limits, named by its account. */
 export interface AccountLimits {
   accountId: string;
@@ -231,6 +245,18 @@ export interface MachineGoLimits {
  */
 export interface UsageLimitsResponse {
   claude: AccountLimits[];
+  /**
+   * BRIDGE (hub scripts/wire-compat.ts) for TestFlight ios 20261018, which
+   * requires and reads limits per machine (Claude's there the first account
+   * signed in on it). Goes once that build is no longer installable,
+   * 2027-01-16.
+   */
+  machines: {
+    hostname: string;
+    limits: ClaudeLimits;
+    machineId: string;
+    openCodeGo: OpenCodeGoLimits | null;
+  }[];
   openCodeGo: MachineGoLimits[];
 }
 

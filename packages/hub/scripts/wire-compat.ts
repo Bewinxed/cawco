@@ -108,7 +108,20 @@ export interface Bridge {
   /** What it is for and when it goes. */
   until: string;
 }
-export const BRIDGES: Bridge[] = [];
+export const BRIDGES: Bridge[] = [
+  {
+    property: "machines",
+    beside: "claude",
+    until:
+      "the per-machine Claude `limits` (in `/api/usage/limits`'s `machines`) before per-account `claude`, which TestFlight ios 20261018 requires; it goes once that build is no longer installable, 2027-01-16 (bash apps/apple/scripts/testflight.sh --expire 20261018)",
+  },
+  {
+    property: "limits",
+    beside: "claude",
+    until:
+      "the per-machine Claude `limits` in a usage frame before per-account `claude`, which TestFlight ios 20261018 requires; it goes once that build is no longer installable, 2027-01-16 (bash apps/apple/scripts/testflight.sh --expire 20261018)",
+  },
+];
 
 /**
  * Whether `branch` is the union member tagged `tag` (its `kind` the one

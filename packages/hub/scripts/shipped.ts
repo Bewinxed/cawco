@@ -23,16 +23,18 @@ const DAY_MS = 86_400_000;
  * read. Each is expired on TestFlight once the app that reads the new wire
  * ships (`testflight.sh --expire <build>`, the app's owed list).
  *
- * - ios 20261015, 20261015.3, 20261017, 20261018: they read a session row's
- *   run and step and a transcript block's run event, which the hub stopped
- *   sending when the multi-step run engine went (the owner's "The
- *   delegation tree is the run"); until updated they show no runs.
+ * - ios 20261015, 20261015.3, 20261017: they read a session row's run and
+ *   step and a transcript block's run event, which the hub stopped sending
+ *   when the multi-step run engine went (the owner's "The delegation tree
+ *   is the run"); until updated they show no runs.
+ *
+ * The newest TestFlight build is never listed here: it is the app on the
+ * owner's phone, and the hub serves it until a newer one ships.
  */
 const UNSERVED_TESTFLIGHT = new Set([
   "ios 20261015",
   "ios 20261015.3",
   "ios 20261017",
-  "ios 20261018",
 ]);
 const NIGHTLY = /^nightly-(\d+)-[0-9a-f]+$/;
 /** A build number is its upload day, `yyyymmdd`, then `.2`, `.3` (testflight.py `next_number`). */

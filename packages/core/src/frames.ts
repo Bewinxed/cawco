@@ -38,7 +38,12 @@ import {
   type TailnetOrigin,
 } from "./tailnet-https";
 import type { ThreadMessage, ThreadSummary } from "./threads";
-import type { AccountLimits, MachineGoLimits, UsageSpend } from "./usage";
+import type {
+  AccountLimits,
+  MachineGoLimits,
+  UsageLimitsReading,
+  UsageSpend,
+} from "./usage";
 
 export interface FleetMcpFrame {
   kind: "fleet_mcp";
@@ -73,6 +78,8 @@ export interface PreviewFrame {
    * one is removed, so a panel's open list drops it at once.
    */
   artifacts?: string[];
+  /** Unsent: {@link PreviewAddress} `host`. */
+  host?: string;
   instanceId: string;
   kind: "preview";
   /**
@@ -117,6 +124,13 @@ export interface PreviewFrame {
  * choice, by where it reached the hub ({@link previewRoute}).
  */
 export interface PreviewAddress {
+  /**
+   * Unsent: host mode's `name[:port]` from before `origin`. TestFlight ios
+   * 20261018 (installable until 2027-01-16) declares it, so it stays
+   * declared until then; the hub never sends it, and that build reads
+   * `origin` (Previews.swift).
+   */
+  host?: string;
   /** Host mode's whole origin for the session. */
   origin?: string;
   /** The session's own preview port, listened on in either mode. */
@@ -529,6 +543,12 @@ export interface UsageFrame {
   /** Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend. */
   claude: AccountLimits[];
   kind: "usage";
+  /**
+   * BRIDGE (hub scripts/wire-compat.ts): limits per machine, which TestFlight
+   * ios 20261018 requires and reads (HubConnection.swift). Goes once that
+   * build is no longer installable, 2027-01-16.
+   */
+  limits: UsageLimitsReading[];
   openCodeGo: MachineGoLimits[];
   spend: UsageSpend;
 }

@@ -157,7 +157,7 @@ typeOverrides:
     RelayStepFinding: OpenEnums.RelayStepFinding
     RelayStepHow: OpenEnums.RelayStepHow
     RestartHoldReason: OpenEnums.RestartHoldReason
-    RoutineMadeInBy: OpenEnums.RoutineMadeInBy
+    RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy
     RoutineRunState: OpenEnums.RoutineRunState
     RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
     RoutineTarget: OpenEnums.RoutineTarget

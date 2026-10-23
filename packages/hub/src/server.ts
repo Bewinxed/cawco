@@ -469,6 +469,7 @@ import {
   reconcileAccounts,
   sessionLimitsReader,
   uncompared,
+  usageFrameLimits,
   usageLimits,
   withOrgIdFrom,
 } from "./accounts";
@@ -4881,7 +4882,7 @@ export const createServer = (
       machineId,
       payload: {
         kind: "usage",
-        ...usageLimits(db),
+        ...usageFrameLimits(db),
         spend: spendNow(),
       },
     });

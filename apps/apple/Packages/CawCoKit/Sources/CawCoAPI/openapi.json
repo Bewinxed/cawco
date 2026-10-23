@@ -32988,6 +32988,10 @@
         "description": "Where a session's preview is served, as the hub reports it: its own port,\nwhich the hub listens on in either mode, and in host mode the whole origin\nthe fleet's pattern names it by too. Which one a client loads is its own\nchoice, by where it reached the hub ({@link previewRoute}).",
         "type": "object",
         "properties": {
+          "host": {
+            "description": "Unsent: host mode's `name[:port]` from before `origin`. TestFlight ios\n20261018 (installable until 2027-01-16) declares it, so it stays\ndeclared until then; the hub never sends it, and that build reads\n`origin` (Previews.swift).",
+            "type": "string"
+          },
           "origin": {
             "description": "Host mode's whole origin for the session.",
             "type": "string"
@@ -41024,6 +41028,10 @@
             "description": "What happened, opened like a fold; absent when the title says it all.",
             "type": "string"
           },
+          "designOffer": {
+            "$ref": "#/components/schemas/DesignOfferEvent",
+            "description": "Unsent: `event` carries it as `design-offer`.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it."
+          },
           "event": {
             "description": "What happened, as typed data; null on a note stored before events were typed.",
             "anyOf": [
@@ -41450,6 +41458,10 @@
             "description": "One line: source and what, like \"Routine · Triage issues · 09:00\". The\ntime is not in it: a reader draws `createdAt` in their own time zone.",
             "type": "string"
           },
+          "routineMade": {
+            "$ref": "#/components/schemas/RoutineMadeEvent",
+            "description": "Unsent: `event` carries it as `routine-made`.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it."
+          },
           "createdAt": {
             "type": "number"
           },
@@ -41466,6 +41478,31 @@
           "id",
           "noteTitle",
           "threadId"
+        ]
+      },
+      "DesignOfferEvent": {
+        "description": "Caw asking first, once per project, whether to build a design system\n(hub design-offers.ts): a design-shaped task entered an active stage in a\nproject with none. Build and Not now act on the project through\n`/api/projects/:id/design-offer`.",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "sources": {
+            "description": "What the build would read, in words: \"the repository's styles and components\", \"the brand kit\".",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taskId": {
+            "description": "The task whose move raised it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "sources",
+          "taskId"
         ]
       },
       "RoutineSchedule": {
@@ -41552,7 +41589,7 @@
             ]
           },
           "by": {
-            "$ref": "#/components/schemas/RoutineMadeInBy",
+            "$ref": "#/components/schemas/RoutineMadeEventBy",
             "description": "`caw`: the project's Caw made it; `delegate` or `session`: another session."
           },
           "expiresAt": {
@@ -41624,6 +41661,52 @@
           "projectId",
           "sources",
           "taskId"
+        ]
+      },
+      "RoutineMadeEvent": {
+        "description": "A session made a routine with `routine_create` (routines.ts `announce`):\nthe notice in the thread its maker's turn was in, or the routine's own\nthread when it was in none. Keep, Turn off and Open act on `routineId`\nthrough `/api/routines/:id`.",
+        "type": "object",
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/RoutineMadeEventBy",
+            "description": "`caw`: the project's Caw made it; `delegate` or `session`: another session."
+          },
+          "expiresAt": {
+            "description": "When it turns itself off unless kept, ms epoch; null when it was kept as it was made.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "instanceId": {
+            "description": "The session that made it.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "routineId": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/RoutineSchedule"
+          },
+          "why": {
+            "description": "What the making turn said just before the call, one paragraph; null when it said nothing.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "by",
+          "expiresAt",
+          "instanceId",
+          "name",
+          "routineId",
+          "schedule",
+          "why"
         ]
       },
       "ThreadRead": {
@@ -41855,7 +41938,7 @@
         "type": "object",
         "properties": {
           "by": {
-            "$ref": "#/components/schemas/RoutineMadeInBy"
+            "$ref": "#/components/schemas/RoutineMadeEventBy"
           },
           "instanceId": {
             "type": "string"
@@ -47652,6 +47735,10 @@
           },
           "trigger": {
             "$ref": "#/components/schemas/BlockMetadataTrigger"
+          },
+          "workflowEvent": {
+            "description": "Unsent: there is no run engine.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it.",
+            "type": "string"
           }
         }
       },
@@ -53362,6 +53449,32 @@
               "$ref": "#/components/schemas/AccountLimits"
             }
           },
+          "machines": {
+            "description": "BRIDGE (hub scripts/wire-compat.ts) for TestFlight ios 20261018, which\nrequires and reads limits per machine (Claude's there the first account\nsigned in on it). Goes once that build is no longer installable,\n2027-01-16.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hostname": {
+                  "type": "string"
+                },
+                "limits": {
+                  "$ref": "#/components/schemas/ClaudeLimits"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "openCodeGo": {
+                  "$ref": "#/components/schemas/OpenCodeGoLimits"
+                }
+              },
+              "required": [
+                "hostname",
+                "limits",
+                "machineId"
+              ]
+            }
+          },
           "openCodeGo": {
             "type": "array",
             "items": {
@@ -53371,6 +53484,7 @@
         },
         "required": [
           "claude",
+          "machines",
           "openCodeGo"
         ]
       },
@@ -53472,26 +53586,6 @@
           "resetsAt"
         ]
       },
-      "MachineGoLimits": {
-        "description": "One machine's OpenCode Go plan, read with that machine's Go key.",
-        "type": "object",
-        "properties": {
-          "hostname": {
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "plan": {
-            "$ref": "#/components/schemas/OpenCodeGoLimits"
-          }
-        },
-        "required": [
-          "hostname",
-          "machineId",
-          "plan"
-        ]
-      },
       "OpenCodeGoLimits": {
         "description": "The OpenCode Go plan's three windows, read from\n`GET https://opencode.ai/zen/go/v1/usage` with the machine's `opencode-go`\nkey. Absent (null) on a machine with no Go key. `stale` is set when a read\nfailed and the last good windows are served with the error attached.",
         "type": "object",
@@ -53519,6 +53613,26 @@
           "error",
           "fetchedAt",
           "windows"
+        ]
+      },
+      "MachineGoLimits": {
+        "description": "One machine's OpenCode Go plan, read with that machine's Go key.",
+        "type": "object",
+        "properties": {
+          "hostname": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/OpenCodeGoLimits"
+          }
+        },
+        "required": [
+          "hostname",
+          "machineId",
+          "plan"
         ]
       },
       "UsageSpend": {
@@ -53987,6 +54101,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "host": {
+            "description": "Unsent: {@link PreviewAddress} `host`.",
+            "type": "string"
           },
           "instanceId": {
             "type": "string"
@@ -57063,6 +57181,20 @@
               }
             ]
           },
+          "workflowRunId": {
+            "description": "Unsent: there is no run engine. TestFlight ios 20261018 (installable\nuntil 2027-01-16) declares it, so it stays declared until then; the hub\nnever sends it, and that build shows no runs.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workflowStepId": {
+            "description": "Unsent, as {@link workflowRunId}.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "workItemId": {
             "description": "The work item this session runs: every delegate is one, and a session\nnever runs more than one. Null on a session nobody delegated, and on a\ndelegate from before work items existed.",
             "type": [
@@ -57588,6 +57720,13 @@
               "usage"
             ]
           },
+          "limits": {
+            "description": "BRIDGE (hub scripts/wire-compat.ts): limits per machine, which TestFlight\nios 20261018 requires and reads (HubConnection.swift). Goes once that\nbuild is no longer installable, 2027-01-16.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimitsReading"
+            }
+          },
           "openCodeGo": {
             "type": "array",
             "items": {
@@ -57601,8 +57740,43 @@
         "required": [
           "claude",
           "kind",
+          "limits",
           "openCodeGo",
           "spend"
+        ]
+      },
+      "UsageLimitsReading": {
+        "description": "One machine's line in a `kind: 'usage'` frame's `limits`, a BRIDGE (hub\nscripts/wire-compat.ts) for TestFlight ios 20261018, which reads limits\nper machine: its OpenCode Go plan, and the limits of the first Claude\naccount signed in there. Goes once that build is no longer installable,\n2027-01-16.",
+        "type": "object",
+        "properties": {
+          "fetchedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "openCodeGo": {
+            "$ref": "#/components/schemas/OpenCodeGoLimits"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ClaudeLimits"
+          }
+        },
+        "required": [
+          "fetchedAt",
+          "machineId",
+          "payload"
         ]
       },
       "StoppedFrame": {
@@ -59606,7 +59780,7 @@
           "UPnP"
         ]
       },
-      "RoutineMadeInBy": {
+      "RoutineMadeEventBy": {
         "type": "string",
         "enum": [
           "caw",

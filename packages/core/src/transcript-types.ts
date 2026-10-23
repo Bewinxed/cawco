@@ -192,6 +192,12 @@ export interface BlockMetadata {
   toolUseResult?: UserQuestionResult;
   totalCost?: number;
   trigger?: "manual" | "auto";
+  /**
+   * Unsent: there is no run engine.
+   * TestFlight ios 20261018 (installable until 2027-01-16) declares it, so
+   * it stays declared until then; the hub never sends it.
+   */
+  workflowEvent?: string;
 }
 
 /** One row of a transcript, as the hub built it. */

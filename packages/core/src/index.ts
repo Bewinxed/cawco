@@ -1495,6 +1495,14 @@ export interface InstanceRow {
   /** When the row last moved. */
   updatedAt?: string | number | Date | null;
   /**
+   * Unsent: there is no run engine. TestFlight ios 20261018 (installable
+   * until 2027-01-16) declares it, so it stays declared until then; the hub
+   * never sends it, and that build shows no runs.
+   */
+  workflowRunId?: string | null;
+  /** Unsent, as {@link workflowRunId}. */
+  workflowStepId?: string | null;
+  /**
    * The work item this session runs: every delegate is one, and a session
    * never runs more than one. Null on a session nobody delegated, and on a
    * delegate from before work items existed.
