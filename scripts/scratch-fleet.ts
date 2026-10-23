@@ -57,7 +57,7 @@ import {
   signal as signalPid,
   spawnedPid,
 } from "../packages/core/src/signal";
-import { ensureDeps } from "./lib/deps";
+import { installDeps } from "./lib/deps";
 import { type HeavySlot, heavySlot } from "./lib/heavy-run";
 import { welcomed } from "./lib/keeper-dial";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
@@ -1607,7 +1607,8 @@ async function standUp(
   // hub that imports a package a rebase added, run on the dependencies from
   // before it, dies at start ("Cannot find package 'yjs'"). The entry that
   // loaded this module awaited it before importing it; this is that same run.
-  await ensureDeps();
+  // The hub resolves in a process of its own, so nothing here runs again.
+  await installDeps();
   // The services' HOME and the agent's XDG_RUNTIME_DIR, apart from the
   // sandbox, two hex under their roots (`fleetRoots`): the runtime dir under
   // the shortest. Mode 700, as a runtime dir is. The agent keeps a
