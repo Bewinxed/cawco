@@ -182,9 +182,18 @@ const podsOf = async (session: string): Promise<ListedPod[]> => {
   return JSON.parse(out || "[]") as ListedPod[];
 };
 
+/** What every label CawCo's doors put on starts with. */
+const LABEL_PREFIX = "dev.cawco.";
+
 const said = (one: Listed | undefined): string =>
   one
-    ? `${one.Names.join(",")} ${one.State}, labelled ${JSON.stringify(one.Labels?.[SESSION_LABEL] ?? null)}`
+    ? `${one.Names.join(",")} ${one.State}, labelled ${JSON.stringify(
+        Object.fromEntries(
+          Object.entries(one.Labels ?? {}).filter(([key]) =>
+            key.startsWith(LABEL_PREFIX)
+          )
+        )
+      )}`
     : "no such container";
 
 /** Waits until `sleep <arg>` is gone; whether it went. */
@@ -297,6 +306,21 @@ const spec: Spec = {
       "(c0) the probe's image is here",
       exists === 0,
       `podman image exists ${IMAGE}: exit ${exists}${pulled ? `; podman pull exit ${pulled.code}: ${pulled.out}` : "; no pull needed"}`
+    );
+    // A pod needs its infra container's init, catatonit, on the host (r191:
+    // "failed to make pod: finding catatonit binary: exec: "catatonit":
+    // executable file not found in $PATH"); without it no pod starts at all.
+    const podCheck = `cawco-probe-podcheck-${tag}`;
+    const podMade = await podman(["pod", "create", "--name", podCheck]);
+    if (podMade.code === 0) {
+      await podman(["pod", "rm", "-f", podCheck]);
+    }
+    check(
+      "(c0) this machine's Podman makes pods",
+      podMade.code === 0,
+      podMade.code === 0
+        ? "podman pod create: exit 0"
+        : `podman pod create: exit ${podMade.code}: ${podMade.out}. Install catatonit (\`sudo apt install catatonit\`) and run the spec again`
     );
     const fleet = await kit.fleet(respond);
     const agentEnv = { DOCKER_HOST: UNTRACKED };

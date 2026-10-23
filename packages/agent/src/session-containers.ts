@@ -335,14 +335,10 @@ const LABEL_UNSAFE = /[^A-Za-z0-9_.-]/g;
 const labelValue = (value: string): string =>
   value.replace(LABEL_UNSAFE, "_").slice(0, 63);
 
-/** The label filters that find this agent's containers, of one session or of every one. */
-const ownFilter = (
-  own: { hub: string; machine: string },
-  instanceId?: string
-): string[] => [
+/** The label filters that find every session's containers this agent's doors made. */
+const ownFilter = (own: { hub: string; machine: string }): string[] => [
   `${MACHINE_LABEL}=${own.machine}`,
   `${HUB_LABEL}=${own.hub}`,
-  ...(instanceId ? [`${SESSION_LABEL}=${instanceId}`] : []),
 ];
 
 /** The labels a door puts on what its session makes; `named` when the person named it. */
@@ -869,19 +865,17 @@ const runtimeSockets = async (): Promise<string[]> => {
   ];
 };
 
-/** A runtime that is not there, or refuses this user, holds nothing of a session's. */
-const unreachable = (error: unknown): boolean =>
-  ["ENOENT", "ECONNREFUSED", "EACCES"].includes(
-    (error as NodeJS.ErrnoException).code ?? ""
-  );
-
 /** A libpod API call on `socketPath`: its status and JSON answer. */
 const libpod = async (
   socketPath: string,
   method: string,
   path: string
 ): Promise<{ body: unknown; status: number }> => {
-  const answer = await fetch(`http://d/libpod${path}`, {
+  // Libpod's routes are versioned only (podman v5.7.0
+  // pkg/api/server/register_pods.go: `r.Handle(VersionedPath("/libpod/pods/json"), …)`):
+  // unversioned, every one answers 404. 4.0.0, the oldest Podman whose pods
+  // API this speaks.
+  const answer = await fetch(`http://d/v4.0.0/libpod${path}`, {
     method,
     unix: socketPath,
   } as RequestInit);
@@ -908,12 +902,7 @@ const podsWith = async (
     socketPath,
     "GET",
     `/pods/json?${filterQuery(labels)}`
-  ).catch((error: unknown) => {
-    if (unreachable(error)) {
-      return { status: 404, body: [] };
-    }
-    throw error;
-  });
+  );
   if (status === 404) {
     return [];
   }
@@ -928,14 +917,51 @@ const containersWith = (
   socketPath: string,
   labels: readonly string[]
 ): Promise<Docker.ContainerInfo[]> =>
-  new Docker({ socketPath })
-    .listContainers({ all: true, filters: { label: [...labels] } })
-    .catch((error: unknown) => {
-      if (unreachable(error)) {
-        return [];
+  new Docker({ socketPath }).listContainers({
+    all: true,
+    filters: { label: [...labels] },
+  });
+
+/**
+ * What session `instanceId` made on `socketPath` through this agent's
+ * doors: found by its session label alone (an instance id is the one
+ * session's on every machine), then kept to this machine's and hub's. One
+ * the session's label names but another owner's is said in the log, and
+ * left. A runtime that does not answer (a socket that refuses this user:
+ * obelisk's `/var/run/docker.sock` is root Podman's) is said, and holds
+ * nothing here.
+ */
+const madeBy = async (
+  socketPath: string,
+  instanceId: string
+): Promise<{ containers: Docker.ContainerInfo[]; pods: ListedPod[] }> => {
+  const own = await owner();
+  const session = [`${SESSION_LABEL}=${instanceId}`];
+  const ours = (labels: Record<string, string> | null | undefined): boolean =>
+    labels?.[MACHINE_LABEL] === own.machine && labels?.[HUB_LABEL] === own.hub;
+  try {
+    const [pods, containers] = await Promise.all([
+      podsWith(socketPath, session),
+      containersWith(socketPath, session),
+    ]);
+    for (const made of [...pods, ...containers]) {
+      if (!ours(made.Labels)) {
+        console.warn(
+          `[containers] ${instanceId}: ${made.Id.slice(0, 12)} on ${socketPath} carries the session's label but another owner's (${MACHINE_LABEL}=${made.Labels?.[MACHINE_LABEL]}, ${HUB_LABEL}=${made.Labels?.[HUB_LABEL]}; this agent is ${own.machine}, ${own.hub}): it is left`
+        );
       }
-      throw error;
-    });
+    }
+    return {
+      pods: pods.filter((pod) => ours(pod.Labels)),
+      containers: containers.filter((container) => ours(container.Labels)),
+    };
+  } catch (error) {
+    console.warn(
+      `[containers] ${instanceId}: ${socketPath} could not be read, so nothing of the session's there is ended: ${said(error)}`
+    );
+    return { pods: [], containers: [] };
+  }
+};
 
 /** Stops `pod` and, unless named, removes it with what it holds, into `ended`. */
 const endPod = async (
@@ -999,10 +1025,6 @@ const endContainer = async (
   }
 };
 
-/** The labels that find session `instanceId`'s pods and containers made through this agent's doors. */
-const sessionFilter = async (instanceId: string): Promise<string[]> =>
-  ownFilter(await owner(), instanceId);
-
 /**
  * Session `instanceId`'s pods and containers on each runtime here, as they
  * stand: each pod, then each container, so a container a removed pod held
@@ -1013,17 +1035,19 @@ const endResources = async (
   instanceId: string,
   only?: EndingRecord
 ): Promise<ContainersEnded> => {
-  const labels = await sessionFilter(instanceId);
   const ended: ContainersEnded = { removed: [], kept: [], failed: [] };
   const pods = only && new Set(only.pods);
   const containers = only && new Set(only.containers);
   for (const socketPath of await runtimeSockets()) {
     // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time, its pods together and then its containers
-    const podsHere = (await podsWith(socketPath, labels)).filter(
+    const podsHere = (await madeBy(socketPath, instanceId)).pods.filter(
       (pod) => !pods || pods.has(pod.Id)
     );
     await Promise.all(podsHere.map((pod) => endPod(socketPath, pod, ended)));
-    const containersHere = (await containersWith(socketPath, labels)).filter(
+    // Read again: a removed pod took its containers with it.
+    const containersHere = (
+      await madeBy(socketPath, instanceId)
+    ).containers.filter(
       (container) => !containers || containers.has(container.Id)
     );
     await Promise.all(
@@ -1066,14 +1090,11 @@ const endingFile = (instanceId: string): string =>
  */
 export const beginEnding = async (instanceId: string): Promise<void> => {
   await closeContainerDoors(instanceId);
-  const labels = await sessionFilter(instanceId);
   const record: EndingRecord = { containers: [], pods: [] };
-  for (const socketPath of await runtimeSockets()) {
+  const sockets = await runtimeSockets();
+  for (const socketPath of sockets) {
     // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time
-    const [pods, containers] = await Promise.all([
-      podsWith(socketPath, labels),
-      containersWith(socketPath, labels),
-    ]);
+    const { pods, containers } = await madeBy(socketPath, instanceId);
     record.pods.push(...pods.map((pod) => pod.Id));
     record.containers.push(...containers.map((container) => container.Id));
   }
@@ -1081,6 +1102,9 @@ export const beginEnding = async (instanceId: string): Promise<void> => {
   await writeFile(endingFile(instanceId), `${JSON.stringify(record)}\n`, {
     mode: 0o600,
   });
+  console.info(
+    `[containers] ${instanceId}: its ending is written down: ${record.pods.length} pod(s) and ${record.containers.length} container(s), on ${sockets.join(", ") || "no runtime"}`
+  );
 };
 
 /**
@@ -1106,6 +1130,9 @@ export const finishEnding = async (
     await rm(file, { force: true });
     return { removed: [], kept: [], failed: [] };
   }
+  console.info(
+    `[containers] ${instanceId}: its ending runs: ${record.pods.length} pod(s) and ${record.containers.length} container(s) written down`
+  );
   const ended = await endResources(instanceId, record);
   if (ended.failed.length === 0) {
     await rm(file, { force: true });
@@ -1133,7 +1160,12 @@ export const sessionsOwedEnding = async (
     const [pods, containers] = await Promise.all([
       podsWith(socketPath, labels),
       containersWith(socketPath, labels),
-    ]);
+    ]).catch((error: unknown) => {
+      console.warn(
+        `[containers] ${socketPath} could not be read as the hub welcomed this agent, so no ended session's containers there are ended: ${said(error)}`
+      );
+      return [[], []] as const;
+    });
     for (const made of [...pods, ...containers]) {
       const session = made.Labels?.[SESSION_LABEL];
       if (session && !had.has(session) && !unfinished.includes(session)) {
