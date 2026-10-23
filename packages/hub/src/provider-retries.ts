@@ -15,7 +15,8 @@
  * deadline if the session still has not moved. Anything the session's model
  * says (an assistant message, a turn's end) is progress, and ends the
  * stretch. Only OpenCode says when it retries (agent opencode-session.ts
- * `#retry`); a retry at the account's limit is the at-limit controller's.
+ * `#retry`); a retry at the limit of an account of CawCo's is the at-limit
+ * controller's, whose harness ends the turn on it (server.ts).
  */
 import { workWords } from "@cawco/core";
 import type { DbShape, WorkItemRow } from "./db";

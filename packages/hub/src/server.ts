@@ -34215,12 +34215,17 @@ export const createServer = (
                 }
                 // A work item's session waits on its provider no longer than
                 // its deadline for that; anything its model says, or its
-                // turn's end, is the wait over (provider-retries.ts).
+                // turn's end, is the wait over (provider-retries.ts). One at
+                // its account's limit on an account of CawCo's is the
+                // at-limit controller's: its harness ends the turn on it.
                 if (
                   neutral.type === "system" &&
                   neutral.subtype === PROVIDER_RETRY &&
                   neutral.retry &&
-                  !neutral.retry.atLimit
+                  !(
+                    neutral.retry.atLimit &&
+                    db.getInstancesByIds([message.instanceId])[0]?.accountId
+                  )
                 ) {
                   providerRetries.retry(message.instanceId, neutral.retry);
                 } else if (

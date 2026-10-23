@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { treeStops } from "./schema";
 
@@ -14,8 +14,6 @@ export interface TreeStopsDb {
   readonly ended: (instanceId: string, at: Date) => void;
   /** The row of `instanceId`, if a stop holds it. */
   readonly get: (instanceId: string) => TreeStopRow | undefined;
-  /** The rows of `ids` a stop holds. */
-  readonly of: (ids: readonly string[]) => TreeStopRow[];
   /** Rows filed for one stop, each session once: one a stop already holds keeps its row. */
   readonly put: (rows: readonly Omit<TreeStopRow, "endedAt">[]) => void;
   /** Rows under `parentId`: the sessions its end waits on. */
@@ -36,14 +34,6 @@ export const treeStopsDb = (db: BunSQLiteDatabase): TreeStopsDb => ({
       .from(treeStops)
       .where(eq(treeStops.instanceId, instanceId))
       .get(),
-  of: (ids) =>
-    ids.length === 0
-      ? []
-      : db
-          .select()
-          .from(treeStops)
-          .where(inArray(treeStops.instanceId, [...ids]))
-          .all(),
   drop: (instanceId) => {
     db.delete(treeStops).where(eq(treeStops.instanceId, instanceId)).run();
   },

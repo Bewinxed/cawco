@@ -269,9 +269,6 @@ export const createTreeStops = ({ db, end, workItems }: TreeStopDeps) => {
       return { under: reached.length - 1 };
     },
 
-    /** Whether a stop is walking `instanceId` now. */
-    holds: (instanceId: string): boolean => !!db.treeStops.get(instanceId),
-
     /**
      * The machine confirmed `row`'s session ended: its live item takes its
      * final state now, whether or not a tree stop holds it (a stop asked

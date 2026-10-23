@@ -108,5 +108,5 @@ export const workWords = {
    * command, as it was asked, and what it had printed by then.
    */
   commandInterrupted: (command: string, output: string) =>
-    `The command \`${command}\` was interrupted when its process went; it had printed ${output.trim() ? `this before it was cut:\n\`\`\`\n${output}\n\`\`\`` : "nothing yet."}`,
+    `The command \`${command}\` was interrupted when its process went; it had printed ${output.trim() ? `this before it was cut:\n\`\`\`\n${output.trimEnd()}\n\`\`\`` : "nothing yet."}`,
 };
