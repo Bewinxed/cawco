@@ -574,10 +574,22 @@ export interface AsleepFrame {
    * the signal, and the harness's own words. The hub starts it again with
    * the turn it cut, unless it died so right after the last such start.
    */
-  died?: { error: string; signal: string };
+  died?: { cut?: CutCommand[]; error: string; signal: string };
   instanceId: string;
   /** The daemon stopped an at-rest session's processes, or one ended of its own accord; its next message wakes it. */
   kind: "asleep";
+}
+
+/**
+ * A shell command a session's process was running when it died: the command
+ * as the model asked it, and the end of what it had printed by then (agent
+ * claude.ts `cutCommands`, from the CLI's own spool of the command's
+ * output). The hub says each one interrupted, with that output, in the turn
+ * it hands back and in the item's report when the death fails it.
+ */
+export interface CutCommand {
+  command: string;
+  output: string;
 }
 
 export interface RecoveryUnavailableFrame {

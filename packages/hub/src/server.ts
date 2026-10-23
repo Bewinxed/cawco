@@ -10,6 +10,7 @@ import type {
   AgentRow,
   ArchiveView,
   AskAnswer,
+  AsleepFrame,
   BuildInfo,
   CarrySessionOutcome,
   CarrySessionRequest,
@@ -25910,11 +25911,15 @@ export const createServer = (
   const diedOnSignal = (
     machineId: string,
     instanceId: string,
-    died: { signal: string; error: string }
+    died: NonNullable<AsleepFrame["died"]>
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     const last = signalDeaths.get(instanceId);
     const now = Date.now();
+    // Each command the death cut, interrupted, with what it had printed.
+    const cutWords = (died.cut ?? [])
+      .map((one) => workWords.commandInterrupted(one.command, one.output))
+      .join("\n\n");
     if (
       !row ||
       row.kind === "summariser" ||
@@ -25933,13 +25938,18 @@ export const createServer = (
       processFailed(
         machineId,
         instanceId,
-        `${again} A message to it starts it again once that is fixed.`
+        `${again}${cutWords ? `\n\n${cutWords}\n\n` : " "}A message to it starts it again once that is fixed.`
       );
       return;
     }
     signalDeaths.set(instanceId, now);
     sessionAsleep(machineId, instanceId);
-    const resumes = resumeKilledTurn(instanceId, died.signal, new Date(now));
+    const resumes = resumeKilledTurn(
+      instanceId,
+      died.signal,
+      new Date(now),
+      cutWords
+    );
     tellCutTasks(
       row,
       new Date(now),
@@ -25961,7 +25971,8 @@ export const createServer = (
   const resumeKilledTurn = (
     instanceId: string,
     signal: string,
-    killedAt: Date
+    killedAt: Date,
+    cutWords: string
   ): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
     const cut = row ? cutTurnOf(row, "killed") : undefined;
@@ -25971,7 +25982,10 @@ export const createServer = (
     const sent = handTurnBack(
       row,
       String(cut),
-      askAgain(row.id, killedWords(signal, killedAt))
+      askAgain(
+        row.id,
+        `${killedWords(signal, killedAt)}${cutWords ? `\n\n${cutWords}` : ""}`
+      )
     );
     if (sent.state === "failed") {
       turnOver(row.id);

@@ -13,6 +13,7 @@ import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type {
   AgentBusyReport,
+  AsleepFrame,
   CarrySessionOutcome,
   CarrySessionRequest,
   ControlPayload,
@@ -3500,7 +3501,7 @@ export class SessionSupervisor {
         }
         this.#endFailed(instanceId, error, processGeneration);
       },
-      died: (signal, error) => {
+      died: (signal, error, cut) => {
         const { session } = holder;
         if (session && this.#ending.has(session)) {
           this.#endedHere(instanceId, error);
@@ -3527,6 +3528,9 @@ export class SessionSupervisor {
         this.#gone(instanceId, processGeneration, {
           signal,
           error: `its process was ended by ${signal} from outside CawCo`,
+          // The commands it cut, with what they printed: the hub says each
+          // one interrupted in the turn it hands back.
+          ...(cut?.length ? { cut } : {}),
         });
       },
       // Refused for good (its boundary hook, its credential): no longer one
@@ -4476,7 +4480,7 @@ export class SessionSupervisor {
   #gone(
     instanceId: string,
     processGeneration: string | undefined,
-    died?: { signal: string; error: string }
+    died?: NonNullable<AsleepFrame["died"]>
   ): void {
     this.#sayGone({
       kind: "asleep",

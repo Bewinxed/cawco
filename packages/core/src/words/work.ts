@@ -103,4 +103,10 @@ export const workWords = {
    */
   providerRetryEnded: (message: string, deadline: string, next?: string) =>
     `Its provider refused the turn and kept retrying ("${message}"), so the item ended at its deadline for a provider's retry, ${deadline}${next ? `: the provider's next attempt was at ${next}, past it` : ""}. Delegate the work again once the provider answers.`,
+  /**
+   * A command a crash cut (hub server.ts, agent `cutCommands`): the
+   * command, as it was asked, and what it had printed by then.
+   */
+  commandInterrupted: (command: string, output: string) =>
+    `The command \`${command}\` was interrupted when its process went; it had printed ${output.trim() ? `this before it was cut:\n\`\`\`\n${output}\n\`\`\`` : "nothing yet."}`,
 };

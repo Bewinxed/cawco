@@ -15,6 +15,7 @@
  */
 import type {
   AuthState,
+  CutCommand,
   Envelope,
   FleetSyncReport,
   HarnessCapabilities,
@@ -132,7 +133,7 @@ export interface HarnessContext {
    * decides whether that is one it starts again or a failure.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  died?(signal: string, error: unknown): void;
+  died?(signal: string, error: unknown, cut?: CutCommand[]): void;
   /** Put an envelope the harness built itself on the daemon's hub socket. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   emit(envelope: Envelope): void;

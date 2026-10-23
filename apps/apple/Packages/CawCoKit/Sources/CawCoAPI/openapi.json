@@ -57864,6 +57864,12 @@
             "description": "Its process died on a signal while the daemon ran it, and nothing of the\ndaemon's stopped it (an OOM kill, a sessiond restart, a stray `kill`):\nthe signal, and the harness's own words. The hub starts it again with\nthe turn it cut, unless it died so right after the last such start.",
             "type": "object",
             "properties": {
+              "cut": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CutCommand"
+                }
+              },
               "error": {
                 "type": "string"
               },
@@ -57890,6 +57896,22 @@
         "required": [
           "instanceId",
           "kind"
+        ]
+      },
+      "CutCommand": {
+        "description": "A shell command a session's process was running when it died: the command\nas the model asked it, and the end of what it had printed by then (agent\nclaude.ts `cutCommands`, from the CLI's own spool of the command's\noutput). The hub says each one interrupted, with that output, in the turn\nit hands back and in the item's report when the death fails it.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "output"
         ]
       },
       "RecoveryUnavailableFrame": {

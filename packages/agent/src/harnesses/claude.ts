@@ -21,7 +21,7 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
-import { constants as osConstants } from "node:os";
+import { constants as osConstants, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   deleteSession,
@@ -46,6 +46,7 @@ import type {
   AccountIdentity,
   AccountKind,
   AuthState,
+  CutCommand,
   EffortLevel,
   EndedTask,
   FleetMcpChange,
@@ -311,7 +312,9 @@ export const processEnded = async (
   ctx: Pick<HarnessContext, "died" | "failed">,
   error: unknown,
   exit: ProcessExit | undefined,
-  conversationKept: (() => Promise<boolean>) | undefined
+  conversationKept: (() => Promise<boolean>) | undefined,
+  /** The shell commands it was running, with what they printed (`#cutCommands`). */
+  cut: () => Promise<CutCommand[]> = () => Promise.resolve([])
 ): Promise<void> => {
   if (!exit || exit.code === 0) {
     ctx.failed(error);
@@ -320,7 +323,7 @@ export const processEnded = async (
   const signal = signalOfExit(exit);
   if (signal) {
     if (ctx.died) {
-      ctx.died(signal, error);
+      ctx.died(signal, error, await cut());
     } else {
       ctx.failed(new Error(`Claude Code's process was ended by ${signal}.`));
     }
@@ -1047,6 +1050,41 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
  * `Task` is the subagent tool's former name.
  */
 const BACKGROUNDABLE_TOOLS = new Set(["Bash", "PowerShell", "Agent", "Task"]);
+
+/** The CLI's shell tools: a command one runs is cut with its process. */
+const SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "PowerShell"]);
+
+/** Where the CLI keeps its temp files: its `CLAUDE_CODE_TMPDIR`, else its temp dir. */
+const tempRootOf = (env: Record<string, string | undefined>): string =>
+  env.CLAUDE_CODE_TMPDIR || env.TMPDIR || tmpdir();
+
+/** How much of a cut command's output is kept: its end, as a terminal shows the last of it. */
+const CUT_OUTPUT_CHARS = 4000;
+
+/**
+ * The end of what task `taskId` of session `sessionId` printed, from the
+ * CLI's spool under `root` (`claude-<uid>/<project>/<session>/tasks/`); empty
+ * when there is none.
+ */
+const spooledOutput = async (
+  root: string,
+  sessionId: string,
+  taskId: string
+): Promise<string> => {
+  const user = join(root, `claude-${process.getuid?.() ?? 0}`);
+  const projects = await readdir(user).catch(() => [] as string[]);
+  for (const project of projects) {
+    const file = join(user, project, sessionId, "tasks", `${taskId}.output`);
+    // biome-ignore lint/performance/noAwaitInLoops: one project folder holds the session; the first found is it
+    const said = await readFile(file, "utf8").catch(() => undefined);
+    if (said !== undefined) {
+      return said.length > CUT_OUTPUT_CHARS
+        ? said.slice(-CUT_OUTPUT_CHARS)
+        : said;
+    }
+  }
+  return "";
+};
 
 /** A main-loop frame only a running turn sends: the model answering. */
 const runsTurn = (message: SDKMessage): boolean =>
@@ -2098,6 +2136,19 @@ class ClaudeSession implements HarnessSession {
    */
   readonly #foreground = new Set<string>();
   /**
+   * The main thread's shell commands running now, by `tool_use` id, from
+   * their `tool_use` until their `tool_result`: the command, and the task
+   * the CLI runs it as (its `task_started`), whose output it spools to
+   * `<temp root>/claude-<uid>/<project>/<session id>/tasks/<task id>.output`
+   * as it comes and deletes once the command ends (Claude Code 2.1.309,
+   * read on 2026-10-24: the file holds a running command's output so far).
+   * A process killed mid-command leaves it: what the command had printed
+   * ({@link #cutCommands}).
+   */
+  readonly #commands = new Map<string, { command: string; taskId?: string }>();
+  /** Where the CLI keeps its temp files ({@link tempRootOf}). */
+  readonly #tempRoot: string;
+  /**
    * The sends the CLI has been handed and has not started, by uuid: from
    * {@link send} (or a `queued` lifecycle an attach replays) until its
    * `started`, `cancelled` or `completed` lifecycle, a withdrawal, or a
@@ -2234,6 +2285,7 @@ class ClaudeSession implements HarnessSession {
       ctx
     );
     this.#configDir = env.CLAUDE_CONFIG_DIR;
+    this.#tempRoot = tempRootOf(env);
     this.#sessiond = sessiond;
     this.#stored = persistSession !== false;
     this.#conversationKept = conversationKept;
@@ -2796,7 +2848,9 @@ class ClaudeSession implements HarnessSession {
       }
     } catch (error) {
       ctx.busy(false);
-      await processEnded(ctx, error, this.#exit, this.#conversationKept);
+      await processEnded(ctx, error, this.#exit, this.#conversationKept, () =>
+        this.#cutCommands()
+      );
     } finally {
       this.#transcriptWatch?.();
       for (const delivery of this.#delivery.values()) {
@@ -2852,6 +2906,7 @@ class ClaudeSession implements HarnessSession {
    * send waits is moved then.
    */
   #trackForeground(message: SDKMessage): void {
+    this.#trackCommands(message);
     if (message.type === "result") {
       this.#foreground.clear();
       return;
@@ -2890,6 +2945,64 @@ class ClaudeSession implements HarnessSession {
         this.#foreground.delete(block.tool_use_id);
       }
     }
+  }
+
+  /** Keeps {@link #commands} from the main thread's frames. */
+  #trackCommands(message: SDKMessage): void {
+    if (message.type === "result") {
+      this.#commands.clear();
+      return;
+    }
+    if (message.type === "system" && message.subtype === "task_started") {
+      const running = message.tool_use_id
+        ? this.#commands.get(message.tool_use_id)
+        : undefined;
+      if (running) {
+        running.taskId = message.task_id;
+      }
+      return;
+    }
+    if (
+      (message.type !== "assistant" && message.type !== "user") ||
+      message.parent_tool_use_id !== null ||
+      !Array.isArray(message.message.content)
+    ) {
+      return;
+    }
+    for (const block of message.message.content) {
+      const command = (block as { input?: { command?: unknown } }).input
+        ?.command;
+      if (
+        block.type === "tool_use" &&
+        SHELL_TOOLS.has(block.name) &&
+        typeof command === "string"
+      ) {
+        this.#commands.set(block.id, { command });
+      } else if (block.type === "tool_result") {
+        this.#commands.delete(block.tool_use_id);
+      }
+    }
+  }
+
+  /**
+   * The shell commands the process was running as it died, each with the
+   * end of what it had printed: read off the CLI's spool of its task's
+   * output, which the dead process left ({@link #commands}). A command whose
+   * spool is not there printed nothing the hub can show.
+   */
+  async #cutCommands(): Promise<CutCommand[]> {
+    const { sessionId } = this;
+    const cut = [...this.#commands.values()];
+    this.#commands.clear();
+    return await Promise.all(
+      cut.map(async ({ command, taskId }) => ({
+        command,
+        output:
+          taskId && sessionId
+            ? await spooledOutput(this.#tempRoot, sessionId, taskId)
+            : "",
+      }))
+    );
   }
 
   /**
