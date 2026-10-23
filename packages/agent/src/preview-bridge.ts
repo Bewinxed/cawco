@@ -2,18 +2,19 @@
  * A preview's way to a port inside a workspace (Linux). Every command of a
  * workspace runs in its boundary's own network (`boundary.ts`), so a dev
  * server a session there starts listens on the boundary's loopback, which the
- * host's does not reach. The agent bridges it: a socat joined to the
- * boundary's network, and to the user namespace that owns that network
- * ({@link JOIN}), listens on a unix socket in the agent's own runtime dir (a
- * path, so in no network) and connects each connection to 127.0.0.1:<port>
- * in there.
+ * host's does not reach. The agent bridges it: a relay ({@link RELAY}, one
+ * bun process on CawCo's own runtime) joined to the boundary's network, and
+ * to the user namespace that owns that network ({@link JOIN}), listens on a
+ * unix socket in the agent's own runtime dir (a path, so in no network) and
+ * carries each connection to 127.0.0.1:<port> in there, every connection on
+ * its one event loop.
  *
  * Each request chooses its network: the newest generation of the workspace
  * whose sandbox runs and listens on the port, else the current one's
  * ({@link target}). A bridge is opened into it on the preview's first request,
  * and again whenever the request names another workspace or port, or the
  * network chosen is another one (a server started again in a newer
- * generation), or the one it had is gone: its socat exited,
+ * generation), or the one it had is gone: its relay exited,
  * or the boundary it joined closed (its init's network is not the one it
  * joined). It goes with its preview, and with the agent: it runs under
  * `setpriv --pdeathsig KILL`, and the hub starts each preview again at the
@@ -29,10 +30,14 @@ import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { SOCAT_BACKLOG } from "@cawco/core/socat";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
-import { listeners, workspaceNetworks } from "./boundary";
+import {
+  BUN_SCRIPT_ENV,
+  bunScriptRuntime,
+  listeners,
+  workspaceNetworks,
+} from "./boundary";
 
 /** The workspace a preview names has no boundary running on this machine. */
 export class WorkspaceDown extends Error {
@@ -74,15 +79,86 @@ const JOIN = [
   'die "cawco: $nsenter could not run ($!)\\n";',
 ].join(" ");
 
-/** How long a bridge has to put its socket down. Our call: socat binds in a few ms. */
+/** How long a bridge has to put its socket down. Our call: the relay binds in well under a second. */
 const BRIDGE_START_MS = 3000;
 
 /** The most of a bridge's stderr kept, to say why it did not start. */
 const STDERR_KEPT = 2000;
 
-/** The bridge's own end, on `socket`: socat's listen address, a child per connection, queued past socat's own 5 (core `SOCAT_BACKLOG`). */
-export const bridgeListen = (socket: string): string =>
-  `UNIX-LISTEN:${socket},fork,backlog=${SOCAT_BACKLOG}`;
+/**
+ * The relay, a bun program: it listens on the unix socket its first argument
+ * names and carries each connection to 127.0.0.1 at the port its second
+ * names, both ways, holding what a side can't take yet until it drains.
+ * Every connection is its event loop's, so a canvas's burst of module
+ * requests opens no process: socat with `fork` took one per connection (a
+ * relay trace on obelisk: 300 GETs through the agent spawned 78 to 299).
+ */
+const RELAY = `
+const [socket, port] = process.argv.slice(-2);
+const send = (to, chunk) => {
+  const held = to.data.held;
+  if (held.length > 0) { held.push(Buffer.from(chunk)); return; }
+  const wrote = to.write(chunk);
+  if (wrote < chunk.byteLength) held.push(Buffer.from(chunk.subarray(wrote)));
+};
+const drain = (to) => {
+  const held = to.data.held;
+  while (held.length > 0) {
+    const chunk = held[0];
+    const wrote = to.write(chunk);
+    if (wrote < chunk.byteLength) { held[0] = chunk.subarray(wrote); return; }
+    held.shift();
+  }
+  if (to.data.ending) to.end();
+};
+const finish = (to) => {
+  if (!to) return;
+  if (to.data.held.length > 0) to.data.ending = true; else to.end();
+};
+Bun.listen({
+  unix: socket,
+  socket: {
+    open(client) {
+      client.data = { held: [], early: [], upstream: null, ending: false };
+      Bun.connect({
+        hostname: "127.0.0.1",
+        port: Number(port),
+        socket: {
+          open(upstream) {
+            upstream.data = { held: [], client, ending: false };
+            client.data.upstream = upstream;
+            for (const chunk of client.data.early) send(upstream, chunk);
+            client.data.early = [];
+          },
+          data(upstream, chunk) { send(upstream.data.client, chunk); },
+          drain,
+          end(upstream) { finish(upstream.data.client); },
+          close(upstream) { finish(upstream.data.client); },
+          error(upstream) { finish(upstream.data.client); },
+          connectError() { client.end(); },
+        },
+      }).catch(() => client.end());
+    },
+    data(client, chunk) {
+      const { upstream } = client.data;
+      if (upstream) send(upstream, chunk); else client.data.early.push(Buffer.from(chunk));
+    },
+    drain,
+    end(client) { finish(client.data.upstream); },
+    close(client) { finish(client.data.upstream); },
+    error(client) { finish(client.data.upstream); },
+  },
+});
+`;
+
+/** The relay's own command on `socket` to `port`, and its environment: CawCo's bun (a binary install's runs as bun with `BUN_BE_BUN=1`). */
+export const bridgeRelay = (
+  socket: string,
+  port: number
+): { command: string[]; env: Record<string, string> } => ({
+  command: [bunScriptRuntime(), "-e", RELAY, socket, String(port)],
+  env: { ...BUN_SCRIPT_ENV },
+});
 
 /** A workspace's id, or a place's (core `isPlace`): a sheet's stage runs in either. */
 const WORKSPACE_ID = new RegExp(
@@ -147,7 +223,7 @@ const tool = (name: string): string => {
   const found = Bun.which(name, { PATH: SYSTEM_PATH });
   if (!found) {
     throw new Error(
-      `${name} is not on this machine, so a workspace's server can't be previewed (install util-linux, socat and perl).`
+      `${name} is not on this machine, so a workspace's server can't be previewed (install util-linux and perl).`
     );
   }
   return found;
@@ -175,9 +251,9 @@ const inGroup = (pgid: number): number[] =>
 
 /**
  * Stops preview `instanceId`'s bridge with every connection it holds: the
- * bridge leads a process group of its own ({@link open}), and socat's child
- * for each connection, a browser's open HMR socket among them, is in it. The
- * whole group is killed at once, so the caller that cannot wait (the agent's
+ * bridge leads a process group of its own ({@link open}), every connection
+ * in its relay, a browser's open HMR socket among them. The whole group is
+ * killed at once, so the caller that cannot wait (the agent's
  * own detach) still takes all of it; the promise settles once none of it
  * runs. A bridge still opening is stopped too: its open sees the stop once
  * its spawn settles and takes down what it made, and this waits for that.
@@ -290,7 +366,8 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await rm(socket, { force: true });
   // `setsid` execs in place (a child is no group leader), so the bridge's pid
-  // leads a process group of its own, which every connection's child joins.
+  // leads a process group of its own.
+  const relay = bridgeRelay(socket, port);
   const proc = Bun.spawn(
     [
       tool("setsid"),
@@ -303,19 +380,17 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
       JOIN,
       String(inner),
       tool("nsenter"),
-      tool("socat"),
-      bridgeListen(socket),
-      `TCP:127.0.0.1:${port}`,
+      ...relay.command,
     ],
     {
-      env: { PATH: SYSTEM_PATH },
+      env: { PATH: SYSTEM_PATH, ...relay.env },
       stdin: "ignore",
       stdout: "ignore",
       stderr: "pipe",
     }
   );
-  // Read always, so socat's line for each refused connection never fills the
-  // pipe; the last of it says why a bridge did not start.
+  // Read always, so what the relay says never fills the pipe; the last of it
+  // says why a bridge did not start.
   let said = "";
   const draining = (async () => {
     const decoder = new TextDecoder();
@@ -328,7 +403,7 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
   const deadline = Date.now() + BRIDGE_START_MS;
   const exited = () => proc.exitCode !== null || proc.signalCode !== null;
   while (!(existsSync(socket) || exited() || Date.now() > deadline)) {
-    // biome-ignore lint/performance/noAwaitInLoops: polls for the socket until socat binds it, exits, or the deadline passes
+    // biome-ignore lint/performance/noAwaitInLoops: polls for the socket until the relay binds it, exits, or the deadline passes
     await Bun.sleep(10);
   }
   if (exited()) {

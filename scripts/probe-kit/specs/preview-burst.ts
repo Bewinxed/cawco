@@ -7,9 +7,11 @@
  * nothing ("didn't load, so none of its stories are drawn"): 1 to 26 of the
  * icon barrel's per-icon modules (`~icons/solar/*.svelte`, about 150 of a
  * burst of about 200) answered 502. The agent's bridge into the workspace
- * (preview-bridge.ts) is a socat listening on a unix socket with socat's
+ * (preview-bridge.ts) was a socat listening on a unix socket with socat's
  * own backlog of 5; past it, a nonblocking connect fails at once with
  * EAGAIN, and the agent's listener answers 502 for the fetch that failed.
+ * The bridge is now the agent's own relay (preview-bridge.ts `bridgeRelay`),
+ * one bun process carrying every connection.
  *
  * The chain, every hop the real one but the bridge's join into a
  * workspace's network (which needs a user namespace, refused inside a
@@ -17,12 +19,12 @@
  * Cloudflare, to a Cloudflare-like front (100 streams at once, RFC 9113's
  * least advised), on to the hub's preview listener (hub preview.ts, a
  * session's own port), the agent's listener (agent preview.ts
- * `startPreview`, a port in a workspace), a socat on the bridge's own listen
- * address (preview-bridge.ts `bridgeListen`) carrying each connection to
- * the stage's port, and the stage host's Vite serving a Svelte canvas whose
- * states file imports a barrel of 150 icon components, a module each.
+ * `startPreview`, a port in a workspace), the bridge's own relay
+ * (preview-bridge.ts `bridgeRelay`) carrying each connection to the stage's
+ * port, and the stage host's Vite serving a Svelte canvas whose states file
+ * imports a barrel of 150 icon components, a module each.
  *
- * 1. The burst is one socat's own backlog refuses: more requests at once
+ * 1. The burst is one socat's own backlog refused: more requests at once
  *    reach the front than 5.
  * 2. Each of 20 cold opens (a fresh browser context, so no cache) draws
  *    its every frame, its page reports no error, and no response is 502.
@@ -31,6 +33,11 @@
  *    cold through the same chain: every frame drawn, no failed module, and
  *    the icons come as the one module Vite pre-bundles of `@cawco/icons`,
  *    no `~icons/…` module asked for (each was a request of its own).
+ * 4. 300 GETs of one immutable module (the largest prebundled dependency
+ *    the canvas loads, at its `?v=`) through the hub's and the agent's listeners and the bridge,
+ *    gzip taken, 50 at a time: the bridge opens no process of its own for
+ *    them, and the CPU this process (both listeners) spent on them, the
+ *    hub gzipping such an answer once for its address.
  *
  *   bun scripts/probe-kit/run.ts preview-burst
  */
@@ -214,22 +221,24 @@ async function stage(
 
 /**
  * The bridge as preview-bridge.ts runs it, but for its join into a
- * workspace's network: a socat on the module's own listen address
- * (`bridgeListen`, read from the module itself at `?real`, which Bun loads
- * past this swap), each connection carried to the port the preview names on
- * this loopback.
+ * workspace's network: the module's own relay (`bridgeRelay`, read from the
+ * module itself at `?real`, which Bun loads past this swap), each connection
+ * carried to the port the preview names on this loopback. Each bridge's pid
+ * goes on `globalThis.__probeBridges` for leg 4.
  */
 function standInBridge(): void {
   const real = `${BRIDGE_FILE}?real`;
   const contents = `import { existsSync } from "node:fs";
-import { bridgeListen } from ${JSON.stringify(real)};
+import { bridgeRelay } from ${JSON.stringify(real)};
 export class WorkspaceDown extends Error {}
 const bridges = new Map();
 export const reachWorkspace = async (instanceId, _workspace, port) => {
   const held = bridges.get(instanceId);
   if (held) return held.socket;
   const socket = ${JSON.stringify(SCRATCH)} + "/" + instanceId + ".sock";
-  const proc = Bun.spawn(["socat", bridgeListen(socket), "TCP:127.0.0.1:" + port], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  const relay = bridgeRelay(socket, port);
+  const proc = Bun.spawn(relay.command, { env: { ...process.env, ...relay.env }, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  (globalThis.__probeBridges ??= []).push(proc.pid);
   const deadline = Date.now() + 3000;
   while (!existsSync(socket) && Date.now() < deadline) await Bun.sleep(10);
   bridges.set(instanceId, { proc, socket });
@@ -538,6 +547,7 @@ async function chain(
 ): Promise<{
   canvas: (file: string) => string;
   edge: Awaited<ReturnType<typeof front>>;
+  hubPort: number;
   stop: () => Promise<void>;
 }> {
   const { startPreview, stopPreview } =
@@ -559,6 +569,7 @@ async function chain(
   const edge = await front(tls, hub.port);
   return {
     edge,
+    hubPort: hub.port,
     canvas: (file) =>
       `https://localhost:${edge.port}/@cawco/canvas?file=${encodeURIComponent(file)}&spec=${encodeURIComponent(JSON.stringify({ name: "Burst" }))}`,
     stop: async () => {
@@ -622,6 +633,108 @@ async function dashboardIcons(
   }
 }
 
+/** A stage module's keyed address's prefix (stage-host `MODULES_PATH`). */
+const KEYED_AT = /^\/@cawco\/m\/[^/]+/;
+/** How many GETs leg 4 sends, and how many at once. */
+const COST_GETS = 300;
+const COST_AT_ONCE = 50;
+
+/** The child processes of `pid` now. */
+const childrenOf = (pid: number): number[] =>
+  Bun.spawnSync(["ps", "--ppid", String(pid), "-o", "pid="])
+    .stdout.toString()
+    .split("\n")
+    .map((line) => Number(line.trim()))
+    .filter((one) => one > 0);
+
+/**
+ * 4. {@link COST_GETS} GETs of one immutable module (the largest of Vite's
+ * prebundled dependencies the canvas loads, at its `?v=`) at the hub's listener on `hubPort`, gzip
+ * taken, {@link COST_AT_ONCE} at a time: every bridge's processes seen
+ * meanwhile (sampled every 5 ms), and this process's CPU over them.
+ */
+async function relayCost(
+  kit: Kit,
+  canvas: string,
+  hubPort: number
+): Promise<void> {
+  // The largest prebundled dependency a page of the canvas asks for, at the address it asks (its `?v=` the optimizer's now).
+  const page: Page = await kit.page("desk", {
+    ignoreHTTPSErrors: true,
+    init: [BRIDGE],
+  });
+  const deps: Promise<{ at: string; bytes: number }>[] = [];
+  page.on("response", (response) => {
+    const at = new URL(response.url());
+    if (at.pathname.includes("/.cawco/stage/cache/deps/")) {
+      deps.push(
+        response
+          .body()
+          .then((body) => ({
+            at: `${at.pathname.replace(KEYED_AT, "")}${at.search}`,
+            bytes: body.byteLength,
+          }))
+          .catch(() => ({ at: "", bytes: 0 }))
+      );
+    }
+  });
+  await page.goto(canvas);
+  await page.waitForFunction(
+    () =>
+      (window as unknown as { __cawcoCanvas?: { report: RenderReport | null } })
+        .__cawcoCanvas?.report?.sections.length,
+    null,
+    { timeout: 60_000 }
+  );
+  const [largest] = (await Promise.all(deps)).sort((a, b) => b.bytes - a.bytes);
+  await page.close();
+  const asked = largest?.at ?? "";
+  const url = `http://127.0.0.1:${hubPort}${asked}`;
+  const bridges =
+    (globalThis as { __probeBridges?: number[] }).__probeBridges ?? [];
+  const seen = new Set<number>();
+  /** Aborted once the GETs are done. */
+  const sampling = new AbortController();
+  const sample = (async () => {
+    while (!sampling.signal.aborted) {
+      for (const pid of bridges) {
+        for (const child of childrenOf(pid)) {
+          seen.add(child);
+        }
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: samples until the GETs are done
+      await Bun.sleep(5);
+    }
+  })();
+  const sizes: number[] = [];
+  const statuses = new Set<number>();
+  const cpu = process.cpuUsage();
+  const started = performance.now();
+  for (let sent = 0; sent < COST_GETS; sent += COST_AT_ONCE) {
+    // biome-ignore lint/performance/noAwaitInLoops: a batch at a time
+    const batch = await Promise.all(
+      Array.from({ length: COST_AT_ONCE }, async () => {
+        const answer = await fetch(url, {
+          headers: { "accept-encoding": "gzip" },
+          decompress: false,
+        } as RequestInit);
+        statuses.add(answer.status);
+        return (await answer.arrayBuffer()).byteLength;
+      })
+    );
+    sizes.push(...batch);
+  }
+  const spent = process.cpuUsage(cpu);
+  const ms = Math.round(performance.now() - started);
+  sampling.abort();
+  await sample;
+  kit.check(
+    `4: ${COST_GETS} GETs of an immutable module (${asked.split("?")[0]?.split("/").at(-1)}, ${largest?.bytes} bytes) through the hub's and the agent's listeners and the bridge, gzip taken, ${COST_AT_ONCE} at a time: ${seen.size} processes of the bridge's own seen; this process spent ${((spent.user + spent.system) / 1000).toFixed(0)} ms of CPU over ${ms} ms (${sizes[0]} bytes on the wire each)`,
+    seen.size === 0 && [...statuses].join() === "200",
+    `statuses ${[...statuses].join(",")}; bridges ${bridges.join(",")}`
+  );
+}
+
 const run = async (kit: Kit) => {
   mkdirSync(SCRATCH, { recursive: true });
   const dir = project();
@@ -665,6 +778,7 @@ const run = async (kit: Kit) => {
         ? `${OPENS - bad.length} of ${OPENS} drew: ${bad.join(" | ")}`
         : `${OPENS} of ${OPENS} drew, ${opens.map((one) => `${one.drawn}/${one.frames} in ${one.ms} ms`).join(", ")}`
     );
+    await relayCost(kit, url, proxied.hubPort);
   } finally {
     await proxied.stop();
     stageHost.kill("SIGTERM");

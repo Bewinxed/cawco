@@ -1165,13 +1165,15 @@ export function createPreviewListeners(
         deps,
         lock === undefined
       );
-      // Gzipped here, once, after the overlay tag is keyed.
+      // Gzipped here, once, after the overlay tag is keyed; an immutable
+      // answer once for its address on this session's origin.
       return (
         answer &&
-        compressed(
+        (await compressed(
           framedBy(await withKeyedOverlay(answer), ancestorsOf(instanceId)),
-          request.headers.get("accept-encoding")
-        )
+          request.headers.get("accept-encoding"),
+          `${instanceId} ${request.url}`
+        ))
       );
     };
     const plain = Bun.serve<ListenerSocket>({

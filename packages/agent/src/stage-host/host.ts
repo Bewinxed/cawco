@@ -35,7 +35,7 @@
  * spec §6's discovery).
  */
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   existsSync,
   readdirSync,
@@ -47,6 +47,7 @@ import {
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parse } from "@babel/parser";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   AS_PAGE,
@@ -124,6 +125,8 @@ interface DevServer {
   config: { base: string };
   environments: {
     client: {
+      /** Vite's optimizer of the project's dependencies: its `browserHash` names the deps it last built (each served at `?v=<hash>`). */
+      depsOptimizer?: { metadata: { browserHash: string } } | null;
       hot: { send: (payload: unknown, ...rest: unknown[]) => void };
       pluginContainer: {
         resolveId: (
@@ -1012,13 +1015,16 @@ async function serveCanvas(
     const preloads = preloadsOf(files)
       .map((url) => `<link rel="modulepreload" href="${escapeAttr(url)}">`)
       .join("");
-    const html = await dev.transformIndexHtml(
-      req.url ?? CANVAS_PATH,
-      canvasPage().replace(
-        "</head>",
-        `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script>${preloads}</head>`
+    const html = keyedPage(
+      await dev.transformIndexHtml(
+        req.url ?? CANVAS_PATH,
+        canvasPage().replace(
+          "</head>",
+          `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script>${preloads}</head>`
+        ),
+        (req as IncomingMessage & { originalUrl?: string }).originalUrl
       ),
-      (req as IncomingMessage & { originalUrl?: string }).originalUrl
+      generationOf(dev)
     );
     res.setHeader("content-type", "text/html");
     res.setHeader("cache-control", "no-store");
@@ -1026,6 +1032,203 @@ async function serveCanvas(
   } catch (error) {
     next(error);
   }
+}
+
+/*
+ * A canvas page's modules, at the stage's generation: `/@cawco/m/<key>/<the
+ * module's own address>`, Vite's prebundled dependencies too (one of them
+ * may import a module of the page's: the stage's `cawco:yjs`, which imports
+ * Vite's client). The key is new whenever a file of the project is
+ * written or taken away, or the dependencies are built again, so one
+ * address always holds one module's code: kept by the browser for good
+ * (`immutable`), a decision page's embeds of one states file fetch each
+ * module once, where through the hub's preview proxy each fetched all of
+ * them again (`no-store`, the only policy Cloudflare leaves a dev server's
+ * module: 1,370 of the comment-card page's 3,430 requests). `private`: the
+ * project's source is kept by the person's browser, never at a CDN's edge.
+ *
+ * Every address a keyed module imports is keyed with it, the page's own
+ * key, so its graph stays one generation's; a changed module reaches an
+ * open page by Vite's HMR, which Vite's client asks for at the page's key
+ * with its `?t=`.
+ */
+const MODULES_PATH = "/@cawco/m/";
+const KEPT = "private, max-age=31536000, immutable";
+const newGeneration = (): string => randomBytes(9).toString("base64url");
+let generation = newGeneration();
+
+/** The key a page loaded now asks for its modules under: the files' generation and the dependencies' build. */
+const generationOf = (dev: DevServer): string => {
+  const deps = dev.environments.client.depsOptimizer?.metadata.browserHash;
+  return deps ? `${generation}.${deps}` : generation;
+};
+
+/** `url` (an address on the stage) under `key`; another origin's, or a relative one, as it is. */
+const keyedUrl = (url: string, key: string): string =>
+  url.startsWith("/") && !url.startsWith("//")
+    ? `${MODULES_PATH}${key}${url}`
+    : url;
+
+/** An import of an address on the stage: what a module with none (a prebundle's chunk) is served without parsing. */
+const STAGE_IMPORT = /(?:\bfrom|\bimport)\s*\(?\s*["']\/(?!\/)/;
+
+/** The page's module scripts and preloads (Vite's client among them) at `key`. */
+const MODULE_TAG =
+  /(<script\b[^>]*\btype="module"[^>]*\bsrc="|<link\b[^>]*\brel="modulepreload"[^>]*\bhref=")([^"]+)"/g;
+const keyedPage = (html: string, key: string): string =>
+  html.replace(
+    MODULE_TAG,
+    (_whole, head: string, url: string) => `${head}${keyedUrl(url, key)}"`
+  );
+
+/** Vite's client declares the base its HMR imports a changed module under. */
+const CLIENT_BASE = (base: string) => `const base = ${JSON.stringify(base)} ||`;
+
+/** The string literals `code` imports from (static, re-exported, and `import("…")` of a literal), as their spans in it. */
+function importedLiterals(code: string): { end: number; start: number }[] {
+  if (!STAGE_IMPORT.test(code)) {
+    return [];
+  }
+  const { program } = parse(code, {
+    sourceType: "module",
+    errorRecovery: true,
+    allowAwaitOutsideFunction: true,
+    allowImportExportEverywhere: true,
+  });
+  const spans: { end: number; start: number }[] = [];
+  const literal = (node: unknown) => {
+    const one = node as
+      { end?: number; start?: number; type?: string } | null | undefined;
+    if (
+      one?.type === "StringLiteral" &&
+      one.start !== undefined &&
+      one.end !== undefined
+    ) {
+      spans.push({ start: one.start, end: one.end });
+    }
+  };
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const one of node) {
+        walk(one);
+      }
+      return;
+    }
+    const one = node as Record<string, unknown> & { type?: string };
+    if (
+      one.type === "ImportDeclaration" ||
+      one.type === "ExportAllDeclaration" ||
+      one.type === "ExportNamedDeclaration"
+    ) {
+      literal(one.source);
+    }
+    if (
+      one.type === "CallExpression" &&
+      (one.callee as { type?: string } | undefined)?.type === "Import"
+    ) {
+      literal((one.arguments as unknown[] | undefined)?.[0]);
+    }
+    for (const [name, value] of Object.entries(one)) {
+      if (
+        name !== "loc" &&
+        name !== "extra" &&
+        value &&
+        typeof value === "object"
+      ) {
+        walk(value);
+      }
+    }
+  };
+  walk(program.body);
+  return spans;
+}
+
+/** `code` with every stage address it imports from at `key`. */
+function keyedImports(code: string, key: string): string {
+  let out = code;
+  for (const { start, end } of importedLiterals(code).sort(
+    (a, b) => b.start - a.start
+  )) {
+    const quote = out[start] as string;
+    const url = out.slice(start + 1, end - 1);
+    const keyed = keyedUrl(url, key);
+    if (keyed !== url) {
+      out = `${out.slice(0, start)}${quote}${keyed}${quote}${out.slice(end)}`;
+    }
+  }
+  return out;
+}
+
+/** Each keyed module as served, by its keyed address: rewritten once a generation. */
+const keyedServed = new Map<
+  string,
+  { body: Uint8Array | string; type: string }
+>();
+
+/**
+ * A module at a key (`/@cawco/m/<key>/<address>`): the stage's own answer
+ * at its address, asked of itself, with what it imports keyed alike and
+ * Vite's client's HMR base the page's key. Kept for good when it answered;
+ * an error (a module that doesn't compile) is never kept.
+ */
+async function serveKeyed(
+  dev: DevServer,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL
+): Promise<void> {
+  const rest = url.pathname.slice(MODULES_PATH.length);
+  const cut = rest.indexOf("/");
+  const key = rest.slice(0, cut);
+  const address = `${rest.slice(cut)}${url.search}`;
+  const at = `${MODULES_PATH}${key}${address}`;
+  let kept = keyedServed.get(at);
+  if (!kept) {
+    const listening = dev.httpServer?.address();
+    const stagePort =
+      typeof listening === "object" && listening ? listening.port : 0;
+    const headers: Record<string, string> = {};
+    for (const name of ["accept", "sec-fetch-dest", "user-agent"]) {
+      const value = req.headers[name];
+      if (typeof value === "string") {
+        headers[name] = value;
+      }
+    }
+    const answer = await fetch(`http://127.0.0.1:${stagePort}${address}`, {
+      headers,
+    });
+    const type =
+      answer.headers.get("content-type") ?? "application/octet-stream";
+    if (answer.status !== 200) {
+      res.statusCode = answer.status;
+      res.setHeader("content-type", type);
+      res.setHeader("cache-control", "no-store");
+      res.end(Buffer.from(await answer.arrayBuffer()));
+      return;
+    }
+    let body: Uint8Array | string;
+    if (type.includes("javascript")) {
+      const prefix = `${MODULES_PATH}${key}`;
+      body = keyedImports(await answer.text(), key);
+      if (address.split("?")[0] === `${dev.config.base}@vite/client`) {
+        body = body.replace(
+          CLIENT_BASE(dev.config.base),
+          CLIENT_BASE(`${prefix}${dev.config.base}`)
+        );
+      }
+    } else {
+      body = new Uint8Array(await answer.arrayBuffer());
+    }
+    kept = { body, type };
+    keyedServed.set(at, kept);
+  }
+  res.statusCode = 200;
+  res.setHeader("content-type", kept.type);
+  res.setHeader("cache-control", KEPT);
+  res.end(kept.body);
 }
 
 /** An attribute's value, its quotes and ampersands written as entities. */
@@ -1983,6 +2186,10 @@ async function serveStage(
   next: (error?: unknown) => void
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://stage");
+  if (url.pathname.startsWith(MODULES_PATH) && req.method === "GET") {
+    await serveKeyed(dev, req, res, url);
+    return;
+  }
   const base = dev.config.base.replace(TRAILING_SLASH, "");
   const path = url.pathname.startsWith(base)
     ? url.pathname.slice(base.length)
@@ -2495,6 +2702,13 @@ function cawcoStage() {
           keepMissing([relative(root, abs)]);
         }
       };
+      // Any file written or taken away: what a new page loads is at new addresses.
+      for (const event of ["add", "change", "unlink"] as const) {
+        dev.watcher.on(event, () => {
+          generation = newGeneration();
+          keyedServed.clear();
+        });
+      }
       dev.watcher.on("add", nowWritten);
       dev.watcher.on("change", nowWritten);
       dev.watcher.on("unlink", (abs: string) => {

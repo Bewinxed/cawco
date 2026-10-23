@@ -518,33 +518,24 @@ export function cachePreview(
 const COMPRESSIBLE =
   /^(?:text\/(?!event-stream$)|application\/(?:javascript|json|wasm)$|image\/svg\+xml$)/;
 
-/**
- * `answer` gzipped for a client that takes it (`acceptEncoding`, the
- * request's Accept-Encoding), once, by the hop that sends it to the browser
- * after its own rewriting: a dev server compresses nothing, and Vite's
- * modules and a folder's bundle are most of a preview's bytes. Only a whole
- * 200 of a {@link COMPRESSIBLE} type with a body and no encoding yet (the
- * overlay is gzipped already), never one that says `no-transform`. A strong
- * ETag becomes weak, as the bytes are no longer the server's; a weak one
- * (Vite's) is the same representation's still.
- */
-export function compressed(
-  answer: Response,
-  acceptEncoding: string | null
-): Response {
+/** Whether `answer` is one {@link compressed} gzips for a client that takes `acceptEncoding`. */
+const gzips = (answer: Response, acceptEncoding: string | null): boolean => {
   const type =
     answer.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ??
     "";
-  if (
-    answer.status !== 200 ||
-    !answer.body ||
-    !(acceptEncoding && GZIP.test(acceptEncoding)) ||
-    answer.headers.has("content-encoding") ||
-    !COMPRESSIBLE.test(type) ||
-    directives(answer.headers.get("cache-control")).has("no-transform")
-  ) {
-    return answer;
-  }
+  return (
+    answer.status === 200 &&
+    !!answer.body &&
+    !!acceptEncoding &&
+    GZIP.test(acceptEncoding) &&
+    !answer.headers.has("content-encoding") &&
+    COMPRESSIBLE.test(type) &&
+    !directives(answer.headers.get("cache-control")).has("no-transform")
+  );
+};
+
+/** `answer`'s headers as its gzipped copy says them. */
+const gzippedHeaders = (answer: Response): Headers => {
   const headers = new Headers(answer.headers);
   headers.set("content-encoding", "gzip");
   headers.append("vary", "accept-encoding");
@@ -553,11 +544,77 @@ export function compressed(
   if (etag && !etag.startsWith("W/")) {
     headers.set("etag", `W/${etag}`);
   }
-  return new Response(answer.body.pipeThrough(new CompressionStream("gzip")), {
+  return headers;
+};
+
+/**
+ * The gzipped bodies of answers kept for good (`immutable`), by their
+ * address: an address that never changes its bytes is compressed once. A
+ * stage's keyed modules are (stage-host `MODULES_PATH`), and a decision
+ * page's embeds asked the hub for each about 3 times, a ~1 ms of its main
+ * thread per 222 KB gzipped each time. The least recently served go first
+ * past {@link KEPT_BYTES}.
+ */
+const kept = new Map<string, Uint8Array<ArrayBuffer>>();
+let keptBytes = 0;
+/** What the hub keeps of them at most. Our call: a few canvases' graphs, gzipped. */
+const KEPT_BYTES = 64 * 1024 * 1024;
+
+const keep = (address: string, body: Uint8Array<ArrayBuffer>): void => {
+  kept.set(address, body);
+  keptBytes += body.byteLength;
+  for (const [old, bytes] of kept) {
+    if (keptBytes <= KEPT_BYTES) {
+      break;
+    }
+    kept.delete(old);
+    keptBytes -= bytes.byteLength;
+  }
+};
+
+/**
+ * `answer` gzipped for a client that takes it (`acceptEncoding`, the
+ * request's Accept-Encoding), once, by the hop that sends it to the browser
+ * after its own rewriting: a dev server compresses nothing, and Vite's
+ * modules and a folder's bundle are most of a preview's bytes. Only a whole
+ * 200 of a {@link COMPRESSIBLE} type with a body and no encoding yet (the
+ * overlay is gzipped already), never one that says `no-transform`. A strong
+ * ETag becomes weak, as the bytes are no longer the server's; a weak one
+ * (Vite's) is the same representation's still. An answer kept for good
+ * (`immutable`) is gzipped once for its `address` ({@link kept}) and its
+ * stored copy served again; any other is gzipped as it streams.
+ */
+export async function compressed(
+  answer: Response,
+  acceptEncoding: string | null,
+  address: string
+): Promise<Response> {
+  if (!gzips(answer, acceptEncoding)) {
+    return answer;
+  }
+  const headers = gzippedHeaders(answer);
+  const init = {
     status: answer.status,
     statusText: answer.statusText,
     headers,
-  });
+  };
+  if (!directives(answer.headers.get("cache-control")).has("immutable")) {
+    return new Response(
+      answer.body?.pipeThrough(new CompressionStream("gzip")),
+      init
+    );
+  }
+  let body = kept.get(address);
+  if (body) {
+    // Served again: the last to go.
+    kept.delete(address);
+    kept.set(address, body);
+    await answer.body?.cancel();
+  } else {
+    body = Bun.gzipSync(new Uint8Array(await answer.arrayBuffer()));
+    keep(address, body);
+  }
+  return new Response(body, init);
 }
 
 /** A versioned address's file, its path under the mount; null when `pathname` is not one. */
