@@ -190,6 +190,8 @@ export interface RoutineDraft {
   delegateType: string | null;
   name: string;
   prompt: string;
+  /** What each run starts: a delegate, or an orchestrator that delegates (hub routines.ts `fireOrchestrator`). */
+  target: "delegate" | "orchestrator";
   timeZone: string;
 }
 
@@ -226,7 +228,7 @@ export const routineFormHub: RoutineFormHub = {
       "/api/routines",
       json("POST", {
         projectId,
-        target: "delegate",
+        target: draft.target,
         name: draft.name.trim(),
         prompt: draft.prompt.trim(),
         cron: draft.cron.trim(),

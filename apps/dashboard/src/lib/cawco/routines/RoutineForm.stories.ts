@@ -160,6 +160,18 @@ export const FilledPhone = {
   parameters: { viewport: 390 },
 };
 
+/** Filled, each run an orchestrator: the choice's words under it say what it does. */
+export const Orchestrator = {
+  args: { draft: { ...filled, target: "orchestrator" as const } },
+  parameters: { viewport: 1440 },
+};
+
+/** Each run an orchestrator, on a phone. */
+export const OrchestratorPhone = {
+  args: { draft: { ...filled, target: "orchestrator" as const } },
+  parameters: { viewport: 390 },
+};
+
 /** Every week, on Mondays at 07:30: the day and the time beside the choice. */
 export const Weekly = {
   args: { draft: { ...filled, cron: "30 7 * * 1" } },

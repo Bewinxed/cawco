@@ -7,7 +7,10 @@
  * once. The person runs it now from its row's menu:
  * the hub starts a run, its delegate is given the routine's instruction and
  * reports, and the run ends with a result. Then the person pauses it: the
- * hub holds it off, the row says Paused, and its menu offers Resume.
+ * hub holds it off, the row says Paused, and its menu offers Resume. Then
+ * the person makes a second one with the form, each run an orchestrator:
+ * the hub keeps that target, and its test run is a background session with
+ * host scope in the project's checkout.
  *
  * A run's delegate works in a workspace boundary: this journey runs only
  * where one can start (the host), never inside a workspace.
@@ -289,6 +292,81 @@ async function walk(leg: Leg): Promise<void> {
         "Resume in its menu"
       );
       await page.keyboard.press("Escape");
+    }
+  );
+
+  // A second routine from the form, each run an orchestrator: the hub keeps
+  // its target as the form chose it, and its test run is an orchestrator, a
+  // background session in the project's checkout (hub routines.ts
+  // `fireOrchestrator`), not a delegate in a workspace.
+  const orchestratorName = leg
+    .title(`Weekly triage lead ${leg.id}`)
+    .slice(0, SESSION_TITLE_MAX)
+    .trimEnd();
+  const orchestrated = () =>
+    fleet
+      .api<Listed[]>(`/api/routines?projectId=${encodeURIComponent(projectId)}`)
+      .then((rows) => rows.find((row) => row.name === orchestratorName));
+  await leg.step(
+    "Create routine again: each run an orchestrator, on the custom schedule",
+    async () => {
+      await page
+        .getByRole("button", { name: routinesWords.createRoutine })
+        .click();
+      await form.getByLabel("Name").fill(orchestratorName);
+      await form
+        .getByLabel(routinesWords.promptLabel)
+        .fill(
+          `JOURNEY-ROUTINE ${leg.id} ${leg.title("lead this week's triage.")}`
+        );
+      await form
+        .getByLabel("When", { exact: true })
+        .selectOption({ label: "Custom" });
+      await form.getByLabel(routinesWords.customLabel).fill(CRON);
+      await form
+        .getByLabel(routinesWords.runsLabel)
+        .selectOption({ label: routinesWords.runs.orchestrator });
+    },
+    () =>
+      shows(
+        form.getByText(routinesWords.runsHint.orchestrator),
+        "what an orchestrator run does, under the choice"
+      )
+  );
+
+  await leg.step(
+    "Create it",
+    () =>
+      form.getByRole("button", { name: routinesWords.createRoutine }).click(),
+    async () => {
+      const made = await eventually(
+        "the hub lists the orchestrator routine, as the form filled it",
+        orchestrated,
+        (row) => row !== undefined
+      );
+      if (made?.target !== "orchestrator" || made.cron !== CRON) {
+        throw new Error(
+          `the hub lists the orchestrator routine unlike the form: ${JSON.stringify(made)}`
+        );
+      }
+      const item = await eventually(
+        "its test run's orchestrator, background and with host scope",
+        () =>
+          fleet.query<{ background: number; host: number }>(
+            "SELECT w.background, s.host FROM routine_runs r JOIN work_items w ON w.id = r.work_item_id JOIN workspaces s ON s.id = w.workspace_id WHERE r.routine_id = ?",
+            made.id
+          )[0],
+        (row) => row !== undefined
+      );
+      if (!(item?.background === 1 && item.host === 1)) {
+        throw new Error(
+          `the orchestrator run's item is not background host-scope work: ${JSON.stringify(item)}`
+        );
+      }
+      await shows(
+        page.getByText(orchestratorName, { exact: true }),
+        `the orchestrator routine's row, “${orchestratorName}”`
+      );
     }
   );
 }

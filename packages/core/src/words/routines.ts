@@ -60,6 +60,20 @@ export const routinesWords = {
   zoneUnread: "The hub can't read schedules in this time zone. Choose another.",
   /** A create refused for its schedule. */
   scheduleUnread: "Its schedule can't be read.",
+  /** What each run of a routine made by hand starts (hub routines.ts `RoutineTarget`). */
+  runsLabel: "Each run starts",
+  /** The two things a run can start, as the form offers them. */
+  runs: {
+    delegate: "A delegate",
+    orchestrator: "An orchestrator",
+  },
+  /** What each one is, under the choice. */
+  runsHint: {
+    delegate:
+      "A fresh delegate in its own workspace does the work and reports the outcome.",
+    orchestrator:
+      "A fresh session in the project's checkout delegates the work, reads its delegates' reports and reports the outcome. It keeps running if the session that made it stops.",
+  },
   typeLabel: "Delegate type",
   /** No type named: each run's is the hub's pick. */
   typeHubPick: "The hub's pick for each run",

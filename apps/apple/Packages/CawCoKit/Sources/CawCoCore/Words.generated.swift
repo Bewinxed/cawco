@@ -1847,6 +1847,29 @@ public enum Words {
         /// A create refused for its schedule.
         public static let scheduleUnread = "Its schedule can't be read."
 
+        /// What each run of a routine made by hand starts (hub routines.ts `RoutineTarget`).
+        public static let runsLabel = "Each run starts"
+
+        /// The two things a run can start, as the form offers them.
+        public enum Runs {
+            public static let delegate = "A delegate"
+
+            public static let orchestrator = "An orchestrator"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["delegate": delegate, "orchestrator": orchestrator]
+        }
+
+        /// What each one is, under the choice.
+        public enum RunsHint {
+            public static let delegate = "A fresh delegate in its own workspace does the work and reports the outcome."
+
+            public static let orchestrator = "A fresh session in the project's checkout delegates the work, reads its delegates' reports and reports the outcome. It keeps running if the session that made it stops."
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["delegate": delegate, "orchestrator": orchestrator]
+        }
+
         public static let typeLabel = "Delegate type"
 
         /// No type named: each run's is the hub's pick.

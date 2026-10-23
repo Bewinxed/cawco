@@ -2,13 +2,13 @@
   /**
    * A routine made by hand: what `POST /api/routines` takes, as Caw's own
    * `routine_create` sends it (routines-api `routineFormHub`), so the
-   * routine is the same one: a delegate run each time, run once at once as
-   * a test. It opens in the Routines block, over the ledger it lands in
+   * routine is the same one: each run a delegate, or an orchestrator that
+   * delegates the work, run once at once as a test. It opens in the Routines block, over the ledger it lands in
    * (DESIGN.md, The Open Page Rule), and blocks nothing.
    *
    * Its fields, on Configure's editor parts (Field, Input, Textarea, the
-   * kit NativeSelect): a name, what each run does, when, and the delegate
-   * type. When is a choice of common schedules, as a calendar's repeat
+   * kit NativeSelect): a name, what each run does, when, what each run
+   * starts (a delegate or an orchestrator), and the delegate type. When is a choice of common schedules, as a calendar's repeat
    * picker offers them (every hour; every day, every weekday or every week
    * on a day, at a time), or Custom, its five values typed (when.ts); each
    * writes the expression the API takes. The hub reads the schedule back as
@@ -79,6 +79,9 @@
     focus?: boolean;
   } = $props();
 
+  /** What a run can start, in the order the form offers them. */
+  const TARGETS = ["delegate", "orchestrator"] as const;
+
   /** The hub's limit on a name (hub work-items `SESSION_TITLE_MAX`). */
   const NAME_MAX = 48;
   /** How long typing rests before the schedule is read back. */
@@ -90,6 +93,7 @@
       prompt: opening.prompt ?? "",
       timeZone: opening.timeZone ?? readerZone(),
       delegateType: opening.delegateType ?? null,
+      target: opening.target ?? "delegate",
     }))
   );
   let when = $state<When>(
@@ -453,6 +457,20 @@
       </div>
     {/if}
   </div>
+
+  <Field
+    hint={words.runsHint[draft.target]}
+    id="routine-target"
+    label={words.runsLabel}
+  >
+    <NativeSelect id="routine-target" class="w-full" bind:value={draft.target}>
+      {#each TARGETS as target (target)}
+        <NativeSelectOption value={target}
+          >{words.runs[target]}</NativeSelectOption
+        >
+      {/each}
+    </NativeSelect>
+  </Field>
 
   <Field
     hint={typesProblem ?? chosenType?.description}
