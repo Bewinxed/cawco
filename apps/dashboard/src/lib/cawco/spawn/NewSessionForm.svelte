@@ -233,7 +233,7 @@
     picks: SessionDraft;
     step: boolean;
   }
-  const STILL_UPLOADING = "Wait for your file to finish uploading.";
+  const STILL_UPLOADING = spawnWords.held.uploading;
   /** The reading line's words while the machine is still read: beside the live dot. */
   const READING = "Reading…";
   /** Start's word while the machine reads the folder it starts in. */
@@ -300,14 +300,14 @@
   let harness = $state<HarnessKind>(spawnPrefs.harness);
   let model = $state("");
   let effort = $state<EffortLevel | null>(null);
-  /** None until the person picks one, when no start of theirs is remembered: Start waits for it. */
-  let permissionMode = $state<PermissionMode | null>(spawnPrefs.permissionMode);
   /**
-   * Full Send came with the form (the last start's mode, or a failed
-   * continuation's) rather than from a pick in it: the warning says where
-   * it came from. A pick in the picker, confirmed there, clears it.
+   * The mode picked in this form, or the one it was left on or started
+   * with (kept picks, a parked start); null while neither, and the form
+   * runs on the mode the person last started in ({@link lastMode}).
    */
-  let fullSendCarried = $state(false);
+  let modePick = $state<PermissionMode | null>(null);
+  /** The mode was picked in the picker here, not carried into the form. */
+  let pickedHere = $state(false);
   let projectId = $state<string>();
   let editing = $state(false);
   let spinOff = $state(false);
@@ -383,6 +383,26 @@
   );
   const report = $derived(
     machine?.harnesses?.find((row) => row.harness === harness)
+  );
+  /**
+   * The mode the person last started a session in, which the form opens
+   * on: CawCo has no default mode of its own to set, so it is their last
+   * choice, the hub's for this harness on the first machine (its
+   * `chosen_modes`, written by every start from any device), else the last
+   * start from this browser. None when neither: Start waits for a pick.
+   */
+  const lastMode = $derived(
+    machine?.chosenModes?.[harness] ?? spawnPrefs.permissionMode
+  );
+  /** The mode a start goes out on. */
+  const permissionMode = $derived(modePick ?? lastMode);
+  /**
+   * Full Send came with the form (the last start's mode, or a failed
+   * continuation's) rather than from a pick in it: the warning says where
+   * it came from. A pick in the picker, confirmed there, clears it.
+   */
+  const fullSendCarried = $derived(
+    permissionMode === "fullSend" && !pickedHere
   );
   const installedHarnesses = $derived(
     HARNESSES.filter((kind) =>
@@ -1020,6 +1040,27 @@
       (repo !== undefined && !isGitUrl(repo)) ||
       (moveTo !== null && !(moving || movedAlready))
   );
+  /**
+   * Why Start is held, said beside it, for the holds nothing else on the
+   * form says: the reading line says the hub, the folder and a move; the
+   * notices beside Start say placement and a refused mode; the model
+   * pickers say a continuation that won't fit. "" when Start can go, or
+   * when the reading line already says these same words (a press's
+   * `validate`).
+   */
+  const startHeld = $derived.by(() => {
+    let held = "";
+    if (machineIds.length === 0) {
+      held = spawnWords.held.machine;
+    } else if (modeUnchosen) {
+      held = spawnWords.held.mode;
+    } else if (repo !== undefined && !isGitUrl(repo)) {
+      held = spawnWords.held.repo;
+    } else if (firstMessage.uploading) {
+      held = spawnWords.held.uploading;
+    }
+    return held === failure ? "" : held;
+  });
   /** The source as the prompt's opening chip; a session title is often its first prompt, so it is cut short. */
   const sourceChip = $derived<LeadChip | undefined>(
     continueFrom && {
@@ -1120,8 +1161,9 @@
   });
   /** The form as it was left, or as a start was submitted with: its picks over what it opened with. */
   function applyPicks(kept: SessionDraft): void {
-    ({ repo, projectId, harness, effort, permissionMode } = kept);
-    fullSendCarried = permissionMode === "fullSend";
+    ({ repo, projectId, harness, effort } = kept);
+    modePick = kept.permissionMode;
+    pickedHere = false;
     ({ harness: summarizerHarness, model: summarizerModel } = kept.summarizer);
     carry = kept.asks ? "asks" : "summary";
     const [openedOn] = machineIds;
@@ -1142,23 +1184,18 @@
       return;
     }
     untrack(() => {
-      const seeded = prefill?.projectId
-        ? cawco.project(prefill.projectId)
-        : undefined;
-      projectId = seeded?.id;
-      const primary = seeded ? checkoutOf(seeded) : undefined;
-      const first =
-        continueFrom?.machineId ||
-        prefill?.machineId ||
-        primary?.machineId ||
-        "";
+      // A project's own checkout is adopted once the board lists the
+      // project (the machine it opens on, below): a page just loaded opens
+      // the form before the socket has brought the projects.
+      projectId = prefill?.projectId;
+      const first = continueFrom?.machineId || prefill?.machineId || "";
       machineIds = first ? [first] : [];
       machinesTouched = false;
       remembered = rememberedMachine();
-      cwd = continueFrom?.cwd || prefill?.cwd || primary?.path || "";
+      cwd = continueFrom?.cwd || prefill?.cwd || "";
       harness = openingHarness();
-      ({ permissionMode } = spawnPrefs);
-      fullSendCarried = permissionMode === "fullSend";
+      modePick = null;
+      pickedHere = false;
       summarizerHarness = spawnPrefs.harness;
       summarizerModel = "";
       carry = "summary";
@@ -1232,16 +1269,28 @@
       untrack(() => exitTo(shown));
     }
   });
-  // With nothing else naming one, the form opens on the machine it last
-  // started a session on, once the fleet lists it: the fleet arrives over the
-  // websocket, so the dialog can open before it does. With none remembered,
-  // or one the fleet no longer has, no machine is chosen until the operator
-  // picks one.
+  // With no machine named, the form opens on its project's checkout, once the
+  // board lists the project, its folder with it; with no project, on the
+  // machine it last started a session on, once the fleet lists it. Both
+  // arrive over the websocket, so the form can open before they do. With
+  // neither, or one the fleet no longer has, no machine is chosen until the
+  // operator picks one.
   $effect(() => {
+    if (!open || machinesTouched || machineIds.length) {
+      return;
+    }
+    if (projectId) {
+      const place = project ? checkoutOf(project) : undefined;
+      if (place) {
+        untrack(() => {
+          machineIds = [place.machineId];
+          cwd ||= place.path;
+        });
+      }
+      return;
+    }
     const id = remembered;
-    const known =
-      id !== null && cawco.machines.some((row) => row.machineId === id);
-    if (open && !machinesTouched && !machineIds.length && known) {
+    if (id !== null && cawco.machines.some((row) => row.machineId === id)) {
       untrack(() => {
         machineIds = [id];
       });
@@ -1371,10 +1420,10 @@
       return held;
     }
     if (!machineIds.length) {
-      return "Choose a machine to run this session on.";
+      return spawnWords.held.machine;
     }
     if (repo !== undefined && !isGitUrl(repo)) {
-      return "Enter the repository's git URL.";
+      return spawnWords.held.repo;
     }
     if (!cwd.trim()) {
       return "Enter the directory this session should work in.";
@@ -2407,8 +2456,8 @@
               modes,
               permission: permissionMode,
               onpermission: (value) => {
-                permissionMode = value;
-                fullSendCarried = false;
+                modePick = value;
+                pickedHere = true;
               },
             }}
             unavailable={continueFrom ? targetRefusal : undefined}
@@ -2484,6 +2533,7 @@
     cancellable={(busy && Boolean(showing?.job)) || pressedFor !== null}
     disabled={cantStart}
     failed={startFailed}
+    held={busy ? "" : startHeld}
     oncancel={busy && showing?.job ? cancelContinue : cancel}
     onstart={() => start()}
     {startLabel}

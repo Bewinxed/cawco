@@ -300,8 +300,8 @@
   /**
    * Spin off: the New Session form at `trigger` (the button, or `⋯` on a
    * phone, where the menu holds it), as a spin-off on the project's
-   * checkout. Harness, model and mode are the form's own, and Start waits
-   * for a mode.
+   * checkout. Harness, model and mode are the form's own: the mode the
+   * person last started in, and with none, Start says it waits for one.
    */
   function spinOff(trigger: HTMLElement | null) {
     if (!(primary && trigger)) {

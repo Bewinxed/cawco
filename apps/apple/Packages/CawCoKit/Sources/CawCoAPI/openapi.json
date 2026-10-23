@@ -44815,6 +44815,21 @@
             "$ref": "#/components/schemas/BuildInfo",
             "description": "The cawco build this machine's daemon is running (NEW.md §12)."
           },
+          "chosenModes": {
+            "type": "object",
+            "properties": {
+              "claude": {
+                "$ref": "#/components/schemas/PermissionMode"
+              },
+              "opencode": {
+                "$ref": "#/components/schemas/PermissionMode"
+              },
+              "pi": {
+                "$ref": "#/components/schemas/PermissionMode"
+              }
+            },
+            "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
+          },
           "custody": {
             "description": "Last register's sessiond read, distinct from an available empty list.",
             "anyOf": [

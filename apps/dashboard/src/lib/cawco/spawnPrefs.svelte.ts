@@ -25,7 +25,12 @@ interface SpawnPrefs {
   effort: EffortLevel | null;
   harness: HarnessKind;
   model: string;
-  /** None until a form has started a session on one: the form then opens on no mode, and Start waits for one. */
+  /**
+   * None until a form in this browser has started a session on one. The
+   * form opens on the hub's last chosen mode for its machine and harness
+   * first (AgentRow `chosenModes`), this one after it; with neither, on no
+   * mode, and Start says it waits for one.
+   */
   permissionMode: PermissionMode | null;
 }
 

@@ -3953,6 +3953,24 @@ const make = async (path: string): Promise<DbShape> => {
     return byMachine;
   };
 
+  /** Each machine's chosen permission mode by harness (schema `chosenModes`). */
+  const chosenModesByMachine = (): Map<
+    string,
+    Partial<Record<HarnessKind, PermissionMode>>
+  > => {
+    const byMachine = new Map<
+      string,
+      Partial<Record<HarnessKind, PermissionMode>>
+    >();
+    for (const row of db.select().from(chosenModes).all()) {
+      byMachine.set(row.machineId, {
+        ...byMachine.get(row.machineId),
+        [row.harness]: row.permissionMode,
+      });
+    }
+    return byMachine;
+  };
+
   /**
    * One history's retention, the same for memory, hooks and skills: the
    * newest {@link HISTORY_LIMIT} rows of the one thing `of` names are kept.
@@ -7136,6 +7154,7 @@ const make = async (path: string): Promise<DbShape> => {
     listAgents: () => {
       const toolCells = toolsByMachine();
       const reports = harnessesByMachine();
+      const modes = chosenModesByMachine();
       return (
         db
           .select()
@@ -7157,6 +7176,7 @@ const make = async (path: string): Promise<DbShape> => {
               // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
             }) => {
               const harnesses = reports.get(agent.machineId);
+              const chosen = modes.get(agent.machineId);
               return {
                 ...agent,
                 tools: toolCells.get(agent.machineId) ?? {},
@@ -7168,6 +7188,7 @@ const make = async (path: string): Promise<DbShape> => {
                 ...(fleetItems ? { fleetItems } : {}),
                 ...(build ? { build } : {}),
                 ...(harnesses ? { harnesses } : {}),
+                ...(chosen ? { chosenModes: chosen } : {}),
                 ...(home ? { home } : {}),
                 ...(machineCapabilities ? { machineCapabilities } : {}),
               };

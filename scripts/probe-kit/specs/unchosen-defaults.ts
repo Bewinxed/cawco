@@ -34,8 +34,13 @@
  * 10. An artifact's own tab whose panel is closed while the artifact lives
  *    says so in words with Show it again, which opens the page there again.
  * 11. Fleet's count in the rail is centred on its nav row (±1px).
- * 12. New Session with no mode remembered opens on no mode ("Choose a
- *    mode"), Start disabled; picking one lets Start go.
+ * 12. New Session with no mode remembered, here or on the hub, opens on no
+ *    mode ("Choose a mode"), Start disabled with why beside it; picking one
+ *    lets Start go.
+ * 13. New Session from a project's page, in a browser that remembers
+ *    nothing: the form opens on that project, on the mode the hub says was
+ *    last chosen on its machine (8b's), and Start can go. With its machine
+ *    taken away, Start is disabled with why beside it.
  *
  * On a second fleet, whose Claude Code signs in but starts no session:
  * 7. New Session on Claude, whose account's models the hub could not read,
@@ -398,6 +403,7 @@ const form = async (kit: Kit, fleet: KitFleet, base: string) => {
   const startButton = unpicked.locator("#session-start");
   const unchosen = await chip.getAttribute("aria-label").catch(() => null);
   const waits = await startButton.isDisabled().catch(() => false);
+  const heldWhy = await heldBeside(page);
   await chip.click();
   // The picker's popover stands outside the dialog's subtree.
   await page.locator('[data-perm="acceptEdits"]').first().click();
@@ -408,10 +414,115 @@ const form = async (kit: Kit, fleet: KitFleet, base: string) => {
     '12: with no mode remembered, New Session opens on no mode ("Choose a mode") and Start waits until the person picks one',
     unchosen === "Permission mode: Choose a mode" &&
       waits &&
+      heldWhy.words === spawnWords.held.mode &&
+      heldWhy.describes &&
       picked?.startsWith("Permission mode: Accept") === true &&
-      goes,
-    `chip ${unchosen}, Start disabled ${waits}; after the pick: chip ${picked}, Start enabled ${goes}`
+      goes &&
+      (await heldBeside(page)).words === "",
+    `chip ${unchosen}, Start disabled ${waits}, beside it ${JSON.stringify(heldWhy)}; after the pick: chip ${picked}, Start enabled ${goes}`
   );
+};
+
+/** What the footer says beside Start, and whether Start is described by it. */
+const heldBeside = (page: Page) =>
+  page.evaluate(() => {
+    const held = document.querySelector('[data-slot="start-held"]');
+    const start = document.getElementById("session-start");
+    return {
+      words: held?.textContent?.trim() ?? "",
+      describes:
+        held !== null &&
+        start?.getAttribute("aria-describedby") === held.id &&
+        held.closest("[data-ns-footer]") === start?.closest("[data-ns-footer]"),
+    };
+  });
+
+interface FormRead {
+  describes: boolean;
+  disabled: boolean;
+  held: string;
+  mode: string | null;
+  project: string | null;
+}
+
+/** The New Session form's project and mode chips, Start, and what stands beside Start. */
+const formRead = (page: Page): Promise<FormRead> =>
+  page.evaluate((modeHead) => {
+    const chip = (prefix: string) =>
+      [...document.querySelectorAll("[aria-label]")]
+        .map((node) => node.getAttribute("aria-label") ?? "")
+        .find((label) => label.startsWith(prefix)) ?? null;
+    const held = document.querySelector('[data-slot="start-held"]');
+    const start = document.getElementById("session-start");
+    return {
+      project: chip("Project:"),
+      mode: chip(modeHead),
+      disabled: start === null || (start as HTMLButtonElement).disabled,
+      held: held?.textContent?.trim() ?? "",
+      describes:
+        held !== null && start?.getAttribute("aria-describedby") === held.id,
+    };
+  }, spawnWords.permissionModeHead);
+
+/** Check 13: New Session from a project's page, nothing remembered in the browser. */
+const fromProject = async (kit: Kit, fleet: KitFleet, base: string) => {
+  const dir = `${fleet.sandbox}/chosen`;
+  await $`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
+  const name = "Chosen";
+  const { id } = await fleet.api<{ id: string }>("/api/projects", {
+    name,
+    machineId: MACHINE,
+    cwd: dir,
+    caw: false,
+  });
+  const page = await kit.page("desk");
+  await open(page, `${base}/project/${id}`, "body");
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const starter = page
+    .getByRole("button", { name: spawnWords.startSession, exact: true })
+    .filter({ visible: true })
+    .first();
+  await starter.waitFor({ timeout: 30_000 });
+  await starter.click();
+  const dialog = page.getByRole("dialog", { name: "New Session" });
+  await dialog.waitFor({ timeout: 30_000 });
+  const opened = (read: FormRead) =>
+    read.project === `Project: ${name}` &&
+    read.mode === spawnWords.permissionMode(spawnWords.modes.acceptEdits) &&
+    !read.disabled;
+  const ready =
+    (await until(
+      "the form on its project",
+      () => formRead(page),
+      opened,
+      15_000
+    ).catch(() => null)) ?? (await formRead(page));
+  kit.check(
+    `13: New Session from a project's page opens on that project and the hub's last chosen mode (${spawnWords.modes.acceptEdits}), Start enabled, nothing held beside it`,
+    opened(ready) && ready.held === "",
+    JSON.stringify(ready)
+  );
+
+  // Its machine taken away: Start is held, and says why beside itself.
+  await dialog.getByRole("button", { name: MACHINES }).first().click();
+  // The machines popover stands outside the dialog's subtree.
+  await page.locator(`[data-machine-id="${MACHINE}"]`).first().click();
+  const isHeld = (read: FormRead) =>
+    read.disabled && read.held === spawnWords.held.machine && read.describes;
+  const held =
+    (await until("Start held", () => formRead(page), isHeld, 15_000).catch(
+      () => null
+    )) ?? (await formRead(page));
+  kit.check(
+    `13: with its machine taken away, Start is disabled and says "${spawnWords.held.machine}" beside itself`,
+    isHeld(held),
+    JSON.stringify(held)
+  );
+  await page.close();
 };
 
 /** A spawn on the dashboard's socket, as a form sends one: the hub's refusal in its words, or undefined when none came within 20 s. */
@@ -744,6 +855,7 @@ const run = async (kit: Kit) => {
   const base = await fleet.dashboard();
   await form(kit, fleet, base);
   await modes(kit, fleet);
+  await fromProject(kit, fleet, base);
   await tabs(kit, fleet, base);
   for (const role of ["agent", "hub", "sessiond"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: the fleet stops in order, its agent first

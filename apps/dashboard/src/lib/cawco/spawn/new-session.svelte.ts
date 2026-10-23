@@ -16,6 +16,7 @@
  * kept; reopened by a reload it hangs from the rail's Start session.
  */
 import type { Bounded } from "@cawco/core/bounded";
+import { page } from "$app/state";
 import {
   type ForkSource,
   forkSession,
@@ -106,16 +107,27 @@ $effect.root(() => {
   });
 });
 
+/** The project whose page is open, when one is. */
+function projectHere(): string | undefined {
+  return page.route.id === "/(app)/project/[id]" ? page.params.id : undefined;
+}
+
 /**
  * Opens the New Session form, on `prefill`'s machine, folder or project when
- * given: hanging from `anchor`, the trigger pressed, when there is one; from
- * the rail's Start session otherwise.
+ * given; a prefill that names no place (the rail's Start session, ⇧⌘N)
+ * opens on the project whose page it was opened from. It hangs from
+ * `anchor`, the trigger pressed, when there is one; from the rail's Start
+ * session otherwise.
  */
 export function newSession(
   prefill?: SpawnPrefill,
   anchor: HTMLElement | null = null
 ): void {
-  spawning.prefill = prefill;
+  const here =
+    prefill?.projectId || prefill?.machineId || prefill?.cwd || prefill?.fork
+      ? undefined
+      : projectHere();
+  spawning.prefill = here ? { ...prefill, projectId: here } : prefill;
   spawning.anchor = anchor;
   spawning.shown = null;
   spawning.opening += 1;

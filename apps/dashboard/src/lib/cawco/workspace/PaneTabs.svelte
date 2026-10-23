@@ -710,7 +710,8 @@
      place of the tab in front: its machine, its folder and its project. A
      tab with no place of its own (a thread) gives its
      machine at most. Harness, model and mode are the form's own: the last
-     start's, else none, and Start waits for a mode. The session it starts
+     start's (the mode last chosen on its machine), else none, and Start
+     says it waits for a mode. The session it starts
      arrives as any started session does.
 
      It stands outside the tablist, after the track, so the tablist holds

@@ -29,6 +29,16 @@ export const spawnWords = {
   searchModels: "Search models",
   /** The mode chip while no mode is picked: Start waits on one. */
   unchosenMode: "Choose a mode",
+  /**
+   * Why Start is held, beside it (PRODUCT.md: a control that can't act is
+   * disabled with the reason stated), for what nothing else on the form says.
+   */
+  held: {
+    machine: "Choose a machine to run this session on.",
+    mode: "Choose a permission mode to start.",
+    repo: "Enter the repository's git URL.",
+    uploading: "Wait for your file to finish uploading.",
+  },
   /** The mode chip's accessible name: "Permission mode: Ask first". */
   permissionModeHead: PERMISSION_MODE,
   permissionMode: (mode: string) => `${PERMISSION_MODE} ${mode}`,

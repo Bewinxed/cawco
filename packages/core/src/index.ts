@@ -848,6 +848,14 @@ export interface AgentRow {
    * The cawco build this machine's daemon is running (NEW.md §12).
    */
   build?: BuildInfo;
+  /**
+   * The permission mode the person last started each harness's session in
+   * on this machine, from any device (the hub's `chosen_modes`): the mode the
+   * New session form opens on there. Absent for a harness never started.
+   */
+  chosenModes?: Partial<
+    Record<import("./harness").HarnessKind, import("./harness").PermissionMode>
+  >;
   /** Last register's sessiond read, distinct from an available empty list. */
   custody?: SessionCustody;
   /**
