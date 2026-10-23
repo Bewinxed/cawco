@@ -4,8 +4,10 @@
  * network leaves no bridge process and no socket, and the open says it was
  * stopped.
  *
- * Drives the real module in-process. Only boundary.ts is swapped, by a
- * runtime Bun plugin, for `workspaceNetworks` naming a network namespace this
+ * Drives the real module in-process, loaded at an address of its own
+ * (`?bridge-spec`), so a stand-in another spec of the run swapped in for it
+ * (preview-burst's) is never the one read. Only its boundary.ts is swapped,
+ * by a runtime Bun plugin, for `workspaceNetworks` naming a network namespace this
  * spec starts with bwrap (a user and network namespace, as a boundary's), a
  * server listening in it: the bridge's own setsid, setpriv, nsenter and relay
  * run as they do for a workspace. Runs where unprivileged user namespaces
@@ -28,13 +30,18 @@ import type { Kit, Spec } from "../kit";
 
 const PORT = 47_311;
 const DELAYS_MS = [0, 1, 2, 4, 6, 8, 10, 15, 20, 30, 45, 60];
-const BOUNDARY = /packages\/agent\/src\/boundary\.ts$/;
+/** This spec's own address for a module, past every module of the same file another spec loaded or swapped. */
+const OWN = "?bridge-spec";
+const BRIDGE_FILE = join(
+  import.meta.dir,
+  "../../../packages/agent/src/preview-bridge.ts"
+);
+const OWN_BRIDGE = /packages\/agent\/src\/preview-bridge\.ts\?bridge-spec$/;
+const OWN_BOUNDARY = /packages\/agent\/src\/boundary\.ts\?bridge-spec$/;
 const STOPPED = "was stopped while its way into the workspace opened";
 
 const bridgeAlive = async (socket: string): Promise<string> =>
-  (await Bun.$`pgrep -f ${socket}`.nothrow().quiet()).stdout
-    .toString()
-    .trim();
+  (await Bun.$`pgrep -f ${socket}`.nothrow().quiet()).stdout.toString().trim();
 
 const run = async (kit: Kit) => {
   // The sandbox: a user and network namespace with a server on PORT inside.
@@ -81,10 +88,21 @@ const run = async (kit: Kit) => {
   // Only boundary.ts is swapped: the bridge's code is the module's own.
   const networks = [{ inner }];
   (globalThis as { __probeNetworks?: unknown }).__probeNetworks = networks;
+  // The bridge's own code, at an address of this spec's own (`?bridge-spec`),
+  // its boundary.ts swapped at one too: a module this process loaded before
+  // (a spec run ahead of this one in the same run: preview-burst swaps the
+  // bridge itself for a stand-in) is never the one read here.
   Bun.plugin({
     name: "probe-boundary",
     setup(build) {
-      build.onLoad({ filter: BOUNDARY }, () => ({
+      build.onLoad({ filter: OWN_BRIDGE }, async () => ({
+        contents: (await readFile(BRIDGE_FILE, "utf8")).replace(
+          'from "./boundary";',
+          `from "./boundary.ts${OWN}";`
+        ),
+        loader: "ts",
+      }));
+      build.onLoad({ filter: OWN_BOUNDARY }, () => ({
         contents: [
           "export const workspaceNetworks = async () => globalThis.__probeNetworks;",
           "export const listeners = async () => [];",
@@ -97,8 +115,9 @@ const run = async (kit: Kit) => {
   });
   const runtime = await mkdtemp(join(tmpdir(), "pb-"));
   process.env.XDG_RUNTIME_DIR = runtime;
-  const { closeBridge, reachWorkspace } =
-    await import("../../../packages/agent/src/preview-bridge");
+  const { closeBridge, reachWorkspace } = (await import(
+    `${BRIDGE_FILE}${OWN}`
+  )) as typeof import("../../../packages/agent/src/preview-bridge");
   const workspace = crypto.randomUUID();
 
   try {
