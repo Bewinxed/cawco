@@ -8,6 +8,10 @@ import { commonWords } from "./common";
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const previewWords = {
+  /** A canvas's view menu, its motion choice and its check against the design system. */
+  canvasView: "Canvas view",
+  reducedMotion: "Reduced motion",
+  verifyDesign: "Verify against the design system",
   /**
    * The page's content process ended a second time for the same page (the
    * first reloads it by itself): the system ended it, most often over its

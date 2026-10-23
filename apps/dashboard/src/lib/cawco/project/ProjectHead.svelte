@@ -43,7 +43,7 @@
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
    */
-  import { commonWords, machineLabel, viewsWords } from "@cawco/core";
+  import { commonWords, machineLabel, projectWords, viewsWords } from "@cawco/core";
   import {
     UPSTREAM_WORDS,
     type UpstreamPosts,
@@ -477,7 +477,7 @@
         aria-haspopup="dialog"
         layout="wide"
         press="pressable"
-        label="Spin off"
+        label={projectWords.spinOff}
         onclick={(event) => spinOff(event.currentTarget)}
         variant="outline"
       />
@@ -514,7 +514,7 @@
           {#if primary}
             <DropdownMenu.Item onSelect={() => spinOff(more)}>
               <IconFork />
-              <span>Spin off</span>
+              <span>{projectWords.spinOff}</span>
             </DropdownMenu.Item>
           {/if}
           <DropdownMenu.Item onSelect={onnewtask}>
@@ -554,12 +554,12 @@
             }}
           >
             <IconColumns />
-            <span>Pick stages…</span>
+            <span>{projectWords.pickStages}</span>
           </DropdownMenu.Item>
         {/if}
         <DropdownMenu.Item onSelect={() => openDetails(false)}>
           <IconInfo />
-          <span>Project details…</span>
+          <span>{projectWords.projectDetails}</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() => {
@@ -567,7 +567,7 @@
           }}
         >
           <IconSettings />
-          <span>Caw settings…</span>
+          <span>{projectWords.cawSettings}</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() =>
@@ -592,7 +592,7 @@
           variant="destructive"
         >
           <IconTrash />
-          <span>Forget project…</span>
+          <span>{projectWords.forgetProject}</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu.Root>

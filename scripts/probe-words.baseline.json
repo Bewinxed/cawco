@@ -10,12 +10,6 @@
   "scripts/probe-kit/journeys/j1-check-in.ts": {
     "Permission request from": 1
   },
-  "scripts/probe-kit/journeys/j10-rules.ts": {
-    "Delete rule": 1,
-    "Nothing is watching yet": 1,
-    "Rule name": 1,
-    "Starter rules": 1
-  },
   "scripts/probe-kit/journeys/j3-spawn.ts": {
     "in its own view": 1,
     "Session details": 1
@@ -109,14 +103,12 @@
     "isn't answering": 1
   },
   "scripts/probe-kit/specs/canvas-design.ts": {
-    "Canvas view": 1,
     "does not exist": 1,
     "does not exist in": 1,
     "isn't answering": 1,
     "No states file": 1,
     "Not drawn yet": 1,
-    "The canvas draws it once its session writes it.": 1,
-    "Verify against the design system": 1
+    "The canvas draws it once its session writes it.": 1
   },
   "scripts/probe-kit/specs/canvas.ts": {
     "The canvas is empty": 1
@@ -164,9 +156,6 @@
   },
   "scripts/probe-kit/specs/composer-canvas.ts": {
     "didn't open": 1
-  },
-  "scripts/probe-kit/specs/config-undo.ts": {
-    "No rule is waiting on an answer": 1
   },
   "scripts/probe-kit/specs/connect-machine.ts": {
     "Add machine": 4,
@@ -317,9 +306,6 @@
   "scripts/probe-kit/specs/ios-long-ask.ts": {
     "'s sessions": 2,
     "Show the whole command": 1
-  },
-  "scripts/probe-kit/specs/ios-parity.ts": {
-    "Reduced motion": 2
   },
   "scripts/probe-kit/specs/ios-project-offer.ts": {
     "project offer": 1
@@ -534,7 +520,6 @@
     "Run it once in a terminal on": 1
   },
   "scripts/probe-kit/specs/template-types.ts": {
-    "Can't start": 2,
     "No delegate type": 1
   },
   "scripts/probe-kit/specs/tracker-sync.ts": {
@@ -580,18 +565,11 @@
   "scripts/probe-kit/specs/web/caw-guided.ts": {
     "Caw · could not start": 1,
     "Message Caw…": 1,
-    "Spin off": 1,
     "What’s next for": 2
   },
   "scripts/probe-kit/specs/web/control-select.ts": {
     "Search models": 1,
     "Use custom model id": 1
-  },
-  "scripts/probe-kit/specs/web/files-panel.ts": {
-    "Couldn't read": 1,
-    "Couldn't read this session's attachments": 1,
-    "No artifacts match": 1,
-    "No attachments match": 1
   },
   "scripts/probe-kit/specs/web/hub-states.ts": {
     "Searching the hub…": 1,
@@ -611,7 +589,6 @@
     "From the folder's remote": 1,
     "Let him finish": 1,
     "no longer recorded": 2,
-    "Project details…": 1,
     "Pull request": 2
   },
   "scripts/probe-kit/specs/web/safari-blurs.ts": {
@@ -640,12 +617,10 @@
   },
   "scripts/probe-kit/specs/web/work-outlives.ts": {
     "Caw is off": 2,
-    "Caw settings…": 1,
     "Delete hook": 1,
     "did not answer": 2,
     "did not run": 1,
     "didn't allow": 1,
-    "Forget project…": 1,
     "is not connected": 2,
     "is not connected, so nothing was installed": 1,
     "is ready": 1,
@@ -690,11 +665,9 @@
     "Other people's repositories": 1,
     "Pairing didn't start": 1,
     "Pause until": 1,
-    "Pick stages": 1,
     "Reading what runs in": 1,
     "Show every limit": 1,
     "Sign-in didn't finish": 1,
-    "This project has no stages of its own yet": 2,
     "Unlock keychain…": 1
   }
 }

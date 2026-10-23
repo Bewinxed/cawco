@@ -7,11 +7,11 @@
     RuleTiming,
     RuleWatch,
   } from "@cawco/core";
-  import {
+  import { 
     commonWords,
     HARNESSES,
     ruleProblem,
-    ruleSentence,
+    ruleSentence,rulesWords,
   } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import {
@@ -287,7 +287,7 @@
   {#snippet header()}
     <TitleInput
       invalid={Boolean(shown("name") || duplicate)}
-      label="Rule name"
+      label={rulesWords.ruleName}
       onblur={() => {
         touched.name = true;
       }}

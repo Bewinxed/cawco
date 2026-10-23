@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type RuleRow, ruleSentence } from "@cawco/core";
+  import { type RuleRow, ruleSentence, rulesWords } from "@cawco/core";
   import { deleteRule, notDeleted } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -156,7 +156,7 @@
     <EmptyState
       icon={section.icon}
       line={EMPTY_LINES.starters("rules", sessionCanStart())}
-      title="Nothing is watching yet"
+      title={rulesWords.nothingWatching}
     >
       {#snippet action()}
         <EmptyAsk
@@ -167,7 +167,7 @@
         />
       {/snippet}
     </EmptyState>
-    <RowList label="Starter rules">
+    <RowList label={rulesWords.starterRules}>
       {#each RULE_TEMPLATES as template (template.title)}
         <SectionRow
           hue={HUE}
@@ -210,7 +210,7 @@
     <EmptyState
       icon={section.icon}
       line={EMPTY_LINES.rulesNoneWaiting}
-      title="No rule is waiting on an answer"
+      title={rulesWords.noneWaiting}
     >
       {#snippet action()}
         <Button
@@ -228,7 +228,7 @@
         <SectionRow
           actions={[
             {
-              label: "Delete rule",
+              label: rulesWords.deleteRule,
               icon: IconTrash,
               destructive: true,
               onselect: () => remove(row),

@@ -59,7 +59,7 @@ final class CanvasViewControl {
             switch self {
             case let .scheme(scheme): scheme.words
             case let .width(width): width.words
-            case .motion: "Reduced motion"
+            case .motion: Words.Preview.reducedMotion
             case .zoom(.fit): "Zoom to fit"
             case .zoom(.whole): "Zoom to 100%"
             }
@@ -80,7 +80,7 @@ final class CanvasViewControl {
         self.post = post
         chosen = Self.kept(UserDefaults.standard.string(forKey: key))
         button = KitButton.make("", glyph: .dataLayers, variant: .ghost, height: .sm) {}
-        button.accessibilityLabel = "Canvas view"
+        button.accessibilityLabel = Words.Preview.canvasView
         button.toolTip = "Canvas view: scheme, widths, motion, zoom"
         button.showsMenuAsPrimaryAction = true
         button.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
@@ -115,7 +115,7 @@ final class CanvasViewControl {
 
     /// More's entry while the head has no room for the button: the same menu, one level in.
     func submenu() -> UIMenu {
-        UIMenu(title: "Canvas view", image: Glyph.dataLayers.image, children: entries())
+        UIMenu(title: Words.Preview.canvasView, image: Glyph.dataLayers.image, children: entries())
     }
 
     func isOn(_ choice: Choice) -> Bool {

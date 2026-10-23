@@ -63,6 +63,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { previewWords } from "../../../packages/core/src/words/preview";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -200,13 +201,13 @@ const CHOICES: [string, (view: View) => View, ("fit" | 1)?][] = [
   ["Desk, 1280", (v) => ({ ...v, width: "1280" })],
   ["Every width", (v) => ({ ...v, width: "all" })],
   [
-    "Reduced motion",
+    previewWords.reducedMotion,
     (v) => ({ ...v, motion: v.motion === "on" ? "reduce" : "on" }),
   ],
   ["Zoom to fit", (v) => v, "fit"],
   ["Zoom to 100%", (v) => v, 1],
   [
-    "Reduced motion",
+    previewWords.reducedMotion,
     (v) => ({ ...v, motion: v.motion === "on" ? "reduce" : "on" }),
   ],
 ];
@@ -408,8 +409,8 @@ function appLegs(kit: Kit, tag: string, heard: string[]): void {
     const want = posted(view, zoom);
     const said = heard
       .filter((one) => one.includes(`canvas view chose [${words}] sent=`))
-      .at(words === "Reduced motion" ? motions : 0);
-    if (words === "Reduced motion") {
+      .at(words === previewWords.reducedMotion ? motions : 0);
+    if (words === previewWords.reducedMotion) {
       motions += 1;
     }
     const sent = said ? after(said, `canvas view chose [${words}] sent=`) : "";

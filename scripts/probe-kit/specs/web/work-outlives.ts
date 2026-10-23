@@ -55,6 +55,7 @@
 import type { Page, WebSocketRoute } from "playwright-core";
 import { HOOK_TEMPLATES } from "../../../../packages/core/src/hooks";
 import { commonWords } from "../../../../packages/core/src/words/common";
+import { projectWords } from "../../../../packages/core/src/words/project";
 import { shellWords } from "../../../../packages/core/src/words/shell";
 import { MACHINE, type Seen } from "../../../scratch-fleet";
 import {
@@ -843,7 +844,7 @@ async function forgetLeg(
     kit,
     page,
     pass,
-    page.getByRole("menuitem", { name: "Forget project…" })
+    page.getByRole("menuitem", { name: projectWords.forgetProject })
   );
   const tray = `[data-stop-tray="${project.id}"]`;
   await page
@@ -1031,7 +1032,7 @@ async function cawOffLeg(
     kit,
     page,
     pass,
-    page.getByRole("menuitem", { name: "Caw settings…" })
+    page.getByRole("menuitem", { name: projectWords.cawSettings })
   );
   await page
     .locator("[data-caw-lead-switch]")

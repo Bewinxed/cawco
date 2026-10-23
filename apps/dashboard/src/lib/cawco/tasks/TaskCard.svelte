@@ -15,6 +15,7 @@
    * is also what a drag carries, and the one object a move flies (`land`):
    * a card that changes column travels there from where it was drawn.
    */
+  import { projectWords } from "@cawco/core";
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
   import {
     flagsOf,
@@ -146,7 +147,7 @@
         variant="fail"
       >
         <IconWarningTriangle aria-hidden="true" />
-        <span>Can't start</span>
+        <span>{projectWords.cantStart}</span>
         <span class="sr-only">{flags.startProblem}</span>
       </Badge>
     {:else if flags.failed && !flags.live}

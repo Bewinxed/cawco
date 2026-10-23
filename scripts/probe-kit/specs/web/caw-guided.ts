@@ -51,6 +51,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { projectWords } from "../../../../packages/core/src/words/project";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { durOf, oneEntrance, recordRuns, runsOn } from "../../entrances";
 import { contrast, type Rgb } from "../../ink";
@@ -68,7 +70,6 @@ import {
   type Theme,
   type View,
 } from "../../kit";
-import { spawnWords } from "../../../../packages/core/src/words/spawn";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -177,7 +178,7 @@ const legPage = async (kit: Kit, { view, width }: Leg, theme: Theme) => {
 
 /** The panel, its parts, the head and the board, as the engine lays them out. */
 const readPanel = (page: Page) =>
-  page.evaluate(([panelSel, firstPromptLabel]) => {
+  page.evaluate(([panelSel, firstPromptLabel, spinOffLabel]) => {
     const box = (el: Element | null | undefined) => {
       const r = el?.getBoundingClientRect();
       return r
@@ -338,7 +339,7 @@ const readPanel = (page: Page) =>
       // Its label and its pending wording stand in one cell (DESIGN.md, Buttons).
       spinOff: [
         ...document.querySelectorAll('[data-slot="project-head"] button'),
-      ].some((button) => words(button).startsWith("Spin off")),
+      ].some((button) => words(button).startsWith(spinOffLabel)),
       // Each column of the board as it shows: a column scrolled past the
       // board's edge is cut by it.
       columns: [...document.querySelectorAll('[data-slot="column"]')]
@@ -384,7 +385,7 @@ const readPanel = (page: Page) =>
           }
         : null,
     };
-  }, [PANEL, spawnWords.firstPrompt] as const);
+  }, [PANEL, spawnWords.firstPrompt, projectWords.spinOff] as const);
 
 type PanelRead = Awaited<ReturnType<typeof readPanel>>;
 type Box = NonNullable<PanelRead["panel"]>;

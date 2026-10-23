@@ -41,6 +41,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
+import { projectWords } from "../../../../packages/core/src/words/project";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import {
   type Kit,
@@ -349,7 +350,7 @@ const leg = async (
   await page.keyboard.press("Escape");
   await page.locator(TRAY).waitFor({ state: "detached" });
   await page.locator(`[aria-label="${commonWords.moreFor(project.name)}"]`).click();
-  await page.getByRole("menuitem", { name: "Project details…" }).click();
+  await page.getByRole("menuitem", { name: projectWords.projectDetails }).click();
   await page.locator(TRAY).waitFor();
   await settle(page, 300);
   kit.check(

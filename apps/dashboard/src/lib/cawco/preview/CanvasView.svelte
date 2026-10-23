@@ -8,7 +8,8 @@
    * waits while it is on); Verify last, a design system round whose verdict
    * goes to the session.
    */
-  // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
+import { previewWords } from "@cawco/core";
+    // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconLayers } from "#lib/icons.js";
   import {
@@ -68,7 +69,7 @@
     checked={view.chosen.motion === "reduce"}
     onCheckedChange={(on) =>
       view.send({ ...view.chosen, motion: on ? "reduce" : "on" })}
-    >Reduced motion</DropdownMenu.CheckboxItem
+    >{previewWords.reducedMotion}</DropdownMenu.CheckboxItem
   >
   <DropdownMenu.Separator />
   <DropdownMenu.Item
@@ -82,14 +83,14 @@
   >
   <DropdownMenu.Separator />
   <DropdownMenu.Item disabled={verifying} onSelect={onverify}
-    >Verify against the design system</DropdownMenu.Item
+    >{previewWords.verifyDesign}</DropdownMenu.Item
   >
 {/snippet}
 
 {#if as === "sub"}
   <DropdownMenu.Sub>
     <DropdownMenu.SubTrigger
-      ><IconLayers /><span>Canvas view</span></DropdownMenu.SubTrigger
+      ><IconLayers /><span>{previewWords.canvasView}</span></DropdownMenu.SubTrigger
     >
     <DropdownMenu.SubContent width="regular"
       >{@render entries()}</DropdownMenu.SubContent
@@ -99,7 +100,7 @@
   <DropdownMenu.Root>
     <!-- The head's own control, as Inspect beside it: the kit's sm ghost. -->
     <DropdownMenu.Trigger
-      aria-label="Canvas view"
+      aria-label={previewWords.canvasView}
       size="icon-sm"
       title="Canvas view: map, scheme, widths, motion, zoom, verify"
       variant="ghost"

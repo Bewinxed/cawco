@@ -44,6 +44,7 @@ import { commonWords } from "../../../packages/core/src/words/common";
 import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { memoryWords } from "../../../packages/core/src/words/memory";
+import { rulesWords } from "../../../packages/core/src/words/rules";
 import { skillsWords } from "../../../packages/core/src/words/skills";
 import type { Reply } from "../../scratch-fleet";
 import { Clock } from "../anim";
@@ -732,7 +733,7 @@ async function rule({ kit, fleet, page, base }: On) {
   const ruleDelete = await deleteFromMenu(
     page,
     made.name,
-    "Delete rule",
+    rulesWords.deleteRule,
     ruleHeld
   );
   kit.check(
@@ -784,7 +785,7 @@ async function rulesWaiting({ kit, fleet, page, base }: On) {
   await open(page, `${base}/config/rules`, CHIP);
   await page.locator(CHIP).click();
   const read = () =>
-    page.evaluate((chip) => {
+    page.evaluate(([chip, noneWaiting]) => {
       const button = document.querySelector(chip);
       const names = [...document.querySelectorAll("[data-row-name]")].map(
         (row) => row.getAttribute("data-row-name") ?? ""
@@ -795,17 +796,15 @@ async function rulesWaiting({ kit, fleet, page, base }: On) {
         waiting: names.includes("probe-waiting"),
         quiet: names.includes("probe-quiet"),
         stranded:
-          document.body.textContent?.includes(
-            "No rule is waiting on an answer"
-          ) ?? false,
+          document.body.textContent?.includes(noneWaiting) ?? false,
       };
-    }, CHIP);
+    }, [CHIP, rulesWords.noneWaiting] as const);
   const filtered = await read();
   const held = async () =>
     (await fleet.api<{ rules: { id: string }[] }>("/api/rules")).rules.some(
       (one) => one.id === waiting
     );
-  await deleteFromMenu(page, "probe-waiting", "Delete rule", held);
+  await deleteFromMenu(page, "probe-waiting", rulesWords.deleteRule, held);
   await rowGone(page, "probe-waiting");
   // The other rule shows only once the filter is off; a filter left on
   // never shows it, and the wait runs out.

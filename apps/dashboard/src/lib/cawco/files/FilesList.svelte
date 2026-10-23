@@ -30,7 +30,7 @@
    * the chosen list filling the rest of the drawer (owner: "aren't tabs for
    * attachments and artifacts a better fit here?").
    */
-  import { type ArtifactSummary, accountsWords } from "@cawco/core";
+  import { type ArtifactSummary, accountsWords, filesWords } from "@cawco/core";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -623,7 +623,7 @@
       again={() => readArtifacts(instanceId)}
       data-files-failed
       details={artifactsFailed}
-      reason="Couldn't read this session's artifacts"
+      reason={filesWords.cantReadArtifacts}
     />
   {:else if asked && searchFault}
     <RowFault
@@ -673,7 +673,7 @@
           data-files-none
           in:crossIn
         >
-          No artifacts match “{shownHits.q}”
+          {filesWords.noArtifactsMatch(shownHits.q)}
         </p>
       {:else}
         <!-- Each region's own scroll, with the house fade at its foot while
@@ -706,7 +706,7 @@
       again={() => readAttachments(instanceId)}
       data-files-failed
       details={attachmentsFailed}
-      reason="Couldn't read this session's attachments"
+      reason={filesWords.cantReadAttachments}
     />
   {:else}
     <div class="relative flex min-h-0 flex-auto flex-col">
@@ -770,7 +770,7 @@
           data-files-none
           in:crossIn
         >
-          No attachments match “{asked}”
+          {filesWords.noAttachmentsMatch(asked)}
         </p>
       {:else}
         <div

@@ -131,6 +131,7 @@ import type {
 } from "../../../packages/core/src/stage";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
+import { previewWords } from "../../../packages/core/src/words/preview";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
@@ -1700,7 +1701,7 @@ async function openView(page: Page): Promise<void> {
     await page.locator("[data-bench-pane] [data-slot=more]").click();
     await page
       .locator("[data-slot=dropdown-menu-sub-trigger]", {
-        hasText: "Canvas view",
+        hasText: previewWords.canvasView,
       })
       .click();
   }
@@ -1922,7 +1923,7 @@ async function mapLeg(
     );
     await openView(page);
     await page
-      .getByRole("menuitem", { name: "Verify against the design system" })
+      .getByRole("menuitem", { name: previewWords.verifyDesign })
       .click();
     const toasted = await page
       .locator("[data-sonner-toast]", { hasText: VERIFY_SAID })

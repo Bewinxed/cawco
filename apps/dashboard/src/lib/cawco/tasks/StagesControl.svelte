@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { projectWords } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   /**
    * The project has no stages.md, so the code stages stand in. This picks a
@@ -149,7 +150,7 @@
   >
     <div class="flex flex-col gap-space-1 px-space-2 pt-space-2 pb-0">
       <p data-slot="lead" class="type-label text-ink-strong">
-        This project has no stages of its own yet
+        {projectWords.noStages}
       </p>
       <p class="type-meta text-pretty text-ink-muted">
         The code stages stand in until you pick a set. The set is written to

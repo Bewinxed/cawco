@@ -46,6 +46,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
+import { filesWords } from "../../../../packages/core/src/words/files";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { tokenColour } from "../../geom";
 import { scan } from "../../journeys/scan";
@@ -739,8 +740,12 @@ const desk = async (
       ) &&
       byTitle.length === 1 &&
       byTitle[0] === "tall-board" &&
-      nothing.some((line) => line.includes("No artifacts match")) &&
-      nothing.some((line) => line.includes("No attachments match")),
+      nothing.some(
+        (line) => line.trim() === filesWords.noArtifactsMatch("invoice")
+      ) &&
+      nothing.some(
+        (line) => line.trim() === filesWords.noAttachmentsMatch("invoice")
+      ),
     `content ${JSON.stringify(byContent)}; title ${JSON.stringify(byTitle)}; none ${JSON.stringify(nothing)}`
   );
   await field.fill("");
@@ -825,7 +830,7 @@ const desk = async (
   const failedSaid = await offline.locator("[data-files-failed]").textContent();
   kit.check(
     `10 offline (${theme}): the list unread says so in Artifacts' place, with Try again, the attachments still listed`,
-    !!failedSaid?.includes("Couldn't read") &&
+    !!failedSaid?.includes(filesWords.cantReadArtifacts) &&
       (await offline
         .locator('[data-files-region="attachments"] [data-files-row]')
         .count()) > 0,
@@ -951,7 +956,7 @@ const reviewLegs = async (
     .count();
   kit.check(
     "14: the attachments read refused says so in its region (RowFault, Try again), the artifacts still listed, and the bar claims no count",
-    !!refusedSaid.fault?.includes("Couldn't read this session's attachments") &&
+    !!refusedSaid.fault?.includes(filesWords.cantReadAttachments) &&
       refusedRetry > 0 &&
       refusedSaid.cards > 0 &&
       refusedSaid.count === null,

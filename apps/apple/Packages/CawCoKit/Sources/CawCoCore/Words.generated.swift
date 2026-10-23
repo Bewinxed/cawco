@@ -955,6 +955,13 @@ public enum Words {
 
     public enum Preview {
         // packages/core/src/words/preview.ts `previewWords`
+        /// A canvas's view menu, its motion choice and its check against the design system.
+        public static let canvasView = "Canvas view"
+
+        public static let reducedMotion = "Reduced motion"
+
+        public static let verifyDesign = "Verify against the design system"
+
         /// The page's content process ended a second time for the same page (the first reloads it by itself): the system ended it, most often over its memory. The app hears it from WebKit; a browser never tells the parent page.
         public static let stoppedTitle = "This page stopped"
 

@@ -21,6 +21,8 @@ import { connectWords } from "../../../packages/core/src/words/connect";
 import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { memoryWords } from "../../../packages/core/src/words/memory";
+import { projectWords } from "../../../packages/core/src/words/project";
+import { rulesWords } from "../../../packages/core/src/words/rules";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { skillsWords } from "../../../packages/core/src/words/skills";
@@ -480,7 +482,7 @@ const BULK_DROP = /^Drop$/;
 const BULK_LABEL = /^Label$/;
 /** The project head's More menu, and its stages picker. */
 const PROJECT_MORE = /More for cawco/;
-const PICK_STAGES = /Pick stages/;
+const PICK_STAGES = startsWith(projectWords.pickStages);
 /** The stages picker's Outreach set (StagesControl `NAMES.outreach`, then its chain). */
 const OUTREACH_STAGES = /^Outreach/;
 /** A column's way to a new task (NewTaskForm, closed). */
@@ -2262,7 +2264,7 @@ const EDITORS: Record<string, State[]> = {
       name: "editor",
       route: () => "/config/rules/new",
       root: "body",
-      ready: { shows: field("Rule name"), path: at("/config/rules/new") },
+      ready: { shows: field(rulesWords.ruleName), path: at("/config/rules/new") },
     },
     // The scene's rule: what it has caught.
     {
@@ -2270,7 +2272,7 @@ const EDITORS: Record<string, State[]> = {
       route: (s) => `/config/rules/${s.rule}`,
       root: "body",
       ready: (s) => ({
-        shows: field("Rule name"),
+        shows: field(rulesWords.ruleName),
         path: at(`/config/rules/${s.rule}`),
       }),
     },
@@ -3093,28 +3095,28 @@ export const SURFACES: Surface[] = [
       // The ⋯ menu's rows: the project's details, Caw's settings, its stages, and the forget it asks.
       {
         name: "details",
-        act: fromMore("Project details…"),
+        act: fromMore(projectWords.projectDetails),
         root: "body",
         ready: { shows: 'section[aria-label="Project details"]' },
       },
       {
         name: "caw-settings",
-        act: fromMore("Caw settings…"),
+        act: fromMore(projectWords.cawSettings),
         root: "body",
         ready: { shows: "[data-slot=caw-panel] [role=switch]" },
       },
       {
         name: "stages",
-        act: fromMore("Pick stages…"),
+        act: fromMore(projectWords.pickStages),
         root: "body",
         ready: {
           shows: "[data-slot=lead]",
-          says: /^This project has no stages of its own yet$/,
+          says: exactly(projectWords.noStages),
         },
       },
       {
         name: "forget",
-        act: fromMore("Forget project…"),
+        act: fromMore(projectWords.forgetProject),
         root: "body",
         ready: { shows: "section[data-stop-tray] [data-stop-confirm]" },
       },
@@ -3148,7 +3150,7 @@ export const SURFACES: Surface[] = [
         name: "forget-reading",
         act: async (page) => {
           await neverAnswered(page, PROJECT_RUNNING, PROJECT_RUNNING_PATH);
-          await fromMore("Forget project…")(page);
+          await fromMore(projectWords.forgetProject)(page);
         },
         root: "body",
         ready: { shows: "p[role=status]", says: /^Reading what runs in / },
@@ -3223,7 +3225,7 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
         ready: {
           shows: `${OPEN_POPOVER} [data-slot=lead]`,
-          says: /^This project has no stages of its own yet$/,
+          says: exactly(projectWords.noStages),
           not: "section[data-ask]",
         },
       },
