@@ -283,9 +283,8 @@ export const configureWords = {
   saved: "Saved",
   saving: "Saving…",
   deleting: "Deleting…",
-  /** The editor header's ⋯ (Delete, on a narrow page), and a row's. */
+  /** The editor header's ⋯ (Delete, on a narrow page), and a row's (commonWords.moreFor names it). */
   more: "More",
-  moreFor: (label: string) => `More for ${label}`,
   /** An editor whose row is not in the list. */
   gone: (what: string) => `That ${what} is gone`,
   goneLine: "It was deleted, or the link is from another hub.",

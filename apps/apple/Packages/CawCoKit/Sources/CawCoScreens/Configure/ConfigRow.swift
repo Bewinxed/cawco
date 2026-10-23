@@ -238,13 +238,13 @@ final class ConfigRow: UIStackView {
         } else {
             menuItems = lead + rowMenuItems(actions)
             if menu == nil {
-                let made = KitGhostButton(.more, label: Words.Configure.moreFor(label: words))
+                let made = KitGhostButton(.more, label: Words.Common.moreFor(label: words))
                 made.showsMenuAsPrimaryAction = true
                 made.menuOnOpen { [weak self] in self?.menuItems ?? [] }
                 controls.addArrangedSubview(made)
                 menu = made
             }
-            menu?.accessibilityLabel = Words.Configure.moreFor(label: words)
+            menu?.accessibilityLabel = Words.Common.moreFor(label: words)
         }
         opener.accessibilityLabel = [words, line].compactMap(\.self).joined(separator: ", ")
         showNote(note)

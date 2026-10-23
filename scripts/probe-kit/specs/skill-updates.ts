@@ -47,6 +47,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import type { FleetPlugin, FleetSkillMeta } from "../../../packages/core/src";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { skillsWords } from "../../../packages/core/src/words/skills";
 import { MACHINE, type Reply } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
@@ -177,7 +178,7 @@ const rowSays = (page: Page, name: string, words: string) =>
     );
 
 const openMenu = async (page: Page, name: string) => {
-  await page.getByRole("button", { name: `More for ${name}` }).click();
+  await page.getByRole("button", { name: commonWords.moreFor(name) }).click();
 };
 
 async function fetchAgain(page: Page, name: string) {

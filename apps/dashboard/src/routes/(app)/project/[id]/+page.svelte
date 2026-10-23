@@ -27,11 +27,11 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
-  import {
+  import { 
     BLOCK_PAGE_TITLES,
     BLOCK_PAGES,
     type BlockPage as BlockPageId,
-    blocksWords,
+    blocksWords,commonWords,
     madeWords,
     type ProjectView,
     viewOfBlock,
@@ -1856,7 +1856,7 @@
             <span data-box>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger
-                  aria-label="More for {viewLabel(view.name)}"
+                  aria-label={commonWords.moreFor(viewLabel(view.name))}
                   class="touch-hit"
                   size="icon-sm"
                   variant="ghost"

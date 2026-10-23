@@ -7,7 +7,7 @@
  * copy.
  */
 import { 
-  CHECK_WORDS,configurePage,
+  CHECK_WORDS,configurePage,connectWords, 
   type Install,
   type InstallProblem,
   installerRan,
@@ -84,8 +84,8 @@ export const left = (install: Install, name: string): string => {
   const keys = keysLeft(install, name);
   if (installerRan(install)) {
     return keys
-      ? `The installer removes what it created when it fails. ${keys}`
-      : `The installer removes what it created when it fails, so nothing of CawCo is left on ${name}.`;
+      ? `${connectWords.installerUndoes}. ${keys}`
+      : `${connectWords.installerUndoes}, so nothing of CawCo is left on ${name}.`;
   }
   return keys
     ? `The installer never ran. ${keys}`
@@ -110,7 +110,7 @@ export function problemWords(
         where: null,
         command: null,
         fix: `Check the address, the port, and that ${name} is on with its SSH server running.`,
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "host-key":
       return {
@@ -119,7 +119,7 @@ export function problemWords(
         where: "On the hub, run",
         command: `ssh-keygen -R ${problem.host}`,
         fix: "",
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "sign-in":
       return {
@@ -140,7 +140,7 @@ export function problemWords(
         where: `In ${name}'s sshd settings, set`,
         command: "AllowTcpForwarding yes",
         fix: "then restart sshd there.",
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "exposed":
       return {
@@ -149,7 +149,7 @@ export function problemWords(
         where: `In ${name}'s sshd settings, set`,
         command: "GatewayPorts no",
         fix: "then restart sshd there.",
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "penalized":
       return {
@@ -158,7 +158,7 @@ export function problemWords(
         where: null,
         command: null,
         fix: "Wait a minute. OpenSSH lets an address back after 15 seconds at first, and after up to 10 minutes if such connections keep coming.",
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "port-held":
       return {
@@ -167,7 +167,7 @@ export function problemWords(
         where: null,
         command: null,
         fix: `Stop that program on ${name}.`,
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "key":
       return {
@@ -176,7 +176,7 @@ export function problemWords(
         where: null,
         command: null,
         fix: `Check that ~/.config/cawco on ${name} can be written by its user.`,
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "download":
       return {
@@ -185,7 +185,7 @@ export function problemWords(
         where: null,
         command: null,
         fix: `Check that nothing on ${name} blocks its own loopback.`,
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "unsigned":
       return {
@@ -194,7 +194,7 @@ export function problemWords(
         where: null,
         command: null,
         fix: "On the hub, install a released build of CawCo.",
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "offer":
       return {
@@ -203,7 +203,7 @@ export function problemWords(
         where: null,
         command: null,
         fix: `On the hub, check ${configurePage("updates")}.`,
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     case "check": {
       const command =
@@ -218,7 +218,7 @@ export function problemWords(
         fix: command
           ? ""
           : `Install ${CHECK_WORDS[problem.check]} on ${name} with its package manager.`,
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     }
     case "step": {
@@ -229,7 +229,7 @@ export function problemWords(
         where: command ? `On ${name}, run` : null,
         command,
         fix: command ? "" : `Fix what it names on ${name}.`,
-        next: `Then Retry. ${left(install, name)}`,
+        next: `${connectWords.thenRetry} ${left(install, name)}`,
       };
     }
     case "never-online": {
@@ -284,7 +284,7 @@ export const stopQuestion = (
   const keys = keysLeft(install, name);
   let body = `Nothing on ${name} has changed yet.`;
   if (installerRan(install)) {
-    body = `It has signed in and the installer runs; the install may be part-way in.${keys ? ` ${keys}` : ""}`;
+    body = `${connectWords.partWayIn}${keys ? ` ${keys}` : ""}`;
   } else if (install.signedIn) {
     body = `It has signed in; the installer hasn't run yet.${keys ? ` ${keys}` : ""}`;
   }

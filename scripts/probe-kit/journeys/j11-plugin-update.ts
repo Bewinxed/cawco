@@ -25,6 +25,7 @@ import type {
   FleetSyncReport,
   MarketplaceLink,
 } from "../../../packages/core/src/fleet";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { skillsWords } from "../../../packages/core/src/words/skills";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
@@ -246,7 +247,7 @@ async function walk(leg: Leg): Promise<void> {
         }
       })();
       try {
-        await page.getByRole("button", { name: `More for ${ID}` }).click();
+        await page.getByRole("button", { name: commonWords.moreFor(ID) }).click();
         await page
           .getByRole("menuitem", { name: skillsWords.fetchAgain })
           .click();

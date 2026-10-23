@@ -40,6 +40,7 @@ import type { Page } from "playwright-core";
 import { userLayerLabel } from "../../../packages/core/src/claude-dirs";
 import { HOOK_TEMPLATES } from "../../../packages/core/src/hooks";
 import { RULE_TEMPLATES } from "../../../packages/core/src/rules";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { memoryWords } from "../../../packages/core/src/words/memory";
@@ -150,7 +151,7 @@ async function deleteFromMenu(
 ) {
   await page
     .getByRole("button", {
-      name: typeof name === "string" ? `More for ${name}` : name,
+      name: typeof name === "string" ? commonWords.moreFor(name) : name,
     })
     .first()
     .click();

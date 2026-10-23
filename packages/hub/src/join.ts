@@ -34,13 +34,13 @@ import {
 import { connect } from "node:net";
 import { homedir, hostname, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
-import {
+import {connectWords, 
   DRAFT_LIMITS,
   INSTALL_STEP_PREFIX,
   type InstallSignIn,
   type JoinAddress,
   type JoinInfo,
-  SSH_ADD_RUNNING_HEADER,
+  SSH_ADD_RUNNING_HEADER
 } from "@cawco/core";
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
@@ -153,7 +153,7 @@ export const joinAddresses = async (): Promise<JoinAddress[]> => {
   }
   const local = localHubName();
   if (local) {
-    found.push({ label: "On this network", url: url(local) });
+    found.push({ label: connectWords.onThisNetwork, url: url(local) });
   }
   return found;
 };

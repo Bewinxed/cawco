@@ -76,6 +76,7 @@ import { browseMdns } from "../../../packages/agent/src/discovery";
 import { currentExecutable } from "../../../packages/core/src/binary-installation";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { reachableLinks } from "../../../packages/core/src/reachable-links";
+import { connectWords } from "../../../packages/core/src/words/connect";
 import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
 import { leasePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -92,7 +93,7 @@ interface Health {
 }
 
 /** Connect a machine's rows that name no interface (hub join.ts). */
-const OWN_ROWS = new Set(["Tailscale", "Tailscale DNS", "On this network"]);
+const OWN_ROWS = new Set(["Tailscale", "Tailscale DNS", connectWords.onThisNetwork]);
 
 /** The number a held name carries: `cawco.local` is the first. */
 const numberOf = (name: string): number => Number(HELD.exec(name)?.[1] ?? 1);
@@ -663,7 +664,7 @@ const nameChecks = async (
     kit.check(
       `Connect a machine on :${port} lists "On this network · ${row}"`,
       listed.some(
-        (address) => address.label === "On this network" && address.url === row
+        (address) => address.label === connectWords.onThisNetwork && address.url === row
       ),
       JSON.stringify(listed)
     );

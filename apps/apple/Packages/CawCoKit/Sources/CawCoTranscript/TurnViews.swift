@@ -482,7 +482,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
             showSendingAgain()
         } else {
             let reasonText = again == "refused" ? block.string("retryRefused") : block.string("sendFailed")
-            reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
+            reason.attributedText = Styled.string(Words.Transcript.notSent + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
                                                   color: Palette.statusFailInk, lineBreak: .byWordWrapping)
         }
         retry.setAttributedTitle(Styled.string(sending ? "Sending again…" : Words.Common.sendAgain, TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
@@ -641,7 +641,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
     /// The retry could not be put together: the row says why, and Send again stands again.
     private func retryRefused(_ why: String) {
         retrying = nil
-        reason.attributedText = Styled.string("Couldn't send that message. \(why)", TypeScale.typeMeta,
+        reason.attributedText = Styled.string("\(Words.Transcript.notSent) \(why)", TypeScale.typeMeta,
                                               color: Palette.statusFailInk, lineBreak: .byWordWrapping)
         retry.setAttributedTitle(Styled.string(Words.Common.sendAgain, TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = true

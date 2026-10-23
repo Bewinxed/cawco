@@ -8,6 +8,7 @@
    * kept by the hub, gone with a reload, which its placeholder then says.
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import { connectWords } from "@cawco/core";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { IconEye, IconEyeClosed } from "#lib/icons.js";
   import { connect } from "./installs.svelte";
@@ -47,7 +48,7 @@
   <InputGroup.Addon align="inline-end">
     <InputGroup.Button
       aria-controls={id}
-      aria-label={shown ? "Hide password" : "Show password"}
+      aria-label={shown ? connectWords.hidePassword : connectWords.showPassword}
       aria-pressed={shown}
       onclick={() => {
         shown = !shown;

@@ -43,7 +43,7 @@
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
    */
-  import { machineLabel, viewsWords } from "@cawco/core";
+  import { commonWords, machineLabel, viewsWords } from "@cawco/core";
   import {
     UPSTREAM_WORDS,
     type UpstreamPosts,
@@ -487,7 +487,7 @@
         {#snippet child({ props })}
           <Button
             {...props}
-            aria-label="More for {project.name}"
+            aria-label={commonWords.moreFor(project.name)}
             class="max-desk:ms-auto max-desk:me-(--more-bleed)"
             size="icon"
             style="--more-bleed: calc((var(--c-btn-h) - var(--icon-md)) / -2)"

@@ -17,11 +17,13 @@ import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { CONFIG_SECTIONS } from "../../../packages/core/src/words/configure";
+import { connectWords } from "../../../packages/core/src/words/connect";
 import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { memoryWords } from "../../../packages/core/src/words/memory";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { skillsWords } from "../../../packages/core/src/words/skills";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
 import { COMPOSER_FIELD, pressAt, pressIn } from "../kit";
@@ -37,7 +39,6 @@ import {
   STUDIO_MACHINE,
   type Variant,
 } from "./scene";
-import { spawnWords } from "../../../packages/core/src/words/spawn";
 
 export type Width = "desk" | "tablet" | "phone";
 
@@ -2452,13 +2453,13 @@ export const SURFACES: Surface[] = [
           await press(ADD_MACHINE)(page);
           await page
             .locator(CONNECT_WINDOW)
-            .getByRole("tab", { name: "By a command" })
+            .getByRole("tab", { name: connectWords.byCommand })
             .click();
         },
         root: "body",
         ready: {
           shows: `${CONNECT_WINDOW}[data-step=reach] #connect-reaches`,
-          says: /^It reaches the hub at$/,
+          says: exactly(connectWords.reachesHubAt),
         },
       },
       // The studio online and its keychain's unlock sent (`studioRouted`,

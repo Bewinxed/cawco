@@ -44,11 +44,11 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person takes them
 import type { Locator, Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
+import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
-import { transcriptWords } from "../../../../packages/core/src/words/transcript";
-import { spawnWords } from "../../../../packages/core/src/words/spawn";
 
 const PLUS = '[data-slot="strip-new"] [data-tnew]';
 const POPOVER = "[data-ns-popover]";
@@ -1160,7 +1160,7 @@ async function reviveLeg(
     .boundingBox()
     .catch(() => null);
   const asked = await page.evaluate(
-    ({ pick, sent, line, at }) => {
+    ({ pick, sent, line, at, notSent }) => {
       const pop = document.querySelector(pick);
       // The message's own row: its words, and what it says under them.
       const row = [
@@ -1185,13 +1185,19 @@ async function reviveLeg(
         refusal:
           words.includes("A permission mode must be chosen") ||
           words.includes("Nothing was started"),
-        failure: words.includes("Couldn't send that message"),
+        failure: words.includes(notSent),
         said: (
           row?.querySelector("[data-slot='reason']")?.textContent ?? ""
         ).trim(),
       };
     },
-    { pick: MODE_PICK, sent: revive.words, line: revive.line, at: chooser }
+    {
+      pick: MODE_PICK,
+      sent: revive.words,
+      line: revive.line,
+      at: chooser,
+      notSent: transcriptWords.notSent,
+    }
   );
   // What the hub hands every screen for the session (its board row).
   const listed = (await (

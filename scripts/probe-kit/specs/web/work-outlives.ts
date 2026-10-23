@@ -763,7 +763,7 @@ async function routineLeg(
   await settle(page, 400);
   await page
     .locator(`[data-routine="${routine.id}"]`)
-    .getByRole("button", { name: `More for ${routine.name}` })
+    .getByRole("button", { name: commonWords.moreFor(routine.name) })
     .click();
   await page.getByRole("menuitem", { name: "Run now" }).click();
   const fault = `[data-routine="${routine.id}"] [data-routine-refusal]`;
@@ -824,7 +824,7 @@ async function forgetLeg(
     kit,
     page,
     pass,
-    page.getByRole("button", { name: `More for ${project.name}` })
+    page.getByRole("button", { name: commonWords.moreFor(project.name) })
   );
   // Every item of the open menu is the topmost thing at its own centre:
   // pressable, whatever else stands (on a phone, Caw's panel over an empty
@@ -1024,7 +1024,7 @@ async function cawOffLeg(
     kit,
     page,
     pass,
-    page.getByRole("button", { name: `More for ${project.name}` })
+    page.getByRole("button", { name: commonWords.moreFor(project.name) })
   );
   await pick(
     kit,
@@ -1336,7 +1336,7 @@ async function configDeleteLeg(
     kit,
     page,
     pass,
-    page.getByRole("button", { name: `More for ${name}` })
+    page.getByRole("button", { name: commonWords.moreFor(name) })
   );
   await pick(
     kit,
@@ -1352,7 +1352,7 @@ async function configDeleteLeg(
     said.text.includes(refusal) &&
       said.text.includes(`${name} stays as it was`) &&
       said.again &&
-      (await page.getByRole("button", { name: `More for ${name}` }).count()) ===
+      (await page.getByRole("button", { name: commonWords.moreFor(name) }).count()) ===
         1 &&
       (await toastsNow(page)) === 0,
     JSON.stringify({ made, said })
@@ -1369,7 +1369,7 @@ async function configDeleteLeg(
   await page.locator(`${line} [data-again]`).click();
   const deleted = await until(
     async () =>
-      (await page.getByRole("button", { name: `More for ${name}` }).count()) ===
+      (await page.getByRole("button", { name: commonWords.moreFor(name) }).count()) ===
       0,
     10_000
   );

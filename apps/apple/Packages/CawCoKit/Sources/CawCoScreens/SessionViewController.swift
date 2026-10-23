@@ -353,7 +353,7 @@ final class SessionViewController: ObservedViewController {
             composerBinding.action = transcript.tail?.busy == true && canStop ? .stop : .send
         }
         // Only the hub's refusal is a failure: a send it never answered waits on its row.
-        composerBinding.sendError = editNote ?? (command?.refusedByHub == true ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
+        composerBinding.sendError = editNote ?? (command?.refusedByHub == true ? Words.Transcript.notSent + (command?.reason.map { " \($0)" } ?? "") : nil)
         composerBinding.sendBlock = sendBlock(hub)
         syncCards()
         syncSide()

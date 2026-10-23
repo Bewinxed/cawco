@@ -29,4 +29,26 @@ export const connectWords = {
     "Updates are installed from the CawCo app, automatically when this machine is idle or with Install now. Nothing was changed.",
   /** Where the builds the fleet runs are chosen. */
   updatesPlace: configurePage("updates"),
+  /** The window's two ways in, each a tab. */
+  overSsh: "Over SSH",
+  byCommand: "By a command",
+  /** Over SSH: where the hub reaches it, and what waits. */
+  reachItAt: "Reach it at",
+  waitsForKey: "Waits for the hub's SSH key",
+  typeItAgain: "Type it again: a reload forgets a password",
+  showPassword: "Show password",
+  hidePassword: "Hide password",
+  /** By a command: where it reaches the hub, and what waits. */
+  reachesHubAt: "It reaches the hub at",
+  waitsForAddresses: "Waits for the hub's addresses",
+  alreadyHasCawCo:
+    "Already has CawCo? From this hub it's harmless. From another hub it moves here.",
+  /** The hub's address by its name on the local network (the hub's join answer). */
+  onThisNetwork: "On this network",
+  /** A failed install's way on, and what it left. */
+  thenRetry: "Then Retry.",
+  installerUndoes: "The installer removes what it created when it fails",
+  /** Stopping an install whose installer runs. */
+  partWayIn:
+    "It has signed in and the installer runs; the install may be part-way in.",
 };

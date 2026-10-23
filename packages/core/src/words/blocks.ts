@@ -8,8 +8,6 @@
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const blocksWords = {
-  /** A block's ⋯, read out with its title. */
-  more: (title: string) => `More for ${title}`,
   moveUp: "Move up",
   moveDown: "Move down",
   narrow: "Narrow",

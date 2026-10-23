@@ -39,6 +39,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one step at a time
 import type { Page } from "playwright-core";
 import { blocksWords } from "../../../../packages/core/src/words/blocks";
+import { commonWords } from "../../../../packages/core/src/words/common";
 import { routinesWords } from "../../../../packages/core/src/words/routines";
 import { Clock } from "../../anim";
 import { frames, type Kit, open, type Spec, settle } from "../../kit";
@@ -99,7 +100,7 @@ const orderOf = async (page: Page) =>
  */
 async function pick(page: Page, title: string, item: string) {
   await page.mouse.move(1, 1);
-  await page.getByRole("button", { name: `More for ${title}` }).focus();
+  await page.getByRole("button", { name: commonWords.moreFor(title) }).focus();
   await page.keyboard.press("Enter");
   const menu = page.getByRole("menu");
   await menu.waitFor();

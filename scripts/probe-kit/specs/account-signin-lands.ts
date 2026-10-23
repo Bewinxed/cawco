@@ -35,7 +35,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { accountsWords, configureWords } from "../../../packages/core/src";
+import { accountsWords, commonWords } from "../../../packages/core/src";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import { type Engine, type Kit, type KitFleet, open, type Spec } from "../kit";
 
@@ -327,7 +327,7 @@ async function leg(
   }, accountsWords.editor.machines);
   const menu = row.buttons.some(
     (label) =>
-      label.startsWith(configureWords.moreFor("")) && label.includes(" on ")
+      label.startsWith(commonWords.moreFor("")) && label.includes(" on ")
   );
   check(
     `${engine} · the machine's row stands signed in: no state word, its ⋯ menu; the hub says signed-in`,

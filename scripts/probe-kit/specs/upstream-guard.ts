@@ -112,6 +112,7 @@ import {
   type UpstreamPosts,
 } from "../../../packages/core/src/upstream-guard";
 import { UPSTREAM_POST_TOOL } from "../../../packages/core/src/upstream-post";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { serveGitHttp } from "../git-http";
 import { type Kit, open, type Spec, settle } from "../kit";
@@ -412,13 +413,13 @@ const readChoiceRow = (selector: string) => {
 const openUpstream = async (page: Page, view: View) => {
   // The page is drawn on the server: a press before it hydrates is lost,
   // so one that opened nothing in 3 s is pressed again.
-  await press(page, view, `[aria-label="More for ${NAME}"]`);
+  await press(page, view, `[aria-label="${commonWords.moreFor(NAME)}"]`);
   const opened = await page
     .waitForSelector(OPEN_MENU, { timeout: 3000 })
     .then(() => true)
     .catch(() => false);
   if (!opened) {
-    await press(page, view, `[aria-label="More for ${NAME}"]`);
+    await press(page, view, `[aria-label="${commonWords.moreFor(NAME)}"]`);
     await page.waitForSelector(OPEN_MENU, { timeout: 10_000 });
   }
   await settle(page, 200);
@@ -666,7 +667,7 @@ const run = async (kit: Kit) => {
   const projectUrl = `${base}/project/${project.id}`;
   for (const view of VIEWS) {
     const page = pages[view];
-    await open(page, projectUrl, `[aria-label="More for ${NAME}"]`);
+    await open(page, projectUrl, `[aria-label="${commonWords.moreFor(NAME)}"]`);
     await settle(page, 400);
     const menu = await openUpstream(page, view);
     await page
@@ -702,7 +703,7 @@ const run = async (kit: Kit) => {
    */
   const choose = async (view: View, words: string) => {
     const page = pages[view];
-    await open(page, projectUrl, `[aria-label="More for ${NAME}"]`);
+    await open(page, projectUrl, `[aria-label="${commonWords.moreFor(NAME)}"]`);
     await settle(page, 400);
     await openUpstream(page, view);
     await page.evaluate(
@@ -894,7 +895,7 @@ const run = async (kit: Kit) => {
     turned.status === 200 && projectPosts() === null && letGo("Y", "I"),
     `PUT ${turned.status}; exit ${exitOf("I")}; said:\n${said("Y", "I")}`
   );
-  await open(pages.desk, projectUrl, `[aria-label="More for ${NAME}"]`);
+  await open(pages.desk, projectUrl, `[aria-label="${commonWords.moreFor(NAME)}"]`);
   await settle(pages.desk, 400);
   const named = await openUpstream(pages.desk, "desk");
   await dismiss(pages.desk);

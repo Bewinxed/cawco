@@ -13,6 +13,7 @@
  * where one can start (the host), never inside a workspace.
  */
 import { join } from "node:path";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { routinesWords } from "../../../packages/core/src/words/routines";
 import { SESSION_TITLE_MAX } from "../../../packages/hub/src/work-items";
 import { MACHINE, type Seen } from "../../scratch-fleet";
@@ -229,7 +230,7 @@ async function walk(leg: Leg): Promise<void> {
     }
   );
   const before = runsOf(fleet, id).length;
-  const menu = page.getByRole("button", { name: `More for ${name}` });
+  const menu = page.getByRole("button", { name: commonWords.moreFor(name) });
 
   await leg.step(
     "Run it now",

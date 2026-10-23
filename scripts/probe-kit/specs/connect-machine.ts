@@ -118,6 +118,7 @@ import {
   serveTarget,
   WAYS,
 } from "../ssh-target";
+import { exactly } from "../words";
 import { type Phone, standInPhone } from "./turn-push";
 
 const USER = "deploy";
@@ -127,7 +128,7 @@ const WINDOW = "[data-connect-window]";
 const BODY = `${WINDOW} [data-slot=grid]`;
 /** The dialog's own ×. */
 const CLOSE = `${WINDOW} [data-slot=dialog-close]`;
-const RELOAD_FORGETS = /reload forgets/;
+const RELOAD_FORGETS = exactly(connectWords.typeItAgain);
 const FETCHING = /Fetching the signed build/;
 const LACKS_TAR = /Failed at Fetching the signed build · it lacks tar/;
 const CODE_IN = /code=([A-Z0-9]+)/;
@@ -135,7 +136,7 @@ const OPEN_NAVIGATION = sidebarWords.openNavigation;
 const OUTPUT = "[data-connect-output]";
 /** What the forced failure left: the installer undid itself; the key the add gave the machine stays. */
 const MACHINE_KEY_LEFT =
-  "The installer removes what it created when it fails. 127.0.0.1 keeps its CawCo key in ~/.config/cawco/machine-key.";
+  `${connectWords.installerUndoes}. 127.0.0.1 keeps its CawCo key in ~/.config/cawco/machine-key.`;
 /** What a password add refused its forward left: the hub's key it planted, and no installer run. */
 const HUB_KEY_LEFT =
   "Then Retry. The installer never ran. 127.0.0.1 keeps the hub's SSH key in ~/.ssh/authorized_keys.";
@@ -631,7 +632,7 @@ async function walk(
   const opensOn = await chosenTab(page);
   kit.check(
     `${leg}: with no way in chosen the window opens straight on its details, the Over SSH tab chosen, no question first`,
-    opensOn === "Over SSH" && !noKey.text.includes("Can the hub"),
+    opensOn === connectWords.overSsh && !noKey.text.includes("Can the hub"),
     `${opensOn}; ${noKey.text.slice(0, 120)}`
   );
   const waits = await page.evaluate((win) => {
@@ -660,7 +661,7 @@ async function walk(
     `${leg}: (9) with no hub key, Add machine is disabled and says why in words beside it, no title`,
     waits.disabled &&
       waits.title === null &&
-      waits.words === "Waits for the hub's SSH key" &&
+      waits.words === connectWords.waitsForKey &&
       waits.shown &&
       waits.beside,
     JSON.stringify(waits)
@@ -880,7 +881,7 @@ async function walk(
   };
   kit.check(
     `${leg}: the machines list's Add machine, naming no way in, opens on Over SSH with the typing kept`,
-    fromList.tab === "Over SSH" && fromList.target === "half@typed",
+    fromList.tab === connectWords.overSsh && fromList.target === "half@typed",
     JSON.stringify(fromList)
   );
 
@@ -901,7 +902,7 @@ async function walk(
         addresses: [
           ...joinInfo.addresses,
           { label: "probe0", url: fleet.base },
-          { label: "On this network", url: local },
+          { label: connectWords.onThisNetwork, url: local },
         ],
       },
     });
@@ -913,20 +914,20 @@ async function walk(
   await openWindow(page, dashboard, "new");
   await settled(page, "reach", "Sign in");
   await fillPort(page, 2200);
-  await pickTab(page, "By a command");
-  await settled(page, "reach", "It reaches the hub at");
+  await pickTab(page, connectWords.byCommand);
+  await settled(page, "reach", connectWords.reachesHubAt);
   await page.waitForSelector(`${WINDOW} [data-address=local] input:enabled`, {
     timeout: 10_000,
   });
   await page.locator(`${WINDOW} [data-address=local] input`).check();
-  await pickTab(page, "Over SSH");
+  await pickTab(page, connectWords.overSsh);
   await settled(page, "reach", "Sign in");
   const sshKept = {
     target: await page.inputValue("#connect-target"),
     port: await page.inputValue("#connect-port").catch(() => "(no field)"),
   };
-  await pickTab(page, "By a command");
-  await settled(page, "reach", "It reaches the hub at");
+  await pickTab(page, connectWords.byCommand);
+  await settled(page, "reach", connectWords.reachesHubAt);
   const chosenAddress = () =>
     page.evaluate(
       (win) =>
@@ -938,7 +939,7 @@ async function walk(
   const commandKept = await chosenAddress();
   await page.waitForTimeout(700);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await settled(page, "reach", "It reaches the hub at");
+  await settled(page, "reach", connectWords.reachesHubAt);
   // The addresses stand once the window's read of them lands.
   await page
     .waitForSelector(`${WINDOW} [data-address] input:checked`, {
@@ -949,7 +950,7 @@ async function walk(
     tab: await chosenTab(page),
     address: await chosenAddress(),
   };
-  await pickTab(page, "Over SSH");
+  await pickTab(page, connectWords.overSsh);
   await settled(page, "reach", "Sign in");
   const sshAfterReload = {
     target: await page.inputValue("#connect-target"),
@@ -964,7 +965,7 @@ async function walk(
   );
   kit.check(
     `${leg}: a reload opens the window on the tab it stood on, both tabs' details kept`,
-    afterReload.tab === "By a command" &&
+    afterReload.tab === connectWords.byCommand &&
       afterReload.address === "local" &&
       sshAfterReload.target === "half@typed" &&
       sshAfterReload.port === "2200",
@@ -981,8 +982,8 @@ async function walk(
   note("reach-by-hand", await settled(page, "reach", "authorized_keys"));
 
   // B: by a command.
-  await pickTab(page, "By a command");
-  note("reach-command", await settled(page, "reach", "It reaches the hub at"));
+  await pickTab(page, connectWords.byCommand);
+  note("reach-command", await settled(page, "reach", connectWords.reachesHubAt));
 
   // (14) and (10): the window reads the hub's addresses once per opening, as Reach shows;
   // a read that fails says so, and the window reads them again on its own.
@@ -1059,7 +1060,7 @@ async function walk(
       waiting.tryAgain &&
       waiting.well.includes(connectWords.noCommandYet) &&
       waiting.copyDisabled &&
-      waiting.copyWaits === "Waits for the hub's addresses" &&
+      waiting.copyWaits === connectWords.waitsForAddresses &&
       pressed >= 1,
     `${JSON.stringify(waiting)}; Try again read ${pressed}; ${failing.text.slice(0, 200)}`
   );
@@ -1104,7 +1105,7 @@ async function walk(
   );
 
   // C: Running over SSH, held at its fetch, started from the window.
-  await pickTab(page, "Over SSH");
+  await pickTab(page, connectWords.overSsh);
   await choose(page, "Sign in", "with the hub's key");
   await page.fill("#connect-target", options.target);
   await fillPort(page, options.port);
@@ -1197,7 +1198,7 @@ async function walk(
   const asking = await settled(
     page,
     "running",
-    "the install may be part-way in"
+    connectWords.partWayIn
   );
   note("running-stop", asking);
   await page.locator(`${WINDOW} [data-ask-cancel]`).click();
@@ -1246,7 +1247,7 @@ async function walk(
   kit.check(
     `${leg}: (3) Stop in the output sheet asks first, with what stopping leaves, and the install runs on until it is answered`,
     sheetAsks.includes("Stop installing on 127.0.0.1?") &&
-      sheetAsks.includes("the install may be part-way in") &&
+      sheetAsks.includes(connectWords.partWayIn) &&
       runsOn === "running",
     `${sheetAsks.replace(/\s+/g, " ")}; the install ${runsOn}`
   );
@@ -1474,7 +1475,7 @@ async function walk(
     problem.text.includes(MACHINE_KEY_LEFT) &&
       failedNow?.keys.machine === true &&
       !failedNow.keys.hub,
-    `keys ${JSON.stringify(failedNow?.keys)}; ${problem.text.slice(problem.text.indexOf("Then Retry"), problem.text.indexOf("Then Retry") + 200)}`
+    `keys ${JSON.stringify(failedNow?.keys)}; ${problem.text.slice(problem.text.indexOf(connectWords.thenRetry), problem.text.indexOf(connectWords.thenRetry) + 200)}`
   );
 
   // (12) Its push says where it failed and why: the row's own line.
@@ -1627,7 +1628,7 @@ async function walk(
   const copyCommand = async () => {
     await setDraft(fleet, { route: "command" });
     await openWindow(page, dashboard, "new");
-    await settled(page, "reach", "It reaches the hub at");
+    await settled(page, "reach", connectWords.reachesHubAt);
     await page.evaluate((win) => {
       const node = document.querySelector<HTMLElement>(win);
       const steps = [node?.dataset.step ?? ""];
@@ -1838,14 +1839,14 @@ async function refusedForward(
   const install = ended.installs.find((one) => one.id === id);
   const page = await kit.page("desk", { theme: "light" });
   await openWindow(page, dashboard, id);
-  const at = await settled(page, "outcome", "Then Retry");
+  const at = await settled(page, "outcome", connectWords.thenRetry);
   const alerts = await until(
     "its push",
     async () => options.pushes.installAlerts(id),
     (all) => all.length > 0,
     20_000
   ).catch(() => options.pushes.installAlerts(id));
-  const said = at.text.slice(at.text.indexOf("Then Retry"));
+  const said = at.text.slice(at.text.indexOf(connectWords.thenRetry));
   kit.check(
     "desk light: (4) a password add whose forward is refused after its sign-in planted the hub's key says the installer never ran and names the key it left, its sentence's case kept",
     install?.state === "failed" &&
@@ -1853,7 +1854,7 @@ async function refusedForward(
       install.keys.hub &&
       !install.keys.machine &&
       said.startsWith(HUB_KEY_LEFT) &&
-      !at.text.includes("removes what it created"),
+      !at.text.includes(connectWords.installerUndoes),
     `${install?.state} ${JSON.stringify(install?.problem)} at ${install?.problemStep}, keys ${JSON.stringify(install?.keys)}; ${said.slice(0, 200)}`
   );
   kit.check(
@@ -2186,7 +2187,7 @@ async function entryTabs(
     const opened: string[] = [];
     let right = true;
     for (const where of ["home", "list"] as const) {
-      for (const way of ["By a command", "Over SSH"]) {
+      for (const way of [connectWords.byCommand, connectWords.overSsh]) {
         // biome-ignore lint/performance/noAwaitInLoops: one entry point after another, on one page
         await open(page, `${dashboard}/`, "body");
         if (where === "home") {
@@ -2211,7 +2212,7 @@ async function entryTabs(
         await settled(
           page,
           "reach",
-          way === "Over SSH" ? "Reach it at" : "It reaches the hub at"
+          way === connectWords.overSsh ? connectWords.reachItAt : connectWords.reachesHubAt
         ).catch(async (error: Error) => {
           const seen = await page.evaluate(() => ({
             url: location.href,
@@ -2290,7 +2291,7 @@ async function chipAdds(
       .filter({ visible: true })
       .first()
       .click();
-    const opened = await settled(page, "reach", "Reach it at");
+    const opened = await settled(page, "reach", connectWords.reachItAt);
     const tab = await chosenTab(page);
     const focusIn = await page.evaluate(
       (win) => Boolean(document.activeElement?.closest(win)),
@@ -2340,7 +2341,7 @@ async function chipAdds(
     kit.check(
       `${view} ${engine}: the new session's Machines chip's "Connect a machine…" opens Add machine over the form on its details, Over SSH, the focus inside it; × closes it with nothing parked, the form still open and the focus back on the chip`,
       opened.step === "reach" &&
-        tab === "Over SSH" &&
+        tab === connectWords.overSsh &&
         focusIn &&
         after.onChip &&
         after.formOpen &&
@@ -2439,7 +2440,7 @@ async function tabsFit(
                 url: "http://build-hub.example-tailnet.ts.net:7777",
               },
               { label: "eth0", url: "http://192.168.1.20:7777" },
-              { label: "On this network", url: "http://build-hub.local:7777" },
+              { label: connectWords.onThisNetwork, url: "http://build-hub.local:7777" },
             ],
           },
         });
@@ -2451,8 +2452,8 @@ async function tabsFit(
       await openWindow(page, dashboard, "new");
       const shown: string[] = [];
       for (const [tab, has, file] of [
-        ["Over SSH", "Reach it at", "ssh"],
-        ["By a command", "It reaches the hub at", "command"],
+        [connectWords.overSsh, connectWords.reachItAt, "ssh"],
+        [connectWords.byCommand, connectWords.reachesHubAt, "command"],
       ] as const) {
         // biome-ignore lint/performance/noAwaitInLoops: one tab after the other, each measured where it stands
         if ((await chosenTab(page)) !== tab) {

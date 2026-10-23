@@ -220,14 +220,14 @@
       where: "not for a Mac",
       missing: ["No network address", "the hub's machine has none"],
       match: (label: string) =>
-        !["Tailscale", "Tailscale DNS", "On this network"].includes(label),
+        !["Tailscale", "Tailscale DNS", connectWords.onThisNetwork].includes(label),
     },
     {
       kind: "local",
       name: "This network or ZeroTier",
       where: "not for a Mac",
       missing: ["No .local name", "it is off on the hub"],
-      match: (label: string) => label === "On this network",
+      match: (label: string) => label === connectWords.onThisNetwork,
     },
   ] as const;
 
@@ -306,7 +306,7 @@
       return "";
     }
     if (connect.joinFailed) {
-      return "Waits for the hub's addresses";
+      return connectWords.waitsForAddresses;
     }
     if (join && !address) {
       return "The hub lists no address for it";
@@ -361,7 +361,7 @@
             <div class="flex items-center gap-space-2">
               <label
                 for="connect-target"
-                class="flex-none type-body text-ink-strong">Reach it at</label
+                class="flex-none type-body text-ink-strong">{connectWords.reachItAt}</label
               >
               <input
                 bind:this={targetField}
@@ -476,7 +476,7 @@
                     addOverSsh().catch(() => undefined);
                   }}
                   placeholder={connect.passwordLost
-                    ? "Type it again: a reload forgets a password"
+                    ? connectWords.typeItAgain
                     : "Its password, used once"}
                 />
               {:else if connect.fields.signIn === "by-hand" && join?.sshPublicKey}
@@ -508,7 +508,7 @@
                 data-slot="waits"
                 class="m-0 min-w-0 type-meta text-pretty text-ink-muted"
               >
-                Waits for the hub's SSH key
+                {connectWords.waitsForKey}
               </p>
             {/if}
             <Button
@@ -525,7 +525,7 @@
         {:else}
           <div class="flex flex-col gap-space-2">
             <p id="connect-reaches" class="m-0 type-body text-ink-strong">
-              It reaches the hub at
+              {connectWords.reachesHubAt}
             </p>
             {#if connect.joinFailed}
               <div data-slot="join-failed" class="flex items-start gap-space-3">
@@ -631,8 +631,7 @@
               In a real terminal it may ask you questions there.
             </p>
             <p class="m-0 type-meta text-pretty text-ink-muted">
-              Already has CawCo? From this hub it's harmless. From another hub
-              it moves here.
+              {connectWords.alreadyHasCawCo}
             </p>
           </div>
           <Checklist />

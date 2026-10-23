@@ -189,7 +189,7 @@ final class RoutinesLedger: UIView {
         row.next.ink = routine.enabled ? Palette.inkMuted : Palette.inkSubtle
         LedgerParts.tip(row.next, next.title)
 
-        row.menu.accessibilityLabel = Words.Blocks.more(title: routine.name)
+        row.menu.accessibilityLabel = Words.Common.moreFor(label: routine.name)
         // Set once and made as it opens, from the routine as it stands then: a
         // refresh that set a new menu while a tap was opening this one cancelled it.
         if row.menu.menu == nil {

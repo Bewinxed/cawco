@@ -61,6 +61,7 @@ import { dirname, join } from "node:path";
 import type { AuthContext } from "ssh2";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { listedPid, signal } from "../../../packages/core/src/signal";
+import { connectWords } from "../../../packages/core/src/words/connect";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import {
@@ -395,9 +396,9 @@ async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
       };
     });
   const masked = await fieldNow();
-  await page.getByRole("button", { name: "Show password" }).click();
+  await page.getByRole("button", { name: connectWords.showPassword }).click();
   const shown = await fieldNow();
-  await page.getByRole("button", { name: "Hide password" }).click();
+  await page.getByRole("button", { name: connectWords.hidePassword }).click();
   const maskedAgain = await fieldNow();
   kit.check(
     "k: the password field is masked with its attributes, and its toggle inside it flips type, name and aria-pressed",
@@ -405,11 +406,11 @@ async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
       masked.autocomplete === "current-password" &&
       masked.spellcheck === "false" &&
       masked.autocapitalize === "off" &&
-      masked.name === "Show password" &&
+      masked.name === connectWords.showPassword &&
       masked.pressed === "false" &&
       masked.inside &&
       shown.type === "text" &&
-      shown.name === "Hide password" &&
+      shown.name === connectWords.hidePassword &&
       shown.pressed === "true" &&
       maskedAgain.type === "password" &&
       maskedAgain.pressed === "false",

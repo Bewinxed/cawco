@@ -12,13 +12,9 @@
   },
   "scripts/probe-kit/journeys/j10-rules.ts": {
     "Delete rule": 1,
-    "More for": 1,
     "Nothing is watching yet": 1,
     "Rule name": 1,
     "Starter rules": 1
-  },
-  "scripts/probe-kit/journeys/j11-plugin-update.ts": {
-    "More for": 1
   },
   "scripts/probe-kit/journeys/j3-spawn.ts": {
     "in its own view": 1,
@@ -36,9 +32,6 @@
   "scripts/probe-kit/journeys/j7-comments.ts": {
     "Comments on": 1,
     "Preview mode": 1
-  },
-  "scripts/probe-kit/journeys/j8-routines.ts": {
-    "More for": 1
   },
   "scripts/probe-kit/journeys/j9-jump.ts": {
     "Jump to session": 1
@@ -187,21 +180,12 @@
     "didn't open": 1
   },
   "scripts/probe-kit/specs/config-undo.ts": {
-    "More for": 1,
     "No rule is waiting on an answer": 1
   },
   "scripts/probe-kit/specs/connect-machine.ts": {
     "Add machine": 4,
-    "By a command": 1,
     "couldn't be read": 1,
-    "Fetching the signed build": 2,
-    "Over SSH": 4,
-    "reload forgets": 1,
-    "removes what it created": 1,
-    "the install may be part-way in": 1,
-    "Then Retry": 3,
-    "Waits for the hub's addresses": 1,
-    "Waits for the hub's SSH key": 1
+    "Fetching the signed build": 2
   },
   "scripts/probe-kit/specs/connections-server-address.ts": {
     "Sign in to": 1
@@ -330,9 +314,6 @@
     "another hub": 1,
     "Require paired devices": 1,
     "this request came from another page": 2
-  },
-  "scripts/probe-kit/specs/hub-local-name.ts": {
-    "On this network": 1
   },
   "scripts/probe-kit/specs/hub-lock.ts": {
     "is held by the hub in process": 1
@@ -543,10 +524,6 @@
     "Named this session": 1,
     "Unknown tool": 1
   },
-  "scripts/probe-kit/specs/ssh-password-join.ts": {
-    "Hide password": 2,
-    "Show password": 2
-  },
   "scripts/probe-kit/specs/ssh-reach.ts": {
     "'s connection held since": 2,
     "[fleet] sync from the hub:": 1,
@@ -609,9 +586,6 @@
     "At its limit": 2,
     "Hasn’t reported": 1,
     "Moved to": 1
-  },
-  "scripts/probe-kit/specs/web/blocks.ts": {
-    "More for": 1
   },
   "scripts/probe-kit/specs/web/browser-ask-card.ts": {
     "Browser ask": 1,
@@ -699,7 +673,6 @@
     "is not connected, so nothing was installed": 1,
     "is ready": 1,
     "It stays a draft": 1,
-    "More for": 6,
     "No new builds could be looked for": 1,
     "Show details": 1,
     "Start run": 2,
@@ -732,7 +705,6 @@
   "scripts/probe-kit/surfaces/catalogue.ts": {
     "Add machine": 2,
     "Add task": 1,
-    "By a command": 1,
     "cannot read its logins": 1,
     "Catching up…": 1,
     "Caw, lead of": 1,
@@ -741,7 +713,6 @@
     "Expand diff (full view)": 1,
     "fleet memory": 1,
     "is unlocked": 1,
-    "It reaches the hub at": 1,
     "Its element is gone from the page": 1,
     "Last activity": 1,
     "Login password for": 1,

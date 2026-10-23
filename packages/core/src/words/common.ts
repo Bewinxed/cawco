@@ -27,6 +27,8 @@ export const commonWords = {
   itsSession: "Its session",
   /** A session, a task or a page waits on the person: the state word. */
   needsYou: "Needs you",
+  /** A row's or a head's ⋯, named for what it holds. */
+  moreFor: (label: string) => `More for ${label}`,
   /** Copies a thing's own address: a tab's menu, a sheet's head, a pin's thread. */
   copyLink: "Copy link",
   /** Sends again what the hub never took: a message's, a comment's line. */

@@ -59,12 +59,8 @@ public enum Words {
 
         public static let deleting = "Deleting…"
 
-        /// The editor header's ⋯ (Delete, on a narrow page), and a row's.
+        /// The editor header's ⋯ (Delete, on a narrow page), and a row's (commonWords.moreFor names it).
         public static let more = "More"
-
-        public static func moreFor(label: String) -> String {
-            "More for \(label)"
-        }
 
         /// An editor whose row is not in the list.
         public static func gone(what: String) -> String {
@@ -778,6 +774,11 @@ public enum Words {
 
         /// A session, a task or a page waits on the person: the state word.
         public static let needsYou = "Needs you"
+
+        /// A row's or a head's ⋯, named for what it holds.
+        public static func moreFor(label: String) -> String {
+            "More for \(label)"
+        }
 
         /// Copies a thing's own address: a tab's menu, a sheet's head, a pin's thread.
         public static let copyLink = "Copy link"
@@ -2120,11 +2121,6 @@ public enum Words {
 
     public enum Blocks {
         // packages/core/src/words/blocks.ts `blocksWords`
-        /// A block's ⋯, read out with its title.
-        public static func more(title: String) -> String {
-            "More for \(title)"
-        }
-
         public static let moveUp = "Move up"
 
         public static let moveDown = "Move down"

@@ -159,7 +159,7 @@ async function walk(leg: Leg): Promise<void> {
       await page.goto(`${base}/config/rules`, {
         waitUntil: "domcontentloaded",
       });
-      await page.getByRole("button", { name: `More for ${name}` }).click();
+      await page.getByRole("button", { name: commonWords.moreFor(name) }).click();
       await page.getByRole("menuitem", { name: "Delete rule" }).click();
     },
     async () => {
