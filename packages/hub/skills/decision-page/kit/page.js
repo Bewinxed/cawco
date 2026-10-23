@@ -28,6 +28,37 @@
     }
   }
 
+  /* A real-size drawing wider than its frame says so in its caption: it
+     scrolls inside the frame and is never scaled (RECIPES.md, "At its real
+     size"). */
+  const frames = document.querySelectorAll(".dp-real-scroll");
+  const widest = Math.max(
+    0,
+    ...[...frames].map((frame) => frame.querySelector(".mk")?.offsetWidth ?? 0)
+  );
+  if (widest > 0) {
+    document
+      .querySelector(".dp")
+      ?.style.setProperty("--dp-real-w", `${widest}px`);
+  }
+  const markMore = () => {
+    for (const frame of frames) {
+      frame
+        .closest(".dp-real")
+        ?.toggleAttribute(
+          "data-dp-more",
+          frame.scrollWidth > frame.clientWidth + 1
+        );
+    }
+  };
+  if ("ResizeObserver" in window) {
+    const watch = new ResizeObserver(markMore);
+    for (const frame of frames) {
+      watch.observe(frame);
+    }
+  }
+  markMore();
+
   /* Each option's keycap, its digit in its card (DESIGN.md, option chips). */
   for (const group of document.querySelectorAll("[data-cawco-choice]")) {
     for (const [n, option] of [

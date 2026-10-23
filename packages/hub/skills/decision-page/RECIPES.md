@@ -35,6 +35,22 @@ Put a figure between the why and the options; two side by side for "look" and "h
 
 `{{MK:<id>}}` is `mockups/<id>.html`, inlined when the hub builds the page ([CONTRACT.md](CONTRACT.md)).
 
+## At its real size
+
+A design the person compares (a Settings card, a panel, a phone screen) is drawn at its real width, a real-size mockup (CONTRACT.md, Layout), and placed in a frame that never scales it:
+
+```html
+<div class="dp-reals">
+  <figure class="dp-pane dp-real"><figcaption><b>Desk</b><span>Settings › Addresses</span><span class="dp-real-more">· scroll sideways for the rest</span></figcaption><div class="dp-real-scroll">{{MK:settings-card}}</div></figure>
+  <figure class="dp-pane dp-real"><figcaption><b>Phone</b><span>The page the QR opens</span><span class="dp-real-more">· scroll sideways for the rest</span></figcaption><div class="dp-real-scroll">{{MK:phone-ok}}</div></figure>
+</div>
+```
+
+- The page's column grows to hold its widest drawing whole wherever the screen is wide enough; frames stand side by side where the card holds them and stack where it doesn't.
+- A frame narrower than its drawing scrolls sideways inside itself and shows its `.dp-real-more` words; the page never scrolls sideways. On a phone the frame runs to the card's edges.
+- The caption names what the person judges (where it lives, which state), never its size.
+- Real-size mockups go in `dp-reals`, fluid ones in `dp-show`.
+
 ## Dials
 
 For values the person tunes rather than picks (a radius, a colour, a spring), keep `{{DIALS}}` in the page's head and create a panel after the page's own script:
