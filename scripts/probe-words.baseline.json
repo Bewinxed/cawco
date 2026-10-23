@@ -113,7 +113,6 @@
     "Update it on the machine the way it was installed": 1
   },
   "scripts/probe-kit/specs/comment-delivery.ts": {
-    "- I wrote:": 6,
     "Caw couldn't take them": 1,
     "Comments aren't reaching the agent": 1,
     "Comments on": 2,
@@ -125,7 +124,6 @@
     "Comments aren't reaching the agent": 1
   },
   "scripts/probe-kit/specs/comments.ts": {
-    "## The person's note on this Send": 1,
     "Attach a file or image": 2,
     "Attached file:": 1,
     "Draft comment, not sent": 1,

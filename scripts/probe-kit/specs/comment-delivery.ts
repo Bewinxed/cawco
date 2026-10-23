@@ -77,7 +77,6 @@ import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { wroteLine } from "../../../packages/core/src/comments";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
-import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, pressAt, pressIn, type Spec, settle } from "../kit";
