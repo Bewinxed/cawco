@@ -9,16 +9,18 @@
  *                                     project that depends on it
  *   bun run typecheck --base <ref>    the same against another base
  *   bun run typecheck --all           every project
+ *   bun run typecheck --dry           name what it would check, and stop
  *
  * The projects are the repository's TypeScript projects (every tracked
  * `tsconfig*.json` but the shared settings) and the dashboard's Svelte
- * project. A changed file belongs to the project whose folder holds it most
- * closely; a project depends on another when any of its files imports one
- * of the other's (a relative path into its folder, or `@cawco/<name>` through
- * that package's `exports`), read from the source on every run, so the graph
- * is the imports as they stand, declared dependencies or not. A change to
- * any tsconfig, the lockfile, the root manifest, a patch or this runner
- * affects every project.
+ * project (its `src/`, and the files at its top). A file belongs to the
+ * project whose folder holds it most closely. What a change affects is read
+ * off the imports as they stand, on every run: each changed file, every
+ * file that imports it (a relative path, `$lib/`, or `@cawco/<name>` through
+ * that package's `exports`), every file that imports one of those, and so
+ * on; the projects those files belong to are checked, declared dependencies
+ * or not. A change to any tsconfig, the lockfile, the root manifest, a
+ * patch or this runner affects every project.
  *
  * The TypeScript projects go to one `tsc -b`. The libraries (core, auth,
  * jsonl-parser, agent and its browser overlay and canvas host, hub,
@@ -81,6 +83,7 @@ const EVERYTHING = [
   /^scripts\/typecheck\.ts$/,
 ];
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/;
+const STEM = /(?:\.d)?\.[cm]?[jt]sx?$/;
 const TYPESCRIPT = /\.(?:[cm]?tsx?)$|(^|\/)tsconfig[^/]*\.json$/;
 /** An import of a file TypeScript reads: code, JSON, or a path with no extension. */
 const TYPED_TARGET = /\.(?:[cm]?[jt]sx?|svelte|json)$/;
@@ -107,6 +110,9 @@ interface Project {
   svelte: boolean;
 }
 
+/** The dashboard's top-level files (its manifest, Vite config), which svelte-check reads too. */
+const DASHBOARD_TOP = /^apps\/dashboard\/[^/]+$/;
+
 const projects: Project[] = lines(
   await git(
     "ls-files",
@@ -121,18 +127,21 @@ const projects: Project[] = lines(
   .filter((config) => !SHARED.has(config))
   .map((config) => ({
     config,
-    dir: dirname(config),
+    dir: config === SVELTE_PROJECT ? `${DASHBOARD}/src` : dirname(config),
     svelte: config === SVELTE_PROJECT,
   }));
+const svelteProject = projects.find((project) => project.svelte);
 
 const depth = (dir: string): number =>
   dir === "." ? 0 : dir.split("/").length;
 const holds = (dir: string, path: string): boolean =>
   dir === "." || path === dir || path.startsWith(`${dir}/`);
-/** The projects whose folder holds `path` most closely (two share apps/dashboard). */
+/** The project whose folder holds `path` most closely (and the dashboard's Svelte project for its top-level files). */
 const ownersOf = (path: string): Project[] => {
   let closest = -1;
-  let owners: Project[] = [];
+  let owners: Project[] =
+    svelteProject && DASHBOARD_TOP.test(path) ? [svelteProject] : [];
+  const fixed = owners.length;
   for (const project of projects) {
     if (!holds(project.dir, path)) {
       continue;
@@ -140,7 +149,7 @@ const ownersOf = (path: string): Project[] => {
     const at = depth(project.dir);
     if (at > closest) {
       closest = at;
-      owners = [project];
+      owners = [...owners.slice(0, fixed), project];
     } else if (at === closest) {
       owners.push(project);
     }
@@ -178,6 +187,9 @@ const packages = new Map<
 
 /** The repository path `specifier` in `file` names, when TypeScript reads it. */
 const targetOf = (file: string, specifier: string): string | undefined => {
+  if (specifier.startsWith("$lib/")) {
+    return join(DASHBOARD, "src/lib", specifier.slice("$lib/".length));
+  }
   if (specifier.startsWith(".")) {
     const path = normalize(join(dirname(file), specifier));
     const hasExtension = basename(path).includes(".");
@@ -199,34 +211,43 @@ const targetOf = (file: string, specifier: string): string | undefined => {
   return path ? normalize(join(pkg.dir, path)) : pkg.dir;
 };
 
-/** Each project's dependents: the projects whose files import one of its files. */
-const dependents = new Map<Project, Set<Project>>(
-  projects.map((project) => [project, new Set()])
-);
-const sources = lines(
+/**
+ * A path as its importers name it: without the extension TypeScript lets an
+ * import leave off or write as `.js`, so an import and the file it reads
+ * meet (and a deleted file still meets the imports that named it).
+ */
+const stemOf = (path: string): string => path.replace(STEM, "");
+/** Each file stem, and the files that import it. */
+const importers = new Map<string, Set<string>>();
+const files = lines(
   await git("ls-files", "--cached", "--others", "--exclude-standard")
-).filter((path) => CODE.test(path));
+);
 await Promise.all(
-  sources.map(async (file) => {
-    const importers = ownersOf(file);
-    const text = await Bun.file(join(ROOT, file))
-      .text()
-      .catch(() => "");
-    for (const [, specifier] of text.matchAll(SPECIFIER)) {
-      const target = targetOf(file, specifier);
-      if (!target) {
-        continue;
-      }
-      for (const imported of ownersOf(target)) {
-        for (const importer of importers) {
-          if (importer !== imported) {
-            dependents.get(imported)?.add(importer);
-          }
+  files
+    .filter((path) => CODE.test(path))
+    .map(async (file) => {
+      const text = await Bun.file(join(ROOT, file))
+        .text()
+        .catch(() => "");
+      for (const [, specifier] of text.matchAll(SPECIFIER)) {
+        const target = targetOf(file, specifier);
+        if (target) {
+          const stem = stemOf(target);
+          const named = importers.get(stem) ?? new Set();
+          named.add(file);
+          importers.set(stem, named);
         }
       }
-    }
-  })
+    })
 );
+/** The files that import `path`, by its stem and, for an index file, its folder's. */
+const importersOf = (path: string): string[] => {
+  const stem = stemOf(path);
+  return [
+    ...(importers.get(stem) ?? []),
+    ...(basename(stem) === "index" ? (importers.get(dirname(stem)) ?? []) : []),
+  ];
+};
 
 const base =
   baseArg ??
@@ -247,21 +268,16 @@ const everything =
   !base ||
   changed.some((path) => EVERYTHING.some((rule) => rule.test(path)));
 
-const affected = new Set<Project>(everything ? projects : []);
-const reach = (project: Project): void => {
-  if (affected.has(project)) {
-    return;
-  }
-  affected.add(project);
-  for (const dependent of dependents.get(project) ?? []) {
-    reach(dependent);
-  }
-};
-for (const path of everything ? [] : changed) {
-  for (const owner of ownersOf(path)) {
-    reach(owner);
+/** Every changed file and every file that imports one, however far up. */
+const reached = new Set<string>(everything ? [] : changed);
+for (const path of reached) {
+  for (const importer of importersOf(path)) {
+    reached.add(importer);
   }
 }
+const affected = new Set<Project>(
+  everything ? projects : [...reached].flatMap(ownersOf)
+);
 
 let scope = `${changed.length} changed file(s) since ${base?.slice(0, 9)}`;
 if (ALL) {
@@ -276,6 +292,10 @@ console.log(
       : ""
   }`
 );
+
+if (args.includes("--dry")) {
+  process.exit(0);
+}
 
 const script = (dir: string, name: string): Check => ({
   name: `${dir === "." ? "" : `${dir} `}${name}`,
