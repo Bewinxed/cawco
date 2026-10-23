@@ -60,6 +60,8 @@ import {
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
   CONTROL_SPIN_OFF_HELD,
@@ -252,6 +254,13 @@ export interface SessiondAdoption {
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   turnRunning(instanceId: string, head: number): Promise<boolean>;
 }
+
+/** The controls that change a session's setting: each names it as its one argument. */
+const SETTING_CONTROLS: ReadonlySet<string> = new Set([
+  CONTROL_SET_MODEL,
+  CONTROL_SET_PERMISSION_MODE,
+  CONTROL_SET_EFFORT,
+]);
 
 /** The words of whatever was thrown. */
 const errorText = (problem: unknown): string =>
@@ -5043,6 +5052,17 @@ export class SessionSupervisor {
           ...(failed.length > 0 ? { failed } : {}),
         });
         return;
+      }
+      // A setting's control names the setting. One with none is refused
+      // before the harness hears it: Claude's would set nothing and clear
+      // its session's own record of its mode (claude.ts
+      // `SessionMode.choose`), Full Send with it, while the hub's row kept
+      // the old mode (restart-rules on the host, 2026-10-23).
+      if (
+        SETTING_CONTROLS.has(method) &&
+        !(typeof args[0] === "string" && args[0])
+      ) {
+        throw new Error(`${method} names no setting`);
       }
       // An interrupted session is idle: nothing it started in its workspace
       // runs on, to end later and wake it, whether or not its process was
