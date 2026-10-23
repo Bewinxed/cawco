@@ -30,7 +30,7 @@ export const Hover = {
   parameters: { viewport: 720 },
 };
 
-/** Desk: the pointer over the top row's More button: no room above it inside the screen, so its class is named beside it, nearer it than any other box. */
+/** Desk: the pointer over the top row's More button: no room above it inside the screen, so its class is named beside the button, clear of every word and icon. */
 export const HoverTop = {
   args: { hover: "More" },
   parameters: { viewport: 720 },
