@@ -242,7 +242,8 @@ try {
       // biome-ignore lint/performance/noAwaitInLoops: specs run one at a time, in the order named
       const code = await runOwnHome(spec);
       if (code === 3) {
-        run.onHost.push(spec.name);
+        // Its own run said where it runs.
+        run.notHere.push(spec.name);
       } else if (code !== 0) {
         failedSpecs.push(spec.name);
       }
@@ -266,12 +267,12 @@ if (review !== null) {
 }
 const seconds = ((performance.now() - started) / 1000).toFixed(0);
 const notes = run.notes > 0 ? `, ${run.notes} note(s)` : "";
-const ran = chosen.length - run.onHost.length;
+const ran = chosen.length - run.notHere.length;
 if (run.failed.length > 0) {
   console.log(`FAILED ASSERTIONS:\n${run.failed.join("\n")}`);
 }
-if (run.onHost.length > 0) {
-  console.log(`NOT RUN HERE, each runs on the host: ${run.onHost.join(", ")}`);
+if (run.notHere.length > 0) {
+  console.log(`NOT RUN HERE: ${run.notHere.join(", ")}`);
 }
 console.log(
   failedSpecs.length === 0
@@ -282,4 +283,4 @@ if (failedSpecs.length > 0) {
   process.exit(1);
 }
 // 3: nothing failed, but a spec asked for was not run here.
-process.exit(run.onHost.length > 0 ? 3 : 0);
+process.exit(run.notHere.length > 0 ? 3 : 0);

@@ -175,6 +175,13 @@ workspace (`CAWCO_WORKSPACE` set), it is not run; the run prints
 HERE`, and exits 3 when nothing failed. A spec that starts a boundary in one
 leg only and words that leg's refusal (comment-delivery) carries no `host`.
 
+The other way round, a spec that reads what a workspace's boundary gives a
+command (its proxy, its tool door) says so in its `workspace` field
+(boundary-proxy). Run outside every workspace (`CAWCO_WORKSPACE` unset), it is
+not run; the run prints `WORKSPACE <spec>: runs inside a workspace's boundary
+…` with its command, lists it under `NOT RUN HERE`, and exits 3 when nothing
+failed.
+
 Such a spec runs outside every boundary: from the shell of a session the
 person started, on a checkout of the delegate's commit. A delegate that
 writes one lists it under "Not run:" in its finish_item report, with the

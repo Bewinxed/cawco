@@ -29,15 +29,23 @@
  * but lockfile is frozen"); the workspace's bun.lock is unchanged, the item
  * is not done, nothing lands.
  *
- * Then the move line (core injected.ts `movedLine`), each with a bun.lock:
+ * Then the move line (core injected.ts `movedLine`), each with a bun.lock.
+ * The line is for a session that goes on in the clone the landing moved, so
+ * each landing here fails its gate and the item stays open there: a landed
+ * item's session is put to sleep and its workspace retires (server.ts
+ * `sleepFinished`, work-items.ts `settle`), and the next message reaches a
+ * clone cut again, whose own line (the recut's) is the one it reads.
  *
- * - M: after its clone is cut, main gains a commit; its delegate commits and
- *   finishes, and the landing rebases its commit onto that newer main. Its
- *   parent's handoff, read by the same session in the same clone, opens
- *   with the hub's line once: its checkout moved from the HEAD it committed
- *   to the HEAD the landing left, and the install to run;
- * - K: main stays put, so the landing leaves HEAD where it was, and the
- *   parent's handoff carries no such line.
+ * - M: its delegate commits a file that typechecks against src/index.ts as
+ *   cut; main then changes src/index.ts so that file no longer does, and the
+ *   delegate finishes. The landing rebases its commit onto that newer main
+ *   and the gate fails there. The next message the session reads, the hub's
+ *   still-open reminder, opens with the hub's line that its checkout moved
+ *   from the HEAD it committed to the HEAD the landing left, with the
+ *   install to run, and no later message repeats it;
+ * - K: main stays put and its delegate's commit fails typecheck on its own,
+ *   so the landing leaves HEAD where it was, and nothing it reads after
+ *   carries such a line.
  *
  *   bun scripts/probe-kit/run.ts landing-recut
  */
@@ -58,6 +66,19 @@ type Tag = "L" | "N" | "S" | "M" | "K";
 type LegTag = "L" | "N";
 /** The file in M's scratch dir the spec writes once main has moved past its clone's cut: its delegate commits, then waits for it. */
 const MAIN_MOVED = "main-moved";
+/**
+ * M's and K's first files: M's typechecks against src/index.ts as cut
+ * (`ok` is `true` there) and not once main widens `ok` to boolean; K's
+ * fails typecheck on its own.
+ */
+const MOVE_FILES = {
+  M: ['import { ok } from "./index";', "export const first_M: true = ok;"],
+  K: ["export const first_K: string = 1;"],
+} as const;
+/** src/index.ts as main changes it under M: `ok` widened, so M's file fails typecheck once rebased onto it. */
+const MAIN_INDEX = "export const ok: boolean = true;\n";
+/** The hub's reminder to a delegate whose turn ended quietly (work-items.ts `quietTurn`). */
+const STILL_OPEN = "Your work item is still open.";
 /** How the hub's line that a landing moved a checkout opens (core injected.ts `movedLine`). */
 const MOVED_OPENING = movedLine({
   kind: "landing",
@@ -112,10 +133,15 @@ const tool = (name: string, input: object): Reply => ({
 });
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
-/** A file committed in the delegate's clone, then (given `waitFor`) a wait of up to 4 min for that file in its scratch dir, then a mark its output prints. */
-const commitCommand = (name: string, mark: string, waitFor?: string) =>
+/** A file committed in the delegate's clone (its `lines`, else one export), then (given `waitFor`) a wait of up to 4 min for that file in its scratch dir, then a mark its output prints. */
+const commitCommand = (
+  name: string,
+  mark: string,
+  waitFor?: string,
+  lines: readonly string[] = [`export const ${name.replace(/\W/g, "_")} = 1;`]
+) =>
   [
-    `printf '%s\\n' 'export const ${name.replace(/\W/g, "_")} = 1;' > src/${name}.ts`,
+    `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(" ")} > src/${name}.ts`,
     `git add src/${name}.ts`,
     `${COMMIT} 'Delegate commit ${name}'`,
     ...(waitFor
@@ -189,7 +215,8 @@ const respond = (request: Seen): Reply => {
           : commitCommand(
               `first_${tag}`,
               `DONE-COMMIT-${tag}`,
-              tag === "M" ? MAIN_MOVED : undefined
+              tag === "M" ? MAIN_MOVED : undefined,
+              tag === "M" || tag === "K" ? MOVE_FILES[tag] : undefined
             ),
       description: "Commit",
       timeout: 300_000,
@@ -475,130 +502,91 @@ const leg = async (
   );
 };
 
-/** The handoff `message` from `parent` to a delegate that just finished, repeated once when a cold target is refused ("… Nothing was sent."). */
-const handOff = async (
-  callAsParent: CallAsParent,
-  parent: string,
-  target: string,
-  message: string
-) => {
-  const first = await callAsParent(parent, "handoff", { target, message });
-  return first.status === 200 && !first.text.includes("Nothing was sent")
-    ? first
-    : await callAsParent(parent, "handoff", { target, message });
-};
-
-type CallAsParent = (
-  parent: string,
-  name: string,
-  args: object
-) => Promise<{ status: number; text: string }>;
-
 /**
- * M or K: the delegate lands (M on a main that moved past its cut, K on the
- * main it was cut from), then its parent hands off to it while it still
- * stands in the same clone: M's handoff opens with the hub's move line once,
- * naming the HEAD it committed and the HEAD the landing left; K's has none.
+ * M or K: the delegate finishes and its landing's gate fails, M's on a main
+ * that moved past its cut, K's on the main it was cut from; the item stays
+ * open in the same clone. The next message its session reads (the hub's
+ * still-open reminder) opens with the hub's move line for M, once, naming
+ * the HEAD it committed and the HEAD the landing left; K's carries none.
  */
 const moveLeg = async (
   kit: Kit,
   fleet: Fleet,
-  tag: "M" | "K",
-  callAsParent: CallAsParent
+  tag: "M" | "K"
 ): Promise<void> => {
   const { check } = kit;
-  const { project, parent, started } = await delegated(fleet, tag, true);
-  let from = "";
+  const mark = `PROBE-RECUT-GATE-${tag}`;
+  const { project, started } = await delegated(fleet, tag, true);
+  const row = await until(
+    `${tag}'s clone committed`,
+    () =>
+      fleet.query<{ path: string; tmp: string | null }>(
+        "SELECT path, tmp FROM workspaces WHERE id = ?",
+        started.workspaceId
+      )[0],
+    (one) =>
+      Boolean(one?.path && one.tmp) &&
+      Bun.spawnSync(["git", "-C", one?.path ?? "", "log", "-1", "--format=%s"])
+        .stdout.toString()
+        .includes(`Delegate commit first_${tag}`),
+    300_000
+  );
+  const path = row?.path ?? "";
+  const from = (await Bun.$`git -C ${path} rev-parse HEAD`.text()).trim();
   if (tag === "M") {
-    const row = await until(
-      "M's clone committed",
-      () =>
-        fleet.query<{ path: string; tmp: string | null }>(
-          "SELECT path, tmp FROM workspaces WHERE id = ?",
-          started.workspaceId
-        )[0],
-      (one) =>
-        Boolean(one?.path && one.tmp) &&
-        Bun.spawnSync([
-          "git",
-          "-C",
-          one?.path ?? "",
-          "log",
-          "-1",
-          "--format=%s",
-        ])
-          .stdout.toString()
-          .includes("Delegate commit first_M"),
-      300_000
-    );
-    from = (
-      await Bun.$`git -C ${row?.path ?? ""} rev-parse HEAD`.text()
-    ).trim();
     const bare = join(fleet.sandbox, "hub", "git", `${project.id}.git`);
     const other = join(fleet.sandbox, "main-mover");
     const env = { ...process.env, HOME: fleet.env.HOME as string };
     await Bun.$`git clone -q ${bare} ${other}`.env(env).quiet();
-    await writeFile(
-      join(other, "src", "main_moved.ts"),
-      "export const moved = 1;\n"
-    );
+    await writeFile(join(other, "src", "index.ts"), MAIN_INDEX);
     await Bun.$`git add -A && git commit -qm 'Main moves on' && git push -q origin HEAD:main`
       .cwd(other)
       .env(env)
       .quiet();
     await writeFile(join(row?.tmp ?? "", MAIN_MOVED), "");
   }
-  const landed = await settled(
-    fleet,
-    tag,
-    started.workItemId,
-    `PROBE-RECUT-GATE-${tag}`
-  );
-  const result = landed.row?.result ?? "";
-  check(
-    `${tag}: its first hand-in lands${tag === "M" ? ", rebased onto the main that moved past its cut" : ""}`,
-    landed.row?.state === "done" &&
-      result.includes(`${workWords.landedOn("main")} at`),
-    `${landed.row?.state} ${landed.row?.error ?? ""}\n${refusal(landed.refused) || result.slice(0, 1500)}`
-  );
-  if (landed.row?.state !== "done") {
-    return;
-  }
-  const path = workspaceRow(fleet, started.workspaceId)?.path ?? "";
+  const landed = await settled(fleet, tag, started.workItemId, mark);
   const to = (
     await Bun.$`git -C ${path} rev-parse HEAD`.quiet().nothrow().text()
   ).trim();
-  const handed = await handOff(
-    callAsParent,
-    parent,
-    started.instanceId,
-    `${again(tag)}: commit one more file, then finish.`
+  check(
+    `${tag}: its finish_item comes back not landed, its gate failing on ${tag === "M" ? "its commit rebased onto the main that moved past its cut" : "its own commit"}, its clone standing`,
+    landed.refused !== undefined && existsSync(path),
+    `${landed.row?.state} ${landed.row?.error ?? ""}\n${refusal(landed.refused) || (landed.row?.result ?? "").slice(0, 1500)}`
   );
-  const read = await until(
-    `${tag}'s handoff read`,
-    () => fleet.seen.find((one) => one.tools && one.last.includes(again(tag))),
-    Boolean,
+  if (landed.refused === undefined) {
+    return;
+  }
+  // Its quiet turns end the item; by then every message it read is seen.
+  const ended = await until(
+    `${tag}'s item ended by its quiet turns`,
+    () => itemRow(fleet, started.workItemId)?.state,
+    (state) => state !== "running",
     240_000
   ).catch(() => undefined);
-  const words = read?.last ?? "";
-  const told = words.split(MOVED_OPENING).length - 1;
-  const state = workspaceRow(fleet, started.workspaceId)?.state;
+  const mine = fleet.seen.filter((one) => one.tools && one.all.includes(mark));
+  const refusedAt = mine.findIndex(
+    (one) => one.afterTool && one.all.includes(NOT_LANDED)
+  );
+  const next = mine.slice(refusedAt + 1).find((one) => !one.afterTool);
+  const words = next?.last ?? "";
+  const told = (mine.at(-1)?.all ?? "").split(MOVED_OPENING).length - 1;
+  const detail = `item ${ended}; HEAD ${from.slice(0, 9)} → ${to.slice(0, 9)}; told ${told} time(s); the next message read: ${JSON.stringify(words.slice(0, 700))}`;
   if (tag === "M") {
-    const named = `from ${from.slice(0, 9)} to ${to.slice(0, 9)}`;
+    const line = movedLine({ kind: "landing", branch: "main", from, to });
     check(
-      "M: the handoff after a landing that moved its checkout opens with the hub's move line once, naming the HEAD it committed and the HEAD the landing left, and the install to run",
-      from !== "" &&
-        to !== from &&
-        told === 1 &&
-        words.includes(named) &&
-        words.includes("Run the repo's install before you build or test."),
-      `handoff ${handed.status}; workspace ${state}; expected "${named}"; the session read: ${JSON.stringify(words.slice(0, 700))}`
+      "M: the first message after a landing that moved its checkout opens with the hub's move line, naming the HEAD it committed and the HEAD the landing left, and the install to run; no later message repeats it",
+      to !== from &&
+        words.includes(line) &&
+        words.indexOf(line) < words.indexOf(STILL_OPEN) &&
+        told === 1,
+      detail
     );
   } else {
     check(
-      "K: the handoff after a landing that left its checkout where it was carries no move line",
-      read !== undefined && told === 0,
-      `handoff ${handed.status}; workspace ${state}; the session read: ${JSON.stringify(words.slice(0, 700))}`
+      "K: after a landing that left its checkout where it was, no message it reads carries the move line",
+      to === from && words.includes(STILL_OPEN) && told === 0,
+      detail
     );
   }
 };
@@ -647,8 +635,8 @@ const run = async (kit: Kit) => {
   await leg(kit, fleet, "N", callAsParent);
   await leg(kit, fleet, "L", callAsParent);
   await staleLeg(kit, fleet);
-  await moveLeg(kit, fleet, "M", callAsParent);
-  await moveLeg(kit, fleet, "K", callAsParent);
+  await moveLeg(kit, fleet, "M");
+  await moveLeg(kit, fleet, "K");
 };
 
 export default {

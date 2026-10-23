@@ -13,10 +13,12 @@
  *   reminder reached it: those turns count toward no quiet-turn failure. A
  *   fourth report it answers with a tool call of its own (Bash): that ends
  *   the wait, the quiet-turn reminder reaches it again, and it finishes.
- * - (b) A delegate leaves an uncommitted file and fails its item; made cold
- *   by the hub's own cache-expiry reading (its last request two hours back
- *   on a 5-minute cache), it takes its parent's hand-off, and Jev is not
- *   asked.
+ * - (b) A delegate leaves an uncommitted file and calls finish_item blocked:
+ *   the hub refuses to end an item while its clone holds work in no commit
+ *   (work-items.ts `leftoversIn`), the delegate leaves the file standing, and
+ *   its third quiet turn fails its item. Made cold by the hub's own
+ *   cache-expiry reading (its last request two hours back on a 5-minute
+ *   cache), it takes its parent's hand-off, and Jev is not asked.
  * - (c) A delegate commits and fails its item with a clean tree; made cold
  *   the same way, its parent's hand-off is refused naming delegate with
  *   `from` and its workspace, Jev not asked. delegate with that `from` gets
@@ -57,6 +59,10 @@ const STILL_OPEN = "Your work item is still open.";
 const WAITING = " is waiting until ";
 /** What finish_item answers a blocked finish (work-items.ts `finishItem`). */
 const BLOCKED = "The item failed as blocked";
+/** How finish_item refuses to end an item whose clone holds work in no commit (work-items.ts `leftoversIn`). */
+const LEFTOVERS = "Not finished: your clone holds work that is in no commit";
+/** How the hub fails an item after its third quiet turn (work-items.ts `QUIET_ERROR`). */
+const QUIET_ERROR = "ended three turns in a row without finish_item";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -110,7 +116,11 @@ const waiter = (request: Seen): Reply => {
   return bash(`echo ${WORKED}`);
 };
 
-/** A leaf that changes its clone with `make`, then fails its item as blocked. */
+/**
+ * A leaf that changes its clone with `make`, then fails its item as blocked;
+ * refused for what its clone holds outside its commits, it leaves that
+ * standing and answers in words, so its quiet turns fail the item.
+ */
 const leaf =
   (make: string, made: string) =>
   (request: Seen): Reply => {
@@ -119,6 +129,9 @@ const leaf =
     }
     if (request.all.includes(BLOCKED)) {
       return text("Stopped.");
+    }
+    if (request.all.includes(LEFTOVERS)) {
+      return text("Leaving the file where it is.");
     }
     return request.all.includes(made) ? blocked() : bash(make);
   };
@@ -329,7 +342,7 @@ const waitOutlivesReports = async (
   );
 };
 
-/** A leaf delegated, left as `made` says, its item failed as blocked, at rest, then cold. */
+/** A leaf delegated, left as `made` says, its item failed (blocked, or by its quiet turns), at rest, then cold. */
 const coldLeaf = async (
   fleet: KitFleet,
   parent: string,
@@ -356,10 +369,10 @@ const coldLeaf = async (
     180_000
   );
   await until(
-    `${tag}'s item failed as blocked`,
+    `${tag}'s item failed`,
     () => itemOf(fleet, started.workItemId)?.state,
     (state) => state === "failed",
-    120_000
+    180_000
   );
   await atRest(fleet, started.instanceId);
   makeCold(fleet, started.instanceId);
@@ -379,6 +392,18 @@ const dirtyTakesHandoff = async (
   src: string
 ): Promise<void> => {
   const dirty = await coldLeaf(fleet, parent, src, DIRTY, DIRTY_MADE);
+  const [ended] = fleet.query<{ error: string | null }>(
+    "SELECT error FROM work_items WHERE id = ?",
+    dirty.workItemId
+  );
+  const refused = fleet.seen.some(
+    (one) => one.all.includes(DIRTY) && one.all.includes(LEFTOVERS)
+  );
+  check(
+    "(b) finish_item refuses a blocked end while the file stands in no commit, and the third quiet turn fails the item",
+    refused && ended?.error?.includes(QUIET_ERROR) === true,
+    `refused: ${refused}; error: ${ended?.error}`
+  );
   const asked = attachCalls(jev);
   const handed = await callAs(fleet, parent, "handoff", {
     target: dirty.instanceId,

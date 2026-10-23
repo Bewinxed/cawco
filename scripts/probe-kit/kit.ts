@@ -296,6 +296,13 @@ export interface Spec {
    */
   ownHome?: string;
   run: (kit: Kit) => Promise<void>;
+  /**
+   * Why the spec runs inside a workspace's boundary, when it does: it reads
+   * what the boundary gives a command (its proxy, its tool door). Outside
+   * every workspace such a spec is not run: the run says it runs in a
+   * workspace, with its command.
+   */
+  workspace?: string;
 }
 
 /** Set on the process run.ts starts for an {@link Spec.ownHome} spec: its scratch HOME. */
@@ -848,8 +855,8 @@ export class Run {
   /** Each failed assertion's line, said again over the run's last line (a report that quotes the run's tail keeps them). */
   readonly failed: string[] = [];
   notes = 0;
-  /** The specs not run here because they run on the host ({@link Spec.host}). */
-  readonly onHost: string[] = [];
+  /** The specs not run here, each with where it runs: on the host ({@link Spec.host}) or in a workspace ({@link Spec.workspace}). */
+  readonly notHere: string[] = [];
   /** Every capture this run that differs from its baseline, in run order. */
   readonly changed: Changed[] = [];
   private devServer: Promise<Served> | null = null;
@@ -976,10 +983,18 @@ export class Run {
 
   /** Runs one spec with its own pages and fleets, closed after it however it ends. */
   async spec(spec: Spec, approval: Approval | null): Promise<void> {
+    const command = spec.command ?? `bun scripts/probe-kit/run.ts ${spec.name}`;
     if (spec.host && process.env.CAWCO_WORKSPACE) {
-      this.onHost.push(spec.name);
+      this.notHere.push(`${spec.name} (on the host)`);
       console.log(
-        `HOST ${spec.name}: runs on the host, not in this workspace: ${spec.host}, and ${BOUNDARY_INSIDE}. Run it from a shell outside every workspace, on a checkout of this commit: ${spec.command ?? `bun scripts/probe-kit/run.ts ${spec.name}`}`
+        `HOST ${spec.name}: runs on the host, not in this workspace: ${spec.host}, and ${BOUNDARY_INSIDE}. Run it from a shell outside every workspace, on a checkout of this commit: ${command}`
+      );
+      return;
+    }
+    if (spec.workspace && !process.env.CAWCO_WORKSPACE) {
+      this.notHere.push(`${spec.name} (in a workspace)`);
+      console.log(
+        `WORKSPACE ${spec.name}: runs inside a workspace's boundary, not here: ${spec.workspace}. Run it from a workspace's shell, on a checkout of this commit: ${command}`
       );
       return;
     }

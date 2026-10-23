@@ -61,7 +61,7 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid, signalGroup } from "../../../packages/core/src/signal";
 import { SOCAT_BACKLOG } from "../../../packages/core/src/socat";
 import { until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import { type Kit, ROOT, type Spec } from "../kit";
 
 type Env = Record<string, string | undefined>;
 
@@ -103,10 +103,13 @@ const freePort = async (): Promise<number> => {
 /** `git ls-remote <url> HEAD`'s one line. */
 const COMMIT_HEAD = /^[0-9a-f]{40}\tHEAD$/;
 
+/** This checkout's CLI: `--record` is this tree's, which the machine's installed `cawco` may predate. */
+const CLI = join(ROOT, "packages/cli/src/cli.ts");
+
 /** The hub's record `cawco tool <name> --record` answers (core tool-answer.ts), parsed. */
 const tool = async <T>(name: string, input: object): Promise<T> =>
   JSON.parse(
-    await Bun.$`cawco tool ${name} --record ${JSON.stringify(input)}`.text()
+    await Bun.$`${process.execPath} ${CLI} tool ${name} --record ${JSON.stringify(input)}`.text()
   ) as T;
 
 /** `argv` run with `env`: its exit code, stdout and stderr. */
@@ -650,6 +653,7 @@ const deniedLeg = async (kit: Kit, env: Env, srtUrl: URL | undefined) => {
 };
 
 const run = async (kit: Kit) => {
+  // A workspace's boundary on another platform has no srt proxy to read.
   if (!(process.platform === "linux" && process.env.SANDBOX_RUNTIME === "1")) {
     kit.check(
       "runs inside a Linux workspace's boundary, whose srt proxy it reads",
@@ -692,5 +696,10 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "boundary-proxy", run };
+const spec: Spec = {
+  name: "boundary-proxy",
+  workspace:
+    "it reads the srt proxy and the tool door a Linux workspace's boundary gives a command",
+  run,
+};
 export default spec;

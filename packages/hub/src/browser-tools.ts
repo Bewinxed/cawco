@@ -29,8 +29,8 @@ export type BrowserAskAnswer =
   | { outcome: "handed_back"; origin: string | null }
   | { outcome: "declined"; words: string };
 
-/** What the person did with the browser, in words. */
-const browserAnsweredWords = (answer: BrowserAskAnswer): string =>
+/** What the person did with the browser, in words: what the asking agent reads. */
+export const browserAnsweredWords = (answer: BrowserAskAnswer): string =>
   answer.outcome === "declined"
     ? `They declined: ${answer.words}`
     : `They handed the browser back${answer.origin ? `, on ${answer.origin}` : "; it did not say which origin it was on"}. Go on in your browser tool.`;
