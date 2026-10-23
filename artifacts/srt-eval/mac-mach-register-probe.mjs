@@ -6,6 +6,7 @@
 //   node mac-mach-register-probe.mjs SETTINGS COMMAND
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+// biome-ignore lint/correctness/noUndeclaredDependencies: run on a Mac beside an srt install, never from this repository's dependencies
 import { SandboxManager } from "@anthropic-ai/sandbox-runtime";
 
 const [settings, command] = process.argv.slice(2);

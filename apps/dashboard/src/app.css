@@ -397,6 +397,8 @@
     &[data-wrap="pretty"] :is(p, li) {
       text-wrap-style: pretty;
     }
+    /* biome-ignore-start lint/style/noDescendingSpecificity: the more specific
+       gaps above are first on purpose, and win over these zero margins. */
     & p,
     & ul,
     & ol,
@@ -410,6 +412,7 @@
     & ol {
       padding-inline-start: var(--space-5);
     }
+    /* biome-ignore-end lint/style/noDescendingSpecificity: the gaps above. */
     & :not(pre) > code {
       display: inline-block;
       max-inline-size: 100%;
@@ -488,6 +491,8 @@
   [data-slot="well"] [data-slot="msg"] {
     max-inline-size: none;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: a code block's own code
+     (`.prose > pre code`) keeps no background over this one, as it should. */
   [data-slot="well"] [data-slot="msg"] code {
     background: var(--surface-raised);
   }

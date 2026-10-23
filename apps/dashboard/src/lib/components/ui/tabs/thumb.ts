@@ -19,9 +19,9 @@ export const segmentedVariants = tv({
     group:
       "group/segmented relative inline-flex items-center gap-space-row rounded-md bg-surface-recess-deep p-c-segmented-pad",
     thumb:
-      "loops pointer-events-none absolute start-0 top-0 origin-top-left rounded-well bg-surface-lift opacity-0 shadow-raised motion-safe:group-data-pending/segmented:animate-breath",
+      "pointer-events-none absolute start-0 top-0 origin-top-left rounded-well bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
     segment:
-      "mark-line relative inline-flex h-c-btn-h-sm items-center justify-center gap-c-segment-gap whitespace-nowrap rounded-well px-c-segment-pad-x py-0 font-body font-medium text-ink-muted text-size-label leading-none transition-control data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
+      "relative inline-flex h-c-btn-h-sm items-center justify-center gap-c-segment-gap rounded-well px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },
 });
 

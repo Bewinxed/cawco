@@ -17,7 +17,7 @@ export const iconTileVariants = tv({
   base: "inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised shadow-tile transition-[background-color,color] duration-(--dur-pop) ease-out data-ink:bg-ink-solid data-ink:text-on-ink data-ink:shadow-none [&_svg]:flex-none",
   variants: {
     empty: {
-      true: "border border-neutral-8 border-dashed bg-transparent shadow-none",
+      true: "border border-dashed border-neutral-8 bg-transparent shadow-none",
     },
   },
 });

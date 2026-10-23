@@ -11,9 +11,9 @@ import { tv } from "#lib/utils.js";
  */
 export const sheetHeadVariants = tv({
   slots: {
-    head: "in-data-[slot=drawer-content]:sheet-seam flex flex-none items-center justify-between gap-space-2 border-b border-b-transparent pb-space-3",
-    title: "min-w-0 text-balance text-ink-strong text-title",
+    head: "flex flex-none items-center justify-between gap-space-2 border-b border-b-transparent pb-space-3 in-data-[slot=drawer-content]:sheet-seam",
+    title: "min-w-0 text-title text-balance text-ink-strong",
     close:
-      "touch-hit inline-flex size-7 flex-none items-center justify-center rounded-sm border border-transparent bg-transparent text-ink-muted transition-control [--hit-edge:1px] hover:bg-surface-hover hover:text-ink-strong [&_svg]:size-icon-md",
+      "touch-hit inline-flex size-7 flex-none items-center justify-center rounded-sm border border-transparent bg-transparent text-ink-muted [--hit-edge:1px] transition-control hover:bg-surface-hover hover:text-ink-strong [&_svg]:size-icon-md",
   },
 });

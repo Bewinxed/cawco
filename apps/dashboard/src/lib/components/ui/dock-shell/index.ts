@@ -10,5 +10,5 @@ import { tv } from "#lib/utils.js";
  * and its row are its caller's.
  */
 export const dockShellVariants = tv({
-  base: "rounded-lg border border-border-control bg-material-panel reduced-transparency:bg-surface-raised shadow-tile backdrop-blur-(--material-blur) backdrop-saturate-(--material-saturate) reduced-transparency:backdrop-filter-none",
+  base: "reduced-transparency:backdrop-filter-none rounded-lg border border-border-control bg-material-panel shadow-tile backdrop-blur-(--material-blur) backdrop-saturate-(--material-saturate) reduced-transparency:bg-surface-raised",
 });

@@ -554,7 +554,7 @@ export class FleetMcp {
 
   #refresh(row: OAuthRow): Promise<OAuthRow> {
     const running = this.#refreshing.get(row.name);
-    if (running) {
+    if (running !== undefined) {
       return running;
     }
     const refreshing = this.#refreshToken(row).finally(() =>

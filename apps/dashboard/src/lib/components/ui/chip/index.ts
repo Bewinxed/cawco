@@ -70,16 +70,16 @@ import { tv } from "#lib/utils.js";
  * edge", the same at rest, under the pointer and sunk).
  */
 export const chipVariants = tv({
-  base: "mark-line type-label inline-flex items-center rounded-sm text-ink-strong",
+  base: "inline-flex items-center rounded-sm text-ink-strong type-label mark-line",
   variants: {
     variant: {
       option:
-        "group/option touch-hit hit-edge-hair min-h-c-btn-h-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-3 py-space-1 text-start enabled:not-aria-pressed:not-aria-checked:not-data-chosen:hover:bg-surface-hover aria-checked:border-brand-solid aria-checked:bg-surface-recess aria-pressed:border-brand-solid aria-pressed:bg-surface-recess data-chosen:border-brand-solid data-chosen:bg-surface-recess motion-safe:transition-[border-color,background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out",
-      tray: "touch-hit touch-callout-none before:bg-(color:--tray-chip-fill) pointer-events-auto relative isolate h-c-tray-chip touch-manipulation select-none gap-c-pill-gap border-0 bg-transparent px-space-2 transition-[color] duration-(--dur-control) ease-out [--tray-chip-fill:var(--surface-raised)] before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:shadow-tile before:transition-[background-color] before:duration-(--dur-control) before:ease-out motion-safe:transition-[color,transform] can-hover:hover:[--tray-chip-fill:var(--surface-hover)] motion-safe:active:[transform:scale(var(--press-scale))] *:[svg]:size-icon-md *:[svg]:flex-none",
+        "group/option touch-hit min-h-c-btn-h-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-3 py-space-1 text-start hit-edge-hair enabled:not-aria-pressed:not-aria-checked:not-data-chosen:hover:bg-surface-hover aria-checked:border-brand-solid aria-checked:bg-surface-recess aria-pressed:border-brand-solid aria-pressed:bg-surface-recess data-chosen:border-brand-solid data-chosen:bg-surface-recess motion-safe:transition-[border-color,background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out",
+      tray: "pointer-events-auto touch-hit relative isolate h-c-tray-chip touch-manipulation gap-c-pill-gap border-0 bg-transparent px-space-2 transition-[color] duration-(--dur-control) ease-out select-none [--tray-chip-fill:var(--surface-raised)] touch-callout-none before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-(color:--tray-chip-fill) before:shadow-tile before:transition-[background-color] before:duration-(--dur-control) before:ease-out motion-safe:transition-[color,transform] motion-safe:active:[transform:scale(var(--press-scale))] can-hover:hover:[--tray-chip-fill:var(--surface-hover)] *:[svg]:size-icon-md *:[svg]:flex-none",
       inline:
-        "inset-ring inset-ring-border-hairline -my-c-inline-chip-pad max-w-full gap-space-1 whitespace-nowrap rounded-[calc(var(--radius-xs)+var(--c-inline-chip-pad))] bg-surface-recess py-c-inline-chip-pad ps-c-inline-chip-pad pe-space-2 align-baseline leading-c-inline-chip-line can-hover:enabled:hover:bg-surface-hover *:data-[slot=label]:min-w-0 *:data-[slot=label]:max-w-c-inline-chip-max-w *:data-[slot=label]:self-baseline *:data-[slot=label]:overflow-clip *:data-[slot=label]:text-ellipsis motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:enabled:active:[transform:scale(var(--press-scale))] *:[svg]:size-icon-md *:[svg]:flex-none",
+        "-my-c-inline-chip-pad max-w-full gap-space-1 rounded-[calc(var(--radius-xs)+var(--c-inline-chip-pad))] bg-surface-recess py-c-inline-chip-pad ps-c-inline-chip-pad pe-space-2 align-baseline leading-c-inline-chip-line whitespace-nowrap inset-ring inset-ring-border-hairline *:data-[slot=label]:max-w-c-inline-chip-max-w *:data-[slot=label]:min-w-0 *:data-[slot=label]:self-baseline *:data-[slot=label]:overflow-clip *:data-[slot=label]:text-ellipsis motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:enabled:active:[transform:scale(var(--press-scale))] can-hover:enabled:hover:bg-surface-hover *:[svg]:size-icon-md *:[svg]:flex-none",
       setting:
-        "touch-hit hit-edge-hair h-c-btn-h-sm max-w-full gap-space-2 whitespace-nowrap border border-border-control variant-static:border-border-hairline bg-surface-raised variant-static:bg-surface-recess px-space-2 leading-none transition-control can-hover:enabled:not-variant-static:hover:bg-surface-hover aria-disabled:opacity-50 *:data-[slot=chevron]:size-icon-sm **:data-[slot=chip-label]:min-w-0 **:data-[slot=chip-label]:overflow-hidden **:data-[slot=chip-label]:text-ellipsis *:data-[slot=chevron]:text-ink-subtle motion-safe:transition-control-press motion-safe:enabled:not-aria-busy:pressed:[transform:scale(var(--press-scale))] *:[svg]:not-data-[slot=chevron]:size-icon-md *:[svg]:flex-none",
+        "touch-hit h-c-btn-h-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-2 leading-none whitespace-nowrap hit-edge-hair transition-control aria-disabled:opacity-50 *:data-[slot=chevron]:size-icon-sm *:data-[slot=chevron]:text-ink-subtle **:data-[slot=chip-label]:min-w-0 **:data-[slot=chip-label]:overflow-hidden **:data-[slot=chip-label]:text-ellipsis motion-safe:transition-control-press can-hover:enabled:not-variant-static:hover:bg-surface-hover motion-safe:enabled:not-aria-busy:pressed:[transform:scale(var(--press-scale))] variant-static:border-border-hairline variant-static:bg-surface-recess *:[svg]:flex-none *:[svg]:not-data-[slot=chevron]:size-icon-md",
     },
     size: {
       regular: "",
@@ -100,7 +100,7 @@ export const chipVariants = tv({
       variant: "setting",
       tone: "grant",
       class:
-        "border-status-attn-ink variant-static:border-status-attn-ink bg-status-attn-bg variant-static:bg-status-attn-bg text-status-attn-ink can-hover:enabled:not-variant-static:hover:bg-status-attn-bg *:data-[slot=chevron]:text-status-attn-ink",
+        "border-status-attn-ink bg-status-attn-bg text-status-attn-ink *:data-[slot=chevron]:text-status-attn-ink can-hover:enabled:not-variant-static:hover:bg-status-attn-bg variant-static:border-status-attn-ink variant-static:bg-status-attn-bg",
     },
   ],
   defaultVariants: { variant: "option" },
@@ -113,7 +113,7 @@ export const chipVariants = tv({
  * instead of overlapping it.
  */
 export const chipsVariants = tv({
-  base: "hit-gap-x-space-2 hit-gap-y-space-2 coarse:hit-gap-y-space-4 flex flex-wrap gap-space-2 coarse:gap-y-space-4",
+  base: "flex flex-wrap gap-space-2 hit-gap-x-space-2 hit-gap-y-space-2 coarse:gap-y-space-4 coarse:hit-gap-y-space-4",
 });
 
 export type ChipVariant = VariantProps<typeof chipVariants>["variant"];

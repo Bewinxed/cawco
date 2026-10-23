@@ -1,0 +1,25 @@
+diff --git a/config/biome/core/biome.jsonc b/config/biome/core/biome.jsonc
+index d3d6546d3d9b4fb8f001e474801a1bc5a3f7eb4a..b0844f91e050e69f1397a887cf38593eaa984fbd 100644
+--- a/config/biome/core/biome.jsonc
++++ b/config/biome/core/biome.jsonc
+@@ -308,13 +308,14 @@
+       "nursery": {
+         // Typically we don't enable nursery rules anymore (https://github.com/haydenbleasel/ultracite/issues/457)
+         // but this was requested specifically by a lot of people.
+-        "useSortedClasses": {
++        // cawco: Biome 2.6 renamed useSortedClasses to useTailwindSortedClasses
++        // and moved its `functions` to the top-level `tailwind` settings
++        // (`mergeFunctions`, `variantFunctions`), which biome.jsonc sets.
++        // ultracite 8.0.2 is verified with Biome 2.5.15 and no release names
++        // 2.6 yet: drop this patch at the first one that does.
++        "useTailwindSortedClasses": {
+           "fix": "safe",
+-          "level": "error",
+-          "options": {
+-            // class and className attributes are sorted by default.
+-            "functions": ["clsx", "cva", "tw", "twMerge", "cn", "twJoin", "tv"]
+-          }
++          "level": "error"
+         }
+       },
+       "performance": {

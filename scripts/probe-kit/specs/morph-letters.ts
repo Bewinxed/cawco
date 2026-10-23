@@ -34,7 +34,13 @@ const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
 const MID = 0.4;
 
 /** Each case: the words it shows, then each step, the last landing mid-step when `mid`. */
-const CASES = [
+interface Case {
+  fade?: boolean;
+  mid?: boolean;
+  name: string;
+  steps: string[];
+}
+const CASES: Case[] = [
   { name: "a figure rolls", steps: ["3m ago", "4m ago", "12m ago"] },
   { name: "a status changes", steps: ["Reading files", "Running 12 tools"] },
   {
@@ -174,7 +180,7 @@ const run = async (kit: Kit) => {
         `put in ${put.put.length} (${put.put.map((said) => JSON.stringify(said)).join(" ")}); again, staying: ${put.stayed.length}${faults.length ? `; ${faults.join("; ")}` : ""}`
       );
       // The next step lands on this one held mid-step, or once it has settled.
-      if (one.mid && rest[i + 1] !== undefined) {
+      if (one.mid && i + 1 < rest.length) {
         await clock.seek(MID);
       } else {
         await clock.seek(1);

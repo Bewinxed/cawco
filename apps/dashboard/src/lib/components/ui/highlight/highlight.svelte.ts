@@ -62,10 +62,10 @@ import { tv } from "#lib/utils.js";
 export const highlightVariants = tv({
   slots: {
     ghost:
-      "pointer-events-none absolute top-0 left-0 -z-1 hidden translate-x-(--hl-x) translate-y-(--hl-y) bg-surface-hover opacity-(--hl-show) [transition:--hl-show_var(--dur-control)_var(--ease-out)] hover-hover:block data-follow:block motion-safe:data-glide:[transition:--hl-x_var(--dur-ghost)_var(--ease-in-out),--hl-y_var(--dur-ghost)_var(--ease-in-out),width_var(--dur-ghost)_var(--ease-in-out),height_var(--dur-ghost)_var(--ease-in-out),--hl-show_var(--dur-control)_var(--ease-out)]",
+      "pointer-events-none absolute top-0 left-0 -z-1 hidden translate-x-(--hl-x) translate-y-(--hl-y) bg-surface-hover opacity-(--hl-show) [transition:--hl-show_var(--dur-control)_var(--ease-out)] data-follow:block motion-safe:data-glide:[transition:--hl-x_var(--dur-ghost)_var(--ease-in-out),--hl-y_var(--dur-ghost)_var(--ease-in-out),width_var(--dur-ghost)_var(--ease-in-out),height_var(--dur-ghost)_var(--ease-in-out),--hl-show_var(--dur-control)_var(--ease-out)] hover-hover:block",
     pill: "pointer-events-none absolute top-0 left-0 -z-1 translate-x-(--hl-x) translate-y-(--hl-y) bg-selected-bg opacity-(--hl-show) data-swap:[transition:--hl-show_var(--dur-fade)_var(--ease-out)] motion-safe:data-glide:not-data-swap:[transition:--hl-x_var(--dur-control)_var(--ease-drawer),--hl-y_var(--dur-control)_var(--ease-drawer),width_var(--dur-control)_var(--ease-drawer),height_var(--dur-control)_var(--ease-drawer)]",
     trail:
-      "pointer-events-none absolute top-0 left-0 -z-1 translate-x-(--hl-x) translate-y-(--hl-y) bg-selected-bg opacity-(--hl-show) data-fade:data-swap:[transition:--hl-show_var(--dur-fade)_var(--ease-out)] data-fade:[transition:--hl-show_var(--dur-control)_var(--ease-out)]",
+      "pointer-events-none absolute top-0 left-0 -z-1 translate-x-(--hl-x) translate-y-(--hl-y) bg-selected-bg opacity-(--hl-show) data-fade:[transition:--hl-show_var(--dur-control)_var(--ease-out)] data-fade:data-swap:[transition:--hl-show_var(--dur-fade)_var(--ease-out)]",
   },
   variants: {
     look: {

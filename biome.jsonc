@@ -44,6 +44,16 @@
       "!apps/dashboard/src/lib/tokens/theme.css",
     ],
   },
+  // The dashboard's Tailwind theme, utilities and variants, which the
+  // Tailwind rules read ("Biome reads the `@theme`, `@utility`, and
+  // `@custom-variant` rules in this file and in the files it imports",
+  // biomejs.dev/reference/configuration/#tailwind), and the class helpers
+  // and recipes the dashboard writes classes in.
+  "tailwind": {
+    "stylesheet": "./apps/dashboard/src/app.css",
+    "mergeFunctions": ["cn", "cx", "clsx", "twMerge", "twJoin", "classNames"],
+    "variantFunctions": ["tv", "cva"],
+  },
   // Biome lints; `bun fmt` formats (scripts/fmt.ts, .prettierrc). Each
   // language's formatter is off too: ultracite's preset turns them on one by one.
   "formatter": { "enabled": false },
@@ -56,7 +66,13 @@
   },
   "json": { "formatter": { "enabled": false } },
   "css": { "formatter": { "enabled": false } },
-  "html": { "formatter": { "enabled": false } },
+  // Svelte markup is linted, not only its scripts ("Since full support is
+  // still experimental, it must be enabled explicitly",
+  // biomejs.dev/internals/language-support).
+  "html": {
+    "experimentalFullSupportEnabled": true,
+    "formatter": { "enabled": false },
+  },
   // Both sorters can change what the code does: JS object key order is
   // observable through Object.keys/entries and JSON output, and a CSS
   // longhand moved after its logical shorthand (margin-left after
@@ -100,6 +116,37 @@
     },
   },
   "overrides": [
+    {
+      // The design system's colour rule over the dashboard's markup and
+      // scripts, moved from @shadcn/lint's no-raw-colors, which ran with no
+      // options: Biome's takes the same ("Disallow Tailwind CSS utility
+      // classes that use raw palette colors … It allows custom color names,
+      // `black`, `white`, `transparent`, `current`, and `inherit`",
+      // biomejs.dev/linter/rules/no-tailwind-raw-colors). The other design
+      // rules run in Golar (golar.config.ts, scripts/lint/design): Biome's
+      // nearest rules hold neither their options nor their reach.
+      "includes": ["apps/dashboard/src/**/*.svelte", "apps/dashboard/src/**/*.ts"],
+      "linter": {
+        "rules": {
+          "nursery": { "noTailwindRawColors": "error" },
+        },
+      },
+    },
+    {
+      // Biome 2.6.2's Tailwind class parser stops at the variant `delta--1:`
+      // (lib/tokens/variants.css, `data-delta="-1"`): "Expected a value but
+      // instead found '-'", a parse error that fails the file. No Tailwind
+      // rule reads these two until it parses them.
+      "includes": [
+        "apps/dashboard/src/lib/cawco/workspace/PaneDeck.svelte",
+        "apps/dashboard/src/lib/cawco/workspace/PaneLeaf.svelte",
+      ],
+      "linter": {
+        "rules": {
+          "nursery": { "noTailwindRawColors": "off" },
+        },
+      },
+    },
     {
       // The browser may hand the dashboard no storage (null on a window
       // WebKit no longer displays, a SecurityError where it is blocked):
@@ -216,6 +263,10 @@
       "includes": ["**/*.svelte"],
       "linter": {
         "rules": {
+          // Class order in markup stays the author's: Biome 2.6 sorts it
+          // once Svelte markup is read (html.experimentalFullSupportEnabled),
+          // which no check did before.
+          "nursery": { "useTailwindSortedClasses": "off" },
           "style": {
             "useFilenamingConvention": {
               "level": "error",
