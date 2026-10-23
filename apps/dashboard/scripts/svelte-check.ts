@@ -57,8 +57,7 @@ const tracked = (
   .filter(Boolean);
 const present = new Set(tracked);
 const dropped = tracked.filter(
-  (file) =>
-    file.endsWith(".svelte") && present.has(file.replace(SVELTE, ".ts"))
+  (file) => file.endsWith(".svelte") && present.has(file.replace(SVELTE, ".ts"))
 );
 if (dropped.length === 0) {
   console.log(

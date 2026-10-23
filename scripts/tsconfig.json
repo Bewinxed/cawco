@@ -8,7 +8,7 @@
     "types": ["bun"],
     "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"]
   },
-  "include": ["**/*.ts"],
+  "include": ["**/*.ts", "**/*.mts"],
   "exclude": ["probe-kit"],
   "references": [
     { "path": "../packages/agent" },

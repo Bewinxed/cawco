@@ -126,9 +126,7 @@ interface Project {
 const DASHBOARD_TOP = /^apps\/dashboard\/[^/]+$/;
 const SVELTE_PROJECT = `${DASHBOARD}/tsconfig.json`;
 const projects: Project[] = files
-  .filter(
-    (path) => TSCONFIG.test(path) && !SHARED.has(path)
-  )
+  .filter((path) => TSCONFIG.test(path) && !SHARED.has(path))
   .map((config) => ({
     config,
     dir: config === SVELTE_PROJECT ? `${DASHBOARD}/src` : dirname(config),
