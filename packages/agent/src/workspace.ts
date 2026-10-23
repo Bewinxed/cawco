@@ -107,7 +107,11 @@ import {
   withoutCredential,
 } from "./move";
 import { noRepositoryAt, straysIn } from "./stand-ins";
-import { runWorkflowCommand } from "./workflow-command";
+import {
+  ownConfigChanges,
+  ownConfigWords,
+  runWorkflowCommand,
+} from "./workflow-command";
 import { refuseShortOfWorkspace } from "./workspace-needs";
 import { cloneHolding } from "./workspace-records";
 
@@ -855,7 +859,10 @@ export const workspaceBundle = async (
  * again. git-lfs smudges nothing on the host, where a `.lfsconfig` of the
  * commit could point it anywhere with the owner's credentials: a commit that
  * marks files for LFS has them pulled inside the boundary, where its
- * checkout smudged them before.
+ * checkout smudged them before. A commit whose own commits change harness
+ * project config (workflow-command.ts `ownConfigChanges`) is never checked
+ * out: the host would write it into a worktree a session's harness loads
+ * outside any boundary.
  */
 export const workspaceAt = async (
   ref: unknown,
@@ -883,6 +890,12 @@ export const workspaceAt = async (
     }
   } finally {
     await rm(path, { force: true });
+  }
+  const own = await ownConfigChanges(workspace, [head]);
+  if (own.length > 0) {
+    throw new Error(
+      `workspace ${workspace.id} was not moved to ${head.slice(0, 9)}, the commit of workspace ${String(source)}: ${ownConfigWords(own)}`
+    );
   }
   const large =
     (await git(
