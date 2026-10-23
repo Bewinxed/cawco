@@ -234,7 +234,7 @@ import {
 } from "./tool-door";
 import { SYSTEM_PATH, workspaceNeeds } from "./workspace-needs";
 import { workspaceRecords } from "./workspace-records";
-import { denyPaths, GIT_MOVE, gitShim } from "./worktree-guard";
+import { GIT_MOVE, gitShim, shimPaths } from "./worktree-guard";
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
@@ -1079,7 +1079,7 @@ const writeGitShim = async (id: string, path: string): Promise<void> => {
     id,
     bin,
     await realpath(path),
-    await denyPaths({ id, path }, "boundary")
+    await shimPaths({ id, path })
   );
   await Promise.all([
     writeWhole(join(bin, "git"), shim.git, 0o755),
