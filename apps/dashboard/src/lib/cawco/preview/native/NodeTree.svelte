@@ -37,6 +37,12 @@
     picked?: boolean;
   } = $props();
 
+  /** One run of content the picture draws (a line of a text, an icon), and the element drawing it. */
+  interface Ink {
+    from: Element;
+    rect: DOMRect;
+  }
+
   interface Rect {
     bottom: number;
     left: number;
@@ -76,26 +82,39 @@
    * not the boxes holding them: a full-width title leaves room beside its
    * words), in the terms of a box at `at`; the tree's own tag left out.
    */
-  function glyphs(scope: Element, at: DOMRect): DOMRect[] {
+  function glyphs(scope: Element, at: DOMRect): Ink[] {
     const range = document.createRange();
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
-    const runs: DOMRect[] = [];
+    const runs: Ink[] = [];
+    const add = (from: Element, rect: DOMRect) => {
+      if (rect.width > 0 && rect.height > 0) {
+        runs.push({
+          from,
+          rect: new DOMRect(
+            rect.left - at.left,
+            rect.top - at.top,
+            rect.width,
+            rect.height
+          ),
+        });
+      }
+    };
     for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-      if (!text.textContent?.trim() || layer?.contains(text)) {
+      if (
+        !(text.textContent?.trim() && text.parentElement) ||
+        layer?.contains(text)
+      ) {
         continue;
       }
       range.selectNodeContents(text);
       for (const line of range.getClientRects()) {
-        if (line.width > 0 && line.height > 0) {
-          runs.push(
-            new DOMRect(
-              line.left - at.left,
-              line.top - at.top,
-              line.width,
-              line.height
-            )
-          );
-        }
+        add(text.parentElement, line);
+      }
+    }
+    // Icons are content as words are: a glyph drawn, not a box.
+    for (const icon of scope.querySelectorAll("svg, img, [role='img']")) {
+      if (!(layer?.contains(icon) || icon.parentElement?.closest("svg"))) {
+        add(icon, icon.getBoundingClientRect());
       }
     }
     return runs;
@@ -103,9 +122,10 @@
 
   /**
    * The tag's place for box `box`, clamped inside the picture (as DevTools
-   * keeps its tooltip inside the viewport): the first that covers no glyph
-   * and stands nearer this box than any other, outside it where it can be
-   * (above, below, beside), else in one of its own corners.
+   * keeps its tooltip inside the viewport), by rank() below: off the node's
+   * own content, off all other content, nearer this box than any other,
+   * outside it where it can be (above, below, beside), else in one of its
+   * own corners.
    */
   function place(box: Box) {
     if (!(tag && layer)) {
@@ -175,22 +195,37 @@
     ].map(([x, y]) => at(clamp(x, room.width - w), clamp(y, room.height - h)));
     // A place covers no glyph, and stands nearer its own box than any other
     // box (it is read as that box's); off the box itself is better still.
+    // Ranked, first criterion first: (1) never over the hovered node's own
+    // content (its words, its icons); (2) never over any other content;
+    // (3) nearer its own box than any other; (4) outside its box. With no
+    // place meeting (1) and (2), the one meeting (1) that covers least.
+    const covered = (candidate: Rect, mine: boolean) =>
+      words
+        .filter((ink) => (self?.contains(ink.from) ?? false) === mine)
+        .reduce((sum, ink) => {
+          const r = ink.rect;
+          const across =
+            Math.min(candidate.right, r.right) -
+            Math.max(candidate.left, r.left);
+          const down =
+            Math.min(candidate.bottom, r.bottom) -
+            Math.max(candidate.top, r.top);
+          return sum + (across > 0 && down > 0 ? across * down : 0);
+        }, 0);
     const rank = (candidate: Rect) => {
-      const text = words.some((word) => meets(candidate, word));
+      const ownInk = covered(candidate, true);
+      const otherInk = covered(candidate, false);
       const near = others.every(
         (other) => apart(candidate, own) < apart(candidate, other)
       );
       const inside = meets(candidate, own);
-      if (!text && near && !inside) {
-        return 0;
+      if (ownInk > 0) {
+        return 1e9 + ownInk + otherInk;
       }
-      if (!text && near) {
-        return 1;
+      if (otherInk > 0) {
+        return 1e6 + otherInk;
       }
-      if (!text) {
-        return 2;
-      }
-      return 3;
+      return (near ? 0 : 2) + (inside ? 1 : 0);
     };
     let best = tries.at(0) ?? at(0, 0);
     let bestRank = Number.POSITIVE_INFINITY;
