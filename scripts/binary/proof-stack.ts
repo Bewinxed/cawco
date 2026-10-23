@@ -61,12 +61,89 @@ async function command(args: string[]) {
   }
   return text.trim();
 }
+/** What a readiness wait waits on: whether it has exited, and its stderr's tail. */
+interface Watched {
+  /** The exit code (or signal) once it has exited; undefined while it runs. */
+  exited: () => Promise<string | undefined>;
+  name: string;
+  stderrTail: () => Promise<string>;
+}
+async function tail(path: string) {
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
+    return "";
+  }
+  return (await file.text()).trimEnd().split("\n").slice(-20).join("\n");
+}
+function watchChild(name: string, verb: string, child: Bun.Subprocess) {
+  return {
+    name,
+    exited: () => {
+      if (child.exitCode !== null) {
+        return Promise.resolve(`code ${child.exitCode}`);
+      }
+      return Promise.resolve(
+        child.signalCode ? `signal ${child.signalCode}` : undefined
+      );
+    },
+    stderrTail: () => tail(join(home, `${verb}-${child.pid}.err.log`)),
+  } satisfies Watched;
+}
+const dashboardUnit = "cawco-binary-dashboard.service";
+const watchUnit: Watched = {
+  name: dashboardUnit,
+  exited: async () => {
+    const state = await command([
+      "systemctl",
+      "show",
+      "-p",
+      "ActiveState",
+      "--value",
+      dashboardUnit,
+    ]);
+    if (state !== "failed" && state !== "inactive") {
+      return;
+    }
+    const status = await command([
+      "systemctl",
+      "show",
+      "-p",
+      "ExecMainStatus",
+      "--value",
+      dashboardUnit,
+    ]);
+    return `${state}, ExecMainStatus ${status}`;
+  },
+  stderrTail: () =>
+    command([
+      "journalctl",
+      "-u",
+      dashboardUnit,
+      "-n",
+      "20",
+      "-o",
+      "cat",
+      "--no-pager",
+    ]).catch((error: unknown) => String(error)),
+};
+/** The safety deadline: a busy machine is slow, never wrong (nightly e83078b6d). */
+const READY_DEADLINE_MS = 120_000;
+/**
+ * Polls `url` every 100 ms until it answers OK with `predicate` true, the
+ * process it waits on exits, or the safety deadline passes.
+ */
 async function wait(
   url: string,
-  predicate: (s: string) => boolean = () => true,
-  ms = 10_000
+  on: Watched,
+  predicate: (s: string) => boolean = () => true
 ) {
-  for (const end = Date.now() + ms; Date.now() < end;) {
+  for (const end = Date.now() + READY_DEADLINE_MS; Date.now() < end;) {
+    const exited = await on.exited();
+    if (exited !== undefined) {
+      throw new Error(
+        `${on.name} exited (${exited}) before ${url} was ready; its last stderr lines:\n${await on.stderrTail()}`
+      );
+    }
     try {
       const res = await fetch(url);
       const body = await res.text();
@@ -78,7 +155,9 @@ async function wait(
     }
     await Bun.sleep(100);
   }
-  throw new Error(`Did not become ready: ${url}`);
+  throw new Error(
+    `Did not become ready within 120 s: ${url}; ${on.name}'s last stderr lines:\n${await on.stderrTail()}`
+  );
 }
 function dashboard() {
   const child = Bun.spawn([process.execPath, "dashboard"], {
@@ -169,8 +248,8 @@ try {
   mkdirSync(home, { recursive: true });
   await exec("proof-fixture");
   spawn("sessiond");
-  spawn("hub");
-  console.log(`health ${await wait("http://127.0.0.1:43456/health")}`);
+  const hub = watchChild("the hub", "hub", spawn("hub"));
+  console.log(`health ${await wait("http://127.0.0.1:43456/health", hub)}`);
   // The machine joined this hub as an install joins it (cli joined-hub.ts,
   // binary-install's own step): `up --hub` names a hub for its run and saves
   // none (discover.ts `settle`), so without this the agent is not the
@@ -180,8 +259,10 @@ try {
   await keepJoinedHub("http://127.0.0.1:43456");
   const captureWs = await capture();
   let agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
-  const registered = await wait("http://127.0.0.1:43456/api/agents", (s) =>
-    JSON.parse(s).some((a: { status: string }) => a.status === "online")
+  const registered = await wait(
+    "http://127.0.0.1:43456/api/agents",
+    watchChild("the agent", "up", agent),
+    (s) => JSON.parse(s).some((a: { status: string }) => a.status === "online")
   );
   writeFileSync(join(home, "registered.json"), registered);
   console.log(`machine registered with capabilities ${registered}`);
@@ -215,6 +296,7 @@ try {
   });
   const done = await wait(
     `http://127.0.0.1:43456/api/workflow-runs/${launched.runId}`,
+    watchChild("the agent", "up", agent),
     (text) => JSON.parse(text).status === "done"
   );
   if (JSON.parse(done).result?.name !== "standalone") {
@@ -243,8 +325,10 @@ try {
     }
   }
   let worker = systemd ? undefined : dashboard();
-  const page = await wait("http://127.0.0.1:43458/", (s) =>
-    s.includes("_app/immutable")
+  const page = await wait(
+    "http://127.0.0.1:43458/",
+    worker ? watchChild("the dashboard", "dashboard", worker) : watchUnit,
+    (s) => s.includes("_app/immutable")
   );
   console.log(`embedded dashboard served ${page.length} characters`);
   const ws = await openDashboard();
@@ -299,11 +383,12 @@ try {
   agent.kill("SIGTERM");
   await agent.exited;
   agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
-  await wait("http://127.0.0.1:43456/api/agents", (s) =>
+  const restarted = watchChild("the agent", "up", agent);
+  await wait("http://127.0.0.1:43456/api/agents", restarted, (s) =>
     JSON.parse(s).some((a: { status: string }) => a.status === "online")
   );
   await exec("proof-custody-check");
-  await wait("http://127.0.0.1:43456/api/accounts", (s) =>
+  await wait("http://127.0.0.1:43456/api/accounts", restarted, (s) =>
     (
       JSON.parse(s) as { signins: { accountId: string; state: string }[] }
     ).signins.some(
@@ -329,13 +414,10 @@ try {
     })
   );
   // A first start materializes the harness's runtime: as long as stage 2 gives one.
-  await wait(
-    "http://127.0.0.1:43456/api/instances",
-    (s) =>
-      (JSON.parse(s) as { id: string; status: string }[]).some(
-        (row) => row.id === sessionId && row.status === "running"
-      ),
-    60_000
+  await wait("http://127.0.0.1:43456/api/instances", restarted, (s) =>
+    (JSON.parse(s) as { id: string; status: string }[]).some(
+      (row) => row.id === sessionId && row.status === "running"
+    )
   );
   captureWs.send(JSON.stringify({ type: "stream.subscribe", sessionId }));
   captureWs.send(
