@@ -430,7 +430,6 @@ const openThroughDoor = async (
  * browser tool opened a page: Files lists its browser, a press on it opens
  * the browser in the panel, and the head's Take over draws its frames.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one plain session's leg, in the order a person takes it, a check at each step
 async function plainLeg(
   kit: Kit,
   fleet: KitFleet,
