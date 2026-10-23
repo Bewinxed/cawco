@@ -8,11 +8,29 @@
    * the bare word needs its admin's search domain first, and says so.
    */
   import { Button } from "#lib/components/ui/button/index.js";
-  import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
-  import { IconExternal, IconLock } from "#lib/icons.js";
+  import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
+  import { IconCopy, IconExternal, IconLock } from "#lib/icons.js";
   import type { AddressTray } from "./tray.svelte";
 
   let { tray }: { tray: AddressTray } = $props();
+
+  /**
+   * Copy is the same kit button as Open beside it (size, variant, its icon
+   * slot and label), so the two stand on one box and one baseline; it says
+   * Copied on the row it copied.
+   */
+  const clipboard = new UseClipboard();
+  let copied = $state<string | null>(null);
+  function copy(address: string): void {
+    copied = address;
+    clipboard.copy(address);
+  }
+  const copyLabel = (address: string): string => {
+    if (copied !== address || clipboard.status === undefined) {
+      return "Copy";
+    }
+    return clipboard.status === "success" ? "Copied" : "Copy failed";
+  };
 
   const rows = $derived([
     {
@@ -59,6 +77,7 @@
       {:else}
         <span class="flex flex-none items-center gap-space-1">
           <Button
+            data-address-open
             href={row.address}
             icon={IconExternal}
             label="Open"
@@ -68,9 +87,14 @@
             variant="ghost"
           />
           {#if tray.overHttps}
-            <CopyButton size="xs" text={row.address} variant="ghost"
-              >Copy</CopyButton
-            >
+            <Button
+              data-address-copy
+              icon={IconCopy}
+              label={copyLabel(row.address)}
+              onclick={() => copy(row.address)}
+              size="xs"
+              variant="ghost"
+            />
           {/if}
         </span>
       {/if}
