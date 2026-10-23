@@ -2,14 +2,14 @@
   import { commentWords as said, artifactWords as words } from "@cawco/core";
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; DESIGN.md,
-   * A thread beside its pin). Its head: the pin's pill, only while the
-   * page's own pill is out of view (`marked` says it stands beside it), what
-   * it stands on in two lines at most (a press scrolls the page to it and
-   * lights its element), then Resolve or Reopen, Delete comment, ⋯ (Copy
-   * link; Pin it somewhere else while its element is gone) and Close, each
-   * the `sm` ghost, standing on the name's first line. Under it, in meta, the
-   * element's nearest parent ("on Routine form"; none for the whole page);
-   * then the line saying its element is gone, or that it stands resolved,
+   * A thread beside its pin). Its head's first row: the pin's pill, only
+   * while the page's own pill is out of view (`marked` says it stands
+   * beside it), the element's nearest parent in meta ("on Routine form";
+   * none for the whole page), and at its end Resolve or Reopen, Delete
+   * comment, ⋯ (Copy link; Pin it somewhere else while its element is gone)
+   * and Close, each the `sm` ghost; under it what it stands on, two lines at
+   * most across the card's width (a press scrolls the page to it and lights
+   * its element). Then the line saying its element is gone, or that it stands resolved,
    * each with its way back; then, when its delivery reached no one or it
    * stands only on the page, "Not sent: why" with Try again (a comment goes
    * to the session by itself once written). Then the thread, the one part
@@ -342,87 +342,95 @@
   {/if}
 {/snippet}
 
-<!-- The pill while the page's is out of view, what it stands on in two
-     lines at most, and the actions, all standing on the name's first line:
-     each part padded to the `sm` control's height round one line. -->
+<!-- Its first row: the pill while the page's is out of view, the
+     element's nearest parent in meta ("on Routine form"; none for the whole
+     page), and the actions at its end. Under it what it stands on, two
+     lines at most, across the card's whole width. -->
 <header
   bind:this={head}
   data-slot="head"
-  class="flex shrink-0 items-start gap-space-2 coarse:gap-space-5 type-label"
-  style:--head-pad="calc((var(--c-btn-h-sm) - 1lh) / 2)"
+  class="flex shrink-0 flex-col gap-space-1"
 >
-  {#if !marked}
-    <span class="mark-cell py-(--head-pad)" data-slot="head-pill">
-      <PinMark
-        focused
-        gone={!!pin.movedAt}
-        number={pin.number}
-        state={markState(pin)}
-        tail="bottom-start"
+  <div
+    class="flex min-w-0 items-center gap-space-2 coarse:gap-space-5 mark-line"
+    data-slot="head-row"
+  >
+    {#if !marked}
+      <span class="mark-cell" data-slot="head-pill">
+        <PinMark
+          focused
+          gone={!!pin.movedAt}
+          number={pin.number}
+          state={markState(pin)}
+          tail="bottom-start"
+        />
+      </span>
+    {/if}
+    {#if parent}
+      <p
+        data-slot="chain"
+        class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
+        title={`on ${parent}`}
+      >
+        on {parent}
+      </p>
+    {/if}
+    <span
+      class="ms-auto flex flex-none items-center gap-space-2 coarse:gap-space-5"
+      data-box
+    >
+      {#if pin.resolvedAt}
+        <Button
+          aria-label={said.reopen}
+          icon={IconReopen}
+          onclick={() => onresolve(false)}
+          size="icon-sm"
+          title={said.reopen}
+          variant="ghost"
+        />
+      {:else}
+        <Button
+          aria-label={said.resolve}
+          icon={IconSuccess}
+          onclick={() => onresolve(true)}
+          size="icon-sm"
+          title={said.resolve}
+          variant="ghost"
+        />
+      {/if}
+      <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
+      <Button
+        aria-label={said.deleteComment}
+        data-slot="delete"
+        icon={IconTrash}
+        onclick={askDelete}
+        size="icon-sm"
+        title={said.deleteComment}
+        variant="ghost"
+      />
+      <span class="flex flex-none">
+        <RowMenu actions={moreActions} label={`comment ${pin.number}`} />
+      </span>
+      <Button
+        aria-label={said.close}
+        icon={IconClose}
+        onclick={onclose}
+        size="icon-sm"
+        title={said.close}
+        variant="ghost"
       />
     </span>
-  {/if}
+  </div>
   <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. -->
   <button
     data-slot="name"
-    class="flex-1 min-w-0 px-0 py-(--head-pad) border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+    class="min-w-0 px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
     onclick={onfind}
     title={name}
     type="button"
     ><span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span></button
   >
-  <span class="flex flex-none items-center gap-space-2 coarse:gap-space-5">
-    {#if pin.resolvedAt}
-      <Button
-        aria-label={said.reopen}
-        icon={IconReopen}
-        onclick={() => onresolve(false)}
-        size="icon-sm"
-        title={said.reopen}
-        variant="ghost"
-      />
-    {:else}
-      <Button
-        aria-label={said.resolve}
-        icon={IconSuccess}
-        onclick={() => onresolve(true)}
-        size="icon-sm"
-        title={said.resolve}
-        variant="ghost"
-      />
-    {/if}
-    <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
-    <Button
-      aria-label={said.deleteComment}
-      data-slot="delete"
-      icon={IconTrash}
-      onclick={askDelete}
-      size="icon-sm"
-      title={said.deleteComment}
-      variant="ghost"
-    />
-    <span class="flex flex-none">
-      <RowMenu actions={moreActions} label={`comment ${pin.number}`} />
-    </span>
-    <Button
-      aria-label={said.close}
-      icon={IconClose}
-      onclick={onclose}
-      size="icon-sm"
-      title={said.close}
-      variant="ghost"
-    />
-  </span>
 </header>
-{#if parent}
-  <p
-    data-slot="chain"
-    class="m-0 -mt-space-1 shrink-0 truncate text-ink-muted type-meta"
-    title={`on ${parent}`}
-  >
-    on {parent}
-  </p>
-{/if}
 {#if pin.movedAt}
   <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
   <div

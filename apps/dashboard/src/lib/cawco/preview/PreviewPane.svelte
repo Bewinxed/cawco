@@ -1588,7 +1588,23 @@
     roomW = node.clientWidth;
     roomH = node.clientHeight;
   });
-  const cardPin = $derived(pins.find((pin) => pin.id === openPin) ?? null);
+  /**
+   * The pin whose card is drawn: the open one, beside its pill once the
+   * page has said where that stands (`pinHeard`; at once as the foot sheet,
+   * or with no page to answer). While another pin's place is still on its
+   * way, the last card stays where it stood, so the swap is one frame: no
+   * frame without a card, none with the new card anywhere but its place.
+   */
+  let lastDrawn: string | null = null;
+  const drawnPin = $derived.by(() => {
+    if (!openPin) {
+      lastDrawn = null;
+    } else if (floatSheet || !connected || pinHeard === openPin) {
+      lastDrawn = openPin;
+    }
+    return lastDrawn;
+  });
+  const cardPin = $derived(pins.find((pin) => pin.id === drawnPin) ?? null);
   /** The open thread's element's nearest parent, as the page names its chain (`cawco:pin-chain`). */
   let cardParent = $state<{ id: string; name: string | null } | null>(null);
   let pinRoom = $state<HTMLDivElement>();
@@ -1940,11 +1956,13 @@
     }
     // A key or a press inside the page, which the host never hears: the page's last input is it.
     lastInput.current = via;
+    if (openPin !== id) {
+      // Its place is the page's to say; the card drawn now keeps its own until it does (`drawnPin`).
+      pinHeard = null;
+    }
     openPin = id;
     focusedPin = id;
     cardError = null;
-    pinAt = null;
-    pinHeard = null;
     cardParent = null;
     post({ type: "cawco:track-pin", id });
     // Brought into view in one step, not a glide: its card stands where its
@@ -1961,7 +1979,9 @@
     cardExit.at = swap ? "cut" : "fade";
     const id = openPin;
     openPin = null;
-    pinAt = null;
+    if (!swap) {
+      pinAt = null;
+    }
     pinHeard = null;
     cardError = null;
     replying = false;
@@ -4007,10 +4027,9 @@
         />
       </PinFloat>
     {/if}
-    <!-- A card beside its pill waits for the page to say where the pill
-         stands (`pinHeard`), unless no page answers; each pin's card is its
-         own, so another's never moves to it. -->
-    {#if cardPin && kit && replyDraft && (floatSheet || !connected || pinHeard === cardPin.id)}
+    <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
+         another's never moves to it. -->
+    {#if cardPin && kit && replyDraft}
       {@const Card = kit.PinCard}
       {#key cardPin.id}
         <PinFloat

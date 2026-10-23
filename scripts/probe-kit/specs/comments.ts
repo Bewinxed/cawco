@@ -3312,7 +3312,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
     };
   });
   on.kit.check(
-    "c: the thread's head holds Resolve, Delete comment, its ⋯ and Close on one row with the name; its foot is the chat composer, Attach and the Reply glyph",
+    "c: the thread's head holds Resolve, Delete comment, its ⋯ and Close on one row, the name under them; its foot is the chat composer, Attach and the Reply glyph",
     parts.named[0] === "Resolve" &&
       parts.named[1] === commentWords.deleteComment &&
       parts.named.at(-1) === "Close" &&
@@ -4763,6 +4763,8 @@ const switchRead = (frames: CardFrames, a: number, b: number) => {
     );
   });
   const both = frames.filter((frame) => of(frame, a) && of(frame, b)).length;
+  /** Frames with no card on the screen at all: the swap left a hole. */
+  const empty = frames.filter((frame) => frame.cards.length === 0).length;
   const aAfter =
     firstIndex < 0
       ? 0
@@ -4774,6 +4776,7 @@ const switchRead = (frames: CardFrames, a: number, b: number) => {
     strays: strays.length,
     both,
     aAfter,
+    empty,
     final: final?.laid ?? null,
     first: withB[0] ? (of(withB[0], b)?.laid ?? null) : null,
   };
@@ -4787,8 +4790,9 @@ const switchRead = (frames: CardFrames, a: number, b: number) => {
  * a phone: pin A's thread open, a press on pin B's pill, and every drawn
  * frame from the press until 900ms after read. B's card is laid out where
  * it stays from its first frame (its offsets never change, its box only
- * ever inside its last, the entrance's scale), and no frame draws it and
- * A's at once nor A's after it. Only cards on the screen count
+ * ever inside its last, the entrance's scale), no frame draws it and A's
+ * at once nor A's after it, and no frame stands without a card: A's holds
+ * its place until B's is known. Only cards on the screen count
  * (`checkVisibility`).
  */
 const switchChecks = async (
@@ -4861,9 +4865,10 @@ const switchChecks = async (
         )) as CardFrames;
         const read = switchRead(frames, made.number, made.second);
         on.kit.check(
-          `${tag}: pin B's card stands where it stays from its first frame (${read.withB} of ${read.frames} frames hold it, from ${read.firstAt}ms; ${read.strays} off its last place), never beside pin A's card (${read.both}) nor followed by it (${read.aAfter})`,
+          `${tag}: pin B's card stands where it stays from its first frame (${read.withB} of ${read.frames} frames hold it, from ${read.firstAt}ms; ${read.strays} off its last place), never beside pin A's card (${read.both}) nor followed by it (${read.aAfter}), and no frame without a card (${read.empty})`,
           read.withB > 0 &&
             read.strays === 0 &&
+            read.empty === 0 &&
             read.both === 0 &&
             read.aAfter === 0,
           JSON.stringify({
