@@ -9,7 +9,15 @@
  * outlives every sync this daemon runs.
  */
 
-import { chmod, readdir, realpath, rm, rmdir, stat } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  readdir,
+  realpath,
+  rm,
+  rmdir,
+  stat,
+} from "node:fs/promises";
 import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import type {
   CliInstall,
@@ -2558,6 +2566,10 @@ const syncHooks = async (
   report: Record<string, FleetItemState>
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes every enabled hook's script, registers the fleet's own in the user settings, then removes what a disabled/deleted/invalid hook used to have
 ): Promise<SyncedHooks> => {
+  // There before any hook is: a workspace's boundary binds it read only as
+  // it starts (core `fleetSyncedPaths`), and a dir that comes later is not
+  // in a boundary already running.
+  await mkdir(HOOKS_DIR, { recursive: true });
   const written: Record<string, ManagedHook> = {};
   const keep = (id: string): void => {
     if (managed[id]) {
