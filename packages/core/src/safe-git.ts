@@ -18,9 +18,11 @@
  *
  * A git call in a live workspace's clone also runs inside the workspace's
  * boundary, where a race on its config can only reach the workspace itself.
- * A workspace's clone is read with git on the host only once its boundary is
- * closed (agent workspace.ts `closeClone`), when nothing can write it any
- * more, and through a `.git` that is a folder, never a link.
+ * A workspace's clone is read or checked out with git on the host only while
+ * its boundary is closed (agent workspace.ts `closeClone`, and `workspaceAt`,
+ * which writes a commit's tracked files the policy denies the workspace
+ * itself), when nothing can write it, and through a `.git` that is a folder,
+ * never a link.
  */
 import { join } from "node:path";
 

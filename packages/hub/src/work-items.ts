@@ -4347,9 +4347,11 @@ export const createWorkItems = ({
    * and its commits past its base bundled inside the source's boundary
    * ({@link CONTROL_WORKSPACE_BUNDLE}), taken inside the new workspace's
    * own ({@link CONTROL_WORKSPACE_AT}), and its branch set there, still
-   * tracking the default branch. Every git step runs inside a boundary,
-   * as the landing gate's own transfer does. A move that fails archives the
-   * new workspace, unworked, and throws why.
+   * tracking the default branch. Every git step runs inside a boundary, as
+   * the landing gate's own transfer does, but the checkout of the commit's
+   * tracked files, which the agent runs on its host with the new
+   * workspace's boundary closed (agent workspace.ts `workspaceAt`). A move
+   * that fails archives the new workspace, unworked, and throws why.
    */
   const cutFrom = async (
     workspace: WorkspaceRow,

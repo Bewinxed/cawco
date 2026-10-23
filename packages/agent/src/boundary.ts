@@ -7084,6 +7084,33 @@ export const stopWorkspaceBoundary = (ref: WorkspaceRef): Promise<number[]> =>
   closedWhile(ref.id, () => stopNow(ref));
 
 /**
+ * `work` on this host with workspace `ref`'s boundary closed as
+ * {@link stopWorkspaceBoundary} closes it, in the same hold against starts
+ * ({@link closedWhile}): no process of the workspace runs while it does, and
+ * an ensure asked for meanwhile waits for it, then starts a boundary under
+ * the policy as before. On Linux it runs once the sandboxes are gone
+ * ({@link sandboxesGone}), so no mount namespace still holds a bind on what
+ * it writes; one still there after {@link STOP_TIMEOUT_MS} refuses it, and
+ * nothing is written. For what the policy denies the workspace itself and
+ * the host writes for it: the tracked files of a commit the hub checks out
+ * (workspace.ts `workspaceAt`).
+ */
+export const whileBoundaryClosed = <T>(
+  ref: WorkspaceRef,
+  work: () => Promise<T>
+): Promise<T> =>
+  closedWhile(ref.id, async () => {
+    const inners = await stopNow(ref);
+    if (process.platform === "linux" && !(await sandboxesGone(inners))) {
+      throw refusal(
+        ref.id,
+        `its sandbox was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped, so nothing was written into its clone on the host`
+      );
+    }
+    return await work();
+  });
+
+/**
  * Ends what still uses workspace `ref` from outside its boundary, as law
  * `live-workspace-judge-answers` counts it ({@link inUse}): every session
  * process a keeper holds in its clone ({@link attachedProcs}) and every

@@ -65,6 +65,7 @@ import {
   setProject,
   shellQuote,
   stopWorkspaceBoundary,
+  whileBoundaryClosed,
 } from "./boundary";
 import {
   carryFolder,
@@ -842,8 +843,19 @@ export const workspaceBundle = async (
  * {@link CONTROL_WORKSPACE_AT}: a gate workspace at another workspace's
  * commit. The bundle is written into its scratch dir as a new file (never
  * through one already there), then inside its boundary git fetches its base
- * and the bundle and checks the commit out, detached, with every untracked
- * file gone.
+ * and the bundle. The commit is checked out, detached, with every untracked
+ * file gone, by git on this host with the boundary closed
+ * ({@link whileBoundaryClosed}, {@link closedCloneGit}'s checks first), as a
+ * first cut checks out before its boundary exists: the policy denies the
+ * workspace every clone-side deny path (workspace-policy.ts `cloneDenies`),
+ * so a commit that tracks one the clone lacks, or holds another text of, is
+ * refused inside it ("unable to create file .mcp.json: Operation not
+ * permitted", Seatbelt's `(deny file-write* (subpath …))` on macOS; srt's
+ * read-only bind on Linux). The boundary the next command starts denies them
+ * again. git-lfs smudges nothing on the host, where a `.lfsconfig` of the
+ * commit could point it anywhere with the owner's credentials: a commit that
+ * marks files for LFS has them pulled inside the boundary, where its
+ * checkout smudged them before.
  */
 export const workspaceAt = async (
   ref: unknown,
@@ -869,11 +881,23 @@ export const workspaceAt = async (
       });
       await git(`git fetch --quiet "$TMPDIR"/${name} HEAD`);
     }
-    await git(
-      `git checkout --quiet --force --detach ${head} && git clean -ffdq`
-    );
   } finally {
     await rm(path, { force: true });
+  }
+  const large =
+    (await git(
+      `if git grep -q filter=lfs ${head} -- ':(glob)**/.gitattributes'; then echo lfs; fi`
+    )) === "lfs";
+  await whileBoundaryClosed(workspace, async () => {
+    const host = await closedCloneGit(workspace);
+    const env = { GIT_LFS_SKIP_SMUDGE: "1" };
+    await host(["checkout", "--quiet", "--force", "--detach", head], { env });
+    await host(["clean", "-ffdq"], { env });
+  });
+  // Running again, as the hub found it, for the gate's first command.
+  await ensureBoundary(workspace);
+  if (large) {
+    await git("git lfs pull");
   }
   console.info(
     `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}`
@@ -922,20 +946,26 @@ const NOTHING_HELD: Held = { ahead: 0, dirty: 0, stashes: 0 };
 
 /**
  * git on this host in workspace `workspace`'s clone, once its boundary is
- * closed ({@link closeClone}): nothing can write the clone any more, so its
- * config cannot change between the look below and the run (safe-git.ts).
+ * closed ({@link closeClone}, {@link workspaceAt}): nothing can write the
+ * clone meanwhile, so its config cannot change between the look below and
+ * the run (safe-git.ts).
  * Refused, nothing run, when its `.git` is no folder of its own (a link is
  * never followed: a delegate can point one at any folder it can name) or
  * when its git directory names another or its config holds a key past the
  * allowlist (`repositoryConfigProblem`). Answers git's stdout, trimmed, for
- * an argv, `input` on its stdin; an exit past `exits` throws its stderr.
+ * an argv, `input` on its stdin, `env` over the host's; an exit past
+ * `exits` throws its stderr.
  */
 const closedCloneGit = async (
   workspace: WorkspaceRef
 ): Promise<
   (
     args: readonly string[],
-    given?: { exits?: readonly number[]; input?: string }
+    given?: {
+      env?: Readonly<Record<string, string>>;
+      exits?: readonly number[];
+      input?: string;
+    }
   ) => Promise<string>
 > => {
   const dotGit = join(workspace.path, ".git");
@@ -951,13 +981,13 @@ const closedCloneGit = async (
       `Workspace ${workspace.id} was not archived: ${problem}, so nothing was deleted.`
     );
   }
-  return async (args, { exits = [0], input } = {}) => {
+  return async (args, { env = {}, exits = [0], input } = {}) => {
     const command =
       input === undefined
         ? Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args}`
         : Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args} < ${Buffer.from(input)}`;
     const ran = await command
-      .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
+      .env({ ...hostEnvironment(), ...env, ...SAFE_GIT_ENV })
       .quiet()
       .nothrow();
     if (!exits.includes(ran.exitCode)) {
