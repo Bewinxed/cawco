@@ -288,7 +288,8 @@ const respond = (request: Seen): Reply => {
   if (busyTurn.active && request.all.includes(BUSY_MARK)) {
     return busyReply(request);
   }
-  if (NOTICE.test(request.last)) {
+  // A delivery starting a turn is heard; one that joins at a tool's boundary leaves the tool's answer to be read below.
+  if (NOTICE.test(request.last) && !request.afterTool) {
     return text("Heard the comments.");
   }
   const routed = ROUTED.exec(request.all);
@@ -611,19 +612,24 @@ const readFirstChecks = async (
   const keptAt = Date.now();
   const read = await callIn(session, READ_TOOL, { artifact });
   const readIn = Date.now() - keptAt;
-  await Bun.sleep(Math.max(0, keptAt + MARK_TO_MODEL_MS - Date.now()));
+  // Read well inside the hub's quiet, the delivery never comes; read later
+  // (a slow turn), it may have come first, once, and the read is then no news.
+  const readFirst = readIn < QUIET_MS - 1000;
+  await Bun.sleep(MARK_TO_MODEL_MS);
   const pin4 = numbered((await docOf(frame)).pins, 4);
-  const early = deliveries(before).filter((one) => one.last.includes("## 4."));
+  // Any delivery of it, one that joined the read's turn at its tool's boundary too.
+  const early = heard
+    .slice(before)
+    .filter((one) => NOTICE.test(one.last) && one.last.includes("## 4."));
   const offered = await sendCount(page);
   kit.check(
-    "8: a comment the session reads with comment_read inside the hub's quiet is stamped heard, is never delivered, and no Send stands",
+    "8: a comment the session reads with comment_read is heard once: read inside the hub's quiet it is stamped heard and never delivered (read later, delivered at most once before it); no Send stands",
     read.includes(FIRST_WORDS) &&
-      readIn < QUIET_MS &&
-      early.length === 0 &&
+      early.length <= (readFirst ? 0 : 1) &&
       !!pin4?.heard &&
       !!pin4.sentAt &&
       offered === null,
-    `read ${readIn} ms after the comment; deliveries of pin 4 ${early.length}; Send ${offered}; pin ${JSON.stringify(pin4 && { sentAt: pin4.sentAt, heard: pin4.heard })}; read ${read.slice(0, 200)}`
+    `read ${readIn} ms after the comment (${readFirst ? "inside" : "past"} the quiet); deliveries of pin 4 ${early.length}; Send ${offered}; pin ${JSON.stringify(pin4 && { sentAt: pin4.sentAt, heard: pin4.heard })}; read ${read.slice(0, 200)}`
   );
   const later = heard.length;
   await openRow(page, 4);
