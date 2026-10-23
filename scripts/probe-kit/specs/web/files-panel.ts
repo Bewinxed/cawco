@@ -39,7 +39,8 @@
  *     card's slot in the masonry, every card inside Files' region, and an
  *     overflow scan of Files totals zero.
  *
- * One capture per state at 390 and 1440, light and dark, in caps/files-panel/.
+ * One capture per state at 390 and 1440, light and dark, in the run's output
+ * folder (`kit.out`).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
 import { mkdir } from "node:fs/promises";
@@ -57,16 +58,16 @@ import {
   kitsOwnMessage,
   type MotionRun,
   open,
-  ROOT,
   readMotion,
   type Spec,
+  specOut,
   stillWithin,
   THEMES,
   type Theme,
   type View,
 } from "../../kit";
 
-const CAPS = join(ROOT, "caps", "files-panel");
+const CAPS = specOut("files-panel");
 const MANY = 42;
 const LONG_NAME =
   "a-page-whose-name-runs-on-and-on-to-the-very-end-of-what-it-may";

@@ -44,6 +44,14 @@ import {
 } from "../scratch-fleet";
 
 export const ROOT = resolve(import.meta.dir, "../..");
+
+/**
+ * A spec's output folder for a run (its `kit.out`): what it writes for a
+ * reviewer, its captures included, never into the tree. Emptied as the spec
+ * starts. A capture helper outside `run` names it by the spec's name.
+ */
+export const specOut = (spec: string): string =>
+  join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit", spec);
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const FONTS_CONF = join(import.meta.dir, "fonts.conf");
 
@@ -1006,11 +1014,7 @@ export class Run {
     const ends: (() => Promise<void>)[] = [];
     /** The run's failures before this spec: more after it, and it failed. */
     const failuresBefore = this.failures;
-    const out = join(
-      process.env.TMPDIR ?? join(ROOT, ".probe"),
-      "probe-kit",
-      spec.name
-    );
+    const out = specOut(spec.name);
     // Its folder holds this run's files alone: one an earlier run left there
     // would read as this run's evidence.
     await rm(out, { recursive: true, force: true });

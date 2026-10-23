@@ -115,7 +115,8 @@
  *     scale 0.97 while held and lets both go on release; its menu opens on
  *     the press and stays open.
  * 21. The panel, its head included, at the desk and at 390 in light and
- *     dark, captured to `$TMPDIR/caps/` for a reviewer; the spec reads none.
+ *     dark, captured to the run's output folder (`kit.out`) for a reviewer;
+ *     the spec reads none.
  * 22. Once the panel has opened (its page resized a frame at a time), the
  *     first frame stands in the middle of the canvas, at the desk and at 390:
  *     each centring measured where the world stands, never mid-move.
@@ -168,7 +169,7 @@ import { artifactToolWords } from "../../../packages/core/src/words/artifact-too
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
+import { buttonNames, type Kit, open, ROOT, type Spec, specOut } from "../kit";
 
 const STORY = "src/Card.stories.js";
 /** Legs 5b and 5c: a states file a canvas is made on, then taken away and written again. */
@@ -630,7 +631,7 @@ const HEAD_ORDER = [
   "expand",
 ];
 /** Where the panel's pictures go for a reviewer, as component-canvas's do. */
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
+const CAPS = specOut("session-sheet");
 const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/;
 
 /** The head as drawn: its width (what the words key on), its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, whether its word is drawn, its name; then whether More and Close stand, More before Close. */

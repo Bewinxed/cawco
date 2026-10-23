@@ -234,7 +234,8 @@
  *   revision makes every load write its pin again; the same with the
  *   delete on one desk and the stale load on another.
  * The captures for the reviewer (light and dark, desk and 390) are written
- * under `.probe/commenting/`; nothing here opens them.
+ * under the run's output folder (`kit.out`/commenting); nothing here opens
+ * them.
  */
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync } from "node:fs";
@@ -259,6 +260,7 @@ import {
   pressAt as pressFramePoint,
   type Spec,
   settle,
+  specOut,
 } from "../kit";
 import {
   docOf,
@@ -5740,7 +5742,7 @@ const inkOf = (screen: Page, token: string) =>
   }, token);
 
 /** Where the captures for the separate reviewer go (they don't land). */
-const CAPTURES = join(ROOT, ".probe", "commenting");
+const CAPTURES = join(specOut("comments"), "commenting");
 
 /** A capture of `what` on `screen`, kept for the reviewer as `<name>.png`. */
 const capture = async (

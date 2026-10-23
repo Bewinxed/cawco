@@ -28,7 +28,7 @@
  *
  * Runs on an iPhone and an iPad simulator on iOS 18.5 (each in a mac-slot.sh
  * slot, deleted at the end) and the Mac Catalyst build. Each stage's window
- * goes to `.probe/config-accounts/<platform>/<stage>.png` (the app PUTs it to
+ * goes to `kit.out`/config-accounts/<platform>/<stage>.png (the app PUTs it to
  * a loopback server here: the Mac app's sandbox writes only its container),
  * for a separate screenshot review.
  *
@@ -274,7 +274,7 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
   }
 
   const fleet = await seededFleet(kit);
-  const out = join(ROOT, ".probe", "config-accounts", platform);
+  const out = join(kit.out, "config-accounts", platform);
   // This run's captures only: an earlier run's never stand in for one that didn't arrive.
   await rm(out, { recursive: true, force: true });
   await mkdir(out, { recursive: true });
@@ -413,7 +413,7 @@ async function accountIds(base: string): Promise<Map<string, string>> {
 /**
  * The web's Configure › Accounts walked through the stages the app's probe
  * walks, on a fleet seeded as the app's is, at one width: each stage's page
- * goes to `.probe/config-accounts/web-<view>/<stage>.png`, beside the app's,
+ * goes to `kit.out`/config-accounts/web-<view>/<stage>.png, beside the app's,
  * so a review compares like with like. Every control is found by the words
  * core gives it (`accountsWords`), the ones the page itself reads.
  */
@@ -428,7 +428,7 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
       opened.close().catch(() => undefined);
     }
   });
-  const out = join(ROOT, ".probe", "config-accounts", `web-${view}`);
+  const out = join(kit.out, "config-accounts", `web-${view}`);
   await rm(out, { recursive: true, force: true });
   await mkdir(out, { recursive: true });
   const captured: string[] = [];

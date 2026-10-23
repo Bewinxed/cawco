@@ -113,9 +113,9 @@
  * (`CANVAS_DESIGN=desk` alone): at session-sheet leg 18's 523px desk pane
  * that box is under 640 and Comments' word is not drawn.
  *
- * Captures for a second review (never read here) go to `$TMPDIR/caps/`:
- * `canvas-{390,523,desk}-{light,dark}.png`, the panel's pane at 2×, and
- * `map-{desk,phone}-{light,dark}.png` (also to the clone's `caps/`).
+ * Captures for a second review (never read here) go to the run's output
+ * folder (`kit.out`): `canvas-{390,523,desk}-{light,dark}.png`, the panel's
+ * pane at 2×, and `map-{desk,phone}-{light,dark}.png`.
  */
 import { Database } from "bun:sqlite";
 import { type ChildProcess, spawn } from "node:child_process";
@@ -135,7 +135,7 @@ import { previewWords } from "../../../packages/core/src/words/preview";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
-import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
+import { type Kit, open as openPage, ROOT, type Spec, specOut } from "../kit";
 import { shaped } from "../words";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
@@ -145,7 +145,7 @@ const ARTIFACT_SOCKET = /\/ws\/artifact\//;
 const MORE_COUNT = /^More, Comments [1-9]\d* open$/;
 /** The crumb's words: which frame of how many. */
 const FRAME_COUNT = /^Frame \d+ of \d+$/;
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
+const CAPS = specOut("canvas-design");
 /** A states file of the probe's own, in the stage's git-ignored folder: one story with no doc comment. */
 const UNNAMED_FILE = ".cawco/probe/Unnamed.stories.ts";
 const FILES = [
@@ -1879,13 +1879,10 @@ async function mapLeg(
       `${JSON.stringify(read)}; live canvas drew ${drewLive} sections`
     );
   }
-  for (const dir of [CAPS, join(ROOT, "caps")]) {
-    mkdirSync(dir, { recursive: true });
-    // biome-ignore lint/performance/noAwaitInLoops: one file per folder
-    await page.locator("[data-bench-pane]").screenshot({
-      path: join(dir, `map-${phone ? "phone" : "desk"}-${theme}.png`),
-    });
-  }
+  mkdirSync(CAPS, { recursive: true });
+  await page.locator("[data-bench-pane]").screenshot({
+    path: join(CAPS, `map-${phone ? "phone" : "desk"}-${theme}.png`),
+  });
   kit.note(
     `capture: ${join(CAPS, `map-${phone ? "phone" : "desk"}-${theme}.png`)}`
   );

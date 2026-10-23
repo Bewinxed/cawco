@@ -26,7 +26,7 @@
  * Nothing in any state scrolls sideways. Every relay failure is checked for
  * the error formula's order, and no failure nor step word names port 80,
  * 443, a sysctl or `ip_unprivileged_port_start`. A capture of each state and width goes to
- * `.probe/stream-relay-step/` for the review item to read.
+ * the run's output folder (`kit.out`) for the review item to read.
  *
  *   bun scripts/probe-kit/run.ts web stream-relay-step
  */
@@ -44,7 +44,7 @@ import {
   STREAM_RELAY_WORDS as words,
 } from "../../../../packages/core/src/stream-relay";
 import type { Kit, Spec, View } from "../../kit";
-import { open, ROOT, settle, type Theme } from "../../kit";
+import { open, settle, specOut, type Theme } from "../../kit";
 
 const LEGS: { name: string; view: View }[] = [
   { name: "390", view: "phone" },
@@ -52,7 +52,7 @@ const LEGS: { name: string; view: View }[] = [
   { name: "1440", view: "desk" },
 ];
 
-const CAPTURES = join(ROOT, ".probe", "stream-relay-step");
+const CAPTURES = specOut("stream-relay-step");
 const DOMAIN = "outpost.example.com";
 const NAME = "turn.example.com";
 const machine = { name: "relay", address: "198.18.4.20", lan: "192.168.1.20" };

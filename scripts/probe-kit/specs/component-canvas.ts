@@ -78,8 +78,8 @@
  *
 
  * Captures of the canvas (desk and phone, light and dark, its move's
- * timeline and its dials open) go to `$TMPDIR/caps/` and the clone's
- * `caps/` for a reviewer; this spec never reads them.
+ * timeline and its dials open) go to the run's output folder (`kit.out`)
+ * for a reviewer; this spec never reads them.
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -102,11 +102,11 @@ import type {
 } from "../../../packages/core/src/stage";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { type Kit, ROOT, type Spec, specOut } from "../kit";
 
 const FIXTURES = join(ROOT, "scripts/probe-kit/fixtures/component-canvas");
 const SCRATCH = join(process.env.TMPDIR ?? "/tmp", "component-canvas");
-const CAPS = [join(process.env.TMPDIR ?? "/tmp", "caps"), join(ROOT, "caps")];
+const CAPS = specOut("component-canvas");
 
 type Framework = "svelte" | "react" | "vue" | "solid";
 
@@ -251,11 +251,8 @@ function errorsOf(page: Page): string[] {
 }
 
 async function capture(page: Page, name: string): Promise<void> {
-  for (const dir of CAPS) {
-    mkdirSync(dir, { recursive: true });
-    // biome-ignore lint/performance/noAwaitInLoops: one file per folder
-    await page.screenshot({ path: join(dir, `${name}.png`) });
-  }
+  mkdirSync(CAPS, { recursive: true });
+  await page.screenshot({ path: join(CAPS, `${name}.png`) });
 }
 
 /** A timeline clip's duration key in DialKit's store: `<clip>.duration`. */

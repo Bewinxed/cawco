@@ -126,9 +126,17 @@ import {
   readEmbeds,
   startDecisionStage,
 } from "../../decision-embeds";
-import { type Kit, ROOT, SCALE, type Spec, settle, THEMES } from "../../kit";
+import {
+  type Kit,
+  ROOT,
+  SCALE,
+  type Spec,
+  settle,
+  specOut,
+  THEMES,
+} from "../../kit";
 
-const OUT = join(ROOT, ".probe/decision-embed");
+const OUT = join(specOut("decision-embed"), "captures");
 const FIXTURE = join(ROOT, "scripts/probe-kit/fixtures/decision-embed");
 const SCRATCH = join(process.env.TMPDIR ?? "/tmp", "decision-embed");
 const NAME = "ledger";

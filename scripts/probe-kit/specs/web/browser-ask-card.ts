@@ -37,7 +37,7 @@
  * Every state at every width is swept for overflow and overlap: each text
  * element inside its container and the viewport, and no two text elements
  * overlapping; the sweep's total must be zero. A capture of each goes to
- * `.probe/browser-ask-card/`, once every finite animation on the page has
+ * the run's output folder (`kit.out`), once every finite animation on the page has
  * landed.
  *
  *   bun scripts/probe-kit/run.ts web browser-ask-card
@@ -53,9 +53,9 @@ import {
   COMPOSER,
   type Kit,
   open,
-  ROOT,
   type Spec,
   settle,
+  specOut,
   type Theme,
   type View,
 } from "../../kit";
@@ -76,7 +76,7 @@ const ORIGIN =
 const CONSEQUENCE =
   "No agent can see or use this browser until you hand it back.";
 const REFUSAL = "The browser did not start.";
-const CAPTURES = join(ROOT, ".probe", "browser-ask-card");
+const CAPTURES = specOut("browser-ask-card");
 const CARD = '[data-slot="ask"]';
 const KEY = "machine:scratch-fleet";
 
