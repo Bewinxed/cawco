@@ -642,18 +642,13 @@ final class MemoryBody: UIView {
         case "set", "set_doc", "remove_doc":
             let removes = action == "remove_doc"
             let path = action == "set" ? "CLAUDE.md" : (input["path"] as? String ?? "")
-            let loading = UIView()
-            loading.backgroundColor = Palette.surfaceRecess
-            loading.layer.cornerRadius = Radius.radiusSm
-            loading.heightAnchor.constraint(equalToConstant: 80).isActive = true
-            stack.addArrangedSubview(loading)
+            let loading = placeholder()
             if !footer.isEmpty, case .saved = parsed { stack.addArrangedSubview(line(footer, mono: true)) }
             guard removes || { if case .saved = parsed { return true } else { return false } }() else { return }
             let written = input["content"] as? String ?? ""
             Task { [weak self] in
                 guard let self else { return }
-                let before = await self.replaced(action: action ?? "", path: input["path"] as? String, updatedAt: updatedAt,
-                                                 expectedHash: input["expectedHash"] as? String, at: block.timestamp)
+                let before = await self.replaced(action: action ?? "", path: input["path"] as? String, at: block.timestamp)
                 let shown: UIView
                 switch before {
                 case let .version(content):
@@ -669,13 +664,7 @@ final class MemoryBody: UIView {
                 case let .missing(why):
                     shown = line("The version this \(removes ? "removed" : "replaced") can't be shown: \(why).")
                 }
-                guard let index = stack.arrangedSubviews.firstIndex(of: loading) else { return }
-                loading.removeFromSuperview()
-                stack.insertArrangedSubview(shown, at: index)
-                if let cell = sequence(first: self as UIView, next: { $0.superview }).first(where: { $0 is UICollectionViewCell }) as? UICollectionViewCell {
-                    cell.invalidateIntrinsicContentSize()
-                    (cell.superview as? UICollectionView)?.collectionViewLayout.invalidateLayout()
-                }
+                settle(loading, with: shown)
             }
         case "get":
             if case let .doc(content) = parsed {
@@ -683,18 +672,56 @@ final class MemoryBody: UIView {
                 if !footer.isEmpty { stack.addArrangedSubview(line(footer, mono: true)) }
             }
         case "list_docs":
-            if case let .docs(docs) = parsed {
-                let list = UIStackView()
-                list.axis = .vertical
-                list.spacing = Space.space1
-                for docEntry in docs {
-                    let row = DocRow(path: docEntry.path, content: docEntry.content, well: well(docEntry.content))
-                    list.addArrangedSubview(row)
+            switch parsed {
+            case let .docs(docs):
+                stack.addArrangedSubview(docList(docs))
+            case let .listed(paths):
+                // The words name the documents; what each held at the call is the hub's record of versions.
+                let loading = placeholder()
+                Task { [weak self] in
+                    guard let self else { return }
+                    let shown: UIView
+                    switch await self.held(paths, at: block.timestamp) {
+                    case let .success(docs): shown = docList(docs)
+                    case let .failure(why): shown = line("The documents it listed can't be shown: \(why.said).")
+                    }
+                    settle(loading, with: shown)
                 }
-                stack.addArrangedSubview(list)
+            default: break
             }
         default: break
         }
+    }
+
+    /// The well's stand-in while the hub is read.
+    private func placeholder() -> UIView {
+        let loading = UIView()
+        loading.backgroundColor = Palette.surfaceRecess
+        loading.layer.cornerRadius = Radius.radiusSm
+        loading.heightAnchor.constraint(equalToConstant: 80).isActive = true
+        stack.addArrangedSubview(loading)
+        return loading
+    }
+
+    /// What the hub answered, in the stand-in's place, and the row measured again.
+    private func settle(_ loading: UIView, with shown: UIView) {
+        guard let index = stack.arrangedSubviews.firstIndex(of: loading) else { return }
+        loading.removeFromSuperview()
+        stack.insertArrangedSubview(shown, at: index)
+        if let cell = sequence(first: self as UIView, next: { $0.superview }).first(where: { $0 is UICollectionViewCell }) as? UICollectionViewCell {
+            cell.invalidateIntrinsicContentSize()
+            (cell.superview as? UICollectionView)?.collectionViewLayout.invalidateLayout()
+        }
+    }
+
+    private func docList(_ docs: [(path: String, content: String)]) -> UIView {
+        let list = UIStackView()
+        list.axis = .vertical
+        list.spacing = Space.space1
+        for docEntry in docs {
+            list.addArrangedSubview(DocRow(path: docEntry.path, content: docEntry.content, well: well(docEntry.content)))
+        }
+        return list
     }
 
     private static func date(_ iso: String) -> Date? {
@@ -705,34 +732,70 @@ final class MemoryBody: UIView {
 
     enum Before { case version(String), empty, unchanged, missing(String) }
 
-    /// Which history row the call replaced or removed (MemoryBody `replaced`).
-    private func replaced(action: String, path: String?, updatedAt: String?, expectedHash: String?, at: String?) async -> Before {
-        guard let hub = env.hub, let base = hub.address else { return .missing("the hub is not connected") }
-        var parts = URLComponents(url: base.appending(path: "/api/fleet/memory/history"), resolvingAgainstBaseURL: false)
-        if action != "set", let path { parts?.queryItems = [URLQueryItem(name: "path", value: path)] }
-        guard let url = parts?.url, let (data, _) = try? await URLSession.shared.data(for: .hub(url)),
-              let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            return .missing("the history could not be read")
+    /// Why the hub's record could not be shown, in words.
+    struct Unread: Error { let said: String }
+
+    /// A GET on the hub, as JSON.
+    private func read(_ path: String, query: [URLQueryItem] = []) async -> Any? {
+        guard let base = env.hub?.address else { return nil }
+        var parts = URLComponents(url: base.appending(path: path), resolvingAgainstBaseURL: false)
+        if !query.isEmpty { parts?.queryItems = query }
+        guard let url = parts?.url, let (data, _) = try? await URLSession.shared.data(for: .hub(url)) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
+    /// One document's versions, newest first: the main file when `path` is nil.
+    private func history(_ path: String?) async -> [[String: Any]]? {
+        await read("/api/fleet/memory/history", query: path.map { [URLQueryItem(name: "path", value: $0)] } ?? []) as? [[String: Any]]
+    }
+
+    private func version(_ row: [String: Any]) async -> String? {
+        guard let id = row["id"] else { return nil }
+        return (await read("/api/fleet/memory/history/\(id)") as? [String: Any])?["content"] as? String
+    }
+
+    private func created(_ row: [String: Any]) -> Date {
+        (row["createdAt"] as? String).flatMap(Self.date) ?? .distantPast
+    }
+
+    /// The version that stood at the call: the hub keeps one as it is replaced or removed, so the oldest recorded at or after it (MemoryBody `versionAt`).
+    private func versionAt(_ rows: [[String: Any]], _ called: Date) -> [String: Any]? {
+        rows.filter { created($0) >= called }.last
+    }
+
+    /// Which history row the call replaced or removed, by the call's time (MemoryBody `replaced`).
+    private func replaced(action: String, path: String?, at: String?) async -> Before {
+        guard env.hub?.address != nil else { return .missing("the hub is not connected") }
+        guard let called = at.flatMap(Self.date) else { return .missing("the call carries no time to match") }
+        guard let rows = await history(action == "set" ? nil : path) else { return .missing("the history could not be read") }
+        guard let found = versionAt(rows, called) else {
+            if action == "set" || action == "set_doc" { return rows.contains { created($0) < called } ? .unchanged : .empty }
+            return .missing("the hub no longer keeps the removed version")
         }
-        let created = { (row: [String: Any]) in (row["createdAt"] as? String).flatMap(Self.date) ?? .distantPast }
-        var found: [String: Any]?
-        if action == "set" || action == "set_doc" {
-            guard let saved = updatedAt.flatMap(Self.date) else { return .missing("the save did not say when it landed") }
-            found = rows.first { row in
-                let gap = saved.timeIntervalSince(created(row))
-                return gap >= 0 && gap < 1 && (expectedHash == nil || row["hash"] as? String == expectedHash)
-            }
-            if found == nil { return rows.contains { created($0) < saved } ? .unchanged : .empty }
-        } else {
-            guard let called = at.flatMap(Self.date) else { return .missing("the call carries no time to match") }
-            found = rows.filter { created($0) >= called }.last
-            if found == nil { return .missing("the hub no longer keeps the removed version") }
-        }
-        guard let id = found?["id"], let url = URL(string: "/api/fleet/memory/history/\(id)", relativeTo: base),
-              let (data, _) = try? await URLSession.shared.data(for: .hub(url)),
-              let version = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let content = version["content"] as? String else { return .missing("that version could not be read") }
+        guard let content = await version(found) else { return .missing("that version could not be read") }
         return .version(content)
+    }
+
+    /// What each listed document held at the call: its version from then when the hub has replaced or removed it since, else the document as it stands (MemoryBody `heldAt`).
+    private func held(_ paths: [String], at: String?) async -> Result<[(path: String, content: String)], Unread> {
+        guard env.hub?.address != nil else { return .failure(Unread(said: "the hub is not connected")) }
+        guard let called = at.flatMap(Self.date) else { return .failure(Unread(said: "the call carries no time to match")) }
+        var standing: [[String: Any]]?
+        var docs: [(path: String, content: String)] = []
+        for path in paths {
+            guard let rows = await history(path) else { return .failure(Unread(said: "the history could not be read")) }
+            if let found = versionAt(rows, called) {
+                guard let content = await version(found) else { return .failure(Unread(said: "that version could not be read")) }
+                docs.append((path, content))
+                continue
+            }
+            if standing == nil { standing = (await read("/api/fleet") as? [String: Any])?["memoryDocs"] as? [[String: Any]] }
+            guard let content = standing?.first(where: { $0["path"] as? String == path })?["content"] as? String else {
+                return .failure(Unread(said: "the hub keeps no version of \(path)"))
+            }
+            docs.append((path, content))
+        }
+        return .success(docs)
     }
 }
 

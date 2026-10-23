@@ -17,7 +17,11 @@ import type {
   MemoryScope,
   RuleRow,
 } from "@cawco/core";
-import { memoryKeptWords, memoryReadHead } from "@cawco/core/tool-presentation";
+import {
+  memoryKeptWords,
+  memoryListWords,
+  memoryReadHead,
+} from "@cawco/core/tool-presentation";
 import type { Presented } from "../mcp-tool";
 import { delegateTypesWords } from "./sessions";
 import { ago, count, lasted, lines, listed, quote, valueWords } from "./words";
@@ -316,15 +320,15 @@ export const memorySettingsWords = (
       const { docs } = answer as {
         docs: (FleetMemoryDoc & { scope?: MemoryScope })[];
       };
-      return docs.length === 0
-        ? "No memory documents."
-        : lines(
-            `${count(docs.length, "document")}; set_doc and remove_doc take the path:`,
-            docs.map(
-              (doc) =>
-                `- ${doc.path} · ${scopeWords(doc.scope)} · ${count(doc.content.split("\n").length, "line")}`
-            )
-          );
+      return memoryListWords(
+        docs.map((doc) => ({
+          path: doc.path,
+          about: [
+            scopeWords(doc.scope),
+            count(doc.content.split("\n").length, "line"),
+          ],
+        }))
+      );
     }
     case "remove_doc":
       return isDeleted(answer)

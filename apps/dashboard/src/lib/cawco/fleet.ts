@@ -1060,6 +1060,11 @@ export const memoryVersion = (
 ): Promise<FleetMemoryVersion & { content: string }> =>
   send(`/api/fleet/memory/history/${id}`, {}, "read that version");
 
+/** The memory's documents as they stand now, files and all (`GET /api/fleet`'s `memoryDocs`). */
+export const memoryDocsNow = async (): Promise<FleetMemoryDocRow[]> =>
+  (await send<FleetSnapshot>("/api/fleet", {}, "read the memory documents"))
+    .memoryDocs;
+
 /** Undo: the version becomes the fleet's, and what it replaced joins the history. */
 export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
   send(

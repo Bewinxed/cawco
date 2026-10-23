@@ -299,7 +299,7 @@ async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
   const { misses } = first;
   if (misses.length > 0) {
     kit.note(
-      `the tape answered ${misses.length} request(s) with "not on the tape" (the same on every run): ${misses.slice(0, 8).join("; ")}`
+      `the tape answered ${misses.length} request(s) it never saw with "not on the tape": ${misses.slice(0, 8).join("; ")}`
     );
   }
   for (const [name, snap] of first.snaps) {

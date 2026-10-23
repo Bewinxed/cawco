@@ -9,8 +9,9 @@
  * response) and every socket's frames, both ways in order, go on the tape.
  * `player(tape)` answers as that hub did:
  *  - HTTP: the first response recorded for the request (method, path, query
- *    and body, the client's own random ids masked); a request the tape never
- *    saw is a 404 and a miss.
+ *    and body, the client's own random ids masked; a body the page drew, a
+ *    mark's pictures, left out: `DRAWN_BODY`); a request the tape never saw
+ *    is a 404 and a miss.
  *  - A socket: the hub's frames the recorded connection opened with, then,
  *    for each frame the page sends, the frames the hub answered the same
  *    frame with on tape (its ids put back to the page's own); a frame the
@@ -285,8 +286,17 @@ const DROPPED = new Set([
   "transfer-encoding",
   "date",
 ]);
-const HTTP_KEY = (method: string, path: string, body: string) =>
-  `${method} ${normalPath(path)} ${body}`;
+/**
+ * A route whose body is what the page drew, not what it asked: a comment's
+ * mark pictures (PNGs of the marked element, `POST /__cawco/artifact/<id>/pictures`),
+ * whose bytes differ from run to run. Matched by its route and artifact alone.
+ */
+const DRAWN_BODY = /^\/__cawco\/artifact\/[0-9a-f-]{36}\/pictures$/;
+
+const HTTP_KEY = (method: string, path: string, body: string) => {
+  const normal = normalPath(path);
+  return `${method} ${normal} ${DRAWN_BODY.test(new URL(normal, "http://tape").pathname) ? "" : body}`;
+};
 
 /** A path with its query sorted: the same request asked in another order. */
 function normalPath(path: string): string {

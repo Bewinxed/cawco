@@ -330,7 +330,11 @@ nonisolated struct ToolDescriptor {
             if case let .doc(text) = MemoryResult(output) { return "\(lineCount(text)) lines" }
             return nil
         case .memoryDocs:
-            if case let .docs(docs) = MemoryResult(output) { return "\(docs.count) docs" }
+            switch MemoryResult(output) {
+            case let .docs(docs): return "\(docs.count) docs"
+            case let .listed(paths): return "\(paths.count) docs"
+            default: break
+            }
             return nil
         }
     }
@@ -537,7 +541,12 @@ nonisolated struct ToolDescriptor {
             case "set", "set_doc": return input["content"] is String
             case "remove_doc": return true
             case "get": if case .doc = MemoryResult(raw as? String) { return true } else { return false }
-            case "list_docs": if case .docs = MemoryResult(raw as? String) { return true } else { return false }
+            case "list_docs":
+                switch MemoryResult(raw as? String) {
+                case .docs: return true
+                case let .listed(paths): return !paths.isEmpty
+                default: return false
+                }
             default: return false
             }
         case .prose:
@@ -552,6 +561,8 @@ nonisolated struct ToolDescriptor {
 nonisolated enum MemoryResult {
     case doc(String)
     case docs([(path: String, content: String)])
+    /// A listing in words: the documents by path; what each held at the call is the hub's record of versions.
+    case listed([String])
     /// A write's answer: what it saved, by hash, never the text back.
     case saved
     case none
@@ -571,12 +582,22 @@ nonisolated enum MemoryResult {
         if let content = doc["content"] as? String { self = .doc(content) } else if doc["hash"] is String { self = .saved } else { self = .none }
     }
 
-    /// The answer in the words its agent read (tool-presentation.ts `memoryWords`): a get's head, then the document; a write's line.
+    /// The answer in the words its agent read (tool-presentation.ts `memoryWords`): a get's head, then the document; a listing's paths; a write's line.
     private init(words text: String) {
         let read = #"^The fleet's CLAUDE\.md, \d+ linked documents?; a write's expectedHash takes [0-9a-f]+:(?:\n([\s\S]*))?$"#
+        let listed = #"^\d+ documents?; set_doc and remove_doc take the path:((?:\n- [^\n]+)+)$"#
         let kept = #"^Kept [^\n]+: \d+ lines?, \d+ bytes; the next write's expectedHash takes [0-9a-f]+\.$"#
         if let regex = try? Regex(read), let match = text.wholeMatch(of: regex) {
             self = .doc(match.output[1].substring.map(String.init) ?? "")
+        } else if text == "No memory documents." {
+            self = .listed([])
+        } else if let regex = try? Regex(listed), let match = text.wholeMatch(of: regex), let lines = match.output[1].substring {
+            // Each line is `- <path> · …`: the path is what stands before the first separator.
+            self = .listed(lines.split(separator: "\n").compactMap { line in
+                guard line.hasPrefix("- ") else { return nil }
+                let rest = line.dropFirst(2)
+                return String(rest.range(of: " · ").map { rest[..<$0.lowerBound] } ?? rest)
+            })
         } else if let regex = try? Regex(kept), text.wholeMatch(of: regex) != nil {
             self = .saved
         } else {

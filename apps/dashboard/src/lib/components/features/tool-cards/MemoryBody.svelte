@@ -2,6 +2,7 @@
   import { memoryResult } from "@cawco/core/tool-presentation";
   import {
     type FleetMemoryVersion,
+    memoryDocsNow,
     memoryHistory,
     memoryVersion,
   } from "#lib/cawco/fleet.js";
@@ -14,8 +15,10 @@
    *
    * A write (`set`, `set_doc`) is a diff like an Edit's: from the version it
    * replaced to what it wrote. A `remove_doc` is the removed document diffed
-   * to nothing. The replaced version is the hub's history row for it
-   * (`fleet_memory_history`, read through the Configure editor's own routes).
+   * to nothing. A `list_docs` in words names its documents by path, and each
+   * opens to what it held then. What stood at the call is the hub's history
+   * row for it (`fleet_memory_history`, read through the Configure editor's
+   * own routes), found by the call's time.
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -43,18 +46,8 @@
   const docPath = $derived(
     typeof input?.path === "string" ? input.path : undefined
   );
-  const expectedHash = $derived(
-    typeof input?.expectedHash === "string" ? input.expectedHash : undefined
-  );
   const writes = $derived(action === "set" || action === "set_doc");
   const removes = $derived(action === "remove_doc");
-
-  /**
-   * The hub stamps the replaced version and the saved row in one synchronous
-   * handler (`keepReplacedMemory` then `setFleetMemory`), so the row a save
-   * recorded sits within this of the save's own `updatedAt`.
-   */
-  const SAME_SAVE_MS = 1000;
 
   /** What the diff's old side is, once it is known. */
   type Before =
@@ -67,46 +60,43 @@
     | { kind: "missing"; why: string };
 
   /**
-   * Which history row this call replaced or removed. `rows` are newest first.
-   * A write: the row stamped by the same save (the one `expectedHash` names,
-   * when the call sent one); none, and the document had earlier versions, is a
-   * save of identical content; none at all is a first write. A removal: the
-   * first row this document recorded at or after the call.
+   * The version of one document that stood at the call: the hub keeps a
+   * version as it is replaced or removed, so it is the oldest history row
+   * recorded at or after the call. `rows` are newest first. None: what stood
+   * then still stands (or nothing stood).
+   */
+  const versionAt = (
+    rows: FleetMemoryVersion[],
+    called: number
+  ): FleetMemoryVersion | undefined =>
+    rows.filter((row) => Date.parse(row.createdAt) >= called).at(-1);
+
+  /**
+   * Which history row this call replaced or removed, by the call's time: the
+   * agent's words carry no time, so the hub's record of versions does. A
+   * write that left none had nothing to replace: a save of the same content
+   * when the document had earlier versions, else a first write.
    */
   function replaced(
     rows: FleetMemoryVersion[]
   ): FleetMemoryVersion | Exclude<Before, { kind: "loading" | "version" }> {
-    if (writes) {
-      if (parsed.kind !== "saved" || !parsed.updatedAt) {
-        return { kind: "missing", why: "the save did not say when it landed" };
-      }
-      const saved = Date.parse(parsed.updatedAt);
-      const stamped = rows.find((row) => {
-        const gap = saved - Date.parse(row.createdAt);
-        return (
-          gap >= 0 &&
-          gap < SAME_SAVE_MS &&
-          (expectedHash === undefined || row.hash === expectedHash)
-        );
-      });
-      if (stamped) {
-        return stamped;
-      }
-      return rows.some((row) => Date.parse(row.createdAt) < saved)
-        ? { kind: "unchanged" }
-        : { kind: "empty" };
-    }
     if (!at) {
       return { kind: "missing", why: "the call carries no time to match" };
     }
     const called = Date.parse(at);
-    const after = rows.filter((row) => Date.parse(row.createdAt) >= called);
-    return (
-      after.at(-1) ?? {
-        kind: "missing",
-        why: "the hub no longer keeps the removed version",
-      }
-    );
+    const found = versionAt(rows, called);
+    if (found) {
+      return found;
+    }
+    if (writes) {
+      return rows.some((row) => Date.parse(row.createdAt) < called)
+        ? { kind: "unchanged" }
+        : { kind: "empty" };
+    }
+    return {
+      kind: "missing",
+      why: "the hub no longer keeps the removed version",
+    };
   }
 
   let before = $state<Before>({ kind: "loading" });
@@ -143,6 +133,77 @@
             kind: "missing",
             why: failureWords(caught),
           };
+        }
+      });
+    return () => {
+      live = false;
+    };
+  });
+
+  interface ListedDoc {
+    content: string;
+    path: string;
+    updatedAt?: string;
+  }
+
+  /** A listing's documents: as the detailed answer carries them, or read from the hub as they stood at the call. */
+  type Listed =
+    | { kind: "loading" }
+    | { kind: "docs"; docs: ListedDoc[] }
+    | { kind: "missing"; why: string };
+
+  /**
+   * What one listed document held at the call: its version from then when
+   * the hub has replaced or removed it since, else the document as it stands.
+   */
+  async function heldAt(
+    path: string,
+    called: number,
+    now: () => Promise<ListedDoc[]>
+  ): Promise<ListedDoc> {
+    const found = versionAt(await memoryHistory(path), called);
+    if (found) {
+      return { path, content: (await memoryVersion(found.id)).content };
+    }
+    const standing = (await now()).find((doc) => doc.path === path);
+    if (!standing) {
+      throw new Error(`the hub keeps no version of ${path}`);
+    }
+    return standing;
+  }
+
+  let listed = $state<Listed>({ kind: "loading" });
+
+  $effect(() => {
+    if (parsed.kind === "docs") {
+      listed = { kind: "docs", docs: parsed.docs };
+      return;
+    }
+    if (action !== "list_docs" || parsed.kind !== "listed") {
+      return;
+    }
+    if (!at) {
+      listed = { kind: "missing", why: "the call carries no time to match" };
+      return;
+    }
+    let live = true;
+    listed = { kind: "loading" };
+    const called = Date.parse(at);
+    // The documents as they stand, read once for every path that needs them.
+    let standing: Promise<ListedDoc[]> | undefined;
+    const now = () => {
+      standing ??= memoryDocsNow();
+      return standing;
+    };
+    Promise.all(parsed.paths.map((path) => heldAt(path, called, now)))
+      .then((docs) => {
+        if (live) {
+          listed = { kind: "docs", docs };
+        }
+      })
+      .catch((caught: unknown) => {
+        if (live) {
+          listed = { kind: "missing", why: failureWords(caught) };
         }
       });
     return () => {
@@ -224,9 +285,15 @@
       <span data-slot="foot" class="type-code text-ink-muted num">{footer}</span
       >
     {/if}
-  {:else if action === "list_docs" && parsed.kind === "docs"}
+  {:else if action === "list_docs" && listed.kind === "loading"}
+    <Skeleton class="w-full" height="block" />
+  {:else if action === "list_docs" && listed.kind === "missing"}
+    <p class="text-size-label text-ink-muted" role="alert">
+      The documents it listed can't be shown: {listed.why}.
+    </p>
+  {:else if action === "list_docs" && listed.kind === "docs"}
     <div class="flex flex-col gap-space-1">
-      {#each parsed.docs as doc (doc.path)}
+      {#each listed.docs as doc (doc.path)}
         <Collapsible.Root>
           <Collapsible.Trigger data-doc class="group w-full" look="head">
             <span
