@@ -3,8 +3,8 @@
    * The preview on a phone (SideSplit): a sheet over the transcript and
    * the composer, down to the screen's foot, so the page has the composer's
    * room too. When the reader takes the composer it steps down onto it, so
-   * what they write stands in view; dragged up, it covers it again. The
-   * preview closes it from its own header.
+   * what they write stands in view; dragged up, or once they leave it, it
+   * covers it again. The preview closes it from its own header.
    */
   import { Portal } from "bits-ui";
   import type { Snippet } from "svelte";
@@ -100,7 +100,8 @@
    *   floor the composer's drawn top, 60% of the visible height or all the
    *   room above the composer. The composer's room under it is clipped off
    *   the host, so the sheet steps down onto the composer and never floats
-   *   over its empty rows.
+   *   over its empty rows. Once the focus leaves the composer, a sheet that
+   *   stepped down for it climbs back to `open` ({@link steppedDown}).
    * - `full`: the whole host, its floor the screen's foot.
    * - `tab`, while an ask is up (TAB, below).
    *
@@ -379,6 +380,20 @@
   const writing = () =>
     !!composerNode?.contains(document.activeElement) &&
     document.activeElement !== document.body;
+  /**
+   * The sheet stands on the composer because the reader was writing there
+   * (its field had the focus as it opened, or took it since), not because
+   * they dragged it down: once the focus leaves the composer it climbs back
+   * to its rest, over the composer and its chips (the owner: "the preview
+   * sheet should cover the composer and the chip row, lost space").
+   */
+  let steppedDown = false;
+  // Dragged or tapped to another stop, it stands where the reader put it.
+  $effect(() => {
+    if (stop !== null && stop !== "lower") {
+      steppedDown = false;
+    }
+  });
   // The sheet mounts at its open stop, which is known once the composer and
   // the screen's foot have been measured; on the composer if the reader is
   // writing in it.
@@ -388,7 +403,9 @@
   $effect.pre(() => {
     if (!placed && hostHeight) {
       placed = true;
-      firstStop = covers.current && !untrack(writing) ? "open" : "lower";
+      const wrote = untrack(writing);
+      firstStop = covers.current && !wrote ? "open" : "lower";
+      steppedDown = covers.current && wrote;
       snap = untrack(() => values[firstStop]);
     }
   });
@@ -416,7 +433,9 @@
     const request = cawco.previewRequests[instanceId];
     if (request !== undefined && placed) {
       untrack(() => {
-        snap = values[writing() ? "lower" : restStop()];
+        const wrote = writing();
+        snap = values[wrote ? "lower" : restStop()];
+        steppedDown = wrote && covers.current;
       });
     }
   });
@@ -484,12 +503,31 @@
     /**
      * The reader takes the composer (its field focused): the sheet steps
      * down to its lower stop on vaul's own curve, the composer in view to
-     * write in. It climbs back only when dragged.
+     * write in. It climbs back when dragged, or once the focus leaves.
      */
     const toComposer = () => {
       if (placed && !onComposer && snapPoints.includes(values.lower)) {
         snap = values.lower;
+        steppedDown = true;
       }
+    };
+    /**
+     * The focus left the composer (the keyboard put away, a tap in the
+     * page or the conversation): a sheet that stepped down for the writing
+     * climbs back to its rest, over the composer, on vaul's own curve. Read
+     * in the frame after, once the focus has landed wherever it went.
+     */
+    const fromComposer = () => {
+      requestAnimationFrame(() => {
+        if (!(steppedDown && placed && stop === "lower") || writing()) {
+          return;
+        }
+        const rest = restStop();
+        if (rest !== "lower" && snapStops.includes(rest)) {
+          steppedDown = false;
+          snap = values[rest];
+        }
+      });
     };
     // A resize is read in the frame after it too (frameObserver): measured
     // in the observer's callback, the sheet's new height (its host's)
@@ -525,6 +563,7 @@
       composer.addEventListener("introend", remeasure, { capture: true });
       composer.addEventListener("outroend", remeasure, { capture: true });
       composer.addEventListener("focusin", toComposer);
+      composer.addEventListener("focusout", fromComposer);
     }
     // A keyboard, a resized window or a pan moves the composer through the
     // visible area as published (visible-viewport), in the frame after the
@@ -548,6 +587,7 @@
       composer?.removeEventListener("introend", remeasure, { capture: true });
       composer?.removeEventListener("outroend", remeasure, { capture: true });
       composer?.removeEventListener("focusin", toComposer);
+      composer?.removeEventListener("focusout", fromComposer);
     };
   });
 </script>

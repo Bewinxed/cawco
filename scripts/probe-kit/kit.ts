@@ -186,14 +186,19 @@ const RUN_ENGINE: Engine = (() => {
  * `installRuns`, a spec's `init`) in every frame as that frame's own
  * scripts, and a frame sandboxed without `allow-scripts` blocks them and
  * says so as a console error; Chromium sets them in where no sandbox
- * reaches and says nothing. The product's one such frame holds no script
- * of its own (preview-overlay schemes.ts `blankFrame`: `sandbox=
- * "allow-same-origin"`, `srcdoc` "<!doctype html>"), so this message from
- * a srcdoc frame is the kit's scripts turned away, never the page's.
+ * reaches and mostly says nothing. The product's one such frame holds no
+ * script of its own (preview-overlay schemes.ts `blankFrame`: `sandbox=
+ * "allow-same-origin"`, `srcdoc` "<!doctype html>"), so this message is
+ * the kit's scripts turned away, never the page's: named `about:srcdoc`,
+ * or, from the frame's first document before its srcdoc lands, by the URL
+ * of the page that made it (Chromium, a phone page's reload in
+ * artifact-resize-loop: "Blocked script execution in
+ * 'http://127.0.0.1:25570/' …", the preview's own address).
  */
+const SANDBOX_REFUSED =
+  /^Blocked script execution in '[^']+' because the document's frame is sandboxed and the 'allow-scripts' permission is not set\.$/;
 export const kitsOwnMessage = (text: string): boolean =>
-  text ===
-  "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.";
+  SANDBOX_REFUSED.test(text);
 
 export interface PageOptions {
   /**

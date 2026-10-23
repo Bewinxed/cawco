@@ -38,6 +38,10 @@
  *   floor is the screen's foot and the composer is under it; the composer
  *   taking the focus sends it to its lower stop, on the composer; a keyboard
  *   resizing the web view never drops it.
+ * - On a phone in WebKit and Chromium, a session with a plan whose ring
+ *   stands in the tray row: shown while the reader writes, the sheet stands
+ *   on the composer; the focus leaving, it climbs back over the composer
+ *   and the ring, its top the open stop's ({@link runPhoneSheetLeaves}).
  *
  * On opening and over every sweep, the page sent the hub no error report
  * and logged no ResizeObserver loop. A desk page draws its scrollbars as a
@@ -58,6 +62,7 @@ import {
   COMPOSER,
   type Kit,
   type KitFleet,
+  kitsOwnMessage,
   open,
   pressAt,
   readMotion,
@@ -774,7 +779,7 @@ interface SheetNow {
   /** The composer's drawn top, as SideSheet's `drawnTop` reads it; null with no part drawn. */
   composerTop: number | null;
   /** The composer's drawn parts each covered by the sheet at their middle (what `elementFromPoint` hits there is in the sheet). */
-  covered: { part: string; covered: boolean }[];
+  covered: { chip: boolean; covered: boolean; part: string }[];
   /** The sheet's floor: the host's foot less what its clip takes off it. */
   floor: number;
   /** The composer's field holds the focus. */
@@ -876,6 +881,7 @@ function sheetReader() {
       top: sheet ? sheet.getBoundingClientRect().top : null,
       covered: parts.map((part) => ({
         part: `${part.localName}[${part.dataset.slot ?? ""}]`,
+        chip: part.hasAttribute("data-tray-chip"),
         covered: !!content.contains(hitIn(part.getBoundingClientRect())),
       })),
       pillInView: !!(pill && pillHit && pill.contains(pillHit)),
@@ -1180,6 +1186,129 @@ export const runPhoneSheet = async (
     `${name}: opening the sheet, focusing the composer, a keyboard up and down, the grabber tapped`,
     start,
     await mark(page, said)
+  );
+  await page.context().close();
+};
+
+/** The steps a session's plan holds: its ring stands in the tray row, a chip on the composer. */
+const PLAN_STEPS = [
+  { id: "read", content: "Read the chip wraps", status: "completed" },
+  { id: "lay", content: "Lay them out", status: "in_progress" },
+];
+const TODO_WRITE = "mcp__cawco__todo_write";
+const PLAN_RING = '[data-slot="lift"] [data-tray-chip]';
+
+/**
+ * The owner, on his iPhone: "the preview sheet should cover the composer
+ * and the chip row, lost space". A session with a plan, its ring a chip in
+ * the composer's tray row, at 390×844 in `engine` (WebKit with an iPhone's
+ * agent, and Chromium): the reader writes in the composer (its field holds
+ * the focus) as the agent shows a page, so the sheet stands on the
+ * composer, the pill and the ring in view. The focus leaves (the keyboard
+ * put away): the sheet climbs back to its open stop, its floor the screen's
+ * foot, and a press at the middle of the pill and of the ring lands in the
+ * sheet: no composer or chip shows inside or below it. Its top is where
+ * the open stop stands on a fresh load (the top as it is on main). No
+ * console error, no post to the hub, no ResizeObserver loop.
+ */
+export const runPhoneSheetLeaves = async (
+  kit: Kit,
+  base: string,
+  fleet: KitFleet,
+  engine: "webkit" | "chromium"
+) => {
+  // Each engine's session its own markers: an answered marker is answered for good.
+  const [planned, shown] = engine === "webkit" ? ["21", "22"] : ["23", "24"];
+  const session = await fleet.spawn("claude", "Plan chips", fleet.repo);
+  asks.set(planned, {
+    name: TODO_WRITE,
+    input: { steps: PLAN_STEPS },
+  });
+  await fleet.send(session, `PROBE-CALL:${planned}`);
+  await until(
+    `the todo_write call (${planned})`,
+    () => answered.get(planned),
+    Boolean,
+    180_000
+  );
+  const page = await kit.page("phone", {
+    engine,
+    init: [heldBack, sheetReader],
+  });
+  const name = `phone 390×844 ${engine === "webkit" ? "WebKit, an iPhone's agent" : "Chromium"}, a plan's ring on the composer`;
+  const said = heard(page);
+  const start = await mark(page, said);
+  await open(page, `${base}/session/${session}`, PLAN_RING);
+  await page.locator(COMPOSER).focus();
+  const id = await made(kit, shown, `plan-chips-${engine}`, () =>
+    fleet.send(session, `PROBE-CALL:${shown}`)
+  );
+  await page
+    .frameLocator("[data-preview-sheet] iframe[title='Preview']")
+    .locator("h1")
+    .waitFor({ timeout: 60_000 });
+  await settle(page, 700);
+  await frames(page);
+  const now = () => page.evaluate(() => window.__sheetNow?.() ?? null);
+  const writing = await now();
+  kit.check(
+    `${name}: shown while the reader writes, the sheet stands on the composer, the pill and the ring in view`,
+    !!id &&
+      !!writing &&
+      writing.focused &&
+      writing.stop === "lower" &&
+      writing.pillInView &&
+      writing.covered.some((part) => part.chip && !part.covered),
+    JSON.stringify(writing)
+  );
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur()
+  );
+  await settle(page, 900);
+  await frames(page);
+  const left = await now();
+  const chips = left?.covered.filter((part) => part.chip) ?? [];
+  kit.check(
+    `${name}: the focus gone, the sheet climbs back over the composer: its floor the screen's foot, the pill and every chip under it (a press at each one's middle lands in the sheet)`,
+    !!left &&
+      !left.focused &&
+      left.stop === "open" &&
+      Math.abs(left.floor - left.screenFloor) <= 1 &&
+      chips.length > 0 &&
+      left.covered.every((part) => part.covered) &&
+      !left.pillInView,
+    JSON.stringify(left)
+  );
+  const end = await mark(page, said);
+  const errors = said.errors
+    .slice(start.errors, end.errors)
+    .filter((line) => !kitsOwnMessage(line));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page
+    .frameLocator("[data-preview-sheet] iframe[title='Preview']")
+    .locator("h1")
+    .waitFor({ timeout: 60_000 });
+  await settle(page, 700);
+  await frames(page);
+  const fresh = await now();
+  kit.check(
+    `${name}: its top is the open stop's on a fresh load, and the page logged no console error`,
+    !!fresh &&
+      !!left &&
+      fresh.stop === "open" &&
+      fresh.top !== null &&
+      left.top !== null &&
+      Math.abs(fresh.top - left.top) <= 1 &&
+      errors.length === 0,
+    JSON.stringify({ climbed: left?.top, fresh: fresh?.top, errors })
+  );
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${name}: shown while writing, the focus leaving`,
+    start,
+    end
   );
   await page.context().close();
 };
@@ -1515,11 +1644,19 @@ const run = async (kit: Kit) => {
       // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
       await runPhoneSheet(kit, base, { session, view: "phone" });
     }
+    for (const engine of ["webkit", "chromium"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one session and page at a time
+      await runPhoneSheetLeaves(kit, base, fleet, engine);
+    }
     return;
   }
   for (const view of ["phone", "phoneWide"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
     await runPhoneSheet(kit, base, { session, view });
+  }
+  for (const engine of ["webkit", "chromium"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one session and page at a time
+    await runPhoneSheetLeaves(kit, base, fleet, engine);
   }
   for (const theme of ["light", "dark"] as const) {
     const legs: Leg[] = [
