@@ -90,29 +90,26 @@ function watchChild(name: string, verb: string, child: Bun.Subprocess) {
   } satisfies Watched;
 }
 const dashboardUnit = "cawco-binary-dashboard.service";
+const dashboardSocket = "cawco-binary-dashboard.socket";
+/**
+ * The socket-activated dashboard: its service is `inactive` until the first
+ * connection starts it, and a clean exit leaves it `inactive` with the socket
+ * still listening to start it again, so neither is an end. The dashboard is
+ * gone when its service has failed (a non-zero exit, a kill, a start that
+ * failed) or its socket no longer listens.
+ */
 const watchUnit: Watched = {
   name: dashboardUnit,
   exited: async () => {
-    const state = await command([
-      "systemctl",
-      "show",
-      "-p",
-      "ActiveState",
-      "--value",
-      dashboardUnit,
-    ]);
-    if (state !== "failed" && state !== "inactive") {
-      return;
+    const show = (unit: string, property: string) =>
+      command(["systemctl", "show", "-p", property, "--value", unit]);
+    if ((await show(dashboardUnit, "ActiveState")) === "failed") {
+      return `${dashboardUnit} failed, ExecMainStatus ${await show(dashboardUnit, "ExecMainStatus")}`;
     }
-    const status = await command([
-      "systemctl",
-      "show",
-      "-p",
-      "ExecMainStatus",
-      "--value",
-      dashboardUnit,
-    ]);
-    return `${state}, ExecMainStatus ${status}`;
+    const socket = await show(dashboardSocket, "ActiveState");
+    if (socket !== "active") {
+      return `${dashboardSocket} is ${socket}`;
+    }
   },
   stderrTail: () =>
     command([
