@@ -3,29 +3,39 @@
  * Code, OpenCode and pi, through CawCo's launch config alone, and no other
  * project's session (core harness-config.ts, agent fleet-harness-set.ts). On
  * a scratch fleet (real hub, agent and sessiond; each harness against the
- * mock model), project A and project B each with a git checkout, A is given
- * through the admin tools' own hub routes:
+ * mock model), project A and project B each with a git checkout.
+ *
+ * First a Claude Code delegate of A ("rearm") starts with the fleet's hooks
+ * dir gone, so its workspace's boundary holds none of it, runs one command
+ * and waits. Then A is given, through the admin tools' own hub routes:
  *
  * - a PreToolUse command hook on Bash whose script refuses a call carrying
- *   HCPROBE-CALL, saying its marker and the `tool_name` it was handed, and
- *   lets every other call run;
+ *   HCPROBE-CALL, saying its marker and the `tool_name` it was handed;
+ * - a PreToolUse command hook on Write that answers a write carrying
+ *   HCPROBE-WRITE with a rewrite of its path to a folder outside every clone,
+ *   and words for the model;
  * - a Notification hook, which OpenCode and pi raise no point for;
  * - Claude Code settings setting `env.HCPROBE_SETTING`;
  * - an OpenCode plugin (a module adding the tool `hcprobe_opencode_tool`);
  * - a pi extension (a module registering the tool `hcprobe_pi_tool`);
  * - a skill, fetched from a SKILL.md this spec serves on loopback.
  *
+ * - r1. The rearm delegate's boundary is handed over once the hooks dir is
+ *   made (agent boundary.ts `rearmMoved`).
+ * - r2. Told to go on, its next call meets the hook placed while it ran
+ *   (claude.ts `#takeFleetSettings`), whose script its old boundary never
+ *   held: the result carries the marker.
+ *
  * Then a Claude Code, an OpenCode and a pi delegate work in workspaces of A,
- * and a Claude Code session works in B's checkout. Each runs its shell twice:
- * `echo HCPROBE-CALL-<tag>`, then a print of `$HCPROBE_SETTING` and a sleep,
- * during which the spec reads its clone. Read where each harness sent its
- * requests, at the mock model:
+ * and a Claude Code session works in B's checkout: `echo HCPROBE-CALL-<tag>`,
+ * a write of HCPROBE-WRITE-<tag>.txt into its clone (A's), then a print of
+ * `$HCPROBE_SETTING` and a sleep, during which the spec reads the clone:
  *
  * - p1. The hook ran in each of A's three sessions: the first call's result
  *   carries its marker with `tool=Bash` (OpenCode's `shell` and pi's `bash`
  *   by Claude Code's name, core HOOK_TOOL_NAMES).
- * - p2. The settings reached A's Claude Code session: its second call
- *   printed the value.
+ * - p2. The settings reached A's Claude Code session: its print shows the
+ *   value.
  * - p3. A's OpenCode session is offered the plugin's tool, A's pi session
  *   the extension's.
  * - p4. Each of A's sessions is offered the skill (its description in the
@@ -34,20 +44,26 @@
  *   setting is empty, and neither the skill nor either tool is in its
  *   requests.
  * - p6. `git status --porcelain` is empty in both checkouts and in each of
- *   A's workspace clones while its delegate runs, and none holds a
- *   `.claude/settings.json`.
+ *   A's workspace clones while its delegate runs (the probe's own write
+ *   aside), and none holds a `.claude/settings.json`.
  * - p7. The machine's row says the Notification hook unsupported, naming
  *   OpenCode and pi.
+ * - p8. In each of A's three sessions the rewrite hook ran (its words reached
+ *   the model), the write landed where the model asked, in the clone, and
+ *   nothing appeared at the rewritten path: a workspace session takes no
+ *   input rewrite (agent fleet-hook-guard.ts, fleet-hook-run.ts).
  *
  * Its delegates cut workspaces, so it runs on the host (README, "A spec that
  * delegates runs on the host").
  *
  *   bun scripts/probe-kit/run.ts harness-config-placement
  */
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { readRecord } from "../../../packages/core/src/state-file";
 import {
   type Harness,
   MACHINE,
@@ -59,8 +75,10 @@ import {
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const RUN = crypto.randomUUID().slice(0, 8);
-/** What the hook says when it refuses a call. */
+/** What the Bash hook says when it refuses a call. */
 const HOOK_MARK = `HCPROBE-HOOK-${RUN}`;
+/** What the Write hook says for the model as it asks its rewrite. */
+const REWRITE_SEEN = `HCPROBE-REWRITE-SEEN-${RUN}`;
 /** The value the settings row sets. */
 const SETTING = `HCPROBE-SETTING-${RUN}`;
 /** The skill's description, which a session offered it carries. */
@@ -68,13 +86,17 @@ const SKILL_MARK = `HCPROBE-SKILL-${RUN}`;
 const SKILL = "hcprobe-skill";
 const OPENCODE_TOOL = "hcprobe_opencode_tool";
 const PI_TOOL = "hcprobe_pi_tool";
+/** What tells the rearm delegate to go on. */
+const GO = `HCPROBE-GO-${RUN}`;
 /** How a delegate's report to its parent opens (core `reportMarker`). */
 const REPORT = "[Report from delegate ";
 /** The shell as each harness names it. */
 const SHELLS = ["Bash", "bash", "shell"];
+/** `wait_item` as each harness offers it. */
+const WAITS = ["mcp__cawco__wait_item", "cawco_wait_item", "wait_item"];
 /** OpenCode's Code Mode tool, which runs MCP tools from a script. */
 const CODE_MODE = "execute";
-/** How long the second call sleeps: the spec reads the clone meanwhile. */
+/** How long the setting's call sleeps: the spec reads the clone meanwhile. */
 const SLEEP_S = 60;
 
 /** Each session's tag: its brief or its first message carries it. */
@@ -83,23 +105,40 @@ const TAGS = {
   opencode: `HCPROBE-opencode-${RUN}`,
   pi: `HCPROBE-pi-${RUN}`,
   other: `HCPROBE-other-${RUN}`,
+  rearm: `HCPROBE-rearm-${RUN}`,
 } as const;
 type Leg = keyof typeof TAGS;
 
+/** What a session does, in order: one tool call each, `wait` ending its turn until the spec says go. */
+type Act = "call" | "write" | "setting" | "warm" | "wait" | "finish";
+const PLAN: Record<Leg, readonly Act[]> = {
+  claude: ["call", "write", "setting", "finish"],
+  opencode: ["call", "write", "setting", "finish"],
+  pi: ["call", "write", "setting", "finish"],
+  other: ["call", "setting"],
+  rearm: ["warm", "wait", "call", "finish"],
+};
+
+/** The file each of A's sessions writes into its clone. */
+const writeName = (leg: Leg): string => `HCPROBE-WRITE-${TAGS[leg]}.txt`;
+
 /** What one session showed the mock. */
 interface Shown {
+  /** The next act of its {@link PLAN}. */
+  at: number;
   /** Every request's body, in order. */
   bodies: string[];
-  finished?: boolean;
-  /** The first call's result. */
-  first?: string;
-  searched?: boolean;
-  /** The second call's result. */
-  second?: string;
-  /** 1: the first call went out; 2: the second. */
-  step: 0 | 1 | 2;
+  /** The act whose call went out and whose result has not come back. */
+  pending?: Act | "search";
+  /** Each act's call's result. */
+  results: Partial<Record<Act, string>>;
+  /** The CawCo tools Claude Code's ToolSearch was asked for. */
+  searched: Set<string>;
 }
 const shown = new Map<Leg, Shown>();
+
+/** Each of A's delegates' clone, as the hub files its workspace: set once the fleet stands. */
+let cloneOf: (leg: Leg) => string | undefined = () => undefined;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -140,35 +179,123 @@ const lastToolResult = (body: string): string => {
   return "";
 };
 
-/** finish_item as the harness offers it: by its name, in OpenCode's Code Mode, or behind a search the first time. */
-const finishCall = (request: Seen, leg: Shown): Reply => {
-  const input = { headline: "Ran the probe.", summary: "Ran the probe." };
-  const named = [
-    "mcp__cawco__finish_item",
-    "cawco_finish_item",
-    "finish_item",
-  ].find((name) => request.toolNames.includes(name));
+/**
+ * A CawCo tool as the harness offers it (`finish_item`, `wait_item`): by its
+ * name, in OpenCode's Code Mode, or behind a search the first time; none
+ * when it is not offered.
+ */
+const cawcoCall = (
+  request: Seen,
+  leg: Shown,
+  names: readonly string[],
+  tool: string,
+  input: object
+): { call: Reply; searching: boolean } | undefined => {
+  const named = names.find((name) => request.toolNames.includes(name));
   if (named) {
-    leg.finished = true;
-    return useTool(named, input);
+    return { call: useTool(named, input), searching: false };
   }
   if (request.toolNames.includes(CODE_MODE)) {
-    leg.finished = true;
-    return useTool(CODE_MODE, {
-      code: `return await tools.cawco.finish_item(${JSON.stringify(input)});`,
-    });
+    return {
+      call: useTool(CODE_MODE, {
+        code: `return await tools.cawco.${tool}(${JSON.stringify(input)});`,
+      }),
+      searching: false,
+    };
   }
-  if (!leg.searched && request.toolNames.includes("ToolSearch")) {
-    leg.searched = true;
-    return useTool("ToolSearch", {
-      query: "select:mcp__cawco__finish_item",
-      max_results: 1,
-    });
+  if (!leg.searched.has(tool) && request.toolNames.includes("ToolSearch")) {
+    leg.searched.add(tool);
+    return {
+      call: useTool("ToolSearch", {
+        query: `select:mcp__cawco__${tool}`,
+        max_results: 1,
+      }),
+      searching: true,
+    };
   }
-  return text("Done.");
 };
 
-/** Each session's turn, by its tag: two shell calls, then finish_item for a delegate. */
+/** The write each harness's file tool takes: Claude Code's `Write`, OpenCode's and pi's `write`. */
+const writeCall = (
+  request: Seen,
+  name: Leg,
+  path: string
+): Reply | undefined => {
+  if (request.toolNames.includes("Write")) {
+    return useTool("Write", { file_path: path, content: "kept" });
+  }
+  if (!request.toolNames.includes("write")) {
+    return;
+  }
+  return useTool(
+    "write",
+    name === "pi"
+      ? { path, content: "kept" }
+      : { filePath: path, content: "kept" }
+  );
+};
+
+/** One act's call, by the tools the session is offered; none when it cannot make it. */
+const actCall = (
+  request: Seen,
+  name: Leg,
+  leg: Shown,
+  act: Act
+): { call: Reply; searching?: boolean } | undefined => {
+  const shell = SHELLS.find((one) => request.toolNames.includes(one));
+  const tag = TAGS[name];
+  switch (act) {
+    case "warm":
+      return shell
+        ? { call: useTool(shell, { command: `echo ${tag} warm` }) }
+        : undefined;
+    case "call":
+      return shell
+        ? {
+            call: useTool(shell, {
+              command: `echo HCPROBE-CALL-${tag}`,
+              description: "Probe the hook",
+            }),
+          }
+        : undefined;
+    case "setting":
+      return shell
+        ? {
+            call: useTool(shell, {
+              command: `printf 'SETTING=[%s]\\n' "$HCPROBE_SETTING"${name === "other" ? "" : `; sleep ${SLEEP_S}`}`,
+              description: "Print the setting",
+              timeout: (SLEEP_S + 60) * 1000,
+            }),
+          }
+        : undefined;
+    case "write": {
+      const clone = cloneOf(name);
+      const call = clone
+        ? writeCall(request, name, join(clone, writeName(name)))
+        : undefined;
+      return call ? { call } : undefined;
+    }
+    case "wait":
+      return cawcoCall(request, leg, WAITS, "wait_item", {
+        minutes: 60,
+        reason: "The probe drives this delegate.",
+      });
+    case "finish":
+      return cawcoCall(
+        request,
+        leg,
+        ["mcp__cawco__finish_item", "cawco_finish_item", "finish_item"],
+        "finish_item",
+        { headline: "Ran the probe.", summary: "Ran the probe." }
+      );
+    default: {
+      const unhandled: never = act;
+      throw new Error(`unhandled act: ${String(unhandled)}`);
+    }
+  }
+};
+
+/** Each session's turn, by its tag: its {@link PLAN}, one call a request. */
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("ok");
@@ -179,39 +306,43 @@ const respond = (request: Seen): Reply => {
   if (!found) {
     return text("ok");
   }
-  const [name, tag] = found;
-  const leg = shown.get(name) ?? { bodies: [], step: 0 };
+  const [name] = found;
+  const leg = shown.get(name) ?? {
+    at: 0,
+    bodies: [],
+    results: {},
+    searched: new Set(),
+  };
   shown.set(name, leg);
   leg.bodies.push(request.body);
-  if (request.afterTool && leg.step === 1 && leg.first === undefined) {
-    leg.first = lastToolResult(request.body);
+  if (request.afterTool && leg.pending) {
+    if (leg.pending !== "search") {
+      leg.results[leg.pending] = lastToolResult(request.body);
+    }
+    leg.pending = undefined;
   }
-  if (request.afterTool && leg.step === 2 && leg.second === undefined) {
-    leg.second = lastToolResult(request.body);
+  const act = PLAN[name][leg.at];
+  // The rearm delegate's turn after its wait ends until it is told to go.
+  if (
+    !act ||
+    (PLAN[name][leg.at - 1] === "wait" && !request.all.includes(GO))
+  ) {
+    return text("Waiting for the probe.");
   }
-  const shell = SHELLS.find((one) => request.toolNames.includes(one));
-  if (leg.step === 0 && shell) {
-    leg.step = 1;
-    return useTool(shell, {
-      command: `echo HCPROBE-CALL-${tag}`,
-      description: "Probe the hook",
-    });
+  const made = actCall(request, name, leg, act);
+  if (!made) {
+    return text(`No tool for ${act}: ${request.toolNames.join(", ")}`);
   }
-  if (leg.step === 1 && leg.first !== undefined && shell) {
-    leg.step = 2;
-    return useTool(shell, {
-      command: `printf 'SETTING=[%s]\\n' "$HCPROBE_SETTING"; sleep ${SLEEP_S}`,
-      description: "Print the setting",
-      timeout: (SLEEP_S + 60) * 1000,
-    });
+  if (made.searching) {
+    leg.pending = "search";
+  } else {
+    leg.pending = act;
+    leg.at += 1;
   }
-  if (leg.step === 2 && leg.second !== undefined && name !== "other") {
-    return leg.finished ? text("Done.") : finishCall(request, leg);
-  }
-  return text("Done.");
+  return made.call;
 };
 
-/** The hook's script: a call carrying HCPROBE-CALL is refused with the marker and its `tool_name`. */
+/** The Bash hook's script: a call carrying HCPROBE-CALL is refused with the marker and its `tool_name`. */
 const HOOK_SCRIPT = [
   "#!/bin/bash",
   "input=$(cat)",
@@ -220,6 +351,25 @@ const HOOK_SCRIPT = [
   `echo "${HOOK_MARK} tool=$tool" >&2`,
   "exit 2",
 ].join("\n");
+
+/** The Write hook's script: a write carrying HCPROBE-WRITE is answered with a rewrite to `outside`, and words for the model. */
+const rewriteScript = (outside: string): string =>
+  [
+    "#!/bin/bash",
+    "input=$(cat)",
+    'case "$input" in *HCPROBE-WRITE*) ;; *) exit 0 ;; esac',
+    `printf '%s\\n' '${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        additionalContext: REWRITE_SEEN,
+        updatedInput: {
+          file_path: join(outside, "rewritten.txt"),
+          content: "rewritten",
+        },
+      },
+    })}'`,
+  ].join("\n");
 
 const OPENCODE_PLUGIN = `export default {
   id: "hcprobe.plugin",
@@ -280,11 +430,12 @@ const checkout = async (path: string): Promise<void> => {
   await Bun.$`mkdir -p ${path} && cd ${path} && git init -q -b main && printf 'probe\\n' > README.md && git add -A && git -c user.name=Owner -c user.email=owner@probe.test commit -qm 'First commit'`.quiet();
 };
 
-/** `git status --porcelain` of a folder: empty when clean. */
+/** `git status --porcelain` of a folder, the probe's own writes left out: empty when clean. */
 const porcelain = async (path: string): Promise<string> =>
-  (
-    await Bun.$`git -C ${path} status --porcelain`.quiet().nothrow().text()
-  ).trim();
+  (await Bun.$`git -C ${path} status --porcelain`.quiet().nothrow().text())
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !line.includes("HCPROBE-WRITE-"))
+    .join("\n");
 
 /** The machine's fleet report, as the hub keeps it. */
 const reportOf = (fleet: KitFleet) =>
@@ -311,32 +462,49 @@ const cleanAt = async (
   };
 };
 
-/** A's rows, put through the routes the admin tools write by; the hook ids. */
+/** The ids A's rows went in under. */
+interface Placed {
+  hookId: string;
+  notifyId: string;
+  rewriteId: string;
+}
+
+/** A's rows, put through the routes the admin tools write by. */
 const placeRows = async (
   fleet: KitFleet,
   projectId: string,
-  skillSource: string
-): Promise<{ hookId: string; notifyId: string }> => {
-  const hookId = crypto.randomUUID();
-  const notifyId = crypto.randomUUID();
-  await hubCall(fleet, "PUT", `/api/fleet/hooks/${hookId}`, {
+  skillSource: string,
+  outside: string
+): Promise<Placed> => {
+  const placed: Placed = {
+    hookId: crypto.randomUUID(),
+    notifyId: crypto.randomUUID(),
+    rewriteId: crypto.randomUUID(),
+  };
+  const hook = (id: string, fields: object) =>
+    hubCall(fleet, "PUT", `/api/fleet/hooks/${id}`, {
+      enabled: true,
+      handler: { type: "command" },
+      scope: "project",
+      projectId,
+      ...fields,
+    });
+  await hook(placed.hookId, {
     name: `hcprobe marker ${RUN}`,
-    enabled: true,
     event: "PreToolUse",
     matcher: "Bash",
-    handler: { type: "command" },
     script: HOOK_SCRIPT,
-    scope: "project",
-    projectId,
   });
-  await hubCall(fleet, "PUT", `/api/fleet/hooks/${notifyId}`, {
+  await hook(placed.rewriteId, {
+    name: `hcprobe rewrite ${RUN}`,
+    event: "PreToolUse",
+    matcher: "Write",
+    script: rewriteScript(outside),
+  });
+  await hook(placed.notifyId, {
     name: `hcprobe notify ${RUN}`,
-    enabled: true,
     event: "Notification",
-    handler: { type: "command" },
     script: "#!/bin/bash\nexit 0",
-    scope: "project",
-    projectId,
   });
   await hubCall(fleet, "PUT", "/api/fleet/claude-settings/hcprobe", {
     settings: { env: { HCPROBE_SETTING: SETTING } },
@@ -355,14 +523,14 @@ const placeRows = async (
     enabled: true,
     projectId,
   });
-  return { hookId, notifyId };
+  return placed;
 };
 
-/** 0: the hub fetched the skill, and the machine reports every row of A applied at A's checkout. */
+/** 0: the hub fetched the skill, and the machine reports every row of A applied. */
 const rowsHeld = async (
   kit: Kit,
   fleet: KitFleet,
-  hookId: string
+  placed: Placed
 ): Promise<void> => {
   const skillFetched = await until(
     "the skill fetched at the hub",
@@ -387,7 +555,8 @@ const rowsHeld = async (
   ];
   const held = (report: ReturnType<typeof reportOf>): boolean =>
     kinds.every((key) => report.harnessConfig?.[key]?.state === "applied") &&
-    report.hooks?.[hookId]?.state === "applied" &&
+    report.hooks?.[placed.hookId]?.state === "applied" &&
+    report.hooks?.[placed.rewriteId]?.state === "applied" &&
     report.skills?.[SKILL]?.state === "applied";
   const converged = await until(
     "A's checkout holds every row",
@@ -400,41 +569,162 @@ const rowsHeld = async (
     held(converged),
     JSON.stringify({
       harnessConfig: converged.harnessConfig,
-      hook: converged.hooks?.[hookId],
+      hook: converged.hooks?.[placed.hookId],
+      rewrite: converged.hooks?.[placed.rewriteId],
       skill: converged.skills?.[SKILL],
     })
   );
 };
 
-/** p1, p3, p4, p6: one of A's delegates, read while its second command sleeps. */
-const readDelegate = async (
+/** A delegate filed under the parent, on `harness`, in a workspace of A's checkout. */
+const delegate = async (
+  fleet: KitFleet,
+  parent: string,
+  name: Leg,
+  harness: Harness,
+  repo: string
+): Promise<string> =>
+  (
+    await fleet.api<{ workItemId: string }>("/api/work-items", {
+      parentInstanceId: parent,
+      title: `harness config ${name}`,
+      prompt: `${TAGS[name]}: run the probe's commands, then finish.`,
+      harness,
+      model: MODEL[harness],
+      cwd: repo,
+      lands: "none",
+    })
+  ).workItemId;
+
+/** A work item's workspace: its id, clone and session. */
+const workspaceOf = (fleet: KitFleet, item: string) =>
+  fleet.query<{ id: string; path: string; instance: string }>(
+    "SELECT w.id AS id, w.path AS path, i.instance_id AS instance FROM work_items i JOIN workspaces w ON w.id = i.workspace_id WHERE i.id = ?",
+    item
+  )[0];
+
+/** The generation a workspace's running boundary is of, from its record. */
+const generationOf = async (
+  fleet: KitFleet,
+  workspace: string
+): Promise<string | undefined> =>
+  (
+    await readRecord<{ gen: string }>(
+      join(
+        fleet.env.HOME as string,
+        ".cawco",
+        "workspaces",
+        workspace,
+        "boundary.json"
+      )
+    ).catch(() => undefined)
+  )?.gen;
+
+/**
+ * r0: the rearm delegate, started with the fleet's hooks dir gone: its
+ * workspace and the generation its boundary started as, once it waits.
+ */
+const startRearm = async (
   kit: Kit,
   fleet: KitFleet,
+  parent: string,
+  repo: string
+): Promise<{ gen: string | undefined; item: string; workspace: string }> => {
+  const hooksDir = join(
+    fleet.env.XDG_DATA_HOME as string,
+    "cawco",
+    "fleet-hooks"
+  );
+  await rm(hooksDir, { recursive: true, force: true });
+  const item = await delegate(fleet, parent, "rearm", "claude", repo);
+  await until(
+    "the rearm delegate waits",
+    () => shown.get("rearm"),
+    (leg) => (leg?.at ?? 0) >= 2 && leg?.pending === undefined,
+    300_000
+  ).catch(() => undefined);
+  const workspace = workspaceOf(fleet, item)?.id ?? "";
+  kit.check(
+    "r0: the rearm delegate's boundary started with no fleet hooks dir",
+    workspace !== "" && !existsSync(hooksDir),
+    existsSync(hooksDir)
+      ? `${hooksDir} was made before the place's rows`
+      : workspace || "no workspace row"
+  );
+  return { gen: await generationOf(fleet, workspace), item, workspace };
+};
+
+/** r1, r2: once the rows are placed, the rearm delegate's boundary is handed over, and its next call meets the hook. */
+const readRearm = async (
+  kit: Kit,
+  fleet: KitFleet,
+  started: { gen: string | undefined; item: string; workspace: string }
+): Promise<void> => {
+  const gen = await until(
+    "the rearm delegate's boundary handed over",
+    () => generationOf(fleet, started.workspace),
+    (now) => now !== undefined && now !== started.gen,
+    120_000
+  ).catch(() => undefined);
+  kit.check(
+    "r1: the rearm delegate's boundary was handed over once the hooks dir was made",
+    gen !== undefined && gen !== started.gen,
+    `started as ${started.gen ?? "none"}, now ${gen ?? "the same"}`
+  );
+  const instance = workspaceOf(fleet, started.item)?.instance;
+  if (instance) {
+    await fleet.send(instance, `${GO}: go on.`);
+  }
+  const leg = await until(
+    "the rearm delegate's call after the hook was placed",
+    () => shown.get("rearm"),
+    (one) => one?.results.call !== undefined,
+    180_000
+  ).catch(() => shown.get("rearm"));
+  kit.check(
+    "r2: a hook placed while a Claude Code session ran fired on its next call, from a script its first boundary never held",
+    leg?.results.call?.includes(`${HOOK_MARK} tool=Bash`) === true,
+    leg?.results.call?.slice(0, 400) ?? "no call answered"
+  );
+};
+
+/** p1, p3, p4, p6, p8: one of A's delegates, read while its setting's call sleeps. */
+const readDelegate = async (
+  kit: Kit,
   harness: Harness,
-  item: string
+  outside: string
 ): Promise<void> => {
   const leg = await until(
-    `${harness}'s second call`,
+    `${harness}'s setting call`,
     () => shown.get(harness),
-    (one) => one?.step === 2,
+    (one) => one?.pending === "setting",
     300_000
   ).catch(() => shown.get(harness));
-  const workspace = fleet.query<{ path: string }>(
-    "SELECT w.path FROM work_items i JOIN workspaces w ON w.id = i.workspace_id WHERE i.id = ?",
-    item
-  )[0]?.path;
-  const clone = workspace ? await cleanAt(workspace) : undefined;
+  const clone = cloneOf(harness);
+  const held = clone ? await cleanAt(clone) : undefined;
   kit.check(
     `p6: ${harness}'s workspace clone is clean while it runs, with no project settings file`,
-    clone?.clean === true,
-    clone?.said ?? "no workspace row"
+    held?.clean === true,
+    held?.said ?? "no workspace row"
   );
   kit.check(
     `p1: the hook ran in A's ${harness} session, on Claude Code's name for its shell`,
-    leg?.first?.includes(`${HOOK_MARK} tool=Bash`) === true,
-    leg?.first?.slice(0, 400) ?? "no first call answered"
+    leg?.results.call?.includes(`${HOOK_MARK} tool=Bash`) === true,
+    leg?.results.call?.slice(0, 400) ?? "no call answered"
   );
   const bodies = leg?.bodies.join("\n") ?? "";
+  const landed = clone ? existsSync(join(clone, writeName(harness))) : false;
+  const escaped = readdirSync(outside);
+  kit.check(
+    `p8: in A's ${harness} session the rewrite hook ran, the write landed where asked, and nothing at the rewritten path`,
+    bodies.includes(REWRITE_SEEN) && landed && escaped.length === 0,
+    JSON.stringify({
+      hookSaid: bodies.includes(REWRITE_SEEN),
+      landedInClone: landed,
+      outside: escaped,
+      write: leg?.results.write?.slice(0, 200),
+    })
+  );
   kit.check(
     `p4: A's ${harness} session is offered the skill`,
     bodies.includes(SKILL_MARK),
@@ -455,37 +745,37 @@ const readDelegate = async (
 /** p2: A's Claude Code session printed the setting. */
 const readSetting = async (kit: Kit): Promise<void> => {
   const leg = await until(
-    "A's Claude Code second call answered",
+    "A's Claude Code setting call answered",
     () => shown.get("claude"),
-    (one) => one?.second !== undefined,
+    (one) => one?.results.setting !== undefined,
     (SLEEP_S + 60) * 1000
   ).catch(() => shown.get("claude"));
   kit.check(
     "p2: the settings reached A's Claude Code session",
-    leg?.second?.includes(`SETTING=[${SETTING}]`) === true,
-    leg?.second?.slice(0, 300) ?? "no second call answered"
+    leg?.results.setting?.includes(`SETTING=[${SETTING}]`) === true,
+    leg?.results.setting?.slice(0, 300) ?? "no setting call answered"
   );
 };
 
 /** p5: nothing of A's reached B's session. */
 const readOther = async (kit: Kit): Promise<void> => {
   const leg = await until(
-    "B's second call answered",
+    "B's setting call answered",
     () => shown.get("other"),
-    (one) => one?.second !== undefined,
-    (SLEEP_S + 240) * 1000
+    (one) => one?.results.setting !== undefined,
+    240_000
   ).catch(() => shown.get("other"));
   const bodies = leg?.bodies.join("\n") ?? "";
   kit.check(
     "p5: B's first call ran, no hook refused it",
-    leg?.first?.includes(`HCPROBE-CALL-${TAGS.other}`) === true &&
-      !leg.first.includes(HOOK_MARK),
-    leg?.first?.slice(0, 300) ?? "no first call answered"
+    leg?.results.call?.includes(`HCPROBE-CALL-${TAGS.other}`) === true &&
+      !leg.results.call.includes(HOOK_MARK),
+    leg?.results.call?.slice(0, 300) ?? "no call answered"
   );
   kit.check(
     "p5: B's session has no setting of A's",
-    leg?.second?.includes("SETTING=[]") === true,
-    leg?.second?.slice(0, 300) ?? "no second call answered"
+    leg?.results.setting?.includes("SETTING=[]") === true,
+    leg?.results.setting?.slice(0, 300) ?? "no setting call answered"
   );
   kit.check(
     "p5: B's requests carry neither A's skill nor its plugin's or extension's tool",
@@ -509,11 +799,20 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
+  // The agent's welcome converge is done before the hooks dir is taken away.
+  await until(
+    "the machine's first fleet report",
+    () => reportOf(fleet).hooks,
+    Boolean,
+    120_000
+  ).catch(() => undefined);
 
   const repoA = join(fleet.sandbox, "code-a");
   const repoB = join(fleet.sandbox, "code-b");
+  const outside = join(fleet.sandbox, "hcprobe-outside");
   await checkout(repoA);
   await checkout(repoB);
+  await mkdir(outside, { recursive: true });
   const projectA = await fleet.api<{ id: string }>("/api/projects", {
     name: "Harness config A",
     machineId: MACHINE,
@@ -524,6 +823,16 @@ const run = async (kit: Kit) => {
     machineId: MACHINE,
     cwd: repoB,
   });
+  const parent = await fleet.spawn("claude", "Harness config parent", repoA, {
+    projectId: projectA.id,
+  });
+  const items = new Map<Leg, string>();
+  cloneOf = (leg) => {
+    const item = items.get(leg);
+    return item ? workspaceOf(fleet, item)?.path : undefined;
+  };
+  const rearm = await startRearm(kit, fleet, parent, repoA);
+  items.set("rearm", rearm.item);
 
   // The skill's source: a SKILL.md on loopback, which the hub fetches once.
   const source = Bun.serve({
@@ -534,14 +843,15 @@ const run = async (kit: Kit) => {
         `---\nname: ${SKILL}\ndescription: ${SKILL_MARK} a probe skill placed for one project.\n---\n\nSay ok.\n`
       ),
   });
-  let ids: { hookId: string; notifyId: string };
+  let placed: Placed;
   try {
-    ids = await placeRows(
+    placed = await placeRows(
       fleet,
       projectA.id,
-      `http://127.0.0.1:${source.port}/SKILL.md`
+      `http://127.0.0.1:${source.port}/SKILL.md`,
+      outside
     );
-    await rowsHeld(kit, fleet, ids.hookId);
+    await rowsHeld(kit, fleet, placed);
   } catch (error) {
     kit.check(
       "0: each row is placed through the hub's routes",
@@ -552,35 +862,23 @@ const run = async (kit: Kit) => {
   } finally {
     source.stop(true);
   }
+  await readRearm(kit, fleet, rearm);
 
   // A's delegates, one per harness, each in a workspace of A; B's session
   // in its checkout.
-  const parent = await fleet.spawn("claude", "Harness config parent", repoA, {
-    projectId: projectA.id,
-  });
   const harnesses: Harness[] = ["claude", "opencode", "pi"];
-  const items = new Map<Harness, string>();
   for (const harness of harnesses) {
     // biome-ignore lint/performance/noAwaitInLoops: one delegate filed at a time
-    const started = await fleet.api<{ workItemId: string }>("/api/work-items", {
-      parentInstanceId: parent,
-      title: `harness config ${harness}`,
-      prompt: `${TAGS[harness]}: run the probe's two commands, then finish.`,
-      harness,
-      model: MODEL[harness],
-      cwd: repoA,
-      lands: "none",
-    });
-    items.set(harness, started.workItemId);
+    items.set(harness, await delegate(fleet, parent, harness, harness, repoA));
   }
   const other = await fleet.spawn("claude", "Harness config B", repoB, {
     projectId: projectB.id,
   });
-  await fleet.send(other, `${TAGS.other}: run the probe's two commands.`);
+  await fleet.send(other, `${TAGS.other}: run the probe's commands.`);
 
   for (const harness of harnesses) {
-    // biome-ignore lint/performance/noAwaitInLoops: each delegate read while its second command sleeps
-    await readDelegate(kit, fleet, harness, items.get(harness) ?? "");
+    // biome-ignore lint/performance/noAwaitInLoops: each delegate read while its setting's call sleeps
+    await readDelegate(kit, harness, outside);
   }
   await readSetting(kit);
   await readOther(kit);
@@ -596,7 +894,7 @@ const run = async (kit: Kit) => {
       held.said
     );
   }
-  const notify = reportOf(fleet).hooks?.[ids.notifyId];
+  const notify = reportOf(fleet).hooks?.[placed.notifyId];
   kit.check(
     "p7: the machine's row says the Notification hook unsupported, for OpenCode and for pi",
     notify?.state === "unsupported" &&
@@ -605,14 +903,14 @@ const run = async (kit: Kit) => {
     JSON.stringify(notify ?? "no row")
   );
 
-  for (const harness of harnesses) {
+  for (const [name, item] of items) {
     // biome-ignore lint/performance/noAwaitInLoops: each item's end, in turn
     await until(
-      `${harness}'s item ended`,
+      `${name}'s item ended`,
       () =>
         fleet.query<{ state: string }>(
           "SELECT state FROM work_items WHERE id = ?",
-          items.get(harness) ?? ""
+          item
         )[0]?.state,
       (state) =>
         state === "done" || state === "failed" || state === "cancelled",
