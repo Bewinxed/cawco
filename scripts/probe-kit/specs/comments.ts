@@ -8564,11 +8564,22 @@ const redrawChecks = async (on: On) => {
   await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
   await pageInComment(frame, true);
   // Pressed while it stands, then written over three of its redraws.
+  // Read once the frame is the pane's current one, shown and taking presses
+  // (PreviewPane: a frame standing in while its next load comes is inert).
   const value = await until(
-    "the second row's value drawn",
-    () => screenBox(on, frame, REDRAWN).catch(() => undefined),
+    "the second row's value drawn, in the pane's current frame",
+    async () => {
+      const current = await (
+        await frame.frameElement()
+      )
+        .evaluate((el) => !el.inert && el.hasAttribute("data-ready"))
+        .catch(() => false);
+      return current
+        ? await screenBox(on, frame, REDRAWN).catch(() => undefined)
+        : undefined;
+    },
     Boolean,
-    5000
+    15_000
   );
   await commentAt(
     on,
