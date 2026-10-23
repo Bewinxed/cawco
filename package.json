@@ -37,11 +37,11 @@
     "words:check": "bun scripts/words-swift.ts --check"
   },
   "overrides": {
-    "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.4/golar-darwin-arm64-0.1.11-cawco.4.tgz",
-    "@golar/linux-x64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.4/golar-linux-x64-0.1.11-cawco.4.tgz",
-    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.4/golar-svelte-0.1.11-cawco.4.tgz",
+    "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-darwin-arm64-0.1.11-cawco.5.tgz",
+    "@golar/linux-x64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-linux-x64-0.1.11-cawco.5.tgz",
+    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-svelte-0.1.11-cawco.5.tgz",
     "@types/bun": "^1.4.3",
-    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.4/golar-0.1.11-cawco.4.tgz",
+    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-0.1.11-cawco.5.tgz",
     "oniguruma-to-es": "^4.3.6",
     "vite": "^8.3.4"
   },
@@ -51,7 +51,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
     "@clack/prompts": "^1.8.1",
-    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.4/golar-svelte-0.1.11-cawco.4.tgz",
+    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-svelte-0.1.11-cawco.5.tgz",
     "@types/bun": "^1.4.3",
     "@types/multicast-dns": "^7.2.4",
     "@types/node": "^26.6.4",
@@ -63,7 +63,7 @@
     "colorjs.io": "^0.7.1",
     "events": "^3.3.0",
     "fast-glob": "^3.3.3",
-    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.4/golar-0.1.11-cawco.4.tgz",
+    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-0.1.11-cawco.5.tgz",
     "multicast-dns": "7.2.5",
     "picocolors": "^1.1.1",
     "pixelmatch": "^8.0.0",
