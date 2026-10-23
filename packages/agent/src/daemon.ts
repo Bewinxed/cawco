@@ -56,6 +56,7 @@ import {
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PROVIDER_KEY,
+  CONTROL_TRANSCRIPT_TURNS,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
@@ -68,6 +69,7 @@ import {
   lawPolicy,
   MACHINE_PART_MS,
   type TranscriptQuery,
+  type TranscriptTurnsQuery,
   UPDATE_CAWCO,
   type WorkspaceRef,
 } from "@cawco/core";
@@ -3758,6 +3760,9 @@ export const startDaemon = (rediscover = false) =>
       CONTROL_SEARCH_TRANSCRIPTS,
       (query, options) =>
         search.search(query as string, options as TranscriptQuery | undefined)
+    );
+    supervisor.registerDaemonFunction(CONTROL_TRANSCRIPT_TURNS, (query) =>
+      search.turns(query as TranscriptTurnsQuery)
     );
 
     yield* Effect.logInfo(

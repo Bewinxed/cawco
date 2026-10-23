@@ -98,6 +98,7 @@ import type {
   ToolStatus,
   TranscriptAnswer,
   TranscriptPage,
+  TranscriptTurns,
   TranscriptWhere,
   UpdateReport,
   UsageBucket,
@@ -208,6 +209,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_SLEEP,
+  CONTROL_TRANSCRIPT_TURNS,
   CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
@@ -986,6 +988,13 @@ function searchMiss(answer: Bounded<ControlResult>): string {
  * delays when a new terminal session becomes findable by name.
  */
 const STORED_LISTING_MS = 15_000;
+/**
+ * How long an agent's `find` waits on a machine for a conversation's turns
+ * from its index (find-tool.ts `around`, a detailed hit's neighbours): one
+ * read of a few records, and a sync first when the index is stale (agent
+ * search/index.ts `SYNC_WAIT_MS`). Our call.
+ */
+const FIND_TURNS_MS = 5000;
 /** How long a states file's read in its workspace may take before a handed input is refused: a `cat` of one source file. Our call. */
 const WORKSPACE_READ_MS = 15_000;
 /** How often the hub reads every skill's and plugin's source for an update. */
@@ -24129,7 +24138,36 @@ export const createServer = (
         id: project.id,
         name: project.name,
       })),
-    readHistory: (id) => readHistory(id),
+    indexedTurns: async (machineId, query) => {
+      const answer = await readAgent(
+        machineId,
+        CONTROL_TRANSCRIPT_TURNS,
+        [query],
+        FIND_TURNS_MS
+      );
+      if (answer.kind === "unanswered" || !answer.value.ok) {
+        return { error: searchMiss(answer) };
+      }
+      // An answer with neither turns nor why is named as one that did not
+      // answer, never read as a conversation with no turns.
+      const result = answer.value.result as Partial<TranscriptTurns> | null;
+      if (!(
+        result &&
+        ("missing" in result ||
+          ("turns" in result && Array.isArray(result.turns)))
+      )) {
+        return { error: "its answer to this read had no turns" };
+      }
+      return result as TranscriptTurns;
+    },
+    sessionIds: (id) => {
+      const [row] = db.find.instances([id]);
+      return row
+        ? [row.sessionId, ...row.priorSessionIds].filter(
+            (each): each is string => !!each
+          )
+        : [];
+    },
     thread: (id) => db.thread(id),
     threadsByPrefix: (prefix) =>
       db

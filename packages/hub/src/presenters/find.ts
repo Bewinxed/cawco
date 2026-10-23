@@ -22,12 +22,16 @@ const idWords = (id: string): string => {
   return WHOLE_ID.test(id) ? handle(id) : id;
 };
 
-/** A ref, `<hit id>#<record>`, as `around` takes it back: each half's handle. */
+/** A ref, `<hit id>#<record>@<when>`, as `around` takes it back: the id's and the record's handles, the time whole. */
 const refWords = (ref: string): string => {
-  const [id, docId] = ref.split("#");
-  return docId === undefined
-    ? idWords(ref)
-    : `${idWords(id ?? "")}#${handle(docId)}`;
+  const [id, record] = ref.split("#");
+  if (record === undefined) {
+    return idWords(ref);
+  }
+  const at = record.lastIndexOf("@");
+  return at < 0
+    ? `${idWords(id ?? "")}#${handle(record)}`
+    : `${idWords(id ?? "")}#${handle(record.slice(0, at))}${record.slice(at)}`;
 };
 
 /** Where a hit is, its ids as handles. */

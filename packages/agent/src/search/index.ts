@@ -6,7 +6,12 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { TranscriptAnswer, TranscriptQuery } from "@cawco/core";
+import type {
+  TranscriptAnswer,
+  TranscriptQuery,
+  TranscriptTurns,
+  TranscriptTurnsQuery,
+} from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import {
   listClaudeFiles,
@@ -19,6 +24,13 @@ import { readOpenCodeDocs } from "@cawco/jsonl-parser/opencode";
 
 /** The `meta` key prefix of each OpenCode database's watermark, followed by its path. */
 const WATERMARK = "opencode_watermark:";
+/**
+ * The `meta` key of when the index's last finished sync began, ms epoch:
+ * written with that sync's commit, so a restart knows the index is whole up
+ * to then, not catching up. A sync that wrote nothing writes none (fts5.ts
+ * `SyncOptions.ended`), so it may name an older sync than the last.
+ */
+const INDEXED_THROUGH = "indexed_through";
 
 /**
  * How often the index takes in what the transcripts gained when nobody is
@@ -43,10 +55,10 @@ const SYNC_INTERVAL_MS = 10 * 60_000;
 const SEARCH_FRESH_MS = 10_000;
 /**
  * How long a search waits for the sync it starts, ms: inside the hub's 1.5 s
- * window for each machine. A sync still running past it is a catch-up (the
- * index rebuilt, or a long time unsynced, minutes on a busy machine): the
- * search answers from what the index holds so far and says it is catching up,
- * rather than every search timing out at the hub until the catch-up ends. A
+ * window for each machine. A sync still running past it answers from what
+ * the index holds so far, saying how far that is ({@link
+ * TranscriptAnswer.indexedThrough}), rather than every search timing out at
+ * the hub; a search that finds a sync already running waits for none. A
  * sync that fails within it refuses the search with its reason.
  */
 const SYNC_WAIT_MS = 1000;
@@ -54,6 +66,8 @@ const MAX_SEARCH_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
 /** How many documents a listing (an author's words, no query) answers with at most. */
 const MAX_LISTED_DOCS = 200;
+/** The most turns either side of a centre `turns` answers with: `find`'s detailed `around` asks five. */
+const MAX_TURNS_SIDE = 10;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {
@@ -71,8 +85,17 @@ export class TranscriptSearchService {
   #timer: ReturnType<typeof setInterval> | null = null;
   /** The sync in flight: one at a time, which the timer and searches share. */
   #syncing: Promise<void> | null = null;
-  /** When the last sync that ended without error began. */
+  /** When the last sync that ended without error began; 0 before one has. */
   #syncedAt = 0;
+  /**
+   * Every transcript as it stood then is in the index, ms epoch: the start
+   * of its last finished sync, kept across restarts ({@link INDEXED_THROUGH}),
+   * or how far a catch-up has come (fts5.ts `SyncOptions.progress`); 0 when
+   * it can say no time.
+   */
+  #indexedThrough = 0;
+  /** A sync of this index has ever finished: else one running is a catch-up. */
+  #whole = false;
   /** Each OpenCode database's watermark, under its `meta` key ({@link WATERMARK} and its path). */
   readonly #openCodeWatermarks = new Map<string, number>();
   /** The last failed sync's reason, logged once; null once a sync succeeds. */
@@ -90,6 +113,9 @@ export class TranscriptSearchService {
     await mkdir(dirname(dbPath), { recursive: true });
     const index = new TranscriptIndex(dbPath);
     const svc = new TranscriptSearchService(index);
+    const through = Number(index.meta(INDEXED_THROUGH) ?? 0);
+    svc.#indexedThrough = through;
+    svc.#whole = through > 0;
     const rows = index.db
       .query("SELECT key, value FROM meta WHERE key LIKE ?")
       .all(`${WATERMARK}%`) as { key: string; value: string }[];
@@ -153,12 +179,21 @@ export class TranscriptSearchService {
     const claudeFiles = await listClaudeFiles();
     await this.#index.sync(
       claudeFiles.map((f) => f.path),
-      { docs, meta }
+      {
+        docs,
+        meta,
+        ended: { [INDEXED_THROUGH]: String(startedAt) },
+        progress: (through) => {
+          this.#indexedThrough = Math.max(this.#indexedThrough, through);
+        },
+      }
     );
     for (const [key, watermark] of watermarks) {
       this.#openCodeWatermarks.set(key, watermark);
     }
     this.#syncedAt = startedAt;
+    this.#indexedThrough = startedAt;
+    this.#whole = true;
   }
 
   /**
@@ -200,36 +235,7 @@ export class TranscriptSearchService {
     options?: TranscriptQuery
   ): Promise<TranscriptAnswer> {
     const started = performance.now();
-    // A sync that fails refuses the search, with the reason the hub names
-    // this machine by; one still running past SYNC_WAIT_MS answers from what
-    // is indexed so far, saying so.
-    let catchingUp = false;
-    if (Date.now() - this.#syncedAt > SEARCH_FRESH_MS) {
-      const outcome = await readWithin(SYNC_WAIT_MS, () =>
-        this.sync().then(
-          () => undefined,
-          (error: unknown) => ({ error })
-        )
-      );
-      switch (outcome.kind) {
-        case "answered":
-          if (outcome.value) {
-            throw new Error(
-              `its index couldn't update (${syncFailure(outcome.value.error)})`,
-              { cause: outcome.value.error }
-            );
-          }
-          break;
-        case "unanswered":
-          // Still syncing: answered from what is indexed so far, saying so.
-          catchingUp = true;
-          break;
-        default: {
-          const unhandled: never = outcome;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
-    }
+    await this.#fresh();
     const queried = performance.now();
     const limit = Math.min(
       options?.limit ?? DEFAULT_SEARCH_LIMIT,
@@ -240,11 +246,69 @@ export class TranscriptSearchService {
     const conversations = this.#conversations(query, limit, options);
     return {
       conversations,
-      catchingUp,
-      syncedAt: this.#syncedAt,
+      // Only a sync of an index that was never whole is a catch-up: a slow
+      // sync of a whole one answers from it, as far as `indexedThrough`.
+      catchingUp: this.#syncing !== null && !this.#whole,
+      indexedThrough: this.#indexedThrough,
       syncMs: Math.round(queried - started),
       queryMs: Math.round(performance.now() - queried),
     };
+  }
+
+  /**
+   * The index brought up to date when its last sync began more than
+   * {@link SEARCH_FRESH_MS} ago and none is running: waited for up to
+   * {@link SYNC_WAIT_MS}, then answered from as far as it has come. A sync
+   * already running is never waited for: in a catch-up, every search waited
+   * its whole second for a sync that ran on for hours. A sync that fails
+   * within the wait refuses, with the reason the hub names this machine by.
+   */
+  async #fresh(): Promise<void> {
+    if (
+      this.#syncing !== null ||
+      Date.now() - this.#syncedAt <= SEARCH_FRESH_MS
+    ) {
+      return;
+    }
+    const outcome = await readWithin(SYNC_WAIT_MS, () =>
+      this.sync().then(
+        () => undefined,
+        (error: unknown) => ({ error })
+      )
+    );
+    switch (outcome.kind) {
+      case "answered":
+        if (outcome.value) {
+          throw new Error(
+            `its index couldn't update (${syncFailure(outcome.value.error)})`,
+            { cause: outcome.value.error }
+          );
+        }
+        return;
+      case "unanswered":
+        // Still syncing: answered from what is indexed so far.
+        return;
+      default: {
+        const unhandled: never = outcome;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
+
+  /**
+   * A conversation's turns around one of its records, as the index holds
+   * them (fts5.ts `turns`), brought up to date first as a search is: what an
+   * agent's `find` reads a hit's turns from, whatever its stored transcript
+   * keeps now.
+   */
+  async turns(query: TranscriptTurnsQuery): Promise<TranscriptTurns> {
+    await this.#fresh();
+    return this.#index.turns({
+      sessions: query.sessions,
+      side: Math.min(Math.max(0, query.side), MAX_TURNS_SIDE),
+      ...(query.docId ? { docId: query.docId } : {}),
+      ...(query.at === undefined ? {} : { at: query.at }),
+    });
   }
 
   /**
@@ -265,6 +329,7 @@ export class TranscriptSearchService {
         ...narrowed,
         ...(options?.since ? { since: options.since } : {}),
         ...(options?.toolOutput ? { toolOutput: true } : {}),
+        ...(options?.context ? { context: true } : {}),
       });
     }
     return this.#index.search(query, {

@@ -30,7 +30,8 @@
  *    `GET /api/find`: its machine's index forgot its words.
  * k. A made-up password typed more than 16 words after "password" in one
  *    sentence (past the index's snippet window) comes back `[redacted]` in
- *    a concise hit: the excerpt is cut from the whole turn, filtered.
+ *    a concise hit: the excerpt is cut from the words the index holds
+ *    around it, filtered.
  * j. `before` keeps the evidence at or before its day: a thread's message
  *    of September comes back, October's does not.
  * l. `by: "person"` with no query lists only the person's words (their

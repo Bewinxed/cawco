@@ -1869,6 +1869,13 @@ export interface SpinOffHeld {
 /** Full-text search across all transcripts on a machine (daemon-scoped). */
 export const CONTROL_SEARCH_TRANSCRIPTS = "searchTranscripts";
 
+/**
+ * A conversation's turns as a machine's transcript index holds them
+ * (daemon-scoped): args `[TranscriptTurnsQuery]` (core find.ts), answers
+ * `TranscriptTurns`.
+ */
+export const CONTROL_TRANSCRIPT_TURNS = "transcriptTurns";
+
 /** One Claude session the hub has a machine carry into the dir its row names. */
 export interface CarrySessionRequest {
   /** The account it is to run on; null for none (the machine's own Claude Code dir). */

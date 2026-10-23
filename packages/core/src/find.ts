@@ -22,8 +22,9 @@ export interface TranscriptQuery {
    */
   before?: string;
   /**
-   * Each moment carries the words around its snippet (`TranscriptMoment.context`):
-   * the person's Find asks while it hides secrets, for the hub's filter to read.
+   * Each moment carries the words around its snippet (`TranscriptMoment.context`;
+   * a listing's, the start of its words): the person's Find asks while it
+   * hides secrets, and an agent's find always, for the hub's filter to read.
    */
   context?: boolean;
   /** How many conversations to answer with; for a listing (no words), how many documents. */
@@ -75,16 +76,65 @@ export interface TranscriptConversation {
 
 /** A machine's answer to a {@link TranscriptQuery}. */
 export interface TranscriptAnswer {
-  /** Its index was still taking in transcripts when it answered (a catch-up): the answer holds what was indexed so far. */
+  /**
+   * Its index has never yet taken in every transcript (built anew, or
+   * stopped part way and not finished since) and is doing so now: the answer
+   * holds what was indexed so far, {@link indexedThrough} saying how far.
+   */
   catchingUp: boolean;
   conversations: TranscriptConversation[];
+  /**
+   * How far its index has come, ms epoch: every transcript as it stood then
+   * is in it (the start of its last finished sync; in a catch-up, every
+   * transcript last written before then). 0 when it can say no time yet.
+   */
+  indexedThrough: number;
   /** What the query itself took on the machine, ms. */
   queryMs: number;
-  /** When the sync the index answered from began, ms epoch; 0 before its first. */
-  syncedAt: number;
-  /** What bringing the index up to date took before the query (0 when it was fresh), ms. */
+  /** What bringing the index up to date took before the query (0 when it was fresh, or a sync was already running), ms. */
   syncMs: number;
 }
+
+/**
+ * What the hub asks a machine's transcript index for a conversation's turns
+ * (`transcriptTurns`): the records around one of them as the index holds
+ * them, whatever its stored transcript keeps now. An agent's `find` reads a
+ * hit's turns this way (hub find-tool.ts).
+ */
+export interface TranscriptTurnsQuery {
+  /** When the centre was said, ms epoch, to the second. */
+  at?: number;
+  /** The centre, by its record's id or the start of it; none: its latest turn. */
+  docId?: string;
+  /** The conversation, by every harness session id it went by. */
+  sessions: string[];
+  /** How many turns either side. */
+  side: number;
+}
+
+/** One record of a conversation as its machine's index holds it, each column cut to a few thousand characters. */
+export interface TranscriptTurn {
+  author: TranscriptAuthor;
+  docId: string;
+  output: string | null;
+  role: string;
+  sidechain: boolean;
+  text: string;
+  thinking: string | null;
+  timestamp: string | null;
+  /** The tools it called, space-joined. */
+  tools: string | null;
+}
+
+/** A machine's answer to a {@link TranscriptTurnsQuery}: the turns oldest first, the centre's place among them; or why there are none. */
+export type TranscriptTurns =
+  | {
+      centre: number;
+      earlier: boolean;
+      later: boolean;
+      turns: TranscriptTurn[];
+    }
+  | { missing: string };
 
 /** Every kind of thing a find answers with. */
 export const FIND_KINDS = [
@@ -325,9 +375,11 @@ export type FindResult =
 export interface FindMachineCoverage {
   /** Whether it answered in time. */
   answered: boolean;
-  /** How old its index was when it answered, ms; null when it did not answer, or its index has not finished a sync yet. */
+  /** How old its index was when it answered (now less {@link indexedThrough}), ms; null when it did not answer, or could say no time yet. */
   indexAgeMs: number | null;
-  /** Its index was still taking in transcripts (a catch-up): what it answered may be short. */
+  /** How far its index had come when it answered ({@link TranscriptAnswer.indexedThrough}), ms epoch; null when it did not answer, or could say no time yet. */
+  indexedThrough: number | null;
+  /** Its index was catching up ({@link TranscriptAnswer.catchingUp}): what it answered may be short. */
   indexing: boolean;
   machineId: string;
   name: string;

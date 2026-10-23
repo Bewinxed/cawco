@@ -51822,14 +51822,21 @@
             "type": "boolean"
           },
           "indexAgeMs": {
-            "description": "How old its index was when it answered, ms; null when it did not answer, or its index has not finished a sync yet.",
+            "description": "How old its index was when it answered (now less {@link indexedThrough}), ms; null when it did not answer, or could say no time yet.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "indexedThrough": {
+            "description": "How far its index had come when it answered ({@link TranscriptAnswer.indexedThrough}), ms epoch; null when it did not answer, or could say no time yet.",
             "type": [
               "null",
               "number"
             ]
           },
           "indexing": {
-            "description": "Its index was still taking in transcripts (a catch-up): what it answered may be short.",
+            "description": "Its index was catching up ({@link TranscriptAnswer.catchingUp}): what it answered may be short.",
             "type": "boolean"
           },
           "machineId": {
@@ -51856,6 +51863,7 @@
         "required": [
           "answered",
           "indexAgeMs",
+          "indexedThrough",
           "indexing",
           "machineId",
           "name",

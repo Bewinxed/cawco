@@ -127,7 +127,7 @@ const THREAD_MOMENTS = 3;
  */
 const LISTED_DOCS = 200;
 
-/** How many characters of a thread message a listing's moment carries; an agent's find cuts its own from the whole message. */
+/** How many characters of a thread message a listing's moment carries; an agent's find cuts its own from the whole message, which rides as its `context` when asked. */
 const LISTED_CHARS = 240;
 
 const SPACES = /\s+/g;
@@ -181,7 +181,9 @@ export interface FindRequest {
   author?: MomentAuthor;
   /**
    * Each moment carries the words around it ({@link HeldMoment}): the
-   * person's Find asks while it hides secrets (find-secrets.ts).
+   * person's Find asks while it hides secrets (find-secrets.ts), and an
+   * agent's find always, its excerpts cut from them once the secret filter
+   * read them (find-tool.ts).
    */
   context?: true;
   cursor?: string;
@@ -927,6 +929,7 @@ export const createFind = (deps: FindDeps) => {
       answered: false,
       reason: deps.online(machine.machineId) ? null : "it is offline",
       indexAgeMs: null,
+      indexedThrough: null,
       indexing: false,
       tookMs: null,
     }));
@@ -948,6 +951,7 @@ export const createFind = (deps: FindDeps) => {
           answered: false,
           reason: "it is offline",
           indexAgeMs: null,
+          indexedThrough: null,
           indexing: false,
           tookMs: null,
         },
@@ -969,20 +973,24 @@ export const createFind = (deps: FindDeps) => {
           answered: false,
           reason: answer.error,
           indexAgeMs: null,
+          indexedThrough: null,
           indexing: false,
           tookMs,
         },
         answer: null,
       };
     }
-    const indexAgeMs =
-      answer.syncedAt > 0 ? Math.max(0, Date.now() - answer.syncedAt) : null;
     return {
       coverage: {
         ...base,
         answered: true,
         reason: null,
-        indexAgeMs,
+        indexAgeMs:
+          answer.indexedThrough > 0
+            ? Math.max(0, Date.now() - answer.indexedThrough)
+            : null,
+        indexedThrough:
+          answer.indexedThrough > 0 ? answer.indexedThrough : null,
         indexing: answer.catchingUp,
         tookMs,
       },
@@ -1212,7 +1220,8 @@ export const createFind = (deps: FindDeps) => {
     found: Map<string, FindResult>,
     author: MomentAuthor,
     where: FindWhere,
-    held: Names
+    held: Names,
+    context: true | undefined
   ) => {
     const lines = held.threadLines
       .filter((line) => line.who === author && inWindow(line.at, where))
@@ -1225,11 +1234,12 @@ export const createFind = (deps: FindDeps) => {
       }
       const key = `thread:${line.threadId}`;
       const before = found.get(key);
-      const moment: FindMoment = {
+      const moment: HeldMoment = {
         docId: line.id,
         author: line.who,
         at: line.at,
         excerpt: line.body.replace(SPACES, " ").trim().slice(0, LISTED_CHARS),
+        ...(context ? { context: line.body } : {}),
       };
       found.set(
         key,
@@ -1264,7 +1274,7 @@ export const createFind = (deps: FindDeps) => {
     const where = request.where ?? {};
     const found = new Map<string, FindResult>();
     if (!kinds || kinds.has("thread")) {
-      listThreads(found, request.author, where, held);
+      listThreads(found, request.author, where, held, request.context);
     }
     const askedAt = performance.now();
     // Caw's words are his threads', kept at the hub: no machine is asked for them.
@@ -1274,7 +1284,14 @@ export const createFind = (deps: FindDeps) => {
       author !== "caw" &&
       (!kinds || kinds.has("conversation"));
     const asked = transcripts
-      ? await askMachines("", author, {}, where, held, LISTED_DOCS)
+      ? await askMachines(
+          "",
+          author,
+          { context: request.context },
+          where,
+          held,
+          LISTED_DOCS
+        )
       : [];
     foldTranscripts(found, asked, held, deps.needsYou(), now);
     const purged = where.unpurged ? deps.purged() : new Set<string>();

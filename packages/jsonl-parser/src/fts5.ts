@@ -17,11 +17,13 @@ import { readTranscriptTail, type Checkpoint } from "./file.ts";
 import { parseMany } from "./pool.ts";
 import { typeFilter } from "./scan.ts";
 import {
+  AUTHOR_RULES,
   DOC_TYPES,
   type DocAuthor,
   extractDoc,
   type ExtractOptions,
   type TranscriptDoc,
+  userAuthor,
 } from "./text.ts";
 
 /**
@@ -203,6 +205,75 @@ export interface ListOptions {
   before?: string;
   /** What tools answered is listed too; otherwise a document of a tool's answer alone is left out. */
   toolOutput?: boolean;
+  /** Each moment carries the start of its words ({@link Moment.context}), {@link CONTEXT_CHARS} twice over. */
+  context?: boolean;
+}
+
+/**
+ * What `turns` reads: the records of a conversation around one of them, as
+ * the index holds them, so a conversation's turns are read whatever its
+ * stored transcript keeps now (a compaction or an account move drops records
+ * from there; the index keeps every one it read).
+ */
+export interface TurnsOptions {
+  /** The conversation, by every harness session id it went by. */
+  sessions: readonly string[];
+  /** The record at the centre, by its id or the start of it ({@link DOC_ID_PREFIX_MIN} characters or more); none: its latest turn. */
+  docId?: string;
+  /** When the centre was said, ms epoch, to the second: it is sought there, not walked to. */
+  at?: number;
+  /** How many turns either side of the centre. */
+  side: number;
+}
+
+/** One record of a conversation as `turns` answers it: its words, each column cut to {@link TURN_CHARS}. */
+export interface IndexedTurn {
+  author: DocAuthor;
+  docId: string;
+  output: string | null;
+  role: string;
+  /** Said inside a subagent (a sidechain): a neighbour never is; only a centre can be. */
+  sidechain: boolean;
+  text: string;
+  thinking: string | null;
+  timestamp: string | null;
+  /** The tools it called, space-joined. */
+  tools: string | null;
+}
+
+/** What `turns` answers: the turns, oldest first, the centre among them, and whether the conversation goes on either side; or why there are none. */
+export type TurnsAnswer =
+  | { centre: number; earlier: boolean; later: boolean; turns: IndexedTurn[] }
+  | { missing: string };
+
+/** The shortest start of a record's id that `turns` takes for it: a handle's eight characters, less a margin. */
+const DOC_ID_PREFIX_MIN = 6;
+/** Each column of a turn `turns` answers, cut to this: the hub shows 2,000 characters of one at most. */
+const TURN_CHARS = 8000;
+/**
+ * How many records a walk through the time order reads for one side of
+ * `turns`, at most: the index holds no order by conversation (see the
+ * schema), so a conversation's neighbours are walked to through every
+ * conversation's records written between them. Past this, the walk says
+ * there is more without having found it.
+ */
+const WALK_MAX = 20_000;
+/** How many records one step of a walk reads. */
+const WALK_CHUNK = 1000;
+/** How far either side of `TurnsOptions.at` the centre is sought, ms: `at` is to the second. */
+const AT_MARGIN_MS = 2000;
+/** Past every ISO time, as a walk's start from the newest. */
+const END_KEY = "￿";
+
+/** One record a walk passes: enough to tell whether it is the conversation's, and a turn. */
+interface Step {
+  docId: string;
+  id: number;
+  key: string;
+  /** It has words or calls: a turn, not a tool's answer or a thought alone. */
+  said: number;
+  session: number;
+  sidechain: number;
 }
 
 /** One place in a conversation that matched: where to open it, and why it matched. */
@@ -305,7 +376,28 @@ export interface SyncOptions {
   docs?: TranscriptDoc[];
   /** `meta` values to keep, written in the same transaction, each only when it changed. */
   meta?: Record<string, string>;
+  /**
+   * `meta` values written with the sync's last commit, and only when that
+   * commit writes something else: what says the sync ended, which a sync
+   * that found nothing new does not write for.
+   */
+  ended?: Record<string, string>;
+  /**
+   * How far a catch-up has come, told after each of its commits but the
+   * last: every transcript last written before this (ms epoch) is in the
+   * index. The sync's own end says the rest.
+   */
+  progress?: (through: number) => void;
 }
+
+/**
+ * How many documents one turn of the event loop inserts, at most: a catch-up
+ * of one long transcript is tens of thousands of documents, and inserted in
+ * one go it held the agent's only thread for seconds, its hub's search
+ * unanswered meanwhile ("it didn't answer within 2 s"). Our own call: a few
+ * tens of ms of FTS5 tokenising each.
+ */
+const INSERT_CHUNK = 500;
 
 export interface SyncResult {
   filesScanned: number;
@@ -415,6 +507,57 @@ export class TranscriptIndex {
         .run(FTS_AUTOMERGE);
     }
     this.#reloadStrings();
+    this.#reattribute();
+  }
+
+  /**
+   * Who said each of the person's documents, read again by the rules of now
+   * (text.ts `userAuthor`, `AUTHOR_RULES`) once those rules change: what
+   * they newly tell as a harness's or the hub's (a summariser's prompt)
+   * stops being the person's, in place. The index is never rebuilt for it: a
+   * rebuild reads every transcript again, hours on a large machine, while
+   * the person's documents are a small share of the rows, read off
+   * `docs_author_ts`. Once per rules version.
+   */
+  #reattribute(): void {
+    const done = this.db.query("SELECT value FROM meta WHERE key = 'author_rules'").get() as {
+      value: string;
+    } | null;
+    if (done?.value === String(AUTHOR_RULES)) {
+      return;
+    }
+    const owner = this.#strings.get("owner");
+    const reread = this.db.transaction(() => {
+      let moved = 0;
+      if (owner !== undefined) {
+        const rows = this.db
+          .query("SELECT id, text FROM docs INDEXED BY docs_author_ts WHERE author = ?")
+          .all(owner) as { id: number; text: string }[];
+        const update = this.db.query("UPDATE docs SET author = ? WHERE id = ?");
+        for (const row of rows) {
+          const { author } = userAuthor(row.text);
+          if (author !== "owner") {
+            update.run(this.#stringId(author), row.id);
+            moved += 1;
+          }
+        }
+      }
+      this.db
+        .query(
+          "INSERT INTO meta (key, value) VALUES ('author_rules', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )
+        .run(String(AUTHOR_RULES));
+      return moved;
+    });
+    try {
+      const moved = reread();
+      if (moved > 0) {
+        console.info(`[search] ${moved} documents told again as not the person's own`);
+      }
+    } catch (error) {
+      this.#reloadStrings();
+      throw error;
+    }
   }
 
   #open(path: string): Database {
@@ -557,15 +700,18 @@ export class TranscriptIndex {
 
   /**
    * Commits `writes`, then `docs` and the `meta` values that changed, as one
-   * transaction, answering how many documents were new. Each file's inserts
-   * get a turn of the event loop of their own: a catch-up of many files is
-   * otherwise one unbroken block on the daemon's only thread. A transaction
-   * that would write nothing is not begun.
+   * transaction, answering how many documents were new; `ended`'s values
+   * ride along when the transaction is begun for the rest. Inserts take
+   * turns of the event loop, {@link INSERT_CHUNK} documents each: a catch-up
+   * of many files, or of one long one, is otherwise one unbroken block on the
+   * daemon's only thread. A transaction that would write nothing is not
+   * begun.
    */
   async #commit(
     writes: FileWrite[],
     docs: TranscriptDoc[] = [],
     meta: Record<string, string> = {},
+    ended: Record<string, string> = {},
   ): Promise<number> {
     const getMeta = this.db.query("SELECT value FROM meta WHERE key = ?");
     const changed = Object.entries(meta).filter(
@@ -574,6 +720,7 @@ export class TranscriptIndex {
     if (writes.length === 0 && docs.length === 0 && changed.length === 0) {
       return 0;
     }
+    changed.push(...Object.entries(ended));
     const putCheckpoint = this.db.query(
       `INSERT INTO files (path, size, offset, lines) VALUES (?, ?, ?, ?)
        ON CONFLICT(path) DO UPDATE SET size = excluded.size, offset = excluded.offset, lines = excluded.lines`,
@@ -585,9 +732,11 @@ export class TranscriptIndex {
     this.db.exec("BEGIN");
     try {
       for (const write of writes) {
-        // biome-ignore lint/performance/noAwaitInLoops: the await is the yield; the files are written one at a time on purpose.
-        await new Promise((resolve) => setImmediate(resolve));
-        added += this.#insertDocs(write.docs);
+        for (let at = 0; at === 0 || at < write.docs.length; at += INSERT_CHUNK) {
+          // biome-ignore lint/performance/noAwaitInLoops: the await is the yield; the chunks are written one at a time on purpose.
+          await new Promise((resolve) => setImmediate(resolve));
+          added += this.#insertDocs(write.docs.slice(at, at + INSERT_CHUNK));
+        }
         putCheckpoint.run(
           write.path,
           write.checkpoint.size,
@@ -595,7 +744,11 @@ export class TranscriptIndex {
           write.checkpoint.lines,
         );
       }
-      added += this.#insertDocs(docs);
+      for (let at = 0; at < docs.length; at += INSERT_CHUNK) {
+        // biome-ignore lint/performance/noAwaitInLoops: the await is the yield, as above.
+        await new Promise((resolve) => setImmediate(resolve));
+        added += this.#insertDocs(docs.slice(at, at + INSERT_CHUNK));
+      }
       for (const [key, value] of changed) {
         putMeta.run(key, value);
       }
@@ -653,8 +806,18 @@ export class TranscriptIndex {
       }),
     );
 
+    // New (or reset) files, the one written to longest ago first, so rowids
+    // grow with when a document was written, as a search's recent tier reads
+    // them ({@link RECENT_TIERS}); `fullRead` of them are gathered (or
+    // failed), in that order.
+    fullFiles.sort((a, b) => a.mtime - b.mtime);
+    let fullRead = 0;
+    const startedAt = Date.now();
+
     // What this sync will commit, flushed early only when a catch-up makes it
-    // large (WRITE_BATCH_BYTES).
+    // large (WRITE_BATCH_BYTES). After each early flush, every transcript
+    // last written before the oldest full file still to read is in: the
+    // grown ones were read first, below.
     let pending: FileWrite[] = [];
     let pendingBytes = 0;
     const gather = async (write: FileWrite) => {
@@ -664,44 +827,13 @@ export class TranscriptIndex {
         result.docsAdded += await this.#commit(pending);
         pending = [];
         pendingBytes = 0;
+        options.progress?.(Math.min(startedAt, (fullFiles[fullRead]?.mtime ?? startedAt) - 1));
       }
     };
 
-    // New (or reset) files: parallel full parse in workers, a batch at a time,
-    // each batch gathered before the next is parsed (FULL_PARSE_BATCH_BYTES).
-    // The one written to longest ago first, so rowids grow with when a
-    // document was written, as a search's recent tier reads them
-    // ({@link RECENT_TIERS}).
-    fullFiles.sort((a, b) => a.mtime - b.mtime);
-    for (const batch of byteBatches(fullFiles, FULL_PARSE_BATCH_BYTES)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one batch's docs in memory at a time is the point
-      const parsed = await parseMany(batch, {
-        mode: "docs",
-        types: [...DOC_TYPES],
-        extract: options.extract,
-        workers: options.workers,
-      });
-      // Back in the batch's order: the workers answer shard by shard.
-      const order = new Map(batch.map((path, i) => [path, i]));
-      const inOrder = parsed.toSorted(
-        (a, b) => (order.get(a.path) ?? 0) - (order.get(b.path) ?? 0),
-      );
-      for (const file of inOrder) {
-        if (file.error !== undefined) {
-          result.errors.push({ path: file.path, error: file.error });
-          continue;
-        }
-        result.filesFull++;
-        await gather({
-          path: file.path,
-          docs: file.docs ?? [],
-          checkpoint: { size: file.stats.bytes, offset: file.stats.bytes, lines: file.stats.lines },
-          bytes: file.stats.bytes,
-        });
-      }
-    }
-
-    // Grown files: tail reads are small, run in-process.
+    // Grown files first: tail reads are small, run in-process, and they are
+    // the live sessions, whose newest words a catch-up would otherwise keep
+    // out of every search until it ends.
     const prefilter = typeFilter(...DOC_TYPES);
     for (const { path, checkpoint } of tailFiles) {
       let write: FileWrite;
@@ -729,13 +861,52 @@ export class TranscriptIndex {
       await gather(write);
     }
 
+    // The new files: parallel full parse in workers, a batch at a time, each
+    // batch gathered before the next is parsed (FULL_PARSE_BATCH_BYTES).
+    for (const batch of byteBatches(fullFiles, FULL_PARSE_BATCH_BYTES)) {
+      // biome-ignore lint/performance/noAwaitInLoops: one batch's docs in memory at a time is the point
+      const parsed = await parseMany(batch, {
+        mode: "docs",
+        types: [...DOC_TYPES],
+        extract: options.extract,
+        workers: options.workers,
+      });
+      // Back in the batch's order: the workers answer shard by shard.
+      const order = new Map(batch.map((path, i) => [path, i]));
+      const inOrder = parsed.toSorted(
+        (a, b) => (order.get(a.path) ?? 0) - (order.get(b.path) ?? 0),
+      );
+      for (const file of inOrder) {
+        fullRead++;
+        if (file.error !== undefined) {
+          result.errors.push({ path: file.path, error: file.error });
+          continue;
+        }
+        result.filesFull++;
+        await gather({
+          path: file.path,
+          docs: file.docs ?? [],
+          checkpoint: { size: file.stats.bytes, offset: file.stats.bytes, lines: file.stats.lines },
+          bytes: file.stats.bytes,
+        });
+      }
+    }
+
     // Another source's documents in the order they were written, as a
     // catch-up's files are.
     const docs = options.docs?.toSorted((a, b) =>
       (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
     );
-    result.docsAdded += await this.#commit(pending, docs, options.meta);
+    result.docsAdded += await this.#commit(pending, docs, options.meta, options.ended);
     return result;
+  }
+
+  /** A `meta` value, or null when the index holds none. */
+  meta(key: string): string | null {
+    return (
+      (this.db.query("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | null)
+        ?.value ?? null
+    );
   }
 
   /**
@@ -965,12 +1136,20 @@ export class TranscriptIndex {
         .all(...params, options.limit) as { id: number }[]
     ).map((row) => row.id);
     const described = this.#described(ids);
+    const words = options.context
+      ? this.#words(ids)
+      : new Map<number, { output: string | null; text: string; thinking: string | null }>();
     const conversations = new Map<string, ConversationHit>();
     for (const id of ids) {
       const doc = described.get(id);
       if (!doc) {
         continue;
       }
+      const said = words.get(id);
+      // The column the gist was cut from, its start.
+      const context = said
+        ? (said.text || said.output || "").slice(0, 2 * CONTEXT_CHARS)
+        : undefined;
       const key = `${doc.harness}\u0000${doc.session_id}`;
       const hit = conversations.get(key) ?? {
         harness: doc.harness,
@@ -989,9 +1168,166 @@ export class TranscriptIndex {
         timestamp: doc.ts,
         score: 0,
         snippet: doc.gist,
+        ...(context === undefined ? {} : { context }),
       });
     }
     return [...conversations.values()];
+  }
+
+  /**
+   * A conversation's turns around one of its records, as the index holds
+   * them ({@link TurnsOptions}): the centre sought at its time (or walked to
+   * from the newest when no time is given), then up to `side` turns either
+   * side of it, walked to along the index's time order ({@link WALK_MAX}).
+   * A neighbour is a record with words or calls outside a subagent; a tool's
+   * answer or a thought alone is a turn only at the centre.
+   */
+  turns(options: TurnsOptions): TurnsAnswer {
+    const sessions = new Set(
+      options.sessions.flatMap((session) => {
+        const id = this.#strings.get(session);
+        return id === undefined ? [] : [id];
+      }),
+    );
+    if (sessions.size === 0) {
+      return { missing: "its machine's index holds none of its words" };
+    }
+    const { docId } = options;
+    const mine = (step: Step) => sessions.has(step.session);
+    const turn = (step: Step) => mine(step) && step.sidechain === 0 && step.said === 1;
+    const named = (step: Step) =>
+      mine(step) &&
+      docId !== undefined &&
+      (step.docId === docId ||
+        (docId.length >= DOC_ID_PREFIX_MIN && step.docId.startsWith(docId)));
+    const from =
+      docId !== undefined && options.at !== undefined
+        ? { key: new Date(options.at + AT_MARGIN_MS + 1000).toISOString(), docId: "" }
+        : { key: END_KEY, docId: "" };
+    const floor =
+      docId !== undefined && options.at !== undefined
+        ? new Date(options.at - AT_MARGIN_MS).toISOString()
+        : "";
+    const sought = this.#walk(from, "before", 1, docId === undefined ? turn : named, floor);
+    const centre = sought.found[0];
+    if (!centre) {
+      return {
+        missing:
+          docId === undefined
+            ? "its machine's index holds no turn of it"
+            : `${docId} is not in its machine's index`,
+      };
+    }
+    const side = Math.max(0, Math.trunc(options.side));
+    const before = this.#walk(centre, "before", side, turn, "");
+    const after = this.#walk(centre, "after", side, turn, "");
+    const steps = [...before.found.toReversed(), centre, ...after.found];
+    const read = this.#turnWords(steps.map((step) => step.id));
+    const turns = steps.flatMap((step) => {
+      const words = read.get(step.id);
+      return words ? [words] : [];
+    });
+    return {
+      turns,
+      centre: turns.findIndex((each) => each.docId === centre.docId),
+      earlier: before.more,
+      later: after.more,
+    };
+  }
+
+  /**
+   * Up to `take` records `wanted` keeps, walked from `from` (not included)
+   * one way along `docs_key`, the index's time order, never below `floor`;
+   * and whether the walk left any behind: more of them, or records it did
+   * not read ({@link WALK_MAX}).
+   */
+  #walk(
+    from: { docId: string; key: string },
+    way: "before" | "after",
+    take: number,
+    wanted: (step: Step) => boolean,
+    floor: string,
+  ): { found: Step[]; more: boolean } {
+    const found: Step[] = [];
+    if (take < 1) {
+      return { found, more: false };
+    }
+    // The bound by time alone is what lets SQLite seek `docs_key` to it; the
+    // row value then steps past the records of that same instant read before.
+    const bounds =
+      way === "before"
+        ? "coalesce(d.ts, '') > ?1 AND coalesce(d.ts, '') <= ?2 AND (coalesce(d.ts, ''), d.doc_id) < (?2, ?3)"
+        : "?1 IS NOT NULL AND coalesce(d.ts, '') >= ?2 AND (coalesce(d.ts, ''), d.doc_id) > (?2, ?3)";
+    const order = way === "before" ? "DESC" : "ASC";
+    const query = this.db.query(
+      `SELECT d.id, coalesce(d.ts, '') AS key, d.doc_id AS docId, d.session, d.sidechain,
+              (length(d.text) > 0 OR d.tools IS NOT NULL) AS said
+       FROM docs d INDEXED BY docs_key
+       WHERE ${bounds}
+       ORDER BY coalesce(d.ts, '') ${order}, d.doc_id ${order}
+       LIMIT ?4`,
+    );
+    let at = from;
+    for (let read = 0; read < WALK_MAX; read += WALK_CHUNK) {
+      const steps = query.all(floor, at.key, at.docId, WALK_CHUNK) as Step[];
+      for (const step of steps) {
+        if (wanted(step)) {
+          if (found.length === take) {
+            return { found, more: true };
+          }
+          found.push(step);
+        }
+      }
+      const last = steps.at(-1);
+      if (!last || steps.length < WALK_CHUNK) {
+        return { found, more: false };
+      }
+      at = last;
+    }
+    return { found, more: true };
+  }
+
+  /** Each of `ids` as `turns` answers it, its columns cut to {@link TURN_CHARS}. */
+  #turnWords(ids: number[]): Map<number, IndexedTurn> {
+    const rows = this.db
+      .prepare(
+        `SELECT d.id, d.doc_id, r.value AS role, a.value AS author, d.ts, d.sidechain, d.tools,
+                substr(d.text, 1, ${TURN_CHARS}) AS text,
+                substr(d.thinking, 1, ${TURN_CHARS}) AS thinking,
+                substr(d.output, 1, ${TURN_CHARS}) AS output
+         FROM json_each(?) AS k
+         JOIN docs d ON d.id = k.value
+         JOIN strings r ON r.id = d.role
+         JOIN strings a ON a.id = d.author`,
+      )
+      .all(JSON.stringify(ids)) as {
+      author: DocAuthor;
+      doc_id: string;
+      id: number;
+      output: string | null;
+      role: string;
+      sidechain: number;
+      text: string;
+      thinking: string | null;
+      tools: string | null;
+      ts: string | null;
+    }[];
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          docId: row.doc_id,
+          role: row.role,
+          author: row.author,
+          timestamp: row.ts,
+          sidechain: row.sidechain === 1,
+          text: row.text,
+          thinking: row.thinking,
+          tools: row.tools,
+          output: row.output,
+        },
+      ]),
+    );
   }
 
   /**

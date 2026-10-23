@@ -111,10 +111,17 @@ const TAGGED: Readonly<Record<string, DocAuthor>> = {
 };
 
 /**
- * What a harness writes under the user's role that nobody typed: Claude
- * Code's slash-command echoes, local command output, task notifications,
- * hook output, its caveat line, an interruption, a compaction's summary and a
- * skill's loaded text.
+ * What a harness or the hub writes under the user's role that nobody typed:
+ * Claude Code's slash-command echoes, local command output, task
+ * notifications, hook output, its caveat line, an interruption, a
+ * compaction's summary and a skill's loaded text; and the hub's own prompts
+ * for a continuation (hub continuation.ts): the summariser's prompt, which
+ * quotes the source session's transcript whole, and the new session's
+ * opening, which quotes its summary and its last turns or the person's asks.
+ * Both carry the person's words, copied: indexed as the person's, every
+ * summarised session's words came back twice under `by: person`, the copy
+ * ranked above the turn. Keep these in step with continuation.ts's
+ * `summariserPrompt`, `openingMessage` and `asksOpening`.
  */
 const INJECTED = [
   /^<(?:command-name|command-message|command-args|local-command-stdout|local-command-stderr|local-command-caveat|task-notification|user-prompt-submit-hook|bash-stdout|bash-stderr)>/,
@@ -122,7 +129,16 @@ const INJECTED = [
   /^\[Request interrupted by user/,
   /^This session is being continued from a previous conversation/,
   /^Base directory for this skill: /,
+  /^Below is the transcript of a coding-agent session, up to its last few turns\./,
+  /^(?:Continuing|Restarting) session ".*" \(instance [0-9a-f-]+, /,
 ];
+
+/**
+ * The version of the rules {@link userAuthor} reads by: raised whenever
+ * {@link INJECTED} or {@link TAGGED} changes, so an index re-reads who said
+ * what it already holds (fts5.ts `#reattribute`) instead of being rebuilt.
+ */
+export const AUTHOR_RULES = 2;
 
 /** Who wrote a user turn's `text`, and the words to index for it. */
 export function userAuthor(text: string): { author: DocAuthor; text: string } {

@@ -1,7 +1,8 @@
 /**
  * No secret reaches an agent through the hub's own words about what was
  * said, nor a project's git. Every text an agent's `find` answers with
- * (find-tool.ts: excerpts, detailed turns, `around`'s turns) and every
+ * (find-tool.ts: excerpts, detailed turns, `around`'s turns; an excerpt
+ * read without its sentence through {@link redactOutOfSentence}) and every
  * `memory_note` before it is written (memory.ts) pass {@link redactSecrets}
  * first; each match is said as {@link REDACTED_SECRET}. The person's own Find
  * is not filtered: while "Hide secrets in Find" is on, its answer names where
@@ -171,3 +172,20 @@ export const redactSecrets = async (text: string): Promise<string> => {
   }
   return `${out}${text.slice(at)}`;
 };
+
+/**
+ * `text` redacted ({@link redactSecrets}), and every password-shaped word
+ * in it too ({@link passwordShaped}), whatever its sentence says: for words
+ * read without the sentence they stand in (an index's snippet, when the
+ * words around it could not be had), whose telling word ("password", "sudo")
+ * may stand outside them. Masked, never withheld whole.
+ */
+export const redactOutOfSentence = async (text: string): Promise<string> =>
+  (await redactSecrets(text)).replace(WORD, (raw) => {
+    const lead = WRAP_START.exec(raw)?.[0] ?? "";
+    const rest = raw.slice(lead.length);
+    const word = rest.replace(WRAP_END, "");
+    return passwordShaped(word)
+      ? `${lead}${REDACTED_SECRET}${rest.slice(word.length)}`
+      : raw;
+  });
