@@ -4883,8 +4883,24 @@ const ownWork = (tasks: MainTask[], from: number, to: number) => {
     (most, task) => (most && most.cpu >= task.cpu ? most : task),
     undefined
   );
+  /** A task past the bound, with the work it did: its frame's phases, and its style and layout passes with what they touched. */
+  const told = (task: MainTask) =>
+    `${said(task)} (${[
+      ...task.rendering
+        .slice(0, 4)
+        .map(([phase, ms]) => `${phase} ${ms.toFixed(1)}ms`),
+      `style ${task.styleMs.toFixed(1)}ms over ${task.restyled} elements`,
+      `layout ${task.layoutMs.toFixed(1)}ms`,
+      ...task.passes
+        .filter((pass) => pass.ms >= 5)
+        .slice(0, 3)
+        .map(
+          (pass) =>
+            `${pass.name} ${pass.ms.toFixed(1)}ms of ${pass.elements}${pass.root ? ` from ${pass.root}` : ""} by ${pass.at}`
+        ),
+    ].join("; ")})`;
   return {
-    over: inside.filter((task) => task.cpu > LONG_TASK_MS).map(said),
+    over: inside.filter((task) => task.cpu > LONG_TASK_MS).map(told),
     longest: longest ? said(longest) : "no task",
   };
 };
@@ -4918,12 +4934,17 @@ const mapPressChecks = async (on: On) => {
     const before = new Set(Object.keys((await docOf(frame)).pins));
     const mark = (name: string) =>
       frame.evaluate((n) => performance.mark(n), name);
-    const main = await traceMain(on.page, async () => {
-      await mark("press");
-      await pressFramePoint(frame, { x: outer.x + x, y: outer.y + y });
-      await on.page.waitForTimeout(2000);
-      await mark("press-after");
-    });
+    // With each task's passes, so one past the bound says what it did.
+    const main = await traceMain(
+      on.page,
+      async () => {
+        await mark("press");
+        await pressFramePoint(frame, { x: outer.x + x, y: outer.y + y });
+        await on.page.waitForTimeout(2000);
+        await mark("press-after");
+      },
+      { passes: true }
+    );
     // The press opened its composer, writing nothing; Comment writes the pin, and its picture goes to the hub.
     await on.page
       .locator(COMPOSE)
