@@ -22,7 +22,6 @@ import {
   readAtMost,
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
-import { hubProtocol } from "@cawco/core/binary-health";
 import {
   ARCHIVE_ENTRY,
   type BinaryInstallation,
@@ -154,6 +153,44 @@ async function readReadiness(
   );
   const holds = mergeHolds(local.holds, theirs.holds);
   return { ready: holds.length === 0, holds };
+}
+
+/**
+ * The hub's wire protocol range, from its `/health`; undefined when it
+ * answered without one. Given the time the offer's read is given: a machine
+ * added over SSH reaches its hub through the forward the hub holds to it,
+ * which is gone while the hub restarts and comes back when the hub opens it
+ * again. A hub that did not say, in time or at all, is
+ * {@link HubUnreachable}: nothing is tried or marked failed, and the next
+ * tick asks again (2026-10-23, a VPS after its hub's restart: "The hub did
+ * not say its wire protocol (GET http://127.0.0.1:36201/health: no answer
+ * within 3003ms)").
+ */
+async function readHubProtocol(
+  hub: string
+): Promise<{ max: number; min: number } | undefined> {
+  const health = await askHub(
+    "with its wire protocol",
+    20_000,
+    `${hub}/health`,
+    {},
+    async (response) => {
+      if (!response.ok) {
+        throw new Error(`its /health answered ${response.status}`);
+      }
+      return (await response.json()) as {
+        build?: { protocol?: { max: number; min: number } };
+      };
+    }
+  ).catch((error: unknown) => {
+    if (error instanceof HubUnreachable) {
+      throw error;
+    }
+    throw new HubUnreachable(
+      `the hub at ${hub} did not say its wire protocol: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  return health.build?.protocol;
 }
 
 /** The hub's fence, for `ms` from now; 0 lowers it. */
@@ -1097,7 +1134,7 @@ export class BinaryUpdater {
     // The hub's machine replaces its hub with the build; every other machine
     // runs it beside the hub as it is, so their wire protocols must overlap.
     if (installation.role !== "hub") {
-      const protocol = await hubProtocol(hub);
+      const protocol = await readHubProtocol(hub);
       const offered = body.manifest.protocol;
       if (
         !protocol ||

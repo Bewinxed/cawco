@@ -209,25 +209,3 @@ async function probeAgentRow(options: {
   }
   return undefined;
 }
-
-/**
- * The hub's wire protocol range, for a machine deciding whether a build can
- * talk to it; undefined when the hub answered without one. A hub that did
- * not answer is never read as one without a range: that throws, saying so.
- */
-export async function hubProtocol(
-  hubUrl: string
-): Promise<{ max: number; min: number } | undefined> {
-  const health = await ask(`${hubUrl}/health`, json<HealthBody>);
-  switch (health.kind) {
-    case "unanswered":
-    case "failed":
-      throw new Error(`The hub did not say its wire protocol (${health.said})`);
-    case "answered":
-      return health.value?.build?.protocol;
-    default: {
-      const unhandled: never = health;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-}

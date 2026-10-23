@@ -367,7 +367,12 @@ export function createBinaryUpdates(options: Options) {
     )
     .get(
       "/api/binary-updates/artifacts/:version/:archive",
-      async ({ params, status }) => {
+      async ({ params, request, server, status }) => {
+        // The first ask of a build waits on its download from the release
+        // host (`fetchArchive`, bounded there): silent that whole time, and
+        // never cut by the hub's idle timer, whose cut a machine's fetch
+        // answers by sending the request again with the proof already taken.
+        server?.timeout(request, 0);
         const candidates = [await runningRelease().catch(() => undefined)];
         if (current) {
           candidates.push(current.release);
