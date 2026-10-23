@@ -538,7 +538,7 @@ export const capableRefusal = (
   const needs = runsOnWords(step.needs);
   const why =
     touched.length === 0
-      ? `This project's landing gate runs “${step.name}” on ${needs}`
+      ? `This project's merge checks run “${step.name}” on ${needs}`
       : `This item changes ${touched.length === 1 ? touched[0] : `${touched.length} files “${step.name}” reads (${touched[0]} first)`}, so it lands only once “${step.name}” passes on ${needs}`;
   const machines = last ? `${last} is offline` : "the hub knows none";
   return `${why}, and none is online (${machines}). The item waits for one: end your turn, and the hub wakes you when one is online to call finish_item again; or call finish_item with blocked.`;

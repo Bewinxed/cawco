@@ -18,7 +18,7 @@
    * - Large files: each origin's own LFS, or where the project declared
    *   they live, bound to a connection with a key (hub project-edit.ts).
    * - Work lands: where its attempts land when their task says nothing.
-   * - Landing checks: the steps the hub runs before work lands, read from
+   * - Merge checks: the steps the hub runs before it merges work, read from
    *   the project folder's gate.md (`GET /api/projects/:id/gate`), with a
    *   link to edit the file.
    * - Tasks: where they live (WORDS.md: tracker). CawCo's files alone, or
@@ -49,6 +49,7 @@
     lfsWords,
     machineLabel,
     type ProjectGate,
+    projectWords,
     statusOptionFor,
     TRACKER_NAMES,
     type Tracker,
@@ -152,7 +153,7 @@
     setLands(next);
   }
 
-  /* ── Landing checks ─────────────────────────────────────────────── */
+  /* ── Merge checks ───────────────────────────────────────────────── */
 
   /** The project's gate.md as the hub last read it, read when the details open. */
   type GateRead =
@@ -1075,7 +1076,7 @@
       </div>
     </div>
 
-    <!-- Landing checks: what the hub runs before work lands, as gate.md declares it. -->
+    <!-- Merge checks: what the hub runs before it merges work, as gate.md declares it. -->
     <div
       data-slot="row"
       class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
@@ -1086,7 +1087,7 @@
         data-slot="project-details-label"
         class="type-label pt-space-1 text-ink-muted"
       >
-        Landing checks
+        {projectWords.mergeChecks}
       </p>
       <div
         data-slot="value"
@@ -1110,7 +1111,7 @@
             <RowFault data-gate-problem reason={problem} />
           {/each}
           <p data-slot="note" class="type-meta text-ink-muted">
-            Until gate.md is fixed, nothing in this project lands.
+            {projectWords.mergeChecksUnread}
           </p>
         {:else if gateRead.gate.kind === "declared" && gateRead.gate.steps.length > 0}
           <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
@@ -1146,7 +1147,7 @@
           </ol>
         {:else}
           <p data-slot="note" class="type-meta text-ink-muted">
-            Landed with no checks: this project declares none.
+            {projectWords.noMergeChecks}
           </p>
         {/if}
         <Button

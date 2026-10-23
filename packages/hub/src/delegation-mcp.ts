@@ -85,7 +85,7 @@ const LONG_CALLS: Record<string, string> = {
   delegate: "Creating the delegate's workspace",
   generate_image: "Generating image through ChatGPT",
   continue_session: "Summarising the session",
-  finish_item: "Running the work item's landing gate",
+  finish_item: "Running the merge checks of the work item",
   task_start: "Creating the attempt's workspace",
   start_session: "Waiting for the machine to start the session",
 };

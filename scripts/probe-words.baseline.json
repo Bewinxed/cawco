@@ -239,8 +239,7 @@
     ": attached to its live process": 1
   },
   "scripts/probe-kit/specs/gate-row.ts": {
-    "Edit gate.md": 1,
-    "Landing checks": 1
+    "Edit gate.md": 1
   },
   "scripts/probe-kit/specs/git-door.ts": {
     "cawco: git over ssh did not run here": 1,
@@ -302,9 +301,6 @@
   },
   "scripts/probe-kit/specs/landing-cutoff.ts": {
     "Nothing to land": 2
-  },
-  "scripts/probe-kit/specs/landing-gate.ts": {
-    "clears the hub's landing gate": 1
   },
   "scripts/probe-kit/specs/limit-admission.ts": {
     "moves from": 1

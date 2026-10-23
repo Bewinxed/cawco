@@ -157,13 +157,13 @@ const outputsLine = (outputs: string[] | undefined): string =>
     ? ` The hub then copies your outputs (${outputs.join(", ")}) into the project's folder; a missing one comes back to you.`
     : "";
 
-/** The landing gate, as a delegate is told of it. */
+/** The merge checks, as a delegate is told of them. */
 const GATE =
-  "its landing gate (the steps its project's gate.md names: for CawCo the dependency install, one `bun run check --all` in your warm workspace, and the iOS build when you changed the app)";
+  "its merge checks (the checks its project's gate.md names: for CawCo the dependency install, one `bun run check --all` in your warm workspace, and the iOS build when you changed the app)";
 
 /**
  * How a work item's workspace lands: the hub does it after `finish_item`,
- * through its landing gate (hub/src/landing.ts), so the session commits and
+ * after its merge checks pass (hub/src/landing.ts), so the session commits and
  * never pushes. The session's report, quoting what it ran, is the proof.
  */
 const hubLandLine = (
@@ -183,7 +183,7 @@ const hubLandLine = (
         ? `${opening} Nothing is pushed: after finish_item, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you. They need not be committed.${compare}`
         : `${opening} Nothing is pushed and nothing is collected: finish_item hands your report to your parent.${compare}`;
     case "main":
-      return `${opening} Commit your work and do not push: after finish_item, the hub rebases your commits onto origin/${base}, runs ${GATE} on the result, and pushes to ${base}; a failing gate comes back to you with its output.${outputsSaid}${compare}`;
+      return `${opening} Commit your work and do not push: after finish_item, the hub rebases your commits onto origin/${base}, runs ${GATE} on the result, and pushes to ${base}; a failed check comes back to you with its output.${outputsSaid}${compare}`;
   }
 };
 

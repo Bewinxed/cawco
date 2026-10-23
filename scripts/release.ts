@@ -195,7 +195,7 @@ const gatePassed = async (commit: string): Promise<boolean> => {
   });
   if (asked.kind === "unanswered" || !asked.value.ok) {
     console.log(
-      `The hub at ${hubUrl} ${asked.kind === "unanswered" ? `did not answer within ${ANNOUNCE_MS / 1000} s` : `answered ${asked.value.status}`} on the landing gate of tree ${tree.slice(0, 12)}: the release runs its own check`
+      `The hub at ${hubUrl} ${asked.kind === "unanswered" ? `did not answer within ${ANNOUNCE_MS / 1000} s` : `answered ${asked.value.status}`} on the merge checks of tree ${tree.slice(0, 12)}: the release runs its own check`
     );
     return false;
   }
@@ -203,8 +203,8 @@ const gatePassed = async (commit: string): Promise<boolean> => {
   const ok = passed.includes(LANDING_CHECK);
   console.log(
     ok
-      ? `The landing gate passed \`${LANDING_CHECK}\` on tree ${tree.slice(0, 12)}: the release checks it no more`
-      : `The landing gate passed no \`${LANDING_CHECK}\` on tree ${tree.slice(0, 12)}: the release runs it`
+      ? `The merge checks passed \`${LANDING_CHECK}\` on tree ${tree.slice(0, 12)}: the release checks it no more`
+      : `The merge checks passed no \`${LANDING_CHECK}\` on tree ${tree.slice(0, 12)}: the release runs it`
   );
   return ok;
 };

@@ -154,6 +154,6 @@ export const REPORT_POINTER_CASES: readonly {
   },
   {
     refused: false,
-    text: "Gate output:\n```\nbun run typecheck\n$ tsc -b\n```\nAll green; see above for the exact lines.",
+    text: "Check output:\n```\nbun run typecheck\n$ tsc -b\n```\nAll green; see above for the exact lines.",
   },
 ];

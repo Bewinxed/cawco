@@ -106,7 +106,7 @@ const BUN_REFUSAL = "error: lockfile had changes, but lockfile is frozen";
 /** The parent's handoff to a retired delegate, and the mark of its reopened turn. */
 const again = (tag: Tag) => `PROBE-RECUT-AGAIN-${tag}`;
 /** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
-const NOT_LANDED = "Not landed: the landing gate ran on";
+const NOT_LANDED = "Not landed: the merge checks ran on";
 /** How the hub says a handoff waits for a clone cut again (delegation-actions.ts). */
 const RECUTTING = "cutting its clone again";
 /** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
@@ -280,7 +280,7 @@ const makeRepo = async (
 
 /** Whether a report's landing gate is the declared one, every step passing, in order. */
 const declaredPassed = (result: string): boolean => {
-  const at = result.indexOf("Landing gate, run by the hub:\n");
+  const at = result.indexOf(`${workWords.gateHeading}\n`);
   const lines = result.slice(at).split("\n").slice(1, 4);
   return (
     at >= 0 &&

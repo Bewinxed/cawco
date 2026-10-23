@@ -16,4 +16,12 @@ export const projectWords = {
   noStages: "This project has no stages of its own yet",
   /** A task card whose attempt the hub couldn't start. */
   cantStart: "Can't start",
+  /** Project details' row of the checks the hub runs before it merges work (gate.md). */
+  mergeChecks: "Merge checks",
+  /** That row for a project whose gate.md names no check. */
+  noMergeChecks:
+    "The hub merges work with no checks: this project declares none.",
+  /** That row under the problems of a gate.md the hub cannot read. */
+  mergeChecksUnread:
+    "Until gate.md is fixed, the hub merges no work in this project.",
 };

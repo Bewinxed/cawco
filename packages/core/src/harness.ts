@@ -2573,8 +2573,8 @@ export const QUEUE_WAIT_MAX_MS = 3 * 60 * 60 * 1000;
  */
 export interface CommandRun {
   /**
-   * The run is a step of a work item's landing gate, in these words (`the
-   * landing gate of “Fix the tray” (153fd0db): iOS build compiles`).
+   * The run is one of a work item's merge checks, in these words (`the
+   * merge checks of “Fix the tray” (153fd0db): iOS build compiles`).
    */
   gate?: string;
   id: string;

@@ -454,7 +454,7 @@ const seedOne = (
     headline
       ? `${headline}\n\nThe whole report, with the output of every command.`
       : null,
-    state === "failed" ? "The landing gate failed." : null,
+    state === "failed" ? "The merge checks failed." : null,
     started,
     ended
   );
@@ -488,7 +488,7 @@ const seedDelegates = (probe: Probe, orch: Session) => {
     "Comment pins re-anchor by source line after a revision; the comments spec passes.",
     "",
     "The routine form reads its schedule back from the hub; the j8 journey passes.",
-    "The landing gate timed out on the Mac's build slot twice; nothing landed.",
+    "The merge checks timed out on the Mac's build slot twice; nothing landed.",
     "Find redacts passwords in concise hits; the find-tool spec passes.",
     "The design map lists a component's call sites; the session-sheet spec passes.",
     "",

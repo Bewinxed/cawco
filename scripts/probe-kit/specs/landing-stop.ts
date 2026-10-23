@@ -56,7 +56,7 @@ const GATES: Record<Tag, string> = {
 };
 /** How the push check's refusal reads (work-items.ts `refusedLine`). */
 const CHECK_REFUSED =
-  "Not landed: the push check (git push --dry-run to main, before any landing gate step) from ";
+  "Not landed: the push check (git push --dry-run to main, before any merge check) from ";
 const NO_STEP = "was refused, so no gate step ran";
 
 /** Each delegate's steps so far; `armed` is set by the spec once it may finish. */
@@ -344,7 +344,7 @@ const legB = async (legs: Legs) => {
   const row = b.row();
   const cancelled = (await legs.fleet.logs("hub"))
     .split("\n")
-    .filter((line) => line.includes("cancelling landing gate run"));
+    .filter((line) => line.includes("cancelling merge check run"));
   check(
     "(b) 10 s after the stop, no process of the gate is alive",
     sleepers.length > 0 && alive.length === 0 && left.length === 0,

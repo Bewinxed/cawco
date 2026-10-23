@@ -43,7 +43,7 @@ export const PAUSE_ORIGIN = "machine-pause";
 /** How a caller has the hub run a command on a machine (server.ts `runOnMachine`). */
 export interface CommandOptions {
   /**
-   * The run is a step of a work item's landing gate, in these words (core
+   * The run is one of a work item's merge checks, in these words (core
    * `CommandRun.gate`).
    */
   readonly gate?: string;

@@ -49,7 +49,7 @@
  *     600` there): within 10 s its process is gone from the process table
  *     and the step says it waits for the pause; the item is not failed, its
  *     landing is the same one, and its delegate is told nothing; B's row
- *     says it stopped 1 running landing gate step. After the pause the build
+ *     says it stopped 1 running merge check. After the pause the build
  *     runs again and the item lands.
  *
  *   bun scripts/probe-kit/run.ts machine-pause
@@ -652,7 +652,7 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     before(until_ - 5000)
   ).catch(() => undefined);
   check(
-    "p5: after the restart the landing gate still waits on B, saying so",
+    "p5: after the restart the merge checks still wait on B, saying so",
     resumed?.includes(words) === true,
     `${resumed ?? "no wait said"}; C's item: ${cItem()}`
   );
@@ -805,8 +805,8 @@ const runningBuild = async (
     `before ${JSON.stringify(landing)}, during ${JSON.stringify(during)}; D's requests since the pause:\n  ${story("D", pausedAt)}`
   );
   check(
-    "p7: the pause's answer says it stopped 1 running landing gate step",
-    view.pauseStopped === "stopped 1 running landing gate step",
+    "p7: the pause's answer says it stopped 1 running merge check",
+    view.pauseStopped === "stopped 1 running merge check",
     `${answer.status} ${JSON.stringify(view)}`
   );
   const done = await until(

@@ -154,9 +154,10 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
     " Your parent reads this report alone; chat messages reach no one. A report pointing at a chat message is refused.";
   const proof =
     " Your parent reads this report alone; chat messages reach no one. `summary` carries the deliverable whole, or names the file (in the repository or your outputs) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.";
-  const gate = "the landing gate (install, lint, typecheck, the iOS build)";
+  const gate =
+    "the merge checks your project's gate.md names (for CawCo: the dependency install, `bun run check --all`, and the iOS build when the app changed)";
   const back =
-    " A failing gate or a conflict comes back with its output: fix, commit, call again.";
+    " A failed check or a conflict comes back with its output: fix, commit, call again.";
   const outputs =
     " Outputs are files in your workspace, copied to the project's folder.";
   const close =
@@ -434,7 +435,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate",
-      "Run bounded work as a delegate: a new session with fresh context (with `fork`, a copy of this one) in a workspace of its own, a clone on its own branch. It reports back once its work clears the hub's landing gate, quoting the output of the commands that prove it.\n\n" +
+      "Run bounded work as a delegate: a new session with fresh context (with `fork`, a copy of this one) in a workspace of its own, a clone on its own branch. It reports back once its work passes the hub's merge checks, quoting the output of the commands that prove it.\n\n" +
         "Delegate SUBSTANTIAL work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs. " +
         "Do menial work yourself: git status/log/diff, grep, reading a few files, port checks, a log tail, a restart, the reads a brief needs. " +
         "Never delegate a single command whose exact output you need, edits to files you are changing, or what the user wants to watch.\n\n" +
@@ -507,7 +508,7 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
           .optional()
           .describe(
-            "main (default): rebased onto the default branch after its gate. branch: pushed to cawco/<item>. pr: that, with a pull request. none: nothing pushed; name its deliverables in outputs. Work on a machine rather than a repository: host instead."
+            "main (default): rebased onto the default branch after its merge checks pass. branch: pushed to cawco/<item>. pr: that, with a pull request. none: nothing pushed; name its deliverables in outputs. Work on a machine rather than a repository: host instead."
           ),
         host: z
           .boolean()

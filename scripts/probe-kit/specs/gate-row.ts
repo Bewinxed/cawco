@@ -24,6 +24,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { projectWords } from "../../../packages/core/src/words/project";
 import { MACHINE, type Reply } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -32,9 +33,9 @@ const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 const ROW = '[data-project-details] [data-detail="gate"]';
 const LINE = "[data-place-line]";
 
-const NONE = "Landed with no checks: this project declares none.";
+const NONE = projectWords.noMergeChecks;
 const READING = "Reading gate.md…";
-const UNTIL = "Until gate.md is fixed, nothing in this project lands.";
+const UNTIL = projectWords.mergeChecksUnread;
 
 const INSTALL = "bun install --frozen-lockfile";
 const LINT_NAME = "Lint the changed files";
@@ -172,10 +173,10 @@ async function probe(kit: Kit) {
     `1 no gate.md: hub ${JSON.stringify(absent)}; row ${JSON.stringify(none)}`
   );
   kit.check(
-    "1: with no gate.md the row, Landing checks, says the project lands with no checks, and links Edit gate.md to the file's address",
+    "1: with no gate.md the row, Merge checks, says the hub merges with no checks, and links Edit gate.md to the file's address",
     absent.gate.kind === "none" &&
       none.state === "none" &&
-      none.label === "Landing checks" &&
+      none.label === projectWords.mergeChecks &&
       none.notes.length === 1 &&
       none.notes[0] === NONE &&
       none.steps.length === 0 &&

@@ -50,11 +50,11 @@ const FILES: Record<Tag, { path: string; body: string }> = {
 /** tsc's words for B's error. */
 const TS_ERROR = "src/b.ts(1,14): error TS2322";
 /** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
-const NOT_LANDED = "Not landed: the landing gate ran on";
+const NOT_LANDED = "Not landed: the merge checks ran on";
 /** P's declaration. */
 const PY_GATE = "---\nuv sync\nuv run pytest -q\n---\n";
 /** What a landing of a project that declares no gate says (work-items.ts `NO_CHECKS`). */
-const NO_CHECKS = "landed with no checks: this project declares none";
+const NO_CHECKS = "merged with no checks: this project declares none";
 
 const steps: Partial<Record<Tag, { finish?: boolean; searched?: boolean }>> =
   {};
@@ -112,7 +112,7 @@ interface ItemRow {
 
 /** The report's landing gate lines: every `- …` line under its heading. */
 const gateLinesOf = (result: string): string[] => {
-  const at = result.indexOf("Landing gate, run by the hub:\n");
+  const at = result.indexOf(`${workWords.gateHeading}\n`);
   if (at < 0) {
     return [];
   }
@@ -231,8 +231,8 @@ const run = async (kit: Kit) => {
   // A
   const a = await delegate("A", repo, ts.parent);
   check(
-    "A: delegate starts with no checks, and says its report comes once its work clears the landing gate",
-    a.text.includes("clears the hub's landing gate") &&
+    "A: delegate starts with no checks, and says its report comes once its work passes the merge checks",
+    a.text.includes(workWords.reportArrives) &&
       !a.text.includes("acceptance checks"),
     a.text.slice(0, 600)
   );
@@ -240,7 +240,7 @@ const run = async (kit: Kit) => {
   const result = aRow.result ?? "";
   const aLines = gateLinesOf(result);
   check(
-    "A: done, its report its own summary, then the landing gate with exactly the declared bun install, lint:changed and typecheck passing, then the landing",
+    "A: done, its report its own summary, then the merge checks with exactly the declared bun install, lint:changed and typecheck passing, then the landing",
     aRow.state === "done" &&
       result.startsWith("Committed src/a.ts.") &&
       aLines.length === 3 &&
@@ -334,9 +334,9 @@ const run = async (kit: Kit) => {
   const nRow = await ended("N", n.workItemId);
   const nResult = nRow.result ?? "";
   check(
-    "N: a project with no gate.md lands, its report saying it landed with no checks because it declares none",
+    "N: a project with no gate.md lands, its report saying it merged with no checks because it declares none",
     nRow.state === "done" &&
-      nResult.includes(`Landing gate, run by the hub:\n${NO_CHECKS}`) &&
+      nResult.includes(`${workWords.gateHeading}\n${NO_CHECKS}`) &&
       nResult.includes(`${workWords.landedOn("main")} at`),
     `${nRow.state} ${nRow.error ?? ""}\n${nResult.slice(0, 1500)}`
   );

@@ -956,13 +956,13 @@ export function pauseClock(at: number, now = Date.now()): string {
 
 /**
  * What a command the hub runs on a machine is, as a pause that stops it
- * counts it: a step of an item's landing gate (the iOS build among them), or
+ * counts it: one of an item's merge checks (the iOS build among them), or
  * any other.
  */
-export type RunKind = "landing gate" | "command";
+export type RunKind = "merge check" | "command";
 
 const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
-  "landing gate": ["landing gate step", "landing gate steps"],
+  "merge check": ["merge check", "merge checks"],
   command: ["command", "commands"],
 };
 
@@ -970,8 +970,8 @@ const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
 export type StoppedCommands = Partial<Record<RunKind, number>>;
 
 /**
- * "stopped 1 running landing gate step", "stopped 2 running landing gate
- * steps and 1 running command"; undefined when the pause stopped nothing.
+ * "stopped 1 running merge check", "stopped 2 running merge checks and 1
+ * running command"; undefined when the pause stopped nothing.
  */
 export function stoppedWords(stopped: StoppedCommands): string | undefined {
   const parts = (Object.keys(COMMAND_NOUNS) as RunKind[]).flatMap((kind) => {

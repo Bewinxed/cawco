@@ -169,7 +169,7 @@ export interface Machine {
   machineId: string;
   /** Paused by the owner until this time, epoch ms (machine-pause.ts); null or absent when not. */
   pausedUntil?: number | null;
-  /** What its pause stopped as it began: "stopped 1 running landing gate step"; null or absent when nothing. */
+  /** What its pause stopped as it began: "stopped 1 running merge check"; null or absent when nothing. */
   pauseStopped?: string | null;
   /** `online` while its daemon holds a socket to the hub. */
   status: string;
@@ -734,7 +734,7 @@ const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
   blocked:
     "Its work item is blocked: its delegate type, its machine or its account is missing, and its session isn't started again without it. The message is kept at the hub and goes to it once that is back; Needs you says what is missing.",
   finishing:
-    "It called finish_item, and its turn ends with that call, so the message is kept at the hub until the call answers: if the landing gate sends the work back, the message joins the turn that goes on; if the work lands, it goes as the session's next turn once that turn is over, and reopens the item.",
+    "It called finish_item, and its turn ends with that call, so the message is kept at the hub until the call answers: if the merge checks send the work back, the message joins the turn that goes on; if the work lands, it goes as the session's next turn once that turn is over, and reopens the item.",
   held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   recut:
     "Its workspace retired once its work was over, so the hub is cutting its clone again at the same path, at the commit its clone was on when it retired, its own commits with it; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
@@ -2156,7 +2156,7 @@ export const handoffActions = ({
     });
     return (
       `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state, ` +
-      `and stays idle: no reminder, wait or landing gate outcome wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
+      `and stays idle: no reminder, wait or merge check outcome wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
     );
   },
 

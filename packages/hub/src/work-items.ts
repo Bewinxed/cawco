@@ -1162,8 +1162,7 @@ export const blockWords = (block: ItemBlock): string => {
 };
 
 /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
-const REPORT_ARRIVES =
-  "Its report arrives once it calls finish_item and its work clears the hub's landing gate; the report quotes the commands it ran.";
+const REPORT_ARRIVES = workWords.reportArrives;
 
 /** How an open item ends, as the hub's reminders say it. */
 const FINISH_LINE =
@@ -1798,7 +1797,7 @@ interface GateRefusal {
 const CAPABLE_WAIT_MINUTES = 120;
 
 /** What a landing that pushed says of a project that declares no gate. */
-const NO_CHECKS = "landed with no checks: this project declares none";
+const NO_CHECKS = "merged with no checks: this project declares none";
 
 /**
  * How a gate run waits. At finish_item and while an item gates on top of
@@ -1966,13 +1965,13 @@ const landedLine = (
     )
     .join(", ");
   const after = landed.rebased
-    ? `${base} had moved by its turn, so it rebased again${ran ? `: ${ran}` : ", with no gate steps to run"}`
+    ? `${base} had moved by its turn, so it rebased again${ran ? `: ${ran}` : ", with no merge checks to run"}`
     : `${base} had not moved by its turn, so nothing ran again`;
   const stepped =
     steps.length > 0
-      ? `; it stepped out of its turn ${steps.length === 1 ? "once" : `${steps.length} times`} to gate again, the last time because ${steps.at(-1)}`
+      ? `; it stepped out of its turn ${steps.length === 1 ? "once" : `${steps.length} times`} to run the merge checks again, the last time because ${steps.at(-1)}`
       : "";
-  return `${workWords.landedOn(base)} at ${landed.sha.slice(0, 9)}, gated on top of ${base}; ${after}${stepped}.`;
+  return `${workWords.landedOn(base)} at ${landed.sha.slice(0, 9)}, checked on top of ${base}; ${after}${stepped}.`;
 };
 
 /** The findings, numbered; nothing when there are none. */
@@ -2024,10 +2023,10 @@ const stoppedLanding = (item: WorkItemRow): Landed => ({
 const dirtyText = (files: string, where: string): string =>
   `Not landed: the workspace has changes that are not committed, new files included. The hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or move scratch to $TMPDIR, then call finish_item again.${fenced(files)}`;
 
-/** The text that hands a failed landing gate back to the session. */
+/** The text that hands failed merge checks back to the session. */
 const gateFailedText = (run: GateRun, where: string): string => {
   const { head, lines } = failedRun(run);
-  return `Not landed: the landing gate ran on ${where}, and ${head}. Fix it, commit, and call finish_item again.\n\n${lines}`;
+  return `Not landed: the merge checks ran on ${where}, and ${head}. Fix it, commit, and call finish_item again.\n\n${lines}`;
 };
 
 /**
@@ -2046,7 +2045,7 @@ const refusedLine = (
   const step: Record<Refusal["step"], string> = {
     fetch: `the fetch of origin/${workspace.base}`,
     rebase: `the rebase onto origin/${workspace.base}`,
-    "push check": `the push check (git push --dry-run to ${target}, before any landing gate step)`,
+    "push check": `the push check (git push --dry-run to ${target}, before any merge check)`,
     push: `the push to ${target}`,
     read: "reading the workspace's git",
   };
@@ -2058,7 +2057,7 @@ const refusedLine = (
   } else if (refusal.cause === "cut-off") {
     said = `${step.push} was cut off, and ${target} does not hold the commits`;
   } else if (refusal.step === "push check") {
-    said = `${step["push check"]} from ${machine} was refused, so no gate step ran`;
+    said = `${step["push check"]} from ${machine} was refused, so no merge check ran`;
   } else if (refusal.step === "push") {
     said = `${step.push} was refused`;
   }
@@ -3399,7 +3398,7 @@ export const createWorkItems = ({
       .map((todo) => `- [${todo.id ?? todo.path}] ${todo.text}`)
       .join(
         "\n"
-      )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call runs the landing gate whatever is ticked.`;
+      )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call runs the merge checks whatever is ticked.`;
   };
 
   /** What follows an item's end, off the step that ended it. */
@@ -4495,7 +4494,7 @@ export const createWorkItems = ({
     if (workspace.checksFor) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${handle(workspace.id)} runs the landing gate's iOS build for workspace ${handle(workspace.checksFor)} on its machine and takes no work item. Delegate with workspace ${handle(workspace.checksFor)}, or without workspace to start a new one.`
+        `Workspace ${handle(workspace.id)} runs the iOS build of the merge checks for workspace ${handle(workspace.checksFor)} on its machine and takes no work item. Delegate with workspace ${handle(workspace.checksFor)}, or without workspace to start a new one.`
       );
     }
     const items = db.workItemsIn(workspace.id);
@@ -4695,7 +4694,7 @@ export const createWorkItems = ({
       if (source.host) {
         why = "it is a host-scope delegate's folder, not a clone";
       } else if (source.checksFor) {
-        why = "it runs a landing gate's build";
+        why = "it runs the iOS build of the merge checks";
       }
       throw new WorkItemRefusal(
         409,
@@ -6078,7 +6077,7 @@ export const createWorkItems = ({
         if (row) {
           tell(
             row,
-            `Your work item's landing gate could not run: ${reason}. Call finish_item again.`
+            `The merge checks of your work item could not run: ${reason}. Call finish_item again.`
           );
         }
       });
@@ -6471,7 +6470,7 @@ export const createWorkItems = ({
     if (landingHolds(item)) {
       throw new WorkItemRefusal(
         409,
-        "the landing gate is already running for this item; its outcome comes to you when it settles"
+        "the merge checks already run for this item; their outcome comes to you when they end"
       );
     }
     // A stop cancels every command its landing has running (landingStops);
@@ -6648,10 +6647,10 @@ export const createWorkItems = ({
      */
     const asStep = (step: GateStep): CommandOptions => ({
       onWait: queued,
-      what: "landing gate",
+      what: "merge check",
       movable: true,
       noWait: how.inTurn,
-      gate: `the landing gate of “${item.title}” (${item.id.slice(0, 8)}): ${step.name}`,
+      gate: `the merge checks of “${item.title}” (${item.id.slice(0, 8)}): ${step.name}`,
       stop,
     });
     /**
@@ -6672,7 +6671,7 @@ export const createWorkItems = ({
       queued(null);
       if (stop?.aborted) {
         throw new CommandStopped(
-          `${item.title} ended while its landing gate waited out a pause`
+          `${item.title} ended while its merge checks waited for a pause to end`
         );
       }
     };
@@ -6840,7 +6839,7 @@ export const createWorkItems = ({
       }
       return { declared: true, outcomes };
     } catch (error) {
-      waitedIn(error, current?.name ?? "the landing gate");
+      waitedIn(error, current?.name ?? "the merge checks");
     }
   };
 
@@ -7130,8 +7129,8 @@ export const createWorkItems = ({
       return { inTurn: true, say: (words) => landingWait(itemId, words) };
     }
     const gating = stepped
-      ? `stepped out of its turn to land (${stepped}), so gating again on top of ${base}`
-      : `gating on top of ${base}`;
+      ? `stepped out of its turn to land (${stepped}), so running the merge checks again on top of ${base}`
+      : `running the merge checks on top of ${base}`;
     return {
       inTurn: false,
       say: (words, step) =>
@@ -7184,7 +7183,7 @@ export const createWorkItems = ({
         gate,
         turning
           ? `in its turn to land on ${base}`
-          : `while gating on top of ${base}`,
+          : `while it ran the merge checks on top of ${base}`,
         how
       );
       if (runFailed(run)) {
@@ -7317,7 +7316,7 @@ export const createWorkItems = ({
     const lines = gate.declared ? gateLines(gate) : NO_CHECKS;
     return [
       summary.trim(),
-      ...(lines ? [`Landing gate, run by the CawCo hub:\n${lines}`] : []),
+      ...(lines ? [`Merge checks, run by the CawCo hub:\n${lines}`] : []),
       link
         ? `This is ${what}; its report and transcript: ${link}`
         : `This is ${what} (work item ${handle(item.id)}).`,
@@ -7741,7 +7740,7 @@ export const createWorkItems = ({
       `${workspace.host ? "" : await changesSince(workspace, item)}${findingsBlock(submission.findings)}${shipped}`
     );
     const lines = landingGateLines(landing);
-    const gateSaid = `${lines ? `\n\nLanding gate:\n${lines}` : ""}${shipped}`;
+    const gateSaid = `${lines ? `\n\nMerge checks:\n${lines}` : ""}${shipped}`;
     const ended = finish(db.workItem(item.id) ?? item, {
       ...(failure ? { state: "failed", error: failure } : { state: "done" }),
       result: body,
@@ -7801,7 +7800,7 @@ export const createWorkItems = ({
     );
     if (diff.exitCode !== 0) {
       throw new Error(
-        `the hub could not read the item's changes against origin/${workspace.base} for its landing gate's on: steps: ${failedWith(diff)}`
+        `the hub could not read the item's changes against origin/${workspace.base} for the on: steps of its merge checks: ${failedWith(diff)}`
       );
     }
     return diffPaths(diff.stdout);
@@ -7859,7 +7858,7 @@ export const createWorkItems = ({
     }
     if (declared.kind === "unreadable") {
       return {
-        refusal: `Not landed: this project's ${GATE_FILE}, which declares its landing gate, does not read, so the hub cannot tell what to run. ${declared.problems.join(" ")} It is in the project's folder on the hub: ask your parent or the person to fix it there, then call finish_item again.`,
+        refusal: `Not landed: this project's ${GATE_FILE}, which declares its merge checks, does not read, so the hub cannot tell what to run. ${declared.problems.join(" ")} It is in the project's folder on the hub: ask your parent or the person to fix it there, then call finish_item again.`,
       };
     }
     const touched = declared.steps.some((step) => step.inputs || step.targetMap)
@@ -7927,7 +7926,7 @@ export const createWorkItems = ({
         : { problem: failedWith(shown) };
     return "problem" in map
       ? {
-          refusal: `Not landed: this project's landing gate builds what its target map, ${path}, gives a change, and ${ref}'s ${path} does not read: ${map.problem}. Write it with apps/apple/scripts/targets-map.sh --write on the Mac and commit it, or ask your parent; then call finish_item again.`,
+          refusal: `Not landed: this project's merge checks build what its target map, ${path}, gives a change, and ${ref}'s ${path} does not read: ${map.problem}. Write it with apps/apple/scripts/targets-map.sh --write on the Mac and commit it, or ask your parent; then call finish_item again.`,
         }
       : map;
   };
@@ -8449,7 +8448,7 @@ export const createWorkItems = ({
       if (!LIVE.has(item.state) || item.landingSince) {
         throw new WorkItemRefusal(
           409,
-          `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "its landing gate runs" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
+          `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "its merge checks run" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
         );
       }
       const waitReason = reason.trim().replace(/\s+/g, " ");
@@ -8991,7 +8990,7 @@ export const createWorkItems = ({
         // on its row ({@link gateOnce}).
         const kept = [...passesOf(item.id).values()].flat().length;
         console.log(
-          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} gate pass(es) kept`
+          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} merge check pass(es) kept`
         );
         landStored(item, submission);
       }

@@ -12,8 +12,11 @@ export const workWords = {
    */
   hostRefused: (lines: readonly string[]) =>
     `Host scope refuses ${lines.length === 1 ? "this" : "these"}:\n${lines.map((line) => `- ${line}`).join("\n")}`,
-  /** The heading of a report's landing gate section, over its steps' lines. */
-  gateHeading: "Landing gate, run by the hub:",
+  /** The heading of a report's merge checks section, over its checks' lines. */
+  gateHeading: "Merge checks, run by the hub:",
+  /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
+  reportArrives:
+    "Its report arrives once it calls finish_item and its work passes the hub's merge checks; the report quotes the commands it ran.",
   /**
    * The title of your notice of a blocked item: held because its session
    * slept past its limit (hub work-items.ts `blockAsleep`), or because what
