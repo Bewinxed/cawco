@@ -45,6 +45,9 @@ export * from "./frames";
 // rules. The `SDK*` names are kept for one release so the dashboard's imports
 // did not all have to move at once; they are neutral types, not the SDK's.
 export * from "./harness";
+// A project's Claude Code settings, OpenCode plugins and pi extensions, placed
+// as its MCP servers are, and refused the same way at the hub and the machine.
+export * from "./harness-config";
 // Hooks the fleet keeps: the lifecycle event, the matcher, and the script the
 // machines run. The matcher's three-way reading lives here so the editor's test
 // box previews exactly what Claude Code will do with it, and `hookProblem` is

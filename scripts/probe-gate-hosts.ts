@@ -657,6 +657,7 @@ await applyFleetDenials([]);
 const { syncFleetConfig } = await import("../packages/agent/src/fleet");
 await syncFleetConfig({
   deniedTools: [],
+  harnessConfig: [],
   hooks: [],
   hubOnlyMarketplaces: [],
   marketplaces: [],

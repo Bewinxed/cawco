@@ -214,6 +214,15 @@ export const fleetMcpSetFile = (): string =>
 export const fleetHooksDir = (): string => join(cawcoDataDir(), "fleet-hooks");
 
 /**
+ * Where the fleet sync writes each OpenCode plugin's and pi extension's
+ * module, and installs each one's npm package (agent
+ * fleet-harness-config.ts): files of CawCo's own, loaded by the OpenCode
+ * server and the pi host on this machine, outside every checkout.
+ */
+export const fleetPlacedDir = (): string =>
+  join(cawcoDataDir(), "fleet-placed");
+
+/**
  * The harness config the fleet places, as this machine's sessions take it
  * at their launch (agent fleet-harness-set.ts): the fleet's hooks and each
  * project's placed copies, with every command resolved to its script. Written

@@ -22,6 +22,7 @@ import {
   hookVerdict,
 } from "@cawco/core";
 import { sessionEnvironment } from "@cawco/core/session-env";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { type Boundary, shellQuote } from "./boundary";
 import type { SetHook } from "./fleet-harness-set";
 
@@ -81,13 +82,9 @@ const runCommand = (
     // Its own group (`detached`): the timeout and the session's abort end
     // what it started too.
     const stop = () => {
-      const { pid } = child;
-      if (pid !== undefined && pid > 1) {
-        try {
-          process.kill(-pid, "SIGKILL");
-        } catch {
-          // Already gone.
-        }
+      const leader = spawnedPid(child);
+      if (leader !== undefined && child.exitCode === null) {
+        signalGroup(leader, "SIGKILL");
       }
     };
     const timer = setTimeout(

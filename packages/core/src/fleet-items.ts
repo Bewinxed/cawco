@@ -22,6 +22,7 @@ import type {
   FleetSkillPayload,
   MachineFleetConfig,
 } from "./fleet";
+import type { FleetHarnessConfig } from "./harness-config";
 import type { FleetHook } from "./hooks";
 
 /** What a machine's harnesses converge an item into, one converge pass each. */
@@ -38,7 +39,8 @@ export type FleetItemKind =
   | "memory"
   | "memoryDoc"
   | "placedMemory"
-  | "hook";
+  | "hook"
+  | "harnessConfig";
 
 /** One item: its id (`<kind>:<key>`, or the kind alone for a singular one) and its value. */
 export type FleetItems = Map<string, unknown>;
@@ -85,8 +87,19 @@ export const fleetItemsOf = (config: MachineFleetConfig): FleetItems => {
   for (const hook of config.hooks) {
     items.set(`hook:${hook.id}@${hook.cwd ?? ""}`, hook);
   }
+  for (const row of config.harnessConfig) {
+    items.set(`harnessConfig:${harnessConfigKey(row)}`, row);
+  }
   return items;
 };
+
+/**
+ * A harness config row's report key: `<kind>:<name>`, and a placed copy's
+ * `@<place id>` after it (core harness-config.ts).
+ */
+export const harnessConfigKey = (
+  row: Pick<FleetHarnessConfig, "kind" | "name" | "placeId">
+): string => `${row.kind}:${row.name}${row.placeId ? `@${row.placeId}` : ""}`;
 
 /** The kind an item id names. */
 export const itemKind = (id: string): FleetItemKind => {
@@ -111,6 +124,8 @@ export const reportKeyOf = (id: string): string | undefined => {
       return key;
     case "hook":
       return key.slice(0, key.lastIndexOf("@"));
+    case "harnessConfig":
+      return key;
     case "memory":
       return "";
     case "policy":
@@ -128,6 +143,7 @@ export const reportKeyOf = (id: string): string | undefined => {
 export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
   const config: MachineFleetConfig = {
     deniedTools: [],
+    harnessConfig: [],
     hooks: [],
     marketplaces: [],
     mcp: [],
@@ -183,6 +199,9 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
         break;
       case "hook":
         config.hooks.push(value as FleetHook);
+        break;
+      case "harnessConfig":
+        config.harnessConfig.push(value as FleetHarnessConfig);
         break;
       default: {
         const unhandled: never = kind;

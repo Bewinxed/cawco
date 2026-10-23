@@ -6,6 +6,7 @@ import {
   connectionProjects,
   connections,
   fleetAgents,
+  fleetHarnessConfig,
   fleetHooks,
   fleetMcpOauth,
   fleetMcpSessions,
@@ -96,6 +97,9 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
     part("rule_state", eq(ruleState.ruleId, key)),
   ],
   hook: (key) => [part("fleet_hooks", eq(fleetHooks.id, key))],
+  harnessConfig: (key) => [
+    part("fleet_harness_config", eq(fleetHarnessConfig.id, key)),
+  ],
   skill: (key) => [part("skills", eq(skills.name, key))],
   plugin: (key) => [part("plugins", eq(plugins.id, key))],
   marketplace: (key) => [part("marketplaces", eq(marketplaces.name, key))],

@@ -70,6 +70,7 @@ import {
   ASK_USER_QUESTION,
   BOUNDARY_RELAUNCH,
   CAWCO_ENV,
+  CLAUDE_SETTINGS_REFUSED,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_CONTEXT_USAGE,
@@ -175,6 +176,8 @@ import {
   syncFleetConfig,
 } from "../fleet";
 import {
+  configAt,
+  type FleetHarnessSet,
   placedAt,
   readFleetHarnessSet,
   type SetHook,
@@ -1482,7 +1485,8 @@ const placedHookEntries = (hooks: readonly SetHook[]): FlagHooks => {
 
 /**
  * {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its
- * `settings`, the project's hooks placed at the session's folder (`placed`,
+ * `settings` over the fleet's Claude Code settings (`fleetSettings`), the
+ * project's hooks placed at the session's folder (`placed`,
  * fleet-harness-set.ts) joined to the boundary's, and a lead's
  * {@link LEAD_SETTINGS} or a fenced session's {@link FENCE_SETTINGS} over
  * them. The boundary's `PreToolUse` entry comes last of that event's. The
@@ -1498,7 +1502,8 @@ const sessionSettingsOptions = (
   boundary: HarnessContext["boundary"],
   lead: boolean,
   fence: boolean,
-  placed: readonly SetHook[]
+  placed: readonly SetHook[],
+  fleetSettings: Record<string, unknown>
 ) => {
   const bounded = claudeBoundaryOptions(boundary);
   // A boundary's settings carry its `hooks`; no boundary, none.
@@ -1511,6 +1516,9 @@ const sessionSettingsOptions = (
   return {
     ...bounded,
     settings: {
+      // The fleet's and the folder's project's settings, under every key
+      // CawCo sets itself ({@link launchedSettings}).
+      ...fleetSettings,
       ...SESSION_SETTINGS,
       ...("settings" in bounded ? bounded.settings : {}),
       ...(Object.keys(hooks).length > 0 ? { hooks } : {}),
@@ -1833,6 +1841,7 @@ const launchFleet = async (
   denied: string[];
   fleet: Record<string, McpServerConfig>;
   hooks: SetHook[];
+  settings: Record<string, unknown>;
 }> => {
   const fleet = session.fence
     ? { servers: {}, denied: [] }
@@ -1846,8 +1855,26 @@ const launchFleet = async (
     ),
     denied: fleet.denied,
     hooks: set ? placedAt(set.placedHooks, ctx.cwd) : [],
+    settings: set ? launchedSettings(set, ctx.cwd) : {},
   };
 };
+
+/**
+ * The fleet's Claude Code settings rows and those of the project placed at
+ * `cwd` (fleet-harness-set.ts `configAt`), merged key by key in that order,
+ * so a project's key is over the fleet's: what a session's flag settings
+ * carry under CawCo's own ({@link sessionSettingsOptions}). A key the hub
+ * refuses a row (core `CLAUDE_SETTINGS_REFUSED`) is left out here too.
+ */
+const launchedSettings = (
+  set: FleetHarnessSet,
+  cwd: string
+): Record<string, unknown> =>
+  Object.fromEntries(
+    configAt(set, "claudeSettings", cwd)
+      .flatMap((row) => Object.entries(row.settings ?? {}))
+      .filter(([key]) => !CLAUDE_SETTINGS_REFUSED.includes(key))
+  );
 
 /**
  * The MCP servers a session launches with: the caller's and CawCo's, or
@@ -2092,17 +2119,20 @@ class ClaudeSession implements HarnessSession {
      * What only a launch has: `conversationKept` says, for a resumed
      * conversation, whether its transcript is still on disk; `fleetMcp` is
      * the fleet's servers it takes as it starts, `placedHooks` its folder's
-     * project hooks ({@link launchFleet}). An attach starts nothing and
+     * project hooks, `fleetSettings` the fleet's and its project's Claude
+     * Code settings ({@link launchFleet}). An attach starts nothing and
      * passes none of them: its CLI keeps the settings it was launched with.
      */
     {
       conversationKept,
       fleetMcp,
       placedHooks = [],
+      fleetSettings = {},
     }: {
       conversationKept?: () => Promise<boolean>;
       fleetMcp?: Record<string, McpServerConfig>;
       placedHooks?: SetHook[];
+      fleetSettings?: Record<string, unknown>;
     },
     /**
      * The sessiond connection this session's CLI child lives under: `spawn()`
@@ -2265,7 +2295,13 @@ class ClaudeSession implements HarnessSession {
         // A work item's session runs every shell command inside its
         // workspace's boundary, through its shell prefix (`sessionEnv`); the
         // hook the CLI itself runs judges every other call's paths.
-        ...sessionSettingsOptions(ctx.boundary, lead, fence, placedHooks),
+        ...sessionSettingsOptions(
+          ctx.boundary,
+          lead,
+          fence,
+          placedHooks,
+          fleetSettings
+        ),
         ...scratchDirectory(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
@@ -4430,6 +4466,7 @@ export class ClaudeHarness implements Harness {
         ...(conversationKept ? { conversationKept } : {}),
         fleetMcp: launch.fleet,
         placedHooks: launch.hooks,
+        fleetSettings: launch.settings,
       },
       { client, procId: procIdFor("claude", ctx.instanceId), executable }
     );

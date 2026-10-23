@@ -51,6 +51,9 @@
  *   tool` and git), and none gets the server's password or CawCo's wiring.
  *   The hook names no session, so the session is the one whose `shell` call
  *   with this very command was just made in this location.
+ * - The fleet's OpenCode plugins and its project's placed at the location
+ *   (the agent's fleet-harness-config.ts), each module's `setup` handed
+ *   this location's `ctx` before CawCo's own hooks register.
  * - `ctx.mcp.transform`: the project MCP servers CawCo placed; in a
  *   workspace's location every fleet server with a command reached through
  *   the workspace's MCP gate on the agent (mcp-gate.ts), which runs it on
@@ -446,6 +449,23 @@ const fleetHooks = (directory) => {
   }
   return [...Object.values(set.hooks ?? {}), ...placed.filter((hook) => place && realOf(hook.cwd) === place)];
 };
+// The fleet's OpenCode plugins for \`directory\` (the agent's
+// fleet-harness-set.ts configAt): the fleet's own, then those of the
+// project placed at the deepest place holding it, each a module file the
+// agent's sync made ready (its fleet-harness-config.ts).
+const fleetPlugins = (directory) => {
+  let set = {};
+  try { set = JSON.parse(readFileSync(cawcoHarnessSet, "utf8")); } catch { return []; }
+  const rows = Object.values(set.config ?? {}).filter((row) => row.kind === "opencodePlugins" && typeof row.entry === "string");
+  const here = realOf(directory);
+  let place;
+  for (const { cwd } of rows) {
+    if (!cwd) continue;
+    const root = realOf(cwd);
+    if ((here === root || here.startsWith(root + "/")) && !(place && place.length >= root.length)) place = root;
+  }
+  return rows.filter((row) => !row.cwd || (place && realOf(row.cwd) === place));
+};
 // Whether this harness runs a hook (core hookUnsupported): an event it
 // raises, a command, no condition.
 const runsHook = (hook) => hookEvents.includes(hook.event) && hook.handler?.type === "command" && !hook.handler.if?.trim();
@@ -523,6 +543,25 @@ export default {
   id: ${JSON.stringify(CAWCO_PLUGIN_ID)},
   async setup(ctx) {
     const directory = ctx.location.directory;
+    // The fleet's OpenCode plugins and its project's, each set up first, with
+    // this location's ctx: a plugin handed another's ctx registers its hooks
+    // and tools as that one does (observed on 2.0.29: a plugin's
+    // \`ctx.shell.hook("create.before")\`, registered through CawCo's ctx,
+    // fired for the location's shell). CawCo's own register after them. One
+    // that fails to load or set up is said on the server's log, and CawCo's
+    // plugin goes on. The location the agent reads through runs none.
+    if (realOf(directory) !== realOf(cawcoQuiet)) {
+      for (const row of fleetPlugins(directory)) {
+        try {
+          const loaded = await import(row.entry);
+          const plugin = loaded.default ?? loaded;
+          if (typeof plugin?.setup !== "function") throw new Error("its module exports no { setup }");
+          await plugin.setup(ctx);
+        } catch (error) {
+          console.error("cawco: the fleet's OpenCode plugin " + row.name + " (" + row.entry + ") did not load: " + said(error));
+        }
+      }
+    }
     // A session anywhere inside a workspace's clone is that workspace's.
     const holding = workspaceOf(directory);
     const workspace = holding?.id;

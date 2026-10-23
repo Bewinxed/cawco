@@ -239,17 +239,20 @@ import {
   FLEET_DELTA,
   FLEET_WATCH,
   FLEET_WATCH_LIMITS,
+  type FleetHarnessConfig,
   FRAMES_LOST,
   FRESH_START,
   forkNotice,
   GENERATE_IMAGE,
   HARNESS_TOOL,
   HARNESSES,
+  type HarnessConfigKind,
   HOOK_TEMPLATES,
   type HomeCredential,
   type HomeLogin,
   type HomeLoginMoved,
   type HomeStore,
+  harnessConfigProblem,
   harnessNamed,
   hookProblem,
   IMAGE_GENERATION_TIMEOUT_MS,
@@ -912,6 +915,26 @@ import {
 import { workflowRoutes } from "./workflows/routes";
 import { createWorkflowRuntime } from "./workflows/runtime";
 import { createWorkspaceRetire } from "./workspace-retire";
+
+/**
+ * What a put of a Claude Code settings row, an OpenCode plugin or a pi
+ * extension takes (core harness-config.ts): each field optional, `null`
+ * clearing it. The row's own check is `harnessConfigProblem`.
+ */
+interface HarnessConfigBody {
+  enabled?: boolean;
+  module?: string | null;
+  package?: string | null;
+  projectId?: string | null;
+  settings?: Record<string, unknown> | null;
+}
+const HARNESS_CONFIG_BODY = t.Object({
+  enabled: t.Optional(t.Boolean()),
+  settings: t.Optional(t.Nullable(t.Record(t.String(), t.Unknown()))),
+  module: t.Optional(t.Nullable(t.String())),
+  package: t.Optional(t.Nullable(t.String())),
+  projectId: t.Optional(t.Nullable(t.String())),
+});
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
 /** A project's page source in its folder (`decisions/<name>/page.oui` or its built `index.html`), its name at 1. */
@@ -18827,6 +18850,12 @@ export const createServer = (
           // A project-bound hook once per place of its project on this
           // machine, with that place as its cwd (project-placements.ts).
           hooks: placedHooks(config.hooks, places, machineId),
+          // The fleet's Claude Code settings, OpenCode plugins and pi
+          // extensions as they are, a project's once per place of it here.
+          harnessConfig: [
+            ...unbound(config.harnessConfig),
+            ...placedCopies(config.harnessConfig, places, machineId),
+          ],
         },
         hubHttpUrl()
       )
@@ -19932,6 +19961,9 @@ export const createServer = (
         : {}),
       ...(peeked.memoryDocs
         ? { memoryDocs: foldPlacedStates(peeked.memoryDocs, pathOf) }
+        : {}),
+      ...(peeked.harnessConfig
+        ? { harnessConfig: foldPlacedStates(peeked.harnessConfig, pathOf) }
         : {}),
     };
     // Compare the machine's persisted content before overwriting its report;
@@ -26491,6 +26523,66 @@ export const createServer = (
     publishInstances(message.machineId);
   };
 
+  /** A kind's rows, as its read route answers them. */
+  const harnessConfigList = (
+    kind: HarnessConfigKind
+  ): { rows: FleetHarnessConfig[] } => ({ rows: db.listHarnessConfig(kind) });
+
+  /**
+   * A partial put of one row: a given field replaces what is stored, `null`
+   * clears it, an absent one keeps it; `projectId` binds the row to that
+   * project, `null` makes it every machine's. The merged row is what
+   * `harnessConfigProblem` judges, the same check each machine runs again.
+   */
+  const harnessConfigPut = (
+    kind: HarnessConfigKind,
+    name: string,
+    body: HarnessConfigBody,
+    status: (code: 400, text: string) => unknown
+  ): unknown => {
+    const merged: Record<string, unknown> = {
+      enabled: true,
+      ...db.getHarnessConfig(kind, name),
+      kind,
+      name,
+    };
+    for (const [key, value] of Object.entries(body)) {
+      if (value === null) {
+        delete merged[key];
+      } else if (value !== undefined) {
+        merged[key] = value;
+      }
+    }
+    merged.scope = merged.projectId ? "project" : undefined;
+    const row = merged as unknown as FleetHarnessConfig;
+    const problem = harnessConfigProblem(row);
+    if (problem) {
+      return status(400, problem);
+    }
+    const kept = db.putHarnessConfig(row);
+    fleetChanged();
+    return kept;
+  };
+
+  /** A row's delete, kept in the trash for its undo. */
+  const harnessConfigDelete = (
+    kind: HarnessConfigKind,
+    name: string,
+    status: (code: 404, text: string) => unknown
+  ): unknown => {
+    const trashed = db.getHarnessConfig(kind, name)
+      ? db.trash.put(
+          { kind: "harnessConfig", key: `${kind}:${name}` },
+          Date.now()
+        )
+      : undefined;
+    if (trashed === undefined) {
+      return status(404, `the fleet keeps no ${kind} row ${name}`);
+    }
+    fleetChanged();
+    return undoable(trashed);
+  };
+
   /**
    * A config item the trash just put back (db/trash.ts): what its delete
    * stopped, started again, and the item as its list reads it.
@@ -26536,6 +26628,11 @@ export const createServer = (
         return db.getFleetMemoryDoc(key) ?? null;
       case "connection":
         return connections.returned(key);
+      case "harnessConfig": {
+        fleetChanged();
+        const [harness, name] = key.split(":") as [HarnessConfigKind, string];
+        return db.getHarnessConfig(harness, name) ?? null;
+      }
       default:
         throw unreachable(kind);
     }
@@ -29912,6 +30009,54 @@ export const createServer = (
         fleetChanged();
         return undoable(trashed);
       })
+      /**
+       * The fleet's Claude Code settings, OpenCode plugins and pi extensions
+       * (core harness-config.ts), each kind at its own routes beside the
+       * hooks': a list, a partial put by name, a delete the trash keeps for
+       * its undo. Only the admin tools call them (admin-tools.ts).
+       */
+      .get("/api/fleet/claude-settings", hidden, () =>
+        harnessConfigList("claudeSettings")
+      )
+      .put(
+        "/api/fleet/claude-settings/:name",
+        { ...hidden, body: HARNESS_CONFIG_BODY },
+        ({ params, body, status }) =>
+          harnessConfigPut("claudeSettings", params.name, body, status)
+      )
+      .delete(
+        "/api/fleet/claude-settings/:name",
+        hidden,
+        ({ params, status }) =>
+          harnessConfigDelete("claudeSettings", params.name, status)
+      )
+      .get("/api/fleet/opencode-plugins", hidden, () =>
+        harnessConfigList("opencodePlugins")
+      )
+      .put(
+        "/api/fleet/opencode-plugins/:name",
+        { ...hidden, body: HARNESS_CONFIG_BODY },
+        ({ params, body, status }) =>
+          harnessConfigPut("opencodePlugins", params.name, body, status)
+      )
+      .delete(
+        "/api/fleet/opencode-plugins/:name",
+        hidden,
+        ({ params, status }) =>
+          harnessConfigDelete("opencodePlugins", params.name, status)
+      )
+      .get("/api/fleet/pi-extensions", hidden, () =>
+        harnessConfigList("piExtensions")
+      )
+      .put(
+        "/api/fleet/pi-extensions/:name",
+        { ...hidden, body: HARNESS_CONFIG_BODY },
+        ({ params, body, status }) =>
+          harnessConfigPut("piExtensions", params.name, body, status)
+      )
+      .delete("/api/fleet/pi-extensions/:name", hidden, ({ params, status }) =>
+        harnessConfigDelete("piExtensions", params.name, status)
+      )
       // What one hook used to be, newest first, without the material. `?hookId=`
       // narrows to that hook's own history; nothing named lists every hook's,
       // for a fleet-wide undo panel.

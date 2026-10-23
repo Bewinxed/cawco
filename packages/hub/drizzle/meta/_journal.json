@@ -2024,6 +2024,13 @@
       "when": 1792754745056,
       "tag": "0296_instance_commands",
       "breakpoints": true
+    },
+    {
+      "idx": 297,
+      "version": "6",
+      "when": 1792767729147,
+      "tag": "0297_fleet_harness_config",
+      "breakpoints": true
     }
   ]
 }

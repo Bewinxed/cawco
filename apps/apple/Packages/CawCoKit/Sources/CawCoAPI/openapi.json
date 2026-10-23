@@ -48160,7 +48160,11 @@
           },
           "hooks": {
             "type": "object",
-            "description": "The fleet's hooks, by the same id the hub keeps them under. Absent from a\nharness's own report when it converges none (OpenCode's, pi's); a\nmachine's merged report always carries it. `failed` covers three different machine-local\nfacts — a hand-edited script, a validation the hub already passed but this\nrow failed again, or a project hook with no checkout here — and `detail`\nis what tells them apart."
+            "description": "The fleet's hooks, by the same id the hub keeps them under (a placed\ncopy's `<id>@<place id>`). Claude Code's report says what its sync\nregistered; OpenCode's and pi's whether CawCo runs the hook there at all,\n`unsupported` with why for an event or handler that harness has no point\nfor (core `hookUnsupported`). A machine's merged report holds each hook's\nworst, every harness's word in its `detail`. `failed` covers three\ndifferent machine-local facts — a hand-edited script, a validation the\nhub already passed but this row failed again, or a project hook with no\ncheckout here — and `detail` is what tells them apart."
+          },
+          "harnessConfig": {
+            "type": "object",
+            "description": "The fleet's Claude Code settings, OpenCode plugins and pi extensions,\nby `<kind>:<name>` (a placed copy's `<kind>:<name>@<place id>`): what the\nsync wrote or installed for each, as sessions take it at their launch."
           },
           "marketplaces": {
             "type": "object"
@@ -54228,6 +54232,7 @@
           "agent",
           "connection",
           "delegateType",
+          "harnessConfig",
           "hook",
           "marketplace",
           "mcp",

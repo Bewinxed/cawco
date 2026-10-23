@@ -14,6 +14,7 @@ import type {
   McpSSEServerConfig,
   McpStdioServerConfig,
 } from "./harness";
+import type { FleetHarnessConfig } from "./harness-config";
 import type { FleetHook } from "./hooks";
 import { configurePage } from "./words/configure";
 import { memoryWords } from "./words/memory";
@@ -880,6 +881,13 @@ export interface FleetConfig {
    * carried them (agent `denied-tools.ts`).
    */
   deniedTools: string[];
+  /**
+   * The fleet's Claude Code settings, OpenCode plugins and pi extensions
+   * (core harness-config.ts). A machine is sent every one bound to no
+   * project as it is, and each project's once per place of it there, with
+   * that place's `cwd` and `placeId`, as {@link hooks} are.
+   */
+  harnessConfig: FleetHarnessConfig[];
   /** Hooks the fleet keeps. */
   hooks: FleetHook[];
   marketplaces: FleetMarketplace[];
@@ -1080,6 +1088,12 @@ export const worstFleetState = (
 export interface FleetSyncReport {
   /** When the sync ran, ms epoch. */
   at: number;
+  /**
+   * The fleet's Claude Code settings, OpenCode plugins and pi extensions,
+   * by `<kind>:<name>` (a placed copy's `<kind>:<name>@<place id>`): what the
+   * sync wrote or installed for each, as sessions take it at their launch.
+   */
+  harnessConfig?: Record<string, FleetItemState>;
   /**
    * What this machine holds on its disk once the sync is done, by hash — the
    * content-carrying rows only, hashed as the hub hashes them. It tells the

@@ -1,21 +1,25 @@
 /**
  * The fleet's settings as an agent reads them (admin-tools.ts): one line per
- * delegate type, connection, skill, plugin, MCP server, rule, hook or memory
- * document, each by the name its write takes; a write answers the row it
+ * delegate type, connection, skill, plugin, MCP server, rule, hook, memory
+ * document, Claude Code settings row, OpenCode plugin or pi extension, each
+ * by the name its write takes; a write answers the row it
  * saved, a removal what the dashboard can still undo.
  */
-import type {
-  ConnectionView,
-  DelegateType,
-  FleetHook,
-  FleetMarketplace,
-  FleetMcpServer,
-  FleetMemory,
-  FleetMemoryDoc,
-  FleetPlugin,
-  FleetSkillMeta,
-  MemoryScope,
-  RuleRow,
+import {
+  type ConnectionView,
+  type DelegateType,
+  type FleetHarnessConfig,
+  type FleetHook,
+  type FleetMarketplace,
+  type FleetMcpServer,
+  type FleetMemory,
+  type FleetMemoryDoc,
+  type FleetPlugin,
+  type FleetSkillMeta,
+  type HarnessConfigKind,
+  harnessConfigLabel,
+  type MemoryScope,
+  type RuleRow,
 } from "@cawco/core";
 import {
   memoryKeptWords,
@@ -362,3 +366,40 @@ export const previewSettingsWords = (answer: unknown): Presented => {
     ? `Previews are reached by host: ${settings.pattern ?? "no pattern"}, routed to the range ${settings.ports ?? "the hub keeps"}.`
     : `Previews are reached by port, on the hub's range ${settings.ports ?? "it keeps"}.`;
 };
+
+/** What one row of each kind is called in a count. */
+const HARNESS_CONFIG_NOUN: Record<HarnessConfigKind, [string, string]> = {
+  claudeSettings: ["Claude Code settings row", "Claude Code settings rows"],
+  opencodePlugins: ["OpenCode plugin", "OpenCode plugins"],
+  piExtensions: ["pi extension", "pi extensions"],
+};
+
+const harnessConfigLine = (row: FleetHarnessConfig): string => {
+  let what = `module, ${count(row.module?.split("\n").length ?? 0, "line")}`;
+  if (row.settings) {
+    what = `sets ${listed(Object.keys(row.settings)) || "nothing"}`;
+  } else if (row.package) {
+    what = `package ${row.package}`;
+  }
+  return `- ${row.name} · ${row.enabled ? "on" : "off"} · ${what} · ${placeWords(row)}`;
+};
+
+/** admin_claude_settings, admin_opencode_plugins, admin_pi_extensions: each row of the kind, or the one written. */
+export const harnessConfigSettingsWords =
+  (kind: HarnessConfigKind) =>
+  (answer: unknown, asked: Asked): Presented => {
+    if (isDeleted(answer)) {
+      return removedWords(`${harnessConfigLabel(kind)} ${asked.name}`, answer);
+    }
+    if (asked.action === "list") {
+      const { rows } = answer as { rows: FleetHarnessConfig[] };
+      const [one, many] = HARNESS_CONFIG_NOUN[kind];
+      return rows.length === 0
+        ? `No ${many}.`
+        : lines(
+            `${count(rows.length, one, many)}; put and remove take the name:`,
+            rows.map(harnessConfigLine)
+          );
+    }
+    return lines("Saved:", harnessConfigLine(answer as FleetHarnessConfig));
+  };

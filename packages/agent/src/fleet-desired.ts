@@ -151,6 +151,8 @@ const reported = (
       return report.memoryDocs?.[key];
     case "hook":
       return report.hooks?.[key];
+    case "harnessConfig":
+      return report.harnessConfig?.[key];
     case "policy":
     case "hubOnly":
     case "pluginPayload":

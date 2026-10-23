@@ -60,6 +60,7 @@ import { resolveClaudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { readFleetDenials, sidecarTurn } from "./denied-tools";
+import { syncHarnessConfig } from "./fleet-harness-config";
 import {
   type FleetHarnessSet,
   readFleetHarnessSet,
@@ -2816,6 +2817,7 @@ const converge = async (
   const skillStates: Record<string, FleetItemState> = {};
   const docStates: Record<string, FleetItemState> = {};
   const hookStates: Record<string, FleetItemState> = {};
+  const harnessStates: Record<string, FleetItemState> = {};
   const report: FleetSyncReport = {
     mcp: {},
     marketplaces: {},
@@ -2823,6 +2825,7 @@ const converge = async (
     skills: skillStates,
     memoryDocs: docStates,
     hooks: hookStates,
+    harnessConfig: harnessStates,
     at: Date.now(),
   };
 
@@ -2858,8 +2861,13 @@ const converge = async (
   const hooks = await syncHooks(config.hooks, managed.hooks, hookStates);
   // What every CawCo session on this machine takes as it starts, written
   // whole after the files it names (fleet-harness-set.ts).
+  const harnessConfig = await syncHarnessConfig(
+    config.harnessConfig,
+    harnessStates
+  );
   await writeFleetHarnessSet({
     ...hooks.set,
+    config: harnessConfig,
     placedSkills: Object.fromEntries(
       Object.entries(placedSkills).map(([key, { cwd, name }]) => [
         key,
@@ -3058,6 +3066,14 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         ? { state: "applied" }
         : absentOrDrifted(fileHash, `${file} is not on disk`);
   }
+  // What the last sync made ready of the fleet's settings, plugins and
+  // extensions is what sessions load.
+  report.harnessConfig = Object.fromEntries(
+    Object.keys((await readFleetHarnessSet()).config).map((key) => [
+      key,
+      { state: "applied" as const },
+    ])
+  );
   // Read once, at the first project copy that asks.
   let readSet: Promise<FleetHarnessSet> | undefined;
   const harnessSet = (): Promise<FleetHarnessSet> => {

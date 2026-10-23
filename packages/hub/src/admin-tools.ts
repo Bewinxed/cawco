@@ -28,6 +28,7 @@ import {
   connectionSettingsWords,
   delegateTypeSettingsWords,
   HASH_HANDLE,
+  harnessConfigSettingsWords,
   hookSettingsWords,
   mcpSettingsWords,
   memorySettingsWords,
@@ -263,6 +264,72 @@ function admin<T extends z.ZodRawShape>(
   );
   return [read, write];
 }
+
+/** Where a Claude Code settings row, OpenCode plugin or pi extension applies, and whether it is on. */
+const harnessConfigPlacement = {
+  enabled: z.boolean().optional().describe("Defaults to true for a new row."),
+  projectId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "One project's only: its sessions in every checkout and workspace of it. null: every machine."
+    ),
+};
+
+/** A plugin's or extension's code: one module, or one npm package. */
+const harnessConfigCode = (module: string) => ({
+  module: z
+    .string()
+    .optional()
+    .describe(`Its source. ${module} Give module or package.`),
+  package: z
+    .string()
+    .optional()
+    .describe("An npm package with its exact version, name@version."),
+});
+
+/**
+ * The one handler of the three harness config groups, through their hub
+ * routes (`/api/fleet/<route>`): a put sends only the fields given, and a
+ * module or a package clears the other.
+ */
+const harnessConfigHandler =
+  (route: "claude-settings" | "opencode-plugins" | "pi-extensions") =>
+  async ({
+    action,
+    name,
+    settings,
+    module,
+    package: pkg,
+    enabled,
+    projectId,
+  }: {
+    action: string;
+    enabled?: boolean;
+    module?: string;
+    name?: string;
+    package?: string;
+    projectId?: string | null;
+    settings?: Record<string, unknown>;
+  }): Promise<unknown> => {
+    if (action === "list") {
+      return await api("GET", `/api/fleet/${route}`);
+    }
+    if (!name) {
+      throw new Error("name is required for put and remove");
+    }
+    const path = `/api/fleet/${route}/${encodeURIComponent(name)}`;
+    if (action === "remove") {
+      return await api("DELETE", path);
+    }
+    return await api("PUT", path, {
+      ...fieldsGiven({ settings, enabled }),
+      ...(module === undefined ? {} : { module, package: null }),
+      ...(pkg === undefined ? {} : { package: pkg, module: null }),
+      ...(projectId === undefined ? {} : { projectId }),
+    });
+  };
 
 /** The admin tools, separated from the handoff tools so the MCP server composes them. */
 export function adminTools() {
@@ -929,6 +996,67 @@ export function adminTools() {
       },
       hookSettingsWords,
       " 'create' adds one (the hub mints the id), 'update' edits by id, 'remove' deletes by id."
+    ),
+
+    // ── Claude Code settings, OpenCode plugins, pi extensions ────────────
+    ...admin(
+      "claude_settings",
+      "the fleet's Claude Code settings: each row a settings object merged into " +
+        "the flag settings of CawCo's Claude Code sessions, every machine's or one " +
+        "project's. Hooks go through admin_hooks_write, Claude plugins through " +
+        "admin_plugins_write.",
+      ["list"],
+      ["put", "remove"],
+      {
+        name: z.string().optional().describe("Required for put and remove."),
+        settings: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe(
+            "Required for a new row. Claude Code settings.json keys, e.g. " +
+              '{ "env": { "FOO": "1" }, "permissions": { "deny": ["WebFetch"] } }. ' +
+              "Refused: hooks, disableAllHooks. A key CawCo sets for its sessions wins."
+          ),
+        ...harnessConfigPlacement,
+      },
+      harnessConfigHandler("claude-settings"),
+      harnessConfigSettingsWords("claudeSettings"),
+      " A new session takes it as it starts; a running one keeps what it started with."
+    ),
+    ...admin(
+      "opencode_plugins",
+      "the fleet's OpenCode plugins: each an OpenCode 2 plugin module or npm " +
+        "package that CawCo's own plugin sets up in every location of CawCo's " +
+        "OpenCode sessions, every machine's or one project's.",
+      ["list"],
+      ["put", "remove"],
+      {
+        name: z.string().optional().describe("Required for put and remove."),
+        ...harnessConfigCode(
+          "An ES module whose default export is { id, setup(ctx) }, as an OpenCode 2 plugin's."
+        ),
+        ...harnessConfigPlacement,
+      },
+      harnessConfigHandler("opencode-plugins"),
+      harnessConfigSettingsWords("opencodePlugins"),
+      " Each machine writes the module, or installs the package with npm; a location booted after that sets it up."
+    ),
+    ...admin(
+      "pi_extensions",
+      "the fleet's pi extensions: each a pi extension module or npm package " +
+        "that CawCo's pi sessions load, every machine's or one project's.",
+      ["list"],
+      ["put", "remove"],
+      {
+        name: z.string().optional().describe("Required for put and remove."),
+        ...harnessConfigCode(
+          "An ES module whose default export is a function taking pi's ExtensionAPI, as a pi extension's."
+        ),
+        ...harnessConfigPlacement,
+      },
+      harnessConfigHandler("pi-extensions"),
+      harnessConfigSettingsWords("piExtensions"),
+      " Each machine writes the module, or installs the package with npm; a new session loads it."
     ),
 
     // ── memory (fleet CLAUDE.md) ─────────────────────────────────────────
