@@ -40,7 +40,6 @@
  */
 import type { Page } from "playwright-core";
 import { spawnWords } from "../../../../packages/core/src/words/spawn";
-import { durOf, oneEntrance, recordRuns, runsOn } from "../../entrances";
 import {
   COMPOSER,
   type Engine,
@@ -1210,46 +1209,6 @@ const LEGS: (Leg & { key: string })[] = (["chromium", "webkit"] as const)
     }))
   );
 
-/**
- * The record a conversation was opened at, in WebKit: its row's mark (the
- * selection tint on the row's `::before`, Row.svelte) fades in by one
- * keyframes animation on the tint as it is drawn (`kit-fade-in` over
- * --dur-panel), never a @starting-style transition, which WebKit sometimes
- * skips for what is just added (bugs.webkit.org 275184). The bench opens
- * its conversation at a record as the finder's link does (`?at=`).
- */
-async function markEntrance(kit: Kit, base: string): Promise<void> {
-  const page = await kit.page("desk", { engine: "webkit" });
-  await page.addInitScript(recordRuns);
-  await open(
-    page,
-    `${base}${BENCH}?case=4&at=${BENCH_SESSION}-asst-10`,
-    LOG,
-    120_000
-  );
-  await page.waitForSelector(`${LOG} [data-row][data-marked]`, {
-    timeout: 30_000,
-  });
-  await page.waitForTimeout(600);
-  const ms = await page.evaluate(durOf, "--dur-panel");
-  const marked = await page.evaluate(runsOn, {
-    selector: `${LOG} [data-row][data-marked]`,
-    pseudo: "::before",
-  });
-  kit.check(
-    `the opened-at record's mark, webkit desk: its tint fades in by one keyframes animation on the row's ::before (kit-fade-in over --dur-panel, ${ms}ms), never a @starting-style transition`,
-    marked.length === 1 &&
-      marked.every(
-        ({ runs }) =>
-          oneEntrance(runs, ms) &&
-          runs[0]?.kind === "CSSAnimation" &&
-          runs[0]?.name === "kit-fade-in"
-      ),
-    JSON.stringify(marked).slice(0, 600)
-  );
-  await page.close();
-}
-
 const spec: Spec = {
   name: "composer-layers",
   async run(kit) {
@@ -1282,17 +1241,6 @@ const spec: Spec = {
             String(error).split("\n").slice(0, 3).join(" ")
           );
         }
-      }
-    }
-    if (only.length === 0 || only.some((one) => "mark".includes(one))) {
-      try {
-        await markEntrance(kit, base);
-      } catch (error) {
-        kit.check(
-          "the opened-at record's mark: runs",
-          false,
-          String(error).split("\n")[0]
-        );
       }
     }
   },

@@ -8,7 +8,6 @@
    * inside the corner and concentric with its radius. A focusable separator
    * (WAI-ARIA window splitter): it takes focus, arrows and a drag.
    */
-  import { appearOnMount } from "../motion/curves.svelte";
   import type { GrabValue, Handle } from "./stage.svelte";
 
   const LABELS: Record<Handle, string> = {
@@ -35,16 +34,6 @@
     ondown: (handle: Handle, event: PointerEvent) => void;
     onkey: (handle: Handle, event: KeyboardEvent) => void;
   } = $props();
-
-  /**
-   * A corner's grip fades up over --dur-grow as the canvas grows to take
-   * it, with or without motion (`appearOnMount`, never `@starting-style`,
-   * which WebKit sometimes skips); the top's grab is simply there.
-   */
-  const comesIn = appearOnMount({
-    motion: { over: "--dur-grow" },
-    reduced: { over: "--dur-grow" },
-  });
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -- a focusable separator is a widget (WAI-ARIA window splitter): it takes focus, arrows and a drag. -->
@@ -62,12 +51,11 @@
     handle === "top" &&
       "start-1/2 top-0 h-c-btn-h-lg w-c-canvas-grab-w -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
     handle === "top-left" &&
-      "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize",
+      "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] duration-(--dur-grow) ease-out starting:opacity-0",
     handle === "top-right" &&
-      "top-0 size-c-btn-h-lg end-(--corner-in) cursor-nesw-resize justify-end",
+      "top-0 size-c-btn-h-lg end-(--corner-in) cursor-nesw-resize justify-end transition-[opacity] duration-(--dur-grow) ease-out starting:opacity-0",
   ]}
   data-canvas-stages-grab={handle}
-  {@attach handle === "top" ? undefined : comesIn}
   onkeydown={(event) => onkey(handle, event)}
   onpointerdown={(event) => ondown(handle, event)}
   role="separator"

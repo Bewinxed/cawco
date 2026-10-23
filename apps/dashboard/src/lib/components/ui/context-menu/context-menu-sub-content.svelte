@@ -22,12 +22,6 @@
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
-  import { popIn } from "#lib/cawco/motion/pop.svelte.js";
-  import {
-    drawn,
-    own,
-    pressable,
-  } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { submenuSide } from "#lib/components/ui/submenu-side.js";
@@ -39,7 +33,6 @@
     ref = $bindable(null),
     class: className,
     portalProps,
-    children,
     min,
     width,
     frame,
@@ -86,28 +79,8 @@
     )}
     collisionPadding={inset}
     data-slot="context-menu-sub-content"
-    forceMount
     {side}
     bind:ref
     {...restProps}
-  >
-    <!-- Drawn here while bits-ui's presence says so (floating-presence), so
-         it comes in by `popIn` as every kit surface does (motion/pop). -->
-    {#snippet child(snippet)}
-      {#if drawn(snippet.props)}
-        <div
-          {...snippet.wrapperProps}
-          style:pointer-events={pressable(snippet.open)}
-        >
-          <div
-            {...own(snippet.props)}
-            style:pointer-events={pressable(snippet.open)}
-            in:popIn|global
-          >
-            {@render children?.()}
-          </div>
-        </div>
-      {/if}
-    {/snippet}
-  </ContextMenuPrimitive.SubContent>
+  />
 </ContextMenuPortal>

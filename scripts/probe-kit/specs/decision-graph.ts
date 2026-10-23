@@ -32,17 +32,10 @@
  *     its row stays with no session, and the graph draws its card picked.
  * (f) A later session's create of the page's name in the project is a
  *     revision of that page: the same artifact, its picks kept.
- * (h) In WebKit, on the project's decision graph (the built dashboard), a
- *     card new to the graph fades up by one animation on itself
- *     (DecisionNode, motion `appearOnMount`) over --dur-fade: never by a
- *     `@starting-style` transition, which WebKit sometimes skips for an
- *     element just added (bugs.webkit.org 275184). Every run the page makes
- *     is recorded as it is made, from before its own scripts.
  */
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { durOf, oneEntrance, recordRuns, runsOn } from "../entrances";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, Spec } from "../kit";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -126,50 +119,6 @@ interface GraphRead {
 interface Read {
   program?: string;
   state: Record<string, { options: string[] }>;
-}
-
-/**
- * (h) On the project's graph, in WebKit: each card new to it fades up by
- * one animation on itself, over --dur-fade, never a @starting-style
- * transition.
- */
-async function graphEntrances(
-  kit: Kit,
-  fleet: KitFleet,
-  projectId: string
-): Promise<void> {
-  const dashboard = await fleet.dashboard();
-  const graphTab = await kit.page("desk", { engine: "webkit", theme: "light" });
-  await graphTab.addInitScript(recordRuns);
-  await graphTab.goto(
-    `${dashboard}/project/${projectId}?view=decisions&mode=graph`
-  );
-  await graphTab.waitForSelector(
-    "[data-slot=decision-graph] [data-slot=decision-node]",
-    { timeout: 30_000 }
-  );
-  await graphTab.waitForTimeout(600);
-  const fade = await graphTab.evaluate(durOf, "--dur-fade");
-  const cards = await graphTab.evaluate(runsOn, {
-    selector: "[data-slot=decision-node]",
-    pseudo: null,
-  });
-  // Svelte Flow's node box round each card, where the stylesheet's
-  // @starting-style fade ran: nothing comes in there now.
-  const boxes = await graphTab.evaluate(runsOn, {
-    selector: ".svelte-flow__node-decision",
-    pseudo: null,
-  });
-  const wrong = cards.filter(({ runs }) => !oneEntrance(runs, fade));
-  const boxed = boxes.filter(({ runs }) => runs.length > 0);
-  kit.check(
-    `(h) in WebKit, each card new to the graph fades up by one animation on itself over --dur-fade (${fade}ms), never a @starting-style transition`,
-    cards.length > 0 && wrong.length === 0 && boxed.length === 0,
-    JSON.stringify(
-      wrong.length || boxed.length ? { wrong, boxed } : cards
-    ).slice(0, 600)
-  );
-  await graphTab.close();
 }
 
 const run = async (kit: Kit) => {
@@ -356,8 +305,6 @@ const run = async (kit: Kit) => {
     JSON.stringify(pickedHead)
   );
   await tab.close();
-
-  await graphEntrances(kit, fleet, projectId);
 
   const folderFile = (path: string) =>
     fleet

@@ -93,7 +93,7 @@
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { popIn, popOut } from "#lib/cawco/motion/pop.svelte.js";
+  import { popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
   import { Button, sendVariants } from "#lib/components/ui/button/index.js";
@@ -3481,9 +3481,15 @@
              filter: a blur transitioning here hung playwright-core 1.63.0's
              WebKit as the row came up (at an iPhone's size, probe-kit
              safari-blurs). That hang was only seen in that build, never on
-             the owner's iPhone, and 1.64.1's WebKit does not hang. The hints and
-             Keep it come up a stagger after
-             the label. Keep it is the kit's Button, addressed from the row
+             the owner's iPhone, and 1.64.1's WebKit does not hang. In iOS
+             27.2 Safari (probe-kit ios-safari-motion, 2026-10-23) the blur
+             put back did not hang, and never drew between its ends: Safari
+             draws no frame from the field taking the focus until the
+             keyboard's room reaches the page (the frames at 842ms and
+             1190ms, the viewport down to 384px at 1191ms), which is when
+             the row comes up; every read of the row 4px, then none (and
+             main's fade the same). The hints and
+             Keep it come up a stagger after the label. Keep it is the kit's Button, addressed from the row
              (its own utilities set its display and transition): hidden but
              on a touch screen, which has no Esc. -->
         <div
@@ -3626,15 +3632,14 @@
           <div
             data-slot="menu"
             class={floatingSurface({
-              motion: "hang",
               class:
                 "absolute inset-x-0 bottom-(--menu-foot) max-h-c-composer-menu-max-h overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-c-composer-menu-max-h [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-border-hairline [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-c-btn-h-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:text-ink-strong coarse:[&_[data-slot=command-item]]:min-h-c-row-h",
             })}
             data-side="top"
+            data-state="open"
             id="composer-menu"
             onmousedown={(event) => event.preventDefault()}
             role="presentation"
-            in:popIn={{ side: "top" }}
             out:popOut={{ side: "top" }}
             style:--menu-foot="calc(100% + var(--space-2))"
           >

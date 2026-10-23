@@ -1044,7 +1044,7 @@ export function highlight(options: HighlightOptions) {
     }
     /**
      * A move on the Web Animations API sends none of those events: a Svelte
-     * transition (a Select's list scaling in on `popIn`), on the list itself
+     * transition (an `in:` or `out:` scaling the list), on the list itself
      * or round it. Placed while one runs, the layers keep its residue (the
      * Project select's ghost, its row's edges on the device-pixel grid of a
      * list still scaling, drew another antialiasing on each walk of

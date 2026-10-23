@@ -114,7 +114,6 @@
     hangClip,
   } from "#lib/cawco/motion/hang-shape.js";
   import type { Morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { popIn } from "#lib/cawco/motion/pop.svelte.js";
   import ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
   import {
     drawn,
@@ -527,9 +526,7 @@
      surface is told it hangs, so it keeps only the fade of its own motion.
      The wrapper is fixed, so it is the stacking context the card's own
      z-index is held inside: it stands on the floating layer itself
-     (DESIGN.md, Stacking), or the card stood under the page's dock. With
-     reduced motion it fades in by `popIn` (`hangs`), never by
-     `@starting-style`, which WebKit sometimes skips (motion/pop). -->
+     (DESIGN.md, Stacking), or the card stood under the page's dock. -->
 <Content
   data-glass-card={glass || undefined}
   {...kitSurface ? { motion: "hang" as const } : {}}
@@ -560,7 +557,6 @@
           style:pointer-events={pressable(open)}
           {@attach hung}
           {@attach kept}
-          in:popIn|global={{ hangs: true }}
         >
           {#if glass}
             <!-- Its surface, over the shadow picture it wears as its border-image (motion/hung-shadow). -->

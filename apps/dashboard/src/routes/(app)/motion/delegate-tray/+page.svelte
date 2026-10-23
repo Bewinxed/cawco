@@ -16,10 +16,6 @@
    * Bypass on a connected machine whose Claude takes every mode and three
    * efforts: its mode chip opens the picker, Full Send's question in it,
    * and its effort chip the sibling the picker's surface glides to.
-   *
-   * `?at=<message id>` opens the conversation at that record, as the
-   * finder's "Where it was said" link does (`askOpenAt`): scrolled to it,
-   * and its row marked.
    */
   import {
     CAPABILITIES_NONE,
@@ -170,10 +166,6 @@
   debug.state.sessions[ID] = session;
   /** The details card stands over the conversation (`?details`). */
   const details = page.url.searchParams.has("details");
-  const at = page.url.searchParams.get("at");
-  if (at) {
-    askOpenAt(ID, at);
-  }
   if (details) {
     session.harness = "claude";
     session.permissionMode = "bypassPermissions";

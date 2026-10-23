@@ -231,6 +231,17 @@ that never painted there, and a Safari that started no load after it, was
 this crash. `ios-safari-load` runs on the newest runtime and on 27.0 (the
 owner's iPhone18,2 runs iOS 27.0).
 
+A workspace's boundary refuses the simulator's Web Inspector socket
+(`ios_webkit_debug_proxy -s unix:…/com.apple.webinspectord_sim.socket`:
+"connect failed: Operation not permitted"; safaridriver: "Could not find any
+session hosts that match the requested capabilities"). A spec that reads the
+engine in Mobile Safari carries its own agent in the page instead
+(`safari-bridge.ts`: the page asks the bridge for the next function, runs it
+and posts back what it returned; `bridge.front(<dashboard>)` puts the agent
+in the dashboard's pages). Safari's web content is not in the accessibility
+tree `axe` reads, so taps go by point: the element's box, plus where the
+page heard a tap land (`ios-safari-motion`).
+
 ## A spec with its own git and HOME
 
 A spec that stands up its own git repositories, doors or forge sign-ins

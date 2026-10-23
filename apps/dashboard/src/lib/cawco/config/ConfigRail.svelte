@@ -6,7 +6,6 @@
    */
   import { configureWords as words } from "@cawco/core";
   import {
-    appearOnMount,
     dur,
     easeOut,
     motionOk,
@@ -114,14 +113,9 @@
                 >{section.label}</span
               >
               {#if unsavedIn(store, section.slug)}
-                <!-- It fades up as an edit goes unsaved (`appearOnMount`,
-                     never `@starting-style`, which WebKit sometimes skips);
-                     with less motion it is simply there. -->
                 <span
-                  data-slot="unsaved"
-                  class="flex-none size-space-2 rounded-pill bg-ink-strong"
+                  class="flex-none size-space-2 rounded-pill bg-ink-strong motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:starting:opacity-0"
                   title={words.unsaved}
-                  {@attach appearOnMount({ motion: { over: "--dur-control" } })}
                   ><span class="sr-only">{words.unsaved}</span></span
                 >
               {/if}

@@ -20,7 +20,6 @@
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
-  import { popIn } from "#lib/cawco/motion/pop.svelte.js";
   import {
     drawn,
     own,
@@ -114,7 +113,6 @@
             <div
               {...own(snippet.props)}
               style:pointer-events={pressable(snippet.open)}
-              in:popIn|global
             >
               {@render children?.()}
             </div>

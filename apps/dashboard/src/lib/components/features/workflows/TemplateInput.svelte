@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { popIn, popOut } from "#lib/cawco/motion/pop.svelte.js";
+  import { popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
@@ -149,13 +149,12 @@
     <div
       aria-label="Template paths"
       class={floatingSurface({
-        motion: "hang",
         class:
           "absolute top-full inset-x-0 max-h-c-completer-max-h overflow-y-auto z-(--layer-float)",
       })}
+      data-state="open"
       role="listbox"
       style:transform-origin={origin}
-      in:popIn
       out:popOut
       {@attach highlight({ rows: "button", hovered: '[aria-selected="true"]' })}
     >

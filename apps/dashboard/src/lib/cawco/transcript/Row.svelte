@@ -460,9 +460,11 @@
      in the reader's well and a line on the rail read the same. It fades in
      where it stands and out once the reader has moved on; with less motion
      it is simply there, then gone. The fade in is a keyframes animation on
-     the tint (`--mark-in`), which runs as the tint is drawn: never
-     `@starting-style`, which WebKit sometimes skips for what is just
-     added. -->
+     the tint (`--mark-in`), which runs as the tint is drawn. Not
+     `@starting-style`: on the `::before` it ran nothing in iOS 27.2 Safari,
+     the tint standing at full opacity on the first read, while the
+     keyframes read 0.24, 0.76, 0.94 over the first 100ms (probe-kit
+     ios-safari-motion, 2026-10-23). -->
 <div
   data-slot="row"
   data-continues={continues || undefined}

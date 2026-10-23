@@ -315,11 +315,14 @@ export interface Arrival {
 /**
  * An element's entrance, attached: as it mounts it comes in by one Web
  * Animation on the element itself (`appear` by default: --dur-fade on
- * ease-out, opacity only). Never by `@starting-style` (Tailwind's
- * `starting:`), which WebKit sometimes skips for an element just added
- * (bugs.webkit.org 275184, comment 8, "transitions are sometimes not
- * applied when adding elements"). An attachment, so it runs as the element
- * mounts whichever block mounts it (a Svelte Flow node, an `{#if}`).
+ * ease-out, opacity only). For an entrance that rises from its side (Caw's
+ * docked panel), which `@starting-style` does not draw in iOS 27.2 Safari:
+ * a starting translate set by Tailwind's `starting:translate-x-*` (the
+ * registered `--tw-translate-x`) runs no transition there, and the panel
+ * faded in where it stands, its rise gone (probe-kit ios-safari-motion,
+ * 2026-10-23: its one run `CSSTransition opacity 280`, translate `none` on
+ * every read). An attachment, so it runs as the element mounts whichever
+ * block mounts it.
  *
  * `motion` is how it comes in with motion, `reduced` with reduced motion,
  * each an `Arrival` or `false` (it stands at once): the stylesheet's own
@@ -355,39 +358,6 @@ export function appearOnMount({
       duration: dur(arrival.over),
       easing: arrival.easing ? ease(arrival.easing) : CURVE.out,
     });
-  };
-}
-
-/**
- * An entrance by the element's own transition, for one whose transition
- * also carries its exit (a decided line's Change, which a turn caught
- * mid-way fades back from where it stands): drawn with `data-entering`,
- * which its classes draw at its starting look (`data-entering:opacity-0`),
- * the mark is taken off once its first style is drawn, and its transition
- * runs from there. A style change WebKit always plays, never
- * `@starting-style`, which it sometimes skips for an element just added
- * (bugs.webkit.org 275184). A CSS transition, so a turn back mid-way runs
- * from where it stands, which a script's animation under it would not.
- * `when` false (its card lands in one frame, or it is not moving): the
- * mark goes with the transition held off, and it is simply there.
- */
-export function enterByStyle(
-  when: (node: HTMLElement) => boolean = () => true
-): (node: HTMLElement) => void {
-  return (node) => {
-    const play = when(node);
-    if (!play) {
-      node.style.transition = "none";
-    }
-    // Its first style, at its starting look, before the mark goes.
-    // biome-ignore lint/complexity/noVoid: the read draws its first style, so taking the mark off is a change its transition runs on
-    void getComputedStyle(node).opacity;
-    node.removeAttribute("data-entering");
-    if (!play) {
-      // biome-ignore lint/complexity/noVoid: the read draws it standing, with the transition still held off
-      void getComputedStyle(node).opacity;
-      node.style.removeProperty("transition");
-    }
   };
 }
 

@@ -16,14 +16,7 @@
  *     with a scrim, the scrim is;
  *  2. a real press there (a click, or a tap on the phone) closes the layer
  *     and the control takes the press (its click arrives);
- *  3. opened again, Escape closes it and the focus is back on its trigger;
- *  4. on its first open, every kit floating surface the act brought onto
- *     the page (a popover, a dropdown or context menu or their submenus, a
- *     select) came in by one animation on itself, `popIn`
- *     (motion/pop) over --dur-pop: never `@starting-style` transitions,
- *     which WebKit sometimes skips for an element just added
- *     (bugs.webkit.org 275184). Watched, never held: the run plays as the
- *     person sees it.
+ *  3. opened again, Escape closes it and the focus is back on its trigger.
  *
  *   bun scripts/probe-kit/run.ts web dismiss-layers [--states=usage-popover/open,…] [--engines=chromium,webkit] [--views=desk,phone]
  */
@@ -305,21 +298,6 @@ function pickOutside(args: { layer: string; scrim: string; shows: string }): {
 
 declare global {
   interface Window {
-    /** Every run that started since the act began, with its target (`watchEntrances`). */
-    probeEntrances?: {
-      done: boolean;
-      runs: {
-        duration: number;
-        easing: string;
-        kind: string;
-        start: number | null;
-        /** The surface's `data-state` as the run started: a closing one's run is its exit. */
-        state: string | null;
-        target: Element | null;
-      }[];
-      /** Set by the read: the watch stops. */
-      stop?: boolean;
-    };
     /** What of the press on the picked control bubbled to the document. */
     probeSeen?: string[];
     /** Whether the click arrived at the page's control found at the point. */
@@ -490,125 +468,12 @@ interface Leg {
 const showsOf = ({ state, scene }: Leg): string =>
   (typeof state.ready === "function" ? state.ready(scene) : state.ready).shows;
 
-/** Every kit floating surface: what bits-ui's contents draw. */
-const KIT_SURFACE = [
-  "popover-content",
-  "dropdown-menu-content",
-  "dropdown-menu-sub-content",
-  "context-menu-content",
-  "context-menu-sub-content",
-  "select-content",
-]
-  .map((slot) => `[data-slot="${slot}"]`)
-  .join(", ");
-
-/**
- * From now on, every run the page starts, recorded as it is made, with its
- * target and that target's `data-state` then: a Web Animation as
- * `Element.animate` makes it (Svelte's transitions), a CSS transition or
- * animation as its `transitionrun`/`animationstart` says. Read as made, not
- * polled: on a page busy for longer than a run lasts (WebKit, mid-act) a
- * frame's poll found it already finished and gone. Nothing is held.
- */
-function watchEntrances(): void {
-  const watch: NonNullable<Window["probeEntrances"]> = {
-    done: false,
-    runs: [],
-  };
-  window.probeEntrances = watch;
-  const seen = new WeakSet<Animation>();
-  const keep = (run: Animation) => {
-    if (watch.stop || seen.has(run)) {
-      return;
-    }
-    seen.add(run);
-    const timing = run.effect?.getTiming();
-    const target = (run.effect as KeyframeEffect | null)?.target ?? null;
-    watch.runs.push({
-      state: target?.getAttribute("data-state") ?? null,
-      kind: run.constructor.name,
-      duration: Number(timing?.duration ?? 0),
-      easing: String(timing?.easing ?? ""),
-      start: run.startTime === null ? null : Number(run.startTime),
-      target,
-    });
-  };
-  const made = Element.prototype.animate;
-  Element.prototype.animate = function animate(
-    this: Element,
-    ...args: Parameters<Element["animate"]>
-  ) {
-    const run = made.apply(this, args);
-    keep(run);
-    return run;
-  };
-  const started = (event: Event) => {
-    const at = event.target instanceof Element ? event.target : null;
-    for (const run of at?.getAnimations() ?? []) {
-      keep(run);
-    }
-  };
-  for (const type of ["transitionrun", "animationstart"]) {
-    document.addEventListener(type, started, true);
-  }
-}
-
-/**
- * Each kit floating surface the watched act brought onto the page, and the
- * runs that played on it: its slot, and each run's kind, length and easing.
- * A run of no length (Svelte's lead-in before its keyframes) is none.
- */
-function entrances(surface: string): {
-  slot: string;
-  runs: { duration: number; easing: string; kind: string }[];
-}[] {
-  const watch = window.probeEntrances;
-  if (watch) {
-    watch.stop = true;
-  }
-  // A closing surface's runs (`data-closed`, a menu leaving as what it
-  // opened comes up) are its exit, not its entrance.
-  const runs = (watch?.runs ?? []).filter((run) => run.state !== "closed");
-  const surfaces = new Map<Element, typeof runs>();
-  for (const run of runs) {
-    const at = run.target?.closest(surface);
-    // A card that hangs (HangCard, `data-hang`) draws its own motion.
-    if (
-      at &&
-      run.target === at &&
-      run.duration > 0 &&
-      !at.closest("[data-hang]")
-    ) {
-      surfaces.set(at, [...(surfaces.get(at) ?? []), run]);
-    }
-  }
-  for (const el of document.querySelectorAll(surface)) {
-    if (
-      !(surfaces.has(el) || el.closest("[data-hang]")) &&
-      el.getAnimations().length === 0
-    ) {
-      surfaces.set(el, []);
-    }
-  }
-  return [...surfaces].map(([el, list]) => ({
-    slot: el.getAttribute("data-slot") ?? "",
-    runs: list.map(({ duration, easing, kind }) => ({
-      duration,
-      easing,
-      kind,
-    })),
-  }));
-}
-
 /** `state`'s route opened fresh, its act done and the step after it, the layer standing open. */
-async function openState(on: Leg, watch = false): Promise<void> {
+async function openState(on: Leg): Promise<void> {
   const { page, base, route, state, scene, view } = on;
   await open(page, `${base}${route}`, "body");
   await page.evaluate(markHittable, { layer: LAYER, selectors: OUTSIDE });
   await on.before?.(page);
-  if (watch) {
-    await page.evaluate(watchEntrances);
-  }
   await state.act?.(page, scene);
   await page
     .locator(showsOf(on))
@@ -620,48 +485,15 @@ async function openState(on: Leg, watch = false): Promise<void> {
   await on.after?.(page, view);
 }
 
-/** 4: each kit floating surface the act brought on came in by one `popIn`. */
-async function entered(kit: Kit, on: Leg): Promise<void> {
-  const { page, label } = on;
-  // The token as the stylesheet says it (`0.26s` or `260ms`), in ms.
-  const pop = await page.evaluate(() => {
-    const said = getComputedStyle(document.documentElement)
-      .getPropertyValue("--dur-pop")
-      .trim();
-    const n = Number.parseFloat(said);
-    return said.endsWith("ms") ? n : n * 1000;
-  });
-  const seen = await page.evaluate(entrances, KIT_SURFACE);
-  if (seen.length === 0) {
-    kit.note(`${label}: brings no kit floating surface onto the page`);
-    return;
-  }
-  const faults = seen.filter(
-    ({ runs }) =>
-      !(
-        runs.length === 1 &&
-        runs[0]?.kind !== "CSSTransition" &&
-        Math.abs((runs[0]?.duration ?? 0) - pop) < 1
-      )
-  );
-  kit.check(
-    `${label}: each kit floating surface it brought on came in by one animation on itself, popIn over --dur-pop (${pop}ms), not @starting-style`,
-    faults.length === 0,
-    JSON.stringify(faults.length ? faults : seen).slice(0, 500)
-  );
-}
-
 async function leg(kit: Kit, on: Leg): Promise<void> {
   const { page, view, label } = on;
-  // 1 and 2: an outside control takes the hit and the press, and the layer
-  // closes; 4, how each kit surface came in, watched as it opened.
+  // 1 and 2: an outside control takes the hit and the press, and the layer closes.
   try {
-    await openState(on, true);
+    await openState(on);
   } catch (error) {
     kit.check(`${label}: opens`, false, String(error).split("\n")[0]);
     return;
   }
-  await entered(kit, on);
   const pick = await page.evaluate(pickOutside, {
     layer: LAYER,
     scrim: SCRIM,

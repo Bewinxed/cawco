@@ -14,7 +14,7 @@
    * as one tracked command whose stages this card's wait line reads.
    *
    * The composer draws the surface: this is what stands in it. Its title,
-   * its body and its foot come up, fading and rising, one after the other
+   * its body and its foot come up out of a slight blur one after the other
    * as the shape grows (`shown`), and sink back as it folds.
    */
   import { tick, untrack } from "svelte";
@@ -586,16 +586,16 @@
 <!-- The title: what asks, and who, with where it stands among the asks
      waiting when there are several ("2 of 3"): they come one at a time.
      The title, the body and the foot come up with the shape one after the
-     other, by opacity and translate alone, and sink back together as it
-     folds, each a stagger after the one before (`--part`); the delay
-     outranks the shorthand, which resets it. No filter: a blur
-     transitioning on a part hung playwright-core 1.63.0's WebKit at an
-     iPhone's size as the card came up (with the blur snapped instead of
-     transitioned, or none, it never hung). That hang was only seen in that
-     build, never on the owner's iPhone, and 1.64.1's WebKit does not hang. -->
+     other, out of a `--part-blur` blur as they fade and rise, and sink back
+     together as it folds, each a stagger after the one before (`--part`);
+     the delay outranks the shorthand, which resets it. Tested in iOS 27.2
+     Safari on 2026-10-23 with a ~1,000-character Bash command's card
+     (probe-kit ios-safari-motion, long-ask): the page answered a script
+     within 18ms throughout, and each part's filter read 4px, then part way
+     (2.01px, 0.39px), then none. -->
 {#snippet title(text: string)}
   <h2
-    class="mark-line flex items-center gap-space-2 mb-space-2 text-size-label font-medium text-ink-strong opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+    class="mark-line flex items-center gap-space-2 mb-space-2 text-size-label font-medium text-ink-strong opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
     style:--part="0"
     style:--part-delay="calc(var(--part) * var(--dur-stagger))"
   >
@@ -669,7 +669,7 @@
          typing before they take over. -->
     <div
       data-slot="body"
-      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
@@ -737,7 +737,7 @@
     </div>
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
@@ -793,7 +793,7 @@
          past the card. -->
     <div
       data-slot="body"
-      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
@@ -925,7 +925,7 @@
          option's lower edge (DESIGN.md, The 44 Touch Rule). -->
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 coarse:pt-space-2 opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 coarse:pt-space-2 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
@@ -963,7 +963,7 @@
          iOS; secrets in the fields are already hidden. -->
     <div
       data-slot="body"
-      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
@@ -1061,7 +1061,7 @@
     </div>
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >

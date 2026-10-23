@@ -12,7 +12,8 @@
  * out of a transitioning blur (Prompt `.part`), and the web process stopped
  * answering until it was killed some 20s later. That blur hang was only ever
  * seen in that build, not on his iPhone, and 1.64.1's WebKit does not hang;
- * this runs on the kit's WebKit.
+ * this runs on the kit's WebKit. The parts' blur is back: in iOS 27.2
+ * Safari the page answered through it and the blur ran (ios-safari-motion).
  *
  * Read twice: once as WebKit hands the page its storage, once with the
  * storage refused (`localStorage` and `sessionStorage` answering null, as

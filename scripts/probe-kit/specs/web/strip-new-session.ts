@@ -47,7 +47,7 @@ import { commonWords } from "../../../../packages/core/src/words/common";
 import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
-import { bezierAt, Clock } from "../../anim";
+import { Clock } from "../../anim";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 
 const PLUS = '[data-slot="strip-new"] [data-tnew]';
@@ -59,8 +59,6 @@ const START = "#session-start";
 const MODE = "acceptEdits";
 /** The kit popover's gap from its trigger (popover-content `sideOffset`). */
 const SIDE_OFFSET = 4;
-/** A `translate` that moves nothing, as a keyframe leaves it ("0px", "0px 0px"). */
-const NO_OFFSET = /^0px( 0px)?$/;
 
 const LEGS = [
   { view: "desk", label: "1440 (fine)", form: POPOVER },
@@ -705,8 +703,8 @@ async function motionLeg(kit: Kit, base: string, source: string) {
       : Number.parseFloat(value) * 1000;
   const numbers = (value: string) =>
     (value.match(/-?[\d.]+/g) ?? []).map(Number).join(",");
-  const lengths = (read: MotionRead, count: number, want: number) =>
-    read.runs.length === count &&
+  const lengths = (read: MotionRead, want: number) =>
+    read.runs.length === 3 &&
     read.runs.every(
       (run) => Math.abs(Number.parseFloat(run.split(" ")[1] ?? "") - want) < 1
     );
@@ -719,33 +717,23 @@ async function motionLeg(kit: Kit, base: string, source: string) {
   const rise = `0px -${expected.rise}`;
   const small = (value: string | undefined) =>
     Number(value) === Number(expected.scale);
-  /* Whole: no scale and no offset left, as either engine writes it ("none",
-     or the keyframe's own "1" and "0px"). */
-  const whole = (at: MotionRead["at"][string] | undefined) =>
-    at?.opacity === "1" &&
-    (at.scale === "none" || Number(at.scale) === 1) &&
-    (at.translate === "none" || NO_OFFSET.test(at.translate));
-  /* The open is popIn (motion/pop): one Web Animation whose keyframes Svelte
-     samples off the drawer curve, so its own timing is linear and the curve
-     is read in what it draws: at ½ of its clock the opacity stands where
-     the curve does at ½ (the keyframes are sampled a frame apart, so to
-     within 0.02). */
-  const halfway = bezierAt(expected.curve, 0.5);
-  const openRun = opened.runs[0] ?? "";
   kit.check(
-    `1440 (fine): the popover opens by one animation (popIn) over ${expected.open} on the drawer curve (${expected.curve}, ${halfway.toFixed(3)} at ½), from the "+"'s side ${expected.rise} off and ${expected.scale} small at 0, whole at 1`,
-    lengths(opened, 1, ms(expected.open)) &&
-      openRun.endsWith(" linear") &&
+    `1440 (fine): the popover opens over ${expected.open} on the drawer curve (${expected.curve}), from the "+"'s side ${expected.rise} off and ${expected.scale} small at 0, on its way at ½, whole at 1`,
+    lengths(opened, ms(expected.open)) &&
+      curved(opened) &&
       opened.at["0"].opacity === "0" &&
       opened.at["0"].translate === rise &&
       small(opened.at["0"].scale) &&
-      Math.abs(Number(opened.at["0.5"].opacity) - halfway) <= 0.02 &&
-      whole(opened.at["1"]),
+      Number(opened.at["0.5"].opacity) > 0 &&
+      Number(opened.at["0.5"].opacity) < 1 &&
+      opened.at["1"].opacity === "1" &&
+      opened.at["1"].scale === "none" &&
+      opened.at["1"].translate === "none",
     JSON.stringify({ expected, opened })
   );
   kit.check(
     `1440 (fine): the popover leaves the same way over ${expected.close}: whole at 0, toward the "+" at 1`,
-    lengths(closed, 3, ms(expected.close)) &&
+    lengths(closed, ms(expected.close)) &&
       curved(closed) &&
       closed.at["0"].opacity === "1" &&
       Number(closed.at["0.5"].opacity) < 1 &&

@@ -68,7 +68,7 @@
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
-  import { popIn, popOut } from "../motion/pop.svelte";
+  import { popOut } from "../motion/pop.svelte";
   import { planAsked, takePlan } from "../reference-things.svelte";
   import { composerLayer } from "../transcript/composer-layer.svelte";
   import PlanTree from "./PlanTree.svelte";
@@ -187,27 +187,25 @@
 
 <svelte:window onkeydown={onwindowkey} />
 
-<!-- It comes in by `popIn` (opacity, rise and scale on one animation,
-     --dur-pop on the drawer curve, from the ring's corner) and leaves by
-     `popOut` back down into the row (--dur-exit); never by
-     `@starting-style`, which WebKit sometimes skips for an element just
-     added (motion/pop). Both global: the pane's `{#if}` that opens and
-     shuts it is outside this component, a snippet render between. -->
+<!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on
+     one transition, --dur-pop on the drawer curve, from the ring's corner)
+     and leaves by `popOut` back down into the row (--dur-exit), global: the
+     pane's `{#if}` that shuts it is outside this component, a snippet
+     render between. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <section
   data-slot="plan"
   aria-labelledby={titleId}
   class={floatingSurface({
-    motion: "hang",
     class:
       "absolute start-0 end-0 bottom-(--plan-foot) z-1 flex flex-col max-h-(--plan-room) p-0 overflow-clip origin-bottom-right rtl:origin-bottom-left pointer-events-auto",
   })}
   data-side="top"
+  data-state="open"
   {onkeydown}
   style:--plan-foot="calc(100% + var(--space-2))"
   bind:this={section}
   {@attach room}
-  in:popIn|global={{ side: "top" }}
   out:popOut|global={{ side: "top" }}
 >
   <header

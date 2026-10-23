@@ -187,10 +187,18 @@
    class from the markup that hosts them. Each is anchored on the host's own
    hook. */
 @layer components {
-  /* Svelte Flow's handles (the decisions graph): the handles the edges need
-     stay as 1px points nobody can grab. A card new to the graph fades up
-     where it lands in script (DecisionNode, motion `appearOnMount`), never
-     by `@starting-style`, which WebKit sometimes skips. */
+  /* Svelte Flow's node and handle (the decisions graph): a card new to the
+     graph fades up where it lands, and the handles the edges need stay as
+     1px points nobody can grab. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="decision-graph"] .svelte-flow__node-decision {
+      transition: opacity var(--dur-fade) var(--ease-out);
+
+      @starting-style {
+        opacity: 0;
+      }
+    }
+  }
   [data-slot="decision-node"] .svelte-flow__handle {
     inline-size: 1px;
     block-size: 1px;
@@ -1053,13 +1061,18 @@
 }
 
 /* ---- The Canvas view's cards (Svelte Flow's nodes): once placed, a card
-   the layout moves eases to its new place. A card new to the canvas fades in
-   where it lands in script (TaskNode, motion `appearOnMount`), never by
-   `@starting-style`, which WebKit sometimes skips. */
+   the layout moves eases to its new place; a card new to the canvas fades
+   in where it lands. */
 @layer components {
   @media (prefers-reduced-motion: no-preference) {
     [data-slot="view-canvas"][data-settled] .svelte-flow__node {
-      transition: transform var(--dur-panel) var(--ease-in-out);
+      transition:
+        transform var(--dur-panel) var(--ease-in-out),
+        opacity var(--dur-fade) var(--ease-out);
+
+      @starting-style {
+        opacity: 0;
+      }
     }
   }
 }

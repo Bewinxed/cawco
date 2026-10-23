@@ -1206,6 +1206,14 @@
   transition: var(--transition-fade-slide);
 }
 
+@utility transition-fade-blur {
+  transition: var(--transition-fade-blur);
+}
+
+@utility transition-fade-slide-blur {
+  transition: var(--transition-fade-slide-blur);
+}
+
 @utility transition-tint-press {
   transition: var(--transition-tint-press);
 }

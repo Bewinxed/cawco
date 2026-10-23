@@ -9,27 +9,25 @@
    * wears it, and HangCard's cards.
    *
    * `pop` (DESIGN.md, Motion (origin-aware)): it opens from its trigger's
-   * side over --dur-pop on the drawer curve, rising --pop-rise and growing
-   * from --pop-scale as it fades in, by `popIn` (motion/pop) on the element
-   * each kit content draws; never by `@starting-style`, which WebKit
-   * sometimes skips for an element just added (bugs.webkit.org 275184). It
-   * leaves the same way over --dur-exit, by transitions on `data-closed`
-   * toward its trigger's side (`--kit-rise`, by bits-ui's `data-side`), so
-   * a close caught mid-open turns back from where it is; bits-ui holds it
-   * mounted until they end (getAnimations()). It grows from its trigger
-   * through bits' transform-origin, which each kit content sets. With
-   * reduced motion only the fade runs.
+   * side (`--kit-rise`, by bits-ui's `data-side`) over --dur-pop on the
+   * drawer curve, rising --pop-rise and growing from --pop-scale as it fades
+   * in from its @starting-style (which iOS 27.2 Safari applies to a surface
+   * just added: probe-kit ios-safari-motion, 2026-10-23), and leaves the
+   * same way over --dur-exit.
+   * Transitions on `data-state`, so a close caught mid-open turns back from
+   * where it is; bits-ui holds it mounted until they end (getAnimations()).
+   * It grows from its trigger through bits' transform-origin, which each
+   * kit content sets. With reduced motion only the fade runs.
    *
    * `hang`: a card that hangs from its anchor opens and closes on its own
-   * clock (motion/hang, HangCard); with reduced motion it fades in by
-   * `popIn` (`hangs`) and out by the kit's fade.
+   * clock (motion/hang, HangCard); with reduced motion the kit's fade runs.
    */
   export const floatingSurface = tv({
     base: "rounded-lg border border-border-control bg-surface-raised p-1.5 text-ink-strong shadow-overlay",
     variants: {
       motion: {
-        pop: "transition-opacity duration-(--dur-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 data-closed:duration-(--dur-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)]",
-        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--dur-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:data-closed:duration-(--dur-exit)",
+        pop: "transition-opacity duration-(--dur-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--dur-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]",
+        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--dur-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--dur-exit)",
       },
     },
     defaultVariants: { motion: "pop" },
@@ -82,7 +80,6 @@
   import { MediaQuery } from "svelte/reactivity";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { type Morph, morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { popIn } from "#lib/cawco/motion/pop.svelte.js";
   import {
     drawn,
     own,
@@ -167,13 +164,30 @@
   // A popover whose content changes (a list arrives, an error appears)
   // tweens to its new height instead of jumping: once it has come in. What
   // settles in it while it comes in (a list read the frame after it opens)
-  // is part of that one entrance (`popIn`), never a size tween a frame
-  // behind it. A site that draws its own surface (`child`, HangCard) or a
-  // card that hangs has no `popIn` here, and tweens from the first.
+  // is part of that one entrance (its @starting-style fade), never a size
+  // tween a frame behind it. A site that draws its own surface (`child`,
+  // HangCard) or a card that hangs has no such fade here, and tweens from
+  // the first.
   // svelte-ignore state_referenced_locally: how it morphs is set once, by its site
   const resize = morph(morphs);
   let entered = $state(false);
   const tweens = $derived(entered || !!callerChild || motion === "hang");
+
+  /** Each open's surface: it has come in once its own opacity transition ends. */
+  function comesIn(node: HTMLElement) {
+    entered = false;
+    const done = (event: TransitionEvent) => {
+      if (event.target === node && event.propertyName === "opacity") {
+        entered = true;
+      }
+    };
+    node.addEventListener("transitionend", done);
+    node.addEventListener("transitioncancel", done);
+    return () => {
+      node.removeEventListener("transitionend", done);
+      node.removeEventListener("transitioncancel", done);
+    };
+  }
   $effect(() => {
     if (ref && tweens) {
       return resize(ref);
@@ -229,13 +243,7 @@
             <div
               {...own(snippet.props)}
               style:pointer-events={pressable(snippet.open)}
-              onintroend={() => {
-                entered = true;
-              }}
-              onintrostart={() => {
-                entered = false;
-              }}
-              in:popIn|global={{ hangs: motion === "hang" }}
+              {@attach comesIn}
             >
               {@render children?.()}
             </div>

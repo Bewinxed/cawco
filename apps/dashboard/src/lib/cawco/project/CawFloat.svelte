@@ -124,8 +124,10 @@
   <!-- The card recipe, its content edge to edge and clipped by its radius; it
        fills the place the page's grid gives it. It comes in as a sheet does,
        from its own side by --pop-rise as it fades, over --dur-panel on the
-       drawer curve; with less motion it only fades (`appearOnMount`, never
-       `@starting-style`, which WebKit sometimes skips). -->
+       drawer curve; with less motion it only fades (`appearOnMount`). Not
+       by `@starting-style`: in iOS 27.2 Safari its starting-style rise ran
+       no transition and the panel only faded (probe-kit ios-safari-motion,
+       2026-10-23). -->
   <aside
     aria-label="Caw, lead of {projectName}"
     class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"

@@ -683,6 +683,7 @@ export type TokenSize =
   | "motion.ride-fade"
   | "motion.pop-rise"
   | "motion.fold-blur"
+  | "motion.part-blur"
   | "motion.skeleton-reveal-blur";
 
 export type TokenFont =
