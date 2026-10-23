@@ -208,3 +208,4 @@ typeOverrides:
     WorkflowStepStatus: OpenEnums.WorkflowStepStatus
     WorkflowWhenOp: OpenEnums.WorkflowWhenOp
     WorkspaceState: OpenEnums.WorkspaceState
+    WorkspaceToolNeed: OpenEnums.WorkspaceToolNeed

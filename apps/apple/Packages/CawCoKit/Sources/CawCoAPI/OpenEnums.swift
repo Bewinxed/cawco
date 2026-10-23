@@ -4662,6 +4662,7 @@ public enum OpenEnums {
         case pi
         case publicAddress
         case serviceManager
+        case workspace
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -4676,6 +4677,7 @@ public enum OpenEnums {
             case "pi": self = .pi
             case "public-address": self = .publicAddress
             case "service-manager": self = .serviceManager
+            case "workspace": self = .workspace
             default: self = .unrecognized(rawValue)
             }
         }
@@ -4691,6 +4693,7 @@ public enum OpenEnums {
             case .pi: "pi"
             case .publicAddress: "public-address"
             case .serviceManager: "service-manager"
+            case .workspace: "workspace"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -4699,7 +4702,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.browser, .claude, .containerRuntime, .git, .node, .opencode, .pi, .publicAddress, .serviceManager]
+        public static let allCases: [Self] = [.browser, .claude, .containerRuntime, .git, .node, .opencode, .pi, .publicAddress, .serviceManager, .workspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -8913,6 +8916,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.active, .archived, .held]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/WorkspaceToolNeed`.
+    public enum WorkspaceToolNeed: OpenEnum {
+        case checkout
+        case walls
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "checkout": self = .checkout
+            case "walls": self = .walls
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .checkout: "checkout"
+            case .walls: "walls"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.checkout, .walls]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

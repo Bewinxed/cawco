@@ -2233,6 +2233,7 @@ export * from "./words/skills";
 export * from "./words/spend";
 export * from "./words/tailnet";
 export * from "./words/views";
+export * from "./words/workspace-needs";
 export * from "./workflow";
 export * from "./workflow-compile";
 

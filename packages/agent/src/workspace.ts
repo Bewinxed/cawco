@@ -98,6 +98,7 @@ import {
 } from "./move";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
+import { refuseShortOfWorkspace } from "./workspace-needs";
 import { cloneHolding } from "./workspace-records";
 
 type Git = (root: string, ...args: string[]) => Promise<string>;
@@ -423,6 +424,8 @@ export const createWorkspace = async (
   account?: unknown,
   at?: unknown
 ): Promise<WorkspaceCheckout> => {
+  // What this machine lacks first, before the folder is read at all.
+  refuseShortOfWorkspace();
   // A MachinePath from the hub (work-items `openWorkspace`): absolute.
   const dir = String(cwd);
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;

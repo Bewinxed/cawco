@@ -232,6 +232,7 @@ import {
   socketPlace,
   toolDoorOf,
 } from "./tool-door";
+import { SYSTEM_PATH, workspaceNeeds } from "./workspace-needs";
 import { workspaceRecords } from "./workspace-records";
 
 /** A running boundary, as a harness uses it. */
@@ -387,13 +388,6 @@ const readPlace = async (
 
 export const shellQuote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
-
-/**
- * The PATH the executor, the hook and the host find their own tools on:
- * the system's dirs alone, which nothing inside a workspace writes. The
- * command itself runs with its caller's PATH.
- */
-const SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
 
 /** A session's `command`, as it runs inside the boundary (pi's bash tool): `--session`, so it shows the workspace's notice first. */
 export const boundaryCommand = (boundary: Boundary, command: string): string =>
@@ -1958,25 +1952,6 @@ const refusal = (id: string, why: string): Error =>
   );
 
 /**
- * What a Linux machine runs a boundary with, each by the package that ships
- * it: srt's own dependencies (its README, "Platform-Specific Dependencies").
- * Its ripgrep is the one this build ships ({@link ripgrep}).
- */
-const HOST_TOOLS = [
-  ["bwrap", "bubblewrap"],
-  ["socat", "socat"],
-] as const;
-
-/** The host tools this machine lacks, each named with its package; none off Linux. */
-const missingHostTools = (): string[] =>
-  process.platform === "linux"
-    ? HOST_TOOLS.filter(
-        ([tool]) =>
-          !SYSTEM_PATH.split(":").some((dir) => existsSync(join(dir, tool)))
-      ).map(([tool, pkg]) => `${tool} (install the ${pkg} package)`)
-    : [];
-
-/**
  * macOS: why this process can start no boundary at all, asked once: a
  * process under a Seatbelt profile stays under it for its whole life, and
  * one under none never gains one. Asked before anything of a boundary is
@@ -1989,13 +1964,11 @@ const nestedSeatbelt = (): string | undefined => {
   return seatbeltNested.reason;
 };
 
-/** Says, as the agent starts, what this machine needs before it can hold a workspace boundary. */
+/** Says, as the agent starts, what this machine needs before it can hold a delegate's workspace (workspace-needs.ts). */
 export const checkBoundaryHost = (): void => {
-  const missing = missingHostTools();
-  if (missing.length > 0) {
-    console.warn(
-      `[workspace] this machine refuses workspace work until it has ${missing.join(" and ")}`
-    );
+  const needs = workspaceNeeds();
+  if (!needs.available) {
+    console.warn(`[workspace] ${needs.reason}`);
   }
 };
 
@@ -2154,9 +2127,10 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
       `workspace boundaries run on Linux and macOS, and this machine runs ${process.platform}`
     );
   }
-  const missing = missingHostTools();
-  if (missing.length > 0) {
-    throw refusal(ref.id, `this machine has no ${missing.join(" and no ")}`);
+  // Its walls' tools; a workspace's checkout is refused before it is cut (workspace.ts).
+  const walls = workspaceNeeds(undefined, "walls");
+  if (!walls.available) {
+    throw refusal(ref.id, walls.reason ?? "");
   }
   const nested = process.platform === "darwin" ? nestedSeatbelt() : undefined;
   if (nested) {
@@ -2675,7 +2649,7 @@ const runtimePlaces = (id: string, allowRead: readonly string[]): string[] => {
   return allowRead.filter((path) => path.startsWith(`${runtime}/`));
 };
 
-/** The host's bwrap: the first on the system PATH, where `missingHostTools` looks for it. */
+/** The host's bwrap: the first on the system PATH, where workspace-needs.ts looks for it. */
 const hostBwrap = (): string =>
   SYSTEM_PATH.split(":")
     .map((dir) => join(dir, "bwrap"))

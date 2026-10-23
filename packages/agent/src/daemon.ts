@@ -398,6 +398,7 @@ import {
   workspaceBoundary,
   workspaceBundle,
 } from "./workspace";
+import { workspaceNeeds } from "./workspace-needs";
 import { workspaceRefs } from "./workspace-records";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
@@ -1800,18 +1801,29 @@ const attach = (
         .map((one) => one.address)
         .sort()
         .join(",");
+    // On the same beat, what a workspace lacks here (workspace-needs.ts): a
+    // tool the person installs, or takes away, reaches the machine's row
+    // within a beat, not at the next reconnect.
+    const needsNow = (): string =>
+      (workspaceNeeds().missing ?? []).map((tool) => tool.command).join(",");
     let network = interfacesNow();
+    let needs = needsNow();
     const networkWatch = setInterval(() => {
       const now = interfacesNow();
-      if (now === network) {
+      const lacking = needsNow();
+      if (now === network && lacking === needs) {
         return;
       }
+      const moved = now !== network;
       network = now;
-      relayReachChanged().catch((error: unknown) =>
-        console.warn(
-          `[relay] its addresses were not told again: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      needs = lacking;
+      if (moved) {
+        relayReachChanged().catch((error: unknown) =>
+          console.warn(
+            `[relay] its addresses were not told again: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+      }
       readPart("the machine's capabilities", probeCapabilities)
         .then((machineCapabilities) => {
           if (machineCapabilities && socket.readyState === WebSocket.OPEN) {

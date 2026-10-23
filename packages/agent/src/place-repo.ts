@@ -43,6 +43,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
 import { configEnv, LFS_FILTERS } from "./move";
+import { refuseShortOfWorkspace } from "./workspace-needs";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
 const AUTHOR = [
@@ -881,9 +882,12 @@ const repoTop = async (path: string, git: Git): Promise<string | undefined> => {
 /**
  * {@link CONTROL_REPO_ROOT}: the top of the git checkout the folder at
  * `path` is in, or null when it is in none. Reads only; a folder that is
- * not there is refused.
+ * not there is refused. Asked only before a workspace is cut (hub
+ * place-repo.ts `beforeCut`), so a machine that lacks what a workspace
+ * needs refuses here first, before the folder is read.
  */
 export const repoRoot = async (path: unknown): Promise<string | null> => {
+  refuseShortOfWorkspace();
   const folder = String(path);
   const info = await stat(folder).catch(() => undefined);
   if (!info?.isDirectory()) {

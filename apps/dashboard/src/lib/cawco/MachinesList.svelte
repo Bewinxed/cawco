@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel, workspaceNeedsDetails } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
    * The machines as a list: every install under way or waiting on the
@@ -146,6 +146,24 @@
     }
     return cellFor(machine, updates.policy);
   }
+  /**
+   * What the machine lacks for a delegate's workspace, as its report says
+   * (agent workspace-needs.ts): the refusal a delegate there gets, read
+   * before one is sent, and where each tool was looked for under Show
+   * details.
+   */
+  function needsOf(machine: Machine) {
+    const needs = machine.machineCapabilities?.items.find(
+      (item) => item.id === "workspace"
+    );
+    if (!needs || needs.available) {
+      return null;
+    }
+    return {
+      reason: needs.reason,
+      details: workspaceNeedsDetails(needs.missing ?? []),
+    };
+  }
   function updateFault(machine: Machine) {
     const refused = updates.refusalOf(machine);
     if (refused) {
@@ -273,6 +291,7 @@
       {@const fault = faultOf(machine.machineId)}
       {@const update = updateOf(machine)}
       {@const updateFailed = updateFault(machine)}
+      {@const needs = up ? needsOf(machine) : null}
       {@const back = returning.get(machine.machineId)}
       <li
         data-machine={machine.machineId}
@@ -306,6 +325,12 @@
             </div>
           </MachineMenu>
           <RowFault again={updateFailed?.again} reason={updateFailed?.reason} />
+          <!-- What a delegate's workspace needs here and the machine lacks: how to install it. -->
+          <RowFault
+            data-workspace-needs
+            details={needs?.details}
+            reason={needs?.reason}
+          />
           <!-- The hub's fleet sync did not land: why, in the hub's sentence. -->
           <RowFault reason={up ? machine.fleetSyncFault : undefined} />
         {/if}

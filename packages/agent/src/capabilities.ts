@@ -25,6 +25,7 @@ import { claudeHostVersion } from "./claude-version";
 import { opencodeBinary } from "./harnesses/opencode-client";
 import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
+import { packageInstall, workspaceNeeds } from "./workspace-needs";
 
 let sandboxable: boolean | undefined;
 
@@ -139,19 +140,10 @@ const publicAddressItem = async (): Promise<MachineCapability> => {
 };
 
 function linuxInstall(pkg: string): string {
-  if (resolveBin("apt-get")) {
-    return `sudo apt-get update && sudo apt-get install -y ${pkg}`;
-  }
-  if (resolveBin("dnf")) {
-    return `sudo dnf install -y ${pkg}`;
-  }
-  if (resolveBin("pacman")) {
-    return `sudo pacman -S --needed ${pkg}`;
-  }
-  if (resolveBin("apk")) {
-    return `sudo apk add ${pkg}`;
-  }
-  return `Install ${pkg} with this Linux distribution's package manager`;
+  return (
+    packageInstall([pkg]) ??
+    `Install ${pkg} with this Linux distribution's package manager`
+  );
 }
 
 const VERSIONED: readonly string[] = [
@@ -344,6 +336,8 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
               : "systemd must be running as the service manager; installing its package alone does not change PID 1",
           }),
     },
+    // What a delegate's workspace needs here, read as a delegate is refused by it.
+    workspaceNeeds(),
   ];
   await Promise.all(items.map(readVersion));
   return { at: Date.now(), platform: platform(), items };

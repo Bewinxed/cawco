@@ -100,7 +100,7 @@ async function offerTools(ask: boolean): Promise<boolean> {
       }
       const command = item.installCommand;
       console.log(
-        `${item.id}: not installed. ${item.reason ?? ""}${command ? `\n  To install it: ${command}` : ""}`
+        `${item.id}: not installed. ${item.reason ?? ""}${command && !item.reason?.includes(command) ? `\n  To install it: ${command}` : ""}`
       );
       if (!(
         command &&

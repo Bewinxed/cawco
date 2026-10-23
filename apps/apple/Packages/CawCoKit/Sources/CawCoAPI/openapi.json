@@ -48442,6 +48442,13 @@
             "$ref": "#/components/schemas/MachineCapabilityMedia",
             "description": "`container-runtime` only: what the runtime forwards to the browser's media port. Short of `udp+tcp`, `reason` says how to get both."
           },
+          "missing": {
+            "description": "`workspace` only: each tool a delegate's workspace needs that the\nmachine lacks (agent workspace-needs.ts). While it is not empty the\nmachine refuses every delegate before anything starts, in `reason`'s\nwords, and `installCommand` installs them all.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceTool"
+            }
+          },
           "nat": {
             "description": "`public-address` only, on a machine with none of its own: the public\naddress its router maps it to, as a STUN binding answered it, and its\naddress on the router's network (core stream-relay.ts `STUN_SERVER`).",
             "type": "object",
@@ -48472,6 +48479,34 @@
           "available",
           "id",
           "installCommand"
+        ]
+      },
+      "WorkspaceTool": {
+        "description": "A tool a delegate's workspace needs, as a machine that lacks it reports it.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "The command it is looked for by.",
+            "type": "string"
+          },
+          "lookedIn": {
+            "description": "Where it was looked for: the dirs, `:`-joined.",
+            "type": "string"
+          },
+          "need": {
+            "$ref": "#/components/schemas/WorkspaceToolNeed",
+            "description": "What needs it: the walls every workspace runs in, or the git checkout a workspace is."
+          },
+          "package": {
+            "description": "The package that ships it, as the install command names it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "lookedIn",
+          "need",
+          "package"
         ]
       },
       "GeneratedImage": {
@@ -62200,7 +62235,8 @@
           "opencode",
           "pi",
           "public-address",
-          "service-manager"
+          "service-manager",
+          "workspace"
         ]
       },
       "MachineCapabilityMedia": {
@@ -62525,6 +62561,13 @@
           "matches",
           "neq",
           "truthy"
+        ]
+      },
+      "WorkspaceToolNeed": {
+        "type": "string",
+        "enum": [
+          "checkout",
+          "walls"
         ]
       },
       "DeleteApiJevTypesafeKey200Route": {
