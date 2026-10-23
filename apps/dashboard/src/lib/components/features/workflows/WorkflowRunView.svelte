@@ -18,6 +18,7 @@
   } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -250,251 +251,257 @@
       aria-label="Loading workflow run"
       class="flex flex-col gap-space-3"
       role="status"
+      out:revealOut
     >
       <Skeleton class="w-1/2" line="meta" />
       <Skeleton class="w-full" line="body" />
       <Skeleton class="w-full" line="body" />
     </div>
   {:else}
-    <!-- What the tab cannot say, before the run: it stands at the page's
-         edge as a transcript's prose does, clear of the run's lines. -->
-    <header
-      data-slot="head"
-      class="flex flex-wrap items-box-start justify-between gap-x-space-5 gap-y-space-3"
-    >
-      <div
-        class="flex min-w-0 flex-col gap-space-1 text-size-meta leading-meta"
+    <!-- What the skeleton stood for, in its reveal. -->
+    <div class="flex min-w-0 flex-col gap-space-5" in:reveal>
+      <!-- What the tab cannot say, before the run: it stands at the page's
+           edge as a transcript's prose does, clear of the run's lines. -->
+      <header
+        data-slot="head"
+        class="flex flex-wrap items-box-start justify-between gap-x-space-5 gap-y-space-3"
       >
-        <!-- Where the run stands, in words: its glyph, then its word
-             (DESIGN.md, The Glyph, Word, Hue Rule), as its tab's glyph. -->
-        <SessionStatus sessionId={runTabId(run.id)} />
-        <p class="m-0 text-ink-muted">Started {startedAt}</p>
-        <!-- A command of the run held by its machine's pause, or queued for
-             a shared slot: said where the run's facts are, until it goes. -->
-        {#if going && run.waiting}
-          <p class="m-0 text-ink-strong" role="status">
-            {run.waiting.charAt(0).toUpperCase()}{run.waiting.slice(1)}
-          </p>
-        {/if}
-        {#if inputs.length}
-          <dl
-            class="m-0 grid grid-cols-(--pair-cols) gap-x-space-3 gap-y-space-1"
-            style:--pair-cols="auto minmax(0, 1fr)"
-          >
-            {#each inputs as [key, value] (key)}
-              <div class="contents">
-                <dt class="text-ink-muted">{key}</dt>
-                <dd
-                  data-workflow-run-view-code={typeof value !== "string" ||
-                    undefined}
-                  class="m-0 max-w-c-measure wrap-anywhere text-ink-strong data-is-code:font-(family-name:--font-mono) data-is-code:liga-none"
-                  data-is-code={typeof value !== "string" || undefined}
-                >
-                  {shown(value)}
-                </dd>
-              </div>
-            {/each}
-          </dl>
-        {/if}
-      </div>
-      <div data-slot="actions" class="flex flex-wrap gap-space-2">
-        {#if going}
-          <Button
-            aria-expanded={asks.pending !== null}
-            disabled={busy || !live}
-            label="Cancel run"
-            onclick={cancel}
-            size="sm"
-            title={offline("cancel")}
-            variant="outline"
-          />
-        {:else}
-          <Button
-            disabled={(busy && acting !== "rerun") || !live}
-            failed={faultOf("rerun") !== null}
-            label="Re-run"
-            onclick={() => rerun()}
-            pending={acting === "rerun"}
-            pendingLabel="Re-running…"
-            size="sm"
-            title={offline("re-run") ??
-              "Start this workflow again with the same inputs"}
-            variant="outline"
-          />
-        {/if}
-        <Button
-          href="/workflows/{run.workflowId}?tab=program"
-          size="sm"
-          variant="outline">Edit workflow</Button
+        <div
+          class="flex min-w-0 flex-col gap-space-1 text-size-meta leading-meta"
         >
-        <RowFault class="basis-full" reason={faultOf("rerun")} />
-      </div>
-    </header>
-    <AskHere asker={asks} at="cancel-run" />
+          <!-- Where the run stands, in words: its glyph, then its word
+               (DESIGN.md, The Glyph, Word, Hue Rule), as its tab's glyph. -->
+          <SessionStatus sessionId={runTabId(run.id)} />
+          <p class="m-0 text-ink-muted">Started {startedAt}</p>
+          <!-- A command of the run held by its machine's pause, or queued for
+               a shared slot: said where the run's facts are, until it goes. -->
+          {#if going && run.waiting}
+            <p class="m-0 text-ink-strong" role="status">
+              {run.waiting.charAt(0).toUpperCase()}{run.waiting.slice(1)}
+            </p>
+          {/if}
+          {#if inputs.length}
+            <dl
+              class="m-0 grid grid-cols-(--pair-cols) gap-x-space-3 gap-y-space-1"
+              style:--pair-cols="auto minmax(0, 1fr)"
+            >
+              {#each inputs as [key, value] (key)}
+                <div class="contents">
+                  <dt class="text-ink-muted">{key}</dt>
+                  <dd
+                    data-workflow-run-view-code={typeof value !== "string" ||
+                      undefined}
+                    class="m-0 max-w-c-measure wrap-anywhere text-ink-strong data-is-code:font-(family-name:--font-mono) data-is-code:liga-none"
+                    data-is-code={typeof value !== "string" || undefined}
+                  >
+                    {shown(value)}
+                  </dd>
+                </div>
+              {/each}
+            </dl>
+          {/if}
+        </div>
+        <div data-slot="actions" class="flex flex-wrap gap-space-2">
+          {#if going}
+            <Button
+              aria-expanded={asks.pending !== null}
+              disabled={busy || !live}
+              label="Cancel run"
+              onclick={cancel}
+              size="sm"
+              title={offline("cancel")}
+              variant="outline"
+            />
+          {:else}
+            <Button
+              disabled={(busy && acting !== "rerun") || !live}
+              failed={faultOf("rerun") !== null}
+              label="Re-run"
+              onclick={() => rerun()}
+              pending={acting === "rerun"}
+              pendingLabel="Re-running…"
+              size="sm"
+              title={offline("re-run") ??
+                "Start this workflow again with the same inputs"}
+              variant="outline"
+            />
+          {/if}
+          <Button
+            href="/workflows/{run.workflowId}?tab=program"
+            size="sm"
+            variant="outline">Edit workflow</Button
+          >
+          <RowFault class="basis-full" reason={faultOf("rerun")} />
+        </div>
+      </header>
+      <AskHere asker={asks} at="cancel-run" />
 
-    <RunBlock here more={rerunFrom} {runId} />
+      <RunBlock here more={rerunFrom} {runId} />
 
-    {#if run.status === "waiting" && run.ask}
-      {@const ask = run.ask}
-      <!-- The question folds open; answered, the picked option pends until
-           the hub moves the run on, and then the block folds away. -->
-      <div class="max-w-c-measure" in:unfold out:unfold>
-        <Card.Root size="sm">
-          <Card.Header>
-            <Card.Title>{ask.question}</Card.Title>
-          </Card.Header>
-          <Card.Content gap="section">
-            {#if ask.options.length}
-              <!-- Peers the workflow's author wrote, none of them the
-                   recommended action: each an outline button, its
-                   description beside it. -->
-              <ul class="m-0 flex list-none flex-col gap-space-2 p-0">
-                {#each ask.options as option (option.label)}
-                  {@const key = `answer:${option.label}`}
-                  <li class="flex min-w-0 items-baseline gap-space-3">
+      {#if run.status === "waiting" && run.ask}
+        {@const ask = run.ask}
+        <!-- The question folds open; answered, the picked option pends until
+             the hub moves the run on, and then the block folds away. -->
+        <div class="max-w-c-measure" in:unfold out:unfold>
+          <Card.Root size="sm">
+            <Card.Header>
+              <Card.Title>{ask.question}</Card.Title>
+            </Card.Header>
+            <Card.Content gap="section">
+              {#if ask.options.length}
+                <!-- Peers the workflow's author wrote, none of them the
+                     recommended action: each an outline button, its
+                     description beside it. -->
+                <ul class="m-0 flex list-none flex-col gap-space-2 p-0">
+                  {#each ask.options as option (option.label)}
+                    {@const key = `answer:${option.label}`}
+                    <li class="flex min-w-0 items-baseline gap-space-3">
+                      <Button
+                        disabled={(busy && acting !== key) || !live}
+                        failed={faultOf(key) !== null}
+                        label={option.label}
+                        onclick={() =>
+                          act(key, () =>
+                            answerWorkflow(runId, ask.stepId, {
+                              choice: option.label,
+                              note,
+                              value: typedValue(),
+                            })
+                          )}
+                        pending={acting === key}
+                        pendingLabel="Answering…"
+                        size="sm"
+                        title={offline("answer")}
+                        variant="outline"
+                      />
+                      {#if option.description}
+                        <p
+                          class="m-0 text-size-meta leading-meta wrap-anywhere text-ink-muted"
+                        >
+                          {option.description}
+                        </p>
+                      {/if}
+                      <RowFault reason={faultOf(key)} />
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+              <div
+                data-slot="workflow-run-view-field"
+                class="flex flex-col gap-space-2"
+              >
+                <Label for="run-note-{runId}">Note (optional)</Label>
+                <Input id="run-note-{runId}" bind:value={note} />
+              </div>
+              {#if ask.answerSchema}
+                <!-- A typed answer: its JSON is checked by the hub against the
+                     schema the program declared, shown here as the placeholder. -->
+                <div
+                  data-slot="workflow-run-view-field"
+                  class="flex flex-col gap-space-2"
+                >
+                  <Label for="run-value-{runId}">Answer value (JSON)</Label>
+                  <Textarea
+                    id="run-value-{runId}"
+                    placeholder={JSON.stringify(ask.answerSchema)}
+                    rows={3}
+                    bind:value={valueText}
+                  />
+                </div>
+                {#if !ask.options.length}
+                  <div data-slot="send" class="flex">
                     <Button
-                      disabled={(busy && acting !== key) || !live}
-                      failed={faultOf(key) !== null}
-                      label={option.label}
+                      disabled={!valueText.trim() ||
+                        (busy && acting !== "value") ||
+                        !live}
+                      failed={faultOf("value") !== null}
+                      label="Send answer"
                       onclick={() =>
-                        act(key, () =>
+                        act("value", () =>
                           answerWorkflow(runId, ask.stepId, {
-                            choice: option.label,
                             note,
                             value: typedValue(),
                           })
                         )}
-                      pending={acting === key}
-                      pendingLabel="Answering…"
+                      pending={acting === "value"}
+                      pendingLabel="Sending…"
+                      size="sm"
+                      title={offline("answer")}
+                    />
+                  </div>
+                  <RowFault reason={faultOf("value")} />
+                {/if}
+              {/if}
+              {#if ask.allowOther}
+                <div
+                  data-slot="workflow-run-view-field"
+                  class="flex flex-col gap-space-2"
+                >
+                  <Label for="run-other-{runId}">Other answer</Label>
+                  <div data-slot="other" class="flex items-center gap-space-2">
+                    <Input id="run-other-{runId}" bind:value={other} />
+                    <Button
+                      disabled={!other ||
+                        (busy && acting !== "answer") ||
+                        !live}
+                      failed={faultOf("answer") !== null}
+                      label="Send answer"
+                      onclick={() =>
+                        act("answer", () =>
+                          answerWorkflow(runId, ask.stepId, {
+                            choice: other,
+                            note,
+                            value: typedValue(),
+                          })
+                        )}
+                      pending={acting === "answer"}
+                      pendingLabel="Sending…"
                       size="sm"
                       title={offline("answer")}
                       variant="outline"
                     />
-                    {#if option.description}
-                      <p
-                        class="m-0 text-size-meta leading-meta wrap-anywhere text-ink-muted"
-                      >
-                        {option.description}
-                      </p>
-                    {/if}
-                    <RowFault reason={faultOf(key)} />
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-            <div
-              data-slot="workflow-run-view-field"
-              class="flex flex-col gap-space-2"
-            >
-              <Label for="run-note-{runId}">Note (optional)</Label>
-              <Input id="run-note-{runId}" bind:value={note} />
-            </div>
-            {#if ask.answerSchema}
-              <!-- A typed answer: its JSON is checked by the hub against the
-                   schema the program declared, shown here as the placeholder. -->
-              <div
-                data-slot="workflow-run-view-field"
-                class="flex flex-col gap-space-2"
-              >
-                <Label for="run-value-{runId}">Answer value (JSON)</Label>
-                <Textarea
-                  id="run-value-{runId}"
-                  placeholder={JSON.stringify(ask.answerSchema)}
-                  rows={3}
-                  bind:value={valueText}
-                />
-              </div>
-              {#if !ask.options.length}
-                <div data-slot="send" class="flex">
-                  <Button
-                    disabled={!valueText.trim() ||
-                      (busy && acting !== "value") ||
-                      !live}
-                    failed={faultOf("value") !== null}
-                    label="Send answer"
-                    onclick={() =>
-                      act("value", () =>
-                        answerWorkflow(runId, ask.stepId, {
-                          note,
-                          value: typedValue(),
-                        })
-                      )}
-                    pending={acting === "value"}
-                    pendingLabel="Sending…"
-                    size="sm"
-                    title={offline("answer")}
-                  />
+                  </div>
+                  <RowFault reason={faultOf("answer")} />
                 </div>
-                <RowFault reason={faultOf("value")} />
               {/if}
-            {/if}
-            {#if ask.allowOther}
-              <div
-                data-slot="workflow-run-view-field"
-                class="flex flex-col gap-space-2"
-              >
-                <Label for="run-other-{runId}">Other answer</Label>
-                <div data-slot="other" class="flex items-center gap-space-2">
-                  <Input id="run-other-{runId}" bind:value={other} />
-                  <Button
-                    disabled={!other || (busy && acting !== "answer") || !live}
-                    failed={faultOf("answer") !== null}
-                    label="Send answer"
-                    onclick={() =>
-                      act("answer", () =>
-                        answerWorkflow(runId, ask.stepId, {
-                          choice: other,
-                          note,
-                          value: typedValue(),
-                        })
-                      )}
-                    pending={acting === "answer"}
-                    pendingLabel="Sending…"
-                    size="sm"
-                    title={offline("answer")}
-                    variant="outline"
-                  />
-                </div>
-                <RowFault reason={faultOf("answer")} />
-              </div>
-            {/if}
-          </Card.Content>
-        </Card.Root>
-      </div>
-    {/if}
+            </Card.Content>
+          </Card.Root>
+        </div>
+      {/if}
 
-    {#if logLines.length}
-      <details
-        data-slot="log"
-        bind:open={logOpen}
-        style:--pair-cols="auto minmax(0, 1fr)"
-        in:unfold
-        out:unfold
-      >
-        <summary
-          class="py-space-2 text-size-label font-medium text-ink-muted coarse:py-space-4"
-          >Log · <span data-slot="num" class="num">{logLines.length}</span
-          ></summary
+      {#if logLines.length}
+        <details
+          data-slot="log"
+          bind:open={logOpen}
+          style:--pair-cols="auto minmax(0, 1fr)"
+          in:unfold
+          out:unfold
         >
-        <!-- A line arrives the house way (motion/rows), and the log keeps
-             the newest in view only while the reader is at its end. -->
-        <ol
-          class="m-0 grid max-h-c-wf-scroll-max-h list-none content-box-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
-          {@attach reflow()}
-          {@attach followTail()}
-        >
-          {#each logLines as line (line.seq)}
-            <li
-              class="grid grid-cols-(--pair-cols) gap-space-3 wrap-anywhere"
-              data-flip
-            >
-              <time data-slot="num" class="num text-size-meta text-ink-muted"
-                >{new Date(line.at).toLocaleTimeString()}</time
-              ><span>{line.text}</span>
-            </li>
-          {/each}
-        </ol>
-      </details>
-    {/if}
+          <summary
+            class="py-space-2 text-size-label font-medium text-ink-muted coarse:py-space-4"
+            >Log · <span data-slot="num" class="num">{logLines.length}</span
+            ></summary
+          >
+          <!-- A line arrives the house way (motion/rows), and the log keeps
+               the newest in view only while the reader is at its end. -->
+          <ol
+            class="m-0 grid max-h-c-wf-scroll-max-h list-none content-box-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
+            {@attach reflow()}
+            {@attach followTail()}
+          >
+            {#each logLines as line (line.seq)}
+              <li
+                class="grid grid-cols-(--pair-cols) gap-space-3 wrap-anywhere"
+                data-flip
+              >
+                <time data-slot="num" class="num text-size-meta text-ink-muted"
+                  >{new Date(line.at).toLocaleTimeString()}</time
+                ><span>{line.text}</span>
+              </li>
+            {/each}
+          </ol>
+        </details>
+      {/if}
+    </div>
   {/if}
 </div>

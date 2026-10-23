@@ -9,6 +9,7 @@
     easeOut,
     lifting,
     motionOk,
+    revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -314,7 +315,7 @@
           data-slot="suggest-shimmer"
           class="block w-c-suggest-shimmer-w flex-none pointer-events-auto"
           in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
-          ><Skeleton class="w-full" height="chip" /></span
+          out:revealOut><Skeleton class="w-full" height="chip" /></span
         >
       {/if}
       {#if failure}

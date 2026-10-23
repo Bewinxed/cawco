@@ -80,6 +80,7 @@
     ToolNotFoundError,
   } from "@openuidev/lang-core";
   import { untrack } from "svelte";
+  import { afterSkeleton, revealOut } from "../../motion/curves.svelte";
   import RegionHeld from "../../RegionHeld.svelte";
 
   let {
@@ -397,6 +398,9 @@
           !querySnapshot.__openui_refetching.includes(statementId))
     )
   );
+
+  /** The view's arrival is its pending skeleton's reveal, and only that. */
+  const { arrive: arriveView, stood: viewStood } = afterSkeleton();
 </script>
 
 {#snippet renderNode(value: unknown)}
@@ -432,9 +436,14 @@
 {/snippet}
 
 {#if pendingContent && unanswered}
-  {@render pendingContent()}
+  <!-- The pending content (a skeleton) hands its place to the view in the
+       skeleton's reveal (motion/curves). -->
+  <div out:revealOut {@attach viewStood}>
+    {@render pendingContent()}
+  </div>
 {:else if evaluated}
   <div
+    in:arriveView
     data-open-ui-renderer-class={className}
     aria-busy={loading}
     class={className}

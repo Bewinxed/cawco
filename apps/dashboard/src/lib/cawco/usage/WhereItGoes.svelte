@@ -36,7 +36,7 @@
   import { cawco } from "../client.svelte";
   import { type Arrival, planRelay, type RelayLine } from "../home/relay-plan";
   import { conversationHref } from "../links";
-  import { dur, motionOk } from "../motion/curves.svelte";
+  import { dur, motionOk, reveal, revealOut } from "../motion/curves.svelte";
   import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
   import {
     boxHeights,
@@ -556,13 +556,14 @@
       data-skeleton
       class="flex flex-col gap-space-2"
       data-slot="skeleton-rows"
+      out:revealOut
     >
       {#each [0, 1, 2, 3, 4] as row (row)}
         <Skeleton class="w-full" height="line" />
       {/each}
     </div>
   {:else if empty && !plan}
-    <p data-slot="note" class="type-meta text-ink-muted">
+    <p data-slot="note" class="type-meta text-ink-muted" in:reveal>
       Nothing recorded in this range.
     </p>
   {:else}
@@ -570,6 +571,7 @@
       data-slot="list"
       class="flex flex-col overflow-x-clip"
       bind:this={listEl}
+      in:reveal
       {@attach reflow()}
     >
       {#each drawn as entry (entry.group.machineId)}

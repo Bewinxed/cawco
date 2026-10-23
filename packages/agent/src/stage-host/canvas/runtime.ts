@@ -923,6 +923,70 @@ export function boot(options: BootOptions): void {
   };
 
   /**
+   * The skeleton's reveal (DESIGN.md Skeleton; transitions.dev Skeleton
+   * loader and reveal), one keyframe pair each way: opacity with a cross-blur
+   * of --skeleton-reveal-blur, over --dur-skeleton-reveal on --ease-crossfade.
+   * None with reduced motion.
+   */
+  function revealOf(): { blur: string; ease: string; ms: number } | null {
+    if (!media("(prefers-reduced-motion: no-preference)").matches) {
+      return null;
+    }
+    const tokens = getComputedStyle(document.documentElement);
+    return {
+      blur: tokens.getPropertyValue("--skeleton-reveal-blur").trim(),
+      ease: tokens.getPropertyValue("--ease-crossfade").trim(),
+      ms: chrome.duration("--dur-skeleton-reveal", 400),
+    };
+  }
+
+  /**
+   * A section's stand-ins taken away as its frames come, in the skeleton's
+   * reveal: each stand-in frame stays in its cell (`held`, answered here),
+   * and `revealed` fades it out into the blur, taking it away once gone,
+   * while each frame drawn since comes out of the blur in the same cell on
+   * the same clock. The status line and the rest go at once, as everything
+   * does with reduced motion.
+   */
+  function holdStandIns(section: Section): HTMLElement[] {
+    const kept = revealOf()
+      ? section.standIns.filter((one) =>
+          one.classList.contains("cawco-stand-in")
+        )
+      : [];
+    section.standIns = section.standIns.filter((one) => !kept.includes(one));
+    clearStandIns(section);
+    return kept;
+  }
+
+  /** `going` (from {@link holdStandIns}) going and `drawn` coming, in the reveal. */
+  function revealed(going: HTMLElement[], drawn: HTMLElement[]): void {
+    const look = revealOf();
+    // A stand-in still unseen (inside the wait's grace) has nothing to reveal.
+    const seen = going.map((one) => Number(getComputedStyle(one).opacity));
+    if (!look || seen.every((opacity) => opacity === 0)) {
+      for (const one of going) {
+        one.remove();
+      }
+      return;
+    }
+    const standing = { opacity: 1, filter: "blur(0px)" };
+    const away = { opacity: 0, filter: `blur(${look.blur})` };
+    const timing = { duration: look.ms, easing: look.ease };
+    going.forEach((one, at) => {
+      const out = one.animate([{ ...standing, opacity: seen[at] ?? 1 }, away], {
+        ...timing,
+        fill: "forwards",
+      });
+      const done = () => one.remove();
+      out.finished.then(done, done);
+    });
+    for (const el of drawn) {
+      el.animate([away, standing], timing);
+    }
+  }
+
+  /**
    * A section whose module didn't load: it says so in its own place, its
    * error and where it threw under Show details, never a blank canvas.
    */
@@ -1440,7 +1504,8 @@ export function boot(options: BootOptions): void {
     const mod = section.mod as SectionModule;
     section.loaded = true;
     section.failed = false;
-    clearStandIns(section);
+    const had = new Set(section.frames.values());
+    const going = holdStandIns(section);
     section.name = sectionName(
       mod.SHEET.meta.title,
       section.name,
@@ -1454,6 +1519,12 @@ export function boot(options: BootOptions): void {
       }
     }
     syncFrames(section);
+    revealed(
+      going,
+      [...section.frames.values()]
+        .filter((frame) => !had.has(frame))
+        .map((frame) => frame.el)
+    );
     said(section);
     if (embed) {
       unnamedInEmbed();

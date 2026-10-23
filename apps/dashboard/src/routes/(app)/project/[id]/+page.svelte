@@ -66,10 +66,11 @@
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import {
-    crossIn,
     crossOut,
     dur,
     motionOk,
+    reveal,
+    revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
@@ -1798,7 +1799,7 @@
   {#if value.startsWith("view:")}
     {@const view = views.find((each) => `view:${each.name}` === value)}
     {#if view}
-      <div class="flex flex-col gap-space-3">
+      <div class="flex flex-col gap-space-3" in:reveal>
         {#if view.draft}
           <!-- The tab already says `draft`; the bar says what it is and
                offers the two answers, kept together on one row. -->
@@ -1901,7 +1902,9 @@
         />
       </div>
     {:else}
-      <Skeleton class="w-full" height="board" radius="card" />
+      <div out:revealOut>
+        <Skeleton class="w-full" height="board" radius="card" />
+      </div>
     {/if}
   {:else if value === "routines" && project}
     <!-- The routines, the strip's fourth tab: a page of blocks. -->
@@ -1960,13 +1963,20 @@
     </div>
   {:else if empty && !adding}
     {#if !lead.project}
-      <Skeleton class="w-full" height="chart" radius="card" width="chart-cap" />
+      <div class="w-full" out:revealOut>
+        <Skeleton
+          class="w-full"
+          height="chart"
+          radius="card"
+          width="chart-cap"
+        />
+      </div>
     {:else if canTalk}
       <!-- The project's starters are the empty board's one action (DESIGN.md,
            The Empty Starts Work Rule): while his panel is open they are in
            it (CawFloat); put away, they stand here and open it with their
            words. -->
-      <div data-slot="caw-empty" class="w-full max-w-c-starters-w">
+      <div data-slot="caw-empty" class="w-full max-w-c-starters-w" in:reveal>
         <EmptyState
           actionWidth="fill"
           line={cawLine}
@@ -2003,7 +2013,7 @@
         </EmptyState>
       </div>
     {:else}
-      <div class="max-w-c-measure">
+      <div class="max-w-c-measure" in:reveal>
         <EmptyState
           icon={IconToolTodo}
           line="Add a task by hand while Caw can’t start."
@@ -2049,7 +2059,10 @@
       tasks={shownTasks}
     />
   {:else if value === "calendar" && dateField && dated}
-    <ViewCalendar field={dateField} onopen={openOne} tasks={dated} />
+    <!-- What the skeleton below stood for until its dates were read. -->
+    <div in:reveal>
+      <ViewCalendar field={dateField} onopen={openOne} tasks={dated} />
+    </div>
   {:else if value === "made"}
     <ViewMade
       hrefOf={(id) => hrefOf(id)}
@@ -2059,7 +2072,9 @@
       tasks={shownTasks}
     />
   {:else}
-    <Skeleton class="w-full" height="board" radius="card" />
+    <div out:revealOut>
+      <Skeleton class="w-full" height="board" radius="card" />
+    </div>
   {/if}
 {/snippet}
 
@@ -2323,13 +2338,13 @@
   >
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the
-             next project's read cross-fades in over it. -->
+             next project's read takes its place in the skeleton's reveal. -->
       <div
         aria-hidden="true"
         class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
         style:--skeleton-col={"minmax(var(--c-board-col-min), var(--c-board-col-max))"}
         style:--skeleton-col-phone="calc(100% - var(--space-8))"
-        out:crossOut
+        out:revealOut
       >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
           <div
@@ -2345,21 +2360,34 @@
       <div
         data-slot="swap"
         class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
-        in:crossIn
+        in:reveal
       >
-        {#key shown}
+        <!-- A view the URL names, still read, stands as its skeleton, which
+             hands its place to the view in its reveal; one view to the next
+             swaps as the lists do (leave). -->
+        {#if shown === "awaiting"}
           <div
             class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
-            style:animation={swap.rowAnim(0, ListSwap.leaveEnd(0))}
-            out:leave
+            out:revealOut
           >
-            {#if shown === "awaiting"}
-              <Skeleton class="w-full" height="board" radius="card" />
-            {:else}
-              {@render pane(shown)}
-            {/if}
+            <Skeleton class="w-full" height="board" radius="card" />
           </div>
-        {/key}
+        {:else}
+          <div
+            class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+            in:reveal
+          >
+            {#key shown}
+              <div
+                class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+                style:animation={swap.rowAnim(0, ListSwap.leaveEnd(0))}
+                out:leave
+              >
+                {@render pane(shown)}
+              </div>
+            {/key}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>

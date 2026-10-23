@@ -17,8 +17,12 @@
  *     the content's opacity is p and its blur --skeleton-reveal-blur (2px)
  *     × (1 − p), the skeleton's opacity 1 − p and its blur 2px × p: the
  *     recipe's cross-fade and cross-blur.
+ *  4. In a `reflow` list (motion/rows), skeleton rows marked
+ *     `data-flip-skeleton` hand their place to the rows the same way: each
+ *     one's copy fades out into the blur where it stood and each row comes
+ *     out of it, six runs on one clock, read at the same fractions.
  *  3. With reduced motion the skeleton stands still (no run on it) and the
- *     swap is at once (no run inside the stage).
+ *     swap is at once (no run of any length inside the stage).
  *
  *   bun scripts/probe-kit/run.ts web skeleton-motion
  */
@@ -30,6 +34,8 @@ const STAGE = '[data-bench="stage"]';
 const SKELETON = '[data-case="skeleton"]';
 const CONTENT = '[data-case="content"]';
 const BAR = `${SKELETON} [data-slot="skeleton"]`;
+const LIST = '[data-bench="list"]';
+const ROW_SKELETON = '[data-case="skeleton-row"]';
 const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
 /** How near a computed value stands to the recipe's: the engine rounds, and Svelte samples its curve a frame apart. */
 const NEAR = { opacity: 0.02, blur: 0.05 };
@@ -197,6 +203,79 @@ const spec: Spec = {
         .join("; ")
     );
 
+    // 4. A `reflow` list's skeleton rows (motion/rows `data-flip-skeleton`):
+    //    each leaves by a copy fading out into the blur where it stood, and
+    //    each row that comes in its batch comes out of the blur, on one clock.
+    await call(page, "wait");
+    await page.locator(ROW_SKELETON).first().waitFor();
+    // The copies are nobody's rows (motion/rows `anonymous`): inert, aria-hidden.
+    const listRead = async () =>
+      page.evaluate(
+        ({ list, blur: blurred }) => {
+          const lookOf = (el: Element) => {
+            const style = getComputedStyle(el);
+            const found = style.filter.match(new RegExp(blurred));
+            return {
+              opacity: Number.parseFloat(style.opacity),
+              blur:
+                style.filter === "none"
+                  ? 0
+                  : Number.parseFloat(found?.[1] ?? "NaN"),
+            };
+          };
+          const box = document.querySelector(list) as Element;
+          return {
+            rows: [...box.querySelectorAll('[data-case="row"]')].map(lookOf),
+            copies: [...box.querySelectorAll(":scope > [inert]")].map(lookOf),
+          };
+        },
+        { list: LIST, blur: BLUR.source }
+      );
+    const listed = await readMotion(page, () => call(page, "load"), LIST, {
+      fractions: FRACTIONS,
+      read: listRead,
+      ms: 5000,
+    });
+    const listOff = listed.at.filter(({ fraction, value }) => {
+      const p = bezierAt(tokens.curve, fraction);
+      return !(
+        value.rows.length === 3 &&
+        value.copies.length === 3 &&
+        value.rows.every(
+          (one) =>
+            Math.abs(one.opacity - p) <= NEAR.opacity &&
+            Math.abs(one.blur - blur * (1 - p)) <= NEAR.blur
+        ) &&
+        value.copies.every(
+          (one) =>
+            Math.abs(one.opacity - (1 - p)) <= NEAR.opacity &&
+            Math.abs(one.blur - blur * p) <= NEAR.blur
+        )
+      );
+    });
+    kit.check(
+      "4: in a reflow list, the three skeleton rows' copies go and the three rows come in the reveal, six runs of --dur-skeleton-reveal on one clock: at each fraction the rows at opacity p and blur 2px × (1 − p), the copies at 1 − p and 2px × p",
+      listed.by === "clock" &&
+        listed.runs.length === 6 &&
+        listed.runs.every(
+          (run) =>
+            Math.round(run.end) === ms(tokens.reveal) &&
+            run.start === listed.runs[0]?.start
+        ) &&
+        listed.at.length === FRACTIONS.length &&
+        listOff.length === 0,
+      `runs ${JSON.stringify(listed.runs.map((run) => [run.target, Math.round(run.end), run.start, run.easing]))}; ${listed.at
+        .map(({ fraction, value }) => {
+          const p = bezierAt(tokens.curve, fraction);
+          const fmtAll = (all: { opacity: number; blur: number }[]) =>
+            all
+              .map((one) => `${fmt(one.opacity)}/${fmt(one.blur)}px`)
+              .join(",");
+          return `${fraction} (p ${fmt(p)}): rows ${fmtAll(value.rows)}, copies ${fmtAll(value.copies)}`;
+        })
+        .join("; ")}`
+    );
+
     // 3. Reduced motion: still, and the swap at once.
     await page.emulateMedia({ reducedMotion: "reduce" });
     await call(page, "wait");
@@ -210,12 +289,19 @@ const spec: Spec = {
     );
     await call(page, "load");
     await page.locator(CONTENT).waitFor();
+    // At once is Svelte's zero-length outro: the skeleton goes on the frame
+    // after, by a run of no length, never a reveal's.
     const after = await page.evaluate(
       ({ skeleton, stage }) => ({
         skeleton: document.querySelector(skeleton) !== null,
-        runs: (document.querySelector(stage) as Element).getAnimations({
-          subtree: true,
-        }).length,
+        runs: (document.querySelector(stage) as Element)
+          .getAnimations({ subtree: true })
+          .map((run) => ({
+            end: Number(run.effect?.getComputedTiming().endTime ?? 0),
+            on: (run.effect as KeyframeEffect | null)?.target?.getAttribute(
+              "data-case"
+            ),
+          })),
       }),
       { skeleton: SKELETON, stage: STAGE }
     );
@@ -223,8 +309,7 @@ const spec: Spec = {
       "3: with reduced motion the skeleton stands still and gives its place to the content at once",
       still.length > 0 &&
         still.every((one) => one === 0) &&
-        !after.skeleton &&
-        after.runs === 0,
+        after.runs.every((run) => run.end === 0),
       `runs on each bar ${JSON.stringify(still)}; after the load ${JSON.stringify(after)}`
     );
     await page.close();

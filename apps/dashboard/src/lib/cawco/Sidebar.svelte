@@ -646,7 +646,13 @@
        height of the rows that replace them (a list row's). Each stage has
        its own, gone when that stage's groups arrive, so nothing drawn is
        ever pushed down. -->
-  <Sidebar.Group aria-busy="true" aria-label="Loading" data-flip pad="rail">
+  <Sidebar.Group
+    aria-busy="true"
+    aria-label="Loading"
+    data-flip
+    data-flip-skeleton
+    pad="rail"
+  >
     <div class="flex h-space-8 items-center px-space-3">
       <Skeleton height="x-height" radius="line" type="label" width="label" />
     </div>

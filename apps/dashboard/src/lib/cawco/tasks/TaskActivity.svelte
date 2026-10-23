@@ -15,6 +15,7 @@
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import {
     stageLabel,
     type TaskComment,
@@ -297,16 +298,16 @@
     <RowFault again={rereadHistory} reason={historyProblem} />
   {/if}
   {#if history === null && historyProblem === null && only === "all"}
-    <div aria-hidden="true" class="flex flex-col gap-space-2">
+    <div aria-hidden="true" class="flex flex-col gap-space-2" out:revealOut>
       <Skeleton class="w-2/3" line="body" />
       <Skeleton class="w-1/2" line="body" />
     </div>
   {:else if pieces.length === 0}
-    <p class="type-meta text-ink-muted">
+    <p class="type-meta text-ink-muted" in:reveal>
       {only === "comments" ? "No comments yet." : "Nothing has happened yet."}
     </p>
   {:else}
-    <ol class="m-0 flex list-none flex-col gap-space-2 p-0">
+    <ol class="m-0 flex list-none flex-col gap-space-2 p-0" in:reveal>
       <!-- Comments are append-only: the hub puts back one taken out of the file by hand (tasks.ts strayComments). -->
       {#each pieces as piece (piece.kind === "one" ? piece.line.key : piece.key)}
         {#if piece.kind === "one"}

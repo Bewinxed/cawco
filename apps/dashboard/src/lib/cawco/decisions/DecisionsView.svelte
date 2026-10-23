@@ -16,7 +16,11 @@
   import type { TransitionConfig } from "svelte/transition";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    motionOk,
+    reveal,
+    revealOut,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
@@ -237,13 +241,18 @@
             </p>
           {/if}
           {#if graph}
-            <DecisionGraph
-              {graph}
-              onopen={(name, at) => go({ page: name, card: at })}
-              onplace={place}
-            />
+            <!-- What the skeleton stood for, in its reveal. -->
+            <div class="flex min-h-0 min-w-0 flex-auto flex-col" in:reveal>
+              <DecisionGraph
+                {graph}
+                onopen={(name, at) => go({ page: name, card: at })}
+                onplace={place}
+              />
+            </div>
           {:else}
-            <Skeleton class="w-full" height="board" radius="card" />
+            <div out:revealOut>
+              <Skeleton class="w-full" height="board" radius="card" />
+            </div>
           {/if}
         {:else if decisions.problem && !list}
           <div data-slot="state">
@@ -321,8 +330,15 @@
                 </div>
               {/each}
             {:else}
+              <!-- The tiles take their place in the skeleton's reveal
+                   (reflow's `data-flip-skeleton`). -->
               {#each [0, 1, 2, 3] as slot (slot)}
-                <Skeleton height="plot" radius="card" />
+                <Skeleton
+                  data-flip
+                  data-flip-skeleton
+                  height="plot"
+                  radius="card"
+                />
               {/each}
             {/if}
           </div>

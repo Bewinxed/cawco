@@ -23,7 +23,9 @@
  *    (TreeMark), in the phone's sidebar sheet;
  *  - the theme switch's icons (app.css `.icon-swap`), in the same sheet;
  *  - the keychain unlock's result mark (MachineAuthStatus `mark-in`);
- *  - a decision record's fold (RecordCard).
+ *  - a decision record's fold (RecordCard);
+ *  - a skeleton handing its place to its content, out of and into the
+ *    reveal's blur (motion/curves `reveal`, the skeleton bench).
  *
  * The queued edit's row hung it (its blur is gone, Composer `[data-slot="edit-row"]`);
  * every other one draws.
@@ -212,6 +214,59 @@ async function cawFolds(kit: Kit, bench: string) {
     });
     await page.close();
   }
+}
+
+/**
+ * The skeleton's reveal (motion/curves `reveal`, `revealOut`), on the
+ * skeleton bench: the skeleton takes its place (its pulse), then hands it to
+ * the content, the skeleton fading out into a --skeleton-reveal-blur blur
+ * as the content comes out of one, twice over.
+ */
+async function skeletonReveal(kit: Kit, bench: string) {
+  const page = await phone(kit);
+  await open(page, `${bench}/motion/skeleton`, '[data-case="content"]');
+  await settle(page);
+  const call = (how: "load" | "wait") =>
+    page.evaluate((one) => {
+      (
+        window as unknown as {
+          __skeletonBench: Record<"load" | "wait", () => void>;
+        }
+      ).__skeletonBench[one]();
+    }, how);
+  await drive(
+    kit,
+    page,
+    "a skeleton hands its place to its content in its cross-blur",
+    async () => {
+      const blurs: number[] = [];
+      for (const _round of [1, 2]) {
+        await call("wait");
+        await page.locator('[data-case="skeleton"]').waitFor();
+        await page.waitForTimeout(300);
+        await call("load");
+        await page.waitForTimeout(120);
+        blurs.push(
+          await page.evaluate(
+            () =>
+              [
+                ...document.querySelectorAll<HTMLElement>(
+                  '[data-case="skeleton"], [data-case="content"]'
+                ),
+              ].filter((one) => getComputedStyle(one).filter.includes("blur"))
+                .length
+          )
+        );
+        await page.waitForTimeout(600);
+      }
+      const gone = await page.locator('[data-case="skeleton"]').count();
+      return {
+        happened: blurs.every((one) => one > 0) && gone === 0,
+        detail: `blurred mid-reveal ${blurs.join(", ")}; ${gone} skeletons left`,
+      };
+    }
+  );
+  await page.close();
 }
 
 async function compactionChevron(kit: Kit, bench: string) {
@@ -625,6 +680,7 @@ const spec: Spec = {
     await recallWheel(kit, bench);
     await cawFolds(kit, bench);
     await compactionChevron(kit, bench);
+    await skeletonReveal(kit, bench);
 
     const fleet = await kit.fleet(respond);
     fleet.launch("sessiond");

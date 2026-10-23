@@ -110,6 +110,7 @@
 
 <script lang="ts">
   import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { reveal, revealHere } from "#lib/cawco/motion/curves.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     type LightboxShot,
@@ -163,6 +164,8 @@
 
   let image = $state<HTMLImageElement>();
   let loaded = $state<string>();
+  /** The picture stood unseen under its skeleton, so its showing is the skeleton's reveal. */
+  let underSkeleton = false;
   let failed = $state<string>();
   /**
    * An image the browser already had when this mounted — a row scrolled back
@@ -318,7 +321,9 @@
         style:--w={intrinsic?.width}
       >
         {#if loaded !== src}
-          <Skeleton aria-hidden="true" fill="frame" />
+          <span aria-hidden="true" class="absolute inset-0" out:reveal>
+            <Skeleton fill="frame" />
+          </span>
         {/if}
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: image load/error lifecycle events; the containing button owns interaction. -->
         <img
@@ -343,6 +348,14 @@
           bind:this={image}
           {@attach mounted}
           {@attach sized}
+          {@attach (node) => {
+            if (loaded !== src) {
+              underSkeleton = true;
+            } else if (underSkeleton && !cached) {
+              underSkeleton = false;
+              revealHere(node);
+            }
+          }}
         />
       </span>
     </button>

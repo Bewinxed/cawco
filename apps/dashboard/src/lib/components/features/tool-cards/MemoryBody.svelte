@@ -7,6 +7,7 @@
     memoryVersion,
   } from "#lib/cawco/fleet.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * What an `admin_memory_read` or `admin_memory_write` call read or wrote, as the document it is. The
    * sentence above already names the action and the path, so none of the raw
@@ -255,9 +256,11 @@
 >
   {#if (writes && written !== undefined) || removes}
     {#if before.kind === "loading"}
-      <Skeleton class="w-full" height="block" />
+      <div out:revealOut>
+        <Skeleton class="w-full" height="block" />
+      </div>
     {:else if before.kind === "missing"}
-      <p class="text-size-label text-ink-muted" role="alert">
+      <p class="text-size-label text-ink-muted" role="alert" in:reveal>
         The version this {removes ? "removed" : "replaced"} can't be shown:
         {before.why}.
       </p>
@@ -265,15 +268,18 @@
       <p
         data-slot="memory-body-label"
         class="text-size-label font-medium text-ink-muted"
+        in:reveal
       >
         Saved unchanged: the content matched what was there.
       </p>
     {:else}
-      <DiffView
-        filePath={diffPath}
-        newContent={removes ? "" : (written ?? "")}
-        oldContent={before.kind === "version" ? before.content : ""}
-      />
+      <div class="min-w-0" in:reveal>
+        <DiffView
+          filePath={diffPath}
+          newContent={removes ? "" : (written ?? "")}
+          oldContent={before.kind === "version" ? before.content : ""}
+        />
+      </div>
     {/if}
     {#if footer}
       <span data-slot="foot" class="type-code text-ink-muted num">{footer}</span
@@ -286,13 +292,15 @@
       >
     {/if}
   {:else if action === "list_docs" && listed.kind === "loading"}
-    <Skeleton class="w-full" height="block" />
+    <div out:revealOut>
+      <Skeleton class="w-full" height="block" />
+    </div>
   {:else if action === "list_docs" && listed.kind === "missing"}
-    <p class="text-size-label text-ink-muted" role="alert">
+    <p class="text-size-label text-ink-muted" role="alert" in:reveal>
       The documents it listed can't be shown: {listed.why}.
     </p>
   {:else if action === "list_docs" && listed.kind === "docs"}
-    <div class="flex flex-col gap-space-1">
+    <div class="flex flex-col gap-space-1" in:reveal>
       {#each listed.docs as doc (doc.path)}
         <Collapsible.Root>
           <Collapsible.Trigger data-doc class="group w-full" look="head">

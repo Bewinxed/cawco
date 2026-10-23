@@ -136,7 +136,7 @@ function launchRead() {
 /** The run's head words and its status glyphs' inks. */
 function runRead() {
   const head = document.querySelector(
-    "[data-run-view] > header[data-slot=head] [data-slot=session-status]"
+    "[data-run-view] > div > header[data-slot=head] [data-slot=session-status]"
   );
   const markGlyph = getComputedStyle(document.documentElement)
     .getPropertyValue("--mark-glyph")

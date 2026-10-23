@@ -22,6 +22,8 @@
     dur,
     easeDrawer,
     motionOk,
+    reveal,
+    revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
@@ -204,7 +206,7 @@
         {#key path}
           <div in:drill={direction}>
             {#if loading}
-              <div aria-label="Reading directory" role="status">
+              <div aria-label="Reading directory" role="status" out:revealOut>
                 {#each SKELETON_WIDTHS as width (width)}
                   <div
                     class="flex h-c-btn-h-sm items-center gap-space-2 px-space-3"
@@ -226,29 +228,31 @@
                 >{errorMessage}</span
               >
             {:else}
-              {#each dirs as dir (dir.name)}
-                <Button
-                  class="w-full"
-                  align="row"
-                  face="path"
-                  onclick={() => go(join(path, dir.name), 1)}
-                  press="tint"
-                  size="sm"
-                  variant="ghost"
-                >
-                  <IconFolder class="shrink-0 opacity-70" />
-                  <span
-                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                    >{dir.name}</span
+              <div in:reveal>
+                {#each dirs as dir (dir.name)}
+                  <Button
+                    class="w-full"
+                    align="row"
+                    face="path"
+                    onclick={() => go(join(path, dir.name), 1)}
+                    press="tint"
+                    size="sm"
+                    variant="ghost"
                   >
-                </Button>
-              {:else}
-                <span
-                  data-slot="block"
-                  class="block px-2 py-space-1 text-meta text-ink-muted"
-                  >No subdirectories.</span
-                >
-              {/each}
+                    <IconFolder class="shrink-0 opacity-70" />
+                    <span
+                      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                      >{dir.name}</span
+                    >
+                  </Button>
+                {:else}
+                  <span
+                    data-slot="block"
+                    class="block px-2 py-space-1 text-meta text-ink-muted"
+                    >No subdirectories.</span
+                  >
+                {/each}
+              </div>
             {/if}
           </div>
         {/key}

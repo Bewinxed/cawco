@@ -8,6 +8,7 @@
    */
   import type { ProjectView } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import { viewsOf } from "#lib/cawco/views-api.js";
@@ -111,26 +112,32 @@
   style:--pad-right-narrow="max(var(--space-5), env(safe-area-inset-right))"
 >
   {#if problem}
-    <EmptyState icon={IconAlert} line={problem} title="This view didn't open">
-      {#snippet action()}
-        {#if missing}
-          <Button
-            href={askHref}
-            label="Ask Caw for this view"
-            variant="outline"
-          />
-        {:else}
-          <Button
-            label="Retry"
-            onclick={() => read(projectId, name)}
-            variant="outline"
-          />
-        {/if}
-      {/snippet}
-    </EmptyState>
+    <div in:reveal>
+      <EmptyState icon={IconAlert} line={problem} title="This view didn't open">
+        {#snippet action()}
+          {#if missing}
+            <Button
+              href={askHref}
+              label="Ask Caw for this view"
+              variant="outline"
+            />
+          {:else}
+            <Button
+              label="Retry"
+              onclick={() => read(projectId, name)}
+              variant="outline"
+            />
+          {/if}
+        {/snippet}
+      </EmptyState>
+    </div>
   {:else if view}
-    <ViewOpenUi {hrefOf} onopen={open} {projectId} {view} />
+    <div in:reveal>
+      <ViewOpenUi {hrefOf} onopen={open} {projectId} {view} />
+    </div>
   {:else}
-    <Skeleton class="w-full" height="board" radius="card" />
+    <div out:revealOut>
+      <Skeleton class="w-full" height="board" radius="card" />
+    </div>
   {/if}
 </main>

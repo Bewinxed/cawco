@@ -753,6 +753,7 @@
       class="flex-none px-space-3 py-space-2"
       aria-hidden="true"
       data-flip
+      data-flip-skeleton
     >
       <Skeleton height={item.tall ? "reason-row" : "control"} />
     </div>
@@ -850,6 +851,7 @@
         class="flex-none px-space-3 py-space-2"
         aria-hidden="true"
         data-flip
+        data-flip-skeleton
       >
         <Skeleton height="control" />
       </div>
@@ -858,6 +860,7 @@
         class="flex-none px-space-3 py-space-2"
         aria-hidden="true"
         data-flip
+        data-flip-skeleton
       >
         <Skeleton height="control" />
       </div>

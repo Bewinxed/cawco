@@ -17,7 +17,11 @@
     setProjectCap,
   } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    appear,
+    reveal,
+    revealOut,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import StatTile from "#lib/cawco/StatTile.svelte";
   import { usd } from "#lib/cawco/usage.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -221,313 +225,430 @@
       The spend for {projectName} could not be read: {refused}
     </p>
   {:else if !spend}
-    <div class="grid grid-cols-stat-tiles gap-space-3">
-      {#each [0, 1, 2, 3, 4] as i (i)}
-        <Skeleton height="stat" radius="tile" />
-      {/each}
+    <div class="flex flex-col gap-space-group" out:revealOut>
+      <div class="grid grid-cols-stat-tiles gap-space-3">
+        {#each [0, 1, 2, 3, 4] as i (i)}
+          <Skeleton height="stat" radius="tile" />
+        {/each}
+      </div>
+      <Skeleton height="chart" radius="card" />
     </div>
-    <Skeleton height="chart" radius="card" />
   {:else}
-    <div class="grid grid-cols-stat-tiles gap-space-3" in:appear>
-      <StatTile label="Today" value={usd(spend.todayUsd)} />
-      <StatTile label="This month" value={usd(spend.monthUsd)} />
-      <StatTile
-        label="Caw, this month"
-        unit={leadOn === false ? "lead off" : undefined}
-        value={usd(spend.caw.monthUsd)}
-      />
-      <StatTile
-        label="Budget"
-        tone={capTone}
-        unit={cap ? `this ${cap.period} · ${share}%` : undefined}
-        value={cap ? `${usd(cap.spentUsd)} / ${usd(cap.usd)}` : "None"}
-      >
-        {#snippet action()}
-          {#if onCapLine}
-            <span class="type-meta shrink grow basis-full text-ink-muted"
-              >{onCapLine}</span
-            >
-          {/if}
-          <Popover.Root bind:open={capOpen}>
-            <Popover.Trigger>
-              {#snippet child({ props })}
-                <!-- The tile says Budget; the button only what it does, named
-                     whole for a reader that hears it on its own. -->
-                <Button
-                  {...props}
-                  aria-label={cap ? "Change budget" : "Set budget"}
-                  size="sm"
-                  variant="outline">{cap ? "Change" : "Set"}</Button
-                >
-              {/snippet}
-            </Popover.Trigger>
-            <Popover.Content
-              align="start"
-              class="max-w-(--cap-max-w)"
-              style="--cap-max-w: calc(100vw - 2 * var(--space-5))"
-              width="wide"
-            >
-              <form
-                class="flex flex-col gap-space-3"
-                onsubmit={(event) => {
-                  event.preventDefault();
-                  saveCap();
-                }}
+    <!-- What the skeleton stood for, in its reveal. -->
+    <div class="flex flex-col gap-space-group" in:reveal>
+      <div class="grid grid-cols-stat-tiles gap-space-3">
+        <StatTile label="Today" value={usd(spend.todayUsd)} />
+        <StatTile label="This month" value={usd(spend.monthUsd)} />
+        <StatTile
+          label="Caw, this month"
+          unit={leadOn === false ? "lead off" : undefined}
+          value={usd(spend.caw.monthUsd)}
+        />
+        <StatTile
+          label="Budget"
+          tone={capTone}
+          unit={cap ? `this ${cap.period} · ${share}%` : undefined}
+          value={cap ? `${usd(cap.spentUsd)} / ${usd(cap.usd)}` : "None"}
+        >
+          {#snippet action()}
+            {#if onCapLine}
+              <span class="type-meta shrink grow basis-full text-ink-muted"
+                >{onCapLine}</span
               >
-                <p data-slot="note" class="type-meta text-ink-muted">
-                  What {projectName} may spend, its Caw and its attempts together.
-                  Leave it empty for no limit.
-                </p>
-                <label
-                  data-slot="project-spend-field"
-                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
-                  >Dollars
-                  <Input
-                    inputmode="decimal"
-                    placeholder="20.00"
-                    bind:value={capAmount}
-                  /></label
+            {/if}
+            <Popover.Root bind:open={capOpen}>
+              <Popover.Trigger>
+                {#snippet child({ props })}
+                  <!-- The tile says Budget; the button only what it does, named
+                       whole for a reader that hears it on its own. -->
+                  <Button
+                    {...props}
+                    aria-label={cap ? "Change budget" : "Set budget"}
+                    size="sm"
+                    variant="outline">{cap ? "Change" : "Set"}</Button
+                  >
+                {/snippet}
+              </Popover.Trigger>
+              <Popover.Content
+                align="start"
+                class="max-w-(--cap-max-w)"
+                style="--cap-max-w: calc(100vw - 2 * var(--space-5))"
+                width="wide"
+              >
+                <form
+                  class="flex flex-col gap-space-3"
+                  onsubmit={(event) => {
+                    event.preventDefault();
+                    saveCap();
+                  }}
                 >
-                <div
-                  data-slot="project-spend-field"
-                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
-                >
-                  <span>Each</span>
-                  <Tabs
-                    onValueChange={(next) => {
-                      capPeriod = next as CapPeriod;
-                    }}
-                    value={capPeriod}
-                  >
-                    <TabsList aria-label="Budget period">
-                      <TabItem label="Day" value="day" />
-                      <TabItem label="Month" value="month" />
-                    </TabsList>
-                  </Tabs>
-                </div>
-                <label
-                  data-slot="project-spend-field"
-                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
-                  for="cap-on"
-                  >When it is reached
-                  <NativeSelect
-                    class="w-full"
-                    id="cap-on"
-                    bind:value={capOnCap}
-                  >
-                    <NativeSelectOption value=""
-                      >Fleet default · {fleetDefault}</NativeSelectOption
-                    >
-                    <NativeSelectOption value="pause"
-                      >{ON_CAP_LABEL.pause}</NativeSelectOption
-                    >
-                    <NativeSelectOption value="quiet"
-                      >{ON_CAP_LABEL.quiet}</NativeSelectOption
-                    >
-                    <NativeSelectOption value="both"
-                      >{ON_CAP_LABEL.both}</NativeSelectOption
-                    >
-                  </NativeSelect>
-                </label>
-                {#if capRefused}
-                  <p
-                    data-slot="refused"
-                    class="type-meta text-error-11"
-                    role="alert"
-                    in:appear
-                  >
-                    {capRefused}
+                  <p data-slot="note" class="type-meta text-ink-muted">
+                    What {projectName} may spend, its Caw and its attempts together.
+                    Leave it empty for no limit.
                   </p>
-                {/if}
-                <div class="flex justify-end gap-space-2">
-                  {#if cap}
+                  <label
+                    data-slot="project-spend-field"
+                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    >Dollars
+                    <Input
+                      inputmode="decimal"
+                      placeholder="20.00"
+                      bind:value={capAmount}
+                    /></label
+                  >
+                  <div
+                    data-slot="project-spend-field"
+                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                  >
+                    <span>Each</span>
+                    <Tabs
+                      onValueChange={(next) => {
+                        capPeriod = next as CapPeriod;
+                      }}
+                      value={capPeriod}
+                    >
+                      <TabsList aria-label="Budget period">
+                        <TabItem label="Day" value="day" />
+                        <TabItem label="Month" value="month" />
+                      </TabsList>
+                    </Tabs>
+                  </div>
+                  <label
+                    data-slot="project-spend-field"
+                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    for="cap-on"
+                    >When it is reached
+                    <NativeSelect
+                      class="w-full"
+                      id="cap-on"
+                      bind:value={capOnCap}
+                    >
+                      <NativeSelectOption value=""
+                        >Fleet default · {fleetDefault}</NativeSelectOption
+                      >
+                      <NativeSelectOption value="pause"
+                        >{ON_CAP_LABEL.pause}</NativeSelectOption
+                      >
+                      <NativeSelectOption value="quiet"
+                        >{ON_CAP_LABEL.quiet}</NativeSelectOption
+                      >
+                      <NativeSelectOption value="both"
+                        >{ON_CAP_LABEL.both}</NativeSelectOption
+                      >
+                    </NativeSelect>
+                  </label>
+                  {#if capRefused}
+                    <p
+                      data-slot="refused"
+                      class="type-meta text-error-11"
+                      role="alert"
+                      in:appear
+                    >
+                      {capRefused}
+                    </p>
+                  {/if}
+                  <div class="flex justify-end gap-space-2">
+                    {#if cap}
+                      <Button
+                        label="Remove"
+                        onclick={() => saveCap(true)}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      />
+                    {/if}
                     <Button
-                      label="Remove"
-                      onclick={() => saveCap(true)}
+                      label="Save"
+                      pending={capSaving}
+                      pendingLabel="Saving…"
                       size="sm"
-                      type="button"
-                      variant="ghost"
+                      type="submit"
                     />
+                  </div>
+                </form>
+              </Popover.Content>
+            </Popover.Root>
+          {/snippet}
+        </StatTile>
+        <StatTile label="Each attempt" value={budgetLine}>
+          {#snippet action()}
+            <Popover.Root bind:open={budgetOpen}>
+              <Popover.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    aria-label={spend?.budget
+                      ? "Change the attempt limit"
+                      : "Set the attempt limit"}
+                    size="sm"
+                    variant="outline">{spend?.budget ? "Change" : "Set"}</Button
+                  >
+                {/snippet}
+              </Popover.Trigger>
+              <Popover.Content align="start">
+                <form
+                  class="flex flex-col gap-space-3"
+                  onsubmit={(event) => {
+                    event.preventDefault();
+                    saveBudget();
+                  }}
+                >
+                  <p data-slot="note" class="type-meta text-ink-muted">
+                    What one attempt at a task may spend before it stops. Leave
+                    a field empty for no limit.
+                  </p>
+                  <label
+                    data-slot="project-spend-field"
+                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    >Dollars
+                    <Input
+                      inputmode="decimal"
+                      placeholder="2.00"
+                      bind:value={amount}
+                    /></label
+                  >
+                  <label
+                    data-slot="project-spend-field"
+                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    >Turns
+                    <Input
+                      inputmode="numeric"
+                      placeholder="40"
+                      bind:value={turns}
+                    /></label
+                  >
+                  <label
+                    data-slot="project-spend-field"
+                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    >Minutes
+                    <Input
+                      inputmode="numeric"
+                      placeholder="30"
+                      bind:value={minutes}
+                    /></label
+                  >
+                  {#if budgetRefused}
+                    <p
+                      data-slot="refused"
+                      class="type-meta text-error-11"
+                      role="alert"
+                      in:appear
+                    >
+                      {budgetRefused}
+                    </p>
                   {/if}
                   <Button
+                    class="self-end"
                     label="Save"
-                    pending={capSaving}
+                    pending={saving}
                     pendingLabel="Saving…"
                     size="sm"
                     type="submit"
                   />
-                </div>
-              </form>
-            </Popover.Content>
-          </Popover.Root>
-        {/snippet}
-      </StatTile>
-      <StatTile label="Each attempt" value={budgetLine}>
-        {#snippet action()}
-          <Popover.Root bind:open={budgetOpen}>
-            <Popover.Trigger>
-              {#snippet child({ props })}
-                <Button
-                  {...props}
-                  aria-label={spend?.budget
-                    ? "Change the attempt limit"
-                    : "Set the attempt limit"}
-                  size="sm"
-                  variant="outline">{spend?.budget ? "Change" : "Set"}</Button
-                >
-              {/snippet}
-            </Popover.Trigger>
-            <Popover.Content align="start">
-              <form
-                class="flex flex-col gap-space-3"
-                onsubmit={(event) => {
-                  event.preventDefault();
-                  saveBudget();
-                }}
-              >
-                <p data-slot="note" class="type-meta text-ink-muted">
-                  What one attempt at a task may spend before it stops. Leave a
-                  field empty for no limit.
-                </p>
-                <label
-                  data-slot="project-spend-field"
-                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
-                  >Dollars
-                  <Input
-                    inputmode="decimal"
-                    placeholder="2.00"
-                    bind:value={amount}
-                  /></label
-                >
-                <label
-                  data-slot="project-spend-field"
-                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
-                  >Turns
-                  <Input
-                    inputmode="numeric"
-                    placeholder="40"
-                    bind:value={turns}
-                  /></label
-                >
-                <label
-                  data-slot="project-spend-field"
-                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
-                  >Minutes
-                  <Input
-                    inputmode="numeric"
-                    placeholder="30"
-                    bind:value={minutes}
-                  /></label
-                >
-                {#if budgetRefused}
-                  <p
-                    data-slot="refused"
-                    class="type-meta text-error-11"
-                    role="alert"
-                    in:appear
-                  >
-                    {budgetRefused}
-                  </p>
-                {/if}
-                <Button
-                  class="self-end"
-                  label="Save"
-                  pending={saving}
-                  pendingLabel="Saving…"
-                  size="sm"
-                  type="submit"
-                />
-              </form>
-            </Popover.Content>
-          </Popover.Root>
-        {/snippet}
-      </StatTile>
-    </div>
+                </form>
+              </Popover.Content>
+            </Popover.Root>
+          {/snippet}
+        </StatTile>
+      </div>
 
-    {#if spend.monthUsd > 0 || spend.threads.length > 0 || spend.attempts.length > 0}
-      <!-- This month's ledger: Caw's threads (and his turns no thread
-           woke), the attempts, every other session, and their total, which
-           is the This month tile. -->
-      <div
-        data-slot="ledger"
-        class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
-      >
-        <!-- Under 640px each row is a card: its name across it, then its
-             count, spend and last word; each band stays as its section's
-             title. -->
-        <Table.Root
-          layout="ledger"
-          stacks="phone"
-          style="--card-cols: minmax(0, 1fr) auto auto"
+      {#if spend.monthUsd > 0 || spend.threads.length > 0 || spend.attempts.length > 0}
+        <!-- This month's ledger: Caw's threads (and his turns no thread
+             woke), the attempts, every other session, and their total, which
+             is the This month tile. -->
+        <div
+          data-slot="ledger"
+          class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
         >
-          {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
-            <Table.Header section>
-              <Table.Row variant="band">
-                <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head variant="band" scope="col">Caw</Table.Head>
-                <Table.Head
-                  class="w-c-ledger-count-w"
-                  variant="band"
-                  scope="col">Wakes</Table.Head
-                >
-                <Table.Head
-                  edge="end"
-                  class="w-c-ledger-usd-w"
-                  variant="band"
-                  scope="col">Spent</Table.Head
-                >
-                <Table.Head
-                  data-col-last
-                  edge="end"
-                  class="w-c-ledger-when-w"
-                  variant="band"
-                  scope="col">Last</Table.Head
-                >
-                <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {#each spend.threads as thread (thread.id)}
-                <Table.Row
-                  data-project-spend-row
-                  class="relative"
-                  variant="stacks"
-                >
-                  <Table.Cell
-                    variant="ledger-stacks"
-                    class="@max-phone/table:col-span-full"
-                  >
-                    <a
-                      data-slot="name"
-                      class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
-                      href="/session/thread:{thread.id}"
-                      >Thread · {thread.title}</a
-                    >
-                  </Table.Cell>
-                  <Table.Cell
-                    data-num
-                    variant="ledger-stacks"
+          <!-- Under 640px each row is a card: its name across it, then its
+               count, spend and last word; each band stays as its section's
+               title. -->
+          <Table.Root
+            layout="ledger"
+            stacks="phone"
+            style="--card-cols: minmax(0, 1fr) auto auto"
+          >
+            {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
+              <Table.Header section>
+                <Table.Row variant="band">
+                  <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
+                  <Table.Head variant="band" scope="col">Caw</Table.Head>
+                  <Table.Head
                     class="w-c-ledger-count-w"
-                    >{thread.wakes}
-                    {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
+                    variant="band"
+                    scope="col">Wakes</Table.Head
                   >
-                  <Table.Cell
-                    data-num
+                  <Table.Head
                     edge="end"
-                    variant="ledger-stacks"
-                    class="w-c-ledger-usd-w">{usd(thread.usd)}</Table.Cell
+                    class="w-c-ledger-usd-w"
+                    variant="band"
+                    scope="col">Spent</Table.Head
                   >
-                  <Table.Cell
-                    data-num
+                  <Table.Head
                     data-col-last
                     edge="end"
-                    variant="ledger-stacks"
                     class="w-c-ledger-when-w"
-                    >{formatAgeShort(thread.lastAt, now)}</Table.Cell
+                    variant="band"
+                    scope="col">Last</Table.Head
                   >
+                  <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
                 </Table.Row>
-              {/each}
-              {#if spend.caw.unthreadedMonthUsd > 0}
+              </Table.Header>
+              <Table.Body>
+                {#each spend.threads as thread (thread.id)}
+                  <Table.Row
+                    data-project-spend-row
+                    class="relative"
+                    variant="stacks"
+                  >
+                    <Table.Cell
+                      variant="ledger-stacks"
+                      class="@max-phone/table:col-span-full"
+                    >
+                      <a
+                        data-slot="name"
+                        class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
+                        href="/session/thread:{thread.id}"
+                        >Thread · {thread.title}</a
+                      >
+                    </Table.Cell>
+                    <Table.Cell
+                      data-num
+                      variant="ledger-stacks"
+                      class="w-c-ledger-count-w"
+                      >{thread.wakes}
+                      {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
+                    >
+                    <Table.Cell
+                      data-num
+                      edge="end"
+                      variant="ledger-stacks"
+                      class="w-c-ledger-usd-w">{usd(thread.usd)}</Table.Cell
+                    >
+                    <Table.Cell
+                      data-num
+                      data-col-last
+                      edge="end"
+                      variant="ledger-stacks"
+                      class="w-c-ledger-when-w"
+                      >{formatAgeShort(thread.lastAt, now)}</Table.Cell
+                    >
+                  </Table.Row>
+                {/each}
+                {#if spend.caw.unthreadedMonthUsd > 0}
+                  <Table.Row
+                    data-project-spend-row
+                    class="relative"
+                    variant="stacks"
+                  >
+                    <Table.Cell
+                      variant="ledger-stacks"
+                      class="@max-phone/table:col-span-full"
+                      ><span
+                        data-slot="name"
+                        class="type-label block truncate text-ink-row no-underline"
+                        >Not in a thread</span
+                      ></Table.Cell
+                    >
+                    <Table.Cell
+                      variant="ledger-stacks"
+                      class="w-c-ledger-count-w"
+                    ></Table.Cell>
+                    <Table.Cell
+                      data-num
+                      edge="end"
+                      variant="ledger-stacks"
+                      class="w-c-ledger-usd-w"
+                      >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
+                    >
+                    <Table.Cell
+                      data-col-last
+                      edge="end"
+                      variant="ledger-stacks"
+                      class="w-c-ledger-when-w"
+                    ></Table.Cell>
+                  </Table.Row>
+                {/if}
+              </Table.Body>
+            {/if}
+            {#if spend.attempts.length > 0}
+              <Table.Header section>
+                <Table.Row variant="band">
+                  <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
+                  <Table.Head variant="band" scope="col">Attempts</Table.Head>
+                  <Table.Head
+                    class="w-c-ledger-count-w"
+                    variant="band"
+                    scope="col">Tries</Table.Head
+                  >
+                  <Table.Head
+                    edge="end"
+                    class="w-c-ledger-usd-w"
+                    variant="band"
+                    scope="col">Spent</Table.Head
+                  >
+                  <Table.Head
+                    data-col-last
+                    edge="end"
+                    class="w-c-ledger-when-w"
+                    variant="band"
+                    scope="col">Now</Table.Head
+                  >
+                  <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {#each spend.attempts as attempt (attempt.taskId)}
+                  <Table.Row
+                    data-project-spend-row
+                    class="relative"
+                    variant="stacks"
+                  >
+                    <Table.Cell
+                      variant="ledger-stacks"
+                      class="@max-phone/table:col-span-full"
+                    >
+                      <a
+                        data-slot="name"
+                        class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
+                        href="/project/{encodeURIComponent(
+                          projectId
+                        )}?task={attempt.taskId}"
+                        >{attempt.title}<span
+                          data-slot="id"
+                          class="type-code liga-none ms-space-2 text-ink-subtle"
+                          >{attempt.taskId}</span
+                        ></a
+                      >
+                    </Table.Cell>
+                    <Table.Cell
+                      data-num
+                      variant="ledger-stacks"
+                      class="w-c-ledger-count-w"
+                      >{attempt.attempts}
+                      {attempt.attempts === 1
+                        ? "attempt"
+                        : "attempts"}</Table.Cell
+                    >
+                    <Table.Cell
+                      data-num
+                      edge="end"
+                      variant="ledger-stacks"
+                      class="w-c-ledger-usd-w">{usd(attempt.usd)}</Table.Cell
+                    >
+                    <Table.Cell
+                      data-col-last
+                      edge="end"
+                      variant="ledger-stacks"
+                      class="w-c-ledger-when-w"
+                      >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell
+                    >
+                  </Table.Row>
+                {/each}
+              </Table.Body>
+            {/if}
+            <Table.Body>
+              {#if spend.others.monthUsd > 0}
                 <Table.Row
                   data-project-spend-row
                   class="relative"
@@ -539,7 +660,7 @@
                     ><span
                       data-slot="name"
                       class="type-label block truncate text-ink-row no-underline"
-                      >Not in a thread</span
+                      >Other sessions</span
                     ></Table.Cell
                   >
                   <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
@@ -549,7 +670,7 @@
                     edge="end"
                     variant="ledger-stacks"
                     class="w-c-ledger-usd-w"
-                    >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
+                    >{usd(spend.others.monthUsd)}</Table.Cell
                   >
                   <Table.Cell
                     data-col-last
@@ -559,86 +680,6 @@
                   ></Table.Cell>
                 </Table.Row>
               {/if}
-            </Table.Body>
-          {/if}
-          {#if spend.attempts.length > 0}
-            <Table.Header section>
-              <Table.Row variant="band">
-                <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head variant="band" scope="col">Attempts</Table.Head>
-                <Table.Head
-                  class="w-c-ledger-count-w"
-                  variant="band"
-                  scope="col">Tries</Table.Head
-                >
-                <Table.Head
-                  edge="end"
-                  class="w-c-ledger-usd-w"
-                  variant="band"
-                  scope="col">Spent</Table.Head
-                >
-                <Table.Head
-                  data-col-last
-                  edge="end"
-                  class="w-c-ledger-when-w"
-                  variant="band"
-                  scope="col">Now</Table.Head
-                >
-                <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {#each spend.attempts as attempt (attempt.taskId)}
-                <Table.Row
-                  data-project-spend-row
-                  class="relative"
-                  variant="stacks"
-                >
-                  <Table.Cell
-                    variant="ledger-stacks"
-                    class="@max-phone/table:col-span-full"
-                  >
-                    <a
-                      data-slot="name"
-                      class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
-                      href="/project/{encodeURIComponent(
-                        projectId
-                      )}?task={attempt.taskId}"
-                      >{attempt.title}<span
-                        data-slot="id"
-                        class="type-code liga-none ms-space-2 text-ink-subtle"
-                        >{attempt.taskId}</span
-                      ></a
-                    >
-                  </Table.Cell>
-                  <Table.Cell
-                    data-num
-                    variant="ledger-stacks"
-                    class="w-c-ledger-count-w"
-                    >{attempt.attempts}
-                    {attempt.attempts === 1
-                      ? "attempt"
-                      : "attempts"}</Table.Cell
-                  >
-                  <Table.Cell
-                    data-num
-                    edge="end"
-                    variant="ledger-stacks"
-                    class="w-c-ledger-usd-w">{usd(attempt.usd)}</Table.Cell
-                  >
-                  <Table.Cell
-                    data-col-last
-                    edge="end"
-                    variant="ledger-stacks"
-                    class="w-c-ledger-when-w"
-                    >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell
-                  >
-                </Table.Row>
-              {/each}
-            </Table.Body>
-          {/if}
-          <Table.Body>
-            {#if spend.others.monthUsd > 0}
               <Table.Row
                 data-project-spend-row
                 class="relative"
@@ -650,7 +691,7 @@
                   ><span
                     data-slot="name"
                     class="type-label block truncate text-ink-row no-underline"
-                    >Other sessions</span
+                    >This month</span
                   ></Table.Cell
                 >
                 <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
@@ -659,8 +700,7 @@
                   data-num
                   edge="end"
                   variant="ledger-stacks"
-                  class="w-c-ledger-usd-w"
-                  >{usd(spend.others.monthUsd)}</Table.Cell
+                  class="w-c-ledger-usd-w">{usd(spend.monthUsd)}</Table.Cell
                 >
                 <Table.Cell
                   data-col-last
@@ -669,39 +709,14 @@
                   class="w-c-ledger-when-w"
                 ></Table.Cell>
               </Table.Row>
-            {/if}
-            <Table.Row data-project-spend-row class="relative" variant="stacks">
-              <Table.Cell
-                variant="ledger-stacks"
-                class="@max-phone/table:col-span-full"
-                ><span
-                  data-slot="name"
-                  class="type-label block truncate text-ink-row no-underline"
-                  >This month</span
-                ></Table.Cell
-              >
-              <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
-              ></Table.Cell>
-              <Table.Cell
-                data-num
-                edge="end"
-                variant="ledger-stacks"
-                class="w-c-ledger-usd-w">{usd(spend.monthUsd)}</Table.Cell
-              >
-              <Table.Cell
-                data-col-last
-                edge="end"
-                variant="ledger-stacks"
-                class="w-c-ledger-when-w"
-              ></Table.Cell>
-            </Table.Row>
-          </Table.Body>
-        </Table.Root>
-      </div>
-    {:else}
-      <p data-slot="note" class="type-meta text-ink-muted">
-        No spend on {projectName} yet. The first wake or attempt shows up here.
-      </p>
-    {/if}
+            </Table.Body>
+          </Table.Root>
+        </div>
+      {:else}
+        <p data-slot="note" class="type-meta text-ink-muted">
+          No spend on {projectName} yet. The first wake or attempt shows up here.
+        </p>
+      {/if}
+    </div>
   {/if}
 </section>

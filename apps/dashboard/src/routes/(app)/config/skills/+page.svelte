@@ -57,6 +57,7 @@
   import MachineAway from "#lib/cawco/MachineAway.svelte";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import { MachineWait } from "#lib/cawco/machine-wait.svelte.js";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -704,20 +705,23 @@
                     aria-label={words.readingVersions(row.name)}
                     class="flex flex-col gap-space-row"
                     role="status"
+                    out:revealOut
                   >
                     {#each [0, 1] as line (line)}
                       <Skeleton class="w-full" height="item" />
                     {/each}
                   </div>
                 {:else}
-                  <PreviousVersions
-                    failed={versionsFailed[row.name]}
-                    onrestore={(version) => restoreSkill(row.name, version)}
-                    {restoreFailed}
-                    {restoring}
-                    {sourceLabel}
-                    versions={versionsOf[row.name] ?? []}
-                  />
+                  <div in:reveal>
+                    <PreviousVersions
+                      failed={versionsFailed[row.name]}
+                      onrestore={(version) => restoreSkill(row.name, version)}
+                      {restoreFailed}
+                      {restoring}
+                      {sourceLabel}
+                      versions={versionsOf[row.name] ?? []}
+                    />
+                  </div>
                 {/if}
               {/if}
             {/snippet}
@@ -846,24 +850,30 @@
                     aria-label={words.reading(row.name)}
                     class="flex flex-col gap-space-row"
                     role="status"
+                    out:revealOut
                   >
                     {#each [0, 1, 2] as line (line)}
                       <Skeleton class="w-full" height="item" />
                     {/each}
                   </div>
                 {:else if unread[row.name]}
-                  <p class="type-meta text-status-attn-ink" role="alert">
+                  <p
+                    class="type-meta text-status-attn-ink"
+                    role="alert"
+                    in:reveal
+                  >
                     {unread[row.name]}
                   </p>
                 {:else if (listings[row.name] ?? []).length === 0}
                   <p
                     data-slot="note"
                     class="type-meta max-w-c-measure text-ink-muted"
+                    in:reveal
                   >
                     {words.listsNothing}
                   </p>
                 {:else}
-                  <ul data-slot="listing" class="flex flex-col">
+                  <ul data-slot="listing" class="flex flex-col" in:reveal>
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
                       <li

@@ -108,6 +108,7 @@
     easeDrawer,
     easeOut,
     motionOk,
+    revealOn,
     rise,
   } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
@@ -218,6 +219,8 @@
   /** The split's expansion, beside a conversation on a desk (SideSplit). */
   const expand = sideExpand();
   let iframe = $state<HTMLIFrameElement>();
+  /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
+  let coverStood = false;
   /**
    * The pane's mode, its head's segmented control, kept per session (core
    * `PreviewMode`): Interact (V), the page gets every press and its pins
@@ -3458,6 +3461,19 @@
       aria-hidden={stageWaiting ? undefined : "true"}
       class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
       role={stageWaiting ? "status" : undefined}
+      {@attach (node) => {
+        // Ready, the cover and its skeleton go in the skeleton's reveal and
+        // the frame comes out of its blur on the same clock (motion/curves).
+        if (!((loaded || standing !== null) && !stageWaiting)) {
+          coverStood = true;
+        } else if (coverStood) {
+          coverStood = false;
+          revealOn(node, "out");
+          if (iframe) {
+            revealOn(iframe, "in");
+          }
+        }
+      }}
     >
       <!-- Unseen until the wait has lasted --dur-wait-grace, then fading up
            (The Real Wait Rule); held still, pulse and all, once the cover is

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { LogoClaude as ClaudeIcon } from "@cawco/icons/marks";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * The page's lead, as Rings: can you keep going, on which account, what
    * happens when it runs out, and when an account is back. It leads with
@@ -198,7 +199,11 @@
   </h2>
 
   {#if !read}
-    <div class="flex flex-col gap-space-3" data-slot="skeleton-rows">
+    <div
+      class="flex flex-col gap-space-3"
+      data-slot="skeleton-rows"
+      out:revealOut
+    >
       <Skeleton height="figure" width="name" />
       <Skeleton class="w-3/4" line="body" />
       <div
@@ -211,109 +216,38 @@
       </div>
     </div>
   {:else}
-    {#if lead}
-      <div data-slot="lead" class="flex flex-col gap-space-2">
-        <p class="flex flex-wrap items-baseline gap-space-3">
-          <span
-            data-slot="num"
-            class="type-kpi num tracking-title text-ink-strong data-muted:text-ink-muted"
-            data-lead-figure
-            data-muted={claude?.stale || undefined}
-            >{#if lead.back}
-              <!-- mark-line: a mark set in running text, beside the figure's digits -->
-              <span
-                aria-hidden="true"
-                class="me-space-1 inline-grid size-icon-lg align-middle text-ink-muted"
-                data-box><IconRefresh class="size-full" /></span
-              >
-            {/if}
-            <Figure text={lead.figure} /></span
-          >
-          <span class="type-body text-ink-muted">{lead.of}</span>
-        </p>
-        <p
-          data-slot="sentence"
-          class="type-body max-w-c-measure-short text-ink-row"
-          data-lead
-        >
-          <Words parts={lead.say} />
-        </p>
-      </div>
-    {/if}
-
-    <div
-      class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
-    >
-      <span
-        data-slot="glyph"
-        aria-hidden="true"
-        class="inline-flex size-icon-md"
-        data-box><ClaudeIcon class="size-full" /></span
-      >
-      <span data-slot="name">Claude</span>
-      {#if claude?.delegate}
-        {@const why = delegateTip(claude, claude.delegate)}
-        <!-- Where new delegates go; why, on a rest or a tap, in placement's
-             own terms, so the line holds one line on a phone. -->
-        <Tip label={why} side="bottom" tap>
-          {#snippet children(props)}
+    <!-- What the skeleton stood for, in its reveal. -->
+    <div class="flex flex-col gap-space-5" in:reveal>
+      {#if lead}
+        <div data-slot="lead" class="flex flex-col gap-space-2">
+          <p class="flex flex-wrap items-baseline gap-space-3">
             <span
-              {...props}
-              aria-label="Delegates go to {claude.delegate?.name}. {why}"
-              class="type-meta ms-auto whitespace-nowrap text-ink-muted"
-              data-delegates
-              role="img"
-              ><Words
-                parts={[
-                  "Delegates go to ",
-                  { strong: claude.delegate?.name ?? "" },
-                ]}
-              /></span
+              data-slot="num"
+              class="type-kpi num tracking-title text-ink-strong data-muted:text-ink-muted"
+              data-lead-figure
+              data-muted={claude?.stale || undefined}
+              >{#if lead.back}
+                <!-- mark-line: a mark set in running text, beside the figure's digits -->
+                <span
+                  aria-hidden="true"
+                  class="me-space-1 inline-grid size-icon-lg align-middle text-ink-muted"
+                  data-box><IconRefresh class="size-full" /></span
+                >
+              {/if}
+              <Figure text={lead.figure} /></span
             >
-          {/snippet}
-        </Tip>
+            <span class="type-body text-ink-muted">{lead.of}</span>
+          </p>
+          <p
+            data-slot="sentence"
+            class="type-body max-w-c-measure-short text-ink-row"
+            data-lead
+          >
+            <Words parts={lead.say} />
+          </p>
+        </div>
       {/if}
-    </div>
-    {#if claude}
-      <div
-        data-slot="grid"
-        class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
-      >
-        {#each claude.accounts as ring, i (ring.id)}
-          {@render tile(
-            ring,
-            i,
-            tileFigure(ring, claude, now),
-            tileSentence(ring, claude, now)
-          )}
-        {/each}
-      </div>
-      {#if extraText}
-        <p class="type-body flex gap-space-3 text-ink-row">
-          <span
-            data-slot="limits-block-label"
-            class="type-label text-ink-strong">Extra usage</span
-          >{extraText}
-        </p>
-      {/if}
-    {:else if claudeUnknown}
-      <div
-        class="type-body flex flex-wrap items-center gap-space-3 text-ink-muted"
-      >
-        <p>{claudeUnknown.reason}</p>
-        {#if claudeUnknown.signIn}
-          <Button
-            href="/config/accounts"
-            icon={IconKey}
-            label="Sign in an account"
-            size="sm"
-            variant="outline"
-          />
-        {/if}
-      </div>
-    {/if}
 
-    {#if openCode || (spend && spend.all > 0)}
       <div
         class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
       >
@@ -321,37 +255,111 @@
           data-slot="glyph"
           aria-hidden="true"
           class="inline-flex size-icon-md"
-          data-box><OpenCodeLogo class="size-full" /></span
+          data-box><ClaudeIcon class="size-full" /></span
         >
-        <span data-slot="name">opencode Go</span>
+        <span data-slot="name">Claude</span>
+        {#if claude?.delegate}
+          {@const why = delegateTip(claude, claude.delegate)}
+          <!-- Where new delegates go; why, on a rest or a tap, in placement's
+               own terms, so the line holds one line on a phone. -->
+          <Tip label={why} side="bottom" tap>
+            {#snippet children(props)}
+              <span
+                {...props}
+                aria-label="Delegates go to {claude.delegate?.name}. {why}"
+                class="type-meta ms-auto whitespace-nowrap text-ink-muted"
+                data-delegates
+                role="img"
+                ><Words
+                  parts={[
+                    "Delegates go to ",
+                    { strong: claude.delegate?.name ?? "" },
+                  ]}
+                /></span
+              >
+            {/snippet}
+          </Tip>
+        {/if}
       </div>
-      {#if openCode}
+      {#if claude}
         <div
           data-slot="grid"
           class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
         >
-          {@render tile(
-            openCode,
-            0,
-            openCodeFigure(openCode, now),
-            openCodeSentence(openCode, now)
-          )}
+          {#each claude.accounts as ring, i (ring.id)}
+            {@render tile(
+              ring,
+              i,
+              tileFigure(ring, claude, now),
+              tileSentence(ring, claude, now)
+            )}
+          {/each}
+        </div>
+        {#if extraText}
+          <p class="type-body flex gap-space-3 text-ink-row">
+            <span
+              data-slot="limits-block-label"
+              class="type-label text-ink-strong">Extra usage</span
+            >{extraText}
+          </p>
+        {/if}
+      {:else if claudeUnknown}
+        <div
+          class="type-body flex flex-wrap items-center gap-space-3 text-ink-muted"
+        >
+          <p>{claudeUnknown.reason}</p>
+          {#if claudeUnknown.signIn}
+            <Button
+              href="/config/accounts"
+              icon={IconKey}
+              label="Sign in an account"
+              size="sm"
+              variant="outline"
+            />
+          {/if}
         </div>
       {/if}
-      {#if spend && spend.all > 0}
-        <p class="type-body flex gap-space-3 text-ink-row">
+
+      {#if openCode || (spend && spend.all > 0)}
+        <div
+          class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
+        >
           <span
-            data-slot="limits-block-label"
-            class="type-label text-ink-strong">Spend</span
-          ><span
-            ><span class="mono-figure">{money(spend.today)}</span>
-            today, <span class="mono-figure">{money(spend.week)}</span>
-            this week,
-            <span class="mono-figure">{money(spend.all)}</span>
-            all time</span
+            data-slot="glyph"
+            aria-hidden="true"
+            class="inline-flex size-icon-md"
+            data-box><OpenCodeLogo class="size-full" /></span
           >
-        </p>
+          <span data-slot="name">opencode Go</span>
+        </div>
+        {#if openCode}
+          <div
+            data-slot="grid"
+            class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
+          >
+            {@render tile(
+              openCode,
+              0,
+              openCodeFigure(openCode, now),
+              openCodeSentence(openCode, now)
+            )}
+          </div>
+        {/if}
+        {#if spend && spend.all > 0}
+          <p class="type-body flex gap-space-3 text-ink-row">
+            <span
+              data-slot="limits-block-label"
+              class="type-label text-ink-strong">Spend</span
+            ><span
+              ><span class="mono-figure">{money(spend.today)}</span>
+              today, <span class="mono-figure">{money(spend.week)}</span>
+              this week,
+              <span class="mono-figure">{money(spend.all)}</span>
+              all time</span
+            >
+          </p>
+        {/if}
       {/if}
-    {/if}
+    </div>
   {/if}
 </section>

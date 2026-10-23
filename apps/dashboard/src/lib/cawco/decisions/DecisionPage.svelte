@@ -19,7 +19,11 @@
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    appear,
+    reveal,
+    revealOut,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import type { StageKind } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
@@ -298,7 +302,7 @@
     {:else if read?.record}
       <!-- The record on the page's own grid: two across on a desk, one under;
            the cards stretch to their row, their content at its top. -->
-      <div class="grid grid-cols-1 gap-space-3 wide:grid-cols-2">
+      <div class="grid grid-cols-1 gap-space-3 wide:grid-cols-2" in:reveal>
         {#each read.record.cards as each (each.id)}
           <RecordCard card={each} {hrefOf} {onopentask} {taskOf} />
         {/each}
@@ -313,9 +317,9 @@
         title={read.title}
       />
     {:else if read}
-      <p class="type-body py-space-5 text-ink-muted">{words.gone}</p>
+      <p class="type-body py-space-5 text-ink-muted" in:reveal>{words.gone}</p>
     {:else}
-      <div aria-hidden="true" class="p-space-5">
+      <div aria-hidden="true" class="p-space-5" out:revealOut>
         <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />
       </div>
     {/if}

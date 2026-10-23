@@ -1113,6 +1113,17 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
     page,
     '.cawco-world .cawco-frame[data-cawco-interaction="rest"]'
   );
+  // The stand-ins go in the skeleton's reveal (runtime.ts `revealed`): gone
+  // once it has run, --dur-skeleton-reveal on.
+  await page
+    .waitForFunction(
+      () =>
+        document.querySelectorAll(".cawco-stand-in, .cawco-section-status")
+          .length === 0,
+      null,
+      { timeout: 5000 }
+    )
+    .catch(() => undefined);
   const left = await page.evaluate(
     () =>
       document.querySelectorAll(".cawco-stand-in, .cawco-section-status").length

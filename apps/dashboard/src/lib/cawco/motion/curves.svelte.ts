@@ -451,23 +451,68 @@ export function reveal(_node?: Element): TransitionConfig {
 }
 
 /**
- * {@link reveal}'s arrival on an element already standing, unveiled where a
- * skeleton beside it in its cell goes (`out:reveal`): one Web Animation on
- * it, the same keyframes on the same clock. At once with reduced motion.
+ * {@link reveal} as one Web Animation on an element the page moves itself:
+ * `in`, content unveiled where its skeleton stood (`out:reveal` beside it in
+ * its cell, or a skeleton row a `reflow` list lets go); `out`, the copy of a
+ * skeleton row such a list leaves where it stood. The same keyframes on the
+ * same clock; null, and nothing run, with reduced motion.
  */
-export function revealHere(node: Element): void {
+export function revealOn(
+  node: Element,
+  way: "in" | "out",
+  options: KeyframeAnimationOptions = {}
+): Animation | null {
   const { duration } = reveal();
   if (!duration) {
-    return;
+    return null;
   }
   const blur = numberOf("--skeleton-reveal-blur");
-  node.animate(
-    [
-      { opacity: 0, filter: `blur(${blur}px)` },
-      { opacity: 1, filter: "blur(0px)" },
-    ],
-    { duration, easing: ease("--ease-crossfade") }
-  );
+  const standing = { opacity: 1, filter: "blur(0px)" };
+  const away = { opacity: 0, filter: `blur(${blur}px)` };
+  return node.animate(way === "in" ? [away, standing] : [standing, away], {
+    duration,
+    easing: ease("--ease-crossfade"),
+    ...options,
+  });
+}
+
+/**
+ * The reveal for content whose own block does not swap with its skeleton's
+ * (the rows of an `{#each}` inside the branch that replaces the skeleton,
+ * whose local intros never play as that branch comes): `stood`, attached to
+ * the skeleton, marks that it stood; `arrive`, as `in:arrive|global` on what
+ * comes, is {@link reveal} in the frame the skeleton went and nothing at any
+ * other time (a popover opening on content already read).
+ */
+export function afterSkeleton(): {
+  arrive: (node: Element) => TransitionConfig;
+  stood: (node: Element) => void;
+} {
+  let stood = false;
+  let clearing = false;
+  return {
+    stood: () => {
+      stood = true;
+    },
+    arrive: (node) => {
+      if (!stood) {
+        return { duration: 0 };
+      }
+      if (!clearing) {
+        clearing = true;
+        requestAnimationFrame(() => {
+          stood = false;
+          clearing = false;
+        });
+      }
+      return reveal(node);
+    },
+  };
+}
+
+/** {@link revealOn}'s arrival, for an attachment: content unveiled where its skeleton stood. */
+export function revealHere(node: Element): void {
+  revealOn(node, "in");
 }
 
 /**

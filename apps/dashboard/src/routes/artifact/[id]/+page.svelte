@@ -8,6 +8,7 @@
   import { findArtifact, showArtifact } from "#lib/cawco/artifact-api.js";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { ArtifactSession } from "#lib/cawco/preview/artifact-session.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
@@ -92,46 +93,66 @@
     class="flex h-dvh flex-col overflow-hidden bg-surface-page p-space-2"
   >
     {#if session.refused}
-      <EmptyState icon={IconAlert} title="This artifact didn't open">
-        {#snippet line()}
-          {session.refused}
-        {/snippet}
-        {#snippet action()}
-          <Button href="/session" label="Back to the fleet" variant="outline" />
-        {/snippet}
-      </EmptyState>
+      <div class="flex min-h-0 flex-1 flex-col" in:reveal>
+        <EmptyState icon={IconAlert} title="This artifact didn't open">
+          {#snippet line()}
+            {session.refused}
+          {/snippet}
+          {#snippet action()}
+            <Button
+              href="/session"
+              label="Back to the fleet"
+              variant="outline"
+            />
+          {/snippet}
+        </EmptyState>
+      </div>
     {:else if problem}
-      <EmptyState icon={IconAlert} title="This artifact didn't open">
-        {#snippet line()}
-          {problem}
-          Open it again from its session's panel.
-        {/snippet}
-        {#snippet action()}
-          <Button href="/session" label="Back to the fleet" variant="outline" />
-        {/snippet}
-      </EmptyState>
+      <div class="flex min-h-0 flex-1 flex-col" in:reveal>
+        <EmptyState icon={IconAlert} title="This artifact didn't open">
+          {#snippet line()}
+            {problem}
+            Open it again from its session's panel.
+          {/snippet}
+          {#snippet action()}
+            <Button
+              href="/session"
+              label="Back to the fleet"
+              variant="outline"
+            />
+          {/snippet}
+        </EmptyState>
+      </div>
     {:else if found && shown === "open"}
-      <PreviewPane instanceId={found.instanceId} ownTab />
+      <div class="flex min-h-0 flex-1 flex-col" in:reveal>
+        <PreviewPane instanceId={found.instanceId} ownTab />
+      </div>
     {:else if found && shown === "closed"}
       {@const instanceId = found.instanceId}
-      <EmptyState icon={IconEyeClosed} title="This artifact's panel is closed">
-        {#snippet line()}
-          {found?.name} is still in its session. Show it again to open it here and
-          in its session's panel.
-        {/snippet}
-        {#snippet action()}
-          <Button
-            label="Show it again"
-            onclick={() => reopen(instanceId)}
-            pending={reopening}
-            pendingLabel="Showing…"
-          />
-        {/snippet}
-      </EmptyState>
+      <div class="flex min-h-0 flex-1 flex-col" in:reveal>
+        <EmptyState
+          icon={IconEyeClosed}
+          title="This artifact's panel is closed"
+        >
+          {#snippet line()}
+            {found?.name} is still in its session. Show it again to open it here and
+            in its session's panel.
+          {/snippet}
+          {#snippet action()}
+            <Button
+              label="Show it again"
+              onclick={() => reopen(instanceId)}
+              pending={reopening}
+              pendingLabel="Showing…"
+            />
+          {/snippet}
+        </EmptyState>
+      </div>
     {:else}
       <div
         aria-hidden="true"
         class="flex-1 rounded-lg bg-surface-recess p-space-5"
+        out:revealOut
       >
         <Skeleton class="w-5/12" data-slot="block" line="body" radius="text" />
       </div>

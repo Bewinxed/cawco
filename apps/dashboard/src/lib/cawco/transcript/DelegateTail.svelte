@@ -17,7 +17,6 @@
    */
   import type { Component } from "svelte";
   import { tick, untrack } from "svelte";
-  import { fade } from "svelte/transition";
   import {
     describeTool,
     type ToolCallStatus,
@@ -32,7 +31,13 @@
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
+  import {
+    CURVE,
+    dur,
+    motionOk,
+    reveal,
+    revealOut,
+  } from "../motion/curves.svelte";
   import { sessionAnswer, sessionFacts } from "../session-names.svelte";
   import type { Message } from "../types";
 
@@ -354,7 +359,7 @@
       data-slot="column"
       class="flex-none flex flex-col"
       bind:this={column}
-      in:fade={{ duration: dur("--dur-control"), easing: easeOut }}
+      in:reveal
     >
       {#each shown as key (key)}
         {@const row = dataOf(key)}
@@ -425,6 +430,7 @@
     <p
       data-slot="facts"
       class="m-0 flex-none h-(--row) flex items-center min-w-0 text-size-meta text-ink-muted"
+      in:reveal
     >
       <span class="min-w-0 truncate">{sessionFacts(answer)}</span>
     </p>
@@ -435,6 +441,7 @@
       aria-label="Loading its transcript"
       class="flex-none flex flex-col"
       role="status"
+      out:revealOut
     >
       <div
         data-slot="row"

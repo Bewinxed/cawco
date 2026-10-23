@@ -21,6 +21,7 @@
     unreachable,
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -1329,7 +1330,7 @@
 <!-- Held as a skeleton until the hub's first read. -->
 <div bind:this={place} class="flex min-h-0 flex-auto flex-col">
   {#if page === null && problem !== null}
-    <div class="max-w-c-measure">
+    <div class="max-w-c-measure" in:reveal>
       <EmptyState
         icon={IconClock}
         line={words.unavailableLine(project.name, problem)}
@@ -1341,9 +1342,11 @@
       </EmptyState>
     </div>
   {:else if page === null}
-    <Skeleton class="w-full" height="board" radius="card" />
+    <div out:revealOut>
+      <Skeleton class="w-full" height="board" radius="card" />
+    </div>
   {:else}
-    <div>
+    <div in:reveal>
       <BlockPage {blocks} {items} page="routines" />
     </div>
   {/if}

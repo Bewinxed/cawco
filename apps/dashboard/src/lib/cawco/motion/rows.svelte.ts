@@ -48,6 +48,7 @@ import {
   glide,
   motionOk,
   popScale,
+  revealOn,
 } from "./curves.svelte";
 import { sizingChanges } from "./sizing";
 
@@ -472,6 +473,11 @@ export function tableReflow(options: {
  * - `data-flip-enter="own"` beside any of these: it arrives with an entrance
  *   of its own, so it is not popped or uncovered here; it still slides, and
  *   still leaves the way its mark says.
+ * - `data-flip-skeleton` beside `data-flip` (a skeleton row): it leaves in
+ *   the skeleton's reveal (motion/curves `revealOn`), its copy fading out
+ *   into the reveal's blur where it stood rather than closing, and what
+ *   arrives in the batch it leaves in is unveiled out of that blur on the
+ *   same clock rather than uncovered or popped; the rest still slides.
  *
  * Layout changes once, in the update that changes the DOM, and everything
  * marked that moved starts, in that same update, on a transform that holds
@@ -904,11 +910,18 @@ function arrival(
   element: HTMLElement,
   still: boolean,
   height: number,
-  room: () => number
+  room: () => number,
+  revealing: boolean
 ) {
   // It brings its own entrance (a delegate chip whose mark flew in, or one
   // that was simply there when the page loaded); its neighbours still slide.
   if (element.dataset.flipEnter === "own") {
+    return;
+  }
+  // What a skeleton row stood for: unveiled out of the reveal's blur, at
+  // once with reduced motion (`revealOn`).
+  if (revealing) {
+    revealOn(element, "in");
     return;
   }
   if (still) {
@@ -968,6 +981,17 @@ function departure(
   });
   node.append(copy);
   const done = () => copy.remove();
+  // A skeleton row goes in the skeleton's reveal where it stood; at once
+  // with reduced motion (`revealOn` runs nothing).
+  if (element.hasAttribute("data-flip-skeleton")) {
+    const away = revealOn(copy, "out", { fill: "forwards" });
+    if (away) {
+      away.finished.then(done, done);
+    } else {
+      done();
+    }
+    return;
+  }
   let last: Animation;
   let travels: number | undefined;
   if (still) {
@@ -1367,8 +1391,12 @@ class Reflow {
       moving.push(animation);
       this.#keep(this.#spans, span.element, animation);
     });
+    // A skeleton row leaving: what arrives with it is what it stood for.
+    const revealing = departures.some(([element]) =>
+      element.hasAttribute("data-flip-skeleton")
+    );
     for (const [element, height] of arrivals) {
-      arrival(element, still, height, room);
+      arrival(element, still, height, room, revealing);
     }
     for (const [element, was, at] of departures) {
       departure(this.#node, element, was, at, still);

@@ -18,6 +18,7 @@
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconRefresh } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
+  import { reveal, revealOut } from "../motion/curves.svelte";
   import { ListSwap } from "../motion/list-swap.svelte";
   import { morph } from "../motion/morph.svelte";
   import { hubMidnight, money } from "../usage";
@@ -313,12 +314,14 @@
               No 5-hour window is running.
             </p>
           {:else if !ready}
-            <Skeleton class="w-full" height="plot" />
+            <div out:revealOut>
+              <Skeleton class="w-full" height="plot" />
+            </div>
           {:else}
             {@const i = chart.harness === "claude" ? 0 : 1}
             <!-- One slot: the old view leaves over its top while the new one
                  waits for it, and the slot's height morphs to the new. -->
-            <div data-slot="body" class="relative" {@attach morph()}>
+            <div data-slot="body" class="relative" in:reveal {@attach morph()}>
               {#each bodySwap.leaving.filter((l) => l.harness === chart.harness) as gone (gone.harness)}
                 <div
                   aria-hidden="true"

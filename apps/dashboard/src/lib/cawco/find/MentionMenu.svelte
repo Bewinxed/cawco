@@ -148,7 +148,14 @@
         No sessions for “{mention.words}”
       </p>
     {:else if late}
-      <Skeleton class="mx-space-3 my-space-2" height="control" />
+      <!-- It hands its place to what the hub answers in its reveal (reflow's
+           `data-flip-skeleton`). -->
+      <Skeleton
+        class="mx-space-3 my-space-2"
+        data-flip
+        data-flip-skeleton
+        height="control"
+      />
     {/if}
   </div>
 </div>

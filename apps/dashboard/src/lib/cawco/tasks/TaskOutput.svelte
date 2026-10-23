@@ -19,6 +19,7 @@
     type PostFile,
     parsePost,
   } from "@cawco/core";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
   import { failureWords } from "../hub-read";
@@ -159,16 +160,20 @@
           data-slot="task-output-skeleton"
           aria-hidden="true"
           class="flex flex-col gap-space-2"
+          out:revealOut
         >
           <Skeleton class="w-full" line="body" />
           <Skeleton class="w-11/12" line="body" />
           <Skeleton class="w-3/5" line="body" />
         </div>
       {:else if post}
-        <PostCard {compact} {post} {projectId} />
+        <div in:reveal>
+          <PostCard {compact} {post} {projectId} />
+        </div>
       {:else if kind === "markdown" && content !== null}
         <div
           data-slot="markdown"
+          in:reveal
           style:--markdown-fade={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--space-6)), transparent)"}
           class="group-data-compact:max-h-c-task-output-compact-h group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
         >
@@ -180,6 +185,7 @@
           class="select-none block p-0 rounded-sm cursor-zoom-in press-tint focus-inset"
           onclick={openImage}
           type="button"
+          in:reveal
         >
           <img
             alt={name}
@@ -196,10 +202,12 @@
           controls
           preload="metadata"
           src={raw}
+          in:reveal
         ></video>
       {:else if kind === "audio"}
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
-        <audio class="w-full" controls preload="metadata" src={raw}></audio>
+        <audio class="w-full" controls preload="metadata" src={raw} in:reveal
+        ></audio>
       {/if}
     </div>
   {/if}

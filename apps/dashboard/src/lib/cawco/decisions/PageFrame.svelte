@@ -18,6 +18,7 @@
     previewWords,
   } from "@cawco/core";
   import { untrack } from "svelte";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews } from "#lib/cawco/preview/pass.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -184,7 +185,7 @@
 {#if problem}
   <!-- The page didn't open: the Empty recipe, named for the page, the hub's
        words for why, and Retry (DESIGN.md, Empty). -->
-  <div role="alert">
+  <div role="alert" in:reveal>
     <EmptyState action={again} icon={IconDocument} line={problem} {title} />
   </div>
 {:else if src}
@@ -195,9 +196,10 @@
     {src}
     title="Decision page: {title}"
     bind:this={frame}
+    in:reveal
   ></iframe>
 {:else}
-  <div aria-hidden="true" class="flex-auto p-space-5">
+  <div aria-hidden="true" class="flex-auto p-space-5" out:revealOut>
     <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />
   </div>
 {/if}

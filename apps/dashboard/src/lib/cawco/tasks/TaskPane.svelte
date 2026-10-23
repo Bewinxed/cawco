@@ -56,6 +56,7 @@
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
   import { cawco } from "../client.svelte";
   import { rowHref } from "../links";
+  import { afterSkeleton, reveal, revealOut } from "../motion/curves.svelte";
   import {
     addComment,
     addTodo,
@@ -415,6 +416,9 @@
       live = false;
     };
   });
+
+  /** The body's arrival is its skeleton's reveal; Review and Details trading places is not. */
+  const { arrive: arriveBody, stood: bodyStood } = afterSkeleton();
 </script>
 
 {#snippet content()}
@@ -429,61 +433,69 @@
     >
       <div data-slot="meta" class="flex flex-wrap items-center gap-space-2">
         {#if shown}
-          <Select.Root
-            disabled={moving}
-            onValueChange={move}
-            type="single"
-            value={shown.stage}
+          <!-- What the skeleton stood for, in its reveal. -->
+          <span
+            class="flex min-w-0 flex-auto flex-wrap items-center gap-space-2"
+            in:reveal
           >
-            <Select.Trigger aria-label="Stage" press="tint">
-              {stageLabel(shown.stage)}
-            </Select.Trigger>
-            <Select.Content>
-              {#each stages.stages as stage (stage.name)}
-                <Select.Item
-                  disabled={stage.name !== shown.stage &&
-                    !allowed.has(stage.name)}
-                  label={stageLabel(stage.name)}
-                  value={stage.name}
-                >
-                  <span>{stageLabel(stage.name)}</span>
-                  {#if stage.kind === "you"}
-                    <IconNeedsYou class="text-status-attn-glyph" />
-                  {/if}
-                </Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-          {#if flags.live}
-            <Badge variant="live"><IconWorking /><span>Working</span></Badge>
-          {:else if flags.queued}
-            <Badge variant="secondary"><span>Queued</span></Badge>
-          {/if}
-          <span class="type-meta text-ink-muted whitespace-nowrap">
-            Created
-            <time
-              datetime={new Date(shown.createdAt).toISOString()}
-              title={when(shown.createdAt)}
-              >{formatTimestamp(new Date(shown.createdAt))}</time
+            <Select.Root
+              disabled={moving}
+              onValueChange={move}
+              type="single"
+              value={shown.stage}
             >
-            · Updated
-            <time
-              datetime={new Date(shown.updatedAt).toISOString()}
-              title={when(shown.updatedAt)}
-              >{formatDistanceToNow(new Date(shown.updatedAt))}</time
-            >
-          </span>
-          {#if shown.labels.length > 0}
-            <!-- Its labels, as the board's card draws them: facts at the
-                 line's end, never a row of their own. -->
-            <span class="flex flex-wrap gap-space-1 ms-auto">
-              {#each shown.labels as label (label)}
-                <Badge variant="secondary"><span>{label}</span></Badge>
-              {/each}
+              <Select.Trigger aria-label="Stage" press="tint">
+                {stageLabel(shown.stage)}
+              </Select.Trigger>
+              <Select.Content>
+                {#each stages.stages as stage (stage.name)}
+                  <Select.Item
+                    disabled={stage.name !== shown.stage &&
+                      !allowed.has(stage.name)}
+                    label={stageLabel(stage.name)}
+                    value={stage.name}
+                  >
+                    <span>{stageLabel(stage.name)}</span>
+                    {#if stage.kind === "you"}
+                      <IconNeedsYou class="text-status-attn-glyph" />
+                    {/if}
+                  </Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+            {#if flags.live}
+              <Badge variant="live"><IconWorking /><span>Working</span></Badge>
+            {:else if flags.queued}
+              <Badge variant="secondary"><span>Queued</span></Badge>
+            {/if}
+            <span class="type-meta text-ink-muted whitespace-nowrap">
+              Created
+              <time
+                datetime={new Date(shown.createdAt).toISOString()}
+                title={when(shown.createdAt)}
+                >{formatTimestamp(new Date(shown.createdAt))}</time
+              >
+              · Updated
+              <time
+                datetime={new Date(shown.updatedAt).toISOString()}
+                title={when(shown.updatedAt)}
+                >{formatDistanceToNow(new Date(shown.updatedAt))}</time
+              >
             </span>
-          {/if}
+            {#if shown.labels.length > 0}
+              <!-- Its labels, as the board's card draws them: facts at the
+                   line's end, never a row of their own. -->
+              <span class="flex flex-wrap gap-space-1 ms-auto">
+                {#each shown.labels as label (label)}
+                  <Badge variant="secondary"><span>{label}</span></Badge>
+                {/each}
+              </span>
+            {/if}
+          </span>
         {:else}
-          <Skeleton class="w-c-task-stage-skeleton-w" height="control-sm" />
+          <span class="flex" out:revealOut>
+            <Skeleton class="w-c-task-stage-skeleton-w" height="control-sm" />
+          </span>
         {/if}
       </div>
       {#if titleDraft !== null}
@@ -611,6 +623,8 @@
         data-slot="task-pane-skeleton"
         aria-hidden="true"
         class="flex flex-col gap-space-2 mx-(--pane-inline)"
+        out:revealOut
+        {@attach bodyStood}
       >
         <Skeleton class="w-full" height="plot" radius="tile" />
         <Skeleton class="mt-space-2 w-1/3" line="label" />
@@ -619,16 +633,19 @@
         <Skeleton class="w-3/5" line="body" />
       </div>
     {:else if view === "review"}
-      <TaskReview
-        onchanged={took}
-        onmove={moveTo}
-        {projectId}
-        {stages}
-        task={shown}
-      />
+      <div class="flex min-h-0 flex-auto flex-col" in:arriveBody>
+        <TaskReview
+          onchanged={took}
+          onmove={moveTo}
+          {projectId}
+          {stages}
+          task={shown}
+        />
+      </div>
     {:else}
       <div
         data-slot="task-body"
+        in:arriveBody
         class="flex flex-auto flex-col gap-space-5 min-h-0 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-border-hairline overflow-y-auto overscroll-contain"
       >
         <TaskNeeds

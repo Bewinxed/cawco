@@ -6,6 +6,7 @@
    * panel first, as the artifact's own tab does (routes/artifact/[id]), and
    * put back should the panel move on to another.
    */
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { findArtifact, showArtifact } from "../../artifact-api";
   import { cawco } from "../../client.svelte";
@@ -63,12 +64,15 @@
 {#if problem}
   <RowFault reason={problem} />
 {:else if staged && drawn}
-  <PreviewPane inset instanceId={staged.instanceId} />
+  <div class="flex min-h-0 min-w-0 flex-1 flex-col" in:reveal>
+    <PreviewPane inset instanceId={staged.instanceId} />
+  </div>
 {:else}
   <div
     data-slot="cover"
     aria-hidden="true"
     class="flex-1 p-space-5 border border-border-well rounded-sm bg-surface-recess"
+    out:revealOut
   >
     <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />
   </div>

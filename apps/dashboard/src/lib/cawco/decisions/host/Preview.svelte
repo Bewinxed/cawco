@@ -39,7 +39,7 @@
   import { IconRefresh } from "#lib/icons.js";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-working.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-working.webp";
-  import { dur } from "../../motion/curves.svelte";
+  import { dur, reveal, revealHere } from "../../motion/curves.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
@@ -164,6 +164,8 @@
   let ready = $state<string | null>(null);
   /** The ready frame finished loading: until then the wait stands over it, so no empty box shows. */
   let drawn = $state(false);
+  /** The frame stood unseen under its wait (its skeleton), so its showing is the skeleton's reveal. */
+  let underWait = false;
   /**
    * It stands at its own shape: a screen once its frame has loaded, a
    * component canvas once it has said its height (every Preview of a
@@ -342,10 +344,18 @@
             src={ready}
             style:block-size={tall === null ? undefined : `${tall}px`}
             title={held.name}
+            {@attach (node) => {
+              if (!drawn) {
+                underWait = true;
+              } else if (underWait) {
+                underWait = false;
+                revealHere(node);
+              }
+            }}
           ></iframe>
           {#if !(shaped || slow) && screen}
-            <!-- Inside the grace, the screen's skeleton over the frame still loading. -->
-            <div class="absolute inset-0">
+            <!-- Inside the grace, the screen's skeleton over the frame still loading; it goes in its reveal. -->
+            <div class="absolute inset-0" out:reveal>
               <Skeleton class="w-full" height="picture" />
             </div>
           {/if}
@@ -366,7 +376,9 @@
           data-slot="wait-row"
         >
           {#if !(shaped || slow || screen)}
-            <Skeleton data-box line="meta" width="title" />
+            <span class="flex" data-box out:reveal>
+              <Skeleton line="meta" width="title" />
+            </span>
           {/if}
           {#if slow && !shaped}
             <img

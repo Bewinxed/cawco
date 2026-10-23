@@ -10,6 +10,7 @@
    * hub's words; only the hub reads the folder.
    */
   import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
@@ -80,12 +81,17 @@
         <AlertDescription>{problem}</AlertDescription>
       </Alert>
     {:else if content === null}
-      <Skeleton class="w-2/3" line="body" />
-      <Skeleton class="w-1/2" line="body" />
+      <div class="flex flex-col gap-space-2" out:revealOut>
+        <Skeleton class="w-2/3" line="body" />
+        <Skeleton class="w-1/2" line="body" />
+      </div>
     {:else if markdown}
-      <Markdown source={content} />
+      <div in:reveal>
+        <Markdown source={content} />
+      </div>
     {:else}
       <pre
+        in:reveal
         data-slot="text"
         class="m-0 font-mono text-size-code wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
     {/if}

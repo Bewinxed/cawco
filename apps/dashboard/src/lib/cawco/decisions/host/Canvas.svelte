@@ -18,6 +18,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { hubRefusal } from "../../hub-read.js";
+  import { revealHere, revealOut } from "../../motion/curves.svelte.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
@@ -74,6 +75,8 @@
 
   /** The drawing's shape as its canvas told it: its size at zoom 1, its view's margin included, px. */
   let shape = $state<{ width: number; height: number } | null>(null);
+  /** The frame stood unseen under the skeleton, so its showing is the skeleton's reveal. */
+  let underSkeleton = false;
   $effect(() => {
     const heard = (event: MessageEvent) => {
       const told = event.data as {
@@ -113,7 +116,9 @@
 >
   {#if held?.kind === "canvas"}
     {#if !shape}
-      <Skeleton class="w-full" height="view" />
+      <div class="w-full" out:revealOut>
+        <Skeleton class="w-full" height="view" />
+      </div>
     {/if}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load names the canvas to the frame's overlay. -->
     <iframe
@@ -128,6 +133,14 @@
       style:inline-size={shape ? `${shape.width}px` : "100%"}
       tabindex="-1"
       title={`Canvas: ${held.name}`}
+      {@attach (node) => {
+        if (!shape) {
+          underSkeleton = true;
+        } else if (underSkeleton) {
+          underSkeleton = false;
+          revealHere(node);
+        }
+      }}
     ></iframe>
   {:else}
     <!-- One line in its well where the drawing would stand, never a slab of its size. -->

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { projectWords } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { afterSkeleton, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * The project has no stages.md, so the code stages stand in. This picks a
    * set of stages for it from the hub's templates (code, launch, SEO, brand,
@@ -138,6 +139,9 @@
       applying = null;
     }
   }
+
+  /** The templates' arrival is the skeleton rows' reveal (motion/curves). */
+  const { arrive: arriveTemplates, stood: templatesStood } = afterSkeleton();
 </script>
 
 <Popover.Root bind:open>
@@ -168,7 +172,7 @@
     <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
       {#if templates}
         {#each templates as template (template.name)}
-          <li>
+          <li in:arriveTemplates|global>
             <button
               aria-expanded={asks.pending?.at === template.name}
               class={menuItemVariants({
@@ -209,8 +213,14 @@
           </li>
         {/each}
       {:else if !problem}
+        <!-- Rows at a template's size, handing their place to the templates
+             in the skeleton's reveal. -->
         {#each [0, 1, 2, 3, 4, 5, 6] as row (row)}
-          <li class="flex flex-col gap-space-1 px-space-3 py-space-2">
+          <li
+            class="flex flex-col gap-space-1 px-space-3 py-space-2"
+            out:revealOut|global
+            {@attach templatesStood}
+          >
             <Skeleton line="label" width="name" />
             <Skeleton class="w-full" line="meta" />
           </li>
