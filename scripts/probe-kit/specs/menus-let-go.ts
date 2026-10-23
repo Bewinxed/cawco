@@ -26,7 +26,9 @@
  *     control that opened the layer: never left on the body.
  *  4. each screen again as Safari presses (its click focuses no link or
  *     button: the control pressed outside gives the focus up as it takes
- *     it): once the exit settles, the focus is back on the opener.
+ *     it, and so does the opener of a glass card, a kit popover or a
+ *     dropdown as it opens one): once the exit settles, the focus is back
+ *     on the opener.
  *
  *   bun scripts/probe-kit/run.ts menus-let-go [--engines=chromium,webkit] [--views=desk,phone]
  */
@@ -94,6 +96,14 @@ const OUTSIDE = [
 ];
 /** Under a true modal's scrim any control is a point to press: the scrim takes it. */
 const UNDER_SCRIM = "a[href], button";
+/**
+ * The openers whose surface gives the focus back by itself, which as Safari
+ * the opening press leaves unfocused too: the glass's items (GlassCard
+ * `data-glass-opens`), and a kit popover's or dropdown's trigger
+ * (floating-presence `pressedAway`, by `aria-controls`).
+ */
+const SAFARI_OPENS =
+  "[data-glass-opens], [data-slot=popover-trigger], [data-slot=dropdown-menu-trigger]";
 /** A declaration on <body> that locks the page: what a modal's lock writes. */
 const LOCK_STYLE = /pointer-events|overflow/;
 /** How long a press is given to close the layer (its `data-state`). */
@@ -107,6 +117,8 @@ declare global {
   interface Window {
     /** Ends the Safari press's hold on the control pressed. */
     probeLetGo?: () => void;
+    /** Ends the Safari press's hold on the opener. */
+    probeLetGoOpener?: () => void;
     /** Whether the click arrived at the control the press was aimed at. */
     probeTook?: boolean;
   }
@@ -615,17 +627,30 @@ async function leg(
     outside: OUTSIDE,
     any: UNDER_SCRIM,
   });
-  const box = await page.evaluate((k) => {
-    const el = document.querySelector(
-      `[data-probe-opener=${JSON.stringify(k)}]`
-    );
-    if (!el) {
-      return null;
-    }
-    el.setAttribute("data-probe-opener-pressed", "");
-    const r = el.getBoundingClientRect();
-    return { x: r.x, y: r.y, width: r.width, height: r.height };
-  }, key);
+  const box = await page.evaluate(
+    ({ k, asSafari, gives }) => {
+      // What an earlier leg's Safari press left armed goes first.
+      window.probeLetGo?.();
+      window.probeLetGo = undefined;
+      const el = document.querySelector<HTMLElement>(
+        `[data-probe-opener=${JSON.stringify(k)}]`
+      );
+      if (!el) {
+        return null;
+      }
+      el.setAttribute("data-probe-opener-pressed", "");
+      // As Safari, the press that opens it focuses nothing either: the
+      // surface, not the browser, has to know where the focus goes back to.
+      if (asSafari && el.matches(gives)) {
+        const giveUp = () => el.blur();
+        el.addEventListener("focus", giveUp, { once: true });
+        window.probeLetGoOpener = () => el.removeEventListener("focus", giveUp);
+      }
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    },
+    { k: key, asSafari: safari, gives: SAFARI_OPENS }
+  );
   if (!box) {
     kit.note(`${label}: not on the page`);
     return false;
@@ -633,6 +658,12 @@ async function leg(
   const url = page.url();
   await press(page, view, box.x + box.width / 2, box.y + box.height / 2);
   const opened = await waitTrue(page, anyOpened, OPEN_MS);
+  // The opening press is over: a trigger it never focused (a touch on a
+  // dropdown's) is no longer held to give the focus up.
+  await page.evaluate(() => {
+    window.probeLetGoOpener?.();
+    window.probeLetGoOpener = undefined;
+  });
   if (page.url() !== url) {
     kit.note(`${label}: it goes to ${page.url()}, no layer`);
     return false;
@@ -695,6 +726,8 @@ async function leg(
       ?.removeAttribute("data-probe-opener-pressed");
     window.probeLetGo?.();
     window.probeLetGo = undefined;
+    window.probeLetGoOpener?.();
+    window.probeLetGoOpener = undefined;
   });
   return closed && page.url() === url;
 }

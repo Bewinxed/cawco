@@ -33,6 +33,7 @@
   {#snippet children(tip)}
     <button
       data-bar-item
+      data-glass-opens="files"
       {...mergeProps(tip, { onclick: () => barGlass.toggle("files") })}
       aria-expanded={barGlass.open === "files"}
       aria-haspopup="dialog"

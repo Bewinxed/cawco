@@ -687,6 +687,7 @@
          the strips' boxes: the beat's reaches past it. -->
     <button
       data-bar-item
+      data-glass-opens="caw"
       {...mergeProps(tip, {
         onclick: choose,
         onpointerdown: press,

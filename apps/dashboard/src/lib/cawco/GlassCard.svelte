@@ -407,10 +407,21 @@
     }
     // What invoked it, or what invoked the opener that has gone (the
     // phone's sheet hands over its burger, bar-glass `invoker`). Never the
-    // card's own contents, which go inert as it closes.
+    // card's own contents, which go inert as it closes. Where nothing had
+    // the focus (Safari focuses no button a click lands on), the glass's
+    // item for the card asked for (`data-glass-opens`), so the focus never
+    // goes back to <body>.
+    const invoked =
+      had instanceof HTMLElement &&
+      had !== document.body &&
+      !content?.contains(had)
+        ? had
+        : null;
     returnTo =
       barGlass.invoker ??
-      (had instanceof HTMLElement && !content?.contains(had) ? had : null);
+      invoked ??
+      glass?.querySelector<HTMLElement>(`[data-glass-opens="${asked}"]`) ??
+      null;
     barGlass.invoker = null;
     const card = asked;
     const node = content?.querySelector<HTMLElement>(`[data-face="${card}"]`);

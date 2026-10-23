@@ -1278,6 +1278,7 @@
               {#snippet children(tip)}
                 <button
                   data-bar-item
+                  data-glass-opens="jump"
                   {...tip}
                   aria-expanded={barGlass.open === "jump"}
                   aria-haspopup="dialog"

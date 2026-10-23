@@ -105,6 +105,7 @@
     <button
       data-machines
       data-bar-item
+      data-glass-opens="machines"
       {...mergeProps(tipProps, { onclick: () => barGlass.toggle("machines") })}
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
