@@ -862,6 +862,7 @@
     from {
       opacity: 0;
       transform: scale(0.25);
+      filter: blur(var(--space-1));
     }
   }
   @keyframes icon-swap-still {

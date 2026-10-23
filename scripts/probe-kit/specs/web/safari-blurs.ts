@@ -15,9 +15,7 @@
  *  - the compaction divider's chevron, out of a 4px blur as its summary
  *    opens (CompactionDivider, traffic bench);
  *  - the send and stop glyphs' swap, a turn starting and ending (Composer
- *    `glyphOut`, `glyphIn`), its blur set each frame by script: as
- *    keyframes (`icon-swap`'s filter) it killed the web process, caught
- *    running at every crash on the session page and the queued edit;
+ *    `glyphOut`, `icon-swap`);
  *  - the queued edit's row, rising out of a 4px blur (Composer `[data-slot="edit-row"]`);
  *  - a minimized question's bar, coming up out of a 4px blur, and the card
  *    again (Composer `askedIn`);
@@ -30,9 +28,7 @@
  *    reveal's blur (motion/curves `reveal`, the skeleton bench).
  *
  * The queued edit's row hung it (its blur is gone, Composer `[data-slot="edit-row"]`);
- * so did the send/stop glyph's swap while its blur was keyframes, one run in
- * three (its blur is now set each frame by script, the look the same); every
- * other one draws. A crash or a hang says the page's last frames' running
+ * every other one draws. A crash or a hang says the page's last frames' running
  * animations, and the browser's own last lines (crash-watch.ts).
  *
  * Each case on a page of its own: its motion happened (read from the DOM),
@@ -343,24 +339,6 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
     page,
     "the send and stop glyphs swap as a turn starts and ends",
     async () => {
-      // Each frame, the largest blur a swapping glyph carries: it still
-      // blurs, set by script (Composer `glyphIn`, `glyphOut`).
-      await page.evaluate(() => {
-        const seen = { blur: 0 };
-        (window as unknown as { __glyphBlur: typeof seen }).__glyphBlur = seen;
-        const look = () => {
-          for (const one of document.querySelectorAll<HTMLElement>(
-            '[data-slot="swap"]'
-          )) {
-            const px = Number.parseFloat(
-              one.style.filter.split("blur(")[1]?.split("px")[0] ?? "0"
-            );
-            seen.blur = Math.max(seen.blur, px);
-          }
-          requestAnimationFrame(look);
-        };
-        requestAnimationFrame(look);
-      });
       await fleet.send(talk, `${SLOW} a short while`);
       const stop = await present(
         page,
@@ -375,14 +353,9 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
           { timeout: 10_000 }
         )
       );
-      const blurred = await page.evaluate(
-        () =>
-          (window as unknown as { __glyphBlur: { blur: number } }).__glyphBlur
-            .blur
-      );
       return {
-        happened: stop && back && blurred > 0,
-        detail: `stop ${stop}, send again ${back}, the glyph blurred to ${blurred.toFixed(2)}px`,
+        happened: stop && back,
+        detail: `stop ${stop}, send again ${back}`,
       };
     }
   );

@@ -85,7 +85,6 @@
   import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import {
-    blurAlong,
     CURVE,
     dur,
     ease,
@@ -499,36 +498,18 @@
    * The send/stop glyph that is being replaced goes out as the new one comes
    * in (`icon-swap`), the two sharing the button's one grid cell: it shrinks
    * to 0.25 into a 4px blur as it fades. Reduced motion keeps the fade, with
-   * no scale and no blur (DESIGN.md's Reduced Motion Rule). Its opacity and
-   * scale are its keyframes; its blur is set each frame on the same clock
-   * (`tick`), never a keyframe's: WebKit 2359 kills its web process on a
-   * blur an animation moves, as the owner's iPhone Safari hangs
-   * (safari-blurs: the glyph's swap was running at every crash it caught).
+   * no scale and no blur (DESIGN.md's Reduced Motion Rule).
    */
-  function glyphOut(node: Element): TransitionConfig {
+  function glyphOut(_node: Element): TransitionConfig {
     const still = !motionOk.current;
-    const glyph = node as HTMLElement;
     return {
       duration: dur("--dur-control"),
       easing: easeOut,
       css: (t, u) =>
-        still ? `opacity: ${t}` : `opacity: ${t}; scale: ${1 - u * 0.75}`,
-      tick: (_t, u) => {
-        if (!still) {
-          glyph.style.filter = `blur(${(u * 4).toFixed(3)}px)`;
-        }
-      },
+        still
+          ? `opacity: ${t}`
+          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(${u * 4}px)`,
     };
-  }
-  /**
-   * The glyph swapping in comes out of its 4px blur (`icon-swap`'s opacity
-   * and scale) with the blur set each frame on the keyframes' own clock and
-   * curve (motion/curves `blurAlong`), for the reason {@link glyphOut} gives.
-   */
-  function glyphIn(node: HTMLElement): void {
-    if (motionOk.current) {
-      blurAlong(node, "icon-swap", 4, easeOut);
-    }
   }
   function fade(_node: Element): TransitionConfig {
     return {
@@ -3928,7 +3909,6 @@
                 data-slot="swap"
                 class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:translate-x-(--optical-nudge) group-enabled/stop:-translate-y-(--optical-nudge)"
                 out:glyphOut
-                {@attach glyphIn}
               >
                 {#if pending}
                   <Spinner aria-hidden="true" role="presentation" />
