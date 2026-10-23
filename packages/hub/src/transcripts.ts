@@ -17,6 +17,7 @@ import {
   type FramePayload,
   type NeutralMessage,
   type SendRecord,
+  type SessionCommands,
   type SessionMessage,
   type SessionStreamFrame,
   STREAM_SO_FAR,
@@ -48,6 +49,12 @@ export interface HistoryFault {
 export interface TranscriptPorts {
   /** The commit the agent on `machineId` runs, as it last registered. */
   readonly build: (machineId: string) => string | undefined;
+  /**
+   * What the session's newest `init` listed behind `/`, as its row keeps it
+   * (db `instanceCommands`): a transcript built from its stored file, which
+   * holds no `init` for a Claude session, starts from it.
+   */
+  readonly commands: (instanceId: string) => SessionCommands | undefined;
   /** Whether a dashboard follows the session's stream. */
   readonly followed: (instanceId: string) => boolean;
   /** The session's stream head: the seq a page is consistent with. */
@@ -296,9 +303,14 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       known.usedAt = Date.now();
       return known;
     }
+    const builder = new TranscriptBuilder(instanceId);
+    const commands = ports.commands(instanceId);
+    if (commands) {
+      builder.carryCommands(commands);
+    }
     const entry: Entry = {
       build: undefined,
-      builder: new TranscriptBuilder(instanceId),
+      builder,
       loading: null,
       held: [],
       where: null,

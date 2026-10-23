@@ -179,6 +179,19 @@ export class TranscriptBuilder {
     return new Date(this.now()).toISOString();
   }
 
+  /**
+   * The `/` menu the session's newest `init` listed, as the hub keeps it,
+   * before anything is read: a stored transcript that holds no `init` (a
+   * Claude session's file) still offers it ({@link seed} keeps it unless the
+   * read lists one), as does every `init` the live frames bring after.
+   */
+  carryCommands(commands: { names: string[]; skills: string[] }): void {
+    this.facts = {
+      ...this.facts,
+      commands: { ...this.facts.commands, ...commands },
+    };
+  }
+
   /** Whether a history read carried this uuid. */
   seen(uuid: string | undefined): boolean {
     return uuid !== undefined && this.seeded.has(uuid);

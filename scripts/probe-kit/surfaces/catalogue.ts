@@ -3938,6 +3938,11 @@ export const SURFACES: Surface[] = [
             .filter({ visible: true })
             .first()
             .waitFor();
+          // → peeks the active stop from the field (Finder `onkeydown`): the
+          // field holds the keys and names a stop before it is pressed.
+          await page
+            .locator(`${JUMP} [role=combobox][aria-activedescendant]:focus`)
+            .waitFor();
           await page.keyboard.press("ArrowRight");
         },
         root: LAYER,

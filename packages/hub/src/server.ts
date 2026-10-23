@@ -81,6 +81,7 @@ import type {
   SentMessage,
   SessionAddress,
   SessionAttachments,
+  SessionCommands,
   SessionCredentialInstall,
   SessionCustody,
   SessionEndIntent,
@@ -2641,6 +2642,7 @@ const peekSessionKey = (
       sessionId: string;
       cwd?: string;
       tooling?: SessionTooling;
+      commands?: SessionCommands;
       /** An `init`: a process answering right now. */
       init: boolean;
     }
@@ -2667,7 +2669,24 @@ const peekSessionKey = (
     sessionId: sdk.session_id,
     cwd: typeof sdk.cwd === "string" ? sdk.cwd : undefined,
     tooling: initTooling(sdk),
+    commands: initCommands(sdk),
     init: true,
+  };
+};
+
+/**
+ * What an `init` listed behind `/`: Claude's `slash_commands`, and which of
+ * them are its `skills`. A harness whose `init` lists none keeps none.
+ */
+const initCommands = (
+  sdk: Record<string, unknown>
+): SessionCommands | undefined => {
+  if (!Array.isArray(sdk.slash_commands)) {
+    return undefined;
+  }
+  return {
+    names: sdk.slash_commands as string[],
+    skills: Array.isArray(sdk.skills) ? (sdk.skills as string[]) : [],
   };
 };
 
@@ -21547,6 +21566,7 @@ export const createServer = (
       const [row] = db.getInstancesByIds([instanceId]);
       return row?.status === "running";
     },
+    commands: (instanceId) => db.instanceCommands(instanceId) ?? undefined,
   });
 
   /** A rewind's spawn, by its request: its transcript is read whole again if the spawn fails. */
@@ -33016,7 +33036,8 @@ export const createServer = (
                     named.cwd
                       ? reportedMachinePath(message.machineId, named.cwd)
                       : undefined,
-                    named.tooling
+                    named.tooling,
+                    named.commands
                   );
                   if (named.init) {
                     // The session naming its own conversation is the daemon's word

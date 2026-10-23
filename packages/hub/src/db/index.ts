@@ -39,6 +39,7 @@ import type {
   RuleState,
   RuleStats,
   RunKind,
+  SessionCommands,
   SessionEffort,
   SessionEndIntent,
   SessionLimits,
@@ -293,13 +294,16 @@ type StoredInstanceRow = Omit<typeof instances.$inferSelect, "cwd"> & {
 };
 /**
  * A session's row as the hub's readers take it: no hub-private column, and
- * no `tooling`. That is the session's MCP servers and tools, 17 KB of JSON a
- * row on average and 36 KB at most (2026-10-09), parsed on every read and
- * read by one route alone ({@link DbShape.instanceTooling}).
+ * no `tooling` or `commands`. `tooling` is the session's MCP servers and
+ * tools, 17 KB of JSON a row on average and 36 KB at most (2026-10-09),
+ * parsed on every read and read by one route alone
+ * ({@link DbShape.instanceTooling}); `commands`, its `/` menu, is read only
+ * as its transcript is built ({@link DbShape.instanceCommands}).
  */
 export type PublicInstanceRow = Omit<
   StoredInstanceRow,
   | "tooling"
+  | "commands"
   | "endIntent"
   | "endConfirmedAt"
   | "endReason"
@@ -351,7 +355,7 @@ export interface MovedHere {
 }
 export type BoardInstanceRow = PublicInstanceRow;
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
-export type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling">;
+export type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
 /**
  * A project as every client reads it: its row, whose `machineId` and `cwd`
@@ -1056,6 +1060,8 @@ export interface DbShape {
   readonly instanceBySessionId: (
     sessionId: string
   ) => PublicInstanceRow | undefined;
+  /** What a session's newest `init` listed behind `/`; null when none listed any, undefined for no such row. */
+  readonly instanceCommands: (id: string) => SessionCommands | null | undefined;
   /**
    * The session an id names now: a former id (a session the hub folded
    * into its continuation, {@link instanceAliases}) is the session it is
@@ -1368,7 +1374,8 @@ export interface DbShape {
     id: string,
     sessionId: string,
     cwd?: MachinePath,
-    tooling?: SessionTooling
+    tooling?: SessionTooling,
+    commands?: SessionCommands
   ) => void;
   /** Keeps a line its machine said on the session's row, the last {@link LIMIT_NOTES_KEPT} of its kind; false when one under its id is already kept. */
   readonly noteMachineLine: (
@@ -3006,10 +3013,15 @@ const make = async (path: string): Promise<DbShape> => {
     freshStartAt: _freshStartAt,
     turnOpenAt: _turnOpenAt,
     tooling: _tooling,
+    commands: _commands,
     ...publicColumns
   } = getTableColumns(instances);
   const boardColumns = publicColumns;
-  const { tooling: _ownTooling, ...ownedColumns } = getTableColumns(instances);
+  const {
+    tooling: _ownTooling,
+    commands: _ownCommands,
+    ...ownedColumns
+  } = getTableColumns(instances);
   /** A workflow's columns but its program: what the list carries. */
   const { program: _program, ...workflowListColumns } =
     getTableColumns(workflows);
@@ -4362,6 +4374,12 @@ const make = async (path: string): Promise<DbShape> => {
         .where(and(eq(instances.id, id), isNotNull(instances.endIntent)))
         .run();
     },
+    instanceCommands: (id) =>
+      db
+        .select({ commands: instances.commands })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get()?.commands,
     instanceTooling: (id) =>
       db
         .select({ tooling: instances.tooling })
@@ -5837,7 +5855,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    noteInstanceSession: (id, sessionId, cwd, tooling) => {
+    noteInstanceSession: (id, sessionId, cwd, tooling, commands) => {
       // A harness key naming the row itself is confusion, never identity: hub
       // ids are hub-minted, harness sids are harness-minted, and the two only
       // meet when a caller echoed the instance id back as the session key
@@ -5865,6 +5883,7 @@ const make = async (path: string): Promise<DbShape> => {
               }
             : {}),
           ...(tooling ? { tooling } : {}),
+          ...(commands ? { commands } : {}),
         })
         .where(eq(instances.id, id))
         .run();

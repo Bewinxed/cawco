@@ -55,6 +55,7 @@ import type {
   SendMode,
   SendRefusal,
   SendState,
+  SessionCommands,
   SessionEffort,
   SessionTooling,
   SigninState,
@@ -1129,6 +1130,15 @@ export const instances = sqliteTable("instances", {
    * carries neither.
    */
   tooling: text("tooling", { mode: "json" }).$type<SessionTooling>(),
+  /**
+   * The `/` menu the session's newest `init` listed (its names, and which of
+   * them are skills), as JSON, overwritten as `tooling` is: a transcript the
+   * hub reads back from the machine's stored file (a Claude session's holds no
+   * `init`) still offers it, once the hub let the built one go
+   * (transcripts.ts `sweep`) or restarted. Null for a harness whose `init`
+   * lists none.
+   */
+  commands: text("commands", { mode: "json" }).$type<SessionCommands>(),
   /**
    * What the session called itself by what it was first asked to do: the first
    * user message, cleaned by core's `deriveTitleFromFirstMessage`. Written once,

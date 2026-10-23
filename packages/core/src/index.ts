@@ -1341,6 +1341,12 @@ export interface SessionTooling {
   tools: string[];
 }
 
+/** What a session's `init` lists behind `/`: its command names, and which of them are skills. */
+export interface SessionCommands {
+  names: string[];
+  skills: string[];
+}
+
 export interface InstanceRow {
   /**
    * The account the session runs on (`instances.account_id`): placed once as
