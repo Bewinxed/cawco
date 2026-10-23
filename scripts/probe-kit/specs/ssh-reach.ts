@@ -18,6 +18,9 @@
  * - {@link GATEWAY}: the same with `GatewayPorts yes`;
  * - {@link PASSWORD_PORT}: the scratch password target (ssh-target.ts),
  *   since a non-root sshd cannot check a password.
+ * The box also runs the machine's session keeper beside its agent, and
+ * reaches the model's mock (its one way out, as a VPS reaches its model
+ * provider) on the mock's port on its own loopback, bridged to this host.
  *
  * The box already has CawCo, on the build the hub offers its fleet (its
  * update channel's newest, read from the hub before the box is furnished:
@@ -159,6 +162,11 @@ const REFUSED_QUIET_MS = 10_000;
  */
 const PUBLIC_TARGET_HOST = "1.1.1.1";
 
+/** The box's way to the model's mock on this host: a socket in the box's dir. */
+const MOCK_SOCKET = "mock.sock";
+/** The session keeper's entry (scratch-fleet.ts `ENTRY`), which the box runs as its own. */
+const SESSIOND_ENTRY = "packages/sessiond/src/main.ts";
+
 const PROCESS_ID = /^\d+$/;
 /** The hub's connection to a machine: the master of its control socket (ssh-tunnels.ts `master`). */
 const MASTER = / -N .* -M -S /;
@@ -285,6 +293,10 @@ interface Box {
   home: string;
   hubBlob: string;
   hubPort: number;
+  /** The machine's session keeper's socket, which the box's keeper listens on. */
+  keeperSocket: string;
+  /** The model's mock's port on this host, which the box's bridge listens on too. */
+  mockPort: string;
   /** The build the hub offers its fleet, which the box's installation names. */
   offered: string;
   root: string;
@@ -447,6 +459,18 @@ socket.addEventListener("close", (event) => {
     standIn(root, agentEnv, wait, keep)
   );
   chmodSync(join(binary, "current", "cawco"), 0o755);
+  // The machine's session keeper runs on the box beside its agent, as on any
+  // machine: a session it starts dials the agent's tool gateway on the box's
+  // loopback (`CAWCO_MCP_PORT`). One on this host's loopback was refused it
+  // (2026-10-23: "its connection to CawCo's tools didn't come up within 90
+  // seconds (… dialing http://127.0.0.1:23105 … ECONNREFUSED)").
+  const keeperTmp = join(dir, "t", "sessiond");
+  mkdirSync(keeperTmp, { recursive: true });
+  // The model's mock, reached from the box at the address its sessions are
+  // given (`ANTHROPIC_BASE_URL`), as a VPS reaches its model provider: a
+  // listener on the box's loopback bridged to {@link MOCK_SOCKET}, which
+  // `standUp` bridges to the mock on this host.
+  const mockPort = new URL(fleet.env.ANTHROPIC_BASE_URL ?? "").port;
   const boxScript = join(dir, "box.sh");
   writeFileSync(
     boxScript,
@@ -461,6 +485,9 @@ ${quoted(process.execPath)} ${quoted(join(root, "scripts/probe-kit/ssh-target.ts
 for port in ${OPEN} ${CLOSED} ${GATEWAY} ${PASSWORD_PORT}; do
   /usr/bin/socat UNIX-LISTEN:"$D/ssh-$port.sock",fork,unlink-early TCP:127.0.0.1:$port &
 done
+/usr/bin/socat TCP-LISTEN:${mockPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:"$D/${MOCK_SOCKET}" &
+( . ${quoted(agentEnv)}; cd "$D" && TMPDIR=${quoted(keeperTmp)} exec ${quoted(process.execPath)} ${quoted(join(root, SESSIOND_ENTRY))} ) > "$D/sessiond.log" 2> "$D/sessiond.err" &
+echo $! > "$D/sessiond.pid"
 echo up > "$D/box-up"
 wait
 `
@@ -505,6 +532,8 @@ wait
       .slice(0, 2)
       .join(" "),
     hubPort,
+    keeperSocket: fleet.sessiondSocket,
+    mockPort,
     offered,
     root,
     user,
@@ -518,6 +547,8 @@ const keepLogs = async (kit: Kit, fleet: KitFleet, box: Box): Promise<void> => {
     [join(box.binary, "agent.log"), "box-agent.log"],
     [join(box.dir, "box.err"), "box.err"],
     [join(box.dir, "target.log"), "box-target.log"],
+    [join(box.dir, "sessiond.log"), "box-sessiond.log"],
+    [join(box.dir, "sessiond.err"), "box-sessiond.err"],
     ...[OPEN, CLOSED, GATEWAY].map((port): [string, string] => [
       join(box.dir, `sshd-${port}.log`),
       `box-sshd-${port}.log`,
@@ -548,6 +579,16 @@ async function standUp(
   if (!bwrap) {
     return;
   }
+  // This host's end of the box's way to the model's mock; its argv names
+  // the box's dir, so `sweep` ends it with the rest.
+  Bun.spawn(
+    [
+      "/usr/bin/socat",
+      `UNIX-LISTEN:${join(box.dir, MOCK_SOCKET)},fork,unlink-early`,
+      `TCP:127.0.0.1:${box.mockPort}`,
+    ],
+    { stdout: "ignore", stderr: Bun.file(join(box.dir, "mock-bridge.err")) }
+  );
   const child = Bun.spawn(
     [
       bwrap,
@@ -574,21 +615,26 @@ async function standUp(
       ...[OPEN, CLOSED, GATEWAY, PASSWORD_PORT].map(
         (port) => `ssh-${port}.sock`
       ),
+      MOCK_SOCKET,
     ].every((name) => existsSync(join(box.dir, name))) &&
+    existsSync(box.keeperSocket) &&
     readFileSync(join(box.dir, "target.log"), "utf8").includes(
       "ssh-target listening"
     );
   const up = await until(
-    "the box's sshds, password target and SSH sockets up",
+    "the box's sshds, password target, session keeper and sockets up",
     () => (ready() ? true : undefined),
     Boolean,
     30_000
   ).catch(() => false);
-  const err = join(box.dir, "box.err");
+  const tail = (name: string) => {
+    const path = join(box.dir, name);
+    return existsSync(path) ? readFileSync(path, "utf8").slice(-800) : "none";
+  };
   kit.check(
-    "the box is up: its three sshds, its password target and the sockets the hub reaches them by",
+    "the box is up: its three sshds, its password target, its session keeper and the sockets the hub and the mock are reached by",
     up === true,
-    `box.err: ${existsSync(err) ? readFileSync(err, "utf8").slice(-800) : "none"}; files ${JSON.stringify(readdirSync(box.dir))}`
+    `box.err: ${tail("box.err")}; sessiond.err: ${tail("sessiond.err")}; mock-bridge.err: ${tail("mock-bridge.err")}; keeper socket ${existsSync(box.keeperSocket)}; files ${JSON.stringify(readdirSync(box.dir))}`
   );
   if (up !== true) {
     child.kill();
@@ -1711,22 +1757,40 @@ async function keylessJoin(box: Box, { check, add }: Readers): Promise<void> {
 }
 
 /**
- * The box's processes, its agent and the hub's connections, whatever the
- * run left: each one found running now by its own pid, whose argv names the
- * box's dir or the hub's control dir, or the box agent named by the pid it
- * wrote, while that pid still runs this checkout's agent.
+ * The box's processes, its agent, its session keeper and the hub's
+ * connections, whatever the run left: each one found running now by its own
+ * pid, whose argv names the box's dir or the hub's control dir, or the box's
+ * agent or keeper named by the pid it wrote, while that pid still runs this
+ * checkout's agent or keeper. The keeper is asked to end first (SIGTERM, its
+ * drain), so the sessions it started end with it.
  */
-const sweep = (box: Box): void => {
-  const pidFile = join(box.binary, "agent.pid");
-  const written = existsSync(pidFile)
-    ? Number(readFileSync(pidFile, "utf8").trim())
-    : Number.NaN;
+const sweep = async (box: Box): Promise<void> => {
+  const writtenIn = (file: string) =>
+    existsSync(file) ? Number(readFileSync(file, "utf8").trim()) : Number.NaN;
+  const written = writtenIn(join(box.binary, "agent.pid"));
+  const keeper = writtenIn(join(box.dir, "sessiond.pid"));
   const agentEntry = join(box.root, "packages/agent/src/cli.ts");
+  const keeperEntry = join(box.root, SESSIOND_ENTRY);
+  const keeperRunning = () =>
+    processList().find(
+      ({ pid, argv }) => pid === keeper && argv.includes(keeperEntry)
+    );
+  const running = keeperRunning();
+  if (running) {
+    signalOwn(listedPid(running.pid), "SIGTERM");
+    await until(
+      "the box's session keeper drained",
+      () => !keeperRunning(),
+      Boolean,
+      15_000
+    ).catch(() => undefined);
+  }
   for (const { pid, argv } of processList()) {
     const ours =
       argv.includes(box.dir) ||
       argv.includes(box.controlDir) ||
-      (pid === written && argv.includes(agentEntry));
+      (pid === written && argv.includes(agentEntry)) ||
+      (pid === keeper && argv.includes(keeperEntry));
     if (ours) {
       signalOwn(listedPid(pid), "SIGKILL");
     }
@@ -1763,8 +1827,7 @@ async function run(kit: Kit): Promise<void> {
   const box = await furnish(fleet, offer.version);
   let child: ReturnType<typeof Bun.spawn> | undefined;
   try {
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
+    // The machine's session keeper is the box's own (box.sh), in its network.
     child = await standUp(kit, box);
     if (!child) {
       return;
@@ -1792,7 +1855,7 @@ async function run(kit: Kit): Promise<void> {
     await keylessJoin(box, read);
   } finally {
     await keepLogs(kit, fleet, box);
-    sweep(box);
+    await sweep(box);
     // The box's bwrap, which this spec started: its own pid.
     const bwrap = child ? spawnedPid(child) : undefined;
     if (bwrap) {
