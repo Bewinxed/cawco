@@ -1051,6 +1051,8 @@ export interface DbShape {
   readonly keepSkillVersion: (name: string) => void;
   /** The items whose landing's gate passed on `tree` (WorkLanding `gate`). */
   readonly landedOnTree: (tree: string) => WorkItemRow[];
+  /** The work items, live or ended, whose session's `finish_item` turn has not been heard to end (`last_turn_at`). */
+  readonly lastTurnWorkItems: () => WorkItemRow[];
   /**
    * The directory a row was launched in, which every spawn of it uses;
    * `"unknown"` when its machine had no record of its conversation; undefined
@@ -2360,6 +2362,7 @@ export interface DbShape {
         | "acceptedAt"
         | "delivery"
         | "envelope"
+        | "hold"
       >
     >
   ) => SentMessageRow | undefined;
@@ -2379,6 +2382,8 @@ export interface DbShape {
         | "dismissReason"
         | "replacedBy"
         | "landingSince"
+        | "landingPhase"
+        | "lastTurnAt"
         | "submission"
         | "waitUntil"
         | "waitReason"
@@ -9150,7 +9155,7 @@ const make = async (path: string): Promise<DbShape> => {
       }
       const taken = db
         .update(sentMessages)
-        .set({ owed: null })
+        .set({ owed: null, hold: null })
         .where(and(eq(sentMessages.uuid, uuid), isNotNull(sentMessages.owed)))
         .returning({ uuid: sentMessages.uuid })
         .all();
@@ -9162,7 +9167,7 @@ const make = async (path: string): Promise<DbShape> => {
         // A send no longer pending is handed on no more: what it was is its body.
         .set(
           change.state && change.state !== "pending"
-            ? { ...change, envelope: null, owed: null }
+            ? { ...change, envelope: null, owed: null, hold: null }
             : change
         )
         .where(eq(sentMessages.uuid, uuid))
@@ -9387,6 +9392,8 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .all(),
+    lastTurnWorkItems: () =>
+      db.select().from(workItems).where(isNotNull(workItems.lastTurnAt)).all(),
     workItemsOfParents: (parentInstanceIds) =>
       parentInstanceIds.length === 0
         ? []

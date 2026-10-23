@@ -2052,6 +2052,13 @@
       "when": 1792788049622,
       "tag": "0300_drop_workflows",
       "breakpoints": true
+    },
+    {
+      "idx": 301,
+      "version": "6",
+      "when": 1792789445170,
+      "tag": "0301_restart_holds",
+      "breakpoints": true
     }
   ]
 }

@@ -824,6 +824,12 @@ export interface WorkItemDeps {
     machineId: string,
     cwd: string
   ) => Promise<void>;
+  /**
+   * Its machine's own word that the session is between turns (server.ts
+   * `sessionIdle`): what a hub that started reads for a turn whose end it
+   * never heard. False while the machine is away or does not answer.
+   */
+  readonly between: (row: InstanceRow) => Promise<boolean>;
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
   readonly call: (
     machineId: string,
@@ -2170,6 +2176,7 @@ export const createWorkItems = ({
   resolveHanded,
   inputRefusal,
   inTurn,
+  between,
   leadPlace,
   leadTurn,
   machineFree,
@@ -2232,48 +2239,79 @@ export const createWorkItems = ({
   /** Items whose landing this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
   /**
-   * Items whose session called `finish_item` (to land, or blocked) in the
-   * turn still under way: that call is the turn's last step, and the turn
-   * ends as it answers. While an item is here, or its landing runs, a send
-   * from one who may reopen it waits at the hub ({@link finishingFor}) and
-   * goes once the turn is over ({@link closeTurn}). In memory: after a hub
-   * restart a landing's `landingSince` holds alone.
+   * Whether `item`'s landing holds its reopeners' sends: one that runs, not
+   * one completing, which waits on its own delegates and may be written to
+   * meanwhile ({@link completeIfDrained}).
    */
-  const lastTurns = new Set<string>();
+  const landingHolds = (item: WorkItemRow): boolean =>
+    !!item.landingSince && item.landingPhase !== "completing";
   /**
    * The {@link finishingFor} hold on `item` ends if nothing keeps it: not
-   * its landing, and not its session's last turn, unless `turnOver` (that
-   * turn has ended) or the item is live (a gate sent it back, and the turn
-   * goes on). What the hold kept goes now.
+   * its landing, and not its session's last turn (`lastTurnAt`, stored),
+   * unless `turnOver` (that turn has ended) or the item is live (a gate
+   * sent it back, and the turn goes on). What the hold kept goes now.
    */
   const closeTurn = (item: WorkItemRow, turnOver: boolean): void => {
     const now = db.workItem(item.id) ?? item;
-    if (now.landingSince) {
-      if (turnOver) {
-        lastTurns.delete(item.id);
+    if (landingHolds(now)) {
+      if (turnOver && now.lastTurnAt) {
+        update(item.id, { lastTurnAt: null });
       }
       return;
     }
     const [row] = db.getInstancesByIds([now.instanceId]);
     if (
       !(turnOver || LIVE.has(now.state)) &&
-      lastTurns.has(item.id) &&
+      now.lastTurnAt &&
       row &&
       inTurn(row)
     ) {
       return;
     }
-    lastTurns.delete(item.id);
+    if (now.lastTurnAt) {
+      update(item.id, { lastTurnAt: null });
+    }
     finishOver(now.instanceId);
   };
   /**
+   * After a hub restart, at `machineId`'s register: each item whose
+   * session's `finish_item` turn the hub that stopped never heard end
+   * (`lastTurnAt`, stored) is released once its machine says the session is
+   * between turns ({@link closeTurn}), and what that hold kept goes. One
+   * still in its turn is released at that turn's end ({@link
+   * WorkItems.turnOver}).
+   */
+  const releaseLastTurns = (machineId: string): void => {
+    for (const item of db.lastTurnWorkItems()) {
+      const [row] = db.getInstancesByIds([item.instanceId]);
+      if (row?.machineId !== machineId) {
+        continue;
+      }
+      between(row)
+        .then((idle) => {
+          if (idle && db.workItem(item.id)?.lastTurnAt) {
+            console.log(
+              `[work-items] ${item.id}: the turn that called finish_item ended while the hub was away; what waited on it goes`
+            );
+            closeTurn(item, true);
+          }
+        })
+        .catch((error: unknown) =>
+          console.warn(
+            `[work-items] ${item.id}: whether its finish_item turn ended was not read: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+    }
+  };
+  /**
    * `item`'s session called `finish_item`, and the call ends its turn: from
-   * here its reopeners' sends wait at the hub ({@link finishingFor}), and
+   * here its reopeners' sends wait at the hub ({@link finishingFor}), the
+   * hold stored on the row (`lastTurnAt`) so a hub restart keeps it, and
    * what its harness holds of theirs unread is taken back to wait with them
    * ({@link WorkItemDeps.reclaimUnread}).
    */
   const lastTurn = async (item: WorkItemRow): Promise<void> => {
-    lastTurns.add(item.id);
+    update(item.id, { lastTurnAt: new Date() });
     await reclaimUnread(item.instanceId);
   };
   /**
@@ -2350,8 +2388,11 @@ export const createWorkItems = ({
   };
   const update = (
     id: string,
-    change: Parameters<DbShape["updateWorkItem"]>[1]
+    asked: Parameters<DbShape["updateWorkItem"]>[1]
   ): WorkItemRow | undefined => {
+    // A landing that stops leaves no phase of it behind.
+    const change =
+      asked.landingSince === null ? { ...asked, landingPhase: null } : asked;
     if (change.state && !LIVE.has(change.state)) {
       disarmWait(id);
       woken.delete(id);
@@ -2696,7 +2737,7 @@ export const createWorkItems = ({
    * to it.
    */
   const enforceBudget = (item: WorkItemRow): void => {
-    if (!(item.budget && LIVE.has(item.state)) || item.landingSince) {
+    if (!(item.budget && LIVE.has(item.state)) || landingHolds(item)) {
       return;
     }
     const reason = overBudget(item.budget, usedBy(item));
@@ -3201,6 +3242,12 @@ export const createWorkItems = ({
   /** What follows an item's end, off the step that ended it. */
   const afterEnd = (item: WorkItemRow): void => {
     settleGroup(item);
+    // The item that delegated it may be completing on its group's end.
+    const [owner] = db.getInstancesByIds([item.parentInstanceId]);
+    const owning = owner ? itemOf(owner) : undefined;
+    if (owning) {
+      completeIfDrained(owning);
+    }
     drainQueued().catch((error: unknown) =>
       console.warn(
         `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
@@ -3255,6 +3302,12 @@ export const createWorkItems = ({
     db.dropQueuedWorkItem(queued.id);
     if (!db.workItem(queued.id)) {
       publish(queuedSummaryOf(queued, new Date()));
+    }
+    // The item that queued it may be completing on its group's end.
+    const [owner] = db.getInstancesByIds([queued.parentInstanceId]);
+    const owning = owner ? itemOf(owner) : undefined;
+    if (owning) {
+      completeIfDrained(owning);
     }
   };
 
@@ -5730,6 +5783,117 @@ export const createWorkItems = ({
     row.workItemId ? db.workItem(row.workItemId) : undefined;
 
   /**
+   * The work session `instanceId` delegated that has not ended: its live
+   * items and its delegates still queued. A completing item lands once
+   * this is empty ({@link completeIfDrained}).
+   */
+  const ownedLive = (instanceId: string): { id: string; title: string }[] => [
+    ...db
+      .liveWorkItemsOf(instanceId)
+      .map((one) => ({ id: one.id, title: one.title })),
+    ...db
+      .queuedWorkItems()
+      .filter((one) => one.parentInstanceId === instanceId)
+      .map((one) => ({ id: one.id, title: one.title })),
+  ];
+
+  /** A completing item's group, as a line names it: `“Theme” (1a2b3c4d), …`. */
+  const groupWords = (group: readonly { id: string; title: string }[]) =>
+    group.map((one) => `“${one.title}” (${handle(one.id)})`).join(", ");
+
+  /** A completing item's status, as its chip says it. */
+  const completingWords = (group: readonly { id: string; title: string }[]) =>
+    `waiting for ${group.length === 1 ? "the item" : `the ${group.length} items`} it delegated to end: ${groupWords(group)}`;
+
+  /** What `finish_item` answers an item whose own delegates are still live. */
+  const completingText = (group: readonly { id: string; title: string }[]) =>
+    `Stored, not landed yet: your work lands once ${group.length === 1 ? "the item" : `the ${group.length} items`} you delegated ${group.length === 1 ? "has" : "have"} ended: ${groupWords(group)}. Their reports still come to you, and a finish_item meanwhile replaces this one. End your turn.`;
+
+  /**
+   * A completing item whose own delegates have all ended lands now, on its
+   * stored submission ({@link landStored}); while any is live it waits,
+   * its chip naming them. Asked as each item ends ({@link afterEnd}), and
+   * at its machine's register after a hub restart ({@link resumeLandings}).
+   */
+  const completeIfDrained = (owner: WorkItemRow): void => {
+    const now = db.workItem(owner.id) ?? owner;
+    if (!(
+      LIVE.has(now.state) &&
+      now.landingPhase === "completing" &&
+      now.submission
+    )) {
+      return;
+    }
+    const group = ownedLive(now.instanceId);
+    if (group.length > 0) {
+      landingWait(now.id, completingWords(group));
+      return;
+    }
+    console.log(
+      `[work-items] ${now.id}: every item it delegated has ended; it lands now`
+    );
+    landingWait(now.id, null);
+    const landing = update(now.id, { landingPhase: null }) ?? now;
+    landStored(landing, now.submission);
+  };
+
+  /**
+   * A `finish_item` that lands, stored first: it runs now, or, while work
+   * the item delegated is still live, it completes once all of that has
+   * ended ({@link completeIfDrained}). Answers what the tool returns.
+   */
+  const landOrComplete = async (
+    item: WorkItemRow,
+    request: WorkItemSubmission
+  ): Promise<string> => {
+    const group = ownedLive(item.instanceId);
+    if (group.length > 0) {
+      update(item.id, {
+        submission: request,
+        landingSince: new Date(),
+        landingPhase: "completing",
+      });
+      landingWait(item.id, completingWords(group));
+      console.log(
+        `[work-items] ${item.id}: finish_item stored; it lands once ${group.length} item(s) it delegated have ended`
+      );
+      return completingText(group);
+    }
+    update(item.id, { submission: request, landingSince: new Date() });
+    return (await settleLanding(item, request)).text;
+  };
+
+  /**
+   * A stored submission's landing, run to its end with no session's call
+   * waiting on it (a hub restart's resume, a completing item's group's
+   * end): a landing needs no word to the session, as its parent has the
+   * report; a failure, or a gate that cannot run, is sent to the session
+   * as the tool would have answered.
+   */
+  const landStored = (
+    item: WorkItemRow,
+    submission: WorkItemSubmission
+  ): void => {
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    settleLanding(item, submission)
+      .then(({ done, text }) => {
+        if (!done && row) {
+          tell(row, text);
+        }
+      })
+      .catch((error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.error(`[work-items] ${item.id}: ${reason}`);
+        if (row) {
+          tell(
+            row,
+            `Your work item's landing gate could not run: ${reason}. Call finish_item again.`
+          );
+        }
+      });
+  };
+
+  /**
    * Moves a live item to a finished state; finished work stays as it ended.
    * Its workspace is settled next ({@link settleSoon}): retired or held once
    * nothing holds it, which its session, still in the turn that ended it,
@@ -6097,7 +6261,9 @@ export const createWorkItems = ({
         `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`
       );
     }
-    if (item.landingSince) {
+    // A completing item's submission waits on its own delegates: a new
+    // call replaces it ({@link completeIfDrained}).
+    if (landingHolds(item)) {
       throw new WorkItemRefusal(
         409,
         "the landing gate is already running for this item; its outcome comes to you when it settles"
@@ -8520,6 +8686,8 @@ export const createWorkItems = ({
           state: "failed",
           error,
           headline: request.headline,
+          landingSince: null,
+          submission: null,
         });
         const failed = ended.state === "failed";
         report(
@@ -8535,14 +8703,13 @@ export const createWorkItems = ({
       }
 
       await lastTurn(item);
-      update(item.id, { submission: request, landingSince: new Date() });
-      return (await settleLanding(item, request)).text;
+      return await landOrComplete(item, request);
     },
 
     /**
      * Whether a send from `origin` waits at the hub because the session's
      * item is finishing: its landing runs, or its session is in the turn
-     * that called `finish_item` ({@link lastTurns}). Only the words of one
+     * that called `finish_item` (`lastTurnAt`). Only the words of one
      * who may reopen the item wait (its parent, its lead, the reader): such
      * a send handed to the harness now would join a turn that ends as
      * `finish_item` answers, and read after the item ended it would reopen
@@ -8555,7 +8722,7 @@ export const createWorkItems = ({
       const item = row ? itemOf(row) : undefined;
       return (
         !!item &&
-        (!!item.landingSince || lastTurns.has(item.id)) &&
+        (landingHolds(item) || item.lastTurnAt !== null) &&
         mayReopen(item, origin)
       );
     },
@@ -8568,7 +8735,7 @@ export const createWorkItems = ({
     turnOver(instanceId: string): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (item && lastTurns.has(item.id)) {
+      if (item?.lastTurnAt) {
         closeTurn(item, true);
       }
     },
@@ -8587,24 +8754,16 @@ export const createWorkItems = ({
         if (!(item.landingSince && submission) || finishing.has(item.id)) {
           continue;
         }
+        // Completing: it lands once its own delegates have ended, which
+        // may have happened while the hub was away.
+        if (item.landingPhase === "completing") {
+          completeIfDrained(item);
+          continue;
+        }
         console.log(`resumed the landing of item ${item.id}`);
-        const [row] = db.getInstancesByIds([item.instanceId]);
-        settleLanding(item, submission)
-          .then(({ done, text }) => {
-            if (!done) {
-              tell(row, text);
-            }
-          })
-          .catch((error: unknown) => {
-            const reason =
-              error instanceof Error ? error.message : String(error);
-            console.error(`[work-items] ${item.id}: ${reason}`);
-            tell(
-              row,
-              `Your work item's landing gate could not run: ${reason}. Call finish_item again.`
-            );
-          });
+        landStored(item, submission);
       }
+      releaseLastTurns(machineId);
     },
 
     /**

@@ -9002,7 +9002,7 @@ export const createServer = (
     // the record a reference to them.
     const mode = sendMode(envelope.payload);
     const whole = JSON.stringify(envelope);
-    const record = db.recordSend({
+    let record = db.recordSend({
       uuid: message.uuid,
       instanceId,
       acceptedAt: new Date(),
@@ -9025,9 +9025,7 @@ export const createServer = (
           }),
     });
     if (owed) {
-      console.log(
-        `[hub] send ${message.uuid} to ${instanceId} queued: ${holdOf(record)}`
-      );
+      record = keepHold(record);
     }
     // The send it retries goes first, so a screen folds that row away as
     // this one arrives.
@@ -9148,12 +9146,6 @@ export const createServer = (
   };
 
   /**
-   * Why an owed send waits, in {@link SendHold}'s terms: its machine away
-   * within its grace, else its session's start held ({@link startHold}: an
-   * update, or a build older than the hub's), else sends
-   * owed before it. Undefined for a send its machine has.
-   */
-  /**
    * A send kept for its machine's pause, while its session's item finishes,
    * for an interrupt's hold on that item against this sender, or while its
    * retired workspace is cut again ({@link deliverToSession}).
@@ -9174,6 +9166,33 @@ export const createServer = (
     return workItems.recutHold(row.id, origin) ? "recut" : "held";
   };
 
+  /**
+   * THE RULE THAT NO HOLD IS SILENT: an owed send's hold is written on its
+   * record as it is kept ({@link deliverToSession}) and again at every look
+   * that keeps it ({@link releaseOne}), with a line in the hub's log when it
+   * changes; each hold's words name what releases it (delegation-actions.ts
+   * `HOLD_WORDS`). A hub that starts reads each one back
+   * ({@link sayKeptAtStart}). Answers the record as stored.
+   */
+  const keepHold = (record: SentMessageRow): SentMessageRow => {
+    const hold = holdOf(record);
+    if (!hold || hold === record.hold) {
+      return record;
+    }
+    console.log(
+      `[hub] send ${record.uuid} to ${record.instanceId} queued: ${hold}${record.hold ? ` (was ${record.hold})` : ""}`
+    );
+    return db.updateSend(record.uuid, { hold }) ?? record;
+  };
+
+  /**
+   * Why an owed send waits, in {@link SendHold}'s terms: its session at
+   * rest, its account's limit or its compaction after a move, its machine's
+   * pause, its item's finish or hold, else its machine away within its
+   * grace, else its session's start held ({@link startHold}: an update, or
+   * a build older than the hub's), else sends owed before it. Undefined for
+   * a send its machine has.
+   */
   const holdOf = (record: SentMessageRow): SendHold | undefined => {
     if (!record.owed) {
       return;
@@ -9353,17 +9372,31 @@ export const createServer = (
     return true;
   };
 
-  /** One owed send, as {@link releaseOwed} hands it over. */
+  /**
+   * One owed send, as {@link releaseOwed} hands it over; one that stays
+   * owed has its hold written again ({@link keepHold}).
+   */
   const releaseOne = (send: SentMessageRow): void => {
+    if (handOwed(send)) {
+      return;
+    }
+    const still = db.sendRecord(send.uuid);
+    if (still?.state === "pending" && still.owed) {
+      keepHold(still);
+    }
+  };
+
+  /** {@link releaseOne}'s hand: true once the send has left the hub's keeping (handed, moved or failed). */
+  const handOwed = (send: SentMessageRow): boolean => {
     const [row] = db.getInstancesByIds([send.instanceId]);
     // Owed to a session whose work a continuation took on: it goes there.
     if (row?.continuedInto) {
       moveOwedSend(send);
-      return;
+      return true;
     }
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row && agent)) {
-      return;
+      return false;
     }
     // A compaction's own step whose session's process ended before it took
     // it: the hub moved it and owes it that step, so it starts it again
@@ -9376,7 +9409,7 @@ export const createServer = (
       keptAsleep(row) ||
       waitingForProcess.has(send.instanceId)
     ) {
-      return;
+      return false;
     }
     const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
     // Kept while its account is at its limit: it goes once that is over.
@@ -9385,35 +9418,36 @@ export const createServer = (
     // it writes to it.
     const { origin } = envelope.payload.message;
     if (owedHeld(send.instanceId, row.machineId, origin, send.uuid)) {
-      return;
+      return false;
     }
     const refused = inputRefusal(send.instanceId, origin);
     if (refused) {
       db.takeOwedSend(send.uuid);
       failSend(send, refused.reason, refused.refusal);
-      return;
+      return true;
     }
     if (row.status === "sleeping") {
       wakeForSend(agent, row.machineId, send.instanceId);
     }
-    handToProcess(agent, send, envelope);
+    return handToProcess(agent, send, envelope);
   };
 
-  /** `send` handed over once its session has a process up or starting and no start held; else it stays owed for that. */
+  /** `send` handed over once its session has a process up or starting and no start held; else it stays owed for that. True when handed. */
   const handToProcess = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     send: SentMessageRow,
     envelope: Envelope<SendPayload>
-  ): void => {
+  ): boolean => {
     const [now] = db.getInstancesByIds([send.instanceId]);
     if (
       db.owesSpawn(send.instanceId) ||
       !(now && (now.status === "running" || now.status === "starting")) ||
       db.takeOwedSend(send.uuid) === undefined
     ) {
-      return;
+      return false;
     }
     handReleased(agent, send, envelope);
+    return true;
   };
 
   /**
@@ -9523,6 +9557,23 @@ export const createServer = (
     machines: db.listAgents().map((machine) => machine.machineId),
     now: Date.now(),
   });
+  /**
+   * What the hub keeps as it starts, read back from the records
+   * ({@link keepHold}): each owed send, its session, and why it waits as
+   * the hub that kept it wrote, so nothing kept is silent across a restart.
+   * Each goes as its hold's release says, its machine's register the first
+   * look.
+   */
+  const sayKeptAtStart = (): void => {
+    for (const machine of db.listAgents()) {
+      for (const send of db.owedSends({ machineId: machine.machineId })) {
+        console.log(
+          `[hub] kept at start: send ${send.uuid} to ${send.instanceId}, accepted ${send.acceptedAt.toISOString()}, held for ${send.hold ?? "a reason no hub wrote"}`
+        );
+      }
+    }
+  };
+  sayKeptAtStart();
   /**
    * Each session's final message of the turn in flight: the text frames that
    * followed its last tool call. A tool call empties it, so what came before
@@ -22602,6 +22653,7 @@ export const createServer = (
     tellYou: (row, title, body) => watch?.tellYou(row, title, body),
     untellYou: (instanceId) => watch?.humanSend(instanceId),
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
+    between: (row) => sessionIdle(row),
     leadPlace: leadPlaceRef,
     report: (row, body, failed, notice, headline) => {
       reportToParent(row, body, failed, { notice, headline });

@@ -107,6 +107,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import type { ContinueRequest, PreparedContinuation } from "../continuation";
+import type { SendHold } from "../delegation-actions";
 import type { MoveState } from "../moves";
 import { hubSecrets, openOrNull } from "../secret-box";
 
@@ -1244,6 +1245,15 @@ export type WorkOrigin = Origin | "kept";
 export type WorkItemState =
   "starting" | "running" | "done" | "failed" | "cancelled";
 
+/**
+ * Where a work item's landing stands ({@link workItems} `landingPhase`), kept
+ * so a hub that starts mid-landing goes on from there:
+ * `completing`, its `finish_item` stored while work it delegated is still
+ * live; it lands once every item it delegated, queued ones included, has
+ * ended (work-items.ts `completeIfDrained`).
+ */
+export type LandingPhase = "completing";
+
 /** What a work item's landing put where ({@link workItems} `landed`). */
 export interface WorkLanding {
   /**
@@ -1377,6 +1387,20 @@ export const workItems = sqliteTable(
      * {@link submission}.
      */
     landingSince: timestamp("landing_since"),
+    /**
+     * Where its landing stands while {@link landingSince} is set
+     * ({@link LandingPhase}); null while it runs from the first.
+     */
+    landingPhase: text("landing_phase").$type<LandingPhase>(),
+    /**
+     * When its session called `finish_item` (to land, or blocked) in the
+     * turn still under way: that call is the turn's last step. While set, a
+     * send from one who may reopen the item waits at the hub (work-items.ts
+     * `finishingFor`). Released at that turn's end: its result, or, after a
+     * hub restart that missed it, its machine's word at its register that
+     * the session is between turns (work-items.ts `resumeLandings`).
+     */
+    lastTurnAt: timestamp("last_turn_at"),
     /** A declared wait on work the delegate started; the hub wakes it at this time. */
     waitUntil: timestamp("wait_until"),
     waitReason: text("wait_reason"),
@@ -1658,6 +1682,12 @@ export const sentMessages = sqliteTable(
      * Null for every send its machine has.
      */
     owed: text("owed"),
+    /**
+     * Why an owed send waits (delegation-actions.ts `SendHold`), written as
+     * it is kept and again at each look that keeps it; each hold's words
+     * name what releases it (`HOLD_WORDS`). Null once it is handed.
+     */
+    hold: text("hold").$type<SendHold>(),
     /**
      * The send whole, as its machine is handed it (`Envelope<SendPayload>`),
      * kept while it is pending: a process that went away before reading it
