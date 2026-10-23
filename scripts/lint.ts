@@ -92,6 +92,7 @@ const checks: Check[] = [
   bun("scripts/token-contrast-check.ts"),
   bun("scripts/page-imports-check.ts"),
   bun("scripts/probe-words-check.ts"),
+  bun("scripts/design-rules.ts", "--check"),
 ];
 
 await runChecks("lint", checks);

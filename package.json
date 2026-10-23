@@ -16,6 +16,8 @@
     "claude-paths:check": "bun scripts/claude-paths-check.ts",
     "css-scope:check": "bun scripts/css-scope-check.ts",
     "db:push": "bun run --filter '@cawco/hub' db:push",
+    "design:rules": "bun scripts/design-rules.ts",
+    "design:rules:check": "bun scripts/design-rules.ts --check",
     "dev": "bun run dev:dashboard",
     "dev:agent": "bun run --filter '@cawco/agent' dev",
     "dev:all": "bun run --filter '*' --filter '!cawco-site' dev",
