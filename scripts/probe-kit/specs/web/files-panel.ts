@@ -134,8 +134,8 @@ light = Option("light", "A light", "The edge lights under the pointer.", false, 
   },
 ];
 
-/** The session's artifact list read, which the offline leg refuses. */
-const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts$/;
+/** Files' read of the session's artifacts (those that reached the person), which the offline leg refuses. */
+const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts\/files$/;
 /** Files' search of a session's artifacts. */
 const SEARCH_READ = /\/artifacts\/search\?/;
 /** The session's attachments read. */
@@ -1043,7 +1043,7 @@ const reviewLegs = async (
   await page.waitForTimeout(400);
   const order = await page.evaluate(async (id) => {
     const listed = (await (
-      await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts`)
+      await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts/files`)
     ).json()) as { id: string }[];
     const cards = [
       ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
