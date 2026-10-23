@@ -19,7 +19,7 @@
  *    `${process.execPath} tool …`, or an argv list's `"tool",` (with `--record` among its next
  *    lines, or the mark within the lines above).
  *
- * Run by `bun run lint`.
+ * Run by `bun run check`.
  */
 import { Glob } from "bun";
 

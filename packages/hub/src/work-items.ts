@@ -1671,6 +1671,9 @@ const passKey = (
   };
 };
 
+/** A git tree's name, as `git rev-parse <commit>^{tree}` prints it. */
+const TREE_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+
 /**
  * Why `step` need not run where `passed` passed (all kept under its
  * {@link passKey}, which `said` names): the same command passed there.
@@ -6506,6 +6509,33 @@ export const createWorkItems = ({
         }
       );
 
+  /**
+   * The landing gate's passes on the tree `sha` holds (WorkLanding `gate`):
+   * the tree, and each step that passed in `run`, the gate's last run, on
+   * the tree that landed. Nothing when git cannot name the tree.
+   */
+  const gatePassOf = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    sha: string,
+    run: GateRun
+  ): Promise<{ passed: string[]; tree: string } | undefined> => {
+    const read = await runIn(workspace, item)(
+      `git rev-parse ${sha}^{tree}`,
+      GIT_TIMEOUT_MS,
+      false,
+      true
+    );
+    const tree = read.exitCode === 0 ? read.stdout.trim() : "";
+    if (!TREE_SHA.test(tree)) {
+      return;
+    }
+    const passed = run.outcomes
+      .filter((outcome) => outcome.passed)
+      .map((outcome) => outcome.step.command.trim());
+    return { tree, passed: [...new Set(passed)] };
+  };
+
   /** HEAD of the workspace's checkout, read whatever stops the item's landing; nothing when git cannot say. */
   const headOf = async (
     workspace: WorkspaceRow,
@@ -6648,13 +6678,24 @@ export const createWorkItems = ({
     switch (outcome.kind) {
       case "stopped":
         return stoppedLanding(item);
-      case "landed":
+      case "landed": {
+        const gated = await gatePassOf(
+          workspace,
+          item,
+          outcome.sha,
+          runs.turn ?? ran
+        );
         return {
           kind: "done",
           gate: ran,
-          landed: { sha: outcome.sha, onto: outcome.onto },
+          landed: {
+            sha: outcome.sha,
+            onto: outcome.onto,
+            ...(gated ? { gate: gated } : {}),
+          },
           line: landedLine(base, outcome, runs.turn, stepped),
         };
+      }
       case "nothing":
         return {
           kind: "done",
@@ -8698,6 +8739,22 @@ export const createWorkItems = ({
      * finished within the tray's hold — and the delegations of either kind
      * still queued for owned files.
      */
+    /**
+     * What the landing gate passed on `tree`, a git tree's name: each step's
+     * command that passed on it, over every item that landed it (WorkLanding
+     * `gate`). Empty when none did. A release asks it of its commit's tree
+     * (scripts/release.ts), and checks only what it does not find here.
+     */
+    gatePassesOn: (tree: string): string[] => [
+      ...new Set(
+        db
+          .landedOnTree(tree)
+          .flatMap((row) =>
+            row.landed?.gate?.tree === tree ? row.landed.gate.passed : []
+          )
+      ),
+    ],
+
     trayOf: (sessionId: string): WorkItemSummary[] => {
       const led = db
         .listProjects()

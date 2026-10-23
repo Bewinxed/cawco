@@ -1,7 +1,7 @@
 /**
  * Every module a TypeScript project in this repository resolves comes from
  * inside the checkout: its own files, or the packages its install linked. So
- * `bun run typecheck` gives the same answer on any machine, whatever sits in
+ * `bun run check` gives the same answer on any machine, whatever sits in
  * a `node_modules` above the checkout.
  *
  * TypeScript looks a bare import up in each ancestor folder's `node_modules`,

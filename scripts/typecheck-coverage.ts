@@ -1,6 +1,6 @@
 /**
  * `bun run typecheck:coverage`: every tracked TypeScript file belongs to
- * exactly one project that `bun run typecheck` checks. A file no project
+ * exactly one project that `bun run check` checks. A file no project
  * includes is never type-checked; a file two projects include is checked
  * under two sets of settings, and passing one says nothing of the other.
  *
@@ -10,7 +10,7 @@
  * extends and includes nothing of its own, and `tsconfig.paths.json` the
  * `paths` every project extends. The dashboard's project extends
  * SvelteKit's generated config, so `svelte-kit sync` runs before this (the
- * dashboard's own `typecheck` does, earlier in the chain).
+ * runner, scripts/check.ts, runs it first).
  */
 import { dirname, join, relative } from "node:path";
 import ts from "typescript";

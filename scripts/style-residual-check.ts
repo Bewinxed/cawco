@@ -1,5 +1,5 @@
 /**
- * `bun scripts/style-residual-check.ts` (part of `bun run lint`): what may
+ * `bun scripts/style-residual-check.ts` (part of `bun run check`): what may
  * stay in a component's `<style>` once its styles are theme utilities. The
  * dashboard's markup carries its styles as classes; a `<style>` keeps only
  * what a class cannot say, each rule under a comment naming why:

@@ -1,5 +1,5 @@
 /**
- * `bun scripts/icon-imports-check.ts` (part of `bun run lint`): an
+ * `bun scripts/icon-imports-check.ts` (part of `bun run check`): an
  * unplugin-icons module (`~icons/<set>/<name>`, or its `virtual:icons/`
  * form) is imported in packages/icons alone. DESIGN.md's Solar Duotone Rule:
  * "Every product icon is Solar's bold-duotone cut, imported through

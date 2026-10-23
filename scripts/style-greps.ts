@@ -1,5 +1,5 @@
 /**
- * `bun scripts/style-greps.ts` (part of `bun run lint`): the shapes the
+ * `bun scripts/style-greps.ts` (part of `bun run check`): the shapes the
  * dashboard never writes, found by grep over apps/dashboard/src
  * (tracked and untracked files):
  *  - `transition-all`: every property the element ever changes would

@@ -1,5 +1,5 @@
 /**
- * `bun scripts/border-width-check.ts` (part of `bun run lint`): a border or
+ * `bun scripts/border-width-check.ts` (part of `bun run check`): a border or
  * an outline is drawn at a whole CSS pixel. Chromium snaps a border's width
  * (and an outline's, "snapped as a border width") to whole device pixels: a
  * 1.5px border draws 1px on a 1× screen and on a 3× one (specs/concentric).

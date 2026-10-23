@@ -5,9 +5,10 @@
  */
 
 /**
- * The gate CawCo declares for itself, less its iOS step: the install first,
- * its failure leaving the rest unrun, then the root package.json's
- * `lint:changed` and `typecheck`.
+ * A JavaScript project's gate, for the scratch projects the landing specs
+ * make: the install first, its failure leaving the rest unrun, then two
+ * scripts of the project's package.json, `lint:changed` and `typecheck`, so
+ * a spec reads one line per step.
  */
 export const JS_GATE = `---
 bun install --frozen-lockfile

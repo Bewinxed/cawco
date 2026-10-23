@@ -1479,6 +1479,15 @@ export interface WorkLanding {
    * before 2026-10-19.
    */
   at?: number;
+  /**
+   * The landing gate's passes on the tree that landed: that tree (`git
+   * rev-parse <sha>^{tree}`) and each step's command that passed on it, as
+   * written in gate.md. What a release asks the hub of a commit's tree
+   * (`GET /api/landing-gate`): a tree the gate passed is not checked again
+   * there. Unset on landings before 2026-10-23, and where git could not name
+   * the tree.
+   */
+  gate?: { passed: string[]; tree: string };
   /** The base commit its commits were rebased onto; null for a push to a branch of its own. */
   onto: string | null;
   sha: string;

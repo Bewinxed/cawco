@@ -1,5 +1,5 @@
 /**
- * `bun run token-contrast:check` (part of `bun run lint`): every colour pair
+ * `bun run token-contrast:check` (part of `bun run check`): every colour pair
  * the design system promises holds its contrast floor in both themes, read
  * from the token source alone, with no browser. Text on its surfaces needs
  * 4.5:1; large or UI text and non-text marks (status glyphs, the focus ring,

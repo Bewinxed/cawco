@@ -1,5 +1,5 @@
 /**
- * `bun run mark-line:check` (part of `bun run lint`): every row that sets
+ * `bun run mark-line:check` (part of `bun run check`): every row that sets
  * words beside a mark is a mark line (app.css, DESIGN.md The Mark Line
  * Rule), its words are elements, and its boxes say so. A mark is an icon, a
  * glyph, an avatar, a status dot or a keycap. Centring a mark beside a line

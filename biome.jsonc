@@ -87,7 +87,7 @@
     },
   },
   // Every state is handled by the type-aware switch check instead
-  // (scripts/switch-check.ts, switch-exhaustiveness-check): a switch over a
+  // (scripts/lint/switch-exhaustiveness.ts, in Golar): a switch over a
   // union names each member, and a `default:` would hide the next member
   // added to it. A default stays only where the value can really be outside
   // its union at runtime (a verb or type off the wire, a plain string).

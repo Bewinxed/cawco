@@ -1,5 +1,5 @@
 /**
- * Part of `bun run lint`: the probe kit finds the product by the product's
+ * Part of `bun run check`: the probe kit finds the product by the product's
  * own words, never a copy of them. A copy goes stale silently when the word
  * changes: the locator then finds nothing, and the failure reads as a
  * missing element after its timeout. Three rules:

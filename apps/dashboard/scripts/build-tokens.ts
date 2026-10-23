@@ -22,7 +22,7 @@
  * module: a colour asset catalog and Tokens.swift (build-tokens-apple.ts).
  *
  *   bun run tokens                          (with --ladder: print the theme's keys and values)
- *   bun scripts/build-tokens.ts --check     (part of `bun run lint`)
+ *   bun scripts/build-tokens.ts --check     (part of `bun run check`)
  *
  * Every output is made in memory and formatted as `bun fmt` writes that file
  * (scripts/fmt.ts `formatText`), so what the build writes is final: no

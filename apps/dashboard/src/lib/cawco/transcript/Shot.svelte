@@ -265,7 +265,7 @@
       class="relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
     >
       {#if captionsReady}
-        <!-- Captions come from the sidecar .vtt when the video has one; a video without one has none to show. svelte-check and Biome read only an unconditional <track>. -->
+        <!-- Captions come from the sidecar .vtt when the video has one; a video without one has none to show. Svelte and Biome read only an unconditional <track>. -->
         <!-- svelte-ignore a11y_media_has_caption -->
         <!-- biome-ignore lint/a11y/useMediaCaption: the <track> is conditional on the sidecar .vtt, which Biome does not read -->
         <video

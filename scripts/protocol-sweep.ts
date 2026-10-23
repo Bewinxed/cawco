@@ -27,7 +27,7 @@
  * stands, and what a law needs of the past (a probe on this link, an ask
  * parked, a keeper's answer this custody) is in the world.
  *
- * Run by `bun run typecheck` (scripts/typecheck.ts); it fails on any law
+ * Run by `bun run check` (scripts/check.ts); it fails on any law
  * broken by `step` or any mutant the laws let through.
  */
 import { UPDATE_TRIAL_MS } from "../packages/core/src/binary-updates";

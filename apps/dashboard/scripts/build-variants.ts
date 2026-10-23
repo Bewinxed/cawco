@@ -21,7 +21,7 @@
  * `formatText`), so what is written is final.
  *
  *   bun run variants
- *   bun scripts/build-variants.ts --check   (part of `bun run lint`: writes
+ *   bun scripts/build-variants.ts --check   (part of `bun run check`: writes
  *     nothing, and fails when the committed file, formatted alike on this
  *     machine's bun (fmt.ts `formattedAlike`), is not what the build makes,
  *     naming each variant it would add or drop)

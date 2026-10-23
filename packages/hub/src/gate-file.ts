@@ -11,8 +11,7 @@
  * ---
  * bun install --frozen-lockfile
  *   on-fail: stop
- * bun run lint:changed
- * bun run typecheck
+ * bun run check --all
  * bash apps/apple/scripts/build-both.sh ios --gate --targets {targets}
  *   name: iOS build compiles
  *   targets: apps/apple/targets.json

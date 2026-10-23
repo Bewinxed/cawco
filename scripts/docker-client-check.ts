@@ -1,5 +1,5 @@
 /**
- * `bun scripts/docker-client-check.ts` (part of `bun run lint`): a Docker
+ * `bun scripts/docker-client-check.ts` (part of `bun run check`): a Docker
  * client is made by `dockerAt` in packages/agent/src/browser/runtime.ts
  * alone. dockerode's modem takes `DOCKER_HOST` over the socket it is given
  * (docker-modem 5.0.7 lib/modem.js: "if (!this.host) { this.socketPath =

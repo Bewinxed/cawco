@@ -5,7 +5,7 @@
  * tsgolint's typescript-go port of it (oxc-project/tsgolint
  * internal/rules/switch_exhaustiveness_check): with those options it reports
  * only a switch that leaves a member of its union unmatched, with the same
- * message. golar.config.ts runs it, and scripts/switch-check.ts reads what
+ * message. golar.config.ts runs it, and scripts/lint/golar-lint.ts reads what
  * it reports.
  *
  * Golar reads a `.svelte` file through svelte2tsx, so a type that a Svelte

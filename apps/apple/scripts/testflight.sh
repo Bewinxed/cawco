@@ -120,8 +120,7 @@ trap '"${SSH[@]}" rm -f "$REMOTE_NOTES"; git worktree remove --force "$CHECKOUT"
   cd "$CHECKOUT"
   started=$EPOCHREALTIME
   bun install --frozen-lockfile > /dev/null
-  bun run typecheck
-  bun run lint
+  bun run check --all
   echo "repo checks at ${REV:0:12}: $(took "$started")"
   started=$EPOCHREALTIME
   # The hub this app meets on its first day: the newest published nightly's.

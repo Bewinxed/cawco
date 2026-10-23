@@ -10,7 +10,7 @@
  * reads app.css without Vite (lint's Tailwind design-system checks:
  * specificity-trap, class-collision, role-order) needs them first, so
  * `bun apps/dashboard/scripts/house-faces.ts` writes them, first in
- * `bun run lint`: a fresh checkout has none.
+ * `bun run check`: a fresh checkout has none.
  */
 import {
   existsSync,

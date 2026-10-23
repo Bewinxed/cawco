@@ -118,8 +118,8 @@ bash apps/apple/scripts/build-both.sh both --compile-only
 
 An upload archives the commit it names (on origin/main), never whatever main is,
 and refuses to start from a checkout with uncommitted or untracked work.
-Before anything reaches the Mac it runs that commit's `bun run typecheck` (the
-wire against every shipped build, migrations, roles, tools) and `bun run lint`
+Before anything reaches the Mac it runs that commit's `bun run check --all`
+(types, lint, the wire against every shipped build, migrations, roles, tools)
 in a worktree of it at `~/.worktrees/release-<sha>-testflight`, removed when the
 run ends, and holds the app to the newest published nightly's hub
 (`packages/hub/scripts/wire-compat.ts --app <sha> --hub <nightly>`): an app

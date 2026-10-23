@@ -34,7 +34,7 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
 ## Work on it
 
 `site/` is one of the repository's Bun workspaces: `bun install` at the
-repository root installs its packages, and the root `bun run typecheck` checks
+repository root installs its packages, and the root `bun run check` checks
 it with the rest.
 
 ```sh

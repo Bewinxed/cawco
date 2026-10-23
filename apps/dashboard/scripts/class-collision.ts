@@ -1,5 +1,5 @@
 /**
- * Part of `bun run lint`: no class is both a component's own hook and a
+ * Part of `bun run check`: no class is both a component's own hook and a
  * Tailwind utility. A class the markup writes and the component's own
  * `<style>` selects (scoped, or through `:global`) is also a candidate
  * Tailwind compiles, so a name like `ring`, `border` or `truncate` draws the

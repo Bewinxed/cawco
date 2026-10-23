@@ -1,5 +1,5 @@
 /**
- * `bun run css-scope:check` (part of `bun run lint`): no component's styles
+ * `bun run css-scope:check` (part of `bun run check`): no component's styles
  * reach another component's elements. A rule in a `.svelte` file's `<style>`
  * whose selector is global all the way through (`:global(.picker)`,
  * `:global(.a .b)`, anything inside a `:global { … }` block) matches every

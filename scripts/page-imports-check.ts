@@ -1,5 +1,5 @@
 /**
- * `bun scripts/page-imports-check.ts` (part of `bun run lint`): a page
+ * `bun scripts/page-imports-check.ts` (part of `bun run check`): a page
  * loads only what it needs. The artifact page (`/artifact/<id>`, an
  * artifact opened in a tab of its own) never reaches the conversation's
  * code: nothing under `src/lib/cawco/transcript/`, and no Composer.

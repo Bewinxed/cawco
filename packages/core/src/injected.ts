@@ -169,7 +169,7 @@ const outputsLine = (outputs: string[] | undefined): string =>
 
 /** The landing gate, as a delegate is told of it. */
 const GATE =
-  "its landing gate (the dependency install, the repository's `lint:changed` and `typecheck` scripts where its package.json defines them, and the iOS build when you changed the app)";
+  "its landing gate (the steps its project's gate.md names: for CawCo the dependency install, one `bun run check --all` in your warm workspace, and the iOS build when you changed the app)";
 
 /**
  * How a work item's workspace lands: the hub does it after `finish_item`,

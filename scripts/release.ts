@@ -3,11 +3,13 @@
  *   bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path
  *     [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--dry-run]
  *
- * A release names its commit, and is built from exactly that commit: three
- * worktrees of it under ~/.worktrees/release-<sha>…, on real disk, made here
- * and removed when the build ends, whichever way. One builds, signs and
- * proves; lint runs in the second and typecheck in the third, each beside
- * the builds in a tree of its own, so no check reads a file another rewrites
+ * A release names its commit, and is built from exactly that commit: a
+ * worktree of it under ~/.worktrees/release-<sha>, on real disk, made here
+ * and removed when the build ends, whichever way, that builds, signs and
+ * proves. The repository's check (`bun run check --all`) runs only when the
+ * hub's landing gate did not pass it on the commit's tree (`GET
+ * /api/landing-gate`, hub work-items.ts `gatePassesOn`): then in a second
+ * worktree, beside the builds, so it reads no file a build rewrites
  * (SvelteKit's sync writes each route's `$types.d.ts` with a plain
  * writeFileSync on every run, kit 3.1.0 src/core/sync/write_types). The
  * checkout this runs from must be clean (this script and what it imports are
@@ -19,8 +21,9 @@
  * release-graph.ts), each starting as soon as the steps it needs have ended.
  * `--dry-run` prints that graph, with each step's expected time, and runs
  * nothing. What waits on what, and why:
- * - lint, typecheck and the live database's migration check gate promotion,
- *   and Apple's notarization: nothing is submitted to Apple before they pass.
+ * - the check (when it runs) and the live database's migration check gate
+ *   promotion, and Apple's notarization: nothing is submitted to Apple
+ *   before they pass.
  * - The proof build and stage 2's builds come before the proofs that run them.
  * - The four targets compile at once, from assets prepared once; each linux
  *   archive is made at once, each darwin bundle signed, notarized and stapled
@@ -148,10 +151,62 @@ const proofVerdicts = join(
   "proof-verdicts"
 );
 
-/** The three trees a build of `commit` runs in: one builds, one lints, one typechecks. */
+/** The trees a build of `commit` runs in: one builds, one checks (when it must). */
 const treesOf = (commit: string) => {
   const base = join(homedir(), ".worktrees", `release-${commit.slice(0, 12)}`);
-  return { build: base, lint: `${base}-lint`, typecheck: `${base}-typecheck` };
+  return { build: base, check: `${base}-check` };
+};
+
+/** The landing gate's step a release takes as its check (gate.md). */
+const LANDING_CHECK = "bun run check --all";
+
+/**
+ * Whether the hub's landing gate passed {@link LANDING_CHECK} on the tree
+ * `commit` holds: the hub on this host is asked (`GET /api/landing-gate`,
+ * as this machine). No hub, no answer, or no such pass: the release runs
+ * the check itself, and says why.
+ */
+const gatePassed = async (commit: string): Promise<boolean> => {
+  const read = Bun.spawnSync(["git", "rev-parse", `${commit}^{tree}`], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const tree = read.stdout.toString().trim();
+  const installation = await readInstallation();
+  if (read.exitCode !== 0 || !installation?.hubUrl) {
+    console.log(
+      read.exitCode === 0
+        ? "This host has no CawCo installation naming a hub: the release runs its own check"
+        : `git could not name the tree of ${commit}: the release runs its own check`
+    );
+    return false;
+  }
+  const { hubUrl } = installation;
+  const asked = await readWithin(ANNOUNCE_MS, async (signal) => {
+    const response = await machineFetch(
+      `${hubUrl}/api/landing-gate?tree=${tree}`,
+      { signal }
+    );
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: await response.text(),
+    };
+  });
+  if (asked.kind === "unanswered" || !asked.value.ok) {
+    console.log(
+      `The hub at ${hubUrl} ${asked.kind === "unanswered" ? `did not answer within ${ANNOUNCE_MS / 1000} s` : `answered ${asked.value.status}`} on the landing gate of tree ${tree.slice(0, 12)}: the release runs its own check`
+    );
+    return false;
+  }
+  const { passed } = JSON.parse(asked.value.text) as { passed: string[] };
+  const ok = passed.includes(LANDING_CHECK);
+  console.log(
+    ok
+      ? `The landing gate passed \`${LANDING_CHECK}\` on tree ${tree.slice(0, 12)}: the release checks it no more`
+      : `The landing gate passed no \`${LANDING_CHECK}\` on tree ${tree.slice(0, 12)}: the release runs it`
+  );
+  return ok;
 };
 const stagingOf = (commit: string): string =>
   join(state, `staging-${commit.slice(0, 12)}`);
@@ -198,7 +253,9 @@ const releaseSteps = (
   learned: Learned,
   secrets: ReturnType<typeof takeReleaseSecrets>,
   /** Holds a GitHub call from starting while a stop is clearing the run: it never returns then. */
-  notStopped: () => Promise<void>
+  notStopped: () => Promise<void>,
+  /** The landing gate passed the check on this commit's tree ({@link gatePassed}). */
+  gated: boolean
 ): Step[] => {
   const trees = treesOf(current.commit);
   const staging = stagingOf(current.commit);
@@ -224,7 +281,7 @@ const releaseSteps = (
     },
   });
   const tree = (which: keyof typeof trees): Step[] => [
-    // The release records (shipped.ts): typecheck's wire check and the frame
+    // The release records (shipped.ts): the check's wire check (openapi:check) and the frame
     // read below hold this build to what is in people's hands, as tagged now.
     step(`tree ${which}`, ["fetch"], 1.5, () =>
       run(["git", "worktree", "add", "--detach", trees[which], current.commit])
@@ -375,23 +432,28 @@ const releaseSteps = (
       run(["git", "fetch", "--quiet", "--tags", "origin"])
     ),
     ...tree("build"),
-    ...tree("lint"),
-    ...tree("typecheck"),
-    // Lint and typecheck read their own trees, beside the builds; they gate
-    // notarization and promotion, never the builds. A release checks every
-    // project, not what changed since a base.
-    step("lint", ["install lint"], 14, () =>
-      run([process.execPath, "run", "lint"], trees.lint)
-    ),
-    step("typecheck", ["install typecheck"], 23, () =>
-      run([process.execPath, "run", "typecheck", "--all"], trees.typecheck)
-    ),
+    // The check reads its own tree, beside the builds; it gates notarization
+    // and promotion, never the builds. None when the landing gate passed it
+    // on this tree.
+    ...(gated
+      ? []
+      : [
+          ...tree("check"),
+          step("check", ["install check"], 30, () =>
+            run([process.execPath, "run", "check", "--all"], trees.check)
+          ),
+        ]),
     step("live database", ["install build"], 15, () =>
       liveDatabase(run, trees.build, staging)
     ),
-    step("gate", ["lint", "typecheck", "live database"], 0, async () => {
-      // Nothing to run: what notarization and promotion wait for.
-    }),
+    step(
+      "gate",
+      gated ? ["live database"] : ["check", "live database"],
+      0,
+      async () => {
+        // Nothing to run: what notarization and promotion wait for.
+      }
+    ),
     step("version", ["install build"], 1, async () => {
       learned.manifest = await manifestOf(run, current, trees.build);
       learned.inputs = await proofInputsKey(trees.build, current.commit);
@@ -586,7 +648,7 @@ const manifestOf = async (
  * update helper takes it, cli binary-apply.ts), checked by
  * `migrations:check --db` (hub migrations-check.ts), which never writes the
  * copy it is given. A host with no hub database has nothing to check, and
- * says so; typecheck's own migrations:check runs over the fixture there.
+ * says so; the check's own migrations:check runs over the fixture there.
  */
 const liveDatabase = async (
   run: Runner,
@@ -1019,7 +1081,9 @@ if (argv.includes("--dry-run")) {
         dry,
         {},
         {},
-        () => Promise.resolve()
+        () => Promise.resolve(),
+        // As when the hub has no pass for the tree: the whole graph.
+        false
       )
     )
   );
@@ -1744,7 +1808,9 @@ const build = async (current: Request): Promise<void> => {
   const building = performance.now();
   const trees = treesOf(current.commit);
   const staging = stagingOf(current.commit);
-  me.checkouts = Object.values(trees);
+  const gated = await gatePassed(current.commit);
+  const checkouts = gated ? [trees.build] : Object.values(trees);
+  me.checkouts = checkouts;
   me.staging = staging;
   await writeHolder();
   await mkdir(staging, { recursive: true });
@@ -1763,7 +1829,8 @@ const build = async (current: Request): Promise<void> => {
           if (stopped) {
             await stopped;
           }
-        }
+        },
+        gated
       ),
       {
         say: (line) => console.log(line),
@@ -1806,7 +1873,7 @@ const build = async (current: Request): Promise<void> => {
     // The Apple secrets' files go first, whatever becomes of the rest of the staging.
     await rm(join(staging, "apple"), { recursive: true, force: true });
     // A build that failed fails with its own error; the sweep's, if it fails too, is said beside it.
-    await clear(Object.values(trees), staging).catch((error: unknown) => {
+    await clear(checkouts, staging).catch((error: unknown) => {
       console.error(
         `Clearing the build of ${current.commit} failed: ${error instanceof Error ? error.message : String(error)}`
       );

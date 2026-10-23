@@ -89,5 +89,5 @@ assets/mascot/scripts/.regress/
 # Captures a delegate takes for a reviewer: outputs of its item, never the repository.
 /caps/
 
-# TypeScript build mode: checked declarations and build info (scripts/typecheck.ts).
+# TypeScript build mode: checked declarations and build info (scripts/check.ts).
 /.tsbuild/

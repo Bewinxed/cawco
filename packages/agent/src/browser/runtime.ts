@@ -156,7 +156,7 @@ const MODEM_ENV = [
  * A client of the runtime at `socketPath` and nowhere else: made with
  * {@link MODEM_ENV} out of the environment for the moment it is made (the
  * modem reads it then, and never after), so nothing the environment says
- * reaches it. The one way a Docker client is made (`bun run lint`,
+ * reaches it. The one way a Docker client is made (`bun run check`,
  * scripts/docker-client-check.ts).
  */
 export const dockerAt = (socketPath: string, timeout?: number): Docker => {

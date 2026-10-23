@@ -1,5 +1,5 @@
 /**
- * `bun scripts/relics-check.ts` (part of `bun run lint`): nothing of the old
+ * `bun scripts/relics-check.ts` (part of `bun run check`): nothing of the old
  * stylesheet is carried over into the Tailwind form. Each kind is a relic of
  * a hand-kept value or an override the design system has a place for, and
  * each must read 0:

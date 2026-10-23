@@ -40,7 +40,7 @@ import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
  * server is serve.js under node, which never loads this file.
  *
  * The refusal is the servers' own (`hubProxy`'s hooks), not the config's:
- * svelte-check loads this config as a `serve` too, and starts no server.
+ * a tool that loads this config as a `serve` starts no server.
  */
 /**
  * adapter-node's output tree. scripts/publish-build.ts renames it to `build/`,

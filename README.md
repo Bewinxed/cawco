@@ -56,9 +56,13 @@ Build and check the workspace with:
 
 ```sh
 bun run build
-bun run typecheck
-bun run lint
+bun run check
 ```
+
+`bun run check` (scripts/check.ts) is the repository's one check: Golar's
+type check over the project references, Golar's lint rules and Biome over
+the files a change reaches, the house checks whose inputs changed, and
+`bun fmt --check`. `bun run check --all` checks the whole tree.
 
 ## Licence
 

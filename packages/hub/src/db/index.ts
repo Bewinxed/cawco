@@ -1080,6 +1080,8 @@ export interface DbShape {
   readonly keepEnvelope: (uuid: string, envelope: string) => void;
   /** A skill about to be deleted: its files kept in its history first, as a hook's are. */
   readonly keepSkillVersion: (name: string) => void;
+  /** The items whose landing's gate passed on `tree` (WorkLanding `gate`). */
+  readonly landedOnTree: (tree: string) => WorkItemRow[];
   /**
    * The directory a row was launched in, which every spawn of it uses;
    * `"unknown"` when its machine had no record of its conversation; undefined
@@ -9747,6 +9749,12 @@ const make = async (path: string): Promise<DbShape> => {
             .where(inArray(instances.parentInstanceId, parentInstanceIds))
             .all()
             .map((row) => row.id),
+    landedOnTree: (tree) =>
+      db
+        .select()
+        .from(workItems)
+        .where(sql`json_extract(${workItems.landed}, '$.gate.tree') = ${tree}`)
+        .all(),
     trayItemsOf: (sessionId, ledProjectIds, endedSince) =>
       db
         .select()

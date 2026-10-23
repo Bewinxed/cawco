@@ -1,5 +1,5 @@
 /**
- * Part of `bun run lint`: no two paths in the repository differ only by
+ * Part of `bun run check`: no two paths in the repository differ only by
  * letter case. macOS's default filesystem is case-insensitive, so such a pair
  * is one file there: `find/finder.svelte.ts` beside `find/Finder.svelte`
  * broke typecheck and the dashboard build on the Mac. Directories count too,

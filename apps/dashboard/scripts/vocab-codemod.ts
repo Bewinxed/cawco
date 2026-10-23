@@ -636,7 +636,7 @@ if (!DRY && changed.length > 0) {
   );
   // A renamed class sorts elsewhere in its string, and changes its line's
   // length: the files go back through Biome's class order and the
-  // repository's formatter, as `bun run lint` checks them. The order of a
+  // repository's formatter, as `bun run check` checks them. The order of a
   // string's classes decides nothing but which of two conflicting ones
   // tailwind-merge keeps, and no string the codemod writes holds two.
   const paths = changed.map(([path]) => path);

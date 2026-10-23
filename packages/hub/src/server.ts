@@ -28496,6 +28496,20 @@ export const createServer = (
           return db.listDelegateEvents(query);
         }
       )
+      // What the landing gate passed on a git tree, for a release of a commit
+      // holding it (scripts/release.ts, no dashboard call): the commands of
+      // the steps that passed on it, as gate.md writes them.
+      .get(
+        "/api/landing-gate",
+        {
+          ...hidden,
+          query: t.Object({ tree: t.String({ pattern: "^[0-9a-f]{40,64}$" }) }),
+        },
+        ({ query }) => ({
+          tree: query.tree,
+          passed: workItems.gatePassesOn(query.tree),
+        })
+      )
       // A parent's delegate tray as it opens; `work_item` frames keep it live.
       .get(
         "/api/work-items",

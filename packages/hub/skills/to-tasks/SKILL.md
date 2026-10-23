@@ -15,7 +15,7 @@ A **task** here is a vertical slice: one narrow path through every layer it touc
    - `title`: one line, verb first, in the project's words.
    - `description`: the behaviour it makes work, as the person would see it, and where it sits (the spec's path, what lands before it, what waits on it).
    - `acceptance`: a markdown list of what is true when it is done; each line is checkable.
-   - `checks`: shell commands that must pass in its workspace (`bun run typecheck`, a lint, a probe). A slice with nothing a command can prove says in `acceptance` what to check by hand.
+   - `checks`: shell commands that must pass in its workspace (`bun run check`, a probe). A slice with nothing a command can prove says in `acceptance` what to check by hand.
    - `todos`: the steps inside the slice, one line each. A step that needs its own edge is a slice instead.
    - `after` (tasks it waits for), `parent` (the task it is part of), `related` (no effect on order), `found_in` (the task whose work turned it up).
    - `type`: the delegate type that should run it, when the project has one for this work. `owns`: globs of the files it changes, so overlapping work queues instead of colliding. `lands`: only when it differs from the project's default. `labels`: short and few.

@@ -1,5 +1,5 @@
 /**
- * Part of `bun run lint`: every `#lib` import in the dashboard names a file
+ * Part of `bun run check`: every `#lib` import in the dashboard names a file
  * that is there. package.json's `"#lib/*": "./src/lib/*"` is Node's subpath
  * import, "a direct static matching and replacement without any special
  * handling for file extensions" (nodejs.org/api/packages.html, Subpath

@@ -1,5 +1,5 @@
 /**
- * Part of `bun run lint`: on one element, a utility under a state's variant
+ * Part of `bun run check`: on one element, a utility under a state's variant
  * never loses to another utility for the same property by selector weight
  * alone.
  *
