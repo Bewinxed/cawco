@@ -869,9 +869,14 @@ function endedAt(row: BoardRow): number | undefined {
 
 /**
  * It ended and the owner has seen it or archived it since (`seenAt` at or
- * after the end): what Unarchive is offered for.
+ * after the end): what Unarchive is offered for. A session still running
+ * (idle between turns included) has only ended a turn, never itself, so it
+ * is never archived.
  */
 export function archivedRow(row: BoardRow): boolean {
+  if (row.status === "running" || row.status === "starting") {
+    return false;
+  }
   const ended = endedAt(row);
   return ended !== undefined && ended <= seenAt(row);
 }

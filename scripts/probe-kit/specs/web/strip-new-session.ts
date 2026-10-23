@@ -958,6 +958,48 @@ async function forkLeg(
   await page.close();
 }
 
+/**
+ * A running session idle between turns, its row's menu in the rail: Stop
+ * is there, Unarchive never (it ended a turn, not itself, and was never
+ * archived).
+ */
+async function liveMenuLeg(kit: Kit, base: string, fleet: KitFleet) {
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Live menu",
+    machineId: MACHINE,
+    cwd: fleet.repo,
+    caw: false,
+  });
+  const live = await fleet.spawn("claude", "Live idle", fleet.repo, {
+    projectId: project.id,
+  });
+  await turn(fleet, live, "hello");
+  await until(
+    "the live session idle",
+    () => fleet.instance(live),
+    (one) => one?.status === "running",
+    60_000
+  );
+  const page = await popoverPage(kit, base, live, "light");
+  const row = page
+    .locator(`a[data-session-row-row][href*="${live}"]`)
+    .filter({ visible: true })
+    .first();
+  await row.waitFor({ state: "visible", timeout: 30_000 });
+  await row.hover();
+  await row.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).waitFor();
+  const names = (await page.getByRole("menuitem").allTextContents()).map(
+    (one) => one.trim()
+  );
+  kit.check(
+    "1440 (fine): a live idle session's menu offers Stop and never Unarchive",
+    names.some((one) => one.startsWith("Stop")) && !names.includes("Unarchive"),
+    JSON.stringify(names)
+  );
+  await page.close();
+}
+
 /** The session's own permission picker (transcript/ModePick), as drawn. */
 const MODE_PICK = '[data-ns-pop][aria-label="Permission mode"]';
 /** The composer's field, named by its hint (as journeys/j3-spawn names it). */
@@ -1537,6 +1579,7 @@ const spec: Spec = {
     await depthLeg(kit, base, source, "dark");
     await motionLeg(kit, base, source);
     await forkLeg(kit, base, fleet, rows);
+    await liveMenuLeg(kit, base, fleet);
     const modeless = await stoppedSession(fleet, "Revives", null);
     await forkHereLeg(kit, base, modeless);
     await reviveLeg(kit, base, fleet, modeless, {
