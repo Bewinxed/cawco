@@ -86,6 +86,7 @@ import {
   handoffMarker,
   holdingWords,
   INPUTS_LIMIT_BYTES,
+  isWorkspaceNeedsRefusal,
   machineCalled,
   sessionLink,
   sizeWords,
@@ -4030,6 +4031,35 @@ export const createWorkItems = ({
   };
 
   /**
+   * What a refused workspace create says: the machine's words, `pending`
+   * the discard's own failure when it did not go. A machine that lacks what
+   * a workspace needs (agent workspace-needs.ts) refused before anything was
+   * cut, and its words end in the install command alone, so they go on
+   * whole, nothing after it; its discard, if it waits, is retried as every
+   * other's is.
+   */
+  const createFailed = (
+    machineId: string,
+    id: string,
+    reason: string,
+    waited: string,
+    pending: string | undefined
+  ): string => {
+    if (isWorkspaceNeedsRefusal(reason)) {
+      if (pending) {
+        console.warn(
+          `[work-items] workspace ${id}, refused on ${machineName(machineId)} for what it lacks, is discarded when the machine next registers: ${pending}`
+        );
+      }
+      return reason;
+    }
+    const failed = `Workspace create on ${machineName(machineId)} failed after ${waited}s: ${reason}.`;
+    return pending
+      ? `${failed} Discard of workspace ${id} is pending (${pending}); it will be retried when the machine next registers.`
+      : `${failed} Workspace ${id.slice(0, 8)} was discarded; no clone or boundary was left.`;
+  };
+
+  /**
    * A new workspace: the project's place made a git repository first when it
    * is a plain folder ({@link WorkItemDeps.beforeCut}), then its machine cuts
    * the clone and starts its boundary, and the hub files it. A place that
@@ -4078,22 +4108,16 @@ export const createWorkItems = ({
       opening.delete(id);
       const reason = error instanceof Error ? error.message : String(error);
       const waited = ((Date.now() - started) / 1000).toFixed(1);
-      try {
-        await discardCreate(id, machineId);
-      } catch (discardError) {
-        const pending =
+      const pending = await discardCreate(id, machineId).then(
+        () => undefined,
+        (discardError: unknown) =>
           discardError instanceof Error
             ? discardError.message
-            : String(discardError);
-        throw new Error(
-          `Workspace create on ${machineName(machineId)} failed after ${waited}s: ${reason}. Discard of workspace ${id} is pending (${pending}); it will be retried when the machine next registers.`,
-          { cause: discardError }
-        );
-      }
-      throw new Error(
-        `Workspace create on ${machineName(machineId)} failed after ${waited}s: ${reason}. Workspace ${id.slice(0, 8)} was discarded; no clone or boundary was left.`,
-        { cause: error }
+            : String(discardError)
       );
+      throw new Error(createFailed(machineId, id, reason, waited, pending), {
+        cause: error,
+      });
     } finally {
       opening.delete(id);
     }

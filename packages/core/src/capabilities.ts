@@ -43,7 +43,7 @@ export interface MachineCapability {
 export interface WorkspaceTool {
   /** The command it is looked for by. */
   command: string;
-  /** Where it was looked for: the dirs, `:`-joined. */
+  /** Every folder it was looked for in that is there, each once, in the order searched, `:`-joined as a PATH is. */
   lookedIn: string;
   /** What needs it: the walls every workspace runs in, or the git checkout a workspace is. */
   need: "walls" | "checkout";

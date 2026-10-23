@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { machineLabel, workspaceNeedsDetails } from "@cawco/core";
+  import {
+    machineLabel,
+    workspaceNeedsDetails,
+    workspaceNeedsReason,
+    workspaceNeedsWords,
+  } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
    * The machines as a list: every install under way or waiting on the
@@ -149,8 +154,8 @@
   /**
    * What the machine lacks for a delegate's workspace, as its report says
    * (agent workspace-needs.ts): the refusal a delegate there gets, read
-   * before one is sent, and where each tool was looked for under Show
-   * details.
+   * before one is sent, its install command in a well of its own with Copy,
+   * and where each tool was looked for under Show details.
    */
   function needsOf(machine: Machine) {
     const needs = machine.machineCapabilities?.items.find(
@@ -159,9 +164,11 @@
     if (!needs || needs.available) {
       return null;
     }
+    const missing = needs.missing ?? [];
     return {
-      reason: needs.reason,
-      details: workspaceNeedsDetails(needs.missing ?? []),
+      reason: workspaceNeedsReason(missing, needs.installCommand),
+      command: needs.installCommand,
+      details: workspaceNeedsDetails(missing),
     };
   }
   function updateFault(machine: Machine) {
@@ -327,6 +334,8 @@
           <RowFault again={updateFailed?.again} reason={updateFailed?.reason} />
           <!-- What a delegate's workspace needs here and the machine lacks: how to install it. -->
           <RowFault
+            command={needs?.command}
+            copyLabel={workspaceNeedsWords.copyCommand}
             data-workspace-needs
             details={needs?.details}
             reason={needs?.reason}

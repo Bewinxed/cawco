@@ -11,14 +11,18 @@
  *   socat on the system path and no git on PATH names all three with the
  *   install command of the package manager there (apt, dnf, pacman, apk;
  *   none known: the person's own); a Mac lacking git names git alone, by
- *   Homebrew; every tool there: nothing missing.
+ *   Homebrew; every tool there: nothing missing. The install command is
+ *   the refusal's last line, alone; Show details names each folder looked
+ *   in that is there, once.
  * - B: on a scratch fleet whose agent runs with git taken off its PATH, the
  *   machine's report says so, and a delegate from its home folder is
- *   refused in the report's own words before its workspace is cut.
+ *   refused in the report's own words, passed on whole by the hub, the
+ *   install command its last line with nothing after it.
  * - C: in a project, the folder read before a cut (`CONTROL_REPO_ROOT`) is
  *   refused first in those words: what the machine lacks before the folder.
- * - D: the machine's row in the dashboard shows those words, drawn, and
- *   Show details says where each tool was looked for.
+ * - D: the machine's row in the dashboard shows those words, drawn, the
+ *   install command in a well of its own with Copy, and Show details says
+ *   where each tool was looked for.
  *
  *   bun scripts/probe-kit/run.ts workspace-needs
  */
@@ -34,7 +38,9 @@ import {
 import type { MachineCapability } from "../../../packages/core/src/capabilities";
 import {
   workspaceNeedsDetails,
+  workspaceNeedsReason,
   workspaceNeedsRefusal,
+  workspaceNeedsWords,
 } from "../../../packages/core/src/words/workspace-needs";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
@@ -87,11 +93,12 @@ const legA = async ({ check }: Kit, scratch: string): Promise<void> => {
     if (manager === "apt-get") {
       console.log(`  the refusal on apt: ${needs.reason}`);
       check(
-        "A: the refusal names bubblewrap and socat for the walls, git for the checkout, and the one install line",
+        "A: the refusal names bubblewrap and socat for the walls, git for the checkout, and the one install line alone as its last line",
         Boolean(
           needs.reason?.includes("bubblewrap and socat, which") &&
           needs.reason.includes(", and git, which") &&
-          needs.reason.endsWith(`: ${command}`)
+          needs.reason.split("\n").at(-1) === command &&
+          needs.reason.split("\n").length === 2
         ),
         needs.reason ?? ""
       );
@@ -122,6 +129,19 @@ const legA = async ({ check }: Kit, scratch: string): Promise<void> => {
         systemPath: none,
       }) === "brew install git",
     mac.reason ?? ""
+  );
+  // A PATH as a person's grows: a folder twice, folders that are not there.
+  const apt = join(scratch, "apt-get");
+  const grown = workspaceNeeds(
+    linux(`${apt}:/no/such/folder:${apt}::${none}:/no/such/folder`)
+  );
+  const looked = grown.missing?.find(
+    (tool) => tool.command === "git"
+  )?.lookedIn;
+  check(
+    "A: a missing tool is looked for in each folder of PATH that is there, each named once",
+    looked === `${apt}:${none}`,
+    `${JSON.stringify(looked)} | ${workspaceNeedsDetails(grown.missing ?? [])}`
   );
   const walls = await standIns(join(scratch, "walls"), ["bwrap", "socat"]);
   const gitHere = await standIns(join(scratch, "git"), ["git", "apt-get"]);
@@ -216,8 +236,9 @@ const legsBC = async (
   const refused = await delegate(fleet, parent, home, "Bare home");
   console.log(`  the hub's refusal: ${refused}`);
   check(
-    "B: a delegate from the home folder is refused in the machine's report's words, naming git and how to install it",
-    Boolean(needs.reason && refused.includes(needs.reason)) &&
+    "B: a delegate from the home folder is refused in the machine's report's words, passed on whole, the install command its last line with nothing after it",
+    Boolean(needs.reason && refused.endsWith(needs.reason)) &&
+      refused.split("\n").at(-1) === needs.installCommand &&
       workspaceCount(fleet) === 0,
     `${refused.slice(0, 600)}; workspaces filed: ${workspaceCount(fleet)}`
   );
@@ -235,7 +256,7 @@ const legsBC = async (
   console.log(`  the hub's refusal in a project: ${first}`);
   check(
     "C: in a project, what the machine lacks is said before its folder is read",
-    Boolean(needs.reason && first.includes(needs.reason)) &&
+    Boolean(needs.reason && first.endsWith(needs.reason)) &&
       !existsSync(join(folder, ".git")) &&
       workspaceCount(fleet) === 0,
     `${first.slice(0, 600)}; ${folder}/.git ${existsSync(join(folder, ".git")) ? "exists" : "absent"}`
@@ -257,6 +278,12 @@ const rowNeeds = (page: Page) =>
       details:
         fault?.querySelector('[data-slot="details"]')?.textContent?.trim() ??
         null,
+      command:
+        fault?.querySelector('[data-slot="command"] code')?.textContent ?? null,
+      copy:
+        fault
+          ?.querySelector('[data-slot="command"] button')
+          ?.getAttribute("aria-label") ?? null,
     };
   }, MACHINE);
 
@@ -300,15 +327,31 @@ const legD = async (
   const drawn = await shownBox(page, selector);
   const said = await rowNeeds(page);
   console.log(`  the row says: ${said.reason}`);
+  console.log(`  its command well: ${said.command} [${said.copy}]`);
   kit.check(
     "D: the machine's row shows the report's words, drawn in the window",
-    said.reason === needs.reason &&
+    said.reason ===
+      workspaceNeedsReason(needs.missing ?? [], needs.installCommand) &&
       drawn !== null &&
       drawn.width > 0 &&
       drawn.height > 0 &&
       drawn.top >= 0 &&
       drawn.bottom <= drawn.windowHeight,
     `${JSON.stringify(drawn)} ${said.reason}`
+  );
+  const well = await shownBox(
+    page,
+    `li[data-machine="${MACHINE}"] [data-workspace-needs] [data-slot="command"] code`
+  );
+  kit.check(
+    "D: the install command stands in its own well, whole, with Copy beside it, nothing after it",
+    said.command === needs.installCommand &&
+      said.copy === workspaceNeedsWords.copyCommand &&
+      !said.reason?.includes(needs.installCommand) &&
+      well !== null &&
+      well.width > 0 &&
+      well.bottom <= well.windowHeight,
+    `${said.command} [${said.copy}] ${JSON.stringify(well)}`
   );
   await page
     .locator(`li[data-machine="${MACHINE}"] [data-workspace-needs]`)
@@ -320,9 +363,15 @@ const legD = async (
     )
     .waitFor();
   const shown = await rowNeeds(page);
+  console.log(`  Show details: ${shown.details}`);
+  const folders = (needs.missing ?? []).flatMap((tool) =>
+    tool.lookedIn.split(":")
+  );
   kit.check(
-    "D: Show details says where each missing tool was looked for",
-    shown.details === workspaceNeedsDetails(needs.missing ?? []),
+    "D: Show details names each folder looked in that is there, once",
+    shown.details === workspaceNeedsDetails(needs.missing ?? []) &&
+      folders.every(existsSync) &&
+      new Set(folders).size === folders.length,
     shown.details ?? ""
   );
 };

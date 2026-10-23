@@ -48490,7 +48490,7 @@
             "type": "string"
           },
           "lookedIn": {
-            "description": "Where it was looked for: the dirs, `:`-joined.",
+            "description": "Every folder it was looked for in that is there, each once, in the order searched, `:`-joined as a PATH is.",
             "type": "string"
           },
           "need": {

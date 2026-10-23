@@ -14,6 +14,8 @@
  * before its walls go up (boundary.ts `ensure`). It is read fresh each time:
  * a few lookups, so a tool installed a second ago counts at once.
  */
+import { statSync } from "node:fs";
+import { delimiter } from "node:path";
 import { workspaceNeedsRefusal } from "@cawco/core";
 import type {
   MachineCapability,
@@ -78,27 +80,48 @@ export const packageInstall = (
   return manager?.[1](packages.join(" "));
 };
 
+/** A tool a workspace needs here, with the PATH it is looked for on. */
+interface Needed {
+  command: string;
+  need: WorkspaceTool["need"];
+  package: string;
+  searched: string;
+}
+
 /** Every tool a workspace needs here, `need` alone when given. */
 const toolsFor = (
   where: ToolPlaces,
   need: WorkspaceTool["need"] | undefined
-): WorkspaceTool[] =>
+): Needed[] =>
   [
     ...(where.platform === "linux"
-      ? WALLS.map(([command, pkg]): WorkspaceTool => ({
+      ? WALLS.map(([command, pkg]): Needed => ({
           command,
           package: pkg,
           need: "walls",
-          lookedIn: where.systemPath,
+          searched: where.systemPath,
         }))
       : []),
     {
       command: "git",
       package: "git",
       need: "checkout" as const,
-      lookedIn: where.path,
+      searched: where.path,
     },
   ].filter((tool) => need === undefined || tool.need === need);
+
+/** The folders of `searched` that are there, each once, in its order: where a missing tool was looked for. */
+const foldersOf = (searched: string): string[] => [
+  ...new Set(
+    searched
+      .split(delimiter)
+      .filter(
+        (dir) =>
+          dir.length > 0 &&
+          (statSync(dir, { throwIfNoEntry: false })?.isDirectory() ?? false)
+      )
+  ),
+];
 
 /**
  * The `workspace` capability: whether this machine has what a delegate's
@@ -111,9 +134,12 @@ export const workspaceNeeds = (
   where: ToolPlaces = here(),
   need?: WorkspaceTool["need"]
 ): MachineCapability => {
-  const missing = toolsFor(where, need).filter(
-    (tool) => !Bun.which(tool.command, { PATH: tool.lookedIn })
-  );
+  const missing = toolsFor(where, need)
+    .filter((tool) => !Bun.which(tool.command, { PATH: tool.searched }))
+    .map(({ searched, ...tool }): WorkspaceTool => ({
+      ...tool,
+      lookedIn: foldersOf(searched).join(":"),
+    }));
   if (missing.length === 0) {
     return { id: "workspace", available: true, installCommand: "" };
   }
