@@ -4542,11 +4542,12 @@ export const threadMessageTasks = sqliteTable(
 
 /** Who a routine's run goes to: a fresh delegate of its type, or the project's lead. */
 /**
- * What a run starts: a fresh delegate, a message to the project's Caw, or
- * the project's memory curator (memory.ts), a delegate in the `curator`
- * role that only the hub makes.
+ * What a run starts: a fresh delegate, a fresh orchestrator (a session that
+ * may delegate, in the project's checkout: routines.ts `fireOrchestrator`),
+ * a message to the project's Caw, or the project's memory curator
+ * (memory.ts), a delegate in the `curator` role that only the hub makes.
  */
-export type RoutineTarget = "delegate" | "lead" | "curator";
+export type RoutineTarget = "delegate" | "orchestrator" | "lead" | "curator";
 
 /**
  * A routine (Projects spec §5.5, routines.ts): a prompt the hub runs on a

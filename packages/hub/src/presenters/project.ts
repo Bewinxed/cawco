@@ -205,9 +205,23 @@ const keptWords = (routine: RoutineView, now: number): string => {
     : ` · turns off ${ahead(routine.expiresAt, now)} unless kept`;
 };
 
+/** What a routine's run starts, in words. */
+const targetWords = (routine: RoutineView): string => {
+  const typed = routine.delegateType ? ` of type ${routine.delegateType}` : "";
+  switch (routine.target) {
+    case "lead":
+      return "messages Caw";
+    case "orchestrator":
+      return `an orchestrator${typed} in the project's checkout, which delegates its work`;
+    case "delegate":
+    case "curator":
+      return `a delegate${typed}, lands ${routine.lands}`;
+  }
+};
+
 /** One routine, its schedule and newest runs; its name its link, which the person's dashboard draws as its chip. */
 const routineLines = (routine: RoutineView, now: number): string[] => [
-  `- ${routineLink(routine.id, routine.name)} ${handle(routine.id)} · ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · ${routine.target === "lead" ? "messages Caw" : `a delegate${routine.delegateType ? ` of type ${routine.delegateType}` : ""}, lands ${routine.lands}`}${keptWords(routine, now)}${routine.dailyCapUsd === null ? "" : ` · $${routine.dailyCapUsd} a day`}${routine.budget ? ` · each run ${valueWords(routine.budget)}` : ""}`,
+  `- ${routineLink(routine.id, routine.name)} ${handle(routine.id)} · ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · ${targetWords(routine)}${keptWords(routine, now)}${routine.dailyCapUsd === null ? "" : ` · $${routine.dailyCapUsd} a day`}${routine.budget ? ` · each run ${valueWords(routine.budget)}` : ""}`,
   `  Prompt: ${quote(routine.prompt, 400)}`,
   ...(routine.runs.length > 0
     ? routine.runs.map((run) => runLine(run, routine.timeZone, now))

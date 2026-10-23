@@ -684,7 +684,10 @@ export const createRoutines = ({
     if (routine.target === "curator" && !routine.projectId) {
       return "The memory curator reads its project's inbox, so it needs a project.";
     }
-    return routine.target === "delegate" && !routine.projectId && standalone
+    return (routine.target === "delegate" ||
+      routine.target === "orchestrator") &&
+      !routine.projectId &&
+      standalone
       ? "A routine in no project runs in the hub's own checkout, and this hub runs from a release build, which has none. Give the routine a project."
       : undefined;
   };
@@ -988,6 +991,59 @@ export const createRoutines = ({
   };
 
   /**
+   * An orchestrator run (decision page workflows-future: "A routine can start
+   * an orchestrator"): a fresh session that may delegate, briefed with the
+   * routine's prompt and the output contract, run with host scope in the
+   * project's checkout (the hub's own for a routine in no project), where it
+   * cuts nothing and lands nothing itself: its delegates cut their own
+   * workspaces. It is background work (work-items.ts `backgroundOf`), so it
+   * outlives whoever made the routine, and its end is read as a delegate
+   * run's is.
+   */
+  const fireOrchestrator = async (
+    routine: RoutineRow,
+    run: RoutineRunRow
+  ): Promise<void> => {
+    const place = await placeWithin(routine);
+    if (typeof place === "string") {
+      store.setRun(run.id, {
+        state: "skipped",
+        reason: place,
+        endedAt: new Date(),
+      });
+      console.log(`[routines] ${routine.name} (${run.slot}) skipped: ${place}`);
+      drain(routine.id);
+      return;
+    }
+    const label = slotLabel(run.slot, routine.timeZone);
+    const type = await runType(routine);
+    const begun = await workItems.startForHub(
+      {
+        title: routine.name,
+        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. You orchestrate it: delegate its work, read your delegates' reports, and decide. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${CONTRACT}`,
+        ...(type ? { type } : {}),
+        canDelegate: true,
+        host: true,
+        ...(routine.budget ? { budget: routine.budget } : {}),
+        cwd: place.cwd,
+        machineId: place.machineId,
+      },
+      routineParent({
+        id: routine.id,
+        name: routine.name,
+        projectId: routine.projectId,
+        cwd: place.cwd,
+        machineId: place.machineId,
+      })
+    );
+    store.setRun(run.id, { state: "running", workItemId: begun.item.id });
+    running.add(begun.item.instanceId);
+    console.log(
+      `[routines] ${routine.name} (${run.slot}, attempt ${run.attempt}): orchestrator, work item ${begun.item.id}`
+    );
+  };
+
+  /**
    * A lead run: the slot noted in the routine's thread, and Caw woken there.
    * It runs until Caw's `routine_result` for it, or until the turn that took
    * its wake ends without one ({@link leadTurnEnded}).
@@ -1065,6 +1121,8 @@ export const createRoutines = ({
       go = fireLead(routine, run);
     } else if (routine.target === "curator") {
       go = fireCurator(routine, run);
+    } else if (routine.target === "orchestrator") {
+      go = fireOrchestrator(routine, run);
     } else {
       go = fireDelegate(routine, run);
     }
@@ -2312,11 +2370,11 @@ export const createRoutines = ({
     return [
       tool(
         "routine_create",
-        `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'lead' messages Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first.`,
+        `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'orchestrator': a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. target 'lead' messages Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first.`,
         {
           name: z.string().describe("3–6 plain words."),
           prompt: z.string().describe("What each run does."),
-          target: z.enum(["delegate", "lead"]),
+          target: z.enum(["delegate", "orchestrator", "lead"]),
           ...scheduleParameters,
           delegate_type: z.string().optional(),
           lands: z
@@ -2472,7 +2530,11 @@ const answer = (error: unknown) => {
   throw error;
 };
 
-const TARGET = t.Union([t.Literal("delegate"), t.Literal("lead")]);
+const TARGET = t.Union([
+  t.Literal("delegate"),
+  t.Literal("orchestrator"),
+  t.Literal("lead"),
+]);
 
 /** The dashboard's routes for routines (its Routines view and its routine form). */
 export const routineRoutes = (routines: Routines) =>

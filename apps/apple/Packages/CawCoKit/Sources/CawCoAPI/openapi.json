@@ -11980,6 +11980,7 @@
                     "type": "string",
                     "enum": [
                       "delegate",
+                      "orchestrator",
                       "lead"
                     ]
                   },
@@ -42054,12 +42055,13 @@
         ]
       },
       "RoutineTarget": {
-        "description": "What a run starts: a fresh delegate, a message to the project's Caw, or\nthe project's memory curator (memory.ts), a delegate in the `curator`\nrole that only the hub makes.",
+        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's Caw, or the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes.",
         "type": "string",
         "enum": [
           "curator",
           "delegate",
-          "lead"
+          "lead",
+          "orchestrator"
         ]
       },
       "ConnectionView": {

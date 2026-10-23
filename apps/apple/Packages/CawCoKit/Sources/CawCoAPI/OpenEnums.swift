@@ -6648,6 +6648,7 @@ public enum OpenEnums {
         case curator
         case delegate
         case lead
+        case orchestrator
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -6656,6 +6657,7 @@ public enum OpenEnums {
             case "curator": self = .curator
             case "delegate": self = .delegate
             case "lead": self = .lead
+            case "orchestrator": self = .orchestrator
             default: self = .unrecognized(rawValue)
             }
         }
@@ -6665,6 +6667,7 @@ public enum OpenEnums {
             case .curator: "curator"
             case .delegate: "delegate"
             case .lead: "lead"
+            case .orchestrator: "orchestrator"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -6673,7 +6676,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.curator, .delegate, .lead]
+        public static let allCases: [Self] = [.curator, .delegate, .lead, .orchestrator]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

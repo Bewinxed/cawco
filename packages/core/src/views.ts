@@ -145,7 +145,7 @@ export interface ViewRoutine {
   /** Newest first. */
   runs: ViewRoutineRun[];
   /** A fresh delegate each run, a message to Caw, or the project's memory curator. */
-  target: "delegate" | "lead" | "curator";
+  target: "delegate" | "orchestrator" | "lead" | "curator";
   timeZone: string;
 }
 

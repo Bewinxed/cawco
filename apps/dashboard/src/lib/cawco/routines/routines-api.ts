@@ -54,7 +54,7 @@ export interface Routine {
   projectId: string | null;
   prompt: string;
   runs: RoutineRun[];
-  target: "delegate" | "lead" | "curator";
+  target: "delegate" | "orchestrator" | "lead" | "curator";
   threadId: string | null;
   timeZone: string;
 }
