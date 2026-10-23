@@ -10,7 +10,9 @@
  * waits out its 10 s for one; nothing here reads a picture.
  *
  * (a) The person opens A over a newer X; the agent shows B and deletes it:
- *     the panel shows A again, and the delete answers A.
+ *     the panel closes, A does not come back, and the delete answers null.
+ *     Only the person's own open, or an agent's show with its ask, brings
+ *     an artifact forward.
  * (b) The person closes the panel; the agent shows G and deletes it: the
  *     panel is closed, and the delete answers null.
  * (c) The person has C in front (newest, over X and A) and Removes it: the
@@ -169,13 +171,13 @@ const run = async (kit: Kit) => {
   const afterB = await panel();
   const ids = { A: a, X: x, B: b };
   kit.check(
-    "(a) the agent shows B over the person's A, deletes B: the panel shows A",
-    shownB === b && afterB === a,
+    "(a) the agent shows B over the person's A, deletes B: the panel closes, nothing comes forward",
+    shownB === b && afterB === null,
     `before the delete ${label(ids, shownB)}, after ${label(ids, afterB)}`
   );
   kit.check(
-    "(a) artifact_delete answers what is in front after: A",
-    deletedB.showing === a,
+    "(a) artifact_delete answers null",
+    deletedB.showing === null,
     `showing ${label(ids, deletedB.showing)}: ${deletedB.said.slice(0, 160)}`
   );
 

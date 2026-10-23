@@ -1454,13 +1454,10 @@ export interface ArtifactServiceDeps {
    * unless named: another session of its delegation tree shows it in its
    * own) at a fresh revision (the open frame every view of that session
    * hears); why not, when its server could not be started. Whether a view
-   * put it on screen is that view's word ({@link Artifacts.shown}). One the
-   * person opened is kept as what they have in front
-   * ({@link ArtifactServiceDeps.personShown}).
+   * put it on screen is that view's word ({@link Artifacts.shown}).
    */
   open: (
     artifact: ArtifactRow,
-    by: PanelHand,
     panel?: string | null
   ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
   /** The workspace a session runs in, by id; undefined outside one. */
@@ -1480,12 +1477,6 @@ export interface ArtifactServiceDeps {
     | { html: string; program?: BuiltProgram }
     | { refused: string; status: ArtifactRefusal["status"] }
   >;
-  /**
-   * The artifact the person last opened in session `instanceId`'s panel
-   * themselves, kept until the panel closes; undefined when they opened none
-   * since. An agent's show never changes it.
-   */
-  personShown: (instanceId: string) => string | undefined;
   /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
    * person something (`comment_reply`'s `asks`): its push, grouped per
@@ -2029,13 +2020,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return meta.get("draft") !== true && meta.get(HANDED) !== true;
     });
 
-  /** What the person last opened in the session's panel themselves, while the session still has it. */
-  const personHad = (instance: InstanceRow): ArtifactRow | undefined => {
-    const id = deps.personShown(instance.id);
-    const row = id === undefined ? undefined : db.get(id);
-    return row?.instanceId === instance.id ? row : undefined;
-  };
-
   /**
    * Whose panel a create puts the artifact in: the caller's own, or with
    * `to: "parent"` the session that started it; refused for a session with
@@ -2207,7 +2191,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     holding?: { fresh: boolean; next: ArtifactRow } | null
   ): ReturnType<typeof show> => {
     if (!handing(making)) {
-      const shown = await show(row, "agent");
+      const shown = await show(row);
       await ready?.();
       return shown;
     }
@@ -3201,13 +3185,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const show = async (
     row: ArtifactRow,
-    by: PanelHand,
     panel = row.instanceId
   ): Promise<
     | { opened: true; started: true }
     | { opened: false; started: boolean; why: string }
   > => {
-    const published = await deps.open(row, by, panel);
+    const published = await deps.open(row, panel);
     if (!published.ok) {
       return { opened: false, why: published.error, started: false };
     }
@@ -6057,7 +6040,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }) as ArtifactRow;
       stampMeta(next, null);
       if (inPanel(next)) {
-        await show(next, "agent");
+        await show(next);
       }
       askedNow(instance, next.id);
       return { id: next.id, revision: next.revision, spec };
@@ -6486,9 +6469,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * waits for a view to have it on screen ({@link Opened}); a refusal when
      * its server could not be started. The session shows its own, one it
      * made, or another session's of its delegation tree ({@link viewable}),
-     * at the agent's call or the person's: what they open is what the panel
-     * goes back to when the agent takes away something it showed over it.
-     * Another session's opens in the caller's panel as it stands, never the
+     * at the agent's call or the person's. Another session's opens in the caller's panel as it stands, never the
      * owner's, and nothing of it changes. The owner's show of one with a held
      * next version (or of that version, by its id) opens the next version
      * ({@link promote}); the person's shows what the panel has.
@@ -6511,7 +6492,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (next) {
         row = await promote(row, next);
       }
-      const shown = await show(row, by, instance.id);
+      const shown = await show(row, instance.id);
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }
@@ -6565,10 +6546,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * its panel showed it:
      * - the person's Remove shows the session's next newest artifact (a draft
      *   canvas still in the composer is not one), as closing a tab does;
-     * - the agent's delete puts back what the person had in front before it
-     *   ({@link ArtifactServiceDeps.personShown}), or closes the panel: an
-     *   agent taking something away never brings a different artifact
-     *   forward as if it wanted the person there.
+     * - the agent's delete closes the panel: an agent taking something away
+     *   never brings another artifact forward, not even one the person
+     *   opened earlier, as if it wanted the person there (owner: "when u
+     *   deleted the preview the preview pane switched to another preview so
+     *   as a user i'm thinking u need someting from me on that view"). Only
+     *   the person's own open, or an agent's show with its ask, comes
+     *   forward.
      * A session up the delegation tree of a writer whose work item ended
      * removes that writer's too ({@link deletable}); the writer's panel that
      * showed it closes, else it hears its artifacts again.
@@ -6611,8 +6595,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           showing: now ? { id: now.id, kind: now.kind, name: now.name } : null,
         };
       }
-      const next = by === "person" ? nextNewest(instance) : personHad(instance);
-      if (next && (await deps.open(next, by)).ok) {
+      const next = by === "person" ? nextNewest(instance) : undefined;
+      if (next && (await deps.open(next)).ok) {
         return { showing: { id: next.id, kind: next.kind, name: next.name } };
       }
       await deps.close(instance.id);

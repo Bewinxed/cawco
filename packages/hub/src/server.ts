@@ -11483,14 +11483,6 @@ export const createServer = (
     return frame;
   };
 
-  /**
-   * What the person last opened in each session's panel themselves (a press
-   * in the panel, the artifact menu, a pin's link), until the panel closes:
-   * what an agent's delete of something it showed over it goes back to
-   * (artifacts/service.ts `remove`). An agent's show never changes it.
-   */
-  const personShown = new Map<string, string>();
-
   const closePreview = async (
     instanceId: string
   ): Promise<
@@ -11502,7 +11494,6 @@ export const createServer = (
       closed: { instanceId, state: "closed" },
     } as const;
     nextPreviewGeneration(instanceId);
-    personShown.delete(instanceId);
     const target = previewTargets.get(instanceId);
     if (!target) {
       return closed;
@@ -13302,7 +13293,7 @@ export const createServer = (
     tree: (instance) => treeSessions(db, instance),
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
-    open: async (artifact, by, panel = artifact.instanceId) => {
+    open: async (artifact, panel = artifact.instanceId) => {
       if (panel === null) {
         return {
           ok: false,
@@ -13318,12 +13309,8 @@ export const createServer = (
       if (!opened.ok) {
         return { ok: false, error: opened.error };
       }
-      if (by === "person") {
-        personShown.set(panel, artifact.id);
-      }
       return { ok: true, revision: opened.frame.revision };
     },
-    personShown: (instanceId) => personShown.get(instanceId),
     page: keptArtifactPage,
     graphLinks: (projectId, name, cards) =>
       decisions.linksOf(projectId, name, cards),

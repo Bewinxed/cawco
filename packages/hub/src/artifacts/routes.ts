@@ -639,7 +639,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     )
     // Removes the artifact (the panel's Remove; artifact_delete with by=agent).
     // The panel that showed it shows the next newest after the person's
-    // Remove, what the person had before after the agent's, or nothing.
+    // Remove, and closes after the agent's.
     .delete(
       "/api/instances/:id/artifacts/:artifact",
       { query: handQuery },
