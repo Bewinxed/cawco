@@ -94,6 +94,17 @@
   "linter": {
     "rules": {
       "style": { "useDefaultSwitchClause": "off" },
+      // Two of Biome's recommended rules whose only fix ("unsafe") changes
+      // what correct code does, and which they report on 103 places that
+      // mean it: Math.max/min over strings, which they cannot tell from
+      // numbers ("ignores operands that are obviously not numeric", which a
+      // string is not; PreviewPane.svelte, comment-rows.ts), and innerText,
+      // which the probe specs read for the text a person sees ("`textContent`
+      // and `innerText` are not equivalent",
+      // biomejs.dev/linter/rules/use-dom-node-text-content). Off, so no fix
+      // pass rewrites them.
+      "complexity": { "useMathMinMax": "off" },
+      "performance": { "useDomNodeTextContent": "off" },
       // A label wrapping a kit control wraps its input: each of these renders
       // one (ui/input, ui/textarea, ui/checkbox, ui/switch's button,
       // ui/native-select). The rule
@@ -132,21 +143,6 @@
       "linter": {
         "rules": {
           "nursery": { "noTailwindRawColors": "error" },
-        },
-      },
-    },
-    {
-      // Biome 2.6.2's Tailwind class parser stops at the variant `delta--1:`
-      // (lib/tokens/variants.css, `data-delta="-1"`): "Expected a value but
-      // instead found '-'", a parse error that fails the file. No Tailwind
-      // rule reads these two until it parses them.
-      "includes": [
-        "apps/dashboard/src/lib/cawco/workspace/PaneDeck.svelte",
-        "apps/dashboard/src/lib/cawco/workspace/PaneLeaf.svelte",
-      ],
-      "linter": {
-        "rules": {
-          "nursery": { "noTailwindRawColors": "off" },
         },
       },
     },

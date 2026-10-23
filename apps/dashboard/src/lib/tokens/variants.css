@@ -251,9 +251,9 @@
 @custom-variant cell-claude (&[data-cell="claude"]);
 @custom-variant covered-true (&[data-covered="true"]);
 @custom-variant delegate-tail-kind-stream (&[data-delegate-tail-kind="stream"]);
-@custom-variant delta--1 (&[data-delta="-1"]);
 @custom-variant delta-0 (&[data-delta="0"]);
 @custom-variant delta-1 (&[data-delta="1"]);
+@custom-variant delta-minus-1 (&[data-delta="-1"]);
 @custom-variant dir-end (&[data-dir="end"]);
 @custom-variant dir-start (&[data-dir="start"]);
 @custom-variant direction-vertical (&[data-direction="vertical"]);

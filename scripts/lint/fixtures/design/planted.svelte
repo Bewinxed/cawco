@@ -29,3 +29,6 @@
   <span class="group-not-data-ready:opacity-50"></span>
 </div>
 <span>{wait}</span>
+<svg aria-hidden="true" viewBox="0 0 1 1"
+  ><path fill="#ec4899" stroke="currentColor" d="M0 0" /></svg
+>

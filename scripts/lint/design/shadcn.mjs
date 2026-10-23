@@ -1,8 +1,11 @@
 // The design system's class and style rules @shadcn/lint 0.2.3 held for the
 // dashboard under ESLint, moved to Golar with the options they ran with
 // (apps/dashboard/eslint.config.mjs at the move). Biome holds no-raw-colors
-// (biome.jsonc); these are the ones Biome's rules cannot hold:
+// for classes (biome.jsonc); these are the ones Biome's rules cannot hold:
 //
+// - no-raw-svg-colors: no-raw-colors' other half, a colour written into an
+//   element's `fill`, `stroke`, `color`, `stop-color`, `flood-color` or
+//   `lighting-color`.
 // - no-unknown-classes: a class Tailwind writes no CSS for, and the project's
 //   own CSS declares no selector for ("Classes Tailwind cannot generate",
 //   shadcn-ui/lint docs/rules/no-unknown-classes.md). A colour token the
@@ -312,6 +315,68 @@ function declarationsIn(css) {
     const property = colon === -1 ? "" : declaration.slice(0, colon).trim();
     return property ? [{ property, value: declaration.slice(colon + 1) }] : [];
   });
+}
+
+/** The SVG and HTML attributes that paint a colour (shadcn's no-raw-colors). */
+const COLOR_ATTRIBUTES = new Set([
+  "fill",
+  "stroke",
+  "color",
+  "stop-color",
+  "flood-color",
+  "lighting-color",
+  "stopColor",
+  "floodColor",
+  "lightingColor",
+]);
+
+/**
+ * Each colour attribute on an element that names a colour outright: the
+ * half of @shadcn/lint's no-raw-colors Biome's noTailwindRawColors does not
+ * hold ("The rule checks literal strings in `fill`, `stroke`, `color`,
+ * `stopColor`, `floodColor`, and `lightingColor` on intrinsic elements",
+ * shadcn-ui/lint docs/rules/no-raw-colors.md). `currentColor` and a theme
+ * variable pass.
+ */
+/** A colour attribute's text, when it is written out (text, or a string in braces). */
+function writtenColor(attribute) {
+  const parts = attribute.value === true ? [] : [attribute.value].flat();
+  if (parts.length > 0 && parts.every((part) => part.type === "Text")) {
+    return parts.map((part) => part.raw).join("");
+  }
+  const literal =
+    parts.length === 1 && parts[0].type === "ExpressionTag"
+      ? unwrap(parts[0].expression)
+      : null;
+  return literal?.type === "Literal" && typeof literal.value === "string"
+    ? literal.value
+    : null;
+}
+
+export function rawSvgColors(model) {
+  if (model.kind !== "svelte") {
+    return [];
+  }
+  const findings = [];
+  eachNode(model, (node) => {
+    if (node.type !== "RegularElement" && node.type !== "SvelteElement") {
+      return;
+    }
+    for (const attribute of node.attributes ?? []) {
+      const text =
+        attribute.type === "Attribute" && COLOR_ATTRIBUTES.has(attribute.name)
+          ? writtenColor(attribute)
+          : null;
+      if (text !== null && hasRawColor(text)) {
+        findings.push({
+          start: attribute.start,
+          end: attribute.end,
+          message: `"${attribute.name}" paints the raw colour "${text}". Use currentColor with a text colour class, or a theme variable (var(--…)).`,
+        });
+      }
+    }
+  });
+  return findings;
 }
 
 /** Each inline style that sets a property, or a custom property to a raw colour. */
