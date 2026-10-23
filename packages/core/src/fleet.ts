@@ -1090,12 +1090,15 @@ export interface FleetSyncReport {
     plugins?: Record<string, string>;
   };
   /**
-   * The fleet's hooks, by the same id the hub keeps them under. Absent from a
-   * harness's own report when it converges none (OpenCode's, pi's); a
-   * machine's merged report always carries it. `failed` covers three different machine-local
-   * facts — a hand-edited script, a validation the hub already passed but this
-   * row failed again, or a project hook with no checkout here — and `detail`
-   * is what tells them apart.
+   * The fleet's hooks, by the same id the hub keeps them under (a placed
+   * copy's `<id>@<place id>`). Claude Code's report says what its sync
+   * registered; OpenCode's and pi's whether CawCo runs the hook there at all,
+   * `unsupported` with why for an event or handler that harness has no point
+   * for (core `hookUnsupported`). A machine's merged report holds each hook's
+   * worst, every harness's word in its `detail`. `failed` covers three
+   * different machine-local facts — a hand-edited script, a validation the
+   * hub already passed but this row failed again, or a project hook with no
+   * checkout here — and `detail` is what tells them apart.
    */
   hooks?: Record<string, FleetItemState>;
   marketplaces: Record<string, FleetItemState>;

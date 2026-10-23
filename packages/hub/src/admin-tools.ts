@@ -831,6 +831,9 @@ export function adminTools() {
       "the fleet's hooks: Claude Code hooks synced to every machine, or to one " +
         "project's sessions. A hook attaches a command, prompt or agent to a lifecycle event " +
         "(SessionStart, PreToolUse, PostToolUse, Stop, etc.) and runs unattended. " +
+        "OpenCode runs command hooks on PreToolUse, PostToolUse and PostToolUseFailure, " +
+        "pi on those and SessionStart, UserPromptSubmit and Stop, matched on Claude's tool " +
+        "names; each machine's row says unsupported for the rest. " +
         "'list' answers the hooks and the templates.",
       ["list"],
       ["create", "update", "remove"],

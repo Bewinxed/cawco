@@ -1,6 +1,7 @@
 /** Host-only pi turns. This module is absent from the agent process graph. */
 import type {
   FleetMcpChange,
+  HookEvent,
   ModelTurnUsage,
   PermissionResult,
   SentMessage,
@@ -17,6 +18,7 @@ import {
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
+  hookToolCall,
   INSTALL_SESSION_CREDENTIAL,
   LEAD_GATED_TOOLS,
   MESSAGES_READ,
@@ -64,6 +66,8 @@ import {
 import { type Boundary, boundaryCommand } from "../boundary";
 import type { BrowserDoor } from "../browser/door";
 import { callDelegationTool, delegationTools } from "../delegation";
+import { hooksAt, readFleetHarnessSet } from "../fleet-harness-set";
+import { type HookPlace, runFleetHooks } from "../fleet-hook-run";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import type { McpGate } from "../mcp-gate";
@@ -492,6 +496,181 @@ class FleetMcp {
           (skipped[name] ? `not taken: ${skipped[name]}` : undefined) ??
           (this.#held.has(name) ? "kept" : "not taken"),
       })),
+    };
+  }
+}
+
+/** What CawCo's fleet hooks put in a pi session's conversation, by this custom type. */
+const FLEET_HOOK_MESSAGE = "cawco-fleet-hook";
+
+/** A tool result's text, for a PostToolUseFailure hook's `error`. */
+const resultText = (content: readonly { type: string; text?: string }[]) =>
+  content.flatMap((block) => (block.text ? [block.text] : [])).join("\n");
+
+/**
+ * The fleet's hooks on pi (core `HOOK_EVENTS_ON.pi`), as an inline
+ * extension: the fleet's own and those of the project placed at the
+ * session's folder (fleet-harness-set.ts `hooksAt`), read again at each
+ * event, so a change reaches a running session. Each command hook runs as
+ * Claude Code runs it (fleet-hook-run.ts), in a workspace inside its
+ * boundary:
+ *
+ * - PreToolUse on `tool_call`: a block refuses the call, its reason pi's
+ *   error for it ("`tool_call` can mutate input or block execution", pi
+ *   docs/extensions.md);
+ * - PostToolUse and PostToolUseFailure on `tool_result`, by its `isError`:
+ *   what a hook says (a block's reason, `additionalContext`) is added to the
+ *   result the model reads, as Claude Code shows the model a PostToolUse
+ *   hook's stderr;
+ * - SessionStart on `session_start`, its reason the matcher's value: what it
+ *   says goes with the session's first prompt;
+ * - UserPromptSubmit on `before_agent_start` for a person's prompt: what it
+ *   says goes with the prompt; a block ends the run before its first
+ *   request ("An abort requested while the run was starting, e.g. during
+ *   before_agent_start, stops it", pi 1.3.0 agent-session.js), its reason
+ *   shown;
+ * - Stop on `agent_end`: a block sends its reason as a message that starts
+ *   another turn, whose Stop hooks are told `stop_hook_active`, as Claude
+ *   Code tells them.
+ *
+ * It comes before the lead's gate, so a call a hook refuses is never put to
+ * the hub.
+ */
+class FleetHooks {
+  readonly #place: HookPlace;
+  /** What SessionStart hooks said, for the session's next prompt. */
+  readonly #pending: string[] = [];
+  /** The turn running now was started by a Stop hook's block. */
+  #stopActive = false;
+
+  constructor(place: HookPlace) {
+    this.#place = place;
+  }
+
+  async #run(
+    event: HookEvent,
+    match: string | undefined,
+    input: Record<string, unknown>,
+    context: { sessionManager: { getSessionId: () => string } }
+  ) {
+    return runFleetHooks(
+      "pi",
+      hooksAt(await readFleetHarnessSet(), this.#place.cwd),
+      event,
+      match,
+      input,
+      { ...this.#place, sessionId: context.sessionManager.getSessionId() }
+    );
+  }
+
+  extension(): ExtensionFactory {
+    return (pi) => {
+      pi.on("tool_call", async (event, context) => {
+        const call = hookToolCall("pi", event.toolName, event.input);
+        const verdict = await this.#run(
+          "PreToolUse",
+          call.name,
+          {
+            tool_name: call.name,
+            tool_input: call.input,
+            tool_use_id: event.toolCallId,
+          },
+          context
+        );
+        return verdict.block
+          ? { block: true, reason: verdict.block }
+          : undefined;
+      });
+      pi.on("tool_result", async (event, context) => {
+        const call = hookToolCall("pi", event.toolName, event.input);
+        const verdict = await this.#run(
+          event.isError ? "PostToolUseFailure" : "PostToolUse",
+          call.name,
+          {
+            tool_name: call.name,
+            tool_input: call.input,
+            tool_use_id: event.toolCallId,
+            ...(event.isError
+              ? { error: resultText(event.content) }
+              : { tool_response: event.content }),
+          },
+          context
+        );
+        const said = [verdict.block, verdict.context].filter(Boolean);
+        return said.length > 0
+          ? {
+              content: [
+                ...event.content,
+                { type: "text" as const, text: said.join("\n") },
+              ],
+            }
+          : undefined;
+      });
+      pi.on("session_start", async (event, context) => {
+        const verdict = await this.#run(
+          "SessionStart",
+          event.reason,
+          { source: event.reason },
+          context
+        );
+        if (verdict.context) {
+          this.#pending.push(verdict.context);
+        }
+      });
+      pi.on("before_agent_start", async (event, context) => {
+        if (event.messageType !== "user") {
+          return;
+        }
+        const verdict = await this.#run(
+          "UserPromptSubmit",
+          undefined,
+          { prompt: event.prompt },
+          context
+        );
+        if (verdict.block) {
+          context.abort();
+          return {
+            message: {
+              customType: FLEET_HOOK_MESSAGE,
+              content: `A fleet hook refused this prompt: ${verdict.block}`,
+              display: true,
+            },
+          };
+        }
+        const said = [...this.#pending.splice(0), verdict.context].filter(
+          Boolean
+        );
+        return said.length > 0
+          ? {
+              message: {
+                customType: FLEET_HOOK_MESSAGE,
+                content: said.join("\n\n"),
+                display: false,
+              },
+            }
+          : undefined;
+      });
+      pi.on("agent_end", async (_event, context) => {
+        const active = this.#stopActive;
+        this.#stopActive = false;
+        const verdict = await this.#run(
+          "Stop",
+          undefined,
+          { stop_hook_active: active },
+          context
+        );
+        if (verdict.block) {
+          this.#stopActive = true;
+          pi.sendMessage(
+            {
+              customType: FLEET_HOOK_MESSAGE,
+              content: verdict.block,
+              display: true,
+            },
+            { triggerTurn: true }
+          );
+        }
+      });
     };
   }
 }
@@ -1408,6 +1587,14 @@ export async function startPiHost(
       ]
     : [];
   const gate = spec.lead ? new PiLeadGate(ctx) : undefined;
+  // The fleet's hooks, and its folder's project's (`FleetHooks`); a fenced
+  // session runs none, as it takes no fleet MCP server.
+  const hooks = fenced
+    ? undefined
+    : new FleetHooks({
+        cwd: ctx.cwd,
+        ...(ctx.boundary ? { boundary: ctx.boundary } : {}),
+      });
   const resourceLoader = new DefaultResourceLoader({
     cwd: ctx.cwd,
     agentDir,
@@ -1415,6 +1602,7 @@ export async function startPiHost(
     extensionFactories: [
       tools.extension(await piHandoffTools(ctx.instanceId, credential)),
       ...mcp,
+      ...(hooks ? [hooks.extension()] : []),
       // Last, so its verdict is on the input the call runs with.
       ...(gate ? [gate.extension()] : []),
     ],

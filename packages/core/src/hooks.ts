@@ -350,33 +350,270 @@ export function hookMatcherKind(
 const SEPARATOR_NARROW = /\|/;
 const SEPARATOR_WIDE = /[|,]/;
 
+/**
+ * A matcher as a test with no rule left to apply: every value, one of a list
+ * of exact names, or a regular expression tested unanchored. What a harness
+ * that is not Claude Code runs a fleet hook's matcher by (agent
+ * fleet-harness-set.ts), so the three readings live here alone.
+ */
+export type HookMatchTest =
+  { all: true } | { exact: string[] } | { regex: string };
+
+export function hookMatchTest(
+  matcher: string | undefined,
+  event?: HookEvent
+): HookMatchTest {
+  const kind = hookMatcherKind(matcher, event);
+  const text = (matcher ?? "").trim();
+  if (kind === "all") {
+    return { all: true };
+  }
+  if (kind === "exact") {
+    const separator =
+      event && NARROW_EVENTS.has(event) ? SEPARATOR_NARROW : SEPARATOR_WIDE;
+    return {
+      exact: text
+        .split(separator)
+        .map((part) => part.trim())
+        .filter((part) => part !== ""),
+    };
+  }
+  return { regex: text };
+}
+
+/** Whether `value` passes a {@link HookMatchTest}; a regex that does not compile passes nothing. */
+export function hookTestPasses(test: HookMatchTest, value: string): boolean {
+  if ("all" in test) {
+    return true;
+  }
+  if ("exact" in test) {
+    return test.exact.includes(value);
+  }
+  try {
+    // Unanchored, exactly as Claude Code tests it — `Edit.*` really does match
+    // `NotebookEdit`, and the test box has to reproduce that, not correct it.
+    return new RegExp(test.regex).test(value);
+  } catch {
+    return false;
+  }
+}
+
 export function hookMatches(
   matcher: string | undefined,
   value: string,
   event?: HookEvent
 ): boolean {
-  const kind = hookMatcherKind(matcher, event);
-  if (kind === "all") {
-    return true;
-  }
-  const text = (matcher ?? "").trim();
-  if (kind === "exact") {
-    const separator =
-      event && NARROW_EVENTS.has(event) ? SEPARATOR_NARROW : SEPARATOR_WIDE;
-    return text
-      .split(separator)
-      .map((part) => part.trim())
-      .filter((part) => part !== "")
-      .includes(value);
-  }
-  try {
-    // Unanchored, exactly as Claude Code tests it — `Edit.*` really does match
-    // `NotebookEdit`, and the test box has to reproduce that, not correct it.
-    return new RegExp(text).test(value);
-  } catch {
-    return false;
-  }
+  return hookTestPasses(hookMatchTest(matcher, event), value);
 }
+
+/**
+ * The harnesses that run the fleet's hooks from CawCo's harness set (agent
+ * fleet-harness-set.ts): CawCo's OpenCode plugin and its inline pi
+ * extension. Claude Code runs them itself.
+ */
+export type HookHarness = "opencode" | "pi";
+
+/**
+ * The events each harness runs a command hook on, by the point it raises:
+ * OpenCode 2.0's plugin tool hooks, `execute.before` and `execute.after`
+ * ("Inspect or replace tool input before execution",
+ * opencode.ai/v2/docs/build/plugins); pi's extension events, `tool_call`
+ * ("can mutate input or block execution"), `tool_result`, `session_start`,
+ * `before_agent_start` and `agent_end` (pi 1.3.0 docs/extensions.md). Any
+ * other event is unsupported on that harness, and said so on the machine's
+ * row ({@link hookUnsupported}).
+ */
+export const HOOK_EVENTS_ON = {
+  opencode: ["PreToolUse", "PostToolUse", "PostToolUseFailure"],
+  pi: [
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "SessionStart",
+    "UserPromptSubmit",
+    "Stop",
+  ],
+} as const satisfies Record<HookHarness, readonly HookEvent[]>;
+
+/** One harness tool in Claude Code's words: its name, and its input's keys renamed to Claude Code's. */
+export interface HookToolName {
+  input?: Readonly<Record<string, string>>;
+  name: string;
+}
+
+/**
+ * Each harness's tools by Claude Code's names, which a fleet hook's matcher
+ * and its `tool_name` read, so `Bash` and `Edit|Write` mean the same on
+ * every harness. OpenCode 2.0's `shell`, `read`, `write`, `edit` (its
+ * `filePath`, `oldString`, `newString`, `replaceAll`), `patch`, `glob`,
+ * `grep`, `webfetch`, `websearch`, `subagent` and `skill`; pi 1.3.0's `bash`,
+ * `powershell`, `read`, `write` and `edit` (their `path`, and `edit`'s
+ * `edits` kept as they are), `ls`, `find` and `grep`. A tool not named here
+ * (an MCP tool, a plugin's or an extension's) is matched by its own name.
+ */
+export const HOOK_TOOL_NAMES = {
+  opencode: {
+    shell: { name: "Bash" },
+    read: { name: "Read", input: { filePath: "file_path" } },
+    write: { name: "Write", input: { filePath: "file_path" } },
+    edit: {
+      name: "Edit",
+      input: {
+        filePath: "file_path",
+        oldString: "old_string",
+        newString: "new_string",
+        replaceAll: "replace_all",
+      },
+    },
+    patch: { name: "Edit" },
+    glob: { name: "Glob" },
+    grep: { name: "Grep" },
+    webfetch: { name: "WebFetch" },
+    websearch: { name: "WebSearch" },
+    subagent: { name: "Agent" },
+    skill: { name: "Skill" },
+  },
+  pi: {
+    bash: { name: "Bash" },
+    powershell: { name: "PowerShell" },
+    read: { name: "Read", input: { path: "file_path" } },
+    write: { name: "Write", input: { path: "file_path" } },
+    edit: { name: "Edit", input: { path: "file_path" } },
+    ls: { name: "LS" },
+    find: { name: "Glob" },
+    grep: { name: "Grep" },
+  },
+} as const satisfies Record<HookHarness, Record<string, HookToolName>>;
+
+/** A harness's tool call as a fleet hook reads it: Claude Code's name for the tool, and its input with Claude Code's keys. */
+export const hookToolCall = (
+  harness: HookHarness,
+  tool: string,
+  input: unknown
+): { input: unknown; name: string } => {
+  const known: HookToolName | undefined = (
+    HOOK_TOOL_NAMES[harness] as Record<string, HookToolName>
+  )[tool];
+  if (!known) {
+    return { name: tool, input };
+  }
+  const keys = known.input;
+  if (!(keys && input && typeof input === "object" && !Array.isArray(input))) {
+    return { name: known.name, input };
+  }
+  return {
+    name: known.name,
+    input: Object.fromEntries(
+      Object.entries(input).map(([key, value]) => [keys[key] ?? key, value])
+    ),
+  };
+};
+
+/**
+ * Why `harness` cannot run `hook`, in a sentence, or undefined when it runs
+ * it: an event it raises no point for ({@link HOOK_EVENTS_ON}), a handler
+ * that is not a command (a prompt, an agent, an HTTP post or an MCP tool are
+ * Claude Code's own), or a condition (`if`), which is Claude Code's
+ * permission-rule syntax.
+ */
+export const hookUnsupported = (
+  harness: HookHarness,
+  hook: Pick<FleetHook, "event" | "handler">
+): string | undefined => {
+  const name = harness === "opencode" ? "OpenCode" : "pi";
+  const events: readonly HookEvent[] = HOOK_EVENTS_ON[harness];
+  if (!events.includes(hook.event)) {
+    return `${name} raises no ${hook.event}: it runs hooks on ${events.join(", ")}.`;
+  }
+  if (hook.handler.type !== "command") {
+    return `${name} runs command hooks only; this one is a ${hook.handler.type} hook.`;
+  }
+  if (hook.handler.if?.trim()) {
+    return `${name} does not read a condition (if): it is Claude Code's permission-rule syntax.`;
+  }
+  return undefined;
+};
+
+/** What a command hook's run came to, for the harness that ran it: a refusal's reason, words for the model, or nothing. */
+export interface HookVerdict {
+  /** Its refusal: exit 2 (its stderr), `decision: "block"`, or a PreToolUse `deny` (their reason). */
+  block?: string;
+  /** Words for the model: `additionalContext`, or what a SessionStart or UserPromptSubmit hook printed. */
+  context?: string;
+}
+
+/**
+ * A command hook's run read as Claude Code reads it (code.claude.com/docs/en/hooks,
+ * "Exit code output" and "JSON output"): exit 2 blocks with its stderr; exit
+ * 0 reads its stdout as JSON when it is (`decision: "block"`,
+ * `hookSpecificOutput.permissionDecision: "deny"`, `continue: false`, each
+ * with its reason, and `additionalContext`), else as words for the model on
+ * SessionStart and UserPromptSubmit; any other exit is a hook that failed,
+ * which blocks nothing.
+ */
+export const hookVerdict = (
+  event: HookEvent,
+  ran: { exit: number | null; stderr: string; stdout: string }
+): HookVerdict => {
+  if (ran.exit === 2) {
+    return {
+      block: ran.stderr.trim() || "A fleet hook refused it (exit 2).",
+    };
+  }
+  if (ran.exit !== 0) {
+    return {};
+  }
+  const out = ran.stdout.trim();
+  const parsed = jsonObject(out);
+  if (!parsed) {
+    return out && (event === "SessionStart" || event === "UserPromptSubmit")
+      ? { context: out }
+      : {};
+  }
+  const specific = (parsed.hookSpecificOutput ?? {}) as Record<string, unknown>;
+  const block = jsonBlock(parsed, specific);
+  const context = saidText(specific.additionalContext);
+  return {
+    ...(block ? { block } : {}),
+    ...(context ? { context } : {}),
+  };
+};
+
+/** `text` as a JSON object, when it is one. */
+const jsonObject = (text: string): Record<string, unknown> | undefined => {
+  let value: unknown;
+  try {
+    value = text.startsWith("{") ? JSON.parse(text) : undefined;
+  } catch {
+    // Words, not JSON.
+    value = undefined;
+  }
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+};
+
+/** A value that is words, trimmed; nothing for anything else or for blank. */
+const saidText = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() ? value.trim() : undefined;
+
+/** A hook's JSON refusal, with its reason: `decision: "block"`, a PreToolUse `deny`, or `continue: false`. */
+const jsonBlock = (
+  parsed: Record<string, unknown>,
+  specific: Record<string, unknown>
+): string | undefined => {
+  if (parsed.decision === "block") {
+    return saidText(parsed.reason) ?? "A fleet hook refused it.";
+  }
+  if (specific.permissionDecision === "deny") {
+    return (
+      saidText(specific.permissionDecisionReason) ?? "A fleet hook refused it."
+    );
+  }
+  if (parsed.continue === false) {
+    return saidText(parsed.stopReason) ?? "A fleet hook stopped it.";
+  }
+};
 
 /** The five things a hook can actually run. */
 export type HookHandlerType =

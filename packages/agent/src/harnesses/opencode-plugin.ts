@@ -10,13 +10,16 @@
  * naming it. It carries every duty 1.x's bridge plugin had, on 2.0's hooks
  * (opencode.ai/v2/docs/build/plugins/migrate-v1):
  *
- * - `ctx.tool.hook("execute.before")`: the workspace judge, and the session
- *   credential stamped into each `cawco_*` MCP call (`__cawco`). It runs for
+ * - `ctx.tool.hook("execute.before")`: the workspace judge, the fleet's
+ *   PreToolUse command hooks (the agent's fleet-harness-set.ts, run as its
+ *   fleet-hook-run.ts runs them for pi), and the session credential stamped
+ *   into each `cawco_*` MCP call (`__cawco`). It runs for
  *   every call, the calls a Code Mode program makes through `execute`
  *   included (settled #1: "plugin tool hooks on nested Code Mode calls —
  *   YES, both fire"). A throw refuses the call; assigning `input` replaces
  *   what the tool receives.
- * - `ctx.tool.hook("execute.after")`: each output of a workspace session's
+ * - `ctx.tool.hook("execute.after")`: the fleet's PostToolUse and
+ *   PostToolUseFailure command hooks; each output of a workspace session's
  *   call too long to hand the model, cut as OpenCode cuts it with the full
  *   output saved in the session's own folder (`cutInto`), and what each call
  *   of a Code Mode program answered, written
@@ -60,8 +63,14 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CAWCO_ENV, CODE_MODE_TOOL } from "@cawco/core";
 import {
+  CAWCO_ENV,
+  CODE_MODE_TOOL,
+  HOOK_EVENTS_ON,
+  HOOK_TOOL_NAMES,
+} from "@cawco/core";
+import {
+  fleetHarnessSetFile,
   fleetMcpSetFile,
   SPILLS_DIR_NAME,
   WORKSPACE_POLICY_NAME,
@@ -153,6 +162,12 @@ const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
 // and the host key its gateway's hosted servers answer to (its mcp-host.ts).
 const cawcoFleetMcp = ${JSON.stringify(fleetMcpSetFile())};
 const cawcoHostKey = ${JSON.stringify(hostKeyFile())};
+// The fleet's hooks as the agent's last sync wrote them (its
+// fleet-harness-set.ts), the events this plugin runs them on and OpenCode's
+// tools by Claude Code's names (core HOOK_EVENTS_ON, HOOK_TOOL_NAMES).
+const cawcoHarnessSet = ${JSON.stringify(fleetHarnessSetFile())};
+const hookEvents = ${JSON.stringify(HOOK_EVENTS_ON.opencode)};
+const hookTools = ${JSON.stringify(HOOK_TOOL_NAMES.opencode)};
 const gatePrefix = ${JSON.stringify(GATE_PREFIX)};
 // Where this server saves a tool output it cuts (its own data dir's
 // \`opencode/tool-output\`, observed on 2.0.28): every session's, which the
@@ -415,6 +430,77 @@ const fleetNames = () => {
 // server with a command is reached in a workspace's location.
 const hostKey = () => { try { return readFileSync(cawcoHostKey, "utf8").trim() || undefined; } catch { return undefined; } };
 
+// The fleet's hooks (the agent's fleet-harness-set.ts): the fleet's own and
+// those of the project placed at the deepest place holding \`directory\`,
+// real paths on whole path segments, read at each call so a change reaches
+// a running session. None when the set cannot be read.
+const fleetHooks = (directory) => {
+  let set = {};
+  try { set = JSON.parse(readFileSync(cawcoHarnessSet, "utf8")); } catch { return []; }
+  const placed = Object.values(set.placedHooks ?? {});
+  const here = realOf(directory);
+  let place;
+  for (const { cwd } of placed) {
+    const root = realOf(cwd);
+    if ((here === root || here.startsWith(root + "/")) && !(place && place.length >= root.length)) place = root;
+  }
+  return [...Object.values(set.hooks ?? {}), ...placed.filter((hook) => place && realOf(hook.cwd) === place)];
+};
+// Whether this harness runs a hook (core hookUnsupported): an event it
+// raises, a command, no condition.
+const runsHook = (hook) => hookEvents.includes(hook.event) && hook.handler?.type === "command" && !hook.handler.if?.trim();
+// A matcher's test passed (core hookTestPasses).
+const passes = (test, value) => {
+  if (test.all) return true;
+  if (test.exact) return test.exact.includes(value);
+  try { return new RegExp(test.regex).test(value); } catch { return false; }
+};
+// A call in Claude Code's words (core hookToolCall): its name, its input's keys.
+const claudeCall = (tool, input) => {
+  const known = hookTools[tool];
+  if (!known) return { name: tool, input };
+  const keys = known.input;
+  return { name: known.name, input: keys && input && typeof input === "object" && !Array.isArray(input) ? Object.fromEntries(Object.entries(input).map(([key, value]) => [keys[key] ?? key, value])) : input };
+};
+const shellWord = (word) => "'" + String(word).replaceAll("'", "'\\\\''") + "'";
+// One command hook run the way Claude Code does it (the agent's fleet-hook-run.ts):
+// the event's JSON on stdin, CLAUDE_PROJECT_DIR the location's folder, its
+// timeout or ten minutes, its own process group. A bounded session's runs
+// inside the workspace's boundary, through its shell prefix.
+const runHook = (handler, stdin, directory, prefix, env) => new Promise((resolve) => {
+  const line = handler.args?.length ? [handler.command ?? "", ...handler.args].map(shellWord).join(" ") : (handler.command ?? "");
+  const [file, ...args] = prefix ? [prefix, line] : ["bash", "-c", line];
+  const child = spawn(file, args, { cwd: directory, env: { ...env, CLAUDE_PROJECT_DIR: directory }, detached: true, stdio: ["pipe", "pipe", "pipe"] });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+  child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+  const stop = () => { const pid = child.pid; if (!Number.isInteger(pid) || pid <= 1) return; try { process.kill(-pid, "SIGKILL"); } catch {} };
+  const timer = setTimeout(stop, (handler.timeout ?? 600) * 1000);
+  child.on("error", (error) => { stderr += String(error); });
+  child.on("close", (code) => { clearTimeout(timer); resolve({ exit: code, stdout, stderr }); });
+  child.stdin.on("error", () => {});
+  child.stdin.end(stdin);
+});
+// A run read as Claude Code reads it (core hookVerdict): exit 2 blocks with
+// its stderr; exit 0 with JSON blocks on decision "block", a deny or
+// continue false, and says its additionalContext; any other exit blocks
+// nothing.
+const verdictOf = (ran) => {
+  if (ran.exit === 2) return { block: ran.stderr.trim() || "A fleet hook refused it (exit 2)." };
+  if (ran.exit !== 0) return {};
+  let parsed;
+  try { parsed = ran.stdout.trim().startsWith("{") ? JSON.parse(ran.stdout) : undefined; } catch {}
+  if (!parsed || typeof parsed !== "object") return {};
+  const specific = parsed.hookSpecificOutput ?? {};
+  const said = (value) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
+  const block = parsed.decision === "block" ? said(parsed.reason) ?? "A fleet hook refused it."
+    : specific.permissionDecision === "deny" ? said(specific.permissionDecisionReason) ?? "A fleet hook refused it."
+    : parsed.continue === false ? said(parsed.stopReason) ?? "A fleet hook stopped it." : undefined;
+  const context = said(specific.additionalContext);
+  return { ...(block ? { block } : {}), ...(context ? { context } : {}) };
+};
+
 // The project MCP servers CawCo placed at the deepest place holding
 // \`directory\`, real paths on whole path segments, set where the location's
 // config names no server by that name.
@@ -576,6 +662,30 @@ export default {
     // The \`shell\` calls made in this location whose shell has yet to open.
     const shells = [];
 
+    // The fleet's hooks of \`event\` that match a call (the agent's
+    // fleet-hook-run.ts), its input in Claude Code's words without the
+    // credential stamp, run at once; their verdicts joined, any block
+    // blocking with every reason.
+    const fleetHooksOn = async (event, sessionID, tool, input, extra) => {
+      const call = claudeCall(tool, withoutSecret(input));
+      const due = fleetHooks(directory).filter((hook) => hook.event === event && runsHook(hook) && passes(hook.test ?? { all: true }, call.name));
+      if (due.length === 0) return {};
+      const stdin = JSON.stringify({ session_id: sessionID, transcript_path: "", cwd: directory, hook_event_name: event, tool_name: call.name, tool_input: call.input, ...extra });
+      const prefix = holding && bounded(sessionID) ? boundaryOf(holding.id, holding.root).prefix : undefined;
+      const env = { ...cleanEnv({ ...process.env }), ...sessionEnv(sessionID) };
+      const verdicts = await Promise.all(due.map(async (hook) => {
+        const running = runHook(hook.handler, stdin, directory, prefix, env);
+        if (hook.handler.async) {
+          running.catch(() => {});
+          return {};
+        }
+        return verdictOf(await running);
+      }));
+      const blocks = verdicts.flatMap((one) => (one.block ? [one.block] : []));
+      const contexts = verdicts.flatMap((one) => (one.context ? [one.context] : []));
+      return { ...(blocks.length > 0 ? { block: blocks.join("\\n") } : {}), ...(contexts.length > 0 ? { context: contexts.join("\\n\\n") } : {}) };
+    };
+
     // Judges the call and stamps a CawCo call with its session's credential.
     const admit = async (event) => {
       if (workspace && bounded(event.sessionID)) {
@@ -598,6 +708,10 @@ export default {
       const slot = program ? program.calls.push({ tool: event.tool, input: withoutSecret(event.input) }) - 1 : -1;
       try {
         await admit(event);
+        // The fleet's PreToolUse hooks, on a call the judge let through: a
+        // block refuses it.
+        const verdict = await fleetHooksOn("PreToolUse", event.sessionID, event.tool, event.input, { tool_use_id: event.id });
+        if (verdict.block) throw new Error(verdict.block);
       } catch (error) {
         if (program) program.calls[slot] = { ...program.calls[slot], content: [{ type: "text", text: said(error) }], isError: true };
         throw error;
@@ -618,6 +732,15 @@ export default {
           const instanceId = await instanceOf(event.sessionID);
           return instanceId ? spillFolder(workspace, instanceId) : undefined;
         });
+      }
+      // The fleet's PostToolUse or PostToolUseFailure hooks: what they say
+      // goes onto a completed call's result, which the model reads, as
+      // Claude Code shows the model a PostToolUse hook's stderr.
+      const completed = event.status === "completed";
+      const after = await fleetHooksOn(completed ? "PostToolUse" : "PostToolUseFailure", event.sessionID, event.tool, event.input, { tool_use_id: event.id, ...(completed ? { tool_response: event.result } : { error: said(event.error) }) });
+      const told = [after.block, after.context].filter(Boolean).join("\\n");
+      if (told && completed) {
+        event.result = { ...event.result, content: [...contentOf(event.result), { type: "text", text: told }] };
       }
       if (event.tool === "shell") {
         const left = shells.findIndex((one) => one.sessionID === event.sessionID && one.command === event.input?.command);

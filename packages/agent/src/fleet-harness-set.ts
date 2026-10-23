@@ -14,7 +14,15 @@
  * from the user settings the sync registers them in, where the person's own
  * `claude` runs them too.
  */
-import type { HookEvent, HookHandler } from "@cawco/core";
+import {
+  type FleetHook,
+  type FleetItemState,
+  type HookEvent,
+  type HookHandler,
+  type HookHarness,
+  type HookMatchTest,
+  hookUnsupported,
+} from "@cawco/core";
 import { fleetHarnessSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { within } from "./fleet-mcp-set";
@@ -27,6 +35,8 @@ export interface SetHook {
   id: string;
   matcher?: string;
   name: string;
+  /** Its matcher as Claude Code reads it (core `hookMatchTest`), for the harnesses that run it themselves. */
+  test: HookMatchTest;
 }
 
 /** One project's hook, placed at one of its folders on this machine. */
@@ -78,6 +88,35 @@ export const placedAt = <T extends { cwd: string }>(
     .sort((a, b) => b.length - a.length);
   return folder === undefined ? [] : rows.filter((row) => row.cwd === folder);
 };
+
+/**
+ * What `harness` makes of each hook, by the id the machine reports it under:
+ * applied, or unsupported with why (core `hookUnsupported`), never left out.
+ * The sync's enabled rows (`hooks` of its config), or a status read's set.
+ */
+export const hookStatesOn = (
+  harness: HookHarness,
+  hooks: readonly Pick<FleetHook, "event" | "handler" | "id">[]
+): Record<string, FleetItemState> =>
+  Object.fromEntries(
+    hooks.map((hook) => {
+      const why = hookUnsupported(harness, hook);
+      return [
+        hook.id,
+        why ? { state: "unsupported", detail: why } : { state: "applied" },
+      ] as const;
+    })
+  );
+
+/** {@link hookStatesOn} for every hook of the set: a status read's. */
+export const hookStatesInSet = (
+  harness: HookHarness,
+  set: FleetHarnessSet
+): Record<string, FleetItemState> =>
+  hookStatesOn(harness, [
+    ...Object.values(set.hooks),
+    ...Object.values(set.placedHooks),
+  ]);
 
 /** The hooks a session in `cwd` runs on a harness that takes the fleet's from here: the fleet's, then its place's. */
 export const hooksAt = (set: FleetHarnessSet, cwd: string): SetHook[] => [
