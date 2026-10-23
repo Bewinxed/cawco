@@ -115,6 +115,9 @@ const RULES: readonly [string, RegExp, Access][] = [
   // A release just published on a machine (scripts/release.ts): the hub looks
   // at its release host now, not when its cached release ages out.
   ["POST", /^\/api\/binary-updates\/check$/, "machine"],
+  // What the landing gate passed on a tree, which a release asks before it
+  // checks a commit again (scripts/release.ts `gatePassed`).
+  ["GET", /^\/api\/landing-gate$/, "machine"],
   ["PUT", /^\/api\/binary-updates\/machines\/[^/]+\/state$/, "machine"],
   // A file a reader attached, by the hash a send names: the session's
   // machine fetches it (agent attachments.ts).
