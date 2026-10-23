@@ -218,7 +218,6 @@
     "By a command": 1,
     "couldn't be read": 1,
     "Fetching the signed build": 2,
-    "Open navigation": 1,
     "Over SSH": 4,
     "reload forgets": 1,
     "removes what it created": 1,
@@ -374,7 +373,6 @@
   },
   "scripts/probe-kit/specs/ios-long-ask.ts": {
     "'s sessions": 2,
-    "Open navigation": 1,
     "Show the whole command": 1
   },
   "scripts/probe-kit/specs/ios-parity.ts": {
@@ -476,7 +474,6 @@
     "its text holds": 1
   },
   "scripts/probe-kit/specs/page-marks.ts": {
-    "Open navigation": 1,
     "Permission mode:": 1
   },
   "scripts/probe-kit/specs/place-repo-home.ts": {
@@ -498,8 +495,7 @@
     "[CawCo presence]": 1,
     "did not answer its desk alert": 2,
     "no narration": 1,
-    "no tab at the desk can show it, so it goes to the phone": 1,
-    "Open navigation": 1
+    "no tab at the desk can show it, so it goes to the phone": 1
   },
   "scripts/probe-kit/specs/preview-burst.ts": {
     "<meta name=\"": 1
@@ -795,7 +791,6 @@
     "No open comments": 1,
     "None of your machines are online": 1,
     "Nothing resolved yet": 1,
-    "Open navigation": 2,
     "Other people's repositories": 1,
     "Page not found": 1,
     "Pairing didn't start": 1,

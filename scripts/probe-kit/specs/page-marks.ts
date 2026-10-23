@@ -27,6 +27,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 
@@ -347,7 +348,9 @@ const run = async (kit: Kit) => {
   await at(phone, "phone session");
   await keep(phone, "phone session");
   await at(phone, "phone sidebar");
-  await phone.getByRole("button", { name: "Open navigation" }).click();
+  await phone
+    .getByRole("button", { name: sidebarWords.openNavigation })
+    .click();
   await phone.waitForSelector('[data-rail-sheet][data-state="open"]');
   await keep(phone, "phone sidebar");
   await at(phone, "phone sidebar leaving");

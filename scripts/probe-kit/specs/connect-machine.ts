@@ -100,6 +100,7 @@ import type { InstallsRead } from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { connectWords } from "../../../packages/core/src/words/connect";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { MACHINE, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import {
@@ -130,7 +131,7 @@ const RELOAD_FORGETS = /reload forgets/;
 const FETCHING = /Fetching the signed build/;
 const LACKS_TAR = /Failed at Fetching the signed build · it lacks tar/;
 const CODE_IN = /code=([A-Z0-9]+)/;
-const OPEN_NAVIGATION = /Open navigation/;
+const OPEN_NAVIGATION = sidebarWords.openNavigation;
 const OUTPUT = "[data-connect-output]";
 /** What the forced failure left: the installer undid itself; the key the add gave the machine stays. */
 const MACHINE_KEY_LEFT =

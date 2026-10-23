@@ -38,6 +38,7 @@ import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { commonWords } from "../../../packages/core/src/words/common";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { freshApp, simulatorApp, staleApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import {
@@ -691,7 +692,7 @@ async function run(kit: Kit): Promise<void> {
         args: "",
         reach: async () => {
           await pause(6000);
-          if (!(await tap("Open navigation"))) {
+          if (!(await tap(sidebarWords.openNavigation))) {
             return false;
           }
           await pause(2000);
@@ -1276,7 +1277,7 @@ async function onSimulator(
     // The drawer: the project, the probe's row under it.
     id = (await launch()) ?? id;
     await pause(8000);
-    let drawer = await tap((label) => label === "Open navigation");
+    let drawer = await tap((label) => label === sidebarWords.openNavigation);
     if (drawer) {
       await pause(2000);
       // The live probe's own row, which says it needs you: not an earlier probe's

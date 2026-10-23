@@ -19,6 +19,7 @@ import { CONFIG_SECTIONS } from "../../../packages/core/src/words/configure";
 import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { memoryWords } from "../../../packages/core/src/words/memory";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { skillsWords } from "../../../packages/core/src/words/skills";
 import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
@@ -295,7 +296,9 @@ const emptyComposer = async (page: Page) => {
 
 /** The phone and tablet's rail: the sheet the navigation button opens. */
 const openRail = async (page: Page) => {
-  const burger = page.getByRole("button", { name: "Open navigation" });
+  const burger = page.getByRole("button", {
+    name: sidebarWords.openNavigation,
+  });
   if (await burger.isVisible()) {
     await burger.click();
   }
@@ -649,7 +652,11 @@ const reloadedWith =
 
 /** Jump: the phone's and tablet's from the rail, the desk's on ⌘K. */
 const openJump = async (page: Page) => {
-  if (await page.getByRole("button", { name: "Open navigation" }).isVisible()) {
+  if (
+    await page
+      .getByRole("button", { name: sidebarWords.openNavigation })
+      .isVisible()
+  ) {
     await openRail(page);
     await press(JUMP_BUTTON)(page);
     return;

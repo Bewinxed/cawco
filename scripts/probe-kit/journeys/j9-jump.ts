@@ -14,6 +14,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import {
@@ -28,7 +29,7 @@ import {
 const SAID = "JOURNEY-SAID";
 const MORE = "JOURNEY-MORE";
 const JUMP = /^Jump to session$/;
-const OPEN_NAVIGATION = "Open navigation";
+const OPEN_NAVIGATION = sidebarWords.openNavigation;
 const SHEET_SEARCH = "Search sessions, projects, machines";
 const FIND = "Find a session, or a task, preview, decision";
 /** How many turns of the agent's words follow the line, each a long answer. */

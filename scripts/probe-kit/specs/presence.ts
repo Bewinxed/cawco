@@ -53,6 +53,7 @@ import {
   type PersonView,
 } from "../../../packages/core/src/notifications";
 import { presenceWords } from "../../../packages/core/src/words/presence";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import {
   type Harness,
   MACHINE,
@@ -685,7 +686,7 @@ const menuLines = async (page: import("playwright-core").Page) => {
   const trigger = page.locator("[data-presence]:visible").first();
   if (!(await trigger.isVisible().catch(() => false))) {
     await page
-      .getByRole("button", { name: "Open navigation" })
+      .getByRole("button", { name: sidebarWords.openNavigation })
       .first()
       .click()
       .catch(() => undefined);
@@ -1177,7 +1178,7 @@ const boxLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
           .catch(() => false);
         if (!railed) {
           await page
-            .getByRole("button", { name: "Open navigation" })
+            .getByRole("button", { name: sidebarWords.openNavigation })
             .first()
             .click();
         }

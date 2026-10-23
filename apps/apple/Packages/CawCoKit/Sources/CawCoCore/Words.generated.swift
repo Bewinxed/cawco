@@ -749,6 +749,9 @@ public enum Words {
 
         /// The projects list is empty while machines are joined.
         public static let noProjects = "No projects yet — name a checkout to group its sessions."
+
+        /// The phone's and narrow window's burger, which opens the sidebar over the page.
+        public static let openNavigation = "Open navigation"
     }
 
     public enum Upstream {

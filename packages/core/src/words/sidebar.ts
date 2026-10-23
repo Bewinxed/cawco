@@ -12,4 +12,6 @@ export const sidebarWords = {
     "No projects yet — start one with New project. Once CawCo runs on a machine, its checkouts group here too.",
   /** The projects list is empty while machines are joined. */
   noProjects: "No projects yet — name a checkout to group its sessions.",
+  /** The phone's and narrow window's burger, which opens the sidebar over the page. */
+  openNavigation: "Open navigation",
 };
