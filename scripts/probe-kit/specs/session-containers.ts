@@ -113,7 +113,17 @@ let infra = true;
 
 const podman = (): boolean => runtime.kind === "podman";
 
-/** Each command the session runs, one a turn, in this order: the tag its message carries, and the command. */
+/**
+ * Each command the session runs, one a turn, in this order: the tag its
+ * message carries, and the command. The kube play's container runs its
+ * `sleep` as `args`, its Cmd, not `command`, its entrypoint: the Engine
+ * API lists a container's Cmd alone (podman v5.7.0 compat/containers.go:
+ * "Command: strings.Join(l.Command(), " ")"), and a kube `command` becomes
+ * the entrypoint with an empty Cmd (kube.go: "If only the yaml.Command is
+ * specified, set it as the entrypoint and drop the image Cmd"). r205 found
+ * the kube container's Command empty, so `sleep 6076` was not found though
+ * it ran, labelled.
+ */
 const COMMANDS: readonly (readonly [string, () => string])[] = [
   ["PROBE-RUN", () => `${runtime.cli} run -d ${MARKS} ${IMAGE} sleep ${RUN}`],
   [
@@ -134,7 +144,7 @@ const COMMANDS: readonly (readonly [string, () => string])[] = [
   [
     "PROBE-KUBE",
     () =>
-      `printf '%s\\n' 'apiVersion: v1' 'kind: Pod' 'metadata:' '  name: ${KUBE_POD}' '  labels:' '    ${SPEC_MARK}: ${SPEC_NAME}' '    ${RUN_MARK}: "${tag}"' 'spec:' '  containers:' '  - name: s' '    image: ${IMAGE}' '    command: ["sleep", "${KUBE}"]' > "./${KUBE_POD}.yaml" && ${runtime.cli} kube play "./${KUBE_POD}.yaml"`,
+      `printf '%s\\n' 'apiVersion: v1' 'kind: Pod' 'metadata:' '  name: ${KUBE_POD}' '  labels:' '    ${SPEC_MARK}: ${SPEC_NAME}' '    ${RUN_MARK}: "${tag}"' 'spec:' '  containers:' '  - name: s' '    image: ${IMAGE}' '    args: ["sleep", "${KUBE}"]' > "./${KUBE_POD}.yaml" && ${runtime.cli} kube play "./${KUBE_POD}.yaml"`,
   ],
   [
     "PROBE-EARLIER",
@@ -734,13 +744,17 @@ const provenOn = async (kit: Kit): Promise<void> => {
     }
     const sleeps = sessionSleeps();
     const made = await Promise.all(sleeps.map(sleeping));
+    const labelled = await containersWith([
+      `${RUN_MARK}=${tag}`,
+      `${SESSION_LABEL}=${session}`,
+    ]);
     check(
       "(c1) each container the session started runs, labelled with it",
       made.every(
         (one) =>
           one?.State === "running" && one.Labels?.[SESSION_LABEL] === session
       ),
-      `on ${runtime.kind}, session ${session}: ${sleeps.map((arg, at) => `sleep ${arg}: ${said(made[at])}`).join("; ")}; the commands ran: ${[...ran].join(", ")}`
+      `on ${runtime.kind}, session ${session}: ${sleeps.map((arg, at) => `sleep ${arg}: ${said(made[at])}`).join("; ")}; the commands ran: ${[...ran].join(", ")}; what this run's mark and the session's label find, by Command: ${JSON.stringify(labelled.map((one) => [one.Names.join(","), one.Command]))}`
     );
     const mine = await sleeping(OUTSIDE);
     check(
