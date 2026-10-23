@@ -59,6 +59,7 @@ import {
 } from "../packages/core/src/signal";
 import { installDeps } from "./lib/deps";
 import { requireDiskRoom } from "./lib/disk-room";
+import { holdAwake } from "./lib/hold-awake";
 import { welcomed } from "./lib/keeper-dial";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 import { STAND_INS_ENV, type StandIns } from "./stand-ins/index";
@@ -1557,6 +1558,7 @@ export async function scratchFleet(options: {
   respond: (request: Seen) => Reply | Promise<Reply>;
 }) {
   requireDiskRoom(`The scratch fleet ${options.name}`);
+  holdAwake(`The scratch fleet ${options.name}`);
   const dirs = new FleetDirs();
   // Its hub's preview ports, held from every other run on the machine until it closes.
   const previews = await leasePortRange(PREVIEW_PORTS);

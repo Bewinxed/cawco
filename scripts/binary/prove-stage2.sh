@@ -217,6 +217,10 @@ orchestrate() {
   done
   free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
   (( free_gb >= 25 )) || { echo "only ${free_gb}G is free where $out is; the proof needs 25G (each rig's machines are vfs copies of the image; a full disk made podman fail with 'database or disk is full' in an earlier run)" >&2; exit 2; }
+  # The machine stays awake while the proofs run (lib/hold-awake.sh): a job of no one's, so no wait here meets it.
+  source "$here/../lib/hold-awake.sh"
+  hold_awake "$$" "The stage-2 proofs into $out" &
+  disown
   STARTED=$SECONDS
   mkdir -p "$out/tmp" "$out/shared" "$out/feeds" "$out/rigs" "$out/logs" "$out/images"
   orchestrator_done() {

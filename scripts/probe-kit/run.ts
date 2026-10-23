@@ -62,9 +62,12 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDeps } from "../lib/deps";
+import { holdAwake } from "../lib/hold-awake";
 import type { Approval, Spec } from "./kit";
 
 // The dependencies first (lib/deps.ts): the kit and the fleet load after them.
+// The machine stays awake for the whole run (lib/hold-awake.ts).
+holdAwake(`bun scripts/probe-kit/run.ts ${process.argv.slice(2).join(" ")}`);
 await ensureDeps();
 const { sweepDeadFleets } = await import("../scratch-fleet");
 const { ENCLOSING_GIT_ENV, OWN_HOME_ENV, Run } = await import("./kit");

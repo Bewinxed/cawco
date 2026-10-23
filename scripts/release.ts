@@ -73,6 +73,7 @@ import {
 } from "./binary/sign-agent-bundle";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { requireDiskRoom } from "./lib/disk-room";
+import { holdAwake } from "./lib/hold-awake";
 import {
   createDraft,
   deleteDraft,
@@ -1593,10 +1594,12 @@ try {
 /**
  * One commit, built, signed and (unless a newer one is queued) promoted. It
  * starts at once, beside whatever else runs, with room on the disk
- * (lib/disk-room.ts); its steps run as their graph says.
+ * (lib/disk-room.ts), the machine held awake from then on (lib/hold-awake.ts);
+ * its steps run as their graph says.
  */
 const build = async (current: Request): Promise<void> => {
   requireDiskRoom(`The release of ${current.commit.slice(0, 12)}`);
+  holdAwake(`The release of ${current.commit.slice(0, 12)}`);
   const building = performance.now();
   const trees = treesOf(current.commit);
   const staging = stagingOf(current.commit);

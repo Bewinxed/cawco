@@ -28,13 +28,15 @@
  * A published release leaves its own key's builds alone in the cache
  * (release.ts runs proof-cache-prune.sh).
  *
- * It starts only with room on the disk (lib/disk-room.ts).
+ * It starts only with room on the disk (lib/disk-room.ts), and holds the
+ * machine awake until it ends (lib/hold-awake.ts).
  */
 import { copyFile, mkdir, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { compileBinary, prepareAssets } from "../build-binary";
 import { diskRoomOrExit } from "../lib/disk-room";
+import { holdAwake } from "../lib/hold-awake";
 import { proofInputsChanged, proofInputsKey } from "./proof-inputs";
 
 const [, , output] = Bun.argv;
@@ -42,6 +44,7 @@ if (!output?.startsWith("/")) {
   throw new Error("Usage: bun scripts/binary/build-stage2.ts /absolute/output");
 }
 diskRoomOrExit("The stage-2 build");
+holdAwake("The stage-2 build");
 const run = async (argv: string[], cwd?: string) => {
   const child = Bun.spawn(argv, {
     stdout: "inherit",
