@@ -112,7 +112,19 @@ const leaksOf = async (
       "--listFilesOnly",
       "--traceResolution",
     ],
-    { cwd: ROOT, stdout: "pipe", stderr: "pipe" }
+    // GOGC=off: Golar's Go runtime died in a garbage collection's stack scan
+    // in one run of the twenty in three ("fatal error: traceback did not
+    // unwind completely", exit 134, a different project each time: Go's
+    // own unwinder, as in golang/go#81959), failing the landing gate twice
+    // on a tree that checks clean. A listing that collects nothing never
+    // scans a stack; it holds 1.19 GB at most instead of 1.01 (the hub's
+    // project, measured), and exits within seconds.
+    {
+      cwd: ROOT,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, GOGC: "off" },
+    }
   );
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
