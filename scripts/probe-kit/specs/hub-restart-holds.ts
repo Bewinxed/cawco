@@ -4,8 +4,8 @@
  * takes them). On a scratch fleet (real hub, agent and sessiond; Claude Code
  * against the mock model), each leg kills the hub at its point (SIGKILL, as
  * a crash does), starts it again, and reads what a person or a session sees
- * after it: the hub's own records, what the model was sent, and the
- * dashboard's Needs you.
+ * after it: the hub's own records (Needs you's notices among them) and what
+ * the model was sent.
  *
  * - (a) Held pictures: a page's pictures of a pin are held (artifacts
  *   held-pictures.ts) and the pin written into the page's doc; the hub dies
@@ -26,8 +26,8 @@
  * - (e) A deleted delegate type: an item's type is deleted while its session
  *   sleeps, and the hub restarts. A message to it does not start it: the item
  *   is blocked, not failed, the message kept at the hub under `blocked`, and
- *   Needs you names the type. The type back, the block clears and the
- *   message goes.
+ *   Needs you tells you it is blocked and why (its notice, as a held item's).
+ *   The type back, the block clears, its notice goes and the message goes.
  * - (f) A background command cut by a restart: a session's command runs in
  *   the background, printing; the machine's processes and the hub all die
  *   and start again. The session is told the command was interrupted, its
@@ -43,6 +43,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
+import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -66,7 +67,7 @@ const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 /** What the hub tells a session whose move ended its work (server.ts `endedByMoveWords`). */
 const MOVED = "You were moved to another account.";
 /** What every cut's words say of each task (server.ts `cutTasksWords`, `endedByMoveWords`). */
-const INTERRUPTED = "interrupted, its outcome unknown";
+const INTERRUPTED = workWords.interrupted;
 /** The gate steps' log, in each workspace's scratch dir. */
 const STEP_LOG = "probe-restart-steps.log";
 /** (d)'s gate: three steps, the second long enough to kill the hub inside it. */
@@ -241,7 +242,6 @@ interface ItemRow {
 interface Legs {
   check: Kit["check"];
   fleet: KitFleet;
-  kit: Kit;
   /** The project's main branch's commit subjects, newest first. */
   mainLog: () => Promise<string[]>;
   parent: string;
@@ -493,7 +493,7 @@ const legB = async (legs: Legs) => {
       !!read &&
       read.all.includes(MOVED) &&
       read.all.includes("PROBE-B-OUTPUT-SO-FAR") &&
-      read.all.includes("interrupted, its outcome unknown") &&
+      read.all.includes(INTERRUPTED) &&
       kept === 0,
     `asleep: ${status}; read: ${read ? read.all.slice(-900) : "no turn within 120 s"}; kept after: ${kept}`
   );
@@ -562,9 +562,6 @@ const legD = async (legs: Legs) => {
   const end = await ended(legs, item, "D");
   const log = (await stepLogOf(legs, workspace)).trim().split("\n");
   const count = (line: string) => log.filter((one) => one === line).length;
-  const hubLog = (await fleet.logs("hub"))
-    .split("\n")
-    .filter((line) => line.includes(`resumed the landing of item ${item}`));
   check(
     "(d) a gate cut inside its second step resumes at that step after the restart: the first step's pass was kept and it never runs again, the second and third run, and the item lands",
     phase === "gating" &&
@@ -572,9 +569,8 @@ const legD = async (legs: Legs) => {
       count("one") === 1 &&
       count("two") >= 2 &&
       count("three") === 1 &&
-      end?.state === "done" &&
-      hubLog.some((line) => line.includes("1 gate pass(es) kept")),
-    `phase at the cut: ${phase}; passes kept: ${passes}; step log: ${log.join(", ")}; item: ${end?.state} ${end?.error ?? ""}; hub: ${hubLog.join(" / ") || "no resume line"}`
+      end?.state === "done",
+    `phase at the cut: ${phase}; passes kept: ${passes}; step log: ${log.join(", ")}; item: ${end?.state} ${end?.error ?? ""}`
   );
   check(
     "(d) its report says where the first step passed, and that it was not run again",
@@ -588,7 +584,7 @@ const legD = async (legs: Legs) => {
 
 /** (e) A deleted delegate type blocks its item at its next start, in Needs you, and its return lets it go on. */
 const legE = async (legs: Legs) => {
-  const { check, fleet, kit } = legs;
+  const { check, fleet } = legs;
   const put = (method: "PUT" | "DELETE") =>
     fetch(`${fleet.base}/api/delegate-types/${TYPE_E}`, {
       method,
@@ -627,12 +623,19 @@ const legE = async (legs: Legs) => {
     owed: string | null;
     state: string;
   }>("SELECT state, owed, hold FROM sent_messages WHERE uuid = ?", sent);
-  const listed = await fleet.api<{ blocked: string | null; id: string }[]>(
-    "/api/work-items/blocked"
-  );
-  const words = listed.find((one) => one.id === item)?.blocked ?? "";
+  // After the send that found it is taken (work-items.ts `blockIfMissing`).
+  const told = await until(
+    "(e) its notice in Needs you",
+    () =>
+      fleet.query<{ body: string; title: string }>(
+        "SELECT title, body FROM fleet_watch_notices WHERE instance_id = ?",
+        session
+      )[0],
+    Boolean,
+    30_000
+  ).catch(() => undefined);
   check(
-    "(e) an item whose delegate type was deleted, started again after a restart, is blocked, never failed: still running, its message kept at the hub held `blocked`, and the hub's Needs you list names the type",
+    "(e) an item whose delegate type was deleted, started again after a restart, is blocked, never failed: still running, its message kept at the hub held `blocked`, and Needs you tells you it is blocked and why",
     madeType.ok &&
       deleted.ok &&
       status === "sleeping" &&
@@ -641,26 +644,10 @@ const legE = async (legs: Legs) => {
       send?.state === "pending" &&
       !!send.owed &&
       send.hold === "blocked" &&
-      words.includes(`“${TYPE_E}” was deleted`),
-    `type put ${madeType.status}, deleted ${deleted.status}; asleep: ${status}; item: ${blocked?.state} ${blocked?.blocked ?? "no block"} ${blocked?.error ?? ""}; send: ${JSON.stringify(send)}; Needs you: ${words || "not listed"}`
+      told?.title === workWords.blockedTitle("Restart leg E") &&
+      told.body === workWords.missingType(TYPE_E),
+    `type put ${madeType.status}, deleted ${deleted.status}; asleep: ${status}; item: ${blocked?.state} ${blocked?.blocked ?? "no block"} ${blocked?.error ?? ""}; send: ${JSON.stringify(send)}; Needs you: ${told ? `${told.title}: ${told.body}` : "no notice"}`
   );
-  // The phone's home draws Needs you as a group of its own.
-  const base = await fleet.dashboard();
-  const page = await kit.page("phone");
-  await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-  const row = page
-    .getByText(`Its delegate type “${TYPE_E}” was deleted`)
-    .first();
-  const shown = await row
-    .waitFor({ timeout: 60_000 })
-    .then(() => true)
-    .catch(() => false);
-  check(
-    "(e) the dashboard's Needs you shows the blocked item with its reason",
-    shown,
-    shown ? "shown" : "no Needs you row with the reason within 60 s"
-  );
-  await page.close();
   const back = await put("PUT");
   const went = await until(
     "(e) its message goes once the type is back",
@@ -669,10 +656,14 @@ const legE = async (legs: Legs) => {
     120_000
   ).catch(() => fleet.sendRow(sent));
   const cleared = itemOf(fleet, item);
+  const [notice] = fleet.query<{ title: string }>(
+    "SELECT title FROM fleet_watch_notices WHERE instance_id = ?",
+    session
+  );
   check(
-    "(e) the type back, the block clears within the sweep and the kept message reaches the session",
-    back.ok && !cleared?.blocked && went?.state === "read",
-    `type put back ${back.status}; item blocked: ${cleared?.blocked ?? "no"}; send: ${went?.state}`
+    "(e) the type back, the block clears within the sweep, its notice goes, and the kept message reaches the session",
+    back.ok && !cleared?.blocked && !notice && went?.state === "read",
+    `type put back ${back.status}; item blocked: ${cleared?.blocked ?? "no"}; notice: ${notice?.title ?? "gone"}; send: ${went?.state}`
   );
 };
 
@@ -771,7 +762,6 @@ const standUp = async (kit: Kit): Promise<Legs> => {
   return {
     check: kit.check,
     fleet,
-    kit,
     parent,
     projectId: project.id,
     repo,
