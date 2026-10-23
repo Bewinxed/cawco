@@ -10,6 +10,9 @@
    * a press on the first try, and once it has closed the next press, where
    * it stood, lands on the page (probe-kit `overlay-taps`). `show(kind)`
    * opens one from code, over another already open (layer-stack).
+   * `?under=ledger` draws a ledger under the openers as the routines view
+   * draws one (`layout="ledger" stickyBand`, its band's heads sticky at
+   * `z-2`), so what opens there stands over a sticky band (layer-stack).
    */
   // biome-ignore-all lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
@@ -21,6 +24,7 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import { page } from "$app/state";
 
   const KINDS = [
@@ -36,6 +40,7 @@
   type Kind = (typeof KINDS)[number];
 
   const only = page.url.searchParams.get("only");
+  const ledger = page.url.searchParams.get("under") === "ledger";
   /** Whether `kind`'s opener is drawn. */
   const shows = (kind: Kind) => !only || only === kind;
 
@@ -85,7 +90,11 @@
 <svelte:head><title>Overlays bench · CawCo</title></svelte:head>
 
 <main
-  class="type-body relative grid grow gap-space-5 p-space-5 text-ink-strong"
+  class={[
+    "type-body relative grid grow gap-space-5 p-space-5 text-ink-strong",
+    // The ledger right under the openers, where what they open stands.
+    ledger && "content-start",
+  ]}
 >
   <div
     data-slot="openers"
@@ -237,6 +246,29 @@
       </ContextMenu.Root>
     {/if}
   </div>
+
+  {#if ledger}
+    <div class="relative z-1" data-slot="ledger">
+      <Table.Root aria-label="Ledger" layout="ledger" stickyBand>
+        <Table.Header>
+          <Table.Row variant="band">
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <Table.Head class="z-2" scope="col" variant="band">Name</Table.Head>
+            <Table.Head class="z-2" scope="col" variant="band">When</Table.Head>
+            <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {#each ["Morning digest", "Weekly review", "Release notes"] as name (name)}
+            <Table.Row>
+              <Table.Cell>{name}</Table.Cell>
+              <Table.Cell>Mon 09:00</Table.Cell>
+            </Table.Row>
+          {/each}
+        </Table.Body>
+      </Table.Root>
+    </div>
+  {/if}
 
   <!-- The page: what a press after an overlay closes must reach, wherever
        the overlay stood. The whole content area under the openers (its

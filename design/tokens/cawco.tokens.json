@@ -7437,11 +7437,6 @@
   },
   "layer": {
     "$description": "The page's stacking roles, bottom to top (DESIGN.md, Elevation & Depth: Stacking). A role is used as `z-(--layer-<role>)`. Each stands 10 over the one under it, so a role can go between two without renumbering. Order inside one component (1 to 6, or -1) stays a plain number and is not a role.",
-    "layer-sticky": {
-      "$type": "number",
-      "$value": 10,
-      "$description": "A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome."
-    },
     "layer-band": {
       "$type": "number",
       "$value": 20,

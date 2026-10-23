@@ -1476,8 +1476,6 @@
     --c-skeleton-card-h: 54px;
     /* The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page). */
     --c-offer-text-basis: 240px;
-    /* A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome. */
-    --layer-sticky: 10;
     /* The hub band's slot under the bar: over the page column it opens above, its shadow on the page. */
     --layer-band: 20;
     /* The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage. */

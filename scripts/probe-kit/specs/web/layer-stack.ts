@@ -30,9 +30,9 @@
  *   selection where it was, and its markup holds no display style the
  *   copy gave the chips; copying words inside one chip gives its `/name`
  *   whole.
- * - A kit popover over a sticky table head (the overlays bench, desk): a
- *   sticky head on `--layer-sticky` set under the popover's place, and the
- *   popover first at that point.
+ * - A kit popover over a ledger's sticky band (the overlays bench's
+ *   `?under=ledger`, desk): the band under the popover's centre, and the
+ *   point there inside the popover.
  * - A kit alert dialog opened over a drawer opened after it mounted (the
  *   overlays bench, desk and phone, Chromium and WebKit): the point at its
  *   centre inside it, the drawer still open.
@@ -459,7 +459,17 @@ async function sessionChip(
     over[0]?.z === float && over.findIndex((h) => h.z === bench) > 0
   );
   await page.keyboard.press("Escape");
-  await settle(page, 400);
+  // Waited on, up to 3s, for the state asserted, then read (as skill-chip's).
+  await page
+    .waitForFunction(
+      ([p, c]) =>
+        document.querySelector(p) === null &&
+        document.querySelector(c)?.getAttribute("aria-expanded") === "false" &&
+        document.activeElement === document.querySelector(c),
+      [panel, chip] as const,
+      { timeout: 3000 }
+    )
+    .catch(() => undefined);
   const shut = await page.evaluate(
     ([p, c]) => ({
       panel: document.querySelector(p) !== null,
@@ -663,7 +673,18 @@ async function skillChips(
     JSON.stringify(opened)
   );
   await page.keyboard.press("Escape");
-  await settle(page, 400);
+  // The panel's exit plays out first: waited on, up to 3s, for the state
+  // asserted (WebKit's slower frame once outlasted a fixed 400ms), then read.
+  await page
+    .waitForFunction(
+      ([p, focusedSkill]) =>
+        document.querySelector(p) === null &&
+        (document.activeElement as HTMLElement | null)?.dataset.skillChip ===
+          focusedSkill,
+      [panel, "clean-copy"] as const,
+      { timeout: 3000 }
+    )
+    .catch(() => undefined);
   const shut = await page.evaluate(
     ([p, focusedSkill]) => ({
       panel: document.querySelector(p) !== null,
@@ -754,52 +775,68 @@ async function skillChips(
   await page.close();
 }
 
+/**
+ * A kit popover over a ledger's sticky band, as the routines view draws one
+ * (the overlays bench's `?under=ledger`: `layout="ledger" stickyBand`, its
+ * band's heads `sticky` at `z-2`): the band is under the popover's centre,
+ * and the point there is inside the popover, the band under it.
+ */
 async function popoverOverSticky(kit: Kit, base: string): Promise<void> {
   const page = await kit.page("desk");
-  await open(page, `${base}/motion/overlays?only=popover`, "[data-open]");
+  await open(
+    page,
+    `${base}/motion/overlays?only=popover&under=ledger`,
+    '[data-open="popover"]'
+  );
   await page.locator('[data-open="popover"]').click();
   const pop = '[data-slot="popover-content"][data-state="open"]';
   await page.waitForSelector(pop);
   await settle(page, 400);
-  const box = await page.locator(pop).boundingBox();
-  if (!box) {
-    kit.check("popover-over-sticky: the popover opens", false);
+  const read = await page.evaluate((p) => {
+    const box = document.querySelector(p)?.getBoundingClientRect();
+    const band = document.querySelector<HTMLElement>(
+      '[data-slot="ledger"] [data-slot="table-head"]'
+    );
+    if (!(box && band)) {
+      return null;
+    }
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    const under = band.getBoundingClientRect();
+    const hit = document.elementFromPoint(x, y);
+    return {
+      x,
+      y,
+      popover: [box.top, box.bottom].map(Math.round),
+      band: [under.top, under.bottom].map(Math.round),
+      bandUnder: under.top <= y && y <= under.bottom,
+      bandPosition: getComputedStyle(band).position,
+      bandZ: getComputedStyle(band).zIndex,
+      inside: Boolean(hit?.closest(p)),
+    };
+  }, pop);
+  if (!read) {
+    kit.check(
+      "popover-over-sticky: the popover and the ledger's band are drawn",
+      false
+    );
     await page.close();
     return;
   }
-  // A sticky head on the sticky role, set across the popover's place in the
-  // page's flow. Its styles are its own, the role read from its token: a
-  // utility class added at runtime is drawn only if the build emitted it,
-  // and no source has used `z-(--layer-sticky)` since c7f1ab369, so the
-  // class drew nothing and the head computed `auto`.
-  await page.evaluate(
-    ({ top, height }) => {
-      const scroller = document.createElement("div");
-      scroller.dataset.slot = "probe-scroller";
-      scroller.style.cssText = `position:absolute;inset-inline:0;top:${top}px;height:${height}px;overflow:auto`;
-      const head = document.createElement("div");
-      head.dataset.slot = "probe-sticky-head";
-      head.style.cssText = `position:sticky;top:0;z-index:var(--layer-sticky);height:${height}px;background:var(--surface-raised)`;
-      scroller.append(head);
-      document.querySelector("main")?.append(scroller);
-    },
-    { top: box.y, height: box.height }
+  const chain = await chainAt(page, read.x, read.y);
+  kit.note(
+    `popover over a ledger's sticky band, the popover's centre: ${said(chain)}`
   );
-  const sticky = await tokenOf(page, "--layer-sticky");
   const float = await tokenOf(page, "--layer-float");
-  const z = await page
-    .locator('[data-slot="probe-sticky-head"]')
-    .evaluate((el) => getComputedStyle(el).zIndex);
-  const chain = await chainAt(
-    page,
-    box.x + box.width / 2,
-    box.y + box.height / 2
-  );
-  kit.note(`popover over a sticky head, the popover's centre: ${said(chain)}`);
-  const head = firstOf(chain, "probe-sticky-head");
+  const band = firstOf(chain, "table-head");
   kit.check(
-    `popover-over-sticky: the sticky head computes --layer-sticky (${sticky}) and the popover (--layer-float ${float}) stands over it`,
-    z === sticky && chain[0]?.z === float && head > 0
+    `popover-over-sticky: over a ledger's sticky band (position ${read.bandPosition}, z-index ${read.bandZ}) under its centre, the popover (--layer-float ${float}) takes the point: elementFromPoint is inside it`,
+    read.bandUnder &&
+      read.bandPosition === "sticky" &&
+      read.inside &&
+      chain[0]?.z === float &&
+      band > 0,
+    JSON.stringify(read)
   );
   await page.close();
 }

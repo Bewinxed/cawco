@@ -1295,8 +1295,6 @@ public enum Size {
 }
 
 public enum Layer {
-    /// A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome.
-    public static let layerSticky: Double = 10
     /// The hub band's slot under the bar: over the page column it opens above, its shadow on the page.
     public static let layerBand: Double = 20
     /// The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage.
