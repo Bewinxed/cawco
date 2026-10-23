@@ -726,6 +726,9 @@ export default {
     const programs = new Map();
     // The \`shell\` calls made in this location whose shell has yet to open.
     const shells = [];
+    // What the fleet's PreToolUse hooks said of each call, by session and
+    // call id, for its result.
+    const saidBefore = new Map();
 
     // The fleet's hooks of \`event\` that match a call (the agent's
     // fleet-hook-run.ts), its input in Claude Code's words without the
@@ -781,6 +784,9 @@ export default {
         // block refuses it.
         const verdict = await fleetHooksOn("PreToolUse", event.sessionID, event.tool, event.input, { tool_use_id: event.id });
         if (verdict.block) throw new Error(verdict.block);
+        // Its words go with the call's result (execute.after), as Claude
+        // Code adds a PreToolUse hook's additionalContext for the model.
+        if (verdict.context) saidBefore.set(key, verdict.context);
         // A rewrite, outside a bounded session only, in OpenCode's keys, the
         // credential stamp kept.
         if (verdict.updatedInput) {
@@ -813,7 +819,8 @@ export default {
       // Claude Code shows the model a PostToolUse hook's stderr.
       const completed = event.status === "completed";
       const after = await fleetHooksOn(completed ? "PostToolUse" : "PostToolUseFailure", event.sessionID, event.tool, event.input, { tool_use_id: event.id, ...(completed ? { tool_response: event.result } : { error: said(event.error) }) });
-      const told = [after.block, after.context].filter(Boolean).join("\\n");
+      const told = [saidBefore.get(event.sessionID + " " + event.id), after.block, after.context].filter(Boolean).join("\\n");
+      saidBefore.delete(event.sessionID + " " + event.id);
       if (told && completed) {
         event.result = { ...event.result, content: [...contentOf(event.result), { type: "text", text: told }] };
       }
