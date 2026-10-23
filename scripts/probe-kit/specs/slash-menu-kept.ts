@@ -22,7 +22,7 @@ import type { TranscriptPage } from "../../../packages/core/src/transcript-types
 import { until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 
-type Menu = TranscriptPage["facts"]["commands"];
+type Menu = NonNullable<TranscriptPage["facts"]>["commands"];
 
 /** The menu as a line: its names and skills, in order. */
 const said = (menu: Menu | undefined): string =>
@@ -53,8 +53,11 @@ const spec: Spec = {
       120_000
     );
     const menuOf = async () =>
-      (await fleet.api<TranscriptPage>(`/api/instances/${instanceId}/transcript`))
-        .facts?.commands;
+      (
+        await fleet.api<TranscriptPage>(
+          `/api/instances/${instanceId}/transcript`
+        )
+      ).facts?.commands;
     const before = await until(
       "the transcript's menu, from the session's init",
       menuOf,
