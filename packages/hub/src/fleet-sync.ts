@@ -191,6 +191,8 @@ export class FleetSync {
   #debounce: HubTimer | undefined;
   /** The machines that answered their welcome on their current connection: the ones a fleet change goes to. */
   readonly #ready = new Set<string>();
+  /** Each wait for items to converge on a machine ({@link convergedAll}), checked as the machine reports. */
+  readonly #waits = new Set<{ check: () => void; machineId: string }>();
 
   constructor(deps: FleetSyncDeps) {
     this.#deps = deps;
@@ -328,6 +330,55 @@ export class FleetSync {
       kept[item.id] = item;
     }
     this.#deps.keepItems(machineId, kept);
+    for (const wait of this.#waits) {
+      if (wait.machineId === machineId) {
+        wait.check();
+      }
+    }
+  }
+
+  /**
+   * Whether the machine's harnesses converged every one of `wanted` (item
+   * id → hash) at that hash, ok or failed, within `ms`: true as soon as its
+   * reports say so, false when `ms` passes first. What a new place's first
+   * session waits on, so it starts with the project's rows placed there
+   * (work-items.ts `placeTaken`).
+   */
+  convergedAll(
+    machineId: string,
+    wanted: ReadonlyMap<string, string>,
+    ms: number
+  ): Promise<boolean> {
+    const done = (): boolean => {
+      const kept = this.#deps.keptItems(machineId);
+      return [...wanted].every(([id, hash]) => {
+        const item = kept[id];
+        return (
+          item?.hash === hash &&
+          (item.state === "ok" || item.state === "failed")
+        );
+      });
+    };
+    if (done()) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      const wait = {
+        machineId,
+        check: () => {
+          if (done()) {
+            end(true);
+          }
+        },
+      };
+      const timer = this.#deps.lifetime.after(ms, () => end(false));
+      const end = (converged: boolean) => {
+        this.#waits.delete(wait);
+        this.#deps.lifetime.cancel(timer);
+        resolve(converged);
+      };
+      this.#waits.add(wait);
+    });
   }
 
   /** A person's Retry of one failed item on a machine: sent forced, so it converges again. */

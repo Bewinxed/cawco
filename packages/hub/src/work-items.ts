@@ -935,6 +935,14 @@ export interface WorkItemDeps {
     task: { projectId: string | null; taskId?: string }
   ) => ItemPlacement;
   /**
+   * Waits, bounded, until `machineId`'s harnesses converged the project's
+   * rows placed at the place `placeId` (its MCP servers, skills, hooks,
+   * memory documents, Claude Code settings, OpenCode plugins and pi
+   * extensions): a delegate's session in a new workspace starts with them,
+   * as each harness reads what is placed at its folder as it launches.
+   */
+  readonly placeTaken: (machineId: string, placeId: string) => Promise<void>;
+  /**
    * The session's plan steps as its plan panel reads them (plans.ts):
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
    * these.
@@ -2098,6 +2106,7 @@ const unpushed = (
 const TRAY_HOLD_MS = 6000;
 
 export const createWorkItems = ({
+  placeTaken,
   awaitsSend,
   beforeCut,
   call,
@@ -4004,13 +4013,14 @@ export const createWorkItems = ({
         );
       }
       if (projectId && db.project(projectId)) {
-        db.addPlace({
+        const { place } = db.addPlace({
           projectId,
           machineId: workspace.machineId,
           path: workspace.path,
           kind: "workspace",
         });
         placesChanged(workspace.machineId, projectId);
+        await placeTaken(workspace.machineId, place.id);
       }
       const again =
         db.updateWorkspace(workspace.id, {
@@ -5251,13 +5261,14 @@ export const createWorkItems = ({
     // archiving the workspace removes it.
     if (parent.projectId) {
       projectStands(parent.projectId);
-      db.addPlace({
+      const { place } = db.addPlace({
         projectId: parent.projectId,
         machineId,
         path: workspace.path,
         kind: "workspace",
       });
       placesChanged(machineId, parent.projectId);
+      await placeTaken(machineId, place.id);
     }
     // In its scratch dir before its session starts ({@link spawnIn}).
     return spawnIn(
