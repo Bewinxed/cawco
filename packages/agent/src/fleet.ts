@@ -45,6 +45,8 @@ import {
   accountIds,
   claudeHomeJson,
   claudeSkillsDir,
+  fleetHarnessSetFile,
+  fleetHooksDir,
   placedMemoryDir,
   placedSkillsDir,
   projectClaudeDir,
@@ -58,6 +60,12 @@ import { resolveClaudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { readFleetDenials, sidecarTurn } from "./denied-tools";
+import {
+  type FleetHarnessSet,
+  readFleetHarnessSet,
+  type SetHook,
+  writeFleetHarnessSet,
+} from "./fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome } from "./fs";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
@@ -125,12 +133,21 @@ const MEMORIES_DIR = userLayerPath("memories");
 const SETTINGS_PATH = userLayerPath("settings.json");
 
 /**
- * Where a fleet hook's own script lands, one file per hook id. Named by id
- * rather than by name or hash, so renaming a hook in the editor moves its
- * registration but never orphans a script under an old name, and a hand edit
- * survives a hash bump to the same file it was made in.
+ * Where a fleet hook's own script lands, one file per hook id (core
+ * `fleetHooksDir`, which every workspace reads: a workspace session's
+ * harness runs a command hook inside its boundary). Named by id rather than
+ * by name or hash, so renaming a hook in the editor moves its registration
+ * but never orphans a script under an old name, and a hand edit survives a
+ * hash bump to the same file it was made in.
  */
-const HOOKS_DIR = userLayerPath("cawco-hooks");
+const HOOKS_DIR = fleetHooksDir();
+
+/**
+ * Where the scripts were written before they moved to {@link HOOKS_DIR}, in
+ * the user layer no workspace reads. A record's script found there is
+ * removed once the sync has registered the hook at its new path.
+ */
+const USER_LAYER_HOOKS_DIR = userLayerPath("cawco-hooks");
 
 const PLUGINS_DIR = userLayerPath("plugins");
 /** The CLI's own account of what is linked and what is installed. */
@@ -238,10 +255,18 @@ interface PlacedRecord {
 /** What cawco registered for one hook, enough to find and remove it later. */
 interface ManagedHook {
   command: string;
+  /**
+   * The folder of a project's copy. One with `placed` is in the harness set
+   * (fleet-harness-set.ts); one without was registered in that folder's
+   * `.claude/settings.json` by an earlier build, and the sync takes it out
+   * of there ({@link dropCheckoutHooks}).
+   */
   cwd?: string;
   event: HookEvent;
   /** sha256 of the script cawco wrote, or of the hub's row when there is no script. */
   hash: string;
+  /** A project's copy, handed to its sessions through the harness set. */
+  placed?: true;
   scope: FleetScope;
 }
 
@@ -2434,14 +2459,57 @@ const scriptParseError = async (
   }
 };
 
-/** `~/.claude/settings.json` for a fleet-wide hook, `<cwd>/.claude/settings.json`
- * for one bound to a project — the same file a project MCP server's counterpart
- * would use if MCP had one, and the only settings file a session in that
- * checkout actually reads for its hooks. */
-const settingsPathFor = (hook: Pick<FleetHook, "scope" | "cwd">): string =>
-  hook.scope && hook.scope !== "user" && hook.cwd
-    ? projectClaudeDir(hook.cwd, "settings.json")
-    : SETTINGS_PATH;
+/**
+ * A project's copy of a hook, placed at one of its folders here: it goes to
+ * the folder's sessions through the harness set (fleet-harness-set.ts),
+ * never into a file of the folder. The fleet's own are registered in
+ * `~/.claude/settings.json`.
+ */
+const placedHook = (hook: Pick<FleetHook, "scope" | "cwd">): boolean =>
+  !!hook.scope && hook.scope !== "user" && !!hook.cwd;
+
+/**
+ * What an earlier build registered in a project's folder, its
+ * `<cwd>/.claude/settings.json`, taken back out: the records with a folder
+ * and no `placed` mark. Each file is read and written once; one that cannot
+ * be read or written is said on the log and left as it is.
+ */
+const dropCheckoutHooks = async (
+  managed: Record<string, ManagedHook>
+): Promise<void> => {
+  const byFile = new Map<string, ManagedHook[]>();
+  for (const record of Object.values(managed)) {
+    if (record.cwd && !record.placed) {
+      const file = projectClaudeDir(record.cwd, "settings.json");
+      byFile.set(file, [...(byFile.get(file) ?? []), record]);
+    }
+  }
+  for (const [file, records] of byFile) {
+    // biome-ignore lint/performance/noAwaitInLoops: each file is a read-modify-write of its own, one at a time
+    const stored = await readJson<Record<string, unknown>>(file);
+    if (!stored) {
+      continue;
+    }
+    const commands = records.map((record) => record.command);
+    const hooks = Object.fromEntries(
+      Object.entries(
+        (stored.hooks as Record<string, HookMatcher[]> | undefined) ?? {}
+      )
+        .map(([event, entries]) => [event, withoutHooks(entries, commands)])
+        .filter(([, entries]) => (entries as HookMatcher[]).length > 0)
+    );
+    const { hooks: _hooks, ...rest } = stored;
+    const next = Object.keys(hooks).length > 0 ? { ...rest, hooks } : rest;
+    if (JSON.stringify(next) === JSON.stringify(stored)) {
+      continue;
+    }
+    await writeJson(file, next).catch((error: unknown) =>
+      console.warn(
+        `[fleet] the hooks an earlier build registered in ${file} were not taken out: ${said(error)}`
+      )
+    );
+  }
+};
 
 /**
  * The handler as it goes into `settings.json`. A command handler carrying a
@@ -2465,21 +2533,30 @@ const identityOf = (handler: HookHandler): string =>
     ? handler.command
     : JSON.stringify(handler);
 
+/** What {@link syncHooks} answers: what cawco now manages, and the hooks for the harness set. */
+interface SyncedHooks {
+  records: Record<string, ManagedHook>;
+  set: Pick<FleetHarnessSet, "hooks" | "placedHooks">;
+}
+
 /**
- * Writes every enabled hook's script and registers it in the settings.json its
- * scope points at, and takes back out whatever a disabled or deleted hook, or
- * one that no longer passes validation, used to have registered. The one row
- * here that is executable: a hook that reaches this function runs on a shell,
- * unprompted, on every machine that gets it, which is why it is checked again
- * below rather than trusted on the wire — the hub already refused an invalid
- * one at the door, but that is the hub's process, not this one's guarantee.
+ * Writes every enabled hook's script, registers each of the fleet's own in
+ * `~/.claude/settings.json`, and answers every one as the harness set holds
+ * it (fleet-harness-set.ts): the fleet's for OpenCode and pi, a project's
+ * copies for every harness. It takes back out whatever a disabled or deleted
+ * hook, or one that no longer passes validation, used to have registered. The
+ * one row here that is executable: a hook that reaches this function runs on
+ * a shell, unprompted, on every machine that gets it, which is why it is
+ * checked again below rather than trusted on the wire — the hub already
+ * refused an invalid one at the door, but that is the hub's process, not this
+ * one's guarantee.
  */
 const syncHooks = async (
   desired: FleetHook[],
   managed: Record<string, ManagedHook>,
   report: Record<string, FleetItemState>
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes every enabled hook's script and registers it per settings.json scope, then removes what a disabled/deleted/invalid hook used to have
-): Promise<Record<string, ManagedHook>> => {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes every enabled hook's script, registers the fleet's own in the user settings, then removes what a disabled/deleted/invalid hook used to have
+): Promise<SyncedHooks> => {
   const written: Record<string, ManagedHook> = {};
   const keep = (id: string): void => {
     if (managed[id]) {
@@ -2584,36 +2661,51 @@ const syncHooks = async (
     settled.push(hook);
   }
 
-  // Registration, one settings.json per place a hook is bound to — including a
-  // file nothing here still wants, so a hook whose row was disabled or deleted
-  // still gets its old entry taken out of the file it used to be in.
-  const bySettings = new Map<string, FleetHook[]>();
+  // Every settled hook as a session runs it: a project's copy goes to its
+  // folder's sessions through the harness set alone, and is applied once its
+  // script is written; the fleet's own is in the set for OpenCode and pi,
+  // and registered in the user settings below for Claude Code.
+  const set: SyncedHooks["set"] = { hooks: {}, placedHooks: {} };
+  const fleetWide: FleetHook[] = [];
   for (const hook of settled) {
-    const path = settingsPathFor(hook);
-    bySettings.set(path, [...(bySettings.get(path) ?? []), hook]);
-  }
-  for (const record of Object.values(managed)) {
-    const path = settingsPathFor(record);
-    if (!bySettings.has(path)) {
-      bySettings.set(path, []);
-    }
-  }
-
-  for (const [path, hooks] of bySettings) {
-    // biome-ignore lint/performance/noAwaitInLoops: each iteration is a read-modify-write of its own settings.json; kept one file at a time like the rest of this sync rather than fanning writes out across every settings.json on the machine at once
-    const stored = await readJson<Record<string, unknown>>(path);
-    // Nothing is written over a file that cannot be read: the rest of it is the
-    // user's own permissions and plugins, and a rewrite from an empty root
-    // would take them with it.
-    if (stored === undefined && (await Bun.file(path).exists())) {
-      const detail = `could not parse ${path}`;
-      for (const hook of hooks) {
-        keep(hook.id);
-        report[hook.id] = { state: "failed", cause: "unparsable", detail };
-      }
+    const handler = handlerFor(hook, scriptPaths.get(hook.id));
+    const one: SetHook = {
+      id: hook.id,
+      name: hook.name,
+      event: hook.event,
+      handler,
+      ...(hook.matcher ? { matcher: hook.matcher } : {}),
+    };
+    if (!placedHook(hook)) {
+      set.hooks[hook.id] = one;
+      fleetWide.push(hook);
       continue;
     }
+    set.placedHooks[hook.id] = { ...one, cwd: hook.cwd as string };
+    written[hook.id] = {
+      hash: hashes.get(hook.id) ?? hook.hash,
+      command: identityOf(handler),
+      event: hook.event,
+      scope: hook.scope ?? "project",
+      cwd: hook.cwd as string,
+      placed: true,
+    };
+    report[hook.id] ??= { state: "applied" };
+  }
 
+  // Registration in the user settings — a hook whose row was disabled or
+  // deleted still gets its old entry taken out of it.
+  const stored = await readJson<Record<string, unknown>>(SETTINGS_PATH);
+  // Nothing is written over a file that cannot be read: the rest of it is the
+  // user's own permissions and plugins, and a rewrite from an empty root
+  // would take them with it.
+  if (stored === undefined && (await Bun.file(SETTINGS_PATH).exists())) {
+    const detail = `could not parse ${SETTINGS_PATH}`;
+    for (const hook of fleetWide) {
+      keep(hook.id);
+      report[hook.id] = { state: "failed", cause: "unparsable", detail };
+    }
+  } else {
     const root = stored ?? {};
     const settingsHooks = {
       ...((root.hooks as Record<string, unknown> | undefined) ?? {}),
@@ -2623,11 +2715,11 @@ const syncHooks = async (
     // it ran on — a hook that moved to a different event still needs its old
     // row gone, not just left orphaned under the event it used to fire on.
     const registeredHere = Object.values(managed)
-      .filter((record) => settingsPathFor(record) === path)
+      .filter((record) => !record.cwd)
       .map((record) => record.command);
 
     const byEvent = new Map<HookEvent, FleetHook[]>();
-    for (const hook of hooks) {
+    for (const hook of fleetWide) {
       byEvent.set(hook.event, [...(byEvent.get(hook.event) ?? []), hook]);
     }
 
@@ -2643,8 +2735,7 @@ const syncHooks = async (
           hash: hashes.get(hook.id) ?? hook.hash,
           command: identityOf(handler),
           event: hook.event,
-          scope: hook.scope ?? "user",
-          ...(hook.cwd ? { cwd: hook.cwd } : {}),
+          scope: "user",
         };
         return hook.matcher
           ? { matcher: hook.matcher, hooks: [handler] }
@@ -2665,47 +2756,56 @@ const syncHooks = async (
       settings.hooks = undefined;
     }
 
+    let unwritable: string | undefined;
     if (JSON.stringify(settings) !== JSON.stringify(root)) {
       try {
-        await writeJson(path, settings);
+        await writeJson(SETTINGS_PATH, settings);
       } catch (error) {
-        const detail = tail(said(error));
-        for (const hook of hooks) {
-          keep(hook.id);
-          report[hook.id] = { state: "failed", cause: "unwritable", detail };
-        }
-        continue;
+        unwritable = tail(said(error));
       }
     }
-
-    if (path !== SETTINGS_PATH && hooks.length > 0) {
-      await excludeFromCheckout(path);
-    }
-
-    for (const hook of hooks) {
-      if (report[hook.id]) {
-        continue; // already reported failed/drift above
+    for (const hook of fleetWide) {
+      if (unwritable) {
+        delete written[hook.id];
+        keep(hook.id);
+        report[hook.id] = {
+          state: "failed",
+          cause: "unwritable",
+          detail: unwritable,
+        };
+      } else {
+        // One reported failed or drifted above keeps that word.
+        report[hook.id] ??= { state: "applied" };
       }
-      report[hook.id] = { state: "applied" };
     }
   }
 
+  await dropCheckoutHooks(managed);
+
   // A hook that is disabled, deleted, or failed validation this round and had
   // nothing kept alive for it above is one whose registration and script (if
-  // cawco wrote one) are cawco's to take away.
+  // cawco wrote one) are cawco's to take away. A script still at the user
+  // layer's old path goes once the hook is registered at its new one.
   const stillHere = new Set(settled.map((hook) => hook.id));
+  const commands = new Set(Object.values(written).map((one) => one.command));
   for (const [id, record] of Object.entries(managed)) {
+    const ours =
+      record.command.startsWith(HOOKS_DIR) ||
+      record.command.startsWith(USER_LAYER_HOOKS_DIR);
     if (stillHere.has(id) || written[id]) {
+      if (ours && !commands.has(record.command)) {
+        // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this mirrors the sequential style of the rest of this sync rather than fanning out filesystem writes
+        await rm(record.command, { force: true });
+      }
       continue;
     }
-    if (record.command.startsWith(HOOKS_DIR)) {
-      // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this mirrors the sequential style of the rest of this sync rather than fanning out filesystem writes
+    if (ours) {
       await rm(record.command, { force: true });
     }
     report[id] = { state: "removed" };
   }
 
-  return written;
+  return { records: written, set };
 };
 
 const converge = async (
@@ -2755,6 +2855,9 @@ const converge = async (
     docStates
   );
   const hooks = await syncHooks(config.hooks, managed.hooks, hookStates);
+  // What every CawCo session on this machine takes as it starts, written
+  // whole after the files it names (fleet-harness-set.ts).
+  await writeFleetHarnessSet({ ...hooks.set });
   // The denials are the sync's own write, made as it arrived (denied-tools.ts
   // `applyFleetDenials`): kept as the sidecar holds them now, in the same
   // turn of its writes, so a newer sync's list is never written back over.
@@ -2776,7 +2879,7 @@ const converge = async (
         : {}),
       ...(memory ? { memory } : {}),
       memoryDocs,
-      hooks,
+      hooks: hooks.records,
       placedMemory,
       placedSkills,
     } satisfies Sidecar);
@@ -2946,6 +3049,12 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         ? { state: "applied" }
         : absentOrDrifted(fileHash, `${file} is not on disk`);
   }
+  // Read once, at the first project copy that asks.
+  let readSet: Promise<FleetHarnessSet> | undefined;
+  const harnessSet = (): Promise<FleetHarnessSet> => {
+    readSet ??= readFleetHarnessSet();
+    return readSet;
+  };
   for (const [id, record] of Object.entries(managed.hooks)) {
     if (record.command.startsWith(HOOKS_DIR)) {
       const scriptFile = Bun.file(record.command);
@@ -2966,10 +3075,22 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       }
     }
     // The last question for every hook: whether the entry cawco registered
-    // is still in the settings.json it registered it in — a script that was
-    // refused registration is kept on disk, so a matching file is not enough.
-    const settingsPath = settingsPathFor(record);
-    const stored = await readJson<Record<string, unknown>>(settingsPath);
+    // is still where sessions take it — a project's copy in the harness set,
+    // the fleet's own in the user settings. A script that was refused
+    // registration is kept on disk, so a matching file is not enough.
+    if (record.placed) {
+      const one = (await harnessSet()).placedHooks[id];
+      hooks[id] =
+        one && identityOf(one.handler) === record.command
+          ? { state: "applied" }
+          : {
+              state: "failed",
+              cause: "absent",
+              detail: `not in ${fleetHarnessSetFile()}`,
+            };
+      continue;
+    }
+    const stored = await readJson<Record<string, unknown>>(SETTINGS_PATH);
     const entries =
       (stored?.hooks as Record<string, HookMatcher[]> | undefined)?.[
         record.event
@@ -2983,7 +3104,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     );
     hooks[id] = present
       ? { state: "applied" }
-      : { state: "failed", cause: "absent", detail: `not in ${settingsPath}` };
+      : { state: "failed", cause: "absent", detail: `not in ${SETTINGS_PATH}` };
   }
   // Claimed here too, and for the reason `have` above is: a status overwrites
   // the stored report, so a status that left the toolchain out would retract

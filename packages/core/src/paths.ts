@@ -205,13 +205,34 @@ export const fleetMcpSetFile = (): string =>
   join(cawcoDataDir(), "fleet-mcp-set.json");
 
 /**
+ * Where each fleet hook's script is written, one file per hook id (a placed
+ * copy's id is `<hook id>@<place id>`): agent fleet.ts writes them, and every
+ * harness runs a command hook from here. A workspace reads it
+ * ({@link fleetSyncedPaths}), since a command hook of a workspace session
+ * runs inside its boundary.
+ */
+export const fleetHooksDir = (): string => join(cawcoDataDir(), "fleet-hooks");
+
+/**
+ * The harness config the fleet places, as this machine's sessions take it
+ * at their launch (agent fleet-harness-set.ts): the fleet's hooks and each
+ * project's placed copies, with every command resolved to its script. Written
+ * whole by each fleet sync; read by CawCo's Claude Code, OpenCode and pi
+ * sessions alone, never by the person's own `claude`, `opencode` or `pi`.
+ */
+export const fleetHarnessSetFile = (): string =>
+  join(cawcoDataDir(), "fleet-harness-set.json");
+
+/**
  * What the fleet sync writes on this machine that a harness loads: each
  * skills dir ({@link claudeSkillsDir}, {@link piSkillsDir}) with the tree
  * store its links land in ({@link treeStoreOf}), the vendored marketplaces
  * with their plugins' stores ({@link VENDOR_MARKETPLACES_DIR}), pi's
- * memory document (Claude Code's, `CLAUDE.md`, is the user layer's), and the
+ * memory document (Claude Code's, `CLAUDE.md`, is the user layer's), the
  * fleet's installed MCP servers ({@link fleetMcpInstallsDir}), which a
- * session in a workspace launches. Every workspace reads each and writes none
+ * session in a workspace launches, and the fleet's hook scripts
+ * ({@link fleetHooksDir}), which a workspace session's harness runs inside
+ * its boundary. Every workspace reads each and writes none
  * (core workspace-policy.ts): a harness hands its model a skill's path, and
  * the model reads the skill's other files from there with its own tools,
  * through the boundary. pi's lie in its agent dir, a credential store, so
@@ -225,6 +246,7 @@ export const fleetSyncedPaths = (): string[] => [
   userLayerPath(VENDOR_MARKETPLACES_DIR),
   piMemoryFile(),
   fleetMcpInstallsDir(),
+  fleetHooksDir(),
 ];
 
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
