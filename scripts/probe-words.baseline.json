@@ -49,7 +49,6 @@
     "Discarded workspace": 1,
     "its workspace": 1,
     "Their sessions can no longer act, so artifact_delete removes them from here.": 1,
-    "you, up its delegation tree, can delete it": 1,
     "Your panel": 1
   },
   "scripts/probe-kit/specs/artifact-resize-loop-thread.ts": {
@@ -62,14 +61,7 @@
   "scripts/probe-kit/specs/artifacts.ts": {
     "): your panel keeps the version you opened": 1,
     "artifact_create takes kind, name, does (pick | judge | try | draw), ask": 1,
-    "changed the": 1,
-    "did not answer: nothing is listening on that port.": 2,
-    "Handed to your parent, not opened": 2,
-    "It wasn't handed to your parent.": 1,
-    "only that session changes it": 3,
-    "The server on port": 2,
-    "This session has no artifact": 3,
-    "waits as its next version": 1
+    "changed the": 1
   },
   "scripts/probe-kit/specs/attach-continue.ts": {
     ": it continues compressed:": 1
@@ -103,9 +95,6 @@
     "Not drawn yet": 1,
     "The canvas draws it once its session writes it.": 1
   },
-  "scripts/probe-kit/specs/canvas.ts": {
-    "The canvas is empty": 1
-  },
   "scripts/probe-kit/specs/caw-edits.ts": {
     "withdrawn while gate.md was read": 2
   },
@@ -129,8 +118,6 @@
     "Comments aren't reaching the agent": 1,
     "Comments on": 2,
     "gone from the page": 1,
-    "marks reached no one": 1,
-    "No artifact of this session holds pin": 1,
     "not sent": 1,
     "the project's Caw couldn't take them": 1
   },
@@ -456,8 +443,7 @@
     "does not exist in": 1,
     "is outside": 1,
     "is the hub's to send": 1,
-    "sheet stage": 1,
-    "The ask is in the person's words: no file, path or id in it. Name the thing as they call it.": 1
+    "sheet stage": 1
   },
   "scripts/probe-kit/specs/setup-on-ask.ts": {
     "decision page named": 1,

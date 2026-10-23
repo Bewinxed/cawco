@@ -26,9 +26,11 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { shaped } from "../words";
 
 const CHILD = "PROBE-ORPHAN-CHILD";
 const MADE = "PROBE-ORPHAN-MADE";
@@ -213,7 +215,7 @@ const run = async (kit: Kit) => {
     "(a) while the child can still act, the parent's artifact_delete is refused, and the page stays",
     early.isError &&
       early.text.includes(STILL_ACTS) &&
-      early.text.includes("you, up its delegation tree, can delete it") &&
+      shaped(artifactToolWords.makerDeletes).test(early.text) &&
       pageOf(fleet)?.id === page.id &&
       workspace?.state !== "archived",
     `workspace ${workspace?.state}; ${early.text.slice(0, 600)}`

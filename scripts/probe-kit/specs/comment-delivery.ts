@@ -63,10 +63,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, pressAt, type Spec, settle } from "../kit";
+import { shaped } from "../words";
 import {
   docOf,
   dragFromIcon,
@@ -1041,7 +1043,7 @@ const endedWriterChecks = async (
     async () => ({
       pin: numbered((await docOf(frame)).pins, 1),
       nested: (await hubLines()).find(
-        (line) => line.includes("marks reached no one") && NESTED.test(line)
+        (line) => shaped(artifactToolWords.marksOwed).test(line) && NESTED.test(line)
       ),
     }),
     (now) =>
@@ -1178,7 +1180,7 @@ const endedWriterChecks = async (
   const card = await readCard(LEAD_WORDS);
   kit.check(
     "7b: a session that is not the project's lead is refused the writer's pin, and no word of it lands",
-    refused.includes(`No artifact of this session holds pin ${pin.id}`) &&
+    refused.includes(artifactToolWords.noPin(pin.id)) &&
       !(landed?.thread ?? []).some(
         (entry) => entry.text === "A sibling's word."
       ),

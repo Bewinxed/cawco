@@ -164,6 +164,7 @@ import {
   STAGE_ENSURE,
   STAGE_READY_MS,
 } from "../../../packages/core/src/stage";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -498,7 +499,7 @@ const componentLegs = async (
   kit.check(
     "2c: artifact_create(kind: component) whose ask names a file is refused in the person's words",
     bare.includes(
-      "The ask is in the person's words: no file, path or id in it. Name the thing as they call it."
+      artifactToolWords.askInTheirWords
     ),
     short(bare)
   );

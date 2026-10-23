@@ -146,6 +146,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -157,6 +158,7 @@ import {
   type Spec,
   settle,
 } from "../kit";
+import { shaped } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
 /** The design tokens' one source (CLAUDE.md, Design Context). */
@@ -743,7 +745,7 @@ const handChecks = async ({
     "H2: the delegate's to: parent canvas is made, readied and not opened",
     !!handedId &&
       handedAt.includes('"opened":false') &&
-      handedAt.includes("Handed to your parent, not opened"),
+      handedAt.includes(artifactToolWords.handedToParent),
     handedAt.slice(0, 400)
   );
   if (!handedId) {
@@ -836,7 +838,7 @@ const handChecks = async ({
   kit.check(
     "H7: a handed canvas with elements is drawn unopened: its create wrote them, the parent reads them and a picture, is told once, and its panel still shows its own page",
     drawing.includes('"wrote":["handed-box"') &&
-      drawing.includes("Handed to your parent, not opened") &&
+      drawing.includes(artifactToolWords.handedToParent) &&
       drawn?.outline.includes("Handed box") === true &&
       drawn.pictureAt !== null &&
       drawingSends === 1 &&
@@ -990,7 +992,7 @@ const treeChecks = async ({
   );
   kit.check(
     "T2: a session of the project outside the tree is refused the canvas and lists nothing of it",
-    outside.includes(`This session has no artifact ${drawingId}.`) &&
+    outside.includes(artifactToolWords.noArtifact(drawingId)) &&
       !outside.includes("Handed box") &&
       !outsideListed,
     `read: ${outside.slice(-300)}; listed ${outsideListed}`
@@ -1016,7 +1018,7 @@ const treeChecks = async ({
   );
   kit.check(
     "T3: the sibling's artifact_update of the parent's canvas is refused, and its outline stays",
-    update.includes("only that session changes it") &&
+    shaped(artifactToolWords.othersArtifact).test(update) &&
       after.outline.includes("Handed box") &&
       !after.outline.includes("Sibling box"),
     `update: ${update.slice(-300)}; outline ${after.outline.slice(0, 200)}`
@@ -1068,7 +1070,7 @@ const treeChecks = async ({
   kit.check(
     "T4: the parent's artifact_show of its delegate's page opens it in the parent's panel; the page stays the delegate's, and the delegate's panel as it was",
     showedOk(parentShow) &&
-      !parentShow.includes("only that session changes it") &&
+      !shaped(artifactToolWords.othersArtifact).test(parentShow) &&
       panelOf(fleet, parent) === pageId &&
       pageAfter.instanceId === sibling &&
       pageAfter.shown === pageBefore.shown &&
@@ -1084,7 +1086,7 @@ const treeChecks = async ({
   });
   kit.check(
     "T6: a session of the project outside the tree is refused the delegate's page (404), and its panel stays empty of it",
-    outsiderShow.includes(`This session has no artifact ${pageId}.`) &&
+    outsiderShow.includes(artifactToolWords.noArtifact(pageId)) &&
       panelOf(fleet, outsider) !== pageId,
     `show: ${outsiderShow.slice(-300)}; outsider's panel ${panelOf(fleet, outsider)}`
   );
@@ -1102,7 +1104,7 @@ const treeChecks = async ({
   );
   kit.check(
     "T7: the parent's artifact_update of its delegate's page is refused with the 403, and the page keeps its revision",
-    parentUpdate.includes("only that session changes it") &&
+    shaped(artifactToolWords.othersArtifact).test(parentUpdate) &&
       pageRead.revision === pageRevision,
     `update: ${parentUpdate.slice(-300)}; revision ${pageRevision} → ${pageRead.revision}`
   );
@@ -1130,7 +1132,7 @@ const treeChecks = async ({
     "T8: a child spawned with parent and no work item hands up a page; the parent's artifact_show opens it in the parent's panel, and the outsider is refused (404)",
     showedOk(upShow) &&
       panelOf(fleet, parent) === upId &&
-      outsiderUp.includes(`This session has no artifact ${upId}.`) &&
+      outsiderUp.includes(artifactToolWords.noArtifact(upId)) &&
       panelOf(fleet, outsider) !== upId,
     `show: ${upShow.slice(-300)}; parent's panel ${panelOf(fleet, parent)}; outsider: ${outsiderUp.slice(-200)}`
   );
@@ -1201,7 +1203,7 @@ const heldChecks = async ({
   kit.check(
     "H8: the delegate's re-create of the canvas the parent's panel shows is held as its next version: the panel keeps it, it waits on the parent, and the parent is told it changed",
     !!canvasNext &&
-      again.includes("waits as its next version") &&
+      again.includes(artifactToolWords.heldAsNext) &&
       canvasShown.shown &&
       relisted?.waitingOn.includes("session") === true &&
       changedSends(canvasId).length === 1,
@@ -1404,9 +1406,9 @@ const refusedHandChecks = async ({
   kit.check(
     "P3: a delegate's to: parent preview of a port nothing listens on is refused with the server sentence",
     !ANSWERED_ID.test(deaf) &&
-      deaf.includes(`The server on port ${silent} on `) &&
-      deaf.includes("did not answer: nothing is listening on that port.") &&
-      deaf.includes("It wasn't handed to your parent."),
+      deaf.includes(artifactToolWords.serverOnPort(String(silent), "on ")) &&
+      deaf.includes(artifactToolWords.notListening("")) &&
+      deaf.includes(artifactToolWords.notHanded),
     deaf.slice(-400)
   );
 
@@ -1550,7 +1552,7 @@ const askChecks = async ({
       ask: "Judge src/lib/Card.svelte",
       html: PAGE,
     },
-    "The ask is in the person's words: no file, path or id in it. Name the thing as they call it."
+    artifactToolWords.askInTheirWords
   );
 };
 
@@ -2363,8 +2365,8 @@ const fieldChecks = async ({
   kit.check(
     "14: a port nothing answers: opened false with the server sentence within 10 s, from the pane's word, and the pane's failure band",
     dead.includes('"opened":false') &&
-      dead.includes(`The server on port ${deadPort} on `) &&
-      dead.includes("did not answer: nothing is listening on that port.") &&
+      dead.includes(artifactToolWords.serverOnPort(deadPort, "on ")) &&
+      dead.includes(artifactToolWords.notListening("")) &&
       deadTook < SHOWN_WAIT_MS &&
       failed?.body.ok === false &&
       failed.body.error === "server" &&

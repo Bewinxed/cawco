@@ -51,6 +51,7 @@
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { previewRoute } from "../../../packages/core/src/frames";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   COMPOSER,
@@ -399,7 +400,7 @@ const emptyChecks = async (on: OnCanvas) => {
   ).catch(() => 0);
   on.kit.check(
     "empty: artifact_create with neither says the canvas is empty; it shows the empty recipe, and Draw picks the pen",
-    answer.includes("The canvas is empty") &&
+    answer.includes(artifactToolWords.canvasEmpty) &&
       rail.title === "Nothing drawn yet" &&
       rail.line === "Draw with the pencil, or ask the agent to draw." &&
       pen === 1,

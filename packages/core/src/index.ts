@@ -2210,6 +2210,7 @@ export const CAWCO_MDNS_TYPE = "cawco";
 export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
+export * from "./words/artifact-tools";
 export * from "./words/artifacts";
 export * from "./words/asks";
 export * from "./words/blocks";

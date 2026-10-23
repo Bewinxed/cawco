@@ -15,7 +15,7 @@
  */
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
-import {
+import { 
   type AgentRow,
   ARTIFACT_NAME,
   type ArtifactChoices,
@@ -32,7 +32,7 @@ import {
   artifactCommentsNotice,
   artifactErrorsNotice,
   artifactLink,
-  artifactSavesNotice,
+  artifactSavesNotice,artifactToolWords,
   type ChoiceEntry,
   choiceEntryProblem,
   DESK_CAPTURE_WIDTH,
@@ -398,7 +398,7 @@ export const askProblem = (ask: string): string | null => {
     return 'The ask reaches the person: say what they do (pick, pin, try, draw) and to what, without "tap" or "poke".';
   }
   if (ASK_PATHLIKE.test(ask)) {
-    return "The ask is in the person's words: no file, path or id in it. Name the thing as they call it.";
+    return artifactToolWords.askInTheirWords;
   }
   return null;
 };
@@ -725,12 +725,10 @@ export const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
 
 /** Why a `to: "parent"` create opened nothing: the parent opens it. */
-const HELD =
-  "Handed to your parent, not opened: it opens in their panel when they call artifact_show.";
+const HELD = artifactToolWords.handedToParent;
 
 /** Why a maker's change opened nothing: the parent had opened the artifact, so the change waits as its next version ({@link holdNext}). */
-const HELD_NEXT =
-  "Your parent opened it, so this change waits as its next version: their panel keeps the version they opened until they call artifact_show.";
+const HELD_NEXT = artifactToolWords.heldAsNext;
 
 /** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
 const HANDED = "handed";
@@ -1742,11 +1740,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (row && row.instanceId !== instance.id && inTree(instance, row)) {
       throw new ArtifactRefusal(
         403,
-        `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is session ${row.instanceId?.slice(0, 8)}'s: your delegation tree reads it, and only that session changes it.`
+        artifactToolWords.othersArtifact(
+          `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`,
+          row.instanceId?.slice(0, 8) ?? ""
+        )
       );
     }
     if (!row || row.instanceId !== instance.id) {
-      throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+      throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
     }
     return row;
   };
@@ -1783,7 +1784,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     throw new ArtifactRefusal(
       403,
       up
-        ? `${whose}, and that session can still act: it deletes it now (a handoff asks it to). Once it can't (its item ended and its workspace was discarded or archived, or the session ended for good), you, up its delegation tree, can delete it.`
+        ? artifactToolWords.makerDeletes(whose)
         : `${whose}. That session deletes it while it can still act; after that, the sessions up its delegation tree do, and the person can from the dashboard. This session is neither.`
     );
   };
@@ -1818,7 +1819,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ) {
       return row;
     }
-    throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+    throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
   };
 
   /**
@@ -2154,7 +2155,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       projectPage(instance, id) ??
       (next && inTree(instance, next) ? next : undefined);
     if (!row) {
-      throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+      throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
     }
     return row;
   };
@@ -2213,7 +2214,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     throw new ArtifactRefusal(
       404,
-      `No artifact of this session holds pin ${pinId}. comment_read lists its pins with their ids.`
+      artifactToolWords.noPin(pinId)
     );
   };
 
@@ -2769,7 +2770,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (workspace.id !== mine && !deps.delegatesIn(instance, workspace.id)) {
       throw new ArtifactRefusal(
         403,
-        `"${needle}" is not your delegate's workspace — you can only preview your own workspace or your delegates'.`
+        artifactToolWords.notYourDelegate(String(needle))
       );
     }
     return workspace;
@@ -2980,11 +2981,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const machine = machineOf(row);
     const subject =
       "port" in source
-        ? `The server on port ${source.port} ${source.workspace ? `in workspace ${source.workspace.slice(0, 8)}` : `on ${machine}`}`
+        ? artifactToolWords.serverOnPort(
+            source.port,
+            source.workspace
+              ? `in workspace ${source.workspace.slice(0, 8)}`
+              : `on ${machine}`
+          )
         : `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`;
     switch (failure) {
       case "server":
-        return `${subject} did not answer: nothing is listening on that port.`;
+        return artifactToolWords.notListening(subject);
       case "workspace":
         return `${subject} did not answer: the workspace isn't running.`;
       case "machine":
@@ -3441,7 +3447,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
     if (!outcome.ok) {
       console.warn(
-        `[artifacts] ${id}: the person's marks reached no one, and stay owed: ${outcome.reason}`
+        artifactToolWords.marksOwed(id, outcome.reason)
       );
       notSent(id, owed, outcome.reason);
       return outcome;
@@ -3916,7 +3922,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ? made
       : {
           ...made,
-          note: "The canvas is empty. Draw on it with artifact_update (elements or mermaid), or wait for the person to draw.",
+          note: artifactToolWords.canvasEmpty,
         };
   };
 
@@ -4674,7 +4680,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     releaseServed(at);
     throw new ArtifactRefusal(
       503,
-      `${notLoaded(at, down.failure)}${down.why ? ` (${down.why})` : ""} It wasn't handed to your parent.`
+      `${notLoaded(at, down.failure)}${down.why ? ` (${down.why})` : ""} ${artifactToolWords.notHanded}`
     );
   };
 
@@ -6146,7 +6152,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const found = viewable(instance, id);
       let row = found.heldFor === null ? found : db.get(found.heldFor);
       if (!row) {
-        throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+        throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
       }
       const next =
         by === "agent" && row.instanceId === instance.id
