@@ -17,6 +17,11 @@ and exits 0 only when every assertion passed. A spec
 that needs a hub gets a scratch fleet (`kit.fleet`, `scripts/scratch-fleet.ts`):
 a real hub, agent and sessiond with their own HOME, against a mock model.
 
+Leave the dashboard's source alone while a run is going: a spec that serves
+it with the dev server (`/motion/` benches, canvas-design's panel) hot-reloads
+every edit into its open pages, which reloads them mid-read and fails legs
+the edit never touched.
+
 ## User journeys
 
 ```sh
