@@ -128,6 +128,15 @@ const briefOf = (task: TaskView): DuplicateBrief => ({
   files: [...task.owns, ...task.outputs],
 });
 
+/** What the hub did for a phone request. */
+export interface PhoneDone {
+  action: PhoneAction | "lead";
+  decidedBy: "jev" | "lead";
+  stage?: string;
+  task?: string;
+  text: string;
+}
+
 export const createJevTasks = ({
   caw,
   continueAttempt,
@@ -644,15 +653,6 @@ export const createJevTasks = ({
     );
     return { ...decided, about };
   };
-
-  /** What the hub did for a phone request. */
-  interface PhoneDone {
-    action: PhoneAction | "lead";
-    decidedBy: "jev" | "lead";
-    stage?: string;
-    task?: string;
-    text: string;
-  }
 
   /** Each action Jev can read a phone sentence as, done as you. */
   const PHONE_DOES: Record<

@@ -1,6 +1,19 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../.tsbuild/scripts/probe-kit.tsbuildinfo"
+  },
   "include": ["**/*.ts"],
-  "exclude": ["fixtures/component-canvas"]
+  "exclude": ["fixtures/component-canvas"],
+  "references": [
+    { "path": "../../packages/agent" },
+    { "path": "../../packages/agent/src/preview-overlay" },
+    { "path": "../../packages/auth" },
+    { "path": "../../packages/cli" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/hub" },
+    { "path": "../../packages/jsonl-parser" },
+    { "path": "../../packages/sessiond" }
+  ]
 }

@@ -4,7 +4,11 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
-    "types": ["bun"]
+    "types": ["bun"],
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "../../.tsbuild/packages/agent"
   },
   "include": ["**/*"],
   "exclude": [
@@ -13,5 +17,6 @@
     "src/canvas-host",
     "src/preview-overlay",
     "src/stage-host/canvas"
-  ]
+  ],
+  "references": [{ "path": "../core" }, { "path": "../jsonl-parser" }]
 }

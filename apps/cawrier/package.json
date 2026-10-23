@@ -6,7 +6,7 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dry-run": "wrangler deploy --dry-run --outdir dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@apple/app-store-server-library": "3.1.0"

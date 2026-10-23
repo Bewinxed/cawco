@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "incremental": true,
+    "tsBuildInfoFile": "../../../.tsbuild/packages/core/scripts.tsbuildinfo"
+  },
+  "include": ["**/*"],
+  "references": [{ "path": ".." }]
+}

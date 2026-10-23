@@ -11,7 +11,9 @@
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "../../.tsbuild/packages/jsonl-parser"
   },
   "include": ["src", "bench", "tsdown.config.ts"]
 }

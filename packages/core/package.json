@@ -146,7 +146,7 @@
     "pricing": "bun scripts/pricing-snapshot.ts",
     "tools": "bun scripts/tool-presentation.ts",
     "tools:check": "bun scripts/tool-presentation.ts --check",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b . scripts"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",

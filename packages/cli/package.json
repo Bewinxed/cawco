@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "start": "bun src/cli.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@cawco/agent": "workspace:*",

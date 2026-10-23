@@ -1,1 +1,9 @@
-{ "extends": "../../../tsconfig.browser.json", "include": ["."] }
+{
+  "extends": "../../../tsconfig.browser.json",
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "../../../../../.tsbuild/packages/agent/src/stage-host/canvas.tsbuildinfo"
+  },
+  "include": ["."],
+  "references": [{ "path": "../../../../core" }]
+}

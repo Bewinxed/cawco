@@ -2,6 +2,8 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../../tsconfig.paths.json",
   "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "../../.tsbuild/apps/cawrier.tsbuildinfo",
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -12,5 +14,8 @@
     "isolatedModules": true,
     "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../packages/core" }
+  ]
 }

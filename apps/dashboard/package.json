@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
     "tokens": "bun scripts/build-tokens.ts",
-    "typecheck": "svelte-kit sync && bun scripts/svelte-check.ts && tsc -p tsconfig.node.json",
+    "typecheck": "svelte-kit sync && bun scripts/svelte-check.ts && tsc -b tsconfig.node.json",
     "variants": "bun scripts/build-variants.ts"
   },
   "overrides": {
