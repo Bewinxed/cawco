@@ -1176,7 +1176,10 @@ export const workspaces = sqliteTable("workspaces", {
    * that held it then, as its machine read it right before deleting the
    * clone (agent workspace.ts `headOnOrigin`): a retired workspace is cut
    * again there for its delegate to go on, and one with none is not cut
-   * again (work-items.ts `recuttable`). Null until it retires.
+   * again (work-items.ts `recuttable`). One whose item landed none retires
+   * with its commits in a carry: its head names that carry, and where its
+   * HEAD built on the branch (agent workspace.ts `carriedFrom`). Null until
+   * it retires.
    */
   head: text("head", { mode: "json" }).$type<WorkspaceCut>(),
   /**
@@ -1189,8 +1192,10 @@ export const workspaces = sqliteTable("workspaces", {
    */
   movedUntold: text("moved_untold", { mode: "json" }).$type<CheckoutMove>(),
   /**
-   * The carry its discard wrote on its machine, its parent or the person
-   * letting its unlanded work go: such a workspace is never cut again.
+   * The carry its machine wrote as it went: a discard's, its parent or the
+   * person letting its unlanded work go, which is never cut again; or its
+   * retirement's, its items landing none, which a cut again restores
+   * (`head.carry`).
    */
   carry: text("carry"),
   /**

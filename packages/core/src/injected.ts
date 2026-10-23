@@ -267,14 +267,15 @@ export const withInputsLine = (
  * it, untold until the next message handed to that session:
  * - `recut`: the workspace retired while its session slept and was cut again
  *   for it at `commit` on `branch` (hub work-items.ts `recut`), a new clone
- *   with nothing git does not track;
+ *   with nothing git does not track; with `carry`, its commits were in that
+ *   carry as it retired and are restored on top, HEAD where it was;
  * - `landing`: the hub rebased the workspace's commits onto origin's `branch`
  *   as it landed them (hub landing.ts `onBase`), HEAD going `from` → `to`,
  *   so the tree holds every file main gained in between, its lockfile and
  *   package manifests among them.
  */
 export type CheckoutMove =
-  | { branch: string; commit: string; kind: "recut" }
+  | { branch: string; carry?: string; commit: string; kind: "recut" }
   | { branch: string; from: string; kind: "landing"; to: string };
 
 /** The run that brings a moved checkout's installed dependencies to its lockfile, in the line's words. */
@@ -291,7 +292,7 @@ const INSTALL_AGAIN = "Run the repo's install before you build or test.";
  */
 export const movedLine = (move: CheckoutMove): string =>
   move.kind === "recut"
-    ? `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${move.commit.slice(0, 9)} on ${move.branch}: installed dependencies, build outputs and your $TMPDIR scratch are gone. ${INSTALL_AGAIN}`
+    ? `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${move.commit.slice(0, 9)} on ${move.branch}${move.carry ? `, your own commits restored on top from the carry ${move.carry}, HEAD where you left it` : ""}: installed dependencies, build outputs and your $TMPDIR scratch are gone. ${INSTALL_AGAIN}`
     : `[CawCo] Your checkout moved from ${move.from.slice(0, 9)} to ${move.to.slice(0, 9)}: the hub rebased your commits onto origin/${move.branch} as it landed them, so files main gained since are here and your installed dependencies may predate them. ${INSTALL_AGAIN}`;
 
 /**

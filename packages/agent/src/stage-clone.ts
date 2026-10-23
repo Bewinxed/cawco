@@ -72,6 +72,7 @@ import { cloneDenies, stageCloneId } from "@cawco/core/workspace-policy";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
 import { expandHome } from "./fs";
 import { runHubCommand } from "./hub-command";
+import { removeTree } from "./remove-tree";
 import { copyOwnSecrets, gitUntil } from "./workspace";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
@@ -637,7 +638,7 @@ const cut = async (
   const state = workspaceStateDir(boundary.id);
   // A cut that never finished, one of an earlier form or of another repository: nothing of it runs on.
   await stopWorkspaceBoundary(boundary);
-  await rm(boundary.path, { recursive: true, force: true });
+  await removeTree(boundary.path);
   await mkdir(state, { recursive: true });
   await rm(join(state, KEPT), { force: true });
   // Written before the clone: the boundary and every scan of this machine's clones find it by this record.

@@ -13,11 +13,12 @@ import {
   mkdir,
   open,
   readdir,
+  readFile,
   rm,
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type {
   CommandResult,
   WorkspaceArchive,
@@ -36,6 +37,8 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
+import { processesWithin } from "@cawco/core/live-processes";
+import { ownCommitsShell } from "@cawco/core/own-commits";
 import {
   forgetWorkspaceTmp,
   isSecretFileName,
@@ -43,6 +46,7 @@ import {
   workspaceCarriesDir,
   workspaceScratchDir,
   workspacesDir,
+  workspaceTmpDir,
 } from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
@@ -52,6 +56,7 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import {
   isDamagedRecord,
   readRecord,
@@ -113,6 +118,7 @@ import {
   urlOrigin,
   withoutCredential,
 } from "./move";
+import { removeTree } from "./remove-tree";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { refuseShortOfWorkspace } from "./workspace-needs";
 import { cloneHolding } from "./workspace-records";
@@ -709,16 +715,34 @@ export const createWorkspace = async (
   if (cut && !COMMIT.test(cut.commit)) {
     throw new Error(`"${cut.commit}" is not a commit id`);
   }
+  // Cut again with a carry's commits: the clone's own start is the carry's
+  // HEAD, which is what a cut cut short holds and is cleared with.
+  const carried = cut?.carry ? await carryOf(id, cut.carry) : undefined;
+  const marked: WorkspaceCut | null = cut
+    ? { branch: cut.branch, commit: carried?.head ?? cut.commit }
+    : null;
   await interruptedCleared;
-  await clearOwnCut(id, path, repoRoot, cut ?? null);
+  await clearOwnCut(id, path, repoRoot, marked);
   try {
     await mkdir(state, { recursive: true });
     // Before anything at the path: a cut this agent's end cuts short is
     // found its own and cleared, at its start or the next cut.
-    await markCut(id, { path, source: repoRoot, at: cut ?? null });
+    await markCut(id, { path, source: repoRoot, at: marked });
     // Written before the clone: archive-by-id survives a lost reply or an agent restart.
-    await writeStateFile(join(state, "create.json"), JSON.stringify({ path }));
+    await writeStateFile(
+      join(state, "create.json"),
+      JSON.stringify({ path } satisfies CreateRecord)
+    );
     const base = await prepareClone(repoRoot, path, authed, known);
+    // The origin it was cut from, as this host read it from the source: the
+    // one URL an archive refreshes the base from ({@link refreshBase}).
+    await writeStateFile(
+      join(state, "create.json"),
+      JSON.stringify({
+        path,
+        origin: await plain(path, "remote", "get-url", "origin"),
+      } satisfies CreateRecord)
+    );
     // git linked the source's object files into the clone (`--local`); each
     // gets its own inode now, before the long fetch and checkout, so a cut
     // cut short there (an agent's restart) leaves nothing linked to the
@@ -728,7 +752,10 @@ export const createWorkspace = async (
     if (cut) {
       await fetchCut(path, id, base, cut, authed);
     }
-    const start = cut ? cut.commit : `origin/${base}`;
+    if (carried) {
+      await carryOnto(path, carried, plain);
+    }
+    const start = carried?.head ?? (cut ? cut.commit : `origin/${base}`);
     const checkout = (await marksLfs(authed, path, start))
       ? await lfsCheckout({
           deadline,
@@ -775,6 +802,56 @@ export const createWorkspace = async (
     } satisfies WorkspaceArchive);
     throw error;
   }
+};
+
+/** A carry a workspace is cut again with ({@link WorkspaceCut} `carry`): its bundle and the HEAD it was saved at. */
+interface Carried {
+  bundle: string;
+  head: string;
+}
+
+/**
+ * The carry `folder` names for workspace `id`'s cut again: one of this
+ * machine's carries (`~/.cawco/carries/<id>-<time>`, carry.ts
+ * `carryFolder`), the HEAD its `head` file says and its `commits.bundle`.
+ * Nothing for a carry that holds no commits (only its uncommitted diff, or
+ * commits whose changes all landed): the clone is cut at the commit its HEAD
+ * built on, and the carry keeps the rest. Refused, nothing cut, for a folder
+ * outside the carries or of another workspace's.
+ */
+const carryOf = async (
+  id: string,
+  folder: string
+): Promise<Carried | undefined> => {
+  const named = resolve(folder);
+  if (
+    dirname(named) !== resolve(workspaceCarriesDir()) ||
+    !basename(named).startsWith(`${id}-`)
+  ) {
+    throw new Error(
+      `workspace ${id} is not cut again: ${folder} is not one of its carries in ${workspaceCarriesDir()}`
+    );
+  }
+  const bundle = join(named, "commits.bundle");
+  const head = (
+    await readFile(join(named, "head"), "utf8").catch(() => "")
+  ).trim();
+  const found = await lstat(bundle).catch(() => undefined);
+  return COMMIT.test(head) && found?.isFile() ? { bundle, head } : undefined;
+};
+
+/**
+ * The carry's commits fetched into the new clone at `path` from its bundle
+ * (git on this host, the carry being this agent's own folder), and its HEAD
+ * there as a commit: what the clone checks out ({@link createWorkspace}).
+ */
+const carryOnto = async (
+  path: string,
+  carried: Carried,
+  git: Git
+): Promise<void> => {
+  await git(path, "fetch", "--quiet", "--no-tags", carried.bundle, "HEAD");
+  await git(path, "cat-file", "-e", `${carried.head}^{commit}`);
 };
 
 /**
@@ -1039,9 +1116,7 @@ export const workspaceBoundary = async (ref: unknown): Promise<number> =>
 const createdPath = async (id: string): Promise<string | undefined> => {
   try {
     return (
-      await readRecord<{ path?: string }>(
-        join(workspacesDir(), id, "create.json")
-      )
+      await readRecord<CreateRecord>(join(workspacesDir(), id, "create.json"))
     )?.path;
   } catch (error) {
     if (!isDamagedRecord(error)) {
@@ -1060,6 +1135,73 @@ const createdPath = async (id: string): Promise<string | undefined> => {
  */
 const strayEntries = async (path: string): Promise<string[]> =>
   straysIn(path, await placedAsMade(path));
+
+/**
+ * A cut's record in its state dir, `create.json`: the clone's path, written
+ * before anything is at it, and once the clone is made the URL of `origin` it
+ * was cut from, as this host read it from the source (a clone a build before
+ * this cut has none).
+ */
+interface CreateRecord {
+  origin?: string;
+  path?: string;
+}
+
+/** A branch name taken into a refspec: no option, no second refspec, no `:`. */
+const BRANCH_NAME = /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/;
+
+/**
+ * `origin`'s `base` fetched into the clone's `origin/<base>` before what it
+ * holds is read ({@link holding}): a commit whose change landed on the base
+ * under another hash, by another workspace, after this clone last fetched,
+ * is matched by its patch only once the clone has that base (core
+ * own-commits.ts). Git on this host once its boundary is closed
+ * ({@link closedCloneGit}'s checks first), from the URL the cut recorded
+ * ({@link CreateRecord}), never one the clone's config names now, with the
+ * credential the cut fetched with ({@link hubGitEnv} for the hub's remote).
+ * No boundary is started for it. A clone with no such record, or a fetch
+ * that fails, is read with the base it has: a stale base only ever keeps
+ * more, and the log says why.
+ */
+const refreshBase = async (
+  workspace: WorkspaceRef,
+  base: string | undefined
+): Promise<void> => {
+  if (!(base && BRANCH_NAME.test(base))) {
+    return;
+  }
+  const record = await readRecord<CreateRecord>(
+    join(workspacesDir(), workspace.id, "create.json")
+  ).catch(() => undefined);
+  const origin = record?.origin;
+  const clone = await lstat(join(workspace.path, ".git")).catch(
+    () => undefined
+  );
+  if (
+    !(origin && clone?.isDirectory()) ||
+    (await noRepositoryAt(workspace.path))
+  ) {
+    return;
+  }
+  await closedCloneGit(workspace);
+  const git = gitUntil(
+    Date.now() + WORKSPACE_GIT_TIMEOUT_MS,
+    isHubRemote(origin) ? hubGitEnv(origin) : hostEnvironment()
+  );
+  await git(
+    workspace.path,
+    "fetch",
+    "--quiet",
+    "--no-tags",
+    "--no-write-fetch-head",
+    origin,
+    `+refs/heads/${base}:refs/remotes/origin/${base}`
+  ).catch((error: Error) =>
+    console.warn(
+      `[workspace] ${workspace.id}: origin's ${base} was not fetched before its clone was read, so it is read against the ${base} it last fetched: ${error.message}`
+    )
+  );
+};
 
 /** What {@link holding} reads: a {@link WorkspaceHolding} but its size. */
 type Held = Omit<WorkspaceHolding, "bytes">;
@@ -1204,16 +1346,42 @@ const notLanded = (landed: readonly string[] | undefined): string[] => {
 };
 
 /**
+ * How many commits the clone holds that are nowhere else (core
+ * own-commits.ts: none of `origin`'s refs has them, `landed` does not reach
+ * them, and no commit on `origin/<base>` carries the same change), by git on
+ * this host once its boundary is closed, as {@link writeCarry} runs it.
+ */
+const ownCommits = async (
+  workspace: WorkspaceRef,
+  base: string | undefined,
+  landed: readonly string[] | undefined
+): Promise<number> => {
+  const ran =
+    await Bun.$`sh -c ${`${SAFE_GIT_SHELL}${ownCommitsShell(base, notLanded(landed))}`}`
+      .cwd(workspace.path)
+      .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
+      .quiet()
+      .nothrow();
+  const count = Number(ran.stdout.toString().trim());
+  if (ran.exitCode !== 0 || !Number.isInteger(count)) {
+    throw new Error(
+      `Workspace ${workspace.id} was not archived: its own commits could not be counted, so nothing was deleted. ${ran.stderr.toString().trim() || `exit ${ran.exitCode}`}`
+    );
+  }
+  return count;
+};
+
+/**
  * What the workspace holds that is nowhere else ({@link WorkspaceHolding}),
  * read by git on this host once its boundary is closed
  * ({@link closedCloneGit}); `skip` are paths `git status` passes over, and
- * the commits `landed` reaches are not its own (their work is on the base
- * branch through the workspace cut from it that landed them). Files a
+ * its commits are counted by {@link ownCommits} against `base`. Files a
  * tracked `.gitignore` covers are not read: they go with the clone.
  */
 const holding = async (
   workspace: WorkspaceRef,
   skip: readonly string[],
+  base: string | undefined,
   landed: readonly string[] | undefined
 ): Promise<Held> => {
   // A clone already deleted (an archive that died after its `rm`) holds nothing.
@@ -1244,21 +1412,13 @@ const holding = async (
       : [];
   const lines = (out: string): number => out.split("\n").filter(Boolean).length;
   const [ahead, status, stashes, excluded] = await Promise.all([
-    git([
-      "rev-list",
-      "--count",
-      "HEAD",
-      "--branches",
-      "--not",
-      "--remotes=origin",
-      ...notLanded(landed),
-    ]),
+    ownCommits(workspace, base, landed),
     git(["status", "--porcelain", ...pathspec]),
     git(["stash", "list"]),
     excludedIn(workspace.path, git, pathspec),
   ]);
   return {
-    ahead: Number(ahead),
+    ahead,
     dirty: lines(status),
     stashes: lines(stashes),
     ...(excluded.length > 0 ? { excluded } : {}),
@@ -1272,9 +1432,11 @@ const holding = async (
  * those that do. Git on this host once its boundary is closed
  * ({@link closedCloneGit}). Nothing for a folder whose `.git` is gone, nor
  * for a HEAD `landed` reaches: its work went on in the workspace cut from it,
- * which landed it, and is cut again from nowhere here. Any other HEAD no
- * branch of `origin` holds throws, and nothing is deleted: such a clone
- * holds commits of its own, and {@link holding} said none.
+ * which landed it, and is cut again from nowhere here. A HEAD no branch of
+ * `origin` holds whose every change is on `origin/<base>` under other
+ * commits ({@link ownCommits} counted none) is cut again at that base's
+ * commit: it holds all of that work. Without a `base` it reads, such a HEAD
+ * throws, and nothing is deleted.
  */
 const headOnOrigin = async (
   workspace: WorkspaceRef,
@@ -1308,12 +1470,44 @@ const headOnOrigin = async (
   ) {
     return;
   }
-  if (!branch) {
+  if (branch) {
+    return { branch, commit };
+  }
+  const tip =
+    base &&
+    (await git(
+      ["rev-parse", "-q", "--verify", `refs/remotes/origin/${base}^{commit}`],
+      { exits: [0, 1] }
+    ));
+  if (!(base && tip)) {
     throw new Error(
       `Workspace ${workspace.id} was not archived: its HEAD ${commit.slice(0, 9)} is on no branch of origin, so its clone could not be cut again there, and nothing was deleted.`
     );
   }
-  return { branch, commit };
+  return { branch: base, commit: tip };
+};
+
+/**
+ * Where a clone whose commits went to a carry is cut again
+ * ({@link WorkspaceCut}): the commit on `origin/<base>` its HEAD builds on
+ * (`git merge-base`), with the carry's commits fetched on top as it is cut
+ * ({@link carryOnto}). Nothing without a base it reads or a commit both
+ * share. Git on this host once its boundary is closed ({@link closedCloneGit}).
+ */
+const carriedFrom = async (
+  workspace: WorkspaceRef,
+  base: string | undefined
+): Promise<WorkspaceCut | undefined> => {
+  if (!base) {
+    return;
+  }
+  const git = await closedCloneGit(workspace);
+  // Exit 1: no commit in common; 128: no such base here. Neither is cut again.
+  const commit = await git(
+    ["merge-base", "HEAD", `refs/remotes/origin/${base}`],
+    { exits: [0, 1, 128] }
+  );
+  return COMMIT.test(commit) ? { branch: base, commit } : undefined;
 };
 
 /** A folder's size on disk in bytes (`du -sk`), 0 when it cannot be read. */
@@ -1510,6 +1704,99 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
 export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
   closeClone({ ...(ref as WorkspaceArchive), unlanded: "keep" }, true);
 
+/** How many times {@link endLeftInside} reads and kills: enough for a process forked between a reading and its kill. */
+const LEFT_INSIDE_PASSES = 5;
+
+/** How long a SIGKILLed process has to leave the table before {@link endLeftInside} reads it as still running. */
+const LEFT_INSIDE_SETTLE_MS = 500;
+
+/**
+ * Every process left running from workspace `workspace`'s clone or scratch
+ * dir once its boundary is stopped (live-processes.ts `processesWithin`: its
+ * working directory or executable there, or its command line naming a path
+ * there), SIGKILLed, reading again after each round. The boundary's own
+ * stop ends what runs inside it, each process it started by name on macOS
+ * (boundary.ts `killAnswering`); a process that left it before its profile
+ * carried that name, or that the boundary never started (a server a
+ * session's host shell left), is ended here by where it runs from. On the
+ * Mac on 2026-10-24 a `vite preview` from workspace bcaa39e4's clone, its
+ * parent launchd, still held port 55978 nine days after that workspace was
+ * archived and its folder gone. One still there once the rounds are done
+ * throws, and nothing is deleted: the archive is not over while anything of
+ * it runs.
+ */
+const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
+  const roots = [
+    workspace.path,
+    workspaceScratchDir(workspace.id),
+    workspaceTmpDir(workspace.id),
+  ];
+  const read = async () =>
+    (await processesWithin(roots)).filter((one) => one.pid !== process.pid);
+  const killed = new Map<number, string>();
+  for (let pass = 0; pass < LEFT_INSIDE_PASSES; pass += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each round reads the process table the round before left
+    const fresh = (await read()).filter((one) => !killed.has(one.pid));
+    if (fresh.length === 0) {
+      break;
+    }
+    for (const one of fresh) {
+      signalPid(listedPid(one.pid), "SIGKILL");
+      killed.set(one.pid, one.command);
+    }
+    await Bun.sleep(LEFT_INSIDE_SETTLE_MS);
+  }
+  const left = await read();
+  if (left.length > 0) {
+    throw new Error(
+      `Workspace ${workspace.id} was not archived: ${left.map((one) => `pid ${one.pid} (${one.command})`).join("; ")} still ${left.length === 1 ? "runs" : "run"} from its clone or scratch dir after SIGKILL, so nothing was deleted.`
+    );
+  }
+  if (killed.size > 0) {
+    console.info(
+      `[workspace] ${workspace.id}: ended ${killed.size} process(es) left running from its clone or scratch dir once its boundary was stopped: ${[...killed].map(([pid, command]) => `pid ${pid} (${command.slice(0, 200)})`).join("; ")}`
+    );
+  }
+};
+
+/**
+ * What a clone being archived holds that is nowhere else ({@link holding}),
+ * written to a new carry before anything is deleted ({@link writeCarry}; a
+ * folder that is no git clone has its own entries copied, {@link
+ * carryStrays}), with its README; and where a git clone's HEAD built on its
+ * base ({@link carriedFrom}), for a cut again that restores the carry.
+ */
+const carryAway = async (
+  workspace: WorkspaceRef,
+  request: WorkspaceArchive,
+  held: Held,
+  skip: readonly string[]
+): Promise<{ carry: string; head: WorkspaceCut | undefined }> => {
+  const words = holdingWords({ ...held, bytes: 0 });
+  // `strays` is read only in a folder that is no git clone: no git writes
+  // its carry; its own entries are copied.
+  const folder = held.strays !== undefined;
+  const { carry, left } = folder
+    ? await carryStrays(request.id, workspace.path)
+    : await writeCarry(workspace, held, skip);
+  const head = folder ? undefined : await carriedFrom(workspace, request.base);
+  await writeFile(
+    join(carry, "README.md"),
+    await carryReadme({
+      title: `Workspace ${request.id}, saved before it was archived`,
+      checkout: folder ? "folder" : "clone",
+      path: workspace.path,
+      words,
+      folder: carry,
+      left,
+    })
+  );
+  console.info(
+    `[workspace] ${request.id}: ${words} in ${workspace.path} saved to the carry ${carry}`
+  );
+  return { carry, head };
+};
+
 const closeClone = async (
   request: WorkspaceArchive,
   carryHeld: boolean
@@ -1522,7 +1809,7 @@ const closeClone = async (
   if (!path) {
     await Promise.all(
       [join(workspacesDir(), request.id), workspaceScratchDir(request.id)].map(
-        (dir) => rm(dir, { recursive: true, force: true })
+        removeTree
       )
     );
     forgetWorkspaceTmp(request.id);
@@ -1533,8 +1820,12 @@ const closeClone = async (
   // Nothing writes the clone from here on, and no boundary is started to
   // read it: git reads it on this host.
   await stopWorkspaceBoundary(workspace);
+  await endLeftInside(workspace);
+  if (read) {
+    await refreshBase(workspace, request.base);
+  }
   const held = read
-    ? await holding(workspace, skip, request.landed)
+    ? await holding(workspace, skip, request.base, request.landed)
     : NOTHING_HELD;
   const holds = !holdsNothing({ ...held, bytes: 0 });
   if (holds && !carryHeld) {
@@ -1547,44 +1838,22 @@ const closeClone = async (
     );
     return { carry: null, held: kept };
   }
-  // Read before the clone goes: where it is cut again.
-  const head =
-    read && !holds && held.strays === undefined
-      ? await headOnOrigin(workspace, request.base, request.landed)
-      : undefined;
-  let carry: string | null = null;
-  if (holds) {
-    const words = holdingWords({ ...held, bytes: 0 });
-    // `strays` is read only in a folder that is no git clone: no git writes
-    // its carry; its own entries are copied.
-    const folder = held.strays !== undefined;
-    let left: string[] = [];
-    ({ carry, left } = folder
-      ? await carryStrays(request.id, path)
-      : await writeCarry(workspace, held, skip));
-    await writeFile(
-      join(carry, "README.md"),
-      await carryReadme({
-        title: `Workspace ${request.id}, saved before it was archived`,
-        checkout: folder ? "folder" : "clone",
-        path,
-        words,
-        folder: carry,
-        left,
-      })
-    );
-    console.info(
-      `[workspace] ${request.id}: ${words} in ${path} saved to the carry ${carry}`
-    );
-  }
+  // Read before the clone goes: where it is cut again, and what it carries.
+  const { carry, head } = holds
+    ? await carryAway(workspace, request, held, skip)
+    : {
+        carry: null,
+        head:
+          read && held.strays === undefined
+            ? await headOnOrigin(workspace, request.base, request.landed)
+            : undefined,
+      };
   const cached = await cacheOfClone(path);
   await closeBoundary(workspace);
-  await rm(workspace.path, { recursive: true, force: true });
-  await Promise.all(
-    cached.map((dir) => rm(dir, { recursive: true, force: true }))
-  );
+  await removeTree(workspace.path);
+  await Promise.all(cached.map(removeTree));
   console.info(
-    `[workspace] ${request.id}: archived; its ${goneFolder(path, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is cut again at ${head.commit.slice(0, 9)} on origin's ${head.branch}` : ""}`
+    `[workspace] ${request.id}: archived; its ${goneFolder(path, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is cut again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
   );
   return head ? { carry, head } : { carry };
 };

@@ -219,6 +219,7 @@ import {
   parseProcId,
 } from "./proc-id";
 import { RELAY_STEP } from "./proxy-relay";
+import { removeTree } from "./remove-tree";
 import { endSandbox } from "./sandbox-end";
 import type { SessiondClient } from "./sessiond-client";
 import {
@@ -7603,11 +7604,11 @@ const closeAll = async (ref: WorkspaceRef): Promise<void> => {
       );
     }
   }
-  await rm(stateDir(ref.id), { recursive: true, force: true });
+  await removeTree(stateDir(ref.id));
   // Its scratch dir, with whatever its commands left there, and its short
   // name on macOS when it names that dir (the link alone).
-  await rm(scratchOf(ref.id), { recursive: true, force: true });
+  await removeTree(scratchOf(ref.id));
   forgetWorkspaceTmp(ref.id);
   // Its sockets' dir, once nothing listens there (`workspaceDoorDir`).
-  await rm(workspaceDoorDir(ref.id), { recursive: true, force: true });
+  await removeTree(workspaceDoorDir(ref.id));
 };

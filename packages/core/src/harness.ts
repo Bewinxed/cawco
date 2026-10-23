@@ -2018,9 +2018,16 @@ export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
  * the clone is. Never the base's tip: a landing stopped while queued leaves
  * commits no landing recorded, and a cut at the tip left them behind
  * (2026-10-17).
+ *
+ * `carry`, for a workspace whose commits went to a carry as it retired (an
+ * item that lands none, hub work-items.ts `settle`): that carry's folder on
+ * its machine. `commit` is then where its HEAD built on `branch`, and the
+ * carry's commits are fetched from its bundle on top: the clone is cut again
+ * at the HEAD it had.
  */
 export interface WorkspaceCut {
   branch: string;
+  carry?: string;
   commit: string;
 }
 

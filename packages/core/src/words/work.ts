@@ -23,4 +23,38 @@ export const workWords = {
   /** Why it is held: since when it sleeps (`since`, "2026-09-15 10:00 UTC") and the limit it slept past. */
   heldAsleep: (since: string, limit: string) =>
     `Its session has been asleep since ${since}, longer than ${limit}, so the hub no longer wakes it by itself. Write to it to carry the work on, or stop it.`,
+  /** Where a retired workspace's commits went (hub work-items.ts `carryNotice`): its carry's folder on its machine. */
+  carriedTo: (carry: string) =>
+    `the commits it held on no remote were saved to the carry ${carry}`,
+  /**
+   * The notice to the session that started a workspace's work, as it
+   * retires with its commits in a carry (hub work-items.ts `carryNotice`):
+   * `ws` its handle, `title` its latest item's.
+   */
+  carriedNotice: (
+    ws: string,
+    title: string,
+    carry: string,
+    machine: string,
+    path: string
+  ) =>
+    `Workspace ${ws} of “${title}” retired: its work lands none, so ${workWords.carriedTo(carry)} on ${machine} (its README says how to take each part back), and its clone ${path} is gone. A handoff or a follow-up to it cuts it again with those commits.`,
+  /** That notice's headline. */
+  carriedHeadline: (ws: string, carry: string, machine: string) =>
+    `Workspace ${ws} retired; its commits are in the carry ${carry} on ${machine}.`,
+  /** `stop_delegate`'s word on a stopped item's workspace that holds work (`held`, in words): held, its stopper's to decide. */
+  stopHolds: (ws: string, held: string) =>
+    `Its workspace ${ws} holds ${held}, so it is held, not retired, once its session ends.`,
+  /** The two ways out of a held workspace, as `stop_delegate` names them. */
+  holdWays: (ws: string) =>
+    `It is yours to decide: continue it (handoff to it, or delegate(..., workspace: "${ws}"): either continues its own session), or discard it (discard_workspace with workspace: "${ws}"), which saves that work to a carry in ~/.cawco/carries on its machine and removes the clone.`,
+  /** `stop_delegate`'s word on a stopped item's workspace that holds nothing that is nowhere else. */
+  stopRetires: (ws: string) =>
+    `Its workspace ${ws} holds nothing that is nowhere else, so it retires once its session ends; a handoff to it cuts it again where it was.`,
+  /** `stop_delegate`'s word when what the workspace holds could not be read as it stopped. */
+  stopUnread: (ws: string, error: string) =>
+    `What its workspace ${ws} holds could not be read now (${error}): if it holds work that is nowhere else it is held as its session ends, and you are told then.`,
+  /** `stop_delegate`'s word on a stopped item whose workspace is gone. */
+  stopGone: (ws: string) =>
+    `Its workspace ${ws} is gone or archived: nothing is held.`,
 };

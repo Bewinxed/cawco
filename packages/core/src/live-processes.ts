@@ -176,6 +176,71 @@ export async function versionsInUse(root: string): Promise<Set<string>> {
   return used;
 }
 
+/** A process that runs from inside a folder ({@link processesWithin}). */
+export interface ProcessWithin {
+  command: string;
+  pid: number;
+}
+
+/** Whether `path` is `root` or lies under it. */
+const under = (path: string, root: string): boolean =>
+  path === root || path.startsWith(`${root}/`);
+
+/** Linux names a working directory deleted under its process so. */
+const DELETED = / \(deleted\)$/;
+
+/**
+ * Every process this user can see that runs from inside one of `roots`
+ * (absolute folders, each also read through its real path): its working
+ * directory there, its executable there (on macOS any of its text segments:
+ * a native module loaded from a clone's `node_modules` too), or its command
+ * line naming a path there (`node <clone>/node_modules/.bin/vite preview`).
+ * A process whose parent ended and that init or launchd adopted is found
+ * the same: what it runs from does not move with its parent. Linux reads
+ * `/proc/<pid>/{cwd,exe,cmdline}`, where another user's process withholds
+ * its cwd; macOS asks `lsof -d cwd,txt` once, beside the kernel's command
+ * lines.
+ */
+export async function processesWithin(
+  roots: readonly string[]
+): Promise<ProcessWithin[]> {
+  const all = [
+    ...new Set(
+      roots.flatMap((root) => [root, readOr(() => realpathSync(root)) ?? root])
+    ),
+  ];
+  const inside = (path: string | undefined): boolean =>
+    path !== undefined && all.some((root) => under(path, root));
+  const names = (command: string): boolean =>
+    all.some((root) => command.includes(`${root}/`) || command.endsWith(root));
+  if (process.platform === "linux") {
+    return linuxProcesses().flatMap((one) => {
+      const cwd = readOr(() => readlinkSync(`/proc/${one.pid}/cwd`))?.replace(
+        DELETED,
+        ""
+      );
+      const exe = one.images[0]?.replace(DELETED, "");
+      return inside(cwd) || inside(exe) || names(one.command)
+        ? [{ pid: one.pid, command: one.command }]
+        : [];
+    });
+  }
+  const [listed, opened] = await Promise.all([
+    commandLines(),
+    printed(["lsof", "-nP", "-w", "-d", "cwd,txt", "-Fpn"]),
+  ]);
+  const from = new Set<number>();
+  let pid = 0;
+  for (const line of opened.split("\n")) {
+    if (line.startsWith("p")) {
+      pid = Number(line.slice(1));
+    } else if (line.startsWith("n") && inside(line.slice(1))) {
+      from.add(pid);
+    }
+  }
+  return listed.filter((one) => from.has(one.pid) || names(one.command));
+}
+
 /** The sockets listening on TCP `port`, by inode, from this network namespace's tables. */
 function listeningInodes(port: number): string[] {
   const hex = port.toString(16).toUpperCase().padStart(4, "0");

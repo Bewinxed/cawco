@@ -30802,6 +30802,19 @@ export const createServer = (
         const item = workItems.item(params.id);
         return item ?? status(404, `no work item ${params.id}`);
       })
+      // What the item's workspace holds on no remote now (work-items.ts
+      // `unlandedOf`), or why it could not be read: what `stop_delegate`
+      // answers its caller about the hold its stop leaves.
+      .get(
+        "/api/work-items/:id/unlanded",
+        hidden,
+        async ({ params, status }) => {
+          const item = workItems.item(params.id);
+          return item
+            ? { unlanded: await coldWork(item.instanceId) }
+            : status(404, `no work item ${params.id}`);
+        }
+      )
       // Archiving a workspace: its machine kills the boundary with every
       // process in it and deletes the clone. Refused while an item runs there.
       // Spent workspaces kept for unlanded work, as the last sweep read them

@@ -36,6 +36,7 @@ import {
   type SessionChosenMode,
   sessionLink,
   withInputsLine,
+  workWords,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -1267,6 +1268,37 @@ function repeatOfRefused(
   return false;
 }
 
+/**
+ * What `stop_delegate` answers about the stopped item's workspace, from what
+ * it holds on no remote as the stop is made (work-items.ts `unlandedOf`):
+ * held, with what it holds and its two ways out (continue it, or discard it
+ * to a carry), the hold being its stopper's to decide (work-items.ts
+ * `carriesOff`); or retiring, holding nothing that is nowhere else, with a
+ * handoff cutting it again. A read that failed says so, and that a hold is
+ * told as it comes (work-items.ts `heldNotice`).
+ */
+export function stoppedHoldWords(
+  workspaceId: string,
+  unlanded: Unlanded | { error: string } | null
+): string {
+  const ws = idHandle(workspaceId);
+  if (!unlanded) {
+    return workWords.stopGone(ws);
+  }
+  if ("error" in unlanded) {
+    return `${workWords.stopUnread(ws, unlanded.error)} ${workWords.holdWays(ws)}`;
+  }
+  const held = [
+    unlanded.ahead > 0 &&
+      `${unlanded.ahead} commit${unlanded.ahead === 1 ? "" : "s"} on no remote`,
+    unlanded.changed > 0 &&
+      `${unlanded.changed} changed file${unlanded.changed === 1 ? "" : "s"} or stash${unlanded.changed === 1 ? "" : "es"}`,
+  ].filter(Boolean);
+  return held.length > 0
+    ? `${workWords.stopHolds(ws, held.join(" and "))} ${workWords.holdWays(ws)}`
+    : workWords.stopRetires(ws);
+}
+
 /** The refusal for a cold session whose clean workspace holds commits on no remote: `from` reaches them for a brief's price. */
 export function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
   const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
@@ -2072,12 +2104,17 @@ export const handoffActions = ({
     }
     const item = (await response.json()) as WorkItemView;
     const live = item.state === "starting" || item.state === "running";
-    return (
-      `Stopped your delegate ${peer.label}${continuesWords(followed)}. Its work item ${item.id} ` +
-      (live ? "is cancelled" : `was already ${item.state}`) +
-      `, and its workspace ${idHandle(item.workspaceId)} keeps the checkout. To carry the work on, handoff to it, ` +
-      `or delegate(..., workspace: "${idHandle(item.workspaceId)}"): either continues its own session.`
+    const read = await fetch(
+      `${hubHttpUrl()}/api/work-items/${encodeURIComponent(item.id)}/unlanded`
     );
+    const unlanded = read.ok
+      ? (
+          (await read.json()) as {
+            unlanded: Unlanded | { error: string } | null;
+          }
+        ).unlanded
+      : { error: await read.text() };
+    return `Stopped your delegate ${peer.label}${continuesWords(followed)}. Its work item ${item.id} ${live ? "is cancelled" : `was already ${item.state}`}. ${stoppedHoldWords(item.workspaceId, unlanded)}`;
   },
 
   interruptDelegate(target: string): string {

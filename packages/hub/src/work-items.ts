@@ -64,6 +64,7 @@ import type {
   WorkspaceArchived,
   WorkspaceCheckout,
   WorkspaceCommit,
+  WorkspaceCut,
   WorkspaceHolding,
   WorkspaceRef,
   WorkspaceUnlanded,
@@ -109,6 +110,7 @@ import {
   type MachinePath,
   MachinePathRefused,
 } from "@cawco/core/machine-path";
+import { ownCommitsShell } from "@cawco/core/own-commits";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import {
@@ -3398,12 +3400,81 @@ export const createWorkItems = ({
   };
 
   /**
+   * Where an archived workspace is cut again, as its row keeps it: where its
+   * machine said its HEAD was. A discard's carry is let go of, and its clone
+   * is cut again nowhere; a retirement's carry (`retired`, its items landing
+   * none) is cut again with its commits ({@link recut}).
+   */
+  const cutAgainAt = (
+    head: WorkspaceCut | undefined,
+    carry: string | null,
+    retired: boolean
+  ): WorkspaceCut | null => {
+    if (!head) {
+      return null;
+    }
+    if (!carry) {
+      return head;
+    }
+    return retired ? { ...head, carry } : null;
+  };
+
+  /**
+   * Whether a settled workspace's work goes to a carry rather than holding
+   * it: every item of it lands none (what it hands in are its outputs,
+   * copied out as it finished; its commits feed nothing), and its latest
+   * ended on its own, done or failed. One its parent, the person or the hub
+   * stopped is the stopper's to decide, and is held. On 2026-10-23 drawings,
+   * decision pages and research reads sat held with 1 to 4 commits each,
+   * their deliverables long since handed in.
+   */
+  const carriesOff = (items: readonly WorkItemRow[]): boolean => {
+    const [latest] = items;
+    return (
+      latest !== undefined &&
+      latest.state !== "cancelled" &&
+      latest.stoppedBy === null &&
+      items.every((item) => item.lands === "none")
+    );
+  };
+
+  /**
+   * Tells the session that started a workspace's work, its latest item's
+   * parent, as a notice, that the workspace retired with its commits in a
+   * carry ({@link carriesOff}): where that carry is, and that a handoff or
+   * follow-up cuts the clone again with them ({@link recut}).
+   */
+  const carryNotice = (workspace: WorkspaceRow, carry: string): void => {
+    const [latest] = db.workItemsIn(workspace.id);
+    const [row] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
+    if (!(latest && row)) {
+      return;
+    }
+    const machine = machineName(workspace.machineId);
+    report(
+      row,
+      workWords.carriedNotice(
+        handle(workspace.id),
+        latest.title,
+        carry,
+        machine,
+        workspace.path
+      ),
+      false,
+      true,
+      workWords.carriedHeadline(workspace.id.slice(0, 8), carry, machine)
+    );
+  };
+
+  /**
    * A workspace closed on its machine ({@link CONTROL_WORKSPACE_ARCHIVE}):
    * its boundary killed first and never started, then what it holds that is
    * nowhere else read on the host, and done with as `unlanded` says
    * ({@link WorkspaceUnlanded}), or with `discard` saved to a carry first
    * ({@link CONTROL_WORKSPACE_DISCARD}, which an agent that cannot write
-   * one refuses); `skip`, its items' handed-over outputs. The commits its
+   * one refuses), and so with `carry` (its items land none,
+   * {@link carriesOff}), whose carry it is cut again with; `skip`, its
+   * items' handed-over outputs. The commits its
    * `from` cuts landed are not its own ({@link landedFrom}). Archived, its
    * places go with it and its row says so, with the carry and where its
    * clone's HEAD was ({@link recut} cuts it again there); holding work (only
@@ -3413,10 +3484,10 @@ export const createWorkItems = ({
    */
   const closeWorkspace = async (
     workspace: WorkspaceRow,
-    unlanded: WorkspaceUnlanded | "discard",
+    unlanded: WorkspaceUnlanded | "discard" | "carry",
     skip: string[] = []
   ): Promise<ArchivedWorkspace> => {
-    const discard = unlanded === "discard";
+    const discard = unlanded === "discard" || unlanded === "carry";
     const landed = landedFrom(workspace.id);
     const request: WorkspaceArchive = {
       ...refOf(workspace),
@@ -3457,7 +3528,7 @@ export const createWorkItems = ({
         boundaryPid: null,
         holding: null,
         heldAt: null,
-        head: head ?? null,
+        head: cutAgainAt(head, carry, unlanded === "carry"),
         ...(carry ? { carry } : {}),
       }) ?? workspace;
     workspaceChanged?.(archived);
@@ -3686,6 +3757,39 @@ export const createWorkItems = ({
   const settleFailures = new Map<string, string>();
 
   /**
+   * A settled workspace closed on its machine ({@link closeWorkspace}): a
+   * `keep`, or a `carry` when its items land none ({@link carriesOff}),
+   * whose parent is told where the carry is ({@link carryNotice}); retired,
+   * its gate workspaces go with it.
+   */
+  const closeSettled = async (
+    workspace: WorkspaceRow,
+    items: readonly WorkItemRow[]
+  ): Promise<Settled> => {
+    const closed = await closeWorkspace(
+      workspace,
+      carriesOff(items) ? "carry" : "keep",
+      handedOver(workspace)
+    );
+    settleFailures.delete(workspace.id);
+    if (closed.held) {
+      return { kind: "held", held: closed.held };
+    }
+    if (closed.carry) {
+      carryNotice(closed.workspace, closed.carry);
+    }
+    await Promise.all(
+      db
+        .checkWorkspacesOf(workspace.id)
+        .map((check) => closeWorkspace(check, "check"))
+    );
+    console.log(
+      `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: retired, its work over and nothing of it anywhere but on its remote${closed.carry ? ` or in its carry ${closed.carry}` : ""}; ${workspace.path} and what it owned there are gone`
+    );
+    return { kind: "retired", carry: closed.carry };
+  };
+
+  /**
    * THE end of a workspace's life (schema.ts `WorkspaceState`). An active
    * delegate's workspace whose items have all ended is closed on its machine
    * ({@link closeWorkspace}, a `keep`) once nothing holds it ({@link holdOn}):
@@ -3716,24 +3820,7 @@ export const createWorkItems = ({
     }
     const machine = machineName(workspace.machineId);
     try {
-      const closed = await closeWorkspace(
-        workspace,
-        "keep",
-        handedOver(workspace)
-      );
-      settleFailures.delete(workspace.id);
-      if (closed.held) {
-        return { kind: "held", held: closed.held };
-      }
-      await Promise.all(
-        db
-          .checkWorkspacesOf(workspace.id)
-          .map((check) => closeWorkspace(check, "check"))
-      );
-      console.log(
-        `[workspaces] ${workspace.id} on ${machine}: retired, its work over and nothing of it anywhere but on its remote; ${workspace.path} and what it owned there are gone`
-      );
-      return { kind: "retired", carry: closed.carry };
+      return await closeSettled(workspace, items);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       if (settleFailures.get(workspace.id) !== reason) {
@@ -3882,7 +3969,7 @@ export const createWorkItems = ({
       const read = await command(
         workspace.machineId,
         workspace.path,
-        `${SAFE_GIT_SHELL}a=$(git rev-list --count HEAD --branches --not --remotes=origin) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
+        `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
         GIT_TIMEOUT_MS,
         refOf(workspace),
         { noWait: true }
@@ -3988,16 +4075,17 @@ export const createWorkItems = ({
 
   /**
    * Whether a workspace is retired and may be cut again: archived, not a
-   * gate workspace, its work not discarded (a discard's carry holds it, and
-   * nothing on its remote does), and its machine said where its clone's HEAD
-   * was as it deleted it ({@link closeWorkspace}). One with no such word (a
-   * clone already gone, a folder that was no clone, a retirement before the
-   * hub kept it) is not: any other commit could leave its commits behind.
+   * gate workspace, and its machine said where its clone's HEAD was as it
+   * deleted it ({@link closeWorkspace}): on a branch of its remote, or, its
+   * items landing none, in its carry (`head.carry`). A discard's carry is let
+   * go of, and its row keeps no head. One with no such word (a clone already
+   * gone, a folder that was no clone, a retirement before the hub kept it)
+   * is not: any other commit could leave its commits behind.
    */
   const recuttable = (workspace: WorkspaceRow): boolean =>
     workspace.state === "archived" &&
-    workspace.carry === null &&
     workspace.head !== null &&
+    (workspace.carry === null || workspace.head.carry !== undefined) &&
     !workspace.checksFor;
 
   /** Why an archived workspace is not cut again ({@link recuttable}), in words. */
@@ -4100,6 +4188,8 @@ export const createWorkItems = ({
           base: checkout.base,
           tmp: checkout.tmp,
           movedUntold: { kind: "recut", ...head },
+          // Its commits are in the clone again: a carry of its next end is its own.
+          carry: null,
         }) ?? workspace;
       onCut?.();
       workspaceChanged?.(again);
