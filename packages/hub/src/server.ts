@@ -13793,13 +13793,13 @@ export const createServer = (
    * start still in flight from before (on a connection the machine has
    * since replaced, its old socket's close perhaps not yet heard). A target
    * whose listener the daemon still serves, on the same source, is pointed
-   * at it again. One it does not serve (the daemon restarted) is started
-   * again on the same source, and the "open" that follows reloads every
-   * dashboard's pane onto the new listener. A start that fails says why in
-   * one line and leaves the target without an upstream: the operator's
-   * intent, its next request asks again (reachPreview), and the pane draws
-   * the hop that failed. A listener no target names is stopped; one whose
-   * session shows another source is left to the start, which replaces it.
+   * at it again. One it does not serve (the daemon restarted) is kept
+   * without an upstream and started by nothing here: its next request, a
+   * pane's or an embed's, starts it (reachPreview, through the proxy), so a
+   * machine coming back after a reboot wakes no server nobody is looking
+   * at, and a pane open across the reconnect draws on that request. A
+   * listener no target names is stopped; one whose session shows another
+   * source is left to the start, which replaces it.
    */
   const reconcilePreviews = (
     machineId: string,
@@ -13869,28 +13869,6 @@ export const createServer = (
         continue;
       }
       targets.set(key, held);
-      reachPreview(key)
-        .then((reached) => {
-          if (!reached.ok) {
-            // Closed meanwhile: nothing is owed. Gone again: its next
-            // register tries again.
-            if (reached.down !== "closed" && registry.agent(machineId)) {
-              console.warn(
-                `[hub] preview for ${key} did not restart (${reached.down}): ${reached.error}`
-              );
-            }
-            return;
-          }
-          // A session's panel reloads onto the new listener; an embed has
-          // no panel, and its next request is relayed to the new one.
-          const now = previewTargets.get(key);
-          if (now) {
-            const moved = { ...now, revision: crypto.randomUUID() };
-            previewTargets.set(key, moved);
-            publishPreview(key, "open", moved);
-          }
-        })
-        .catch(console.error);
     }
     for (const listener of serving) {
       if (

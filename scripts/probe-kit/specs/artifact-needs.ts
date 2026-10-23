@@ -89,7 +89,10 @@ import {
   reasonShort,
   unparked,
 } from "../../../packages/core/src/artifact-needs";
-import type { Envelope } from "../../../packages/core/src/index";
+import {
+  type Envelope,
+  PREVIEW_DOWN_META,
+} from "../../../packages/core/src/index";
 import { artifactWords } from "../../../packages/core/src/words/artifacts";
 import { cawHeadWords } from "../../../packages/core/src/words/caw-head";
 import { commentWords } from "../../../packages/core/src/words/comments";
@@ -1597,6 +1600,247 @@ const goneAtRegister = async (at: At, session: string) => {
   );
 };
 
+/** The preview pane's frame on `page`, once its document stands. */
+const paneFrame = async (page: Page) =>
+  await until(
+    "the pane's frame",
+    async () =>
+      (await (await page.locator(FRAME).elementHandle())?.contentFrame()) ??
+      null,
+    Boolean,
+    60_000
+  );
+
+/** What the pane's frame draws: its heading, and whether it is the proxy's own down page. */
+const paneDraws = async (
+  page: Page
+): Promise<{ down: boolean; heading: string | null }> => {
+  const frame = await paneFrame(page);
+  if (!frame) {
+    return { heading: null, down: false };
+  }
+  return await frame
+    .evaluate(
+      (meta) => ({
+        heading: document.querySelector("h1")?.textContent ?? null,
+        down: !!document.querySelector(`meta[name="${meta}"]`),
+      }),
+      PREVIEW_DOWN_META
+    )
+    .catch(() => ({ heading: null, down: false }));
+};
+
+/**
+ * A machine reconnecting starts no preview: two sessions' panels show a
+ * folder preview and a machine-port preview (a server on the host), each
+ * drawn in its pane. The agent is stopped and launched again while the hub
+ * is held still, so what it holds of its own is read before the hub's first
+ * word; the hub let go, the machine registers. Before any request, the agent
+ * holds no listening socket and no process it didn't hold before
+ * (server.ts `reconcilePreviews` keeps each target and starts none). Then
+ * each pane's next request (its frame navigated again, as a click would)
+ * draws its page, no down page, and only then does a listener stand for it.
+ */
+const reconnectStartsNothing = async (
+  at: At,
+  folderSession: string,
+  portSession: string
+) => {
+  const { fleet, kit, base } = at;
+  const folder = join(fleet.repo, "probe-pane-folder");
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(
+    join(folder, "index.html"),
+    judgePage("Folder pane", ["Served from a folder."])
+  );
+  const app = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(judgePage("Port pane", ["Served from a port."]), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+  });
+  // Sessions that already hold a preview origin each: the fleet's ports are few.
+  await create(fleet, folderSession, {
+    kind: "preview",
+    does: "try",
+    ask: "Try the folder pane",
+    name: "folder-pane",
+    dir: folder,
+  });
+  await create(fleet, portSession, {
+    kind: "preview",
+    does: "try",
+    ask: "Try the port pane",
+    name: "port-pane",
+    port: app.port as number,
+  });
+  const panes = [
+    { session: folderSession, heading: "Folder pane" },
+    { session: portSession, heading: "Port pane" },
+  ];
+  const pages: Page[] = [];
+  for (const pane of panes) {
+    // biome-ignore lint/performance/noAwaitInLoops: one pane at a time
+    const page = await kit.page("desk");
+    await open(page, `${base}/session/${pane.session}`, FRAME);
+    pages.push(page);
+  }
+  const drawn = await Promise.all(
+    pages.map((page, n) =>
+      until(
+        `the ${panes[n]?.heading} drawn`,
+        () => paneDraws(page),
+        (now) => now.heading === panes[n]?.heading,
+        60_000
+      ).catch(() => paneDraws(page))
+    )
+  );
+  await fleet.stop("agent");
+  fleet.freeze("hub", true);
+  const agent = fleet.launch("agent");
+  // The agent up and waiting at the held hub's door: what it holds of its own.
+  await Bun.sleep(8000);
+  const own = await heldBy(agent.pid);
+  fleet.freeze("hub", false);
+  await fleet.agentUp();
+  // The register's work done, and no pane has asked anything since.
+  await Bun.sleep(5000);
+  const quiet = await heldBy(agent.pid);
+  const newListening = quiet.listening.filter(
+    (one) => !own.listening.includes(one)
+  );
+  const newProcesses = quiet.processes.filter(
+    (one) => !own.processes.includes(one)
+  );
+  kit.check(
+    "a reconnect starts no preview: with a folder preview and a port preview on two panels' screens, the machine registers and, before any request, its agent holds no listening socket and no process it didn't hold before the hub's first word",
+    drawn.every((one, n) => one.heading === panes[n]?.heading) &&
+      newListening.length === 0 &&
+      newProcesses.length === 0,
+    JSON.stringify({ drawn, own, quiet, newListening, newProcesses })
+  );
+  const after = await Promise.all(
+    pages.map(async (page, n) => {
+      const frame = await paneFrame(page);
+      await frame
+        ?.goto(frame.url(), { waitUntil: "load", timeout: 60_000 })
+        .catch(() => null);
+      return await until(
+        `the ${panes[n]?.heading} drawn again`,
+        () => paneDraws(page),
+        (now) => now.heading === panes[n]?.heading,
+        LANE_MS
+      ).catch(() => paneDraws(page));
+    })
+  );
+  const served = await heldBy(agent.pid);
+  const started = served.listening.filter(
+    (one) => !own.listening.includes(one)
+  );
+  kit.check(
+    "then each pane's next request draws: the folder page and the port page come back in their panes, no down page, and a listener stands for each only now",
+    after.every((one, n) => one.heading === panes[n]?.heading && !one.down) &&
+      started.length >= 2,
+    JSON.stringify({ after, started })
+  );
+  for (const page of pages) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    await page.close();
+  }
+  await app.stop(true);
+};
+
+/**
+ * A delegate's hand-up asks nothing of the person until its parent shows
+ * it: a delegate hands its parent a judge canvas (`to: "parent"`) and goes
+ * on with its work (its next turn ends); the canvas stays out of the lane,
+ * out of Caw's panel and out of the phone's pushes. The person removes what
+ * the parent's panel shows: the panel brings no handed canvas forward
+ * (service.ts `nextNewest`), and it still asks nothing. The parent's
+ * artifact_show puts it in front of the person, and only then does it
+ * stand, "New · not opened".
+ */
+const handedUp = async (
+  at: At,
+  parent: string,
+  phone: ReturnType<typeof standInPhone>
+) => {
+  const { fleet, kit, base, call } = at;
+  const delegate = await fleet.spawn("claude", "Hand delegate", fleet.repo, {
+    parent: { instanceId: parent },
+  });
+  await call(delegate, CREATE, {
+    kind: "canvas",
+    does: "judge",
+    ask: "Judge the connect card",
+    name: "connect-card",
+    to: "parent",
+  });
+  const id = await madeNamed(fleet, parent, "connect-card");
+  const handedAt = Date.now();
+  await fleet.send(delegate, "PROBE-NEXT go on with something else");
+  await until(
+    "the delegate's next turn's end",
+    () => turnEndedAt(fleet, delegate),
+    (end) => end > handedAt,
+    120_000
+  ).catch(() => 0);
+  await Bun.sleep(3000);
+  const handedLine = await lineOf(fleet, id);
+  const listed = (
+    await fleet.api<{ id: string; waiting: boolean }[]>(
+      `/api/instances/${parent}/artifacts`
+    )
+  ).find((one) => one.id === id);
+  const page = await kit.page("desk", { engine: "webkit" });
+  await open(page, `${base}/session`, "[data-needs-caw]");
+  await cawPanel(page);
+  await settle(page, 1000);
+  const rows = await panelRead(page);
+  await page.close();
+  const pushed = phone.pushed.some(
+    (one) => one.collapseId === `artifact-${id}`
+  );
+  kit.check(
+    "a hand-up asks nothing: a delegate's judge canvas handed to its parent, the delegate gone on, is not in the lane, not a row in Caw's panel, not waiting in its list, and never pushed",
+    !!id &&
+      handedLine === null &&
+      listed?.waiting === false &&
+      !rows.artifacts.includes(id) &&
+      !pushed,
+    JSON.stringify({ id, handedLine, listed, rows, pushed })
+  );
+  // The parent's panel shows a page of its own; the person removes it.
+  const cover = await create(fleet, parent, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge the parent's own page",
+    name: "parent-cover",
+    html: judgePage("Parent cover", ["The parent's own page."]),
+  });
+  const removed = (await (
+    await fetch(`${fleet.base}/api/instances/${parent}/artifacts/${cover}`, {
+      method: "DELETE",
+    })
+  ).json()) as { showing: { id: string } | null };
+  await Bun.sleep(3000);
+  const afterRemove = await lineOf(fleet, id);
+  kit.check(
+    "the person's Remove of what the parent's panel shows brings no handed canvas forward, and it still asks nothing",
+    removed.showing?.id !== id && afterRemove === null,
+    JSON.stringify({ removed, afterRemove })
+  );
+  await call(parent, "artifact_show", { id });
+  const shownLine = await lineIs(fleet, id, artifactWords.notOpened);
+  kit.check(
+    "the parent's artifact_show puts it in front of the person: it stands in Needs you, 'New · not opened'",
+    shownLine === artifactWords.notOpened,
+    String(shownLine)
+  );
+};
+
 const countAndArcs = async (at: At) => {
   const { fleet, kit, base } = at;
   const page = await kit.page("desk");
@@ -1823,6 +2067,7 @@ const run = async (kit: Kit) => {
   const showing = await fleet.spawn("claude", "Showing", fleet.repo);
 
   await onlyOpenAsks(at, showing);
+  await handedUp(at, showing, phone);
   const media = await fleet.spawn("claude", "Media", fleet.repo);
   await mediaAndGone(at, media);
 
@@ -1889,6 +2134,7 @@ const run = async (kit: Kit) => {
   }
   const away = await fleet.spawn("claude", "Away", fleet.repo);
   await goneAtRegister(at, away);
+  await reconnectStartsNothing(at, away, media);
   phone.stop();
 };
 

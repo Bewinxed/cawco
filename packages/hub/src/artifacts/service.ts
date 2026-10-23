@@ -2017,11 +2017,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return program === undefined ? {} : { program };
   };
 
-  /** The session's newest artifact the panel can show: a draft canvas still in the composer is not one. */
+  /**
+   * The session's newest artifact the panel can show: a draft canvas still
+   * in the composer is not one, nor one a delegate handed up that the
+   * session hasn't shown ({@link isHanded}): that is its parent's to put in
+   * front of the person, never the panel's by itself.
+   */
   const nextNewest = (instance: InstanceRow): ArtifactRow | undefined =>
-    db
-      .ofInstance(instance.id)
-      .find((other) => docs.doc(other.id).getMap("meta").get("draft") !== true);
+    db.ofInstance(instance.id).find((other) => {
+      const meta = docs.doc(other.id).getMap("meta");
+      return meta.get("draft") !== true && meta.get(HANDED) !== true;
+    });
 
   /** What the person last opened in the session's panel themselves, while the session still has it. */
   const personHad = (instance: InstanceRow): ArtifactRow | undefined => {
