@@ -22,7 +22,10 @@
  * With `PROBE_SHOTS_DIR` set, each viewport and scheme is captured there,
  * working and landed, for review.
  *
- * At 1440, in both schemes, the motion, read through the kit's `readMotion`
+ * At 1440, in both schemes, one clock: put to work by one change, the
+ * card's working mark and the pin's own pill each run one `breath`, with
+ * equal duration, easing and start time (the owner's pick: "One breath
+ * everywhere"). Then the motion, read through the kit's `readMotion`
  * on the DevTools clock with its loops caught: putting the agent to work
  * starts one run inside the card, the shared `breath` keyframes on the live
  * dot, a loop of `--breath` on `--ease-in-out`; held at 0, ½ and 1 of it
@@ -44,6 +47,9 @@ const VIEWS_READ: { view: View; width: number }[] = [
 const CARD = '[data-slot="pin-card"]';
 const WORKING = `${CARD} [data-slot="working"]`;
 const DOT = `${WORKING} [data-slot="live-dot"]`;
+/** The pin's own pill in the well, wearing its live dot. */
+const PILL_DOT =
+  '[data-slot="pin-room"] > span > [data-mark] [data-dot="live"]';
 /** The accessible name the working state keeps. */
 const SAID = commentWords.working;
 /** Where each state's capture goes for review, when set: a run's output, never the repository. */
@@ -272,6 +278,49 @@ async function breath(kit: Kit, base: string): Promise<void> {
       probe.remove();
       return read;
     });
+    // One clock: the card's mark and the pin's own pill, both put to work
+    // by one change, run the same breath from the same moment.
+    await bench(page, url, "work");
+    await page.locator(DOT).waitFor();
+    await page.waitForTimeout(100);
+    const clock = await page.evaluate(
+      ({ cardDot, pillDot }) =>
+        [cardDot, pillDot].map((sel) => {
+          const el = document.querySelector(sel);
+          const breaths = (el?.getAnimations() ?? []).filter(
+            (one): one is CSSAnimation =>
+              one instanceof CSSAnimation && one.animationName === "breath"
+          );
+          const [run] = breaths;
+          return {
+            found: !!el,
+            runs: breaths.length,
+            start: run ? Number(run.startTime) : null,
+            duration: run
+              ? Number(run.effect?.getComputedTiming().duration)
+              : null,
+            easing: el ? getComputedStyle(el).animationTimingFunction : "",
+          };
+        }),
+      { cardDot: DOT, pillDot: PILL_DOT }
+    );
+    const [mark, pill] = clock;
+    kit.check(
+      `1440 ${theme}: the card's working mark and the pin's pill breathe on one clock: one breath each, equal duration (${tokens.ms}ms), easing and start time`,
+      !!(mark && pill) &&
+        mark.runs === 1 &&
+        pill.runs === 1 &&
+        mark.start !== null &&
+        mark.start === pill.start &&
+        near(mark.duration ?? 0, tokens.ms, 1) &&
+        mark.duration === pill.duration &&
+        mark.easing === pill.easing &&
+        mark.easing.replaceAll(" ", "") === tokens.easing.replaceAll(" ", ""),
+      `\n    ${JSON.stringify(clock)}`
+    );
+    await bench(page, url, "rest");
+    await page.locator(WORKING).waitFor({ state: "detached" });
+    await page.waitForTimeout(400);
     const motion = await readMotion(
       page,
       () => bench(page, url, "work"),

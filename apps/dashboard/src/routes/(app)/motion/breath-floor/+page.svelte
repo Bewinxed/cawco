@@ -5,7 +5,8 @@
    * kind of breather (`data-breather`): Find's working row (the real
    * FindRow), the session status's Working glyph (the real SessionStatus),
    * a plan step under way (the real PlanTree), the catch-up tag (the real
-   * CatchUp, its dot on the tag's own surface), the live dot (ui/live-dot)
+   * CatchUp, its dot on the tag's own surface), the live dot (ui/live-dot,
+   * and its muted tone, the models page's wait)
    * beside words that say what runs, and the in-flight tool glyph
    * as the transcript draws it (`ic breathe` in each tool family's ink, and
    * the muted ink an unknown tool takes), so the probe reads each one's
@@ -14,6 +15,7 @@
   import FindRow from "#lib/cawco/find/FindRow.svelte";
   import type { Row } from "#lib/cawco/find/find-rows.js";
   import PlanTree, { type PlanNode } from "#lib/cawco/plan/PlanTree.svelte";
+  import PinMark from "#lib/cawco/preview/PinMark.svelte";
   import CatchUp from "#lib/cawco/transcript/CatchUp.svelte";
   import SessionStatus from "#lib/cawco/workspace/SessionStatus.svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -86,6 +88,13 @@
       </div>
       <div class="relative" data-breather="catch-up"><CatchUp /></div>
       <div class="flex" data-breather="live-dot"><LiveDot /></div>
+      <div class="flex" data-breather="live-dot-muted">
+        <LiveDot size="row" tone="muted" />
+      </div>
+      <!-- A pin's pill while the agent works on it: its live dot on its raised cut. -->
+      <div class="flex p-space-1" data-breather="pin-live">
+        <PinMark dot="live" number={12} state="unsent" />
+      </div>
       <div class="flex flex-wrap gap-space-2">
         {#each INKS as ink (ink)}
           <span class="breathe loops inline-flex {ink}" data-breather={ink}

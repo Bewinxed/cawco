@@ -10,7 +10,7 @@
  * resolved, which is drawn only while its thread is open. A 2px raised ring
  * and the xs shadow lift it off the page; an open or stepped-to pin adds a
  * second ring in the focus ink; a dot on its top end says the agent is
- * working on it (the live dot, pulsing) or has answered and the person
+ * working on it (the live dot, breathing) or has answered and the person
  * hasn't looked (the needs-you dot, echoing three loops, then still).
  *
  * Pins are drawn in an `<svg>` in the page's own document like the ink, so
@@ -525,6 +525,9 @@ export function startPins(deps: PinsDeps): Pins {
       dotSize: ["--status-dot-size", "width"],
       dotCut: ["--status-dot-cut", "width"],
       loop: ["--dur-loop", "transition-duration"],
+      breath: ["--breath", "transition-duration"],
+      breathFloor: ["--breath-floor", "opacity"],
+      breathEase: ["--ease-in-out", "transition-timing-function"],
       control: ["--dur-control", "transition-duration"],
       ease: ["--ease-out", "transition-timing-function"],
     });
@@ -546,6 +549,9 @@ export function startPins(deps: PinsDeps): Pins {
       dotSize: Number.parseFloat(read.dotSize) || 6,
       dotCut: Number.parseFloat(read.dotCut) || 1.5,
       loop: durationMs(read.loop),
+      breath: durationMs(read.breath),
+      breathFloor: Number.parseFloat(read.breathFloor),
+      breathEase: read.breathEase,
       control: durationMs(read.control),
       ease: read.ease,
     };
@@ -699,7 +705,7 @@ export function startPins(deps: PinsDeps): Pins {
 
   /**
    * A pill's dot on its top end, cut round by `--status-dot-cut`: working,
-   * the live dot, pulsing; an answer unread, the needs-you dot with its
+   * the live dot, breathing; an answer unread, the needs-you dot with its
    * echo (DESIGN.md, Status dot).
    */
   const dotOf = (id: string, box: Box, paint: Paint): SVGElement[] => {
@@ -722,11 +728,18 @@ export function startPins(deps: PinsDeps): Pins {
       return [cut, mark, echoOf(id, cx, cy, r, paint)];
     }
     if (motionOk()) {
-      mark.animate([{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }], {
-        duration: paint.loop,
-        iterations: Number.POSITIVE_INFINITY,
-        easing: "ease-in-out",
-      });
+      // Live work breathes (DESIGN.md), on the one shared breath the
+      // dashboard's live dot runs (its `breath` keyframes: down to the floor
+      // half a breath in and back, each half on --ease-in-out), the owner's
+      // pick: "One breath everywhere".
+      mark.animate(
+        [
+          { opacity: 1, easing: paint.breathEase },
+          { opacity: paint.breathFloor, easing: paint.breathEase },
+          { opacity: 1 },
+        ],
+        { duration: paint.breath, iterations: Number.POSITIVE_INFINITY }
+      );
     }
     return [cut, mark];
   };

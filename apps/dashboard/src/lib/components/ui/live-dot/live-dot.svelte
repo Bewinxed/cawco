@@ -15,13 +15,14 @@
     variants: {
       /**
        * Its ink: the live glyph's (the default); the live ink, on a raised
-       * tag (the catch-up tag); the muted ink at 60%, a wait not yet the
-       * session's work (a connection being finished).
+       * tag (the catch-up tag); the muted ink, a wait not yet the session's
+       * work (a connection being finished). Each stands at full opacity, so
+       * the breath dims it to the floor and back like every breather.
        */
       tone: {
         live: "bg-status-live-glyph",
         "live-ink": "bg-status-live-ink",
-        muted: "bg-ink-muted opacity-60",
+        muted: "bg-ink-muted",
       },
       /** `status-dot-size` by default; `row`, a row's 7px dot beside its words (a task card's, a connection's). */
       size: {

@@ -110,7 +110,12 @@
       style:--mark-x="{MARK.x}px"
       style:--mark-y="{MARK.y}px"
     >
-      <PinMark number={pin.number} state={markState(pin)} tail="bottom-start" />
+      <PinMark
+        dot={live ? "live" : null}
+        number={pin.number}
+        state={markState(pin)}
+        tail="bottom-start"
+      />
     </span>
     <PinFloat
       label="Comment {pin.number}"
