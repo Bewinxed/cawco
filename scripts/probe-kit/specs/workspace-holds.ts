@@ -33,7 +33,10 @@
  *     it ended.
  * (o) A shell of the person's (started from outside the fleet, its parent
  *     alive) runs in O's clone: O's retirement leaves it running and waits,
- *     the hub's log naming it; once it ends, the next sweep retires O.
+ *     the hub's log naming it. Once the shell alone is killed, its `sleep`
+ *     is an orphan, as a session's detached server is once its starter is
+ *     gone: the next sweep ends it, names it in the agent's log, and
+ *     retires O.
  * (c) P's carry holds an uncommitted diff beside its commits: a handoff
  *     cuts it again with the diff on top and says so; a diff that no
  *     longer applies is said, naming its file, and stays in the carry.
@@ -226,7 +229,8 @@ const pTurn = (request: Seen): Reply => {
       return reading;
     }
     const at = request.all.lastIndexOf(P_READ);
-    read.p2 ||= request.all.slice(at, at + 400);
+    // The step prints its mark after git's lines: they stand before it.
+    read.p2 ||= request.all.slice(Math.max(0, at - 400), at);
     if (finishes < 2) {
       return (
         pStep(
@@ -570,14 +574,17 @@ const processesLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   const item = await scene.ended(d);
   const retired = await scene.stateBecomes(wd.id, "archived");
   const left = [...(await sleeps(INSIDE_SLEEP)), ...(await sleeps(HOST_SLEEP))];
+  // The keeper's process in the clone is ended as its boundary closes for
+  // good (boundary.ts `endUsers`), and the agent names it by its pid.
   const ended = (await scene.fleet.logs("agent"))
     .split("\n")
     .find(
       (line) =>
-        line.includes(`${wd.id}: ended`) && line.includes(`sleep ${HOST_SLEEP}`)
+        line.includes(`[workspace] ${wd.id}:`) &&
+        host.some((pid) => line.includes(`pid ${pid}`))
     );
   check(
-    "(d) D finishes and its workspace retires; neither process runs, and the agent's log names the one it ended",
+    "(d) D finishes and its workspace retires; neither process runs, and the agent's log names the keeper's one it ended by its pid",
     item?.state === "done" &&
       retired.state === "archived" &&
       left.length === 0 &&
@@ -632,14 +639,28 @@ const ownerLeg = async (kit: Kit, scene: Scene): Promise<void> => {
       row.state === "active",
     `${item?.state}; shell ${shell.exitCode === null ? "runs" : `ended ${shell.exitCode}`}; ${row.state}; ${waited ?? (await linesOf(scene.fleet, wo.id))}`
   );
+  // The shell alone ends: its `sleep`, orphaned, is what a session's
+  // detached server is once its starter is gone (the Mac's 9-day vite).
+  const orphan = await sleeps(OWNER_SLEEP);
   shell.kill("SIGKILL");
   await shell.exited;
   await scene.fleet.api("/api/workspaces/retire", {});
   const retired = await scene.stateBecomes(wo.id, "archived");
+  const named = (await scene.fleet.logs("agent"))
+    .split("\n")
+    .find(
+      (line) =>
+        line.includes(`[workspace] ${wo.id}: ended`) &&
+        line.includes(`sleep ${OWNER_SLEEP}`)
+    );
   check(
-    "(o) once the shell ends, the next sweep retires it",
-    retired.state === "archived" && !existsSync(wo.path),
-    `${retired.state}; ${await linesOf(scene.fleet, wo.id)}`
+    "(o) once the shell ends, the next sweep retires it, ending the shell's orphaned sleep and naming it in the agent's log",
+    retired.state === "archived" &&
+      !existsSync(wo.path) &&
+      orphan.length > 0 &&
+      (await sleeps(OWNER_SLEEP)).length === 0 &&
+      named !== undefined,
+    `${retired.state}; orphan ${orphan.join(", ") || "none"}; ${named ?? "no line naming it"}; ${await linesOf(scene.fleet, wo.id)}`
   );
 };
 
