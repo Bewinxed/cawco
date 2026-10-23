@@ -2139,16 +2139,23 @@ const syncMemoryDocs = async (
   return written;
 };
 
-/** The folders a placed document's removal emptied, from its own up to `.claude/rules/cawco/`. */
+/**
+ * The folders a placed document's removal emptied, from its own up to, not
+ * including, `.claude/rules/cawco/`: that dir is a deny path of a delegate's
+ * clone (core workspace-policy.ts `cloneDenies`), bound read-only into a
+ * Linux sandbox, and removed on the host it would leave the sandbox free to
+ * make it again with documents of its own.
+ */
 const pruneEmptyPlaced = async (cwd: string, path: string): Promise<void> => {
   const root = placedMemoryDir(cwd);
-  for (let dir = dirname(join(root, path)); ; dir = dirname(dir)) {
+  for (
+    let dir = dirname(join(root, path));
+    dir !== root && dirname(dir) !== dir;
+    dir = dirname(dir)
+  ) {
     // biome-ignore lint/performance/noAwaitInLoops: deepest first, a parent only once its child is gone
     // biome-ignore lint/suspicious/noEmptyBlockStatements: a folder still holding something stays
     await rmdir(dir).catch(() => {});
-    if (dir === root || dirname(dir) === dir) {
-      return;
-    }
   }
 };
 

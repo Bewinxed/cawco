@@ -46,6 +46,7 @@ import {
   resolve,
 } from "node:path";
 import { binaryRoot } from "./binary-installation";
+import { projectClaudeRelative } from "./claude-dirs";
 import type { WorkspaceRef } from "./harness";
 import {
   accountConfigDir,
@@ -60,7 +61,6 @@ import {
   isSecretFileName,
   placedMemoryDir,
   placedSyncedPaths,
-  projectClaudeDir,
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
   userGitConfigDir,
@@ -155,17 +155,94 @@ const SRT_FILES = [
 const SRT_DIRS = [".vscode", ".idea"];
 
 /**
+ * Claude Code's empty preview launch config: its version and no server.
+ * "Claude automatically detects your dev server setup and stores the
+ * configuration in `.claude/launch.json` … `{ "version": "0.0.1",
+ * "configurations": [ … ] }`" (code.claude.com/docs/en/desktop, "Configure
+ * preview servers").
+ */
+const LAUNCH_EMPTY = {
+  kind: "file",
+  text: '{"version":"0.0.1","configurations":[]}\n',
+} as const;
+
+/**
+ * Claude Code's empty scheduled tasks: a `tasks` list with none. Its reader
+ * takes anything else as no task too (CLI 0.3.302: `if(!r||typeof
+ * r!=="object")return[];let i=r;if(!Array.isArray(i.tasks))return[]`).
+ */
+const SCHEDULED_EMPTY = { kind: "file", text: '{"tasks":[]}\n' } as const;
+
+/**
+ * Every project file or dir Claude Code, OpenCode or pi loads and runs (or
+ * follows as instructions only it may change, `output-styles`), by its path
+ * from the dir it is found in, with the stand-in its harness parses as
+ * nothing set (a clone holds one at its root on Linux, {@link cloneDenies}).
+ * Each is the harness's own and a fleet admin tool's, never a workspace's:
+ * the owner picked "Admin tools only" (2026-10-23).
+ *
+ * - Claude Code: `.mcp.json`; `.claude/` settings (hooks, env, helpers,
+ *   plugins), `hooks`, `commands` and `skills` (`` !`cmd` `` lines,
+ *   frontmatter hooks), `agents`, `workflows` (JS scripts), `routines`,
+ *   `scheduled_tasks.json`, `loop.md` (scheduled prompts), `launch.json`
+ *   (the preview server's command), `output-styles`: Claude Code's own
+ *   write-protected list (CLI 0.3.302: `Ae(st(Z,".claude","launch.json")…
+ *   "workflows"…"routines"…"output-styles"…"scheduled_tasks.json"…
+ *   "loop.md"…".mcp.json")`).
+ * - OpenCode: `opencode.json(c)` and `.opencode/` (plugins, commands' shell
+ *   blocks, MCP commands), from cwd to the filesystem root
+ *   (opencode.ai/v2/docs/config).
+ * - pi: `.pi/` (extensions, packages, `mcp.json`, settings; CawCo's pi takes
+ *   every folder as trusted, pi-runtime.ts `SettingsManager.create`). "A
+ *   bare `.pi` directory does not require project trust" (pi docs), so an
+ *   empty one stands in.
+ * - OpenCode and pi: `.agents/skills`.
+ */
+const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
+  ".mcp.json": { kind: "file", text: '{"mcpServers":{}}\n' },
+  [projectClaudeRelative("settings.json")]: EMPTY_JSON,
+  [projectClaudeRelative("settings.local.json")]: EMPTY_JSON,
+  [projectClaudeRelative("hooks")]: DIR,
+  [projectClaudeRelative("commands")]: DIR,
+  [projectClaudeRelative("agents")]: DIR,
+  [projectClaudeRelative("skills")]: DIR,
+  [projectClaudeRelative("workflows")]: DIR,
+  [projectClaudeRelative("routines")]: DIR,
+  [projectClaudeRelative("output-styles")]: DIR,
+  [projectClaudeRelative("launch.json")]: LAUNCH_EMPTY,
+  [projectClaudeRelative("scheduled_tasks.json")]: SCHEDULED_EMPTY,
+  [projectClaudeRelative("loop.md")]: EMPTY,
+  "opencode.json": OPENCODE_EMPTY,
+  "opencode.jsonc": OPENCODE_EMPTY,
+  ".opencode": OPENCODE_DIR,
+  ".pi": DIR,
+  ".agents/skills": DIR,
+};
+
+/**
+ * {@link HARNESS_CONFIG_EMPTY}'s paths: the one list of harness config a
+ * clone's root denies, and which no workspace's commit changes at any depth
+ * or in any letter case (agent workflow-command.ts `ownConfigChanges`,
+ * worktree-guard.ts `gitShim`).
+ */
+export const HARNESS_CONFIG: readonly string[] =
+  Object.keys(HARNESS_CONFIG_EMPTY);
+
+/**
  * Every path in a clone the workspace's policy denies writing, and srt's own
  * mandatory names at its root ({@link SRT_FILES}, {@link SRT_DIRS}), each
  * with its stand-in. What host git runs or reads from a clone: its config, its
  * hooks, its submodules' git dirs. And the harness project config the host
- * loads at the workspace's next session, outside any boundary: Claude Code's
- * project settings (hooks), hooks, commands and agents, OpenCode's config
- * (plugins, MCP commands), both `.mcp.json`; and the project skills, where
- * the fleet places a project's skills with the store their links land in
- * (core paths.ts `placedSyncedPaths`). On Linux a link in a dir the
- * sandbox writes can be swapped for another, so the whole skills dir is held,
- * as `commands` and `agents` are.
+ * loads at the workspace's next session, outside any boundary, at the clone's
+ * root ({@link HARNESS_CONFIG_EMPTY}: Claude Code's, OpenCode's and pi's);
+ * the project skills, where the fleet places a project's skills with the
+ * store their links land in (core paths.ts `placedSyncedPaths`); and the
+ * project's memory documents as the fleet places them (`placedMemoryDir`).
+ * On Linux a link in a dir the sandbox writes can be swapped for another,
+ * so the whole skills dir is held, as `commands` and `agents` are. srt binds
+ * literal paths alone ("`allowWrite` / `denyWrite` take literal paths",
+ * github.com/anthropics/sandbox-runtime), so a nested copy of one is kept
+ * out of what lands, at any depth, by the commit check instead.
  *
  * Linux: srt binds `/dev/null` over a deny path that does not exist, and
  * bwrap leaves a read-only empty file on the host at it for the sandbox's
@@ -177,26 +254,29 @@ const SRT_DIRS = [".vscode", ".idea"];
  * artifact"), so the boundary's host makes each stand-in before every
  * sandbox it starts (`boundary-host.ts`).
  */
-export const cloneDenies = (clone: string): readonly CloneDeny[] => [
-  { path: join(clone, ".git", "config"), empty: { kind: "none" } },
-  { path: join(clone, ".git", "hooks"), empty: DIR },
-  { path: join(clone, ".git", "modules"), empty: DIR },
-  { path: projectClaudeDir(clone, "settings.json"), empty: EMPTY_JSON },
-  { path: projectClaudeDir(clone, "settings.local.json"), empty: EMPTY_JSON },
-  ...["hooks", "commands", "agents"].map((name) => ({
-    path: projectClaudeDir(clone, name),
-    empty: DIR,
-  })),
-  // The skills the fleet places in the clone, and the store their links
-  // land in: a fleet skill, never the delegate's to change.
-  ...placedSyncedPaths(clone).map((path) => ({ path, empty: DIR })),
-  { path: join(clone, "opencode.json"), empty: OPENCODE_EMPTY },
-  { path: join(clone, "opencode.jsonc"), empty: OPENCODE_EMPTY },
-  { path: join(clone, ".opencode"), empty: OPENCODE_DIR },
-  {
-    path: join(clone, ".mcp.json"),
-    empty: { kind: "file", text: '{"mcpServers":{}}\n' },
-  },
+export const cloneDenies = (clone: string): readonly CloneDeny[] => {
+  const denies: CloneDeny[] = [
+    { path: join(clone, ".git", "config"), empty: { kind: "none" } },
+    { path: join(clone, ".git", "hooks"), empty: DIR },
+    { path: join(clone, ".git", "modules"), empty: DIR },
+    ...Object.entries(HARNESS_CONFIG_EMPTY).map(([name, empty]) => ({
+      path: join(clone, name),
+      empty,
+    })),
+    // The skills the fleet places in the clone, and the store their links
+    // land in: a fleet skill, never the delegate's to change.
+    ...placedSyncedPaths(clone).map((path) => ({ path, empty: DIR })),
+    // The project's memory documents as the fleet places them: instructions
+    // Claude Code loads at launch, never the delegate's to change.
+    { path: placedMemoryDir(clone), empty: DIR },
+    ...srtDenies(clone),
+  ];
+  const seen = new Set<string>();
+  return denies.filter(({ path }) => !seen.has(path) && seen.add(path));
+};
+
+/** srt's own mandatory names at the clone's root, each with its stand-in ({@link SRT_FILES}, {@link SRT_DIRS}). */
+const srtDenies = (clone: string): CloneDeny[] => [
   ...SRT_FILES.map((name) => ({
     path: join(clone, name),
     empty: EMPTY,
@@ -213,15 +293,13 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
  * What CawCo writes into a clone and keeps out of its status itself, by path
  * in the clone: its deny paths, which no delegate writes ({@link
  * cloneDenies}: the stand-ins CawCo made there, the placed skills and their
- * store), the project's memory documents as the fleet places them (paths.ts
- * `placedMemoryDir`), and its stage's host (agent stage.ts `writeHost`).
+ * store, the project's memory documents as the fleet places them), and its
+ * stage's host (agent stage.ts `writeHost`).
  */
 export const cloneWritten = (clone: string): string[] =>
-  [
-    ...cloneDenies(clone).map((deny) => deny.path),
-    placedMemoryDir(clone),
-    join(clone, ".cawco"),
-  ].map((path) => relative(clone, path));
+  [...cloneDenies(clone).map((deny) => deny.path), join(clone, ".cawco")].map(
+    (path) => relative(clone, path)
+  );
 
 /**
  * The `git status` that names a clone's untracked paths git ignores, a
