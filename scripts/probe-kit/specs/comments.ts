@@ -8572,7 +8572,11 @@ const redrawChecks = async (on: On) => {
       const current = await (
         await frame.frameElement()
       )
-        .evaluate((el) => !el.inert && el.hasAttribute("data-ready"))
+        .evaluate(
+          (el) =>
+            !(el as HTMLIFrameElement).inert &&
+            (el as HTMLIFrameElement).hasAttribute("data-ready")
+        )
         .catch(() => false);
       return current
         ? await screenBox(on, frame, REDRAWN).catch(() => undefined)
