@@ -120,9 +120,10 @@ const toolFailed = (content: unknown): boolean =>
 /** One request the mock answered. */
 export interface Seen {
   /**
-   * The request answers a tool call: its last message is the tool's result
-   * (a `tool` message on chat completions, a `tool_result` block on
-   * Anthropic messages).
+   * The request answers a tool call: its last message, past the system
+   * messages Claude Code appends after it ({@link answeredOf}), is the
+   * tool's result (a `tool` message on chat completions, a `tool_result`
+   * block on Anthropic messages).
    */
   afterTool: boolean;
   /**
@@ -562,6 +563,24 @@ const newestOf = (
     lastMidTurn: newest?.midTurn === true,
   };
 };
+
+/**
+ * The newest message a request answers ({@link Seen.afterTool}): its last,
+ * past the system messages after it that carry none of the person's words.
+ * On a model that takes system messages mid-conversation, Claude Code says
+ * its environment in a message of its own, and a working directory a call
+ * moved in one after that call's result (`# Environment update`, Claude
+ * Code 2.1.302 on Opus 5.5, its default; on Haiku 4.5 it says it inside the
+ * result). Words read mid-turn as a system message of their own are the
+ * newest message ({@link MID_TURN}).
+ */
+const answeredOf = (
+  messages: { role: string; content: unknown }[]
+): { role: string; content: unknown } | undefined =>
+  messages.findLast(
+    (message) =>
+      message.role !== "system" || textOf(message.content).includes(MID_TURN)
+  );
 
 const encoder = new TextEncoder();
 /** The agent's log lines about accounts and sign-ins, for a failed wait to show. */
@@ -1713,7 +1732,7 @@ async function standUp(
           ? [{ text, said: text, midTurn: false }]
           : [];
       });
-      const final = body.messages?.at(-1);
+      const final = answeredOf(body.messages ?? []);
       const one: Seen = {
         at: Date.now(),
         auth:

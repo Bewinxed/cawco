@@ -837,12 +837,6 @@ const legacyLeg = async (kit: Kit, fleet: KitFleet, claude: Delegate) => {
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       settingSources: ["project", "local"],
-      // The fleet's Claude model, as the agent launches a delegate: on it
-      // Claude Code says a moved working directory beside the tool's result,
-      // which the mock reads as the call's answer. On Opus 5.5, its default,
-      // that is a system message of its own after the result (r199: the step
-      // read no answer and ended).
-      model: MODEL.claude,
       // Its shell is what this leg proves: the repository's server is w6's.
       strictMcpConfig: true,
       ...(await legacyClaudeOptions(boundary)),
