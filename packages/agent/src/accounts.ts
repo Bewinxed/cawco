@@ -80,7 +80,9 @@ const envFor = (account: string): Record<string, string | undefined> => ({
 });
 
 /**
- * How long one `claude auth status` may take to answer. Our choice, because:
+ * How long one dir's sign-in read may take: the keychain looks that come
+ * first on a Mac ({@link lockedAway}) and `claude auth status` itself, all of
+ * it. Our choice, because:
  * every account dir is read this way each minute and on every report, and a
  * CLI that never answers would hold all of them; a read cut by it is
  * unanswered, never signed out ({@link authStatusIn}). Ending it can cut a
@@ -159,14 +161,14 @@ const signedInAs = (
   return identity;
 };
 
-/** The sentence for a `claude auth status` on `dir` that gave no answer in time, or ended before it answered. */
+/** The sentence for a sign-in read of `dir` that gave no answer in time, or ended before it answered. */
 export const noAuthAnswer = (
   dir: string,
   { after, reason }: { after: number; reason: "timeout" | "dead" }
 ): string =>
   reason === "timeout"
-    ? `Claude Code did not answer \`claude auth status\` for ${dir} within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (let go after ${after} ms). Its sign-in was not read.`
-    : `Claude Code's \`claude auth status\` for ${dir} ended before it answered, after ${after} ms. Its sign-in was not read.`;
+    ? `The sign-in of ${dir} was not read within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (the keychain looks and \`claude auth status\`; let go after ${after} ms).`
+    : `The sign-in read of ${dir} ended before it answered (\`claude auth status\` or a keychain look ended by a signal), after ${after} ms. Its sign-in was not read.`;
 
 /** `claude auth status --json`'s output read as an answer, or undefined when it is none (no JSON, no `loggedIn`). */
 const statusIn = (
@@ -194,10 +196,10 @@ const statusIn = (
 /**
  * What `claude auth status --json` says, run in `env` (its config dir is
  * `dir`): signed in, how, and as whom ({@link AuthStatus}). Unanswered when
- * it ran out of {@link AUTH_STATUS_TIMEOUT_MS} (however the process then
- * took its end), or something else ended it before it answered (`dead`).
- * Not run, and `locked`, when the dir's login is in the locked login
- * keychain ({@link lockedAway}).
+ * the read ran out of {@link AUTH_STATUS_TIMEOUT_MS} (the keychain looks
+ * included, and however the process then took its end), or something else
+ * ended it before it answered (`dead`). Not run, and `locked`, when the
+ * dir's login is in the locked login keychain ({@link lockedAway}).
  */
 export const authStatusIn = async (
   env: Record<string, string | undefined>,
@@ -218,16 +220,13 @@ export const authStatusIn = async (
     }
     throw error;
   }
-  if (await lockedAway(serviceOf(env.CLAUDE_CONFIG_DIR))) {
-    return {
-      kind: "answered",
-      value: {
+  return readWithin<AuthStatus>(AUTH_STATUS_TIMEOUT_MS, async (signal) => {
+    if (await lockedAway(serviceOf(env.CLAUDE_CONFIG_DIR), signal)) {
+      return {
         kind: "locked",
         why: `\`claude auth status\` was not run for ${dir}: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it. Its sign-in was not read.`,
-      },
-    };
-  }
-  return readWithin<AuthStatus>(AUTH_STATUS_TIMEOUT_MS, async (signal) => {
+      };
+    }
     const child = Bun.spawn([executable, "auth", "status", "--json"], {
       env,
       stdin: "ignore",
@@ -458,14 +457,60 @@ const serviceOf = (configDir: string | undefined): string =>
  * Whether the keychain holds the login item filed under `service`: its
  * attributes only (no `-w`), which read while the keychain is locked and
  * never touch the secret, so no prompt rises. A missing item exits 44.
+ * `signal` ends it: the deadline of the read it is part of.
  */
-const keychainHolds = async (service: string): Promise<boolean> => {
-  const read =
-    await Bun.$`security find-generic-password -a ${keychainUser()} -s ${service}`
-      .env(hostEnvironment())
-      .quiet()
-      .nothrow();
-  return read.exitCode === 0;
+const keychainHolds = async (
+  service: string,
+  signal: AbortSignal
+): Promise<boolean> => {
+  const child = Bun.spawn(
+    ["security", "find-generic-password", "-a", keychainUser(), "-s", service],
+    {
+      env: hostEnvironment(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+      signal,
+    }
+  );
+  await child.exited;
+  if (child.signalCode !== null) {
+    throw new Gone(
+      `security find-generic-password -s ${service} (${child.signalCode})`
+    );
+  }
+  return child.exitCode === 0;
+};
+
+/**
+ * The login keychain's lock as one read answers it to every account read
+ * that asks while it runs: the lock is the machine's, so the accounts read at
+ * once (7 on the owner's Mac) start one lock read, not one each. Its own
+ * deadline is the sign-in budget, so it never outlives the reads that wait
+ * on it; each of those is bounded by its own as well.
+ */
+let lockRead: Promise<Bounded<boolean>> | undefined;
+
+const loginLocked = async (): Promise<boolean> => {
+  lockRead ??= readWithin(AUTH_STATUS_TIMEOUT_MS, (signal) =>
+    keychainLocked(loginKeychainPath(), signal)
+  ).finally(() => {
+    lockRead = undefined;
+  });
+  const read = await lockRead;
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      // The account read waiting on it ends unanswered with it.
+      throw new Gone(
+        `the login keychain's lock read (${read.reason}, after ${read.after} ms)`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 /**
@@ -476,12 +521,16 @@ const keychainHolds = async (service: string): Promise<boolean> => {
  * which on a locked keychain raises the unlock dialog inside the desktop
  * session and waits on it, so nothing that runs it in the background is
  * started on such a login. The item is read first: the lock is read only of
- * a keychain that holds one.
+ * a keychain that holds one. Both looks run in processes of their own, off
+ * the agent's JS thread, inside the deadline `signal` carries.
  */
-const lockedAway = async (service: string): Promise<boolean> =>
+const lockedAway = async (
+  service: string,
+  signal: AbortSignal
+): Promise<boolean> =>
   platform() === "darwin" &&
-  (await keychainHolds(service)) &&
-  keychainLocked(loginKeychainPath());
+  (await keychainHolds(service, signal)) &&
+  (await loginLocked());
 
 /**
  * The machine's word on Claude, from its account dirs alone: authenticated
@@ -555,10 +604,25 @@ const PROBE_TIMEOUT_MS = 60_000;
  * carries the organization id the dir's `auth status` names.
  */
 export const probeAccount = async (account: string): Promise<AccountProbe> => {
-  if (await lockedAway(keychainService(account))) {
-    throw new Error(
-      `${accountConfigDir(account)} was not probed: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it.`
-    );
+  const away = await readWithin(AUTH_STATUS_TIMEOUT_MS, (signal) =>
+    lockedAway(keychainService(account), signal)
+  );
+  switch (away.kind) {
+    case "unanswered":
+      throw new Error(
+        `${accountConfigDir(account)} was not probed: the keychain looks before it gave no answer within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (let go after ${away.after} ms).`
+      );
+    case "answered":
+      if (away.value) {
+        throw new Error(
+          `${accountConfigDir(account)} was not probed: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it.`
+        );
+      }
+      break;
+    default: {
+      const unhandled: never = away;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
   const handle = query({
     prompt: idle,

@@ -134,7 +134,7 @@ function refuseUnlessScratchPath(home: string, path: string, what: string) {
  * Whether the scratch keychain is locked, by the agent's own primitive
  * (agent/src/login-keychain.ts: `SecKeychainGetStatus`, no secret, no UI).
  */
-function scratchLocked(home: string, path: string): boolean {
+function scratchLocked(home: string, path: string): Promise<boolean> {
   refuseUnlessScratchPath(home, path, "SecKeychainGetStatus");
   return keychainLocked(path);
 }
@@ -481,7 +481,7 @@ const spec: Spec = {
       );
       const searchList = await scratchSearchList(home);
       const held = await holds();
-      const lockedAtStart = lockedNow();
+      const lockedAtStart = await lockedNow();
       const infoBefore = await info();
       kit.note(
         `scratch keychain ${keychain}: set-keychain-settings exit ${settings.code}, list-keychains -s exit ${listed.code}, add-generic-password exit ${added.code}, lock-keychain exit ${locked.code}; H's search list: ${searchList.out}; show-keychain-info before: exit ${infoBefore.code} ${infoBefore.err || infoBefore.out}`
@@ -576,7 +576,7 @@ const spec: Spec = {
         refused.alert === WRONG_PASSWORD && refused.underRow,
         JSON.stringify({ alert: refused.alert, underRow: refused.underRow })
       );
-      const stillLocked = lockedNow();
+      const stillLocked = await lockedNow();
       kit.check(
         "after the refusal the field keeps its place, marked invalid, and the keychain stays locked",
         refused.field !== null &&
@@ -624,7 +624,7 @@ const spec: Spec = {
       );
       await settle(page);
       const answered = await stepState(page, MACHINE);
-      const lockedAfter = lockedNow();
+      const lockedAfter = await lockedNow();
       const infoAfter = await info();
       kit.note(
         `show-keychain-info after: exit ${infoAfter.code} ${infoAfter.err || infoAfter.out}`

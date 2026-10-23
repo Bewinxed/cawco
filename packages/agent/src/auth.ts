@@ -73,7 +73,7 @@ export const unlockKeychain = async (password: string): Promise<void> => {
   }
 
   const keychain = loginKeychainPath();
-  const lockedBefore = keychainLocked(keychain);
+  const lockedBefore = await keychainLocked(keychain);
   const unlocked =
     await Bun.$`security unlock-keychain -p ${password} ${keychain}`
       .env(hostEnvironment())
@@ -84,7 +84,7 @@ export const unlockKeychain = async (password: string): Promise<void> => {
   // Live on a Mac the right password left it unlocked while the step said it
   // had refused it, and the agent never read Claude again or beat: the
   // answer had gone on the exit alone.
-  const lockedAfter = keychainLocked(keychain);
+  const lockedAfter = await keychainLocked(keychain);
   // The tool's own words: `security` prints the OSStatus's message and the
   // keychain's path, never the password it was given.
   const said = unlocked.stderr.toString().trim();

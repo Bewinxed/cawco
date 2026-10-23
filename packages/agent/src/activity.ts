@@ -494,14 +494,25 @@ const macIdle = async (): Promise<IdleSource | undefined> => {
 /**
  * macOS's sleep and wake, from NSWorkspace's notification centre, through
  * `osascript -l JavaScript`: the script prints `listening` once both
- * observers stand, then `sleep` or `wake` as each is posted.
+ * observers stand, then `sleep` or `wake` as each is posted. It exits when
+ * its stdin reads end of file, which is when the agent that holds the pipe's
+ * other end is gone however it ended (a SIGKILL included): a listener with
+ * no agent to tell is never left running. (JXA hands NSData's `length` back
+ * as a string, hence the `Number`.)
  */
 const MAC_SLEEP = `ObjC.import("AppKit");
+ObjC.import("stdlib");
 const out = $.NSFileHandle.fileHandleWithStandardOutput;
 const say = (word) => out.writeData($(word + "\\n").dataUsingEncoding($.NSUTF8StringEncoding));
 const center = $.NSWorkspace.sharedWorkspace.notificationCenter;
 center.addObserverForNameObjectQueueUsingBlock("NSWorkspaceWillSleepNotification", $(), $.NSOperationQueue.mainQueue, () => say("sleep"));
 center.addObserverForNameObjectQueueUsingBlock("NSWorkspaceDidWakeNotification", $(), $.NSOperationQueue.mainQueue, () => say("wake"));
+const input = $.NSFileHandle.fileHandleWithStandardInput;
+$.NSNotificationCenter.defaultCenter.addObserverForNameObjectQueueUsingBlock("NSFileHandleReadCompletionNotification", input, $.NSOperationQueue.mainQueue, (note) => {
+  if (Number(note.userInfo.objectForKey("NSFileHandleNotificationDataItem").length) === 0) $.exit(0);
+  input.readInBackgroundAndNotify;
+});
+input.readInBackgroundAndNotify;
 say("listening");
 $.NSRunLoop.currentRunLoop.run;`;
 
@@ -513,7 +524,8 @@ const hearMacSleep = (
     "/usr/bin/osascript",
     ["-l", "JavaScript", "-e", MAC_SLEEP],
     {
-      stdio: ["ignore", "pipe", "ignore"],
+      // stdin is the agent's end of the pipe whose close ends the listener.
+      stdio: ["pipe", "pipe", "ignore"],
     }
   );
   child.unref();

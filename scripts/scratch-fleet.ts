@@ -1765,6 +1765,9 @@ async function standUp(
   // signed in as the probe's identity and sends the fake token to the mock.
   // Every machine of the fleet gets the same, in its own HOME (`furnish`).
   const accountDir = join(home, ".cawco", "accounts", ACCOUNT, "claude");
+  const { resolveClaudeExecutable } =
+    await import("../packages/agent/src/auth");
+  const hostClaude = resolveClaudeExecutable();
   const furnish = async (dir: string) => {
     const account = join(dir, ".cawco", "accounts", ACCOUNT, "claude");
     await mkdir(account, { recursive: true });
@@ -1780,6 +1783,17 @@ async function standUp(
     if (existsSync(hostBrowsers)) {
       await mkdir(join(dir, browsers), { recursive: true });
       await symlink(hostBrowsers, join(dir, browsers, "ms-playwright"));
+    }
+    // The host's Claude Code, where its installer puts it and the agent's own
+    // lookup reads it (tools.ts `toolPath`: PATH, then `~/.local/bin`): the
+    // one this process finds, which is the one the failure words ask
+    // ({@link accountSignedIn}). The fleet's HOME is its own, so a host
+    // whose Claude Code is found only in its `~/.local/bin` (a shell whose
+    // PATH lacks it) had an agent that reported Claude not installed and
+    // read no account at all.
+    if (hostClaude) {
+      await mkdir(join(dir, ".local", "bin"), { recursive: true });
+      await symlink(hostClaude, join(dir, ".local", "bin", "claude"));
     }
     await writeFile(
       join(account, ".credentials.json"),
@@ -2507,7 +2521,15 @@ async function standUp(
   interface AgentRow {
     auth?: string;
     custody?: { state: string };
-    harnesses?: { auth?: string; harness: string }[];
+    harnesses?: {
+      accounts?: { account: string; loggedIn: boolean }[];
+      auth?: string;
+      authReason?: string;
+      harness: string;
+      installed?: boolean;
+      unreadAccounts?: string[];
+      version?: string;
+    }[];
     machineCapabilities?: unknown;
     machineId: string;
     status: string;
@@ -2730,14 +2752,31 @@ async function standUp(
       ACCOUNT,
       Date.now()
     );
+  /** The Claude report the hub holds from the first machine's agent, as its failure words say it. */
+  const claudeReportWords = async (): Promise<string> => {
+    const report = (await api<AgentRow[]>("/api/agents").catch(() => []))
+      .find((row) => row.machineId === MACHINE)
+      ?.harnesses?.find((one) => one.harness === "claude");
+    return report
+      ? JSON.stringify({
+          installed: report.installed,
+          version: report.version,
+          auth: report.auth,
+          authReason: report.authReason,
+          accounts: report.accounts,
+          unreadAccounts: report.unreadAccounts,
+        })
+      : "none filed";
+  };
   /**
    * The probe's own Claude account (its fake login in this fleet's HOME,
    * never one of the host's) reported signed in by the scratch agent. When
    * it is not within the wait, the failure says what there was to see: the
-   * account it waited for, every sign-in row the hub holds, what Claude Code
-   * itself answers for that account's dir (`claude auth status --json`, the
-   * agent's own question, accounts.ts `authStatusIn`), and the agent's lines
-   * about accounts.
+   * account it waited for, every sign-in row the hub holds, the Claude report
+   * the agent filed (installed or not, its accounts and the dirs it could not
+   * read), what Claude Code itself answers for that account's dir (`claude
+   * auth status --json`, the agent's own question, accounts.ts
+   * `authStatusIn`), and the agent's lines about accounts.
    */
   const accountSignedIn = async () => {
     try {
@@ -2785,6 +2824,7 @@ async function standUp(
         [
           `${error instanceof Error ? error.message : String(error)}: waited for account ${ACCOUNT} (its dir ${accountDir}) on machine ${MACHINE}.`,
           `Sign-in rows the hub holds: ${rows.length > 0 ? rows.map((row) => `${row.account_id} on ${row.machine_id}: ${row.state} (checked ${new Date(row.checked_at).toISOString()})`).join("; ") : "none"}.`,
+          `The agent's Claude report: ${await claudeReportWords()}.`,
           `Claude Code (${executable ?? started.refused}) says for that dir: exit ${status?.exitCode ?? "-"}, ${status ? status.stdout.toString().trim() || status.stderr.toString().trim() || "(nothing)" : "(not run)"}.`,
           `The agent's account lines:\n${agentLines.join("\n") || "(none)"}`,
         ].join("\n"),
