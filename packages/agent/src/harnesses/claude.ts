@@ -1190,7 +1190,10 @@ const scheduledWakeups = (input: unknown): Wakeups | undefined => {
  */
 export const sessionEnv = (
   specEnv: Record<string, string | undefined> | undefined,
-  ctx: Pick<HarnessContext, "boundary" | "instanceId" | "sessionCredential">,
+  ctx: Pick<
+    HarnessContext,
+    "boundary" | "containerEnv" | "instanceId" | "sessionCredential"
+  >,
   root: boolean = runsAsRoot()
 ): Record<string, string | undefined> => ({
   // The fleet's MCP connect window (mcp-status.ts), under the agent's own env.
