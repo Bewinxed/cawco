@@ -432,6 +432,7 @@ import {
   readForgeAsk,
 } from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
+import { leakWords } from "@cawco/core/words/leaks";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -25311,7 +25312,13 @@ export const createServer = (
       );
       tellSession(
         parent,
-        `Your delegate ${item.title} (work item ${item.id.slice(0, 8)}, ${item.state}) left this behind in workspace ${item.workspaceId.slice(0, 8)}, and it takes no message now: ${said.content}`,
+        leakWords.delegateLeft(
+          item.title,
+          item.id.slice(0, 8),
+          item.state,
+          item.workspaceId.slice(0, 8),
+          said.content
+        ),
         LEAK_ORIGIN
       );
       return;

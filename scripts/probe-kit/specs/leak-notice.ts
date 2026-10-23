@@ -36,6 +36,7 @@ import {
   listedPid,
   signal as signalPid,
 } from "../../../packages/core/src/signal";
+import { leakWords } from "../../../packages/core/src/words/leaks";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -153,7 +154,7 @@ const spec: Spec = {
       await fleet.send(grower, `${MEMORY_TAG}: grow memory.`);
       const memoryTold = await until(
         "the session told of its leaking process",
-        () => toldWith(fleet.seen, ["leaking memory", LEAKER]),
+        () => toldWith(fleet.seen, [leakWords.leaking, LEAKER]),
         Boolean,
         MEMORY_WAIT_MS
       ).catch(() => undefined);
@@ -183,8 +184,7 @@ const spec: Spec = {
       ).catch(() => undefined);
       const leftTold = await until(
         "the session told of its leftover",
-        () =>
-          toldWith(fleet.seen, ["still running after", `sleep ${LEFTOVER}`]),
+        () => toldWith(fleet.seen, [leakWords.leftBehind, `sleep ${LEFTOVER}`]),
         Boolean,
         LEFT_WAIT_MS
       ).catch(() => undefined);

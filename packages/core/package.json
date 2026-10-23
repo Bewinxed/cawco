@@ -59,6 +59,7 @@
     "./house-faces": "./src/house-faces.ts",
     "./words/decisions": "./src/words/decisions.ts",
     "./words/routines": "./src/words/routines.ts",
+    "./words/leaks": "./src/words/leaks.ts",
     "./canvas": "./src/canvas.ts",
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",

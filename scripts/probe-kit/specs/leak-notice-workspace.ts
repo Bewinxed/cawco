@@ -41,6 +41,7 @@ import {
   listedPid,
   signal as signalPid,
 } from "../../../packages/core/src/signal";
+import { leakWords } from "../../../packages/core/src/words/leaks";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -125,11 +126,11 @@ const respond = (request: Seen): Reply => {
     }
     return text("ok");
   }
-  if (!ended && request.last.includes("leaking memory")) {
+  if (!ended && request.last.includes(leakWords.leaking)) {
     ended = true;
     return want(request, FINISH, BLOCKED);
   }
-  if (!ended && request.last.includes("still running after")) {
+  if (!ended && request.last.includes(leakWords.leftBehind)) {
     return want(request, WAIT, REST);
   }
   return text("ok");
@@ -197,8 +198,7 @@ const spec: Spec = {
       const where = `in workspace ${(workspace ?? "").slice(0, 8)}`;
       const leftTold = await until(
         "the delegate told of its leftover",
-        () =>
-          toldWith(fleet.seen, ["still running after", `sleep ${LEFTOVER}`]),
+        () => toldWith(fleet.seen, [leakWords.leftBehind, `sleep ${LEFTOVER}`]),
         Boolean,
         LEFT_WAIT_MS + 120_000
       ).catch(() => undefined);
@@ -209,7 +209,7 @@ const spec: Spec = {
       );
       const memoryTold = await until(
         "the delegate told of its leaking process",
-        () => toldWith(fleet.seen, ["leaking memory", LEAKER]),
+        () => toldWith(fleet.seen, [leakWords.leaking, LEAKER]),
         Boolean,
         MEMORY_WAIT_MS
       ).catch(() => undefined);
@@ -220,7 +220,12 @@ const spec: Spec = {
       );
       const parentTold = await until(
         "the parent told of its ended delegate's leak",
-        () => toldWith(fleet.seen, ["Your delegate", "leaking memory", LEAKER]),
+        () =>
+          toldWith(fleet.seen, [
+            leakWords.yourDelegate,
+            leakWords.leaking,
+            LEAKER,
+          ]),
         Boolean,
         MEMORY_WAIT_MS
       ).catch(() => undefined);

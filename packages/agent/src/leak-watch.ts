@@ -53,6 +53,7 @@ import {
   processLineage,
   residentBytes,
 } from "@cawco/core/process-identity";
+import { leakWords } from "@cawco/core/words/leaks";
 import { keeperChildren } from "./sessiond-client";
 
 const GIB = 1024 ** 3;
@@ -213,9 +214,6 @@ const whereOf = async (target: LeakTarget, pid: number): Promise<string> => {
   return `on ${hostname()}${cwd ? ` in ${cwd}` : ""}`;
 };
 
-const plural = (count: number, one: string, many: string): string =>
-  count === 1 ? one : many;
-
 /** One process's memory over the last readings, and the threshold multiple last told. */
 interface Climb {
   readings: number[];
@@ -325,7 +323,15 @@ const climbed = async (
   ]);
   return {
     id: `leak-memory-${key}-${height}`,
-    words: `A process this session started is leaking memory, and CawCo leaves it running: \`${command}\` (pid ${pid}, ${where}) holds ${gib(resident)} resident, up from ${gib(first)} a minute ago and higher at every reading ${LOOK_MS / 1000} s apart, past this machine's leak threshold of ${gib(limit)}. Find what keeps taking memory and fix it.`,
+    words: leakWords.memory(
+      command,
+      pid,
+      where,
+      gib(resident),
+      gib(first),
+      LOOK_MS / 1000,
+      gib(limit)
+    ),
   };
 };
 
@@ -381,12 +387,14 @@ const leftovers = async (
       return `\`${command}\` (pid ${pid}, started ${minutes} min ago)`;
     })
   );
-  const more = due.length - named.length;
-  const count = due.length;
-  const it = plural(count, "it", "them");
   return {
     id: `leak-left-${due.map(keyOf).join(",")}`,
-    words: `${count === 1 ? "A process" : `${count} processes`} this session started ${plural(count, "is", "are")} still running after the process that started ${it} ended, and CawCo leaves ${it} running: ${named.join(", ")}${more > 0 ? ` and ${more} more` : ""}, ${await whereOf(target, root.pid)}. End ${it} if nothing needs ${it}, and fix what started ${it} so it does not leave ${it} behind.`,
+    words: leakWords.left(
+      due.length,
+      named.join(", "),
+      due.length - named.length,
+      await whereOf(target, root.pid)
+    ),
   };
 };
 
