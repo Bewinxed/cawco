@@ -35,13 +35,16 @@ export const isHubAway = (status: number): boolean => AWAY.has(status);
  * away once {@link HUB_AWAY_BOUND_MS} from the first try has passed, or once
  * `stopped` is aborted (the asker gave up). `tryOnce` throws when no answer
  * came (refused, reset, none within its own bound). Tries every 0.5 s
- * doubling to 5 s.
+ * doubling to 5 s; a wait that ran late (this process held) moves the bound
+ * out by as much.
  */
 export const throughHubAway = async (
   tryOnce: () => Promise<Response>,
   stopped?: AbortSignal
 ): Promise<Response | { away: string }> => {
-  const deadline = Date.now() + HUB_AWAY_BOUND_MS;
+  // The bound is the hub's to use: time this process was held (a wait
+  // that ran late) is given back, so a loop blocked here never spends it.
+  let deadline = Date.now() + HUB_AWAY_BOUND_MS;
   let wait = 500;
   for (;;) {
     let away: string;
@@ -60,7 +63,9 @@ export const throughHubAway = async (
     if (stopped?.aborted || Date.now() + wait >= deadline) {
       return { away };
     }
+    const slept = Date.now();
     await Bun.sleep(wait);
+    deadline += Math.max(0, Date.now() - slept - wait);
     wait = Math.min(wait * 2, 5000);
   }
 };

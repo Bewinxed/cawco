@@ -26,6 +26,13 @@ export class Gone extends Error {
   }
 }
 
+/** A deadline's timer this late ran in a process that was held (its loop blocked, or the machine starved it). */
+const HELD_LATE_MS = 1000;
+/** How long a held process reads what came due meanwhile before a late deadline decides. */
+const CATCH_UP_MS = 1000;
+/** Each look while it catches up. */
+const CATCH_UP_STEP_MS = 10;
+
 /**
  * Runs `read` with `ms` to answer. The read gets a signal that aborts when
  * the time is up (or when `options.signal` aborts) and hands it to whatever
@@ -34,6 +41,15 @@ export class Gone extends Error {
  * {@link Gone}. Any other error the read throws is its own and is thrown on,
  * as is the abort of `options.signal`: a caller that let go did not run out
  * of time.
+ *
+ * A deadline whose timer ran {@link HELD_LATE_MS} or more late found this
+ * process held, and decides nothing until what came due meanwhile is read:
+ * Bun runs a timer that came due while its loop was held before it reads
+ * the sockets, so an answer that arrived in time waits behind the deadline.
+ * Up to {@link CATCH_UP_MS} more is given, looked at every
+ * {@link CATCH_UP_STEP_MS}. 2026-10-23 19:33, obelisk: the agent's loop held
+ * ~75 s (its 10 s bounds said "within 84 s"), and 317 session starts were
+ * stopped because the hub's answer to each credential's ACK lay unread.
  */
 export const readWithin = <T>(
   ms: number,
@@ -47,11 +63,33 @@ export const readWithin = <T>(
     ? AbortSignal.any([options.signal, deadline.signal])
     : deadline.signal;
   return new Promise<Bounded<T>>((resolve, reject) => {
-    const timer = setTimeout(() => {
+    let settled = false;
+    const giveUp = () => {
+      if (settled) {
+        return;
+      }
       deadline.abort(
         new DOMException(`no answer within ${ms} ms`, "TimeoutError")
       );
       resolve({ kind: "unanswered", after: elapsed(), reason: "timeout" });
+    };
+    let timer = setTimeout(() => {
+      if (elapsed() - ms < HELD_LATE_MS) {
+        giveUp();
+        return;
+      }
+      const until = performance.now() + CATCH_UP_MS;
+      const look = () => {
+        if (settled) {
+          return;
+        }
+        if (performance.now() >= until) {
+          giveUp();
+          return;
+        }
+        timer = setTimeout(look, CATCH_UP_STEP_MS);
+      };
+      timer = setTimeout(look, CATCH_UP_STEP_MS);
     }, ms);
     let pending: Promise<T>;
     try {
@@ -63,10 +101,12 @@ export const readWithin = <T>(
     }
     pending.then(
       (value) => {
+        settled = true;
         clearTimeout(timer);
         resolve({ kind: "answered", value });
       },
       (error: unknown) => {
+        settled = true;
         clearTimeout(timer);
         if (deadline.signal.aborted) {
           // Already answered `unanswered`: this is the read giving up on our abort.

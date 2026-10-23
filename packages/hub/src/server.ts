@@ -24709,6 +24709,7 @@ export const createServer = (
     for (const id of ids) {
       forgetPending(id, UNREAD.ended);
       anchors.delete(id);
+      settleBackoff.delete(id);
       unanswered.delete(id);
       pulses.delete(id);
       touched.delete(id);

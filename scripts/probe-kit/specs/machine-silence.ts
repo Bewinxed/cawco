@@ -15,13 +15,13 @@
  * hub's own) against the mock model:
  *
  * (a) Six Claude sessions are each sent a message while the agent is
- *     frozen, so each holds an unread send; the agent is killed and started
- *     again, twice. The agent reaches the hub through a relay here
- *     ({@link agentRelay}), and the moment the hub asks it for a transcript
- *     (its settle reads, as it registers) the agent is frozen and what it
- *     says is held, for {@link FROZEN_MS}: the reads go unanswered. No
- *     Needs-you item and no push about the machine, nor any fleet-watch
- *     notice, comes of it.
+ *     frozen (SIGSTOP, {@link FROZEN_MS}), so each holds an unread send. The
+ *     agent is killed and started again, slow: it reaches the hub through a
+ *     relay here ({@link agentRelay}) that holds its answer to every
+ *     transcript the hub asks for, {@link SLOW_MS}, while its heartbeats
+ *     pass, as obelisk beat on while its reads missed. The hub's settle
+ *     reads go unanswered. No Needs-you item and no push about the machine,
+ *     nor any fleet-watch notice, comes of it.
  * (b) The machine is asked {@link SETTLE_READS_PER_MACHINE} settle reads at
  *     most at once (server.ts `SETTLE_READS_PER_MACHINE`), the rest waiting
  *     their turn.
@@ -34,6 +34,14 @@
  *     across an agent restart: its reattach's waits double from 1 s to the
  *     30 s ceiling, and it stops at its 120 s budget in its own words, the
  *     session settled asleep.
+ * (f) Four Claude sessions start at once, and the agent is frozen the
+ *     moment it sends the first credential ACK, for {@link HELD_MS}, past
+ *     the 90 s it gives the hub (agent hub-away.ts `HUB_AWAY_BOUND_MS`): the
+ *     hub's answer lies unread in its socket meanwhile. Every session starts
+ *     and every credential is acknowledged; none is stopped as "not
+ *     acknowledged". Main fails: its 15 s try's timer runs before the
+ *     socket is read (core bounded.ts), and the 90 s are spent while held
+ *     (2026-10-23 19:33, obelisk: 317 starts stopped so).
  *
  *   bun scripts/probe-kit/run.ts machine-silence
  */
@@ -53,8 +61,10 @@ import { type Phone, standInPhone } from "./turn-push";
 const SETTLE_READS_PER_MACHINE = 4;
 /** More sessions than the machine's settle turns, so some wait theirs. */
 const SESSIONS = 6;
-/** Each freeze after a register: past two rounds of 10 s reads, well short of `MACHINE_LOST_MS`. */
-const FROZEN_MS = 25_000;
+/** The agent's freeze while the sends go: about 15 s, well short of `MACHINE_LOST_MS`. */
+const FROZEN_MS = 15_000;
+/** How long the agent that comes back is slow to give transcripts: rounds of 10 s reads and their backoff. */
+const SLOW_MS = 60_000;
 /** opencode.ts: the reattach's first wait, its ceiling and its budget. */
 const RETRY_FIRST_MS = 1000;
 const RETRY_MAX_MS = 30_000;
@@ -65,62 +75,171 @@ const SETTLE =
 const RETRY =
   /\[opencode\] recovery ([0-9a-f-]{36}) waiting; retry (\d+) in (\d+)ms/;
 
+/** Leg (f)'s hold of the agent: past the 90 s it gives the hub's answer to an ACK. */
+const HELD_MS = 95_000;
+/** Sessions leg (f) starts at once. */
+const STARTS = 4;
+/** The request line of a credential's ACK (agent session-identity.ts). */
+const ACK_ASK = "POST /api/session-identities/ack";
+/** The agent's word for a start its ACK stopped (agent session-identity.ts `NOT_ACKNOWLEDGED`). */
+const NOT_ACKED = "Session credential installation was not acknowledged";
+
 /** What the hub asks a machine for when it reads a transcript (core harness.ts `CONTROL_GET_SESSION_MESSAGES`). */
 const TRANSCRIPT_ASK = "getSessionMessages";
 /** The upgrade's header that offers permessage-deflate. */
 const DEFLATE_OFFER = /^sec-websocket-extensions:/i;
+/** A request that upgrades to a WebSocket. */
+const WEBSOCKET_UPGRADE = /^upgrade:\s*websocket/im;
+
+/** A transcript ask's request id, as the hub's frame carries it (plain, or inside a wire part's string). */
+const REQUEST_ID = /requestId\\?"\s*:\s*\\?"([0-9a-f-]{36})/g;
 
 /**
- * A relay the agent reaches the hub through. Armed, the first hub frame that
- * asks for a transcript calls `asked` (the agent is frozen there) before the
- * agent can read it, and from then on what the agent sends is held, never
- * passed on, until `release`. It strips the agent's offer to deflate, so
- * the hub's frames cross it as plain JSON. Without that hold an agent answers in the
- * milliseconds before a freeze from outside lands.
+ * Where the first WebSocket frame in `bytes` ends, and where its mask and
+ * payload start (RFC 6455 §5.2); null until it has come whole.
+ */
+const frameAt = (
+  bytes: Buffer
+): { end: number; mask: number | null; payload: number } | null => {
+  if (bytes.length < 2) {
+    return null;
+  }
+  const second = bytes[1] as number;
+  // biome-ignore lint/suspicious/noBitwiseOperators: the frame's length is the second byte's low seven bits
+  const short = second & 0x7f;
+  // biome-ignore lint/suspicious/noBitwiseOperators: its mask bit is the second byte's high bit
+  const masked = (second & 0x80) !== 0;
+  const sizes: Record<number, [number, () => number]> = {
+    126: [4, () => bytes.readUInt16BE(2)],
+    127: [10, () => Number(bytes.readBigUInt64BE(2))],
+  };
+  const [head, read] = sizes[short] ?? [2, () => short];
+  if (bytes.length < head) {
+    return null;
+  }
+  const payload = head + (masked ? 4 : 0);
+  const end = payload + read();
+  return bytes.length < end
+    ? null
+    : { end, mask: masked ? head : null, payload };
+};
+
+/** Two bytes XORed: how a frame's key unmasks it. */
+// biome-ignore lint/suspicious/noBitwiseOperators: unmasking is a byte-wise XOR with the frame's key
+const xor = (a: number, b: number): number => a ^ b;
+
+/** A frame's payload, unmasked: a client masks every frame (RFC 6455 §5.3). */
+const unmasked = (frame: Buffer, mask: number | null, at: number): Buffer => {
+  const payload = Buffer.from(frame.subarray(at));
+  if (mask !== null) {
+    for (let index = 0; index < payload.length; index += 1) {
+      payload[index] = xor(
+        payload[index] as number,
+        frame[mask + (index % 4)] as number
+      );
+    }
+  }
+  return payload;
+};
+
+/** The agent's WebSocket frames, each whole, with its payload read, from what it sends. */
+const frames = () => {
+  let buffered = Buffer.alloc(0);
+  return (data: Buffer): { frame: Buffer; payload: Buffer }[] => {
+    buffered = Buffer.concat([buffered, data]);
+    const out: { frame: Buffer; payload: Buffer }[] = [];
+    for (let at = frameAt(buffered); at; at = frameAt(buffered)) {
+      const frame = Buffer.from(buffered.subarray(0, at.end));
+      out.push({ frame, payload: unmasked(frame, at.mask, at.payload) });
+      buffered = buffered.subarray(at.end);
+    }
+    return out;
+  };
+};
+
+/**
+ * A relay the agent reaches the hub through, standing for a machine that
+ * is live but slow: while `slow`, the agent's answer to each transcript the
+ * hub asks for is held (its heartbeats and every other frame pass), and
+ * goes on, late, at `quick`. It strips the agent's offer to deflate, so the
+ * hub's asks cross it as plain JSON. `armAck` calls back as the agent sends
+ * a credential's ACK.
  */
 const agentRelay = (hubPort: number) => {
-  let armed: (() => void) | null = null;
-  let holding = false;
+  let slow = false;
+  let ackArmed: (() => void) | null = null;
+  /** Transcript asks the hub made while slow: their answers are held. */
+  const asks = new Set<string>();
   const pairs = new Set<{ agent: Socket; hub: Socket; kept: Buffer[] }>();
   const server = createServer((agent) => {
     const hub = connect(hubPort, "127.0.0.1");
     const pair = { agent, hub, kept: [] as Buffer[] };
     pairs.add(pair);
+    const split = frames();
     // The upgrade without its offer of permessage-deflate, so the hub's
     // frames cross the relay as their own JSON, read for the ask.
     let upgrade: Buffer | null = Buffer.alloc(0);
-    agent.on("data", (data: Buffer) => {
-      let chunk = data;
-      if (upgrade) {
-        upgrade = Buffer.concat([upgrade, data]);
-        const end = upgrade.indexOf("\r\n\r\n");
-        if (end < 0) {
-          return;
-        }
-        const head = upgrade
-          .subarray(0, end)
+    // A connection that is no WebSocket (an ACK, a tool call) passes whole.
+    let plain = false;
+    const acked = (data: Buffer) => {
+      if (ackArmed && data.includes(ACK_ASK)) {
+        const fire = ackArmed;
+        ackArmed = null;
+        fire();
+      }
+    };
+    /** The upgrade, read whole and passed on less its deflate offer; the bytes after it, or null while it is still coming or the connection is plain. */
+    const opened = (data: Buffer): Buffer | null => {
+      upgrade = Buffer.concat([upgrade ?? Buffer.alloc(0), data]);
+      const end = upgrade.indexOf("\r\n\r\n");
+      if (end < 0) {
+        return null;
+      }
+      const head = Buffer.from(
+        upgrade
+          .subarray(0, end + 4)
           .toString("latin1")
           .split("\r\n")
           .filter((line) => !DEFLATE_OFFER.test(line))
-          .join("\r\n");
-        chunk = Buffer.concat([
-          Buffer.from(head, "latin1"),
-          upgrade.subarray(end),
-        ]);
-        upgrade = null;
+          .join("\r\n"),
+        "latin1"
+      );
+      const rest = upgrade.subarray(end + 4);
+      upgrade = null;
+      if (!WEBSOCKET_UPGRADE.test(head.toString("latin1"))) {
+        plain = true;
+        hub.write(Buffer.concat([head, rest]));
+        acked(head);
+        return null;
       }
-      if (holding) {
-        pair.kept.push(chunk);
-      } else {
-        hub.write(chunk);
+      hub.write(head);
+      return rest;
+    };
+    agent.on("data", (data: Buffer) => {
+      if (plain) {
+        hub.write(data);
+        acked(data);
+        return;
+      }
+      const chunk = upgrade ? opened(data) : data;
+      if (!chunk) {
+        return;
+      }
+      for (const { frame, payload } of split(chunk)) {
+        if ([...asks].some((id) => payload.includes(id))) {
+          pair.kept.push(frame);
+        } else {
+          hub.write(frame);
+        }
       }
     });
-    hub.on("data", (chunk) => {
-      if (armed && chunk.includes(TRANSCRIPT_ASK)) {
-        const fire = armed;
-        armed = null;
-        holding = true;
-        fire();
+    hub.on("data", (chunk: Buffer) => {
+      if (slow && chunk.includes(TRANSCRIPT_ASK)) {
+        for (const found of chunk.toString("utf8").matchAll(REQUEST_ID)) {
+          if (found[1]) {
+            asks.add(found[1]);
+          }
+        }
       }
       agent.write(chunk);
     });
@@ -140,18 +259,25 @@ const agentRelay = (hubPort: number) => {
         resolve((server.address() as { port: number }).port)
       );
     }),
-    /** The next transcript ask calls `asked`, and holds what the agent says from then. */
-    arm: (asked: () => void) => {
-      armed = asked;
+    /** From now, the agent's answers to transcript asks are held. */
+    slow: () => {
+      slow = true;
     },
-    /** What the agent said meanwhile goes on, and nothing more is held. */
-    release: () => {
-      holding = false;
+    /** What was held goes on, late, and nothing more is. The asks held so far. */
+    quick: (): number => {
+      slow = false;
+      const held = asks.size;
+      asks.clear();
       for (const pair of pairs) {
-        for (const chunk of pair.kept.splice(0)) {
-          pair.hub.write(chunk);
+        for (const frame of pair.kept.splice(0)) {
+          pair.hub.write(frame);
         }
       }
+      return held;
+    },
+    /** The next credential ACK the agent sends, passed on, calls `sent`; nothing is held. */
+    armAck: (sent: () => void) => {
+      ackArmed = sent;
     },
     stop: () => {
       for (const pair of pairs) {
@@ -255,43 +381,31 @@ const relayedLegs = async (
     );
   };
 
-  // (a) Unread sends, then two registers each frozen at once.
+  // (a) Unread sends while the agent is frozen; then it comes back slow.
+  const lostSeen: (number | null)[] = [];
+  const watchLost = async (ms: number) => {
+    const from = Date.now();
+    while (Date.now() - from < ms) {
+      // biome-ignore lint/performance/noAwaitInLoops: a look every 2.5 s
+      lostSeen.push(await lostAt());
+      await delay(2500);
+    }
+  };
   fleet.freeze("agent", true);
   for (const id of sessions) {
     // biome-ignore lint/performance/noAwaitInLoops: one send at a time
     await fleet.send(id, "Are you there?");
   }
-  await delay(2000);
-  const lostSeen: (number | null)[] = [];
-  for (const wave of [1, 2]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one register after the other
-    await fleet.stop("agent", "SIGKILL");
-    relay.release();
-    const asked = new Promise<void>((resolve) =>
-      relay.arm(() => {
-        fleet.freeze("agent", true);
-        resolve();
-      })
-    );
-    launchAgent();
-    await Promise.race([
-      asked,
-      delay(60_000).then(() => {
-        throw new Error(
-          `wave ${wave}: the hub asked for no transcript within 60 s`
-        );
-      }),
-    ]);
-    const frozenAt = Date.now();
-    while (Date.now() - frozenAt < FROZEN_MS) {
-      // biome-ignore lint/performance/noAwaitInLoops: a look every 2.5 s through the freeze
-      lostSeen.push(await lostAt());
-      await delay(2500);
-    }
-  }
-  fleet.freeze("agent", false);
-  relay.release();
-  await delay(12_000);
+  await watchLost(FROZEN_MS);
+  // Its process gone, the sessions held by sessiond: the agent that comes
+  // back takes them over, and the hub settles what they were sent against
+  // their transcripts, which the agent is slow to give.
+  await fleet.stop("agent", "SIGKILL");
+  relay.slow();
+  launchAgent();
+  await watchLost(SLOW_MS);
+  const held = relay.quick();
+  await delay(15_000);
   const said = (await hubLog.since()).split("\n");
   const machineLines = said.filter(
     (line) =>
@@ -300,11 +414,11 @@ const relayedLegs = async (
       line.includes("push watch-")
   );
   check(
-    `a: frozen ${FROZEN_MS / 1000} s twice with ${SESSIONS} unread sends, the machine raises no Needs-you item, no push and no fleet-watch notice`,
+    `a: frozen ${FROZEN_MS / 1000} s with ${SESSIONS} unread sends, then slow to give their transcripts for ${SLOW_MS / 1000} s, the machine raises no Needs-you item, no push and no fleet-watch notice`,
     machineLines.length === 0 &&
       lostSeen.every((one) => one === null) &&
       machinePushes().length === 0,
-    `${JSON.stringify(machineLines)}; lostAt read ${JSON.stringify(lostSeen)}; pushes ${JSON.stringify(phone.ids())}`
+    `${held} transcript ask(s) held; ${JSON.stringify(machineLines)}; lostAt read ${JSON.stringify(lostSeen)}; pushes ${JSON.stringify(phone.ids())}`
   );
   const reads: SettleRead[] = said.flatMap((line) => {
     const found = SETTLE.exec(line);
@@ -465,5 +579,44 @@ const relayedLegs = async (
       asleep?.status === "sleeping" &&
       words !== undefined,
     `${servers.length} server(s) frozen; waits ${JSON.stringify(waits)}; row ${asleep?.status}; ${words ?? "no words"}`
+  );
+
+  // (f) Starts while the agent is held past its ACK's bound.
+  const agentAt = await fleet.logMark("agent");
+  let heldAt = 0;
+  relay.armAck(() => {
+    fleet.freeze("agent", true);
+    heldAt = Date.now();
+    setTimeout(() => fleet.freeze("agent", false), HELD_MS);
+  });
+  const started = await Promise.allSettled(
+    Array.from({ length: STARTS }, (_, at) =>
+      fleet.spawn("claude", `Held start ${at + 1}`)
+    )
+  );
+  const ids = started.flatMap((one) =>
+    one.status === "fulfilled" ? [one.value] : []
+  );
+  const agentSaid = await agentAt.since();
+  // Installed: the hub took its ACK (session_identities `installed_at`).
+  const acked = ids.filter(
+    (id) =>
+      (fleet.query<{ installed_at: number | null }>(
+        "SELECT installed_at FROM session_identities WHERE instance_id = ?",
+        id
+      )[0]?.installed_at ?? null) !== null
+  );
+  const stopped = agentSaid
+    .split("\n")
+    .filter((line) => line.includes(NOT_ACKED));
+  check(
+    `f: ${STARTS} sessions start at once while the agent is held ${HELD_MS / 1000} s from its first credential ACK: every one starts, its credential acknowledged, none stopped as not acknowledged`,
+    heldAt > 0 &&
+      ids.length === STARTS &&
+      acked.length === STARTS &&
+      stopped.length === 0,
+    `held ${heldAt > 0 ? "from the first ACK" : "never"}; ${ids.length} running; ${acked.length} acknowledged; stopped ${JSON.stringify(stopped)}; ${started
+      .flatMap((one) => (one.status === "rejected" ? [String(one.reason)] : []))
+      .join("; ")}`
   );
 };
