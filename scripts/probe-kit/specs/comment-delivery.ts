@@ -74,6 +74,7 @@ import { Database } from "bun:sqlite";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
+import { wroteLine } from "../../../packages/core/src/comments";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { commentWords } from "../../../packages/core/src/words/comments";
@@ -239,8 +240,8 @@ const BUSY_SLEEPS = [45, 30] as const;
 const BUSY_PIN_WORDS = "how does this even work";
 const BUSY_REPLY_WORDS = "and what's the best practice?";
 const BUSY_NOTICE = `The person commented on the page "${BUSY_PAGE}"`;
-/** The hub's journal lines for a delivery that went (artifacts/service.ts `sayDelivery`; server.ts `marksToSession`). */
-const WENT_LINE = /delivered, for session|went to session/;
+/** A reason's own full stop, which the line that quotes it puts back. */
+const REASON_STOP = /\.$/;
 /** The picks' notice (core injected.ts `artifactResponsesNotice`) for the busy page. */
 const PICKS_NOTICE = `The page "${BUSY_PAGE}" has new responses`;
 /** Step 13's reply, which wakes the sleeping session. */
@@ -648,8 +649,8 @@ const readFirstChecks = async (
   kit.check(
     "8: the person's later reply on that comment goes by itself, with only the new words",
     words.includes("## 4. comment on #e") &&
-      words.includes(`- I wrote: ${JSON.stringify(LATER_WORDS)}`) &&
-      !words.includes(`- I wrote: ${JSON.stringify(FIRST_WORDS)}`),
+      words.includes(wroteLine(LATER_WORDS)) &&
+      !words.includes(wroteLine(FIRST_WORDS)),
     words.slice(0, 500) || "no delivery"
   );
 };
@@ -742,7 +743,7 @@ const wholePageChecks = async (on: On, frame: Frame) => {
     "9: the page's comment reaches the session by itself exactly once, through the page's words changing twice, as a comment on the whole page with the person's words and its id, never as gone, and is stamped sent",
     went.length === 1 &&
       words.includes(`## ${WHOLE_PIN}. comment on the whole page`) &&
-      words.includes(`- I wrote: ${JSON.stringify(WHOLE_WORDS)}`) &&
+      words.includes(wroteLine(WHOLE_WORDS)) &&
       words.includes(`- Pin: ${stamped?.id}`) &&
       !words.includes("gone from the page") &&
       !!stamped?.sentAt &&
@@ -978,7 +979,7 @@ const linkDownChecks = async (on: On, frame: Frame) => {
     "10: the comment written while the link was down reaches the session exactly once, with the person's words and its id, stamped sent",
     said.length === 1 &&
       saidWords.includes(`## ${DOWN_COMMENT}. comment on #b`) &&
-      saidWords.includes(`- I wrote: ${JSON.stringify(DOWN_WORDS)}`) &&
+      saidWords.includes(wroteLine(DOWN_WORDS)) &&
       saidWords.includes(`- Pin: ${commentId}`) &&
       !!stampedComment?.sentAt,
     `${said.length} deliveries of pin ${DOWN_COMMENT}; stamped ${String(stampedComment?.sentAt)}; heard ${saidWords.slice(0, 400) || "nothing"}`
@@ -1137,10 +1138,14 @@ const busyDecisionChecks = async (
     kit.check("12: the decision page is made", false, made.slice(0, 300));
     return;
   }
-  const hubSaid = async (pattern: RegExp) =>
+  /** The hub's journal lines naming this artifact and each of `ids`, matched by what they name, not their wording. */
+  const hubSaid = async (...ids: string[]) =>
     (await fleet.logs("hub"))
       .split("\n")
-      .filter((line) => line.includes(artifact) && pattern.test(line));
+      .filter(
+        (line) =>
+          line.includes(artifact) && ids.every((one) => line.includes(one))
+      );
   const tab = await kit.page("desk");
   const on: On = { ...desk, page: tab, session: decider };
   await open(tab, `${base}/session/${decider}`, "[data-artifact-trigger]");
@@ -1180,8 +1185,12 @@ const busyDecisionChecks = async (
   ).catch(() => undefined);
   const pinned = numbered((await docOf(frame)).pins, 1);
   const offered = await sendCount(tab);
-  const rows = fleet.query<{ reason: string | null; state: string }>(
-    "SELECT state, reason FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+  const rows = fleet.query<{
+    reason: string | null;
+    state: string;
+    uuid: string;
+  }>(
+    "SELECT state, reason, uuid FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
     decider,
     `%${BUSY_NOTICE.replaceAll('"', "%")}%`
   );
@@ -1194,22 +1203,20 @@ const busyDecisionChecks = async (
       boundary.at - pinnedAt <= MARK_TO_MODEL_MS &&
       boundary.at < firstEnds &&
       boundary.all.includes(BUSY_NOTICE) &&
-      boundary.all.includes(`- I wrote: ${JSON.stringify(BUSY_PIN_WORDS)}`) &&
+      boundary.all.includes(wroteLine(BUSY_PIN_WORDS)) &&
       boundary.all.includes(`- Pin: ${pinned?.id}`) &&
       rows.length === 1 &&
       rows[0].state !== "failed",
     `busy ${String(busy)}; Send ${String(offered)}; boundary ${boundary ? `${boundary.at - pinnedAt} ms after the pin, ${firstEnds - boundary.at} ms before the command's end, afterTool ${boundary.afterTool}, command backgrounded ${boundary.body.includes("backgrounded")}` : "never"}; rows ${JSON.stringify(rows)}; heard ${boundary?.last.slice(0, 500) ?? "-"}`
   );
-  const wentLines = await hubSaid(WENT_LINE);
+  // The service's line names the pin and its session; the send path's, the session and the message it went as.
+  const carriedLines = await hubSaid(pinned?.id ?? "-", decider);
+  const messageLines = await hubSaid(decider, rows[0]?.uuid ?? "-");
   const stamped = numbered((await docOf(frame)).pins, 1);
   kit.check(
-    "12: the pin is stamped sent, and the hub's journal says the delivery went, to which session, as which message",
-    !!stamped?.sentAt &&
-      wentLines.some((line) => line.includes("delivered, for session")) &&
-      wentLines.some(
-        (line) => line.includes("went to session") && line.includes(decider)
-      ),
-    `sentAt ${String(stamped?.sentAt)}; journal ${JSON.stringify(wentLines)}`
+    "12: the pin is stamped sent, and the hub's journal says the delivery went: what it carried for which session, and the message it went as",
+    !!stamped?.sentAt && carriedLines.length > 0 && messageLines.length > 0,
+    `sentAt ${String(stamped?.sentAt)}; carried ${JSON.stringify(carriedLines)}; message ${JSON.stringify(messageLines)}`
   );
 
   // The person's reply while the next long command runs.
@@ -1240,8 +1247,8 @@ const busyDecisionChecks = async (
       next.at - repliedAt <= MARK_TO_MODEL_MS &&
       next.at < secondEnds &&
       next.last.includes(BUSY_NOTICE) &&
-      next.last.includes(`- I wrote: ${JSON.stringify(BUSY_REPLY_WORDS)}`) &&
-      !next.last.includes(`- I wrote: ${JSON.stringify(BUSY_PIN_WORDS)}`) &&
+      next.last.includes(wroteLine(BUSY_REPLY_WORDS)) &&
+      !next.last.includes(wroteLine(BUSY_PIN_WORDS)) &&
       repliedRows.length === 2 &&
       repliedRows.every((row) => row.state !== "failed"),
     `next ${next ? `${next.at - repliedAt} ms after the reply, ${secondEnds - next.at} ms before the command's end, afterTool ${next.afterTool}, command backgrounded ${next.body.includes("backgrounded")}` : "never"}; rows ${JSON.stringify(repliedRows)}; heard ${next?.last.slice(0, 500) ?? "-"}`
@@ -1301,7 +1308,7 @@ const busyDecisionChecks = async (
       !!woke &&
       !woke.afterTool &&
       woke.last.includes(BUSY_NOTICE) &&
-      !woke.last.includes(`- I wrote: ${JSON.stringify(BUSY_REPLY_WORDS)}`) &&
+      !woke.last.includes(wroteLine(BUSY_REPLY_WORDS)) &&
       fleet.instance(decider)?.status !== "sleeping",
     `slept ${String(slept)}; woke ${woke ? `${woke.at - wokenAt} ms after the reply, afterTool ${woke.afterTool}` : "never"}; status ${String(fleet.instance(decider)?.status)}; heard ${woke?.last.slice(0, 400) ?? "-"}`
   );
@@ -1463,17 +1470,21 @@ const endedWriterChecks = async (
       (await notSentLine.count()) > 0
         ? ((await notSentLine.first().textContent()) ?? "").trim()
         : "";
+    // The hub's reason, as the pin keeps it, is what its row says.
+    const why = String(
+      (still?.notSent as { why?: string } | undefined)?.why ?? ""
+    ).replace(REASON_STOP, "");
     const rowSays = await until(
-      "pin 1's row saying it wasn't sent",
+      "pin 1's row saying why it wasn't sent",
       lineWords,
-      (words) => words.startsWith("Not sent: "),
+      (words) => !!why && words.includes(why),
       10_000
     ).catch(lineWords);
     const retry = await pinRow.locator('[data-slot="pin-retry"]').count();
     await shutList(tab);
     kit.check(
-      '7a: the pin no one took says so where the person reads it: its row says "Not sent: …" with Caw\'s refusal, and offers Try again',
-      rowSays.includes("Caw couldn't take them") && retry === 1,
+      "7a: the pin no one took says so where the person reads it: its row says why, in the hub's words, and offers Try again",
+      !!why && rowSays.includes(why) && retry === 1,
       `row ${JSON.stringify(rowSays)}; Try again ${retry}; notSent ${JSON.stringify(still?.notSent)}`
     );
   } else {
@@ -1640,13 +1651,20 @@ const run = async (kit: Kit) => {
   );
   const arrived = first ? first.at - third : Number.NaN;
   await Bun.sleep(STILL_MS);
-  const wentLines = (await fleet.logs("hub"))
-    .split("\n")
-    .filter((entry) => entry.includes(id) && WENT_LINE.test(entry));
   const all = deliveries();
   const events = eventsOf(dbPath, session, startedAt);
   const doc = await docOf(frame);
   const pins = [1, 2, 3].map((n) => numbered(doc.pins, n));
+  // The journal's line for it names the artifact, the session and each pin it carried.
+  const wentLines = (await fleet.logs("hub"))
+    .split("\n")
+    .filter(
+      (entry) =>
+        entry.includes(id) &&
+        entry.includes(session) &&
+        pins.every((pin) => !!pin && entry.includes(pin.id))
+    );
+
   const sections = pins.map((pin, i) => {
     const p = PARAS[i];
     const words = first?.last ?? "";
@@ -1655,7 +1673,7 @@ const run = async (kit: Kit) => {
       words.includes(`## ${i + 1}. comment on #${p.id}`) &&
       words.includes(`- Source: src/Page.svelte:${p.line}`) &&
       words.includes(`- Text: ${JSON.stringify(p.text)}`) &&
-      words.includes(`- I wrote: ${JSON.stringify(WORDS[i])}`) &&
+      words.includes(wroteLine(WORDS[i])) &&
       words.includes(`- Pin: ${pin.id}`)
     );
   });
@@ -1666,7 +1684,7 @@ const run = async (kit: Kit) => {
       events.length === 1 &&
       arrived >= QUIET_MS - 1000 &&
       arrived <= MARK_TO_MODEL_MS &&
-      wentLines.some((entry) => entry.includes("delivered, for session")),
+      wentLines.length > 0,
     `Send ${String(counted)}; ${all.length} deliveries at the model, ${events.length} artifact event(s) in sent_messages; the first ${arrived} ms after the third comment (comments kept at +${keptAt.map((at) => at - keptAt[0]).join(", +")} ms); journal ${JSON.stringify(wentLines.slice(0, 3))}`
   );
   kit.check(
@@ -1747,8 +1765,8 @@ const run = async (kit: Kit) => {
       !!second &&
       second.at - repliedAt <= MARK_TO_MODEL_MS &&
       words2.includes("## 2. comment on #b") &&
-      words2.includes('- I wrote: "On second thought, keep the weight."') &&
-      !words2.includes(`- I wrote: ${JSON.stringify(WORDS[1])}`) &&
+      words2.includes(wroteLine("On second thought, keep the weight.")) &&
+      !words2.includes(wroteLine(WORDS[1])) &&
       !words2.includes("## 1.") &&
       !words2.includes("## 3."),
     `${deliveries(before3).length} at the model, ${after3} event(s); ${second ? second.at - repliedAt : "-"} ms after the reply; heard ${words2.slice(0, 600)}`

@@ -1218,6 +1218,10 @@ export const attachedLine = (
   return `- I attached: ${attachment.name} (${size}, ${attachment.mediaType}), its "Attached file" line below`;
 };
 
+/** A delivery's line for the person's words in a pin's thread: what a probe reads them by. */
+export const wroteLine = (text: string): string =>
+  `- I wrote: ${JSON.stringify(text)}`;
+
 /** One pin's section: what it stands on, where, and what the session has not heard of its thread. */
 export function pinSection(
   pin: Pin,
@@ -1240,7 +1244,7 @@ export function pinSection(
   }
   for (const entry of unheardEntries(pin)) {
     if (entry.text.trim()) {
-      lines.push(`- I wrote: ${JSON.stringify(entry.text)}`);
+      lines.push(wroteLine(entry.text));
     }
     for (const attachment of entry.attachments ?? []) {
       lines.push(

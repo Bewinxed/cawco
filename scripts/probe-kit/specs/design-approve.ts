@@ -86,6 +86,13 @@ const DESIGN_WRITE = "mcp__cawco__design_write";
 const ARTIFACT = "mcp__cawco__artifact_create";
 const RESULT = "mcp__cawco__task_result";
 const FINISH = "mcp__cawco__finish_item";
+/**
+ * The tools whose answers this spec reads as their records (design_write's
+ * `written` and `proposal`, design_verdict's `recorded`): asked for them
+ * whole, since CawCo's tools answer agents in words by default (mcp-tool.ts
+ * `response_format`).
+ */
+const DETAILED = new Set([DESIGN_WRITE, VERDICT]);
 const BASH = "Bash";
 /** Only an attempt's brief opens this way. */
 const BRIEF = "Your work item is an attempt at";
@@ -579,7 +586,10 @@ const next = (request: Seen, key: string | undefined): Reply => {
     typeof call.input === "function"
       ? call.input(toolResultOf(request.body))
       : call.input;
-  return useTool(call.name, input);
+  return useTool(
+    call.name,
+    DETAILED.has(call.name) ? { ...input, response_format: "detailed" } : input
+  );
 };
 
 /** A verifier's turn: its session's round, keyed by the commit its brief names. */
