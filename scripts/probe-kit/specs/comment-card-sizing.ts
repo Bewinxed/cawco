@@ -101,10 +101,6 @@ interface Raw {
   pane: (Box & { client: number; scroll: number }) | null;
   /** The pill, where the holder stands beside it (not a sheet). */
   pill: Box | null;
-  /** The surface the thread stands on as a sheet or a panel: the list's sheet round a row, else the holder. */
-  sheet: Box | null;
-  /** The pill, where the holder is a sheet or a panel. */
-  sheetPill: Box | null;
   room: {
     client: number;
     clientW: number;
@@ -113,6 +109,10 @@ interface Raw {
   } | null;
   /** The holder's own width and what it holds. */
   self: { client: number; scroll: number };
+  /** The surface the thread stands on as a sheet or a panel: the list's sheet round a row, else the holder. */
+  sheet: Box | null;
+  /** The pill, where the holder is a sheet or a panel. */
+  sheetPill: Box | null;
   story: string;
 }
 
