@@ -2863,7 +2863,11 @@ workspace_across_update() {
   # session attached and answering. A message reaches it and is answered, and its turn declares its wait again.
   ws_item_live || { echo "ASSERTION FAILED: after the update the work item is $(ws_item_says)"; return 1; }
   echo "after the update the work item is $(ws_item_says)"
-  session_running "$(cat "$rigdir/ws-delegate")" || { echo "ASSERTION FAILED: after the update the delegate's session is $(hub_api /api/instances | json "d => d.find(r => r.id === '$(cat "$rigdir/ws-delegate")')?.status")"; return 1; }
+  # The new agent takes the delegate's process back only once the workspace's hook is in its build's form, and the hub
+  # files it `starting` from the register until the agent's word that it is live (its init or its next heartbeat, 20 s
+  # apart): waited for, as `survived` waits for a session taken back. Read once, it failed fde1ac886's run at load
+  # 30-90, the agent having attached the same process at 13:32:09, 17 s after the session that delegated.
+  wait_until 120 'session_running "$(cat "$rigdir/ws-delegate")"' || { echo "ASSERTION FAILED: after the update the delegate's session is $(hub_api /api/instances | json "d => d.find(r => r.id === '$(cat "$rigdir/ws-delegate")')?.status")"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$(cat "$rigdir/ws-delegate")" | tail -n 8; return 1; }
   token="ws-after-update-$RANDOM$RANDOM"
   send_message "$jid" "$(cat "$rigdir/ws-delegate")" "$(printf '%s\n%s' "$token" "$WS_WAIT_LINE")"
   wait_until 60 '[[ "$(transcript_of "$(cat "$rigdir/ws-delegate")")" == *"proof answered: '"$token"'"*"wait_item: Prove the workspace boundary is waiting until"* ]]' || { echo "ASSERTION FAILED: the delegate did not answer after the update: $(transcript_of "$(cat "$rigdir/ws-delegate")" | tail -c 2000)"; return 1; }
