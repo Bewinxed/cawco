@@ -63,7 +63,13 @@
  *
  *   bun scripts/probe-kit/run.ts artifact-needs
  */
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
@@ -1162,6 +1168,30 @@ const mediaAndGone = async (at: At, session: string) => {
     await view.close();
   }
 
+  // A revision that drops the raised tray's canvas: it stays the page's picture, no row of its own.
+  const revised = await create(fleet, session, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the tray's look",
+    name: "tray-look",
+    program: `root = Decisions("The tray's look", [look])
+look = Decision("look", "Which tray look ships?", [flatLook, plainLook], "The flat look is drawn on a canvas.")
+flatLook = Option("flat", "Flat", "It sits in the bar.", true, [flatPic], "Less depth.")
+plainLook = Option("plain", "Plain", "No tray at all.", false, [], "Nothing to hold.")
+flatPic = Canvas("${flat}", "The flat tray")`,
+  });
+  await Bun.sleep(1500);
+  const afterRevision = (await lane(fleet)).needs.map(
+    (need) => need.artifactId
+  );
+  kit.check(
+    "option media, a revision drops one: the page stays one row, the canvas it dropped doesn't come back as its own, nor the one it keeps",
+    revised === page &&
+      afterRevision.includes(page) &&
+      !(afterRevision.includes(raised) || afterRevision.includes(flat)),
+    JSON.stringify({ revised, page, flat, raised, afterRevision })
+  );
+
   const folder = join(fleet.repo, "probe-gone-preview");
   mkdirSync(folder, { recursive: true });
   writeFileSync(
@@ -1194,6 +1224,131 @@ const mediaAndGone = async (at: At, session: string) => {
       after === null &&
       filed?.waiting === false,
     JSON.stringify({ before, shown, after, filed })
+  );
+};
+
+/** An fd's link to a socket, its inode captured. */
+const SOCKET_LINK = /^socket:\[(\d+)\]$/;
+const SPACES = /\s+/;
+
+/** The listening TCP sockets process `pid` holds, as `address:port` in /proc's hex, and every process under it (Linux /proc). */
+const heldBy = async (
+  pid: number
+): Promise<{ listening: string[]; processes: number[] }> => {
+  const inodes = new Set(
+    (await readdir(`/proc/${pid}/fd`).catch(() => []))
+      .map((fd) => {
+        try {
+          return readlinkSync(`/proc/${pid}/fd/${fd}`);
+        } catch {
+          return "";
+        }
+      })
+      .flatMap((link) => SOCKET_LINK.exec(link)?.slice(1) ?? [])
+  );
+  const listening = ["tcp", "tcp6"].flatMap((table) =>
+    readFileSync(`/proc/${pid}/net/${table}`, "utf8")
+      .split("\n")
+      .slice(1)
+      .map((line) => line.trim().split(SPACES))
+      // State 0A is LISTEN; column 9 the socket's inode.
+      .filter((cols) => cols[3] === "0A" && inodes.has(cols[9] ?? ""))
+      .map((cols) => `${table} ${cols[1]}`)
+  );
+  const parents = new Map<number, number[]>();
+  for (const entry of await readdir("/proc")) {
+    const id = Number(entry);
+    if (!Number.isInteger(id)) {
+      continue;
+    }
+    let stat = "";
+    try {
+      stat = readFileSync(`/proc/${id}/stat`, "utf8");
+    } catch {
+      continue;
+    }
+    const parent = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+    parents.set(parent, [...(parents.get(parent) ?? []), id]);
+  }
+  const processes: number[] = [];
+  const walk = (at: number) => {
+    for (const child of parents.get(at) ?? []) {
+      processes.push(child);
+      walk(child);
+    }
+  };
+  walk(pid);
+  return { listening: listening.sort(), processes: processes.sort() };
+};
+
+/**
+ * A folder gone while its machine was away: a judge preview with its ask
+ * stands; its agent stopped, its folder deleted, the agent launched again
+ * while the hub is held still, so what the agent holds of its own before
+ * any hub word is read; the hub let go, the machine registers and the hub
+ * reads the folder, and the preview leaves the lane with no start of it.
+ * The agent then holds no listening socket and no process it didn't hold
+ * before the register: the read started nothing.
+ */
+const goneAtRegister = async (at: At, session: string) => {
+  const { fleet, kit } = at;
+  const folder = join(fleet.repo, "probe-away-preview");
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(
+    join(folder, "index.html"),
+    judgePage("Away preview", ["A line that goes while away."])
+  );
+  const away = await create(fleet, session, {
+    kind: "preview",
+    does: "judge",
+    ask: "Judge the preview that goes while away",
+    name: "away-preview",
+    dir: folder,
+  });
+  // The panel shows a page after it: no panel holds the preview, so no
+  // register restarts it (server.ts `reconcilePreviews`), and only the
+  // register's read can say its folder went.
+  await create(fleet, session, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge the cover page",
+    name: "away-cover",
+    html: judgePage("Cover", ["The panel shows this instead."]),
+  });
+  const before = await lineIs(fleet, away, artifactWords.notOpened);
+  await fleet.stop("agent");
+  rmSync(folder, { recursive: true, force: true });
+  fleet.freeze("hub", true);
+  const agent = fleet.launch("agent");
+  // The agent up and waiting at the held hub's door: what it holds of its own.
+  await Bun.sleep(8000);
+  const own = await heldBy(agent.pid);
+  fleet.freeze("hub", false);
+  await fleet.agentUp();
+  // Nothing shows it: only the register's read can take it out.
+  const after = await lineIs(fleet, away, null);
+  await Bun.sleep(2000);
+  const then = await heldBy(agent.pid);
+  const newListening = then.listening.filter(
+    (one) => !own.listening.includes(one)
+  );
+  const newProcesses = then.processes.filter(
+    (one) => !own.processes.includes(one)
+  );
+  const files = await fleet.api<{ id: string; waiting: boolean }[]>(
+    `/api/instances/${session}/artifacts/files`
+  );
+  kit.check(
+    "a folder gone while its machine was away: as the machine registers the hub reads the folder (a stat, no start) and the preview leaves the lane, still in Files",
+    before === artifactWords.notOpened &&
+      after === null &&
+      files.find((one) => one.id === away)?.waiting === false,
+    JSON.stringify({ before, after })
+  );
+  kit.check(
+    "the register's read starts nothing: the agent holds no listening socket and no process it didn't hold before the hub's first word",
+    newListening.length === 0 && newProcesses.length === 0,
+    JSON.stringify({ own, then, newListening, newProcesses })
   );
 };
 
@@ -1486,6 +1641,8 @@ const run = async (kit: Kit) => {
       "with many items, a 40-word ask among them"
     );
   }
+  const away = await fleet.spawn("claude", "Away", fleet.repo);
+  await goneAtRegister(at, away);
   phone.stop();
 };
 

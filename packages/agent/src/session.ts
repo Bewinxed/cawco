@@ -100,6 +100,7 @@ import {
   MESSAGES_STORED,
   MOVE_STEPS,
   machineLabel,
+  PREVIEW_FOLDERS,
   PREVIEW_START,
   PREVIEW_STOP,
   PREVIEW_WEIGHT,
@@ -192,6 +193,7 @@ import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { Outbox } from "./outbox";
 import {
+  foldersThere,
   previewWeight,
   startPreview,
   stopPreview,
@@ -1065,6 +1067,8 @@ export class SessionSupervisor {
     [PREVIEW_STOP]: (options) =>
       stopPreview(options as Parameters<typeof stopPreview>[0]),
     [PREVIEW_WEIGHT]: (dir, path) => previewWeight(dir, path),
+    // A read of folders, as a machine registers: nothing starts (preview.ts `foldersThere`).
+    [PREVIEW_FOLDERS]: (dirs) => foldersThere(dirs),
     // A canvas no person's screen shows, drawn by this machine's Chromium (canvas-screen.ts).
     [CANVAS_SCREEN_OPEN]: (options) =>
       fenced()

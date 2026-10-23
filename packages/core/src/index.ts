@@ -2015,6 +2015,13 @@ export const PREVIEW_START = "previewStart";
 export const PREVIEW_STOP = "previewStop";
 /** The daemon's control method that weighs a folder preview's folder on its machine (core preview-proxy `folderWeight`). */
 export const PREVIEW_WEIGHT = "previewWeight";
+/**
+ * The daemon's control method that reads whether folder previews' folders
+ * are still on its machine: a `realpath` and a `stat` each, no listener and
+ * no process. Answers, per folder in the order asked, core preview-proxy
+ * `folderGone`'s words for one that isn't there, or null.
+ */
+export const PREVIEW_FOLDERS = "previewFolders";
 
 /**
  * The session tag a spin-off's transcript carries (NEW.md §1). The agent

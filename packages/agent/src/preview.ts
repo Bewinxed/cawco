@@ -17,6 +17,7 @@ import {
   folderWeight,
   IMMUTABLE,
   injectOverlay,
+  isFolderGone,
   PREVIEW_SERVED_HEADER,
   type PreviewSocket,
   previewFailed,
@@ -609,6 +610,29 @@ async function folderRoot(dir: string): Promise<string> {
     throw new Error(folderGone(`${dir} is not a folder`));
   }
   return root;
+}
+
+/**
+ * Whether each of `dirs` is still a folder on this machine, read with a
+ * `realpath` and a `stat` (folderRoot) and nothing else: no listener, no
+ * process. For each, in order, core's `folderGone` words when it isn't
+ * there, else null (a path that is no absolute one says nothing of it).
+ */
+export async function foldersThere(dirs: unknown): Promise<(string | null)[]> {
+  if (!(Array.isArray(dirs) && dirs.every((dir) => typeof dir === "string"))) {
+    throw new Error("foldersThere takes a list of folders' absolute paths.");
+  }
+  return await Promise.all(
+    dirs.map((dir) =>
+      folderRoot(dir).then(
+        () => null,
+        (error: unknown) => {
+          const said = error instanceof Error ? error.message : String(error);
+          return isFolderGone(said) ? said : null;
+        }
+      )
+    )
+  );
 }
 
 /** What a folder preview of `dir` loads at most, and the desk captures on its start page at `path` (core `folderWeight`). */

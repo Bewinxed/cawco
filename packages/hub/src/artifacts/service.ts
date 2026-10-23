@@ -2354,13 +2354,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       discard(next);
     }
     // Its Canvases and Previews stay its pictures once it is gone (needs.ts).
-    for (const id of mediaOf(row)) {
-      if (db.get(id)?.instanceId === row.instanceId) {
-        docs.transact(id, "hub", (doc) =>
-          doc.getMap("meta").set(MEDIA_OF, row.id)
-        );
-      }
-    }
+    keptAsMedia(row, mediaOf(row));
     letGoHeadless(row.id);
     docs.drop(row.id);
     db.remove(row.id);
@@ -2486,6 +2480,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const writePage = (id: string, html: string, program?: BuiltProgram) => {
     const folder = join(deps.root, id);
+    // The Canvases and Previews this revision drops stay the page's pictures (needs.ts).
+    const page = db.get(id);
+    const was = join(folder, PROGRAM_FILE);
+    if (page && existsSync(was)) {
+      const kept = new Set(
+        program ? readKept(program.program).artifacts.map((one) => one.id) : []
+      );
+      keptAsMedia(
+        page,
+        readKept(readFileSync(was, "utf8"))
+          .artifacts.map((one) => one.id)
+          .filter((one) => !kept.has(one))
+      );
+    }
     rmSync(join(folder, "files"), { recursive: true, force: true });
     rmSync(join(folder, PROGRAM_FILE), { force: true });
     writeStateFileSync(join(folder, "index.html"), html);
@@ -2493,6 +2501,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       writeStateFileSync(join(folder, PROGRAM_FILE), program.program);
       for (const file of program.files) {
         writeStateFileSync(join(folder, file.path), file.bytes);
+      }
+    }
+  };
+
+  /**
+   * Marks each of `ids`, an option's media on decision page `page` of its
+   * own session, as that page's (doc meta `mediaOf`): the page went, or a
+   * revision of it dropped them, and they ask nothing of their own still.
+   */
+  const keptAsMedia = (page: ArtifactRow, ids: readonly string[]): void => {
+    for (const id of ids) {
+      const media = db.get(id);
+      if (
+        media?.instanceId === page.instanceId &&
+        !docs.doc(id).getMap("meta").has(MEDIA_OF)
+      ) {
+        docs.transact(id, "hub", (doc) =>
+          doc.getMap("meta").set(MEDIA_OF, page.id)
+        );
       }
     }
   };
@@ -5388,6 +5415,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * words that it isn't there (core preview-proxy `isFolderGone`), takes it
      * out of Needs you and keeps it in Files; null, it was there.
      */
+    /**
+     * The folder previews on machine `machineId` that are in Needs you, or
+     * would be but for a gone folder recorded: each one's folder, for the
+     * machine to read as it registers (server.ts `foldersSeen`).
+     */
+    foldersAsking: (machineId: string): { dir: string; id: string }[] =>
+      db.asking().flatMap((row) => {
+        if (
+          row.machineId !== machineId ||
+          row.kind !== "preview" ||
+          !("dir" in row.source)
+        ) {
+          return [];
+        }
+        const kept = { ...withMedia(row, factsOf(row)), gone: null };
+        const facts = { ...kept, asked: askOf(row, kept) };
+        return mayWait(row, kept) &&
+          needOf(row, facts, sessionsOf(row, kept)) !== null
+          ? [{ id: row.id, dir: row.source.dir }]
+          : [];
+      }),
+
     sourceSeen: (id: string, gone: string | null): void => {
       const row = db.get(id);
       if (!row) {

@@ -289,6 +289,7 @@ import {
   type PlacementPreview,
   type PlacementStrategy,
   type PlanStep,
+  PREVIEW_FOLDERS,
   PREVIEW_START,
   PREVIEW_STOP,
   PREVIEW_WEIGHT,
@@ -11434,6 +11435,42 @@ export const createServer = (
     } else if (isFolderGone(started.error)) {
       artifacts.sourceSeen(id, started.error);
     }
+  };
+
+  /**
+   * As machine `machineId` registers: the folders of its folder previews
+   * that ask the person something, read by its agent with a `stat` each
+   * (agent preview.ts `foldersThere`), so one whose folder went while the
+   * hub was away leaves Needs you now, not at its next start. A read only:
+   * no listener, no process, nothing woken. An agent that doesn't answer it
+   * leaves every record as it stands.
+   */
+  const foldersSeen = (machineId: string): void => {
+    const asking = artifacts.foldersAsking(machineId);
+    if (asking.length === 0) {
+      return;
+    }
+    detach(
+      (async () => {
+        const read = await readAgent(
+          machineId,
+          PREVIEW_FOLDERS,
+          [asking.map((one) => one.dir)],
+          BUSY_TIMEOUT_MS
+        );
+        if (read.kind !== "answered" || !read.value.ok) {
+          return;
+        }
+        const said = read.value.result as (string | null)[];
+        for (const [n, one] of asking.entries()) {
+          artifacts.sourceSeen(one.id, said[n] ?? null);
+        }
+        console.info(
+          `[hub] ${machineName(machineId)}'s folder previews read: ${asking.length}, ${said.filter(Boolean).length} gone`
+        );
+      })(),
+      "folder previews read"
+    );
   };
 
   const openPreview = async (
@@ -31625,6 +31662,8 @@ export const createServer = (
               );
               // Its canvases' stages are reachable again: no doc says otherwise.
               artifacts.machineBack(message.machineId);
+              // Its folder previews' folders read, never started.
+              foldersSeen(message.machineId);
               // A project Caw could not set up while no machine was online is set up now.
               soon(() => {
                 caw.machineOnline();
