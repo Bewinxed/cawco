@@ -33,6 +33,7 @@
   import SessionPane from "../SessionPane.svelte";
   import { isThreadTab } from "../thread-tabs";
   import Composer, { type TrayRow } from "../transcript/Composer.svelte";
+  import { composerFleet } from "../transcript/composer-fleet";
   import TranscriptSkeleton from "../transcript/TranscriptSkeleton.svelte";
   import { runIdOf } from "../workflow-runs";
   import {
@@ -520,6 +521,7 @@
     >
       <RegionBoundary kept="Your draft is kept." region="composer">
         <Composer
+          fleet={composerFleet}
           agentName={lent.agentName}
           ask={lent.ask}
           busy={lent.busy}

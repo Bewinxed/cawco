@@ -104,6 +104,7 @@
     type ComposerFoot,
   } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
+  import { composerFleet } from "./transcript/composer-fleet";
   import FootFade from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import Transcript from "./transcript/Transcript.svelte";
@@ -1161,6 +1162,7 @@
       >
         <RegionBoundary kept="Your draft is kept." region="composer">
           <Composer
+            fleet={composerFleet}
             agentName={binding.agentName}
             ask={firstAsk}
             busy={thread?.status === "working"}

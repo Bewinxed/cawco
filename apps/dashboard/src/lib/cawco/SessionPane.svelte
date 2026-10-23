@@ -88,6 +88,7 @@
     ComposerDraft,
     paneDrafts,
   } from "./transcript/composer-draft.svelte";
+  import { composerFleet } from "./transcript/composer-fleet";
   import FootFade from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
@@ -1355,6 +1356,7 @@
           </p>
         {:else if writable && !browser}
           <Composer
+            fleet={composerFleet}
             {agentName}
             ask={firstAsk}
             busy={session.busy}

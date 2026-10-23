@@ -38,6 +38,7 @@
   import TemplateCards from "#lib/cawco/project/TemplateCards.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import {
     chipsVariants,
     chipVariants,
@@ -199,6 +200,7 @@
       style:block-size="calc({footHeight}px + var(--space-4))"
     >
       <Composer
+        fleet={composerFleet}
         agentName="Caw"
         attach={false}
         {draft}

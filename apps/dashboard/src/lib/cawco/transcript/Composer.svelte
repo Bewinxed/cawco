@@ -114,28 +114,11 @@
     IconStop,
   } from "#lib/icons.js";
   import { handBack, stages } from "../canvas/stage.svelte";
-  import {
-    cawco,
-    readOlderPage,
-    replaceQueued,
-    type SendExtras,
-    userTurnActions,
-  } from "../client.svelte";
+  import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import { felt } from "../feel.svelte";
   import MentionField from "../find/MentionField.svelte";
   import { readAs } from "../find/mention.svelte";
-  import { mcpSignInIntent, signInToMcp } from "../fleet";
-  import HarnessBlock from "../HarnessBlock.svelte";
-  import {
-    forgetRelaunch,
-    harnessBlockOf,
-    relaunchRefusalOf,
-    relaunchUnblocked,
-    retryRelaunch,
-  } from "../harness-block.svelte";
-  import CawFace from "../home/CawFace.svelte";
-  import { hubSeam } from "../hub-seam";
   import { newId } from "../id";
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
@@ -148,32 +131,12 @@
   import type { Message } from "../types";
   import AttachButton from "./AttachButton.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
-  import { CanvasRoom } from "./canvas-room.svelte";
   import type { ComposerDraft } from "./composer-draft.svelte";
+  import type { ComposerFleet } from "./composer-fleet";
   import { stand } from "./composer-presence.svelte";
-  import DelegateTray from "./DelegateTray.svelte";
   import { GrownShape, layoutScale, measureShape } from "./grown";
-  import {
-    asBubble,
-    asField,
-    bubbleBox,
-    bubbleWords,
-    fieldBox,
-    LEFT_BY,
-    landing as landingWords,
-    liftAsk,
-    notEdited,
-    readFirst,
-    replacing,
-    startFlight,
-    watchReplace,
-    writesTo,
-  } from "./lift.svelte";
-  import Prompt from "./Prompt.svelte";
-  import RecallWheel from "./RecallWheel.svelte";
   import { sentByReader } from "./recall";
   import { opensTurn } from "./rows";
-  import SuggestionChips from "./SuggestionChips.svelte";
 
   let {
     draft,
@@ -206,6 +169,7 @@
     lead,
     action,
     flush = false,
+    fleet,
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -346,12 +310,19 @@
      * no dock foot under it, so its host is never sized from a measure.
      */
     flush?: boolean;
+    /**
+     * What it reads of the fleet, and the parts a conversation's composer
+     * shows (composer-fleet.ts): handed in by every composer in the app,
+     * which `trayRows`, `ask`, `recallOf`, `suggest`, `commands` and
+     * `/mcp auth` need. None on a comment's reply, which loads none of it.
+     */
+    fleet?: ComposerFleet;
   } = $props();
 
   /** The hub this composer reads: the live client's, or a states file's stand-in. */
-  const hub = hubSeam();
+  const hub = untrack(() => fleet)?.hubSeam();
   $effect(() => {
-    if (suggest) {
+    if (suggest && hub) {
       loadSuggestSetting(hub);
     }
   });
@@ -384,8 +355,10 @@
   /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
   let field = $state<HTMLDivElement | null>(null);
   let mentionField = $state<ReturnType<typeof MentionField>>();
-  /** The session's skills, which its field draws as chips. */
-  const skills = $derived(skillsOf(commands));
+  /** The session's skills, which its field draws as chips (the fleet's SkillChip). */
+  const skills = $derived(
+    fleet ? { chip: fleet.SkillChip, named: skillsOf(commands) } : null
+  );
   /** A phone's @ menu: its rows wrap, and it drags down to go. */
   const phone = new MediaQuery(NARROW_QUERY);
 
@@ -462,7 +435,7 @@
   /** How many frames a focus request asks again before it lets go. */
   const FOCUS_TRIES = 10;
   /** The suggestion row, for Tab and Shift+Tab. */
-  let chips = $state<ReturnType<typeof SuggestionChips>>();
+  let chips = $state<ReturnType<ComposerFleet["SuggestionChips"]>>();
 
   /** A `/` or `@` token stops being typed as one the moment it holds whitespace. */
   const TOKEN_WHITESPACE = /\s/;
@@ -1221,7 +1194,9 @@
     dismissed = false;
     if (event.type === "input") {
       sendBlock = "";
-      room.error = "";
+      if (room) {
+        room.error = "";
+      }
       draft.notice = "";
       draftNote = "";
     }
@@ -1257,7 +1232,10 @@
 
   /** This session's row, while its start failed. */
   const failedRow = $derived.by(() => {
-    const row = recallOf ? cawco.instanceIndex.byId.get(recallOf) : undefined;
+    const row =
+      fleet && recallOf
+        ? fleet.cawco.instanceIndex.byId.get(recallOf)
+        : undefined;
     return row?.status === "error" && row.harness !== null ? row : undefined;
   });
   /**
@@ -1269,27 +1247,29 @@
    */
   const harnessStart = $derived.by(() => {
     const row = failedRow;
-    if (!row?.harness) {
+    if (!(fleet && row?.harness)) {
       return null;
     }
-    const machine = cawco.machines.find(
+    const machine = fleet.cawco.machines.find(
       (one) => one.machineId === row.machineId
     );
-    const block = machine ? harnessBlockOf(machine, row.harness) : null;
+    const block = machine ? fleet.harnessBlockOf(machine, row.harness) : null;
     return machine && block ? { machine, block } : null;
   });
   /** A start again after its harness was brought up that was refused: said here, with Retry. */
   const relaunchRefused = $derived(
-    recallOf && failedRow ? relaunchRefusalOf(recallOf) : undefined
+    fleet && recallOf && failedRow
+      ? fleet.relaunchRefusalOf(recallOf)
+      : undefined
   );
   let retrying = $state(false);
   async function retryStart(): Promise<void> {
-    if (!recallOf || retrying) {
+    if (!(fleet && recallOf) || retrying) {
       return;
     }
     retrying = true;
     try {
-      await retryRelaunch(recallOf);
+      await fleet.retryRelaunch(recallOf);
     } finally {
       retrying = false;
     }
@@ -1297,12 +1277,12 @@
   // Any session this tab saw refused whose machine's harness now runs goes
   // again, whichever composer is on screen.
   $effect(() => {
-    relaunchUnblocked(cawco.machines);
+    fleet?.relaunchUnblocked(fleet.cawco.machines);
   });
   // A session that went on some other way has no refusal left to say.
   $effect(() => {
-    if (recallOf && !failedRow) {
-      forgetRelaunch(recallOf);
+    if (fleet && recallOf && !failedRow) {
+      fleet.forgetRelaunch(recallOf);
     }
   });
 
@@ -1322,7 +1302,9 @@
     if (signingIn === null) {
       return draftNote;
     }
-    const server = (cawco.fleetMcp ?? []).find((one) => one.name === signingIn);
+    const server = (fleet?.cawco.fleetMcp ?? []).find(
+      (one) => one.name === signingIn
+    );
     return server?.auth?.state === "signed-in"
       ? `${signingIn} is signed in for the fleet.`
       : `Waiting for ${signingIn}: sign in in the tab that opened.`;
@@ -1353,28 +1335,7 @@
     draft.notice = "";
     draftNote = "";
     signingIn = null;
-    // `/mcp auth <server>` for a fleet server is this browser's own sign-in,
-    // not a message: the agent's machine may have no browser at all (a phone is
-    // the browser here), and the hub holds the credentials either way.
-    // Its words stand over the composer, where it was typed; the session
-    // stays where it is while the provider opens in a tab of its own.
-    const intent = mcpSignInIntent(draft.text, cawco.fleetMcp ?? []);
-    if (intent.kind === "go") {
-      const { name } = intent;
-      signingIn = name;
-      signInToMcp(name).catch((error) => {
-        signingIn = null;
-        sendBlock = failureWords(error);
-      });
-      return;
-    }
-    if (intent.kind === "say") {
-      signingIn = null;
-      if (intent.level === "error") {
-        sendBlock = intent.message;
-      } else {
-        draftNote = intent.message;
-      }
+    if (signsIn()) {
       return;
     }
     if (draft.canvas) {
@@ -1392,6 +1353,43 @@
   }
 
   /**
+   * `/mcp auth <server>` for a fleet server is this browser's own sign-in,
+   * not a message: the agent's machine may have no browser at all (a phone
+   * is the browser here), and the hub holds the credentials either way. Its
+   * words stand over the composer, where it was typed; the session stays
+   * where it is while the provider opens in a tab of its own. True when the
+   * draft was that, and nothing is sent.
+   */
+  function signsIn(): boolean {
+    if (!fleet) {
+      return false;
+    }
+    const intent = fleet.mcpSignInIntent(
+      draft.text,
+      fleet.cawco.fleetMcp ?? []
+    );
+    if (intent.kind === "go") {
+      const { name } = intent;
+      signingIn = name;
+      fleet.signInToMcp(name).catch((error) => {
+        signingIn = null;
+        sendBlock = failureWords(error);
+      });
+      return true;
+    }
+    if (intent.kind === "say") {
+      signingIn = null;
+      if (intent.level === "error") {
+        sendBlock = intent.message;
+      } else {
+        draftNote = intent.message;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * A message carrying the canvas: its picture is drawn now and its file,
    * outline and picture join the send, through the attachments and images
    * the send already carries. The canvas's chip flies into the row the
@@ -1403,7 +1401,7 @@
   ): Promise<void> {
     const writing = draft;
     const { canvas } = draft;
-    const extra = await room.extras();
+    const extra = await room?.extras();
     if (!extra || draft !== writing || draft.canvas !== canvas) {
       return;
     }
@@ -1423,7 +1421,7 @@
     extras.images = [...(extras.images ?? []), ...(extra.images ?? [])];
     via(text, extras, id);
     if (canvas) {
-      room.sent(canvas.id);
+      room?.sent(canvas.id);
     }
   }
 
@@ -1495,7 +1493,7 @@
     }
     if (event.key === "Escape" && canvasUp) {
       event.preventDefault();
-      room.fold();
+      room?.fold();
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -1592,36 +1590,43 @@
   let canvasSlot = $state<HTMLElement>();
   /** The canvas's chip, while it is folded. */
   let canvasChip = $state<HTMLElement>();
-  const room = new CanvasRoom({
-    column: () => column,
-    dock: () => dockEl,
-    draft: () => draft,
-    field: () => field ?? undefined,
-    chip: () => canvasChip,
-    pill: () => pill,
-    session: () => recallOf,
-    shell: () => shell,
-    slot: () => canvasSlot,
-  });
+  /** The canvas's room: a conversation's composer has one (`chat`); a comment's reply draws none. */
+  const Room = untrack(() => fleet?.CanvasRoom);
+  const room = Room
+    ? new Room({
+        column: () => column,
+        dock: () => dockEl,
+        draft: () => draft,
+        field: () => field ?? undefined,
+        chip: () => canvasChip,
+        pill: () => pill,
+        session: () => recallOf,
+        shell: () => shell,
+        slot: () => canvasSlot,
+      })
+    : null;
   /** What went wrong making, reading or sending the canvas, said over the field. */
   function canvasNotice(): string {
-    return room.error;
+    return room?.error ?? "";
   }
   /** The canvas is being made, or read for a send: Send waits, pending. */
   function canvasWorking(): boolean {
-    return room.working;
+    return room?.working ?? false;
   }
   /** The canvas stands over the field, or is on its way up or down: the grown shape is the composer. */
-  const canvasUp = $derived(room.up);
+  const canvasUp = $derived(room?.up ?? false);
   /** Its box over the field is laid out while the draft's canvas stands there. */
   const canvasStands = $derived(
-    room.up && !!draft.canvas && !draft.canvas.folded
+    canvasUp && !!draft.canvas && !draft.canvas.folded
   );
 
   // The composer handed another conversation's draft: this one's canvas goes,
   // the new one's stands if it was standing.
   let canvasDraft: ComposerDraft | undefined;
   $effect(() => {
+    if (!room) {
+      return;
+    }
     const next = draft;
     untrack(() => {
       if (canvasDraft !== undefined && canvasDraft !== next) {
@@ -1639,7 +1644,7 @@
   // The panel gives a canvas back (Undock, or Done while docked).
   $effect(() => {
     const asked = handBack.ask;
-    if (!asked || asked.instanceId !== recallOf) {
+    if (!(room && asked) || asked.instanceId !== recallOf) {
       return;
     }
     untrack(() => {
@@ -1651,11 +1656,14 @@
   $effect(() => {
     const id = draft.canvas?.id;
     const stage = id ? stages.get(id) : undefined;
-    if (stage?.at === "panel" && !draft.canvas?.folded) {
+    if (room && stage?.at === "panel" && !draft.canvas?.folded) {
       untrack(() => room.yielded());
     }
   });
   $effect(() => {
+    if (!room) {
+      return;
+    }
     const refit = () => room.refit();
     window.addEventListener("resize", refit);
     return () => {
@@ -1672,7 +1680,7 @@
     event.key.toLowerCase() === "d";
 
   function canvasKey(event: KeyboardEvent): boolean {
-    if (!(recallOf && isCanvasKey(event)) || askOpen) {
+    if (!(room && recallOf && isCanvasKey(event)) || askOpen) {
       return false;
     }
     event.preventDefault();
@@ -1704,10 +1712,12 @@
     }
     if (event.key === "Escape" && canvasUp && !recall) {
       event.preventDefault();
-      room.fold();
+      room?.fold();
     }
   }
-  const recalled = $derived(recallOf ? cawco.session(recallOf) : null);
+  const recalled = $derived(
+    fleet && recallOf ? fleet.cawco.session(recallOf) : null
+  );
 
   /**
    * The wheel, while it is up: whether keys reach it from the field (a held
@@ -1724,7 +1734,7 @@
   let ctrls = $state<HTMLElement>();
   /** The field's box: the draft's row on the wheel. */
   let fieldWrap = $state<HTMLElement>();
-  let wheel = $state<ReturnType<typeof RecallWheel>>();
+  let wheel = $state<ReturnType<ComposerFleet["RecallWheel"]>>();
   /** ↑ pressed while the wheel was folding: it comes up again once folded. */
   let reopen = false;
   /** The wheel's row on the field's line, for a screen reader. */
@@ -1765,7 +1775,7 @@
     const messages = recalled?.messages ?? [];
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       if (opensTurn(messages[i])) {
-        return userTurnActions(messages[i]).edit === "queued"
+        return fleet?.userTurnActions(messages[i]).edit === "queued"
           ? messages[i]
           : null;
       }
@@ -2192,7 +2202,7 @@
     if (dy < -SLOP && -dy > Math.abs(dx)) {
       pen = null;
       event.preventDefault();
-      room.open();
+      room?.open();
     } else if (Math.hypot(dx, dy) > SLOP) {
       pen = null;
     }
@@ -2401,9 +2411,17 @@
   }
 
   async function liftQueued(message: Message): Promise<void> {
-    if (!(field && recallOf) || draft.lifted || recall || askOpen || canvasUp) {
+    if (
+      !(fleet && field && recallOf) ||
+      draft.lifted ||
+      recall ||
+      askOpen ||
+      canvasUp
+    ) {
       return;
     }
+    const { asBubble, asField, bubbleBox, bubbleWords, fieldBox, startFlight } =
+      fleet.lift;
     // Both ends first, then the change: one layout.
     if (shell && pill) {
       liftSizes = measureShape(shell, pill, field);
@@ -2447,9 +2465,20 @@
    */
   async function returnEdit(replaced?: string): Promise<void> {
     const lift = draft.lifted;
-    if (!(lift && field)) {
+    if (!(fleet && lift && field)) {
       return;
     }
+    const {
+      asBubble,
+      asField,
+      bubbleBox,
+      bubbleWords,
+      fieldBox,
+      LEFT_BY,
+      landing: landingWords,
+      replacing,
+      startFlight,
+    } = fleet.lift;
     const leaving = draft.text;
     const from = fieldBox(field);
     const trip = startFlight(asField(field, leaving), from);
@@ -2491,9 +2520,10 @@
   async function replaceLifted(): Promise<void> {
     const lift = draft.lifted;
     const message = recalled?.messages.find((m) => m.id === lift?.id);
-    if (!(lift && message)) {
+    if (!(fleet && lift && message)) {
       return;
     }
+    const { notEdited, watchReplace } = fleet.lift;
     const words = draft.text.trim();
     if (!words) {
       sendBlock = "Write a message before sending.";
@@ -2504,7 +2534,7 @@
       return;
     }
     try {
-      const sent = await replaceQueued(message, words);
+      const sent = await fleet.replaceQueued(message, words);
       // Read while the replace was on its way out: the edit is already
       // back in the field, and the withdraw can only say so again.
       if (draft.lifted !== lift) {
@@ -2532,36 +2562,38 @@
    * The queued message was read while its words were in the field: it can
    * no longer be edited, and the edit stays, with why, to send anew.
    */
-  function settleLift(): void {
+  function settleLift(read: string): void {
     const edited = draft.putBack();
     draft.keepEdit(edited);
-    draft.notice = `${readFirst(agentName)} Your edit is still in the composer.`;
+    draft.notice = `${read} Your edit is still in the composer.`;
   }
 
   $effect(() => {
     const lift = draft.lifted;
-    if (!lift) {
+    if (!(fleet && lift)) {
       return;
     }
-    const message = cawco
+    const message = fleet.cawco
       .session(lift.instanceId)
       ?.messages.find((m) => m.id === lift.id);
-    if (!(message && userTurnActions(message).edit === "queued")) {
-      untrack(settleLift);
+    if (!(message && fleet.userTurnActions(message).edit === "queued")) {
+      const { readFirst } = fleet.lift;
+      untrack(() => settleLift(readFirst(agentName)));
     }
   });
 
   $effect(() => {
-    if (recallOf) {
-      return writesTo(recallOf);
+    if (fleet && recallOf) {
+      return fleet.lift.writesTo(recallOf);
     }
   });
 
   // A row asked to lift its message (its Edit, or a tap on touch): the
   // composer writing to that conversation takes it.
   $effect(() => {
-    const asked = liftAsk.message;
-    if (!asked || asked.instanceId !== recallOf) {
+    const liftAsk = fleet?.lift.liftAsk;
+    const asked = liftAsk?.message;
+    if (!(liftAsk && asked) || asked.instanceId !== recallOf) {
       return;
     }
     untrack(() => {
@@ -2817,7 +2849,7 @@
     if (draft.lifted) {
       returnEdit();
     }
-    room.stepAside();
+    room?.stepAside();
     if (document.activeElement === field) {
       askRefocus = true;
       field.blur();
@@ -3207,7 +3239,7 @@
     inert={askRaised}
     {@attach measureLift}
   >
-    {#if minimized && ask && askQuestions}
+    {#if fleet && minimized && ask && askQuestions}
       <!-- The minimized question, in the tray row's place: Caw's needs-you
            face, what it asks, and the chevron it comes back up by. The
            tray's chips and the plan's ring step aside meanwhile, as they do
@@ -3243,7 +3275,7 @@
             class="inline-grid flex-none place-items-center"
             data-box
           >
-            <CawFace size={16} status="needs-you" />
+            <fleet.CawFace size={16} status="needs-you" />
           </span>
           <span
             class="flex-auto min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap"
@@ -3258,11 +3290,11 @@
         </button>
       </div>
     {/if}
-    {#if suggest && suggestions.enabled}
+    {#if fleet && suggest && suggestions.enabled}
       <!-- Keyed by conversation: the ranking is of one chat's words, and the
            shared phone composer must not carry it into the next chat. -->
       {#key draft}
-        <SuggestionChips
+        <fleet.SuggestionChips
           candidates={suggest.candidates}
           oninsert={insertSuggestion}
           text={draft.text}
@@ -3285,7 +3317,7 @@
         </div>
       </div>
     {/if}
-    {#if trayed.length > 0}
+    {#if fleet && trayed.length > 0}
       <!-- One conversation's tray over the next while they cross-fade, in a
            column the composer's width: an auto column grew to the chips' own
            width. The slot is the tray's one row from the composer's first
@@ -3312,7 +3344,7 @@
             data-composer-away={row.id !== showing || undefined}
             class="row-start-1 col-start-1 transition-exit-show data-composer-away:opacity-0 data-composer-away:invisible data-composer-away:transition-exit-hide"
           >
-            <DelegateTray {held} parentId={row.delegatesOf} />
+            <fleet.DelegateTray {held} parentId={row.delegatesOf} />
           </div>
         {/each}
       </div>
@@ -3344,10 +3376,10 @@
     <!-- The row of attachments is one block above the field, the canvas's
          chip leading it. -->
     <AttachmentChips
-      canvasHidden={room.chipHidden}
+      canvasHidden={room?.chipHidden}
       {draft}
-      onopencanvas={() => room.open()}
-      onremovecanvas={() => room.remove()}
+      onopencanvas={() => room?.open()}
+      onremovecanvas={() => room?.remove()}
       bind:canvasChip
     />
 
@@ -3355,13 +3387,13 @@
          back stands on the line that says what failed, after its words.
          While the canvas stands, it stands in the grown shape over the
          field, above its surface. -->
-    {#if harnessStart && recallOf}
+    {#if fleet && harnessStart && recallOf}
       <div
         data-slot="start-block"
         class="pointer-events-auto px-space-3 group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         transition:unfold
       >
-        <HarnessBlock
+        <fleet.HarnessBlock
           block={harnessStart.block}
           machineId={harnessStart.machine.machineId}
           online={harnessStart.machine.status === "online"}
@@ -3433,8 +3465,8 @@
       class="relative pointer-events-auto"
       bind:this={shell}
     >
-      {#if recall && shell && fieldWrap}
-        <RecallWheel
+      {#if fleet && recall && shell && fieldWrap}
+        <fleet.RecallWheel
           deck={deckAt}
           draft={recall.text}
           field={fieldWrap}
@@ -3445,7 +3477,7 @@
           older={() => {
             if (recallOf) {
               // biome-ignore lint/complexity/noVoid: the page lands in the session, which the wheel reads
-              void readOlderPage(recallOf);
+              void fleet?.readOlderPage(recallOf);
             }
           }}
           onback={recallBack}
@@ -3506,7 +3538,7 @@
           </Button>
         </div>
       {/if}
-      {#if drawnAsk && askBox}
+      {#if fleet && drawnAsk && askBox}
         <!-- The ask the composer has grown into, on the shell's foot over
              the pill and cut to the shape as it grows and folds, across the
              composer's width: over the pill, as the wheel's rows and the
@@ -3520,7 +3552,7 @@
           style:--ask-max="{askBox.max}px"
         >
           {#key drawnAsk.request.requestId}
-            <Prompt
+            <fleet.Prompt
               asker={drawnAsk.asker}
               onanswer={drawnAsk.onanswer}
               onminimize={askQuestions ? minimizeAsk : undefined}
@@ -3852,7 +3884,7 @@
             <AttachButton
               {draft}
               ghost={!!action}
-              ondraw={recallOf ? () => room.open() : undefined}
+              ondraw={room && recallOf ? () => room.open() : undefined}
             />
           {/if}
           <!-- Pending from the press until the hub takes the message: the glyph

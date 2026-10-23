@@ -32,6 +32,7 @@
   import type { HeldPlan } from "#lib/cawco/plan.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import { askOpenAt } from "#lib/cawco/transcript/open-at.svelte.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
@@ -373,6 +374,7 @@
         style:--transcript-share="{lent.transcriptShare * 100}%"
       >
         <Composer
+          fleet={composerFleet}
           agentName={lent.agentName}
           ask={lent.ask}
           busy={lent.busy}

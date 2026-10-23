@@ -18,6 +18,7 @@
   import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import type { Message } from "#lib/cawco/types.js";
 
   const ID = "recall-bench";
@@ -88,6 +89,7 @@
      width with 11px margins under 900px. -->
 <div data-slot="dock" class="relative h-full">
   <Composer
+    fleet={composerFleet}
     commands={COMMANDS}
     {draft}
     mentionsFrom={ID}

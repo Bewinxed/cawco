@@ -47,7 +47,7 @@
   import { cn } from "#lib/utils.js";
   import { copyChips } from "../chip-copy";
   import { CURVE, dur, motionOk } from "../motion/curves.svelte.js";
-  import SkillChip from "../SkillChip.svelte";
+  import type SkillChip from "../SkillChip.svelte";
   import { type Skill, skillWords } from "../skill-chips";
   import type { FindResult } from "./find-client";
   import { rowOf } from "./find-rows";
@@ -70,7 +70,7 @@
     value = $bindable(""),
     here = null,
     names = true,
-    skills = new Map(),
+    skills = null,
     phone = false,
     placeholder = "Message the agent…",
     label = "Message the agent",
@@ -92,8 +92,15 @@
     here?: string | null;
     /** Whether "@" names anything here; off, an "@" is only text. */
     names?: boolean;
-    /** The session's skills by name: each named whole is its chip. */
-    skills?: ReadonlyMap<string, Skill>;
+    /**
+     * The session's skills by name, each named whole drawn as its chip
+     * (`chip`, SkillChip: the composer's fleet hands it in, so a field with
+     * no skills loads none of it).
+     */
+    skills?: {
+      chip: typeof SkillChip;
+      named: ReadonlyMap<string, Skill>;
+    } | null;
     phone?: boolean;
     placeholder?: string;
     label?: string;
@@ -253,18 +260,19 @@
   /** Plain words as the field holds them: each skill named whole in them its chip. */
   function wordsOf(text: string): Node[] {
     const out: Node[] = [];
-    const pattern = skillWords(skills.keys());
+    const known = skills;
+    const pattern = known ? skillWords(known.named.keys()) : null;
     let from = 0;
-    for (const match of pattern ? text.matchAll(pattern) : []) {
-      const skill = skills.get(match[1] as string);
+    for (const match of known && pattern ? text.matchAll(pattern) : []) {
+      const skill = known?.named.get(match[1] as string);
       const start = match.index ?? 0;
-      if (!skill) {
+      if (!(known && skill)) {
         continue;
       }
       if (start > from) {
         out.push(document.createTextNode(text.slice(from, start)));
       }
-      out.push(skillChip(skill));
+      out.push(skillChip(known.chip, skill));
       from = start + match[0].length;
     }
     if (from < text.length) {
@@ -278,9 +286,9 @@
    * keeps what Svelte leaves beside it (its block's anchor) out of the
    * message, and takes the chip back to be unmounted where it was mounted.
    */
-  function skillChip(skill: Skill): HTMLElement {
+  function skillChip(drawn: typeof SkillChip, skill: Skill): HTMLElement {
     const holder = document.createElement("span");
-    const mounted = mount(SkillChip, {
+    const mounted = mount(drawn, {
       target: holder,
       props: { skill, field: true },
     });
@@ -300,7 +308,7 @@
    * followed by a space, or with `ends` "end" also at the text's end.
    */
   function namesSkill(ends: "end" | "space"): boolean {
-    const pattern = skillWords(skills.keys(), ends);
+    const pattern = skills ? skillWords(skills.named.keys(), ends) : null;
     if (!(pattern && editor)) {
       return false;
     }

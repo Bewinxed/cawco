@@ -128,6 +128,7 @@
   } from "#lib/cawco/tasks/task-select.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
   import { taskEdges } from "#lib/cawco/views/task-graph.js";
   import ViewCalendar, {
@@ -2412,6 +2413,7 @@
         style:block-size="calc({viewFoot}px + var(--space-4))"
       >
         <Composer
+          fleet={composerFleet}
           agentName="Caw"
           attach={false}
           draft={viewDraft}

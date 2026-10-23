@@ -30,6 +30,7 @@
   import RowFault from "../RowFault.svelte";
   import Composer from "../transcript/Composer.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
+  import { composerFleet } from "../transcript/composer-fleet";
 
   let {
     comments,
@@ -359,6 +360,7 @@
       var(--safe-bottom))"
     >
       <Composer
+        fleet={composerFleet}
         agentName={reaches?.kind === "live" ? reaches.session : "The task"}
         attach={false}
         draft={commentDraft}

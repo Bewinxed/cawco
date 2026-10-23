@@ -92,6 +92,7 @@
   import { threadHref } from "#lib/cawco/thread-tabs.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -804,6 +805,7 @@
     style:--ask-h="calc({askFoot}px + var(--space-4))"
   >
     <Composer
+      fleet={composerFleet}
       agentName="Caw"
       attach={false}
       draft={askDraft}
