@@ -21,8 +21,5 @@
     "scripts",
     "site"
   ],
-  "references": [
-    { "path": "./packages/agent" },
-    { "path": "./packages/core" }
-  ]
+  "references": [{ "path": "./packages/agent" }, { "path": "./packages/core" }]
 }
