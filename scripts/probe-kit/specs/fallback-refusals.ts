@@ -296,6 +296,7 @@ exit 128
       `import { syncFleetConfig } from ${JSON.stringify(join(AGENT, "fleet.ts"))};
 const report = await syncFleetConfig({
   deniedTools: [],
+  harnessConfig: [],
   hooks: [],
   hubOnlyMarketplaces: [],
   marketplaces: [{ name: "probe-market", source: ${JSON.stringify(source)} }],

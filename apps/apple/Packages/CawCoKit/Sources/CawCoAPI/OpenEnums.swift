@@ -8201,6 +8201,7 @@ public enum OpenEnums {
         case agent
         case connection
         case delegateType
+        case harnessConfig
         case hook
         case marketplace
         case mcp
@@ -8217,6 +8218,7 @@ public enum OpenEnums {
             case "agent": self = .agent
             case "connection": self = .connection
             case "delegateType": self = .delegateType
+            case "harnessConfig": self = .harnessConfig
             case "hook": self = .hook
             case "marketplace": self = .marketplace
             case "mcp": self = .mcp
@@ -8234,6 +8236,7 @@ public enum OpenEnums {
             case .agent: "agent"
             case .connection: "connection"
             case .delegateType: "delegateType"
+            case .harnessConfig: "harnessConfig"
             case .hook: "hook"
             case .marketplace: "marketplace"
             case .mcp: "mcp"
@@ -8250,7 +8253,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.agent, .connection, .delegateType, .hook, .marketplace, .mcp, .memory, .memoryDoc, .plugin, .rule, .skill]
+        public static let allCases: [Self] = [.agent, .connection, .delegateType, .harnessConfig, .hook, .marketplace, .mcp, .memory, .memoryDoc, .plugin, .rule, .skill]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

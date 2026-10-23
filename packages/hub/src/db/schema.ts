@@ -28,6 +28,7 @@ import type {
   FleetScope,
   FleetSyncOutcome,
   FleetSyncReport,
+  HarnessConfigKind,
   HarnessKind,
   HarnessReport,
   HomeStore,
@@ -2854,7 +2855,8 @@ export type TrashKind =
   | "delegateType"
   | "memory"
   | "memoryDoc"
-  | "connection";
+  | "connection"
+  | "harnessConfig";
 
 /** One table's rows, as the driver reads them: every column, sealed ones still sealed. */
 export interface TrashedRows {
@@ -2929,6 +2931,37 @@ export const fleetHooks = sqliteTable("fleet_hooks", {
   script: text("script"),
   /** sha256 hex of the material a machine compares before writing. */
   hash: text("hash").notNull(),
+  scope: text("scope").$type<FleetScope>(),
+  projectId: text("project_id"),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * The fleet's Claude Code settings, OpenCode plugins and pi extensions (core
+ * harness-config.ts), one row per kind and name, every field stored as
+ * `harnessConfigProblem` passed it. `scope`/`projectId` place a row as an MCP
+ * server's do: the hub fills in each place's `cwd` as it sends a machine its
+ * config. A row's `settings` are sealed, as an MCP server's config is: a
+ * settings `env` carries keys.
+ */
+export const fleetHarnessConfig = sqliteTable("fleet_harness_config", {
+  /** `<kind>:<name>`: one key for its writes and its trash entry. */
+  id: text("id").primaryKey(),
+  kind: text("kind").$type<HarnessConfigKind>().notNull(),
+  name: text("name").notNull(),
+  /** A disabled row stays here and is placed nowhere. */
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  /** Claude Code settings. Null for the other kinds, and when the hub's key does not open it. */
+  settings: sealedJson<Record<string, unknown>>("settings"),
+  /** An OpenCode plugin's or pi extension's source. */
+  module: text("module"),
+  /** An OpenCode plugin's or pi extension's npm package, `<name>@<version>`. */
+  package: text("package"),
   scope: text("scope").$type<FleetScope>(),
   projectId: text("project_id"),
   createdAt: timestamp("created_at")

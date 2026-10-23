@@ -17,6 +17,7 @@
 import {
   type FleetHook,
   type FleetItemState,
+  type HarnessConfigKind,
   type HookEvent,
   type HookHandler,
   type HookHarness,
@@ -52,7 +53,28 @@ export interface PlacedSetSkill {
   name: string;
 }
 
+/**
+ * One Claude Code settings row, OpenCode plugin or pi extension as a
+ * session loads it (core harness-config.ts, agent fleet-harness-config.ts).
+ */
+export interface SetHarnessConfig {
+  /** The folder of a project's copy; none for the fleet's own. */
+  cwd?: string;
+  /** An OpenCode plugin's module file; a pi extension's file or package dir. */
+  entry?: string;
+  kind: HarnessConfigKind;
+  name: string;
+  /** Claude Code settings. */
+  settings?: Record<string, unknown>;
+}
+
 export interface FleetHarnessSet {
+  /**
+   * The fleet's and each project's Claude Code settings, OpenCode plugins
+   * and pi extensions, by `<kind>:<name>` (a placed copy's with
+   * `@<place id>`).
+   */
+  config: Record<string, SetHarnessConfig>;
   /** The fleet's own hooks, by id. */
   hooks: Record<string, SetHook>;
   /** Each project's placed copies, by `<id>@<place id>`. */
@@ -67,6 +89,7 @@ export interface FleetHarnessSet {
 }
 
 const EMPTY: FleetHarnessSet = {
+  config: {},
   hooks: {},
   placedHooks: {},
   placedSkills: {},
@@ -142,3 +165,27 @@ export const hooksAt = (set: FleetHarnessSet, cwd: string): SetHook[] => [
   ...Object.values(set.hooks),
   ...placedAt(set.placedHooks, cwd),
 ];
+
+/**
+ * The rows of `kind` a session in `cwd` loads: the fleet's own, then those
+ * of the deepest place at or above it ({@link placedAt}), so a project's
+ * settings are merged over the fleet's.
+ */
+export const configAt = (
+  set: FleetHarnessSet,
+  kind: HarnessConfigKind,
+  cwd: string
+): SetHarnessConfig[] => {
+  const rows = Object.values(set.config).filter((row) => row.kind === kind);
+  return [
+    ...rows.filter((row) => !row.cwd),
+    ...placedAt(
+      Object.fromEntries(
+        rows.flatMap((row) =>
+          row.cwd ? [[`${row.name}@${row.cwd}`, { ...row, cwd: row.cwd }]] : []
+        )
+      ),
+      cwd
+    ),
+  ];
+};

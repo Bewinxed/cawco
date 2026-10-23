@@ -11,6 +11,7 @@ import type {
   Envelope,
   FleetAgent,
   FleetConfig,
+  FleetHarnessConfig,
   FleetHook,
   FleetItemStatus,
   FleetMarketplace,
@@ -24,6 +25,7 @@ import type {
   FleetSyncReport,
   FleetVersioned,
   FleetWatchNotice,
+  HarnessConfigKind,
   HarnessKind,
   HarnessReport,
   HookEvent,
@@ -154,6 +156,7 @@ import {
   findSettings,
   fleetAgents,
   fleetDeniedTools,
+  fleetHarnessConfig,
   fleetHookHistory,
   fleetHooks,
   fleetMcpOauth,
@@ -951,6 +954,11 @@ export interface DbShape {
   readonly getFleetMemory: () =>
     { content: string; hash: string; updatedAt: Date } | undefined;
   readonly getFleetMemoryDoc: (path: string) => MemoryDocRow | undefined;
+  /** One row, by its kind and name. */
+  readonly getHarnessConfig: (
+    kind: HarnessConfigKind,
+    name: string
+  ) => FleetHarnessConfig | undefined;
   /**
    * The named rows, however old they are — the listing's staleness cut-off does
    * not apply here. A conversation the reader still has a tab open on is a row
@@ -1154,6 +1162,14 @@ export interface DbShape {
   readonly listFleetMemoryHistory: (path?: string) => MemoryVersion[];
   /** Newest first, without the files: one skill's history. */
   readonly listFleetSkillHistory: (name: string) => SkillVersion[];
+  /**
+   * The fleet's Claude Code settings, OpenCode plugins and pi extensions
+   * (core harness-config.ts), of one kind or every kind, by name. A
+   * settings row the hub's key does not open is none, as an MCP server's is.
+   */
+  readonly listHarnessConfig: (
+    kind?: HarnessConfigKind
+  ) => FleetHarnessConfig[];
   /**
    * Every listed row. A pass over the whole fleet only: what asks about one
    * session or a few reads them by key ({@link listedInstancesByIds}), since
@@ -1731,6 +1747,8 @@ export interface DbShape {
     content: string;
     scope?: MemoryScope;
   }) => MemoryDocRow;
+  /** A row stored whole, as `harnessConfigProblem` passed it; answers it as stored. */
+  readonly putHarnessConfig: (row: FleetHarnessConfig) => FleetHarnessConfig;
   /** Stores the turn a project's Caw is in, replacing what his session had. */
   /** Stores a lead's turn as it stands, replacing what it had, its threads with it, in one transaction. */
   readonly putLeadTurn: (turn: LeadTurnRow) => void;
@@ -2864,6 +2882,26 @@ const hookOf = (row: {
   ...(row.projectId ? { projectId: row.projectId } : {}),
 });
 
+/** A stored harness config row in the shape both ends of the fleet share; none for settings the hub's key does not open. */
+const harnessConfigOf = (
+  row: typeof fleetHarnessConfig.$inferSelect
+): FleetHarnessConfig[] =>
+  row.kind === "claudeSettings" && !row.settings
+    ? []
+    : [
+        {
+          kind: row.kind,
+          name: row.name,
+          enabled: row.enabled,
+          ...(row.settings ? { settings: row.settings } : {}),
+          ...(row.module ? { module: row.module } : {}),
+          ...(row.package ? { package: row.package } : {}),
+          ...(row.projectId
+            ? { projectId: row.projectId, scope: row.scope ?? "project" }
+            : {}),
+        },
+      ];
+
 /** A hub place's machine: the hub itself, which is no machine of the fleet. */
 export const HUB_PLACE_MACHINE = "hub";
 
@@ -3061,6 +3099,14 @@ const make = async (path: string): Promise<DbShape> => {
     return rows.map((row) => ({ ...row, tasks: named.get(row.id) ?? null }));
   };
   /** The fleet's tool denials, in the order they were added. */
+  const listHarnessConfig = (kind?: HarnessConfigKind): FleetHarnessConfig[] =>
+    db
+      .select()
+      .from(fleetHarnessConfig)
+      .where(kind ? eq(fleetHarnessConfig.kind, kind) : undefined)
+      .orderBy(fleetHarnessConfig.kind, fleetHarnessConfig.name)
+      .all()
+      .flatMap(harnessConfigOf);
   const deniedToolNames = (): string[] =>
     db
       .select({ tool: fleetDeniedTools.tool })
@@ -6730,6 +6776,8 @@ const make = async (path: string): Promise<DbShape> => {
           .where(eq(fleetHooks.enabled, true))
           .all()
           .map(hookOf),
+        // A disabled row is placed nowhere, as a disabled hook is not.
+        harnessConfig: listHarnessConfig().filter((row) => row.enabled),
         // Always sent: a machine spawns nothing until it has heard it.
         deniedTools: deniedToolNames(),
       };
@@ -7196,6 +7244,48 @@ const make = async (path: string): Promise<DbShape> => {
     },
     listFleetHooks: () =>
       db.select().from(fleetHooks).orderBy(fleetHooks.name).all().map(hookOf),
+    listHarnessConfig,
+    getHarnessConfig: (kind, name) => {
+      const row = db
+        .select()
+        .from(fleetHarnessConfig)
+        .where(eq(fleetHarnessConfig.id, `${kind}:${name}`))
+        .get();
+      return row ? harnessConfigOf(row)[0] : undefined;
+    },
+    putHarnessConfig: (row) => {
+      const values = {
+        id: `${row.kind}:${row.name}`,
+        kind: row.kind,
+        name: row.name,
+        enabled: row.enabled,
+        settings: row.settings ?? null,
+        module: row.module ?? null,
+        package: row.package ?? null,
+        scope: row.projectId ? (row.scope ?? "project") : null,
+        projectId: row.projectId ?? null,
+        updatedAt: new Date(),
+      };
+      db.insert(fleetHarnessConfig)
+        .values({ ...values, createdAt: values.updatedAt })
+        .onConflictDoUpdate({
+          target: fleetHarnessConfig.id,
+          set: {
+            enabled: values.enabled,
+            settings: values.settings,
+            module: values.module,
+            package: values.package,
+            scope: values.scope,
+            projectId: values.projectId,
+            updatedAt: values.updatedAt,
+          },
+        })
+        .run();
+      return harnessConfigOf({
+        ...values,
+        createdAt: values.updatedAt,
+      })[0] as FleetHarnessConfig;
+    },
     getFleetHook: (id) => {
       const row = db
         .select()

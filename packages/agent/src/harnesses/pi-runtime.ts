@@ -66,7 +66,12 @@ import {
 import { type Boundary, boundaryCommand } from "../boundary";
 import type { BrowserDoor } from "../browser/door";
 import { callDelegationTool, delegationTools } from "../delegation";
-import { hooksAt, placedAt, readFleetHarnessSet } from "../fleet-harness-set";
+import {
+  configAt,
+  hooksAt,
+  placedAt,
+  readFleetHarnessSet,
+} from "../fleet-harness-set";
 import { type HookPlace, runFleetHooks } from "../fleet-hook-run";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
@@ -1605,6 +1610,13 @@ export async function startPiHost(
     // SKILL.md, treat it as a skill root" (pi 1.3.0 skills.js).
     additionalSkillPaths: placedAt(placed.placedSkills, ctx.cwd).map(
       (skill) => skill.dir
+    ),
+    // The fleet's pi extensions and its folder's project's, as the fleet
+    // sync made them ready (fleet-harness-config.ts): a module's file, or an
+    // installed package's dir, which pi loads as a pi package. A fenced
+    // session keeps CawCo's inline extensions alone (`cawcosExtensionsAlone`).
+    additionalExtensionPaths: configAt(placed, "piExtensions", ctx.cwd).flatMap(
+      (extension) => (extension.entry ? [extension.entry] : [])
     ),
     extensionFactories: [
       tools.extension(await piHandoffTools(ctx.instanceId, credential)),
