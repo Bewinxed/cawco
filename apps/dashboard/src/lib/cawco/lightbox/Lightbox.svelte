@@ -8,6 +8,7 @@
   import DialogRoot from "#lib/components/ui/dialog/dialog.svelte";
   import { dialogTrayVariants } from "#lib/components/ui/dialog/dialog-content.svelte";
   import DialogOverlay from "#lib/components/ui/dialog/dialog-overlay.svelte";
+  import DialogPortal from "#lib/components/ui/dialog/dialog-portal.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   /**
    * What a thumbnail opens into, one entry point (lightbox-state) for both
@@ -224,7 +225,7 @@
   }}
   open={doc !== null}
 >
-  <DialogPrimitive.Portal>
+  <DialogPortal>
     <DialogOverlay {leaving} />
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
@@ -246,7 +247,7 @@
         </div>
       {/snippet}
     </DialogPrimitive.Content>
-  </DialogPrimitive.Portal>
+  </DialogPortal>
 </DialogRoot>
 
 {#snippet docView()}

@@ -240,7 +240,7 @@
       heir === undefined
         ? null
         : list?.querySelector<HTMLElement>(
-            `[data-artifact-row][data-artifact="${CSS.escape(heir)}"]:not([data-reflow-ghost])`
+            `[data-artifact-row][data-artifact="${CSS.escape(heir)}"]`
           );
     (next ?? list)?.focus();
   });

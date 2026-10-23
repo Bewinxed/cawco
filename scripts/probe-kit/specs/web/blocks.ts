@@ -74,21 +74,19 @@ const blocksOf = (page: Page) =>
         : 0,
       blocks: [
         ...document.querySelectorAll<HTMLElement>(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         ),
-      ]
-        .filter((block) => !block.hasAttribute("data-reflow-ghost"))
-        .map((block) => {
-          const box = block.getBoundingClientRect();
-          return {
-            id: block.dataset.block ?? "",
-            span: Number(block.dataset.span ?? 0),
-            width: block.matches("[data-wide]") ? "wide" : "narrow",
-            left: Math.round(box.left),
-            top: Math.round(box.top),
-            w: Math.round(box.width),
-          };
-        }),
+      ].map((block) => {
+        const box = block.getBoundingClientRect();
+        return {
+          id: block.dataset.block ?? "",
+          span: Number(block.dataset.span ?? 0),
+          width: block.matches("[data-wide]") ? "wide" : "narrow",
+          left: Math.round(box.left),
+          top: Math.round(box.top),
+          w: Math.round(box.width),
+        };
+      }),
     };
   });
 const orderOf = async (page: Page) =>
@@ -142,7 +140,7 @@ async function columns(kit: Kit, page: Page, phone: Page, url: string) {
   await open(
     phone,
     url,
-    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+    '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
   );
   await settle(phone);
   const read = await blocksOf(phone);
@@ -170,7 +168,7 @@ async function throughHub(
   await open(
     other,
     url,
-    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+    '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
   );
   await settle(other);
   await pick(page, routinesWords.actions, "Move up");
@@ -178,7 +176,7 @@ async function throughHub(
     () =>
       [
         ...document.querySelectorAll(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         ),
       ]
         .map((b) => (b as HTMLElement).dataset.block)
@@ -196,7 +194,7 @@ async function throughHub(
       () =>
         [
           ...document.querySelectorAll(
-            '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+            '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
           ),
         ]
           .map((b) => (b as HTMLElement).dataset.block)
@@ -350,7 +348,7 @@ async function motion(kit: Kit, page: Page) {
  */
 async function dragOnto(page: Page, from: string, to: string) {
   const title = page.locator(
-    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${from}'] [data-slot="block-head"] [data-slot="title"]`
+    `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='${from}'] [data-slot="block-head"] [data-slot="title"]`
   );
   await title.evaluate((el) =>
     el.scrollIntoView({ behavior: "instant", block: "nearest" })
@@ -359,7 +357,7 @@ async function dragOnto(page: Page, from: string, to: string) {
   const head = await title.boundingBox();
   const target = await page
     .locator(
-      `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${to}']`
+      `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='${to}']`
     )
     .boundingBox();
   if (!(head && target)) {
@@ -386,10 +384,10 @@ async function dragOnto(page: Page, from: string, to: string) {
     .waitForFunction(
       () =>
         document.querySelector(
-          ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-dragging]'
+          ":is([data-block], [data-field-separator-block], [data-switch-block])[data-dragging]"
         ) !== null &&
         document.querySelector(
-          ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
+          ':is([data-block], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
         ) !== null,
       null,
       { timeout: 2000 }
@@ -398,16 +396,16 @@ async function dragOnto(page: Page, from: string, to: string) {
   const mid = await page.evaluate(() => ({
     slot:
       document.querySelector<HTMLElement>(
-        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-dragging]'
+        ":is([data-block], [data-field-separator-block], [data-switch-block])[data-dragging]"
       )?.dataset.block ?? null,
     drop: document
       .querySelector(
-        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
+        ':is([data-block], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
       )
       ?.getAttribute("data-edge"),
     on:
       document.querySelector<HTMLElement>(
-        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]):has(> :is([data-drop], [data-slot="drop"]))'
+        ':is([data-block], [data-field-separator-block], [data-switch-block]):has(> :is([data-drop], [data-slot="drop"]))'
       )?.dataset.block ?? null,
   }));
   await page.mouse.up();
@@ -421,7 +419,7 @@ async function deskDrag(kit: Kit, page: Page, base: string, projectId: string) {
     () =>
       document
         .querySelector<HTMLElement>(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         )
         ?.getAttribute("data-block") === "sources",
     null,
@@ -454,12 +452,12 @@ async function phoneDrag(
   await open(
     phone,
     url,
-    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+    '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
   );
   await settle(phone);
   const head = await phone.evaluate(() => {
     const el = document.querySelector<HTMLElement>(
-      ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block=\'actions\'] [data-slot="block-head"]'
+      ":is([data-block], [data-field-separator-block], [data-switch-block])[data-block='actions'] [data-slot=\"block-head\"]"
     );
     const styles = el ? getComputedStyle(el) : null;
     return {
@@ -488,7 +486,7 @@ async function phoneDrag(
     () =>
       document
         .querySelector<HTMLElement>(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         )
         ?.getAttribute("data-block") === "actions",
     null,
@@ -564,7 +562,7 @@ async function tabAndBlock(
   await page.getByRole("menuitem", { name: blocksWords.placeOnPage }).click();
   await page.getByRole("menuitem", { name: "Routines", exact: true }).click();
   await page.waitForSelector(
-    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
+    `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
   );
   await settle(page);
   const placed = {
@@ -584,7 +582,7 @@ async function tabAndBlock(
   );
   const reached = await other
     .waitForSelector(
-      `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`,
+      `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`,
       { timeout: 10_000 }
     )
     .then(() => true)
@@ -598,7 +596,7 @@ async function tabAndBlock(
   await page.waitForFunction(
     (block) =>
       !document.querySelector(
-        `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
+        `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
       ),
     `view:${VIEW}`
   );
@@ -620,7 +618,7 @@ async function tabAndBlock(
   await page.getByRole("menuitem", { name: blocksWords.placeOnPage }).click();
   await page.getByRole("menuitem", { name: "Board", exact: true }).click();
   await page.waitForSelector(
-    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
+    `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
   );
   await settle(page);
   const board = await page.evaluate(() => {
@@ -655,7 +653,7 @@ async function tabAndBlock(
       board: Math.round(stages?.getBoundingClientRect().height ?? 0),
       order: [
         ...document.querySelectorAll(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         ),
       ]
         .map((b) => (b as HTMLElement).dataset.block)
@@ -676,7 +674,7 @@ async function tabAndBlock(
   await page.waitForFunction(
     (block) =>
       !document.querySelector(
-        `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
+        `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
       ),
     `view:${VIEW}`
   );
@@ -725,7 +723,7 @@ const spec: Spec = {
     await open(
       page,
       url,
-      '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+      '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
     );
     await settle(page);
     kit.check(

@@ -2256,7 +2256,11 @@ const MACHINES_CHIP = '[aria-controls="session-machines-popover"]';
  * machine over the session's form, on its details (Over SSH: it names no
  * way in), the focus inside it; × closes it on the draft with nothing
  * parked, the form still open and the focus back on the chip that asked.
- * Run once the fleet has a machine, which the form opens on.
+ * Add machine is the Shell's, mounted at first paint, and the form (a
+ * drawer on the phone) opened after it on the same layer: the window is
+ * topmost all the same (the kit dialog enters the page as it opens,
+ * dialog.svelte), the point at its centre inside it, in Chromium and
+ * WebKit. Run once the fleet has a machine, which the form opens on.
  */
 async function chipAdds(
   kit: Kit,
@@ -2266,9 +2270,12 @@ async function chipAdds(
   await clearInstalls(fleet);
   const form = (view: "desk" | "phone") =>
     view === "desk" ? "[data-ns-popover]" : "[data-session-card]";
-  for (const view of ["desk", "phone"] as const) {
+  const legs = (["chromium", "webkit"] as const).flatMap((engine) =>
+    (["desk", "phone"] as const).map((view) => ({ engine, view }))
+  );
+  for (const { engine, view } of legs) {
     // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-    const page = await kit.page(view, { theme: "light" });
+    const page = await kit.page(view, { engine, theme: "light" });
     await open(
       page,
       `${dashboard}/session?spawn=${encodeURIComponent(MACHINE)}&cwd=${encodeURIComponent(fleet.workdir)}`,
@@ -2288,6 +2295,28 @@ async function chipAdds(
     const focusIn = await page.evaluate(
       (win) => Boolean(document.activeElement?.closest(win)),
       WINDOW
+    );
+    // What a press at the window's centre lands on: the window, over the form.
+    const top = await page.evaluate((win) => {
+      const box = document.querySelector(win)?.getBoundingClientRect();
+      if (!box) {
+        return { inside: false, hit: "no window" };
+      }
+      const hit = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2
+      );
+      return {
+        inside: Boolean(hit?.closest(win)),
+        hit: hit
+          ? `${hit.tagName.toLowerCase()}${hit.getAttribute("data-slot") ? `[data-slot=${hit.getAttribute("data-slot")}]` : ""}`
+          : "nothing",
+      };
+    }, WINDOW);
+    kit.check(
+      `${view} ${engine}: Add machine, mounted with the Shell, opened from the new session's form after it, is topmost: the point at its centre is inside it`,
+      top.inside,
+      top.hit
     );
     await page.locator(CLOSE).click();
     await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
@@ -2309,7 +2338,7 @@ async function chipAdds(
     );
     const parked = (await installs(fleet)).installs.length;
     kit.check(
-      `${view}: the new session's Machines chip's "Connect a machine…" opens Add machine over the form on its details, Over SSH, the focus inside it; × closes it with nothing parked, the form still open and the focus back on the chip`,
+      `${view} ${engine}: the new session's Machines chip's "Connect a machine…" opens Add machine over the form on its details, Over SSH, the focus inside it; × closes it with nothing parked, the form still open and the focus back on the chip`,
       opened.step === "reach" &&
         tab === "Over SSH" &&
         focusIn &&

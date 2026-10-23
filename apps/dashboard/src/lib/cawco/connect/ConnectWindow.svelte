@@ -307,93 +307,70 @@
       void arrive(node);
     }
   });
-
-  /**
-   * The dialog is in the page from the moment it opens until it has closed,
-   * its exit and any flight played (bits-ui's `onOpenChangeComplete`), so
-   * it is the newest surface on its layer: opened from another one that
-   * shares `--layer-float` (the new session's sheet on a phone, whose
-   * Machines chip adds a machine), it stands over it, as the later of two
-   * on one layer is drawn. Mounted with the Shell instead, its portal stood
-   * in the page before every surface opened since, and opened under them.
-   */
-  let present = $state(false);
-  $effect(() => {
-    if (connect.open) {
-      present = true;
-    }
-  });
 </script>
 
-{#if connect.open || present}
-  <Dialog.Root
-    onOpenChange={(value) => {
-      if (!value) {
-        connect.close();
+<Dialog.Root
+  onOpenChange={(value) => {
+    if (!value) {
+      connect.close();
+    }
+  }}
+  open={connect.open}
+>
+  <Dialog.Content
+    data-connect-window
+    data-phone={phone.current || undefined}
+    data-step={step}
+    interactOutsideBehavior="ignore"
+    onCloseAutoFocus={(event) => {
+      event.preventDefault();
+      // Minimized for the output's sheet, which holds the focus: not taken back.
+      if (!connect.output) {
+        returnOf()?.focus({ preventScroll: true });
       }
     }}
-    onOpenChangeComplete={(value) => {
-      if (!value) {
-        present = false;
-      }
+    onOpenAutoFocus={(event) => {
+      // `arrive` places it, once the window is laid out.
+      event.preventDefault();
     }}
-    open={connect.open}
+    style={lifted}
+    width="connect"
+    bind:ref={surface}
   >
-    <Dialog.Content
-      data-connect-window
-      data-phone={phone.current || undefined}
-      data-step={step}
-      interactOutsideBehavior="ignore"
-      onCloseAutoFocus={(event) => {
-        event.preventDefault();
-        // Minimized for the output's sheet, which holds the focus: not taken back.
-        if (!connect.output) {
-          returnOf()?.focus({ preventScroll: true });
-        }
-      }}
-      onOpenAutoFocus={(event) => {
-        // `arrive` places it, once the window is laid out.
-        event.preventDefault();
-      }}
-      style={lifted}
-      width="connect"
-      bind:ref={surface}
-    >
-      <Dialog.Header>
-        <Dialog.Title id="connect-title">
-          <!-- Starting an install, the address typed in Reach flies into the
+    <Dialog.Header>
+      <Dialog.Title id="connect-title">
+        <!-- Starting an install, the address typed in Reach flies into the
              title (its departure, ReachStep); from then on the title morphs. -->
-          {#key step === "reach"}
-            <span
-              class="block min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              {@attach land(() => "connect-title", { uniform: true })}
-              ><MorphText text={title} /></span
-            >
-          {/key}
-        </Dialog.Title>
-      </Dialog.Header>
-      <div data-slot="pages" class="relative grid min-w-0">
-        {#key shownPage}
-          <div
-            data-slot="page"
-            data-page={step}
-            class="col-start-1 row-start-1 min-w-0"
-            in:pageIn
-            out:pageOut
+        {#key step === "reach"}
+          <span
+            class="block min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+            {@attach land(() => "connect-title", { uniform: true })}
+            ><MorphText text={title} /></span
           >
-            {#if step === "reach"}
-              <ReachStep />
-            {:else if step === "running" && install}
-              <RunningStep {install} />
-            {:else if install}
-              <OutcomeStep {install} />
-            {/if}
-          </div>
         {/key}
-      </div>
-    </Dialog.Content>
-  </Dialog.Root>
-{/if}
+      </Dialog.Title>
+    </Dialog.Header>
+    <div data-slot="pages" class="relative grid min-w-0">
+      {#key shownPage}
+        <div
+          data-slot="page"
+          data-page={step}
+          class="col-start-1 row-start-1 min-w-0"
+          in:pageIn
+          out:pageOut
+        >
+          {#if step === "reach"}
+            <ReachStep />
+          {:else if step === "running" && install}
+            <RunningStep {install} />
+          {:else if install}
+            <OutcomeStep {install} />
+          {/if}
+        </div>
+      {/key}
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
 
 {#if connect.output && connect.install}
   <OutputSheet install={connect.install} />

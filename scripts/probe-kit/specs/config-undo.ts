@@ -785,13 +785,9 @@ async function rulesWaiting({ kit, fleet, page, base }: On) {
   const read = () =>
     page.evaluate((chip) => {
       const button = document.querySelector(chip);
-      // A row filtered away leaves a copy closing where it stood (reflow's
-      // departure, motion/rows.svelte.ts), carrying its name: not a row.
-      const names = [
-        ...document.querySelectorAll(
-          "[data-row-name]:not([data-reflow-ghost])"
-        ),
-      ].map((row) => row.getAttribute("data-row-name") ?? "");
+      const names = [...document.querySelectorAll("[data-row-name]")].map(
+        (row) => row.getAttribute("data-row-name") ?? ""
+      );
       return {
         chip: button !== null,
         pressed: button?.getAttribute("aria-pressed") ?? null,
