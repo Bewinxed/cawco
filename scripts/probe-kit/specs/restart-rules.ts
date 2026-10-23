@@ -10,7 +10,9 @@
  *
  * A project's Caw, put in Full Send by the owner, and a delegate of a
  * session in Full Send (it inherits its root's mode). Each step is the
- * person's words naming it, and the mock's one Bash call:
+ * person's words naming it, and the mock's one Bash call; between steps the
+ * delegate rests on its item with `wait_item`, as a delegate waiting on its
+ * parent does:
  *
  * c1. Before the restart, Caw's `touch` (a write his gate puts on your
  *     Approve card, lead-gate.ts) goes to the hub's gate: its `lead_calls`
@@ -68,6 +70,48 @@ const callOf = (tag: string): Reply => ({
   },
 });
 
+const WAIT = "mcp__cawco__wait_item";
+/** Whether the delegate's wait on its item is declared since its last own work. */
+let resting = false;
+
+/** A deferred tool is found first, then called. */
+const offered = (request: Seen, name: string, input: object): Reply => {
+  if (request.toolNames.includes(name)) {
+    return { everyMs: 5, words: [], tool: { name, input } };
+  }
+  return request.toolNames.includes("ToolSearch")
+    ? {
+        everyMs: 5,
+        words: [],
+        tool: {
+          name: "ToolSearch",
+          input: { query: `select:${name}`, max_results: 1 },
+        },
+      }
+    : words(`${name} is not offered`);
+};
+
+/**
+ * The delegate between steps: its item's wait declared, so a turn of its
+ * that ends is a waiting turn, never one of the three quiet ones in a row
+ * that fail its item and put its session to sleep (hub work-items.ts
+ * `quietTurn`, `waitingTurn`). A step's own call ends the wait (`worked`),
+ * so it is declared again after each.
+ */
+const rest = (request: Seen): Reply => {
+  if (resting) {
+    return words("waiting");
+  }
+  const reply = offered(request, WAIT, {
+    minutes: 60,
+    reason: "the person's next step",
+  });
+  if (reply.tool?.name === WAIT) {
+    resting = true;
+  }
+  return reply;
+};
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return words("Probe title");
@@ -76,9 +120,13 @@ const respond = (request: Seen): Reply => {
   if (tag && !request.afterTool && step?.tag !== tag) {
     step = { tag, called: false };
   }
+  const delegate = request.all.includes(BRIEF) && !request.all.includes(CAW);
   // Only the session the step's words were sent to plays it.
   const now = step;
   if (!(now && request.all.includes(now.tag)) || now.result) {
+    if (delegate) {
+      return rest(request);
+    }
     return words(request.all.includes(CAW) ? "ok" : "waiting");
   }
   if (!now.called) {
@@ -87,6 +135,10 @@ const respond = (request: Seen): Reply => {
   }
   if (request.afterTool) {
     now.result = { body: request.body, failed: request.toolFailed };
+    if (delegate) {
+      resting = false;
+      return rest(request);
+    }
     return words("done");
   }
   return words("ok");
@@ -142,7 +194,12 @@ const run = async (kit: Kit) => {
       id
     )[0]?.permission_mode;
   const pending = () => fleet.api<Ask[]>("/api/pending");
-  /** Sets a session's mode as the dashboard's picker does. */
+  /**
+   * Sets a session's mode as the dashboard's picker does: its command's
+   * payload is the control the mode goes in as (dashboard client.svelte.ts
+   * `commandPayload`), the mode its one argument, which the agent's receipt
+   * names and the hub files (agent session.ts, hub `noteSessionSettings`).
+   */
   const setMode = (instanceId: string, mode: string) =>
     fleet.post({
       type: "command",
@@ -150,7 +207,7 @@ const run = async (kit: Kit) => {
       kind: "set-permission-mode",
       machineId: MACHINE,
       sessionId: instanceId,
-      payload: { mode },
+      payload: { method: "setPermissionMode", args: [mode] },
     });
 
   // ── Caw, in Full Send ─────────────────────────────────────────────────
