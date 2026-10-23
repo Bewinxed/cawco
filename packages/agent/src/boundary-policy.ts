@@ -373,6 +373,41 @@ const holdersIn = (policy: Policy): string[] => {
   return [...holders].sort();
 };
 
+const LETTER = /[a-z]/i;
+const AS_IS = /[0-9/]/;
+const UNSPELLED = /[\]\\^"\n]/;
+const PLAIN = /[a-z0-9/]/i;
+
+/** One character of a path as a Seatbelt regex matches it in either case; nothing for one this does not spell. */
+const caseClass = (char: string): string | undefined => {
+  if (LETTER.test(char)) {
+    return `[${char.toLowerCase()}${char.toUpperCase()}]`;
+  }
+  if (AS_IS.test(char)) {
+    return char;
+  }
+  return UNSPELLED.test(char) ? undefined : `[${char}]`;
+};
+
+/**
+ * A Seatbelt regex for `path` as written in the clone `clone`, its part below
+ * the clone in any letter case: the clone's volume is case-insensitive on a
+ * Mac as it comes (APFS), so `.MCP.json` is the file Claude Code reads as
+ * `.mcp.json`, and a deny that names one spelling holds no other. Nothing
+ * for a path outside the clone, or one with a character this does not spell.
+ */
+const anyCase = (clone: string, path: string): string | undefined => {
+  if (!(path !== clone && within(path, clone))) {
+    return;
+  }
+  const parts = [...clone].map((char) =>
+    PLAIN.test(char) ? char : caseClass(char)
+  );
+  const below = [...path.slice(clone.length)].map(caseClass);
+  const all = [...parts, ...below];
+  return all.every((part) => part !== undefined) ? all.join("") : undefined;
+};
+
 /**
  * The Seatbelt profile of a macOS workspace's runner. Seatbelt lets the last
  * matching rule win, so the read rules come in order of depth, a deny before
@@ -479,6 +514,17 @@ export const seatbeltProfile = (
     ...holdersIn(policy).map(
       (dir) => `(deny file-write* (literal ${sbString(dir)}))`
     ),
+    // The same in any letter case, below the clone ({@link anyCase}).
+    ...policy.denyWrite.flatMap((path) => {
+      const pattern = anyCase(policy.clone, path);
+      return pattern
+        ? [`(deny file-write* (regex #"^${pattern}(/.*)?$"))`]
+        : [];
+    }),
+    ...holdersIn(policy).flatMap((dir) => {
+      const pattern = anyCase(policy.clone, dir);
+      return pattern ? [`(deny file-write* (regex #"^${pattern}$"))`] : [];
+    }),
     // Its contents are the workspace's to write; the scratch dir itself stays.
     `(deny file-write-unlink (literal ${sbString(policy.scratch)}))`,
     '(deny process-exec (literal "/bin/launchctl"))',

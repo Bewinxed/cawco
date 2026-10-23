@@ -26,7 +26,7 @@ import {
   ensureBoundary,
   whileSandboxDown,
 } from "./boundary";
-import { type DenyPaths, denyPaths } from "./worktree-guard";
+import { type DenyPaths, denyPathspecs, shimPaths } from "./worktree-guard";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -550,14 +550,16 @@ const MOVE_TARGET = /^[\w./@^~-]+$/;
 /** How long a move on the host waits between looks at a boundary that still runs something. */
 const BUSY_LOOK_MS = 2000;
 
-/** {@link denyPaths}, each as one shell word of a literal pathspec. */
-const denyPathspecs = async (
+/** worktree-guard.ts `denyPathspecs`, each as one shell word. */
+const pathspecWords = async (
   workspace: WorkspaceRef,
-  which: DenyPaths = "boundary"
-): Promise<string[]> =>
-  (await denyPaths(workspace, which)).map((path) =>
-    shellWord(`:(literal)${path}`)
-  );
+  which: DenyPaths
+): Promise<string> =>
+  (await denyPathspecs(workspace, which)).map(shellWord).join(" ");
+
+/** worktree-guard.ts `shimPaths`'s `before`, as shell words: what a move is judged on before it runs. */
+const moveWords = async (workspace: WorkspaceRef): Promise<string> =>
+  (await shimPaths(workspace)).before.map(shellWord).join(" ");
 
 /** `text` as one shell word. */
 const shellWord = (text: string): string =>
@@ -565,10 +567,11 @@ const shellWord = (text: string): string =>
 
 /**
  * The harness project config that commits no branch of `workspace`'s
- * origin holds change, of those reachable from `revs` there: `.mcp.json`,
- * OpenCode's config, Claude Code's project settings, hooks, commands,
- * agents and the placed skills (workspace-policy.ts `cloneDenies`, srt's
- * own names aside), by path. A host harness loads them at a workspace's next
+ * origin holds change, of those reachable from `revs` there: core's
+ * `HARNESS_CONFIG` (Claude Code's, OpenCode's and pi's project config) at
+ * any depth and in any letter case, and every clone-side deny path at the
+ * root (the placed skills and memory among them, srt's own names aside;
+ * worktree-guard.ts `denyPathspecs`), by path. A host harness loads them at a workspace's next
  * session, outside any boundary, so no workspace writes them, and no commit
  * of one carries them into a worktree either: a commit that changed them
  * through git's index alone (`git update-index --cacheinfo`, no file
@@ -586,7 +589,7 @@ export const ownConfigChanges = async (
   workspace: WorkspaceRef,
   revs: readonly string[]
 ): Promise<string[]> => {
-  const paths = (await denyPathspecs(workspace, "config")).join(" ");
+  const paths = await pathspecWords(workspace, "config");
   const changed = new Set<string>();
   for (const rev of revs) {
     if (!MOVE_TARGET.test(rev)) {
@@ -707,10 +710,13 @@ const movedCommand = async (
       stderr: `CawCo: the move did not run: ${ownConfigWords(own)}.\n`,
     };
   }
-  const paths = (await denyPathspecs(workspace)).join(" ");
+  // A target whose harness config differs at any depth is moved on the
+  // host too: the workspace's own git refuses such a move (worktree-guard.ts
+  // `gitShim`), and the hub's runs through that git inside.
+  const paths = await pathspecWords(workspace, "boundary");
   const touched = await insideRead(
     workspace,
-    `git diff --name-only -z HEAD ${target} -- ${paths} && git diff --name-only -z HEAD -- ${paths}`
+    `git diff --name-only -z HEAD ${target} -- ${await moveWords(workspace)} && git diff --name-only -z HEAD -- ${paths}`
   );
   if (!touched.ok) {
     return { exitCode: 1, stdout: "", stderr: touched.why };
