@@ -144,6 +144,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/sheet.ts", export: "sheetWords", as: "" }],
   },
   {
+    // Configure › Updates and its notice: a ready build, refusals, a machine waiting on its hub.
+    swift: "Updates",
+    members: [{ file: "words/updates.ts", export: "updatesWords", as: "" }],
+  },
+  {
     // The hub's connection while an announced update restarts it: the band, the app's status line.
     swift: "Connection",
     members: [

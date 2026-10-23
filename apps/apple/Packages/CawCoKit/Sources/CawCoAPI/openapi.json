@@ -47791,6 +47791,10 @@
             "description": "True on the machine that runs the hub.",
             "type": "boolean"
           },
+          "hubWait": {
+            "$ref": "#/components/schemas/BinaryUpdateStateHubWait",
+            "description": "What `waiting-for-hub` waits for: the hub to run a build whose wire\nprotocol overlaps the offered one (`behind`), or the hub to answer for\nits protocol at all (`unanswered`, a hub mid-restart)."
+          },
           "installedVersion": {
             "type": "string"
           },
@@ -47968,6 +47972,7 @@
           "none",
           "ready",
           "waiting-for-channel",
+          "waiting-for-hub",
           "waiting-sessions"
         ]
       },
@@ -62075,6 +62080,13 @@
         "enum": [
           "nightly",
           "stable"
+        ]
+      },
+      "BinaryUpdateStateHubWait": {
+        "type": "string",
+        "enum": [
+          "behind",
+          "unanswered"
         ]
       },
       "BlockMetadataCompact": {

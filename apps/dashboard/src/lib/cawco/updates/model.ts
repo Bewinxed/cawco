@@ -227,7 +227,7 @@ const keptCell = (kept: readonly KeptProcess[]): Cell => ({
   text: `No session can start on this machine: the process that keeps its sessions running stopped answering. CawCo can't restart it while ${heldBy(kept)} ${kept.length === 1 ? "runs" : "run"} inside it. Handoff: end ${kept.length === 1 ? "that process" : "them"}. The restart follows, and sessions start again.`,
 });
 
-/** Rows 3 to 12: the cell by the update's phase. */
+/** Rows 3 to 12 and 14: the cell by the update's phase. */
 function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
   const v = u.availableVersion ? displayVersion(u.availableVersion) : "";
   const cur = displayVersion(u.installedVersion);
@@ -286,6 +286,13 @@ function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
         ...EMPTY(10),
         icon: "clock",
         text: `Stays on ${cur} until ${channelName(policy.channel)} has a newer build`,
+      };
+    case "waiting-for-hub":
+      return {
+        ...EMPTY(14),
+        icon: "clock",
+        text: updatesWords.waitsForHub(v, u.hubWait !== "unanswered"),
+        buttons: policy.autoUpdate ? [] : ["cancel"],
       };
     case "available":
       return {
@@ -579,6 +586,7 @@ const COMMANDED_PHASES: readonly string[] = [
   "available",
   "downloading",
   "ready",
+  "waiting-for-hub",
   "installing",
 ];
 
@@ -593,6 +601,9 @@ function installLine(machine: UpdateMachine, name: string): NoticeLine {
   }
   if (state.phase === "downloading") {
     return { state: "busy", text: `${name} · downloading` };
+  }
+  if (state.phase === "waiting-for-hub") {
+    return { state: "wait", text: updatesWords.installLineWaitsForHub(name) };
   }
   const waiting = waitsOn(state);
   if (waiting.length > 0) {

@@ -11,7 +11,11 @@ export interface BinaryUpdatePolicy {
  * waits for them to end (`heldChildren`), and `installedVersion` is still the
  * old one. A keeper of an earlier build that still holds sessions is no wait:
  * the keeper of the installed build runs beside it and takes every new
- * session at once (`retiringKeepers`).
+ * session at once (`retiringKeepers`). `waiting-for-hub`: a machine other
+ * than the hub's own was told to install a build (a command, or auto-update)
+ * whose wire protocol its hub does not speak yet, or its hub did not say
+ * which it speaks (`hubWait`); the install stands, and goes ahead by itself
+ * once the hub runs a build that overlaps it. Nothing failed.
  */
 export const BINARY_UPDATE_PHASES = [
   "none",
@@ -20,6 +24,7 @@ export const BINARY_UPDATE_PHASES = [
   "ready",
   "waiting-sessions",
   "waiting-for-channel",
+  "waiting-for-hub",
   "installing",
   "installed",
   "failed-rolled-back",
@@ -303,6 +308,12 @@ export interface BinaryUpdateState {
   heldChildren?: number;
   /** True on the machine that runs the hub. */
   hostsHub: boolean;
+  /**
+   * What `waiting-for-hub` waits for: the hub to run a build whose wire
+   * protocol overlaps the offered one (`behind`), or the hub to answer for
+   * its protocol at all (`unanswered`, a hub mid-restart).
+   */
+  hubWait?: "behind" | "unanswered";
   installedVersion: string;
   /** The build whose session keeper could not start; the keeper is not handed to it again by itself. */
   keeperFailedVersion?: string;

@@ -273,7 +273,7 @@ final class UpdatesSectionController: ConfigSectionController {
             rows[id] = nil
             row.removeFromSuperview()
         }
-        cancelling = cancelling.filter { id in machines.first { $0.machineId == id }.map { UpdateRows.cell($0, policy: policy).row == 7 } ?? false }
+        cancelling = cancelling.filter { id in machines.first { $0.machineId == id }.map { [7, 14].contains(UpdateRows.cell($0, policy: policy).row) } ?? false }
         for (index, machine) in machines.enumerated() {
             let row = rows[machine.machineId] ?? makeRow(machine.machineId)
             rows[machine.machineId] = row

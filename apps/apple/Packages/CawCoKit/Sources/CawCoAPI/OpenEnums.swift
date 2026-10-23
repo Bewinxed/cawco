@@ -591,6 +591,7 @@ public enum OpenEnums {
         case none
         case ready
         case waitingForChannel
+        case waitingForHub
         case waitingSessions
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
@@ -606,6 +607,7 @@ public enum OpenEnums {
             case "none": self = .none
             case "ready": self = .ready
             case "waiting-for-channel": self = .waitingForChannel
+            case "waiting-for-hub": self = .waitingForHub
             case "waiting-sessions": self = .waitingSessions
             default: self = .unrecognized(rawValue)
             }
@@ -622,6 +624,7 @@ public enum OpenEnums {
             case .none: "none"
             case .ready: "ready"
             case .waitingForChannel: "waiting-for-channel"
+            case .waitingForHub: "waiting-for-hub"
             case .waitingSessions: "waiting-sessions"
             case let .unrecognized(rawValue): rawValue
             }
@@ -631,7 +634,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.available, .downloading, .failed, .failedRolledBack, .installed, .installing, .none, .ready, .waitingForChannel, .waitingSessions]
+        public static let allCases: [Self] = [.available, .downloading, .failed, .failedRolledBack, .installed, .installing, .none, .ready, .waitingForChannel, .waitingForHub, .waitingSessions]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -670,6 +673,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.nightly, .stable]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/BinaryUpdateStateHubWait`.
+    public enum BinaryUpdateStateHubWait: OpenEnum {
+        case behind
+        case unanswered
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "behind": self = .behind
+            case "unanswered": self = .unanswered
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .behind: "behind"
+            case .unanswered: "unanswered"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.behind, .unanswered]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

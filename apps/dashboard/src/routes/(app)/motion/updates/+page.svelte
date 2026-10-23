@@ -209,6 +209,12 @@
         sessiondKept: [CONMON[0] as KeptProcess, SLEEP],
       }),
     }),
+    machine("r14", "Omars-MacBook-Pro", "darwin", {
+      binaryUpdate: update({ phase: "waiting-for-hub", hubWait: "behind" }),
+    }),
+    machine("r14-unanswered", "obelisk-of-light", "linux", {
+      binaryUpdate: update({ phase: "waiting-for-hub", hubWait: "unanswered" }),
+    }),
   ];
 
   const OFF: BinaryUpdatePolicy = { autoUpdate: false, channel: "stable" };

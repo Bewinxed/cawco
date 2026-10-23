@@ -132,6 +132,7 @@
     "downloading",
     "installing",
     "waiting-sessions",
+    "waiting-for-hub",
     "failed",
     "failed-rolled-back",
   ]);

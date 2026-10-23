@@ -50,6 +50,7 @@ public enum UpdateRows {
         let retiringKeepers: [Keeper]?
         let error: String?
         let landed: Landing?
+        let hubWait: String?
     }
 
     static func state(_ machine: MachineRow) -> State? {
@@ -108,6 +109,9 @@ public enum UpdateRows {
             return UpdateCell(row: 9, text: words(v, "installs when \(held) \(held == 1 ? "session ends" : "sessions end")"), icon: .clock)
         case "waiting-for-channel":
             return UpdateCell(row: 10, text: "Stays on \(current) until \(channelName(policy.channel)) has a newer build", icon: .clock)
+        case "waiting-for-hub":
+            return UpdateCell(row: 14, text: Words.Updates.waitsForHub(version: v, answered: state.hubWait != "unanswered"),
+                              icon: .clock, buttons: policy.autoUpdate ? [] : [.cancel])
         case "available":
             return UpdateCell(row: 11, text: words(v, "available"), icon: .download, buttons: [.install])
         default:
@@ -139,7 +143,7 @@ public enum UpdateRows {
     public static func error(_ machine: MachineRow) -> String? { state(machine)?.error }
 
     /// The phases an update is under way or failed in (MachinesList.svelte `MOVING`).
-    private static let moving: Set = ["ready", "downloading", "installing", "waiting-sessions", "failed", "failed-rolled-back"]
+    private static let moving: Set = ["ready", "downloading", "installing", "waiting-sessions", "waiting-for-hub", "failed", "failed-rolled-back"]
 
     /// What a machine's row says of its update (MachinesList.svelte
     /// `updateOf`): the Update cell's words while one is under way or failed,

@@ -316,7 +316,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
         // 2. An install this device asked for, or the hub restarting under it.
         let inSet = live.filter { commanded.contains($0.id) || ($0.state.hostsHub && $0.state.phase == "installing") }
         let running = inSet.contains { m in
-            (commanded.contains(m.id) && ["available", "downloading", "ready", "installing"].contains(m.state.phase))
+            (commanded.contains(m.id) && ["available", "downloading", "ready", "waiting-for-hub", "installing"].contains(m.state.phase))
                 || (m.state.hostsHub && m.state.phase == "installing")
         }
         if running {
@@ -330,6 +330,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
                         if doneOn(m.state) { return "✓ \(m.name)" }
                         if m.state.phase == "installing" { return "\(m.name) · restarting" }
                         if m.state.phase == "downloading" { return "\(m.name) · downloading" }
+                        if m.state.phase == "waiting-for-hub" { return Words.Updates.installLineWaitsForHub(name: m.name) }
                         let waiting = waitsOn(m.state)
                         return waiting.isEmpty ? "· \(m.name) · waiting" : "· \(m.name) · waiting for \(waiting.joined(separator: ", "))"
                     }

@@ -1554,6 +1554,38 @@ public enum Words {
         public static let tryingAgain = "Starting…"
     }
 
+    public enum Updates {
+        // packages/core/src/words/updates.ts `updatesWords`
+        /// The notice's title while a build waits.
+        public static func ready(version: String) -> String {
+            "CawCo \(version) is ready"
+        }
+
+        /// An Install now the hub refused: the notice's title, and why under a machine's row.
+        public static func notInstalled(version: String, machine: String) -> String {
+            "CawCo \(version) was not installed on \(machine)"
+        }
+
+        public static func notConnected(machine: String) -> String {
+            "\(machine) is not connected, so nothing was installed. Retry once it is back."
+        }
+
+        /// A Check for updates refused, under it.
+        public static func noNewBuilds(why: String) -> String {
+            "No new builds could be looked for: \(why). Machines keep the build they run; Try again to check."
+        }
+
+        /// A machine other than the hub's own is to install `version` (`waiting-for-hub`): the hub does not speak its wire protocol yet (`answered`, the state's `hubWait` "behind"), or did not say which it speaks (a hub mid-restart). It installs by itself once the hub runs a build that does.
+        public static func waitsForHub(version: String, answered: Bool) -> String {
+            answered ? "Waits for its hub to take \(version) first" : "Waits for its hub to answer before installing \(version)"
+        }
+
+        /// The machine's line in the notice of an install under way, while it waits for its hub.
+        public static func installLineWaitsForHub(name: String) -> String {
+            "· \(name) · waiting for its hub"
+        }
+    }
+
     public enum Connection {
         // packages/core/src/words/connection.ts `connectionWords`
         /// The hub isn't answering: the band's, the home's quiet line, the status line's lead.

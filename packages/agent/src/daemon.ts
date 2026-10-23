@@ -166,6 +166,7 @@ import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
 import {
   BinaryUpdater,
+  hubRegistered,
   latestBinaryUpdate,
   reportBinaryUpdate,
 } from "./binary-update";
@@ -2705,6 +2706,9 @@ const attach = (
       if (envelope.verb === "register") {
         agentStep({ kind: "register-ack" });
         recordRegistered();
+        // A machine waiting for its hub's build looks again: the hub may
+        // have restarted into it (binary-update.ts `hubRegistered`).
+        hubRegistered();
         // What each session is owed goes first, ahead of anything this ack
         // sets off: every frame the hub has not taken, then each running
         // reply so far (outbox.ts).

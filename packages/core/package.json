@@ -62,6 +62,7 @@
     "./words/leaks": "./src/words/leaks.ts",
     "./words/spawn": "./src/words/spawn.ts",
     "./words/shell": "./src/words/shell.ts",
+    "./words/updates": "./src/words/updates.ts",
     "./canvas": "./src/canvas.ts",
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",

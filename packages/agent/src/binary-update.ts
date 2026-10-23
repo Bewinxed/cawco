@@ -12,7 +12,10 @@
  * run ahead of its hub (an install on a Mac first is the canary before the
  * hub takes a build); the guard is the wire-protocol overlap check, by which
  * a machine other than the hub's own installs only a build whose
- * `protocolRange` overlaps its hub's.
+ * `protocolRange` overlaps its hub's. One told to install a build its hub
+ * does not speak yet waits for its hub (`waiting-for-hub`): the install
+ * stands, and goes ahead by itself once the hub runs a build that does,
+ * whichever of the hub's machine and this one took the release first.
  */
 import { readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -68,6 +71,7 @@ import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { updatesWords } from "@cawco/core/words/updates";
 import { leaveRetiringKeepers } from "./boundary";
 import {
   HELPER_START_MS,
@@ -218,6 +222,45 @@ export const latestBinaryUpdate = (): BinaryUpdateState | undefined => latest;
 export const reportBinaryUpdate = (state: BinaryUpdateState): void => {
   latest = state;
 };
+
+/** This agent's updater, once it has started: the one a register with the hub tells ({@link hubRegistered}). */
+let startedUpdater: BinaryUpdater | undefined;
+/**
+ * This agent registered with its hub (daemon.ts, at every register ack): the
+ * hub restarted, or this agent reconnected. A machine waiting for its hub
+ * looks again now rather than at its next tick, for a hub that restarted may
+ * run the build it waits for.
+ */
+export const hubRegistered = (): void => {
+  startedUpdater?.hubRegistered();
+};
+
+/**
+ * What a machine other than the hub's own waits for before it installs a
+ * build speaking `offered` (`hubWait`): nothing when its hub's wire protocol
+ * overlaps it, `behind` when the hub's does not or the hub names none (a
+ * build from before the range), `unanswered` when the hub, which answered
+ * for its offer, did not say ({@link readHubProtocol}): a wait like the
+ * other, said on the machine's row, never a failed attempt.
+ */
+async function hubWaitFor(
+  hub: string,
+  offered: { max: number; min: number }
+): Promise<BinaryUpdateState["hubWait"]> {
+  let protocol: { max: number; min: number } | undefined;
+  try {
+    protocol = await readHubProtocol(hub);
+  } catch (error) {
+    if (!(error instanceof HubUnreachable)) {
+      throw error;
+    }
+    console.info(`[update] ${error.message}; the install waits for the hub`);
+    return "unanswered";
+  }
+  return protocol && offered.min <= protocol.max && offered.max >= protocol.min
+    ? undefined
+    : "behind";
+}
 
 /** One session keeper as it answered: its held sessions, what it speaks, and every live child it holds. */
 interface KeeperReading {
@@ -425,6 +468,7 @@ export class BinaryUpdater {
     }
     this.#hostsHub = (await readInstallation())?.role === "hub";
     console.info(`[update] updating the binary install at ${binaryRoot()}`);
+    startedUpdater = this;
     await this.#load();
     this.#timer = setInterval(() => this.tick(), POLL_MS);
     this.#timer.unref();
@@ -451,9 +495,17 @@ export class BinaryUpdater {
     return this.#state;
   }
 
+  /** The agent registered with its hub ({@link hubRegistered}): a machine waiting for its hub looks again now. */
+  hubRegistered(): void {
+    if (this.#state.phase === "waiting-for-hub") {
+      setTimeout(() => this.tick(), 0);
+    }
+  }
+
   /**
-   * Returns a machine waiting to install to `available`: the person changed
-   * their mind. A drain under way sees it at its end and installs nothing.
+   * Returns a machine waiting to install, on its work in flight or on its
+   * hub, to `available`: the person changed their mind. A drain under way
+   * sees it at its end and installs nothing.
    */
   async cancel(): Promise<BinaryUpdateState> {
     this.#flags.commanded = false;
@@ -467,9 +519,13 @@ export class BinaryUpdater {
       return this.#state;
     }
     await this.#load();
-    if (this.#state.phase === "ready") {
+    if (
+      this.#state.phase === "ready" ||
+      this.#state.phase === "waiting-for-hub"
+    ) {
       await this.#set({
         phase: "available",
+        hubWait: undefined,
         waitingOn: undefined,
         waitingSince: undefined,
       });
@@ -533,9 +589,15 @@ export class BinaryUpdater {
   /** Why the pass a command ran installed nothing, in the words the command's answer carries. */
   #notInstalled(named: string | undefined): string {
     const offered = this.#offered;
-    const { error, phase, waitingOn } = this.#state;
+    const { availableVersion, error, hubWait, phase, waitingOn } = this.#state;
     if (named !== undefined && offered && offered.version !== named) {
       return `the hub offers ${offered.version}, not ${named}, the build this install named`;
+    }
+    if (phase === "waiting-for-hub" && availableVersion) {
+      return updatesWords.waitsForHub(
+        availableVersion,
+        hubWait !== "unanswered"
+      );
     }
     if (waitingOn?.length) {
       return waitingWords(waitingOn);
@@ -1078,7 +1140,10 @@ export class BinaryUpdater {
     } catch (error) {
       // A command stands through a failed attempt, which is tried again on
       // the retry schedule, and through a hub that did not answer, before
-      // which nothing was tried; a refusal of what the hub offers spends it.
+      // which nothing was tried; a refusal of what the hub offers (a build
+      // of another channel, settings it refused) spends it. A hub that does
+      // not speak the build's wire protocol yet is no error: the pass ends
+      // waiting for it (#takeUp), the command standing.
       if (!(
         error instanceof AttemptFailed || error instanceof HubUnreachable
       )) {
@@ -1105,11 +1170,14 @@ export class BinaryUpdater {
    * database holds. Every machine is offered the same build: the one the hub
    * found on the channel (`latest`, which a check refreshes), so an install
    * asked for right after a check takes the build that check named, on the
-   * hub's machine and every other alike.
+   * hub's machine and every other alike. On a machine other than the hub's
+   * own, also what it waits for before it may install it (`hubWait`).
    */
-  async #offer(
-    installation: BinaryInstallation
-  ): Promise<{ dbSchemaVersion?: number; release: SignedRelease }> {
+  async #offer(installation: BinaryInstallation): Promise<{
+    dbSchemaVersion?: number;
+    hubWait: BinaryUpdateState["hubWait"];
+    release: SignedRelease;
+  }> {
     const hub = installation.hubUrl;
     const body = await askHub(
       "with the build it offers",
@@ -1133,20 +1201,14 @@ export class BinaryUpdater {
     }
     // The hub's machine replaces its hub with the build; every other machine
     // runs it beside the hub as it is, so their wire protocols must overlap.
-    if (installation.role !== "hub") {
-      const protocol = await readHubProtocol(hub);
-      const offered = body.manifest.protocol;
-      if (
-        !protocol ||
-        offered.min > protocol.max ||
-        offered.max < protocol.min
-      ) {
-        throw new Error(
-          "This build's wire protocol does not overlap the hub's"
-        );
-      }
-    }
-    return { release: body, dbSchemaVersion: body.dbSchemaVersion };
+    return {
+      release: body,
+      dbSchemaVersion: body.dbSchemaVersion,
+      hubWait:
+        installation.role === "hub"
+          ? undefined
+          : await hubWaitFor(hub, body.manifest.protocol),
+    };
   }
 
   async #check(): Promise<void> {
@@ -1178,7 +1240,8 @@ export class BinaryUpdater {
       throw new Error(`The hub's update settings answered ${settings.status}`);
     }
     this.#policy = settings.policy;
-    const { release, dbSchemaVersion } = await this.#offer(installation);
+    const { release, dbSchemaVersion, hubWait } =
+      await this.#offer(installation);
     const running = await readRunningManifest();
     const newer = release.manifest.sequence > running.sequence;
     this.#offered = { newer, version: release.manifest.version };
@@ -1201,7 +1264,7 @@ export class BinaryUpdater {
       await this.#settleNothingNewer(this.#policy.channel !== running.channel);
       return;
     }
-    await this.#takeUp(release, installation);
+    await this.#takeUp(release, installation, hubWait);
   }
 
   /**
@@ -1209,28 +1272,54 @@ export class BinaryUpdater {
    * failed attempt at it waits out its delay, failed, and why), and a command
    * or auto-update attempts it: staged, then applied. An attempt that fails
    * is recorded with its retry time ({@link AttemptFailed}).
+   *
+   * AN INSTALL THE HUB CANNOT SPEAK TO YET WAITS FOR THE HUB. On a machine
+   * other than the hub's own, an attempt at a build whose wire protocol its
+   * hub does not speak, or while its hub does not say which it speaks
+   * (`hubWait`), tries nothing: the state says `waiting-for-hub`, the command
+   * stands, and the build is tried again on the next tick, and at once when
+   * the agent registers with its hub again ({@link hubRegistered}), which a
+   * hub's restart into its new build makes it do.
    */
   async #takeUp(
     release: SignedRelease,
-    installation: BinaryInstallation
+    installation: BinaryInstallation,
+    hubWait: BinaryUpdateState["hubWait"]
   ): Promise<void> {
     const { version, notes } = release.manifest;
     this.#spendCommandFor(version);
     const failedBefore = this.#state.failedVersion === version;
     const attempt =
       this.#flags.commanded || (this.#policy.autoUpdate && !failedBefore);
+    if (attempt && hubWait) {
+      await this.#setChanged({
+        phase: "waiting-for-hub",
+        hubWait,
+        availableVersion: version,
+        notes,
+        error: undefined,
+        heldChildren: undefined,
+        waitingOn: undefined,
+      });
+      return;
+    }
     const failure = attempt ? await readFailure(version) : undefined;
     const waiting = failure !== undefined && Date.now() < failure.nextAt;
     if (
       !["installing", "waiting-sessions", "ready"].includes(this.#state.phase)
     ) {
-      let said: Partial<BinaryUpdateState> = {
-        phase: failedBefore ? "failed-rolled-back" : "available",
-      };
+      let said: Partial<BinaryUpdateState> = failedBefore
+        ? { phase: "failed-rolled-back" }
+        : { phase: "available", error: undefined };
       if (waiting) {
         said = { phase: "failed", error: failure.error };
       }
-      await this.#setChanged({ ...said, availableVersion: version, notes });
+      await this.#setChanged({
+        ...said,
+        hubWait: undefined,
+        availableVersion: version,
+        notes,
+      });
     }
     if (!attempt || waiting) {
       return;
@@ -1267,6 +1356,7 @@ export class BinaryUpdater {
       "downloading",
       "ready",
       "waiting-for-channel",
+      "waiting-for-hub",
       "none",
       ...(waitsForChannel ? (["installed"] as const) : []),
     ];
@@ -1274,6 +1364,7 @@ export class BinaryUpdater {
       await this.#set({
         phase: target,
         availableVersion: undefined,
+        hubWait: undefined,
         notes: undefined,
         waitingOn: undefined,
         waitingSince: undefined,
@@ -1307,7 +1398,12 @@ export class BinaryUpdater {
     if (!artifact) {
       throw new Error(`This release has no build for ${target}`);
     }
-    await this.#set({ phase: "downloading" });
+    // A new attempt: what the last one said is not this one's.
+    await this.#set({
+      phase: "downloading",
+      error: undefined,
+      hubWait: undefined,
+    });
     const bytes = await askHub(
       `with the build ${manifest.version}`,
       600_000,

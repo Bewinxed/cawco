@@ -46,10 +46,11 @@ TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-tmp-$(printf %s "$out
 ln -sfn "$out/tmp" "$TMPDIR"
 export TMPDIR
 
-# The builds (scripts/binary/build-stage2.ts): three of this tree. NIGHTLY is NEXT as the nightly channel publishes
+# The builds (scripts/binary/build-stage2.ts): four of this tree. NIGHTLY is NEXT as the nightly channel publishes
 # it: a version in the shape release.ts gives a nightly (`<base>-nightly.<sequence>+<commit:12>`), its sequence and
 # commit NEXT's, so its feed's manifest is one releaseTag reads and its binary says the version its manifest names.
-export BASE=0.0.1-test.2 NEXT=0.0.1-test.3 NIGHTLY=0.0.1-nightly.30+333333333333
+# WIRE is newer than NEXT and speaks the next wire protocol alone: a release that moves the protocol (hubwire).
+export BASE=0.0.1-test.2 NEXT=0.0.1-test.3 NIGHTLY=0.0.1-nightly.30+333333333333 WIRE=0.0.1-test.4
 # The proof's own pace for the update's timed steps (packages/core/src/clock.ts, replaced in proof builds by
 # scripts/binary/proof-clock.ts): the trial window (180 s), the confirm hold (60 s), the first retry delay (60 s), how
 # long a retiring keeper sits empty (20 s), a drain's wait on the work in flight (45 s, agent binary-update.ts
@@ -74,12 +75,12 @@ export CLAUDE_LATE_S
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
 RIGS=(sshadd admitted spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry
-  pins workspace wsarchive runaway memory capped slowfleet bare nightlyjoin)
+  pins workspace wsarchive runaway memory capped slowfleet bare nightlyjoin hubwire)
 # How many systemd machines each rig boots (its `machines` refuses any other count): what it holds of the host user's
 # inotify instances while it runs.
 declare -A RIG_MACHINES=([sshadd]=3 [admitted]=2 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1
   [swapkill]=1 [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [pins]=1 [workspace]=2
-  [wsarchive]=2 [runaway]=1 [memory]=1 [capped]=2 [slowfleet]=2 [bare]=2 [nightlyjoin]=2)
+  [wsarchive]=2 [runaway]=1 [memory]=1 [capped]=2 [slowfleet]=2 [bare]=2 [nightlyjoin]=2 [hubwire]=2)
 # THE HOST USER'S INOTIFY INSTANCES are every rig's to share. The kernel charges an instance to its user in each user
 # namespace up to the initial one, and every rootless container's namespace is the host user's, so all machines of
 # every rig, and the host user's own processes, draw on one fs.inotify.max_user_instances (384 on obelisk). Run A of
@@ -209,7 +210,7 @@ EOF
 orchestrate() {
   python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
   command -v flock > /dev/null || { echo "flock (util-linux) is needed: one proof at a time builds into the image store" >&2; exit 2; }
-  for need in cawco-2 cawco-3 cawco-nightly keys/test-release-private.pem keys/test-release-public.pem; do
+  for need in cawco-2 cawco-3 cawco-nightly cawco-wire keys/test-release-private.pem keys/test-release-public.pem; do
     [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
   done
   free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
@@ -263,6 +264,8 @@ orchestrate() {
     feed swapbroken ok stable 0.0.1-test.6 3434343434343434343434343434343434343434 "$out/shared/broken-cawco" "$key" 34 "$schema" & pids+=($!)
     # The newer build on the nightly channel, beside base's older one on stable: a nightly hub's fleet (nightlyjoin).
     feed nightly ok nightly "$NIGHTLY" 3333333333333333333333333333333333333333 "$bins/cawco-nightly" "$key" 30 "$schema" & pids+=($!)
+    # A release that moves the wire protocol: its manifest's range is the one its binary says (hubwire).
+    feed wire ok stable "$WIRE" 4444444444444444444444444444444444444444 "$bins/cawco-wire" "$key" 40 "$schema" & pids+=($!)
     feed refusals tampered stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" tamper & pids+=($!)
     feed refusals badsig stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" bad-signature & pids+=($!)
     feed refusals nosig stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" no-signature & pids+=($!)
@@ -952,7 +955,7 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # answer only once every online machine has been told (hub binary-updates.ts `adopt`), and a pass begun after that
 # reads the new policy; one already under way says `installing` to the hub the moment it raises its fence
 # (binary-update.ts `#drain` → `#tellHub`), before any helper starts.
-settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-sessions)$ ]]; }
+settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-for-hub|waiting-sessions)$ ]]; }
 export PROOF_RUNNER
 export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed \
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
@@ -2316,6 +2319,74 @@ rig_retry() {
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "an install commanded on a joined machine whose hub cannot supply the build says failed and why, then applies it by itself once the hub can, with no agent restart by hand" joiner_install_retries 900
+}
+
+# THE JOINED MACHINE WAITS FOR ITS HUB. A release that moves the wire protocol (WIRE speaks none of BASE's), its
+# install asked of the joined machine first, as a person's Update all asks it of the other machines before the hub's
+# own: the joined machine waits for its hub, its row saying so in the Update cell's words, never failed; it keeps
+# waiting through its own update ticks, its command standing and nothing downloaded; the hub's machine installs it;
+# and the joined machine installs it by itself once the hub runs it, at its register with the restarted hub, with no
+# check and no second press. What the hub records of the joined machine's update is sampled every half second from
+# before the ask until the end (hubwire_sampler): one `failed`, or an error carried into the install, fails the check.
+joiner_waits_for_hub() {
+  need_hub
+  local answer samples="$rigdir/hubwire-samples" sampler t0 took
+  use_feed wire
+  learn > /dev/null
+  wait_until 120 '[[ "$(field $jid availableVersion)" == $WIRE ]]'
+  hubwire_sampler "$samples" &
+  sampler=$!
+  on_exit "kill $sampler 2> /dev/null"
+  answer=$(install_now_request "$jid")
+  echo "the joined machine answered: $answer"
+  grep -q '"installed":false' <<< "$answer"
+  grep -qF "Waits for its hub to take $WIRE first" <<< "$answer"
+  wait_until 30 '[[ "$(phase $jid)" == waiting-for-hub && "$(field $jid hubWait)" == behind ]]'
+  [[ -z "$(field $jid error)" ]]
+  echo "its Update cell: $(update_row "$jid")"
+  [[ "$(update_row "$jid")" == "Waits for its hub to take $WIRE first" ]]
+  # Past one update tick (60 s, on no proof clock): still waiting, its command standing, nothing downloaded.
+  sleep 65
+  [[ "$(phase $jid)" == waiting-for-hub ]]
+  if has_version "$joinerc" "$WIRE"; then echo "ASSERTION FAILED: the joined machine staged $WIRE while it waited"; return 1; fi
+  # The hub's machine takes the release; the hub restarts into it.
+  install_now_request "$hid" > /dev/null
+  wait_until 400 '[[ "$(hub_api /health | json "d => d.build?.version")" == $WIRE ]]'
+  t0=$SECONDS
+  wait_until 300 '[[ "$(phase $jid)" != waiting-for-hub ]]'
+  took=$((SECONDS - t0))
+  echo "the joined machine went on ${took}s after the hub answered on $WIRE"
+  # At its register with the restarted hub, not at its next tick a minute on.
+  (( took <= 30 ))
+  wait_until 400 '[[ "$(build_version $hid)" == $WIRE && "$(phase $hid)" == installed ]]'
+  wait_until 400 '[[ "$(build_version $jid)" == $WIRE && "$(phase $jid)" == installed ]]'
+  [[ "$(apply_starts "$joinerc" "$WIRE")" == 1 ]]
+  kill "$sampler" 2> /dev/null || true
+  echo "the hub's record of the joined machine, each change: $(uniq "$samples" | tr '\n' '|')"
+  grep -q '^waiting-for-hub -$' "$samples"
+  if grep -q '^failed' "$samples"; then echo "ASSERTION FAILED: the hub recorded the joined machine's update as failed"; return 1; fi
+  if grep -qE '^(available|downloading|ready|installing) [^-]' "$samples"; then
+    echo "ASSERTION FAILED: an attempt carried an earlier error: $(grep -E '^(available|downloading|ready|installing) [^-]' "$samples" | head -n 1)"
+    return 1
+  fi
+}
+# Every half second, what the hub records of the joined machine's update: `<phase> <error, or ->`, one line each, into
+# $1; nothing for a look the hub did not answer (it restarts in the update).
+hubwire_sampler() {
+  local machines
+  : > "$1"
+  while :; do
+    if machines=$(hub_api /api/binary-updates/machines 2> /dev/null); then
+      json "d => { const m = d.machines['$jid']; return m ? m.phase + ' ' + (m.error ? JSON.stringify(m.error) : '-') : undefined; }" <<< "$machines" >> "$1" || true
+    fi
+    sleep 0.5
+  done
+}
+export -f joiner_waits_for_hub hubwire_sampler
+rig_hubwire() {
+  fleet base "$BASE" "hub joiner"
+  setup_done
+  check "a joined machine asked to install a release its hub cannot speak to yet waits for its hub, never failed, and installs it by itself once the hub's machine has, with no check and no second press" joiner_waits_for_hub 1200
 }
 
 # ---------------------------------------------------------------- pins: the harness a build pins goes on before it,

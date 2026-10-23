@@ -65,6 +65,9 @@ const PUBLISHED_PACKAGES: Record<string, string> = {
   "@silvia-odwyer/photon-node": "photon-node",
 };
 const PUBLISHED_PACKAGE = /^(?:playwright-core|@silvia-odwyer\/photon-node)$/;
+/** The wire protocol range core runtime.ts declares, which a proof build's `protocol` replaces. */
+const PROTOCOL_RANGE =
+  /export const protocolRange = \{ min: \d+, max: \d+ \} as const;/;
 
 export function packageDir(
   name: string,
@@ -366,6 +369,12 @@ export async function compileBinary(options: {
   /** Link the credential-free stub harnesses into the real entry point; for proofs only. */
   stubHarness?: boolean;
   testPublicKey?: string;
+  /**
+   * The hub ↔ agent wire protocol range the build speaks in place of this
+   * tree's (core runtime.ts `protocolRange`): a release that moves the
+   * protocol, for proofs only (build-stage2.ts's `wire` build).
+   */
+  protocol?: { max: number; min: number };
 }) {
   pinnedBun();
   if (!TARGETS.includes(options.target as (typeof TARGETS)[number])) {
@@ -504,6 +513,25 @@ export async function compileBinary(options: {
                   contents: `export const RELEASE_PUBLIC_KEY=${JSON.stringify(options.testPublicKey)};`,
                   loader: "ts",
                 })
+              );
+            }
+            const { protocol } = options;
+            if (protocol) {
+              build.onLoad(
+                { filter: /packages\/core\/src\/runtime\.ts$/ },
+                async ({ path }) => {
+                  const source = await Bun.file(path).text();
+                  const moved = source.replace(
+                    PROTOCOL_RANGE,
+                    `export const protocolRange = { min: ${protocol.min}, max: ${protocol.max} } as const;`
+                  );
+                  if (moved === source) {
+                    throw new Error(
+                      `${path} declares no \`export const protocolRange = { min: N, max: N } as const;\` to move`
+                    );
+                  }
+                  return { contents: moved, loader: "ts" };
+                }
               );
             }
             build.onResolve({ filter: /^cawco:pi-runtime$/ }, () => ({
