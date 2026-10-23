@@ -257,6 +257,7 @@ async function breath(kit: Kit, base: string): Promise<void> {
   for (const theme of THEMES) {
     // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
     const page = await kit.page("desk", { theme });
+    const engine = page.context().browser()?.browserType().name() ?? "";
     await open(page, url, DOT);
     await bench(page, url, "rest");
     await page.locator(WORKING).waitFor({ state: "detached" });
@@ -288,7 +289,7 @@ async function breath(kit: Kit, base: string): Promise<void> {
     const mark = await page.evaluate(readBreath, DOT);
     const pill = await page.evaluate(readBreath, PILL_DOT);
     kit.check(
-      `1440 ${theme}: the card's working mark and the pin's pill breathe on one clock: one breath each, equal length (${tokens.ms}ms) and curve, each begun on the one clock (core breath.ts)`,
+      `1440 ${theme} (${engine}): the card's working mark and the pin's pill breathe on one clock: one breath each, equal length (${tokens.ms}ms) and curve, opacity 1, the floor (${tokens.floor}) and 1 at 0, ½ and 1 of a loop, each begun on the one clock (core breath.ts)`,
       !!(mark && pill) &&
         mark.runs === 1 &&
         pill.runs === 1 &&
@@ -299,9 +300,24 @@ async function breath(kit: Kit, base: string): Promise<void> {
         mark.offClock !== null &&
         pill.offClock !== null &&
         mark.offClock <= 1 &&
-        pill.offClock <= 1,
+        pill.offClock <= 1 &&
+        [mark, pill].every(
+          (one) =>
+            near(one.opacity[0] ?? 0, 1, 0.01) &&
+            near(one.opacity[1] ?? 0, tokens.floor, 0.01) &&
+            near(one.opacity[2] ?? 0, 1, 0.01)
+        ),
       `\n    mark ${JSON.stringify(mark)}\n    pill ${JSON.stringify(pill)}`
     );
+    if (engine !== "chromium") {
+      // The kit reads a loop on the DevTools clock alone (readMotion
+      // `loops`): elsewhere the breath is read above, off its own timing.
+      kit.note(
+        `1440 ${theme} (${engine}): the breath's motion read runs on Chromium only; its timing and values are read above`
+      );
+      await page.context().close();
+      continue;
+    }
     await bench(page, url, "rest");
     await page.locator(WORKING).waitFor({ state: "detached" });
     await page.waitForTimeout(400);

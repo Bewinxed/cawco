@@ -670,11 +670,15 @@ function takeTheme(said: unknown) {
     // stand on `:host(.dark)` (tokens.ts).
     host.classList.toggle("dark", said === "dark");
     themed();
-    // The pills are painted with the tokens read as they are drawn: drawn
-    // again in the new scheme, their inks and their breath's floor with it.
+    // What the overlay paints with tokens read as it is drawn, the pills
+    // (pins.ts paintOf: their inks and their breath's floor), the ink's
+    // strokes (ink.ts, `--brand-solid`) and the changes' washes (changes.ts,
+    // `--c-change-wash`), is drawn again in the new scheme.
     if (said !== drawnIn) {
       drawnIn = said;
       pins.draw();
+      ink.replace();
+      changes.draw();
     }
   }
 }

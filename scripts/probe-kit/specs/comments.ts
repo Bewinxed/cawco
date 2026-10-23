@@ -1255,7 +1255,11 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
  * long on `--ease-in-out`, its opacity 1, the floor and 1 at 0, ½ and 1 of
  * a loop, by day and at night, both begun on the one clock (core breath.ts,
  * the wall clock's multiples of the breath: the two documents keep timelines
- * of their own); and nothing breathes under reduced motion.
+ * of their own); and nothing breathes under reduced motion. And what the
+ * overlay paints with tokens read as it draws takes the night scheme the
+ * moment the dashboard's theme turns: the pill's ring (`--surface-raised`)
+ * and the ink's strokes (`--brand-solid`); the changes' washes are read the
+ * same way in the changed leg.
  */
 const breathChecks = async (on: On, frame: Frame) => {
   const { page: screen } = on;
@@ -1332,29 +1336,73 @@ const breathChecks = async (on: On, frame: Frame) => {
     );
   };
   await both("day");
+  // What the overlay paints with tokens read as it draws: the pill's ring
+  // (`--surface-raised`) and the ink's strokes (`--brand-solid`), by day.
+  const paints = () =>
+    frame.evaluate(
+      (n) => ({
+        ring:
+          document
+            .querySelector(
+              `svg[data-cawco-pins] g[data-pin="${n}"] [data-ring]`
+            )
+            ?.getAttribute("fill") ?? "",
+        ink:
+          document
+            .querySelector("svg[data-cawco-ink] path:not([data-live])")
+            ?.getAttribute("fill") ?? "",
+      }),
+      number
+    );
+  const dayPaint = await paints();
+  const dayTokens = [
+    await tokenColor(screen, "--surface-raised"),
+    await tokenColor(screen, "--brand-solid"),
+  ];
   // Night: the dashboard's own switch, which tells the page its scheme.
-  const switchTo = async (to: "dark" | "light") => {
-    const label = to === "dark" ? shellWords.lightMode : shellWords.darkMode;
-    for (let press = 0; press < 3; press += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: one press of the switch at a time
-      const dark = await screen.evaluate(() =>
-        document.documentElement.classList.contains("dark")
-      );
-      if (dark === (to === "dark")) {
-        return;
-      }
-      await screen
-        .getByRole("button", { name: label })
-        .or(screen.getByRole("button", { name: "System" }))
-        .first()
-        .click({ timeout: 5000 });
-      // A plain wait, never `settle`, which holds every loop still at its
-      // start: the breath read next is the page's own.
-      await screen.waitForTimeout(400);
-    }
-  };
-  await switchTo("dark");
+  await switchTheme(screen, "dark");
   await both("night");
+  const nightPaint = await until(
+    "the page's paint in the night scheme",
+    paints,
+    (read) => read.ring !== dayPaint.ring && read.ink !== dayPaint.ink,
+    5000
+  ).catch(paints);
+  const nightTokens = [
+    await tokenColor(screen, "--surface-raised"),
+    await tokenColor(screen, "--brand-solid"),
+  ];
+  const [
+    dayRing,
+    dayInk,
+    nightRing,
+    nightInk,
+    dayRaised,
+    dayBrand,
+    nightRaised,
+    nightBrand,
+  ] = await srgbOf(screen, [
+    dayPaint.ring,
+    dayPaint.ink,
+    nightPaint.ring,
+    nightPaint.ink,
+    ...dayTokens,
+    ...nightTokens,
+  ]);
+  on.kit.check(
+    `4b (scheme): the dashboard's theme switched to night, the page's overlay draws again in it at once: pin ${number}'s pill ring takes --surface-raised's night value, as it had its day value`,
+    sameRgb(dayRing, dayRaised) &&
+      sameRgb(nightRing, nightRaised) &&
+      !sameRgb(dayRaised, nightRaised),
+    `day ${dayPaint.ring} ${JSON.stringify(dayRing)} (token ${JSON.stringify(dayRaised)}); night ${nightPaint.ring} ${JSON.stringify(nightRing)} (token ${JSON.stringify(nightRaised)})`
+  );
+  on.kit.check(
+    "4b (scheme): the ink's strokes on the page take --brand-solid's night value the moment the theme turns, as they had its day value",
+    sameRgb(dayInk, dayBrand) &&
+      sameRgb(nightInk, nightBrand) &&
+      !sameRgb(dayBrand, nightBrand, 1),
+    `day ${dayPaint.ink} ${JSON.stringify(dayInk)} (token ${JSON.stringify(dayBrand)}); night ${nightPaint.ink} ${JSON.stringify(nightInk)} (token ${JSON.stringify(nightBrand)})`
+  );
   // Less motion: nothing breathes, on the page nor in the rail.
   await screen.emulateMedia({ reducedMotion: "reduce" });
   await screen.waitForTimeout(300);
@@ -1365,7 +1413,7 @@ const breathChecks = async (on: On, frame: Frame) => {
     `\n    pill: ${shown(still.pill)}\n    row:  ${shown(still.row)}`
   );
   await screen.emulateMedia({ reducedMotion: "no-preference" });
-  await switchTo("light");
+  await switchTheme(screen, "light");
   await until(
     "the long turn to end",
     () => screen.locator(`${RAIL} [data-dot="live"]`).count(),
@@ -6958,6 +7006,30 @@ const srgbOf = (screen: Page, colors: string[]) =>
     });
   }, colors);
 
+/**
+ * The dashboard's own theme switch pressed until it draws `to`; it tells the
+ * page in the pane its scheme. A plain wait after each press, never
+ * `settle`, which holds every loop still at its start.
+ */
+const switchTheme = async (screen: Page, to: "dark" | "light") => {
+  const label = to === "dark" ? shellWords.lightMode : shellWords.darkMode;
+  for (let press = 0; press < 3; press += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: one press of the switch at a time
+    const dark = await screen.evaluate(() =>
+      document.documentElement.classList.contains("dark")
+    );
+    if (dark === (to === "dark")) {
+      return;
+    }
+    await screen
+      .getByRole("button", { name: label })
+      .or(screen.getByRole("button", { name: "System" }))
+      .first()
+      .click({ timeout: 5000 });
+    await screen.waitForTimeout(400);
+  }
+};
+
 /** A token's colour as the dashboard resolves it now. */
 const tokenColor = (screen: Page, token: string) =>
   screen.evaluate((name) => {
@@ -7825,6 +7897,30 @@ const changedChecks = async (on: On) => {
       (readable?.night ?? 0) >= 4.5,
     `contrast ${JSON.stringify(readable)}; items ${JSON.stringify(items)}; washes ${JSON.stringify(before?.washes)}; wash ${JSON.stringify(washRgb)} done ${JSON.stringify(doneRgb)}; tag ${said}`
   );
+
+  // The theme turned to night: the washes are drawn again in it at once.
+  await switchTheme(on.page, "dark");
+  const night = await until(
+    "the washes in the night scheme",
+    () => changedRead(frame),
+    (read) =>
+      read.washes.length > 0 &&
+      read.washes[0]?.fill !== before?.washes[0]?.fill,
+    5000
+  ).catch(() => changedRead(frame));
+  const nightDone = await tokenColor(on.page, "--c-change-wash");
+  const [nightWashRgb, nightDoneRgb] = await srgbOf(on.page, [
+    night.washes[0]?.fill ?? "",
+    nightDone,
+  ]);
+  on.kit.check(
+    "changed (scheme): the dashboard's theme switched to night, the page's washes take --c-change-wash's night value at once, as they had its day value",
+    sameRgb(washRgb, doneRgb) &&
+      sameRgb(nightWashRgb, nightDoneRgb) &&
+      !sameRgb(doneRgb, nightDoneRgb),
+    `day ${before?.washes[0]?.fill} ${JSON.stringify(washRgb)} (token ${JSON.stringify(doneRgb)}); night ${night.washes[0]?.fill} ${JSON.stringify(nightWashRgb)} (token ${JSON.stringify(nightDoneRgb)})`
+  );
+  await switchTheme(on.page, "light");
 
   // The sweep lays the panel out at three widths and back: the steps read the frame as it stands after.
   const held = (await changesBarSweep(on, id)) ?? frame;

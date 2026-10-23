@@ -670,6 +670,7 @@ export function startPins(deps: PinsDeps): Pins {
       paint.raised
     );
     ring.style.filter = `drop-shadow(0 1px 1px ${paint.shadow})`;
+    ring.setAttribute("data-ring", "");
     g.append(ring);
     const faces: Record<
       PillState,
