@@ -127,8 +127,8 @@ export interface PreviewAddress {
   /**
    * Unsent: host mode's `name[:port]` from before `origin`. TestFlight ios
    * 20261018 (installable until 2027-01-16) declares it, so it stays
-   * declared until then; the hub never sends it, and that build reads
-   * `origin` (Previews.swift).
+   * declared until then (a declared-only BRIDGE, hub scripts/wire-compat.ts);
+   * the hub never sends it, and that build reads `origin` (Previews.swift).
    */
   host?: string;
   /** Host mode's whole origin for the session. */

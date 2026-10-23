@@ -41,11 +41,13 @@ import {
   APP_SCHEMA,
   asSent,
   BRIDGES,
-  type Bridge,
+  type DeclaredBridge,
+  declares,
   FRAMES,
   GENERATOR_CONFIG,
   openEnumNames,
   SENT,
+  type SentBridge,
   wireBreaks,
   wireProtocolAt,
   withoutBridge,
@@ -1374,18 +1376,33 @@ const refused: string[] = [];
  * (wire-compat.ts `asSent`): what a shipped reader meets. `except` leaves
  * one bridge out: the document as it would be sent without it.
  */
-const sentWithout = (except?: Bridge): unknown =>
-  BRIDGES.filter((bridge) => bridge !== except).reduce<unknown>(
-    (sending, bridge) => asSent(sending, bridge),
-    document
-  );
+const sentBridges = BRIDGES.filter(
+  (bridge): bridge is SentBridge => !("declaredOnly" in bridge)
+);
+const sentWithout = (except?: SentBridge): unknown =>
+  sentBridges
+    .filter((bridge) => bridge !== except)
+    .reduce<unknown>((sending, bridge) => asSent(sending, bridge), document);
 const sent = sentWithout();
+// A field declared only for shipped apps goes once no served TestFlight
+// build declares it.
+for (const bridge of BRIDGES.filter(
+  (entry): entry is DeclaredBridge => "declaredOnly" in entry
+)) {
+  if (
+    !readers.some((reader) => reader.app && declares(reader.schema, bridge))
+  ) {
+    refused.push(
+      `\`${bridge.in}.${bridge.property}\` is declared only for shipped readers, and no shipped reader declares it now (${bridge.until}): remove the field and its entry in BRIDGES (scripts/wire-compat.ts).`
+    );
+  }
+}
 // A bridge no shipped reader needs any more goes. Each reader is taken as
 // built without it too: one built since reads `beside` and loses nothing,
 // one built before reads only the bridge and breaks without it. A bridge
 // that holds a kind back is needed while sending that kind in `beside`
 // breaks a shipped reader.
-for (const bridge of BRIDGES) {
+for (const bridge of sentBridges) {
   const without = withoutBridge(sentWithout(bridge), bridge);
   const needed = readers.some((reader) => {
     const built = withoutBridge(reader.schema, bridge);

@@ -32989,7 +32989,7 @@
         "type": "object",
         "properties": {
           "host": {
-            "description": "Unsent: host mode's `name[:port]` from before `origin`. TestFlight ios\n20261018 (installable until 2027-01-16) declares it, so it stays\ndeclared until then; the hub never sends it, and that build reads\n`origin` (Previews.swift).",
+            "description": "Unsent: host mode's `name[:port]` from before `origin`. TestFlight ios\n20261018 (installable until 2027-01-16) declares it, so it stays\ndeclared until then (a declared-only BRIDGE, hub scripts/wire-compat.ts);\nthe hub never sends it, and that build reads `origin` (Previews.swift).",
             "type": "string"
           },
           "origin": {
@@ -41030,7 +41030,7 @@
           },
           "designOffer": {
             "$ref": "#/components/schemas/DesignOfferEvent",
-            "description": "Unsent: `event` carries it as `design-offer`.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it."
+            "description": "Unsent: `event` carries it as `design-offer`.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it (a declared-only\nBRIDGE, hub scripts/wire-compat.ts)."
           },
           "event": {
             "description": "What happened, as typed data; null on a note stored before events were typed.",
@@ -41460,7 +41460,7 @@
           },
           "routineMade": {
             "$ref": "#/components/schemas/RoutineMadeEvent",
-            "description": "Unsent: `event` carries it as `routine-made`.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it."
+            "description": "Unsent: `event` carries it as `routine-made`.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it (a declared-only\nBRIDGE, hub scripts/wire-compat.ts)."
           },
           "createdAt": {
             "type": "number"
@@ -47752,7 +47752,7 @@
             "$ref": "#/components/schemas/BlockMetadataTrigger"
           },
           "workflowEvent": {
-            "description": "Unsent: there is no run engine.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it.",
+            "description": "Unsent: there is no run engine.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it (a declared-only\nBRIDGE, hub scripts/wire-compat.ts).",
             "type": "string"
           }
         }
@@ -57197,7 +57197,7 @@
             ]
           },
           "workflowRunId": {
-            "description": "Unsent: there is no run engine. TestFlight ios 20261018 (installable\nuntil 2027-01-16) declares it, so it stays declared until then; the hub\nnever sends it, and that build shows no runs.",
+            "description": "Unsent: there is no run engine. TestFlight ios 20261018 (installable\nuntil 2027-01-16) declares it, so it stays declared until then (a\ndeclared-only BRIDGE, hub scripts/wire-compat.ts); the hub never sends\nit, and that build shows no runs.",
             "type": [
               "null",
               "string"

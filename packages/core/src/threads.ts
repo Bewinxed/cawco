@@ -417,7 +417,8 @@ export interface EventThreadMessage extends ThreadMessageBase {
   /**
    * Unsent: `event` carries it as `design-offer`.
    * TestFlight ios 20261018 (installable until 2027-01-16) declares it, so
-   * it stays declared until then; the hub never sends it.
+   * it stays declared until then; the hub never sends it (a declared-only
+   * BRIDGE, hub scripts/wire-compat.ts).
    */
   designOffer?: DesignOfferEvent;
   /** What happened, as typed data; null on a note stored before events were typed. */
@@ -430,7 +431,8 @@ export interface EventThreadMessage extends ThreadMessageBase {
   /**
    * Unsent: `event` carries it as `routine-made`.
    * TestFlight ios 20261018 (installable until 2027-01-16) declares it, so
-   * it stays declared until then; the hub never sends it.
+   * it stays declared until then; the hub never sends it (a declared-only
+   * BRIDGE, hub scripts/wire-compat.ts).
    */
   routineMade?: RoutineMadeEvent;
 }

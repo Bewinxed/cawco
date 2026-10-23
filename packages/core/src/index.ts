@@ -1504,8 +1504,9 @@ export interface InstanceRow {
   updatedAt?: string | number | Date | null;
   /**
    * Unsent: there is no run engine. TestFlight ios 20261018 (installable
-   * until 2027-01-16) declares it, so it stays declared until then; the hub
-   * never sends it, and that build shows no runs.
+   * until 2027-01-16) declares it, so it stays declared until then (a
+   * declared-only BRIDGE, hub scripts/wire-compat.ts); the hub never sends
+   * it, and that build shows no runs.
    */
   workflowRunId?: string | null;
   /** Unsent, as {@link workflowRunId}. */

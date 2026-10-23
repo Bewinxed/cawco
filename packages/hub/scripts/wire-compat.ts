@@ -100,7 +100,7 @@ export const SENT = new Set([
  * once sending the kind in `beside` would break none of them: then the
  * kind goes out where it belongs and `property` goes.
  */
-export interface Bridge {
+export interface SentBridge {
   beside: string;
   /** The tag (its `kind`) of `beside`'s union the hub holds back, sending `property` in its place. */
   holds?: string;
@@ -108,7 +108,60 @@ export interface Bridge {
   /** What it is for and when it goes. */
   until: string;
 }
+
+/**
+ * A field the hub never sends, declared only because a shipped app declares
+ * it: component `in`'s optional `property`. The wire check flags any
+ * property a shipped app declares that the document drops, read or not, so
+ * the declaration stays while one does; openapi.ts refuses the entry once
+ * no served TestFlight build declares it, and then the field goes with it.
+ */
+export interface DeclaredBridge {
+  declaredOnly: true;
+  /** The component that declares it. */
+  in: string;
+  property: string;
+  /** What it is for and when it goes. */
+  until: string;
+}
+
+export type Bridge = SentBridge | DeclaredBridge;
+
+/** Whether `document`'s component `bridge.in` declares `bridge.property`. */
+export const declares = (
+  document: unknown,
+  bridge: DeclaredBridge
+): boolean => {
+  const components = isObject(document) ? document.components : undefined;
+  const schemas = isObject(components) ? components.schemas : undefined;
+  const schema = isObject(schemas) ? schemas[bridge.in] : undefined;
+  return (
+    isObject(schema) &&
+    isObject(schema.properties) &&
+    bridge.property in schema.properties
+  );
+};
+
+const UNSENT_20261018 =
+  "never sent, declared because TestFlight ios 20261018 declares it; of these that build reads only `workflowRunId`, and shows no runs without it; it goes once that build is no longer installable, 2027-01-16 (bash apps/apple/scripts/testflight.sh --expire 20261018)";
+
 export const BRIDGES: Bridge[] = [
+  ...(
+    [
+      ["PreviewFrame", "host"],
+      ["PreviewAddress", "host"],
+      ["EventThreadMessage", "designOffer"],
+      ["EventThreadMessage", "routineMade"],
+      ["InstanceRow", "workflowRunId"],
+      ["InstanceRow", "workflowStepId"],
+      ["BlockMetadata", "workflowEvent"],
+    ] as const
+  ).map(([component, property]): DeclaredBridge => ({
+    declaredOnly: true,
+    in: component,
+    property,
+    until: UNSENT_20261018,
+  })),
   {
     property: "machines",
     beside: "claude",
@@ -154,7 +207,7 @@ const taggedAs = (
  * member of `beside`'s union tagged `holds` gone. The document unchanged for
  * a bridge that holds nothing.
  */
-export const asSent = (document: unknown, bridge: Bridge): unknown => {
+export const asSent = (document: unknown, bridge: SentBridge): unknown => {
   const { holds } = bridge;
   if (holds === undefined || !isObject(document)) {
     return document;
@@ -198,7 +251,10 @@ export const asSent = (document: unknown, bridge: Bridge): unknown => {
 };
 
 /** The document as it would be without `bridge`: the property gone from every schema that has both. */
-export const withoutBridge = (document: unknown, bridge: Bridge): unknown => {
+export const withoutBridge = (
+  document: unknown,
+  bridge: SentBridge
+): unknown => {
   if (Array.isArray(document)) {
     return document.map((item) => withoutBridge(item, bridge));
   }
