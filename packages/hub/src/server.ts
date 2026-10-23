@@ -3709,6 +3709,20 @@ export const createServer = (
     { machineId: string; since: number; reason: string }
   >();
   const machineCustody = new Map<string, SessionCustody>();
+  /**
+   * A machine's custody as it read it now. A reading that decides what was
+   * undecided (the first since it came back, or since it could not read it)
+   * lets its work items follow their sessions again: one held by the custody
+   * wait fails or goes on by what the machine said (work-items
+   * `custodyPending`).
+   */
+  const keepCustody = (machineId: string, custody: SessionCustody): void => {
+    const was = machineCustody.get(machineId)?.state;
+    machineCustody.set(machineId, custody);
+    if (custody.state === "available" && was !== "available") {
+      soon(() => workItems.followSessions());
+    }
+  };
   const addressClaims = (payload: unknown): SessionAddress[] => {
     const value = (payload as { sessionAddresses?: unknown } | null)
       ?.sessionAddresses;
@@ -22634,6 +22648,12 @@ export const createServer = (
   const workItems = createWorkItems({
     beforeCut: (projectId, machineId, cwd) =>
       placeRepos.beforeCut(projectId, machineId, cwd),
+    // Undecided while the machine is away or has not read its custody since
+    // it came back, and while it holds the session's process alive: neither
+    // proves the session gone.
+    custodyPending: (machineId, instanceId) =>
+      machineCustody.get(machineId)?.state !== "available" ||
+      heldProcesses(machineCustody.get(machineId)).includes(instanceId),
     db,
     // What a session hands by name (handed-inputs.ts), made further down;
     // nothing starts an item before the hub is up.
@@ -32407,7 +32427,7 @@ export const createServer = (
                   )
                 );
               const custody = peekCustody(message.payload);
-              machineCustody.set(message.machineId, custody);
+              keepCustody(message.machineId, custody);
               const heldIds = new Set(
                 custody.state === "available" ? custody.instances : []
               );
@@ -32756,7 +32776,7 @@ export const createServer = (
                 lifecycle.reconcile(message.machineId);
               } else {
                 const custody = peekCustody(message.payload);
-                machineCustody.set(message.machineId, custody);
+                keepCustody(message.machineId, custody);
                 lifecycle.reconcile(message.machineId, {
                   custody,
                   attached: peekInstances(message.payload),

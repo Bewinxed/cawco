@@ -854,6 +854,15 @@ export interface WorkItemDeps {
     workspace?: WorkspaceRef,
     how?: CommandOptions
   ) => Promise<CommandResult>;
+  /**
+   * Whether `machineId`'s custody of session `instanceId` is undecided:
+   * the machine is away or reconnecting and has not yet said which
+   * processes it still holds, or it holds that one's process unadopted. Its
+   * item is neither failed nor reported meanwhile (workflow engine
+   * 93a02b3a9: "Keep workflow attempts alive until custody decides
+   * absence").
+   */
+  readonly custodyPending: (machineId: string, instanceId: string) => boolean;
   readonly db: DbShape;
   /** Whether a verifier is judging the item's result now: its turns ending quietly are waiting, not idle. */
   readonly designHeld: (itemId: string) => boolean;
@@ -2178,6 +2187,7 @@ export const createWorkItems = ({
   beforeCut,
   call,
   command,
+  custodyPending,
   db,
   designHeld,
   designHold,
@@ -2883,12 +2893,17 @@ export const createWorkItems = ({
    */
   /**
    * Whether {@link followSessions} leaves a live item as it is: its session
-   * moved on to another item, or its landing runs.
+   * moved on to another item, its landing runs, or THE CUSTODY WAIT: while
+   * its machine's reconnect has not decided whether the session's process is
+   * still there, nothing fails or reports the item, and the next look after
+   * the decision follows it ({@link WorkItemDeps.custodyPending}).
    */
   const leftToFollow = (
     item: WorkItemRow,
     row: InstanceRow | undefined
-  ): boolean => !!row && (row.workItemId !== item.id || !!item.landingSince);
+  ): boolean =>
+    (!!row && (row.workItemId !== item.id || !!item.landingSince)) ||
+    custodyPending(row?.machineId ?? standIn(item).machineId, item.instanceId);
 
   const followSessions = (only?: ReadonlySet<string>): void => {
     const live = db
@@ -2950,6 +2965,7 @@ export const createWorkItems = ({
     item.heldAt !== null ||
     item.blocked !== null ||
     item.stoppingAt !== null ||
+    custodyPending(row.machineId, row.id) ||
     pausedWorkspace(item.workspaceId) !== undefined ||
     !!(item.waitUntil || item.waitResumeBy) ||
     !!item.landingSince ||
