@@ -1,23 +1,23 @@
 /**
  * A preview's stop wins over its bridge still opening (preview-bridge.ts): a
- * stop that comes while `open()` spawns the socat into the workspace's
+ * stop that comes while `open()` spawns the relay into the workspace's
  * network leaves no bridge process and no socket, and the open says it was
  * stopped.
  *
  * Drives the real module in-process. Only boundary.ts is swapped, by a
  * runtime Bun plugin, for `workspaceNetworks` naming a network namespace this
  * spec starts with bwrap (a user and network namespace, as a boundary's), a
- * server listening in it: the bridge's own setsid, setpriv, nsenter and socat
+ * server listening in it: the bridge's own setsid, setpriv, nsenter and relay
  * run as they do for a workspace. Runs where unprivileged user namespaces
  * are allowed: on the host, not inside a workspace boundary.
  *
  * 1. Each round starts `reachWorkspace` and issues `closeBridge` after a
  *    delay (0 to 60 ms, across the spawn); after both settle no process
- *    listens on the round's socket (`pgrep -f UNIX-LISTEN:<socket>`) and the
+ *    listens on the round's socket (`pgrep -f <socket>`) and the
  *    socket is gone.
  * 2. At least one round's stop landed while its open spawned: the open
  *    answered that it was stopped.
- * 3. A bridge left to open stands (its socat runs, its socket is there, a
+ * 3. A bridge left to open stands (its relay runs, its socket is there, a
  *    request through it reaches the server), and `closeBridge` takes it all.
  */
 import { existsSync } from "node:fs";
@@ -32,7 +32,7 @@ const BOUNDARY = /packages\/agent\/src\/boundary\.ts$/;
 const STOPPED = "was stopped while its way into the workspace opened";
 
 const bridgeAlive = async (socket: string): Promise<string> =>
-  (await Bun.$`pgrep -f ${`UNIX-LISTEN:${socket}`}`.nothrow().quiet()).stdout
+  (await Bun.$`pgrep -f ${socket}`.nothrow().quiet()).stdout
     .toString()
     .trim();
 
@@ -85,8 +85,12 @@ const run = async (kit: Kit) => {
     name: "probe-boundary",
     setup(build) {
       build.onLoad({ filter: BOUNDARY }, () => ({
-        contents:
+        contents: [
           "export const workspaceNetworks = async () => globalThis.__probeNetworks;",
+          "export const listeners = async () => [];",
+          "export const bunScriptRuntime = () => process.execPath;",
+          "export const BUN_SCRIPT_ENV = {};",
+        ].join("\n"),
         loader: "ts",
       }));
     },

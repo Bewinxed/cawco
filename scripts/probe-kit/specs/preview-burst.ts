@@ -33,6 +33,17 @@
  *    cold through the same chain: every frame drawn, no failed module, and
  *    the icons come as the one module Vite pre-bundles of `@cawco/icons`,
  *    no `~icons/…` module asked for (each was a request of its own).
+ * 5. On the host, the real join: a scratch fleet (real hub, agent and
+ *    sessiond; Claude Code against the mock model) whose session in a Vite
+ *    + Svelte folder makes a component canvas. Its stage runs in a place's
+ *    boundary, reached by the agent's bridge through `nsenter` into that
+ *    boundary's network (preview-bridge.ts, every line its own). The canvas
+ *    opened through the session's preview origin draws; then
+ *    {@link COST_GETS} GETs of one of its keyed modules, {@link COST_AT_ONCE}
+ *    at a time, through the hub's and the agent's listeners and that
+ *    bridge: every answer 200, and `ps --ppid <the relay>` empty
+ *    throughout (sampled every 5 ms). Inside a workspace, where a boundary
+ *    cannot start, it says so in one line and the legs above stand.
  * 4. 300 GETs of one immutable module (the largest prebundled dependency
  *    the canvas loads, at its `?v=`) through the hub's and the agent's listeners and the bridge,
  *    gzip taken, 50 at a time: the bridge opens no process of its own for
@@ -42,15 +53,23 @@
  *   bun scripts/probe-kit/run.ts preview-burst
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import http2 from "node:http2";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { PREVIEW_WHY_META } from "../../../packages/core/src/index";
 import type { RenderReport } from "../../../packages/core/src/stage";
-import { until } from "../../scratch-fleet";
+import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { CLOUDFLARE, scratchCertificate } from "../cloudflare-front";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { BOUNDARY_INSIDE, type Kit, ROOT, type Spec } from "../kit";
 
 const OPENS = 20;
 const ICONS = 150;
@@ -735,6 +754,208 @@ async function relayCost(
   );
 }
 
+/** Leg 5's project in the session's folder: plain Vite and Svelte, installed only in its stage clone (as session-sheet's). */
+const PLACE_PROJECT: Record<string, string> = {
+  ".gitignore": "node_modules\n",
+  "package.json": JSON.stringify({
+    name: "probe-burst-cards",
+    private: true,
+    type: "module",
+    devDependencies: {
+      "@sveltejs/vite-plugin-svelte": "^7.3.1",
+      svelte: "5.57.1",
+      vite: "^8.3.4",
+    },
+  }),
+  "vite.config.mjs": `import { svelte } from "@sveltejs/vite-plugin-svelte";
+export default { plugins: [svelte()], server: { fs: { strict: false } } };
+`,
+  "index.html": "<!doctype html><html><head></head><body></body></html>\n",
+  "src/Card.svelte": `<script>
+  let { title } = $props();
+</script>
+
+<h2 data-probe="title">{title}</h2>
+`,
+  "src/Card.stories.js": `import Card from "./Card.svelte";
+
+export default { component: Card, args: { title: "Hello" } };
+
+export const One = { args: {}, parameters: { viewport: 400 } };
+`,
+};
+const PLACE_STORY = "src/Card.stories.js";
+
+/** What each numbered message asks leg 5's session to call, and what it answered. */
+const asks = new Map<string, { input: object; name: string }>();
+const issued = new Set<string>();
+const answered = new Map<string, string>();
+const COMMAND = /PROBE-CALL:(\w+)/g;
+
+/** Leg 5's mock model: the call a `PROBE-CALL:<n>` names, then "done"; every other turn a word. */
+const respond = (request: Seen): Reply => {
+  const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+  if (!request.tools) {
+    return text("Probe title");
+  }
+  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
+  const ask = marker ? asks.get(marker) : undefined;
+  if (!(marker && ask)) {
+    return text("ok");
+  }
+  if (issued.has(marker)) {
+    if (!answered.has(marker)) {
+      answered.set(marker, request.last);
+    }
+    return text("done");
+  }
+  if (request.toolNames.includes(ask.name)) {
+    issued.add(marker);
+    return { everyMs: 5, words: [], tool: ask };
+  }
+  return request.toolNames.includes("ToolSearch")
+    ? {
+        everyMs: 5,
+        words: [],
+        tool: {
+          name: "ToolSearch",
+          input: { query: `select:${ask.name}`, max_results: 1 },
+        },
+      }
+    : text(`${ask.name} is not offered`);
+};
+
+/** The relay of preview `instanceId`'s bridge: the process whose arguments end in its socket. */
+const relayOf = (instanceId: string): number | null => {
+  const ending = `/${instanceId}.sock`;
+  for (const entry of readdirSync("/proc")) {
+    let argv: string[] = [];
+    try {
+      argv = readFileSync(`/proc/${entry}/cmdline`, "utf8").split("\0");
+    } catch {
+      // Not a process, or gone as it was read.
+    }
+    if (argv.some((one) => one.endsWith(ending))) {
+      return Number(entry);
+    }
+  }
+  return null;
+};
+
+/** 5. The real join: a session's component canvas in a place, through the agent's bridge into its boundary's network. */
+async function realJoin(kit: Kit): Promise<void> {
+  if (process.env.CAWCO_WORKSPACE) {
+    kit.note(
+      `5 (the relay's join into a real boundary) runs on the host: ${BOUNDARY_INSIDE}; bun scripts/probe-kit/run.ts preview-burst`
+    );
+    return;
+  }
+  const fleet = await kit.fleet(respond);
+  for (const [file, body] of Object.entries(PLACE_PROJECT)) {
+    mkdirSync(join(fleet.repo, file, ".."), { recursive: true });
+    writeFileSync(join(fleet.repo, file), body);
+  }
+  await Bun.$`bun install --lockfile-only --no-progress`
+    .cwd(fleet.repo)
+    .quiet();
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.fileAccount();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await fleet.accountSignedIn();
+  const session = await fleet.spawn("claude", "Cards", fleet.repo);
+  asks.set("5", {
+    name: "mcp__cawco__artifact_create",
+    input: {
+      response_format: "detailed",
+      kind: "component",
+      name: "cards",
+      file: PLACE_STORY,
+      does: "judge",
+      ask: "Judge the card in each of its states",
+    },
+  });
+  await fleet.send(session, "PROBE-CALL:5");
+  const created = (await until(
+    "artifact_create's answer",
+    () => answered.get("5"),
+    Boolean,
+    300_000
+  ).catch(() => "no answer")) as string;
+  const { port } = (await (
+    await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+      method: "POST",
+    })
+  ).json()) as { port?: number };
+  const origin = `http://127.0.0.1:${port ?? 0}`;
+  const page: Page = await kit.page("desk");
+  const modules: string[] = [];
+  page.on("request", (request) => {
+    const at = new URL(request.url());
+    if (KEYED_AT.test(at.pathname)) {
+      modules.push(`${at.pathname}${at.search}`);
+    }
+  });
+  await page.goto(
+    `${origin}/@cawco/canvas?file=${encodeURIComponent(PLACE_STORY)}`
+  );
+  const drawn = await page
+    .waitForFunction(
+      () =>
+        !!document.querySelector(
+          '[data-cawco-story="One"] [data-probe="title"]'
+        ),
+      null,
+      { timeout: 120_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  await page.close();
+  const relay = relayOf(session);
+  const target =
+    modules.find((one) => one.includes("Card.svelte")) ?? modules[0];
+  const seen = new Set<number>();
+  const sampling = new AbortController();
+  const sample = (async () => {
+    while (!sampling.signal.aborted) {
+      for (const child of relay ? childrenOf(relay) : []) {
+        seen.add(child);
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: samples until the GETs are done
+      await Bun.sleep(5);
+    }
+  })();
+  const statuses = new Map<number, number>();
+  for (let sent = 0; target && sent < COST_GETS; sent += COST_AT_ONCE) {
+    // biome-ignore lint/performance/noAwaitInLoops: a batch at a time
+    await Promise.all(
+      Array.from({ length: COST_AT_ONCE }, async () => {
+        const status = await fetch(`${origin}${target}`)
+          .then(async (answer) => {
+            await answer.arrayBuffer();
+            return answer.status;
+          })
+          .catch(() => 0);
+        statuses.set(status, (statuses.get(status) ?? 0) + 1);
+      })
+    );
+  }
+  sampling.abort();
+  await sample;
+  kit.check(
+    `5: on the host, a session's canvas in a place draws through the agent's bridge into its boundary (its relay ${relay ?? "not found"}), and ${COST_GETS} GETs of ${target ?? "no module"} through it, ${COST_AT_ONCE} at a time, answer ${[...statuses].map(([status, n]) => `${n}×${status}`).join(", ") || "nothing"} with ${seen.size} processes of the relay's own seen`,
+    drawn &&
+      relay !== null &&
+      !!target &&
+      statuses.get(200) === COST_GETS &&
+      seen.size === 0,
+    `artifact_create: ${created.replaceAll(/\s+/g, " ").slice(0, 300)}`
+  );
+}
+
 const run = async (kit: Kit) => {
   mkdirSync(SCRATCH, { recursive: true });
   const dir = project();
@@ -784,6 +1005,7 @@ const run = async (kit: Kit) => {
     stageHost.kill("SIGTERM");
   }
   await dashboardIcons(kit, tls);
+  await realJoin(kit);
 };
 
 const spec: Spec = { name: "preview-burst", run };
