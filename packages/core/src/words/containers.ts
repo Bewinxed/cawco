@@ -30,6 +30,11 @@ export const containerWords = {
     ].filter(Boolean);
     return `This session ended, so ${containerWords.ended}: ${parts.join("; ")}.`;
   },
+  /** The phrase every notice of containers that will not stop with their session carries. */
+  untrackedPhrase: "will not stop when this session ends",
+  /** The runtime endpoints a session reaches with no door of CawCo's (`tcp://`, `ssh://`): what it starts there stays. */
+  untracked: (endpoints: readonly string[]): string =>
+    `Containers this session starts at ${endpoints.join(" or ")} ${containerWords.untrackedPhrase}: CawCo reaches a container runtime only through a unix socket. Stop them yourself once they are done.`,
   /** One session's container notice, as the session that delegated it reads it. */
   delegateEnded: (title: string, item: string, notice: string): string =>
     `${containerWords.yourDelegate} ${title} (work item ${item}) ended. ${notice}`,

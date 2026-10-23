@@ -56,6 +56,7 @@ import {
   CAWCO_SCRATCH_TAG,
   CLI_OUTDATED,
   CONTAINERS_ENDED,
+  CONTAINERS_UNTRACKED,
   CONTROL_CARRY_SESSIONS,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
@@ -203,6 +204,7 @@ import { fenced } from "./restart";
 import {
   beginEnding,
   containersEndedWords,
+  containersUntrackedWords,
   endSessionContainers,
   finishEnding,
   openContainerDoors,
@@ -3237,16 +3239,31 @@ export class SessionSupervisor {
     // Its doors to the machine's container runtimes (session-containers.ts),
     // so what its work starts stops with it. A workspace's boundary reaches
     // no runtime at all: a bounded session gets none.
-    const containerEnv = boundary
+    const doors = boundary
       ? undefined
-      : await openContainerDoors(spec.instanceId).catch(
-          (error: unknown): Record<string, string> => {
-            warn(
-              `${spec.instanceId}: its doors to the container runtimes did not open, so containers it starts are not stopped with it: ${errorText(error)}`
-            );
-            return {};
-          }
-        );
+      : await openContainerDoors(spec.instanceId).catch((error: unknown) => {
+          warn(
+            `${spec.instanceId}: its doors to the container runtimes did not open, so containers it starts are not stopped with it: ${errorText(error)}`
+          );
+          return { env: {}, untracked: [] };
+        });
+    const containerEnv = doors?.env;
+    // A runtime it reaches with no door: it is told once, as it launches.
+    const untracked = containersUntrackedWords(doors?.untracked ?? []);
+    if (untracked && !recovery) {
+      this.#sayGone({
+        kind: "frame",
+        instanceId: spec.instanceId,
+        harness: adapter.kind,
+        message: {
+          type: "system",
+          subtype: CONTAINERS_UNTRACKED,
+          uuid: `containers-untracked-${spec.instanceId}`,
+          session_id: "",
+          content: untracked,
+        } as unknown as NeutralMessage,
+      });
+    }
     const ctx = this.#context(
       spec.instanceId,
       workdir,
@@ -4146,35 +4163,33 @@ export class SessionSupervisor {
   }
 
   /**
-   * Every container session `instanceId`'s work started, stopped as it ends
-   * (session-containers.ts `endSessionContainers`), and the hub told what
-   * was done ({@link CONTAINERS_ENDED}), which tells the session that
-   * delegated it, else the session. Its ending, written down before
-   * ({@link beginEnding}), is crossed off once done; one that fails stays
-   * written down for the next agent's start, and is said.
+   * Session `instanceId`'s ending, as {@link beginEnding} wrote it down,
+   * done (session-containers.ts `finishEnding`): the pods and containers it
+   * named stopped, and removed unless named, and the hub told what was done
+   * ({@link CONTAINERS_ENDED}), which tells the session that delegated it,
+   * else the session. One that fails stays written down for the next
+   * agent's start, and is said.
    */
   #endContainers(instanceId: string, harness: HarnessKind): void {
-    endSessionContainers(instanceId)
-      .then(async (ended) => {
+    finishEnding(instanceId)
+      .then((ended) => {
         const content = containersEndedWords(ended);
-        if (content) {
-          console.info(`[containers] ${instanceId}: ${content}`);
-          this.#sayGone({
-            kind: "frame",
-            instanceId,
-            harness,
-            message: {
-              type: "system",
-              subtype: CONTAINERS_ENDED,
-              uuid: `containers-ended-${instanceId}-${Date.now()}`,
-              session_id: "",
-              content,
-            } as unknown as NeutralMessage,
-          });
+        if (!content) {
+          return;
         }
-        if (ended.failed.length === 0) {
-          await finishEnding(instanceId);
-        }
+        console.info(`[containers] ${instanceId}: ${content}`);
+        this.#sayGone({
+          kind: "frame",
+          instanceId,
+          harness,
+          message: {
+            type: "system",
+            subtype: CONTAINERS_ENDED,
+            uuid: `containers-ended-${instanceId}-${Date.now()}`,
+            session_id: "",
+            content,
+          } as unknown as NeutralMessage,
+        });
       })
       .catch((error: unknown) =>
         warn(
@@ -4848,11 +4863,17 @@ export class SessionSupervisor {
       // Its process is gone, and sessiond swept what it started on the host;
       // what its commands left inside its workspace's boundary goes too.
       await this.#endWork(instanceId, "stopped", cwd);
-      // And every container its work started (session-containers.ts),
-      // written down first so an agent that stops midway ends them as it
-      // starts again. The stop is not held for their stop timeouts.
-      await beginEnding(instanceId);
-      this.#endContainers(instanceId, kind);
+      // And every pod and container its work started (session-containers.ts),
+      // their ids written down first so an agent that stops midway ends
+      // those, and only those, as it starts again. The stop is not held for
+      // their stop timeouts, nor failed when they cannot be read.
+      await beginEnding(instanceId).then(
+        () => this.#endContainers(instanceId, kind),
+        (error: unknown) =>
+          warn(
+            `${instanceId}: it ended, but the containers it started could not be read, so they were not stopped: ${errorText(error)}`
+          )
+      );
       this.#resumable.delete(instanceId);
       this.#handed.delete(instanceId);
       forgetTaken(instanceId);

@@ -24,14 +24,31 @@
  *   option"). A session's podman therefore runs every command through the
  *   Podman service's API, on Linux as on macOS, where it always did.
  *
- * The door passes every request through to the runtime unchanged but one:
- * a container's create (`POST /containers/create`, `POST
- * /libpod/containers/create`), whose body gets {@link SESSION_LABEL} (the
- * session's instance id), {@link MACHINE_LABEL} (this machine's id),
- * {@link HUB_LABEL} (the hub this agent serves) and,
- * when the create named the container, {@link NAMED_LABEL}. A create that
- * already carries a session's label keeps it: a door behind another door (a
- * scratch fleet a session runs) is the inner session's, which started it.
+ * The door passes every request through to the runtime unchanged but the
+ * three that make what a session runs ({@link STAMPED}): a container's
+ * create (`POST /containers/create`, `POST /libpod/containers/create`), a
+ * pod's (`POST /libpod/pods/create`, which `podman pod create` and `podman
+ * run --pod new:` send) and a kube play's (`POST /libpod/play/kube`). Each
+ * gets {@link SESSION_LABEL} (the session's instance id), {@link
+ * MACHINE_LABEL} (this machine's id), {@link HUB_LABEL} (the hub this agent
+ * serves) and, when the person named it, {@link NAMED_LABEL}. A kube play
+ * gets them on each pod its YAML describes (a Pod's `metadata.labels`, a
+ * Deployment's, DaemonSet's or Job's pod template's), which Podman puts on
+ * the pod and copies onto each of its containers (podman v5.7.0
+ * pkg/specgen/generate/kube/kube.go: "p.Labels = podYAML.ObjectMeta.Labels";
+ * pkg/domain/infra/abi/play.go: "// add podYAML labels"). Its `labels` query
+ * parameter is not released (podman-kube-play(1) on main: "Add a label to
+ * the pods ... created by podman kube play"; in no release notes through
+ * 6.1.0). A create that already carries a session's label keeps it: a door
+ * behind another door (a scratch fleet a session runs) is the inner
+ * session's, which started it.
+ *
+ * NAMED: a container or pod whose create named it (`--name`, `--pod
+ * new:<name>`). A name Compose gives (a create labelled
+ * `com.docker.compose.project` or `io.podman.compose.project`) and a kube
+ * play's (its YAML's) are a file's, not the person's at the prompt: those go
+ * as unnamed ones do.
+ *
  * An upgraded connection (attach, exec: `Connection: Upgrade`, as both
  * clients send them, podman pkg/bindings/containers/attach.go
  * `newUpgradeRequest`) is passed through raw from its upgrade on.
@@ -42,28 +59,41 @@
  * them; nor does anything a person starts from their own shell. Nothing is
  * ever found by name.
  *
- * AT A SESSION'S END ({@link endSessionContainers}): its doors close, then
- * each container labelled with it, this machine and this hub is stopped the way the
- * runtime stops one, its stop signal and then SIGKILL after its own stop
- * timeout (the API's `POST /containers/{id}/stop` with no `t`: "The main
- * process inside the container will receive SIGTERM, and after a grace
- * period, SIGKILL", docker container stop), and removed unless it was
- * named as it was created, when it is only stopped. The session that
+ * AT A SESSION'S END ({@link beginEnding}, {@link finishEnding}): its doors
+ * close, then the ids of every pod and container labelled with it, this
+ * machine and this hub are written down: the ending is theirs alone. Each
+ * pod is stopped (`POST /libpod/pods/{id}/stop`) and removed with what it
+ * holds, its infra container among them (`DELETE /libpod/pods/{id}?force=true`),
+ * unless named; then each container the way the runtime stops one, its stop
+ * signal and then SIGKILL after its own stop timeout (the API's `POST
+ * /containers/{id}/stop` with no `t`: "The main process inside the
+ * container will receive SIGTERM, and after a grace period, SIGKILL",
+ * docker container stop), and removed unless named, when it is only
+ * stopped. Volumes are left, as `docker rm` leaves them. The session that
  * delegated it, else the session, is told what was done (core
  * `CONTAINERS_ENDED`).
  *
- * An ending is written down before it starts and crossed off once it is done
- * ({@link ENDING_DIR}), so an agent that stopped midway ends it as it
- * starts again; and as the hub welcomes it, the containers of every session
- * the hub no longer has on this machine are ended too ({@link
- * sweepSessionContainers}).
+ * The ending's file is crossed off once it is done ({@link ENDING_DIR}), so
+ * an agent that stopped midway ends it as it starts again, and only what it
+ * wrote down: a session woken since runs containers of its own, which that
+ * ending never reaches. As the hub welcomes the agent, the containers of
+ * every session the hub no longer has on this machine are ended too
+ * ({@link sessionsOwedEnding}).
  *
  * A runtime the door cannot reach does not get one: a Docker endpoint that
- * is not a unix socket (`tcp://`, `ssh://`), a Podman connection over ssh.
- * Then the session's client reaches that runtime as before, its containers
- * unlabelled, and the agent's log says so.
+ * is not a unix socket (`tcp://`, `ssh://`), a Podman one over ssh. Then
+ * the session's client reaches that runtime as before, its containers
+ * unlabelled; the agent's log says so, and so is the session, once, as it
+ * starts (core `CONTAINERS_UNTRACKED`).
  */
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -72,6 +102,7 @@ import { cawcoDataDir, darwinSocketRoot } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { containerWords } from "@cawco/core/words/containers";
 import Docker from "dockerode";
+import { parseAllDocuments } from "yaml";
 import { contextEndpoint } from "./browser/runtime";
 import { delegationHubUrl } from "./delegation";
 import { socketPlace } from "./tool-door";
@@ -87,8 +118,13 @@ export const MACHINE_LABEL = "dev.cawco.machine";
  * its own hub's.
  */
 export const HUB_LABEL = "dev.cawco.hub";
-/** The label on a container its create named (`--name`): it is stopped, not removed. */
+/** The label on a container or pod the person named as it was created: it is stopped, not removed. */
 export const NAMED_LABEL = "dev.cawco.named";
+/** The labels Compose puts on each container it creates, Docker's and podman-compose's: its names are its own. */
+const COMPOSE_LABELS = [
+  "com.docker.compose.project",
+  "io.podman.compose.project",
+];
 
 type RuntimeKind = "docker" | "podman";
 const KINDS: readonly RuntimeKind[] = ["docker", "podman"];
@@ -99,11 +135,22 @@ const ENV_OF: Record<RuntimeKind, string> = {
 };
 const UNIX = "unix://";
 
-/** A container's create, Docker's or Podman's, behind any API version prefix. */
-const CREATE = /^(?:\/v[\d.]+)?(\/libpod)?\/containers\/create$/;
+/** What a door stamps: a container's create, a pod's, a kube play's. */
+type Stamping = "container" | "libpod-container" | "pod" | "kube";
+/** Each request a door stamps, by its path behind any API version prefix. */
+const STAMPED: readonly [RegExp, Stamping][] = [
+  [/^(?:\/v[\d.]+)?\/containers\/create$/, "container"],
+  [/^(?:\/v[\d.]+)?\/libpod\/containers\/create$/, "libpod-container"],
+  [/^(?:\/v[\d.]+)?\/libpod\/pods\/create$/, "pod"],
+  [/^(?:\/v[\d.]+)?\/libpod\/(?:play\/kube|kube\/play)$/, "kube"],
+];
+const stampingOf = (method: string, path: string): Stamping | undefined =>
+  method === "POST"
+    ? STAMPED.find(([pattern]) => pattern.test(path))?.[1]
+    : undefined;
 /** The most a request's head may hold before its end. */
 const HEAD_MAX = 1024 * 1024;
-/** The most a create's body may hold: a container's spec, never a payload. */
+/** The most a stamped body may hold: a spec or a kube YAML, never a payload. */
 const CREATE_MAX = 16 * 1024 * 1024;
 const HEAD_END = Buffer.from("\r\n\r\n");
 const CRLF = Buffer.from("\r\n");
@@ -129,8 +176,15 @@ const doorDir = (): string => {
 const doorOf = (instanceId: string, kind: RuntimeKind): string =>
   join(doorDir(), `${instanceId}.${kind.slice(0, 1)}.sock`);
 
-/** Sessions whose ending is under way, one empty file each, crossed off once done. */
-const ENDING_DIR = (): string => join(cawcoDataDir(), "containers-ending");
+/** The folder of endings under way, in the agent's data dir: one file each, named by its session, crossed off once done. */
+export const ENDING_DIR_NAME = "containers-ending";
+const ENDING_DIR = (): string => join(cawcoDataDir(), ENDING_DIR_NAME);
+
+/** An ending as it is written down: the ids of the pods and containers it ends, and nothing else. */
+export interface EndingRecord {
+  containers: string[];
+  pods: string[];
+}
 
 const exists = (path: string): Promise<boolean> =>
   stat(path).then(
@@ -164,26 +218,36 @@ const tellOnce = (line: string): void => {
   }
 };
 
-/**
- * The socket the Docker CLI reaches from this agent's environment, as it
- * resolves one: `DOCKER_HOST`, else the current context's endpoint, else the
- * default `/var/run/docker.sock`; none when it is not a unix socket, or no
- * socket is there.
- */
-const dockerUpstream = async (): Promise<string | undefined> => {
-  const host =
-    process.env.DOCKER_HOST ||
-    (await contextEndpoint())?.host ||
-    `${UNIX}/var/run/docker.sock`;
+/** Where a runtime is: its unix socket, or an endpoint no door reaches (`tcp://`, `ssh://`). */
+type Upstream = { path: string } | { untracked: string };
+
+/** A runtime's endpoint as its client names it: its socket when it is a unix one that is there. */
+const upstreamAt = async (
+  host: string,
+  runtime: string
+): Promise<Upstream | undefined> => {
   if (!host.startsWith(UNIX)) {
     tellOnce(
-      `Docker is reached at ${host}, which is not a unix socket: no session gets a door to it, so containers a session starts there are not stopped with it`
+      `${runtime} is reached at ${host}, which is not a unix socket: no session gets a door to it, so containers a session starts there are not stopped with it`
     );
-    return;
+    return { untracked: host };
   }
   const path = host.slice(UNIX.length);
-  return (await exists(path)) ? path : undefined;
+  return (await exists(path)) ? { path } : undefined;
 };
+
+/**
+ * Where the Docker CLI reaches from this agent's environment, as it resolves
+ * it: `DOCKER_HOST`, else the current context's endpoint, else the default
+ * `/var/run/docker.sock`; none when no socket is there.
+ */
+const dockerUpstream = async (): Promise<Upstream | undefined> =>
+  upstreamAt(
+    process.env.DOCKER_HOST ||
+      (await contextEndpoint())?.host ||
+      `${UNIX}/var/run/docker.sock`,
+    "Docker"
+  );
 
 /** The Linux Podman service's socket, as podman(1) names it: rootful `/run/podman/podman.sock`, rootless `/run/user/$UID/podman/podman.sock`. */
 const linuxPodmanSocket = (): string => {
@@ -194,29 +258,23 @@ const linuxPodmanSocket = (): string => {
 };
 
 /**
- * The socket of the Podman service a session's podman would reach, as
- * podman resolves its URL: `CONTAINER_HOST`, else, on Linux, the service's
- * own socket, started by its systemd socket unit when it is not there
+ * Where the Podman service a session's podman would reach is, as podman
+ * resolves its URL: `CONTAINER_HOST`, else, on Linux, the service's own
+ * socket, started by its systemd socket unit when it is not there
  * (`systemctl --user start podman.socket`, as Podman ships it); on macOS the
  * running machine's API socket (`podman machine inspect`:
- * `ConnectionInfo.PodmanSocket.Path`). None where podman is not installed,
- * or the service cannot be reached by a unix socket. `start`: whether a
- * Linux service socket that is not there is started.
+ * `ConnectionInfo.PodmanSocket.Path`). None where podman is not installed.
+ * `start`: whether a Linux service socket that is not there is started.
  */
-const podmanUpstream = async (start: boolean): Promise<string | undefined> => {
+const podmanUpstream = async (
+  start: boolean
+): Promise<Upstream | undefined> => {
   if (!Bun.which("podman")) {
     return;
   }
   const host = process.env.CONTAINER_HOST;
   if (host) {
-    if (!host.startsWith(UNIX)) {
-      tellOnce(
-        `Podman is reached at ${host}, which is not a unix socket: no session gets a door to it, so containers a session starts there are not stopped with it`
-      );
-      return;
-    }
-    const path = host.slice(UNIX.length);
-    return (await exists(path)) ? path : undefined;
+    return upstreamAt(host, "Podman");
   }
   if (process.platform === "darwin") {
     const inspected = await output(["podman", "machine", "inspect"]);
@@ -228,12 +286,12 @@ const podmanUpstream = async (start: boolean): Promise<string | undefined> => {
       : [];
     const path = machine?.ConnectionInfo?.PodmanSocket?.Path;
     return machine?.State === "running" && path && (await exists(path))
-      ? path
+      ? { path }
       : undefined;
   }
   const path = linuxPodmanSocket();
   if (await exists(path)) {
-    return path;
+    return { path };
   }
   if (!start || (process.getuid?.() ?? 0) === 0) {
     return;
@@ -250,13 +308,13 @@ const podmanUpstream = async (start: boolean): Promise<string | undefined> => {
     );
     return;
   }
-  return path;
+  return { path };
 };
 
 const upstreamOf = (
   kind: RuntimeKind,
   start: boolean
-): Promise<string | undefined> =>
+): Promise<Upstream | undefined> =>
   kind === "docker" ? dockerUpstream() : podmanUpstream(start);
 
 /** What a door stamps on each container its session creates. */
@@ -268,9 +326,14 @@ interface Stamp {
 
 /** This agent's machine and hub, as its doors stamp them and its endings find them. */
 const owner = async (): Promise<{ hub: string; machine: string }> => ({
-  hub: new URL(delegationHubUrl()).host,
-  machine: await machineId(),
+  hub: labelValue(new URL(delegationHubUrl()).host),
+  machine: labelValue(await machineId()),
 });
+
+/** What a Kubernetes label value holds (a kube play's pod labels are one): 63 of `[A-Za-z0-9_.-]`. */
+const LABEL_UNSAFE = /[^A-Za-z0-9_.-]/g;
+const labelValue = (value: string): string =>
+  value.replace(LABEL_UNSAFE, "_").slice(0, 63);
 
 /** The label filters that find this agent's containers, of one session or of every one. */
 const ownFilter = (
@@ -282,14 +345,34 @@ const ownFilter = (
   ...(instanceId ? [`${SESSION_LABEL}=${instanceId}`] : []),
 ];
 
+/** The labels a door puts on what its session makes; `named` when the person named it. */
+const sessionLabels = (
+  stamp: Stamp,
+  named: boolean
+): Record<string, string> => ({
+  [SESSION_LABEL]: stamp.instanceId,
+  [MACHINE_LABEL]: stamp.machine,
+  [HUB_LABEL]: stamp.hub,
+  ...(named ? { [NAMED_LABEL]: "true" } : {}),
+});
+
+/** A labels map as a body holds it, or an empty one. */
+const labelsIn = (held: unknown): Record<string, string> =>
+  held && typeof held === "object" && !Array.isArray(held)
+    ? (held as Record<string, string>)
+    : {};
+
 /**
- * A create's body with the session's labels on it ({@link SESSION_LABEL},
- * {@link MACHINE_LABEL}, {@link NAMED_LABEL} when it names the container):
- * Docker's `Labels` and its `?name=`, Podman's `labels` and `name`. A body
- * that is not a JSON object, or already carries a session's label, goes on
- * as it came: the runtime answers the first itself.
+ * A container's or pod's create with the session's labels on it: Docker's
+ * `Labels` and its `?name=`, Podman's `labels` and `name`. Named when the
+ * create named it and Compose did not ({@link COMPOSE_LABELS}).
  */
-const stamped = (body: Buffer, target: string, stamp: Stamp): Buffer => {
+const stampedSpec = (
+  body: Buffer,
+  target: string,
+  stamp: Stamp,
+  docker: boolean
+): Buffer => {
   let spec: unknown;
   try {
     spec = JSON.parse(body.toString("utf8"));
@@ -299,30 +382,79 @@ const stamped = (body: Buffer, target: string, stamp: Stamp): Buffer => {
   if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
     return body;
   }
-  const url = new URL(target, "http://door");
-  const libpod = CREATE.exec(url.pathname)?.[1] !== undefined;
   const fields = spec as Record<string, unknown>;
-  const key = libpod ? "labels" : "Labels";
-  const held = fields[key];
-  const labels =
-    held && typeof held === "object" && !Array.isArray(held)
-      ? (held as Record<string, string>)
-      : {};
+  const key = docker ? "Labels" : "labels";
+  const labels = labelsIn(fields[key]);
   if (labels[SESSION_LABEL]) {
     return body;
   }
-  const name = libpod ? fields.name : url.searchParams.get("name");
-  fields[key] = {
-    ...labels,
-    [SESSION_LABEL]: stamp.instanceId,
-    [MACHINE_LABEL]: stamp.machine,
-    [HUB_LABEL]: stamp.hub,
-    ...(typeof name === "string" && name !== ""
-      ? { [NAMED_LABEL]: "true" }
-      : {}),
-  };
+  const name = docker
+    ? new URL(target, "http://door").searchParams.get("name")
+    : fields.name;
+  const named =
+    typeof name === "string" &&
+    name !== "" &&
+    !COMPOSE_LABELS.some((label) => labels[label] !== undefined);
+  fields[key] = { ...labels, ...sessionLabels(stamp, named) };
   return Buffer.from(JSON.stringify(fields));
 };
+
+/** The kinds a kube play makes pods of, and where each keeps its pod's labels. */
+const KUBE_POD_LABELS: Record<string, readonly string[]> = {
+  Pod: ["metadata", "labels"],
+  Deployment: ["spec", "template", "metadata", "labels"],
+  DaemonSet: ["spec", "template", "metadata", "labels"],
+  Job: ["spec", "template", "metadata", "labels"],
+};
+
+/**
+ * A kube play's YAML with the session's labels on each pod it describes
+ * ({@link KUBE_POD_LABELS}), never named: its names are its file's. A body
+ * that is not YAML (a build's tar) goes on as it came, as does a pod
+ * already labelled with a session.
+ */
+const stampedKube = (body: Buffer, stamp: Stamp): Buffer => {
+  const documents = parseAllDocuments(body.toString("utf8"));
+  if (
+    !Array.isArray(documents) ||
+    documents.some((document) => document.errors.length > 0)
+  ) {
+    return body;
+  }
+  let changed = false;
+  for (const document of documents) {
+    const at = KUBE_POD_LABELS[String(document.get("kind"))];
+    if (!at || document.getIn([...at, SESSION_LABEL]) !== undefined) {
+      continue;
+    }
+    for (const [label, value] of Object.entries(sessionLabels(stamp, false))) {
+      document.setIn([...at, label], value);
+    }
+    changed = true;
+  }
+  // A document after the first keeps the `---` it was written with.
+  return changed
+    ? Buffer.from(
+        documents
+          .map((document, at) => {
+            const text = String(document);
+            return at === 0 || text.startsWith("---") ? text : `---\n${text}`;
+          })
+          .join("")
+      )
+    : body;
+};
+
+/** A stamped request's body, as the runtime is sent it. */
+const stamped = (
+  body: Buffer,
+  target: string,
+  stamp: Stamp,
+  stamping: Stamping
+): Buffer =>
+  stamping === "kube"
+    ? stampedKube(body, stamp)
+    : stampedSpec(body, target, stamp, stamping === "container");
 
 /** A request's head, read. */
 interface Head {
@@ -350,10 +482,11 @@ type Reading =
       trailer: boolean;
       upgrade: boolean;
     }
-  /** A create's body, held whole until it is read. */
+  /** A stamped request's body, held whole until it is read. */
   | {
       at: "create";
       body: Buffer[];
+      stamping: Stamping;
       chunked: boolean;
       head: Head;
       left: number;
@@ -362,9 +495,14 @@ type Reading =
     }
   | { at: "raw" };
 
-/** A create's head and body, as the runtime is sent them: its length new, no chunking. */
-const rewritten = (head: Head, body: Buffer, stamp: Stamp): Buffer => {
-  const out = stamped(body, head.target, stamp);
+/** A stamped request's head and body, as the runtime is sent them: its length new, no chunking. */
+const rewritten = (
+  head: Head,
+  body: Buffer,
+  stamp: Stamp,
+  stamping: Stamping
+): Buffer => {
+  const out = stamped(body, head.target, stamp, stamping);
   const lines = head.lines.filter((line) => {
     const name = line.toLowerCase();
     return !(
@@ -492,9 +630,11 @@ const serveConnection = (
         const length = Number(headerOf(head, "content-length") ?? 0) || 0;
         const upgrade = headerOf(head, "upgrade") !== undefined;
         const path = new URL(target, "http://door").pathname;
-        if (method === "POST" && CREATE.test(path)) {
+        const stamping = stampingOf(method, path);
+        if (stamping) {
           reading = {
             at: "create",
+            stamping,
             head,
             chunked,
             left: chunked ? 0 : length,
@@ -578,10 +718,17 @@ const serveConnection = (
         }
       }
       if (create.size > CREATE_MAX) {
-        refuse("a container create whose body is over 16 MiB");
+        refuse("a create whose body is over 16 MiB");
         return;
       }
-      send(rewritten(create.head, Buffer.concat(create.body), stamp));
+      send(
+        rewritten(
+          create.head,
+          Buffer.concat(create.body),
+          stamp,
+          create.stamping
+        )
+      );
       reading = { at: "head" };
     }
   };
@@ -591,10 +738,17 @@ const serveConnection = (
   });
 };
 
-/** Each session's doors as they open and once open: its servers and the environment that names them. */
+/** A session's doors to the machine's runtimes: what its environment names them by, and the endpoints no door reaches. */
+export interface ContainerDoors {
+  env: Record<string, string>;
+  /** Each runtime endpoint the session reaches with no door (`tcp://`, `ssh://`): what it starts there does not stop with it. */
+  untracked: string[];
+}
+
+/** Each session's doors as they open and once open: its servers too. */
 const doors = new Map<
   string,
-  Promise<{ env: Record<string, string>; servers: Server[] }>
+  Promise<ContainerDoors & { servers: Server[] }>
 >();
 
 /**
@@ -602,18 +756,20 @@ const doors = new Map<
  * when it has none (a launch, or a session an agent restart takes back,
  * whose environment already names them): the variables its environment
  * gets, `DOCKER_HOST` and `CONTAINER_HOST` for each runtime there is a door
- * to. A door an earlier agent left is replaced.
+ * to, and the endpoints there is none to. A door an earlier agent left is
+ * replaced.
  */
 export const openContainerDoors = (
   instanceId: string
-): Promise<Record<string, string>> => {
+): Promise<ContainerDoors> => {
   const open = doors.get(instanceId);
   if (open) {
-    return open.then(({ env }) => env);
+    return open.then(({ env, untracked }) => ({ env, untracked }));
   }
   const opening = (async () => {
     const stamp = { instanceId, ...(await owner()) };
     const env: Record<string, string> = {};
+    const untracked: string[] = [];
     const servers: Server[] = [];
     const upstreams = new Map<string, string>();
     for (const kind of KINDS) {
@@ -622,11 +778,15 @@ export const openContainerDoors = (
       if (!upstream) {
         continue;
       }
+      if ("untracked" in upstream) {
+        untracked.push(upstream.untracked);
+        continue;
+      }
       const path = doorOf(instanceId, kind);
       await socketPlace(path, `${instanceId}'s door to ${kind}`);
       await rm(path, { force: true });
       const server = createServer({ allowHalfOpen: true }, (client) =>
-        serveConnection(client, upstream, stamp)
+        serveConnection(client, upstream.path, stamp)
       );
       await new Promise<void>((done, fail) => {
         server.once("error", fail);
@@ -636,7 +796,7 @@ export const openContainerDoors = (
         });
       });
       servers.push(server);
-      upstreams.set(kind, upstream);
+      upstreams.set(kind, upstream.path);
       env[ENV_OF[kind]] = `${UNIX}${path}`;
     }
     if (servers.length > 0) {
@@ -644,11 +804,11 @@ export const openContainerDoors = (
         `[containers] ${instanceId}'s doors: ${[...upstreams].map(([kind, upstream]) => `${kind} → ${upstream}`).join(", ")}`
       );
     }
-    return { env, servers };
+    return { env, untracked, servers };
   })();
   doors.set(instanceId, opening);
   opening.catch(() => doors.delete(instanceId));
-  return opening.then(({ env }) => env);
+  return opening.then(({ env, untracked }) => ({ env, untracked }));
 };
 
 /** Session `instanceId`'s doors closed and their sockets gone: nothing it runs creates a container through them again. */
@@ -666,14 +826,31 @@ const closeContainerDoors = async (instanceId: string): Promise<void> => {
   );
 };
 
+/** What a session's notice says of the runtimes its containers do not stop on; none when there are none. */
+export const containersUntrackedWords = (
+  untracked: readonly string[]
+): string | undefined =>
+  untracked.length === 0 ? undefined : containerWords.untracked(untracked);
+
 /** The `/` the Engine API puts before each container's name. */
 const NAME_SLASH = /^\//;
 
 /** One container a session's end reached, in words: `` `name` (image) ``. */
-const named = (container: Docker.ContainerInfo): string =>
+const namedContainer = (container: Docker.ContainerInfo): string =>
   `\`${container.Names[0]?.replace(NAME_SLASH, "") ?? container.Id.slice(0, 12)}\` (${container.Image})`;
 
-/** What a session's end did to its containers. */
+/** A pod as libpod lists it (`GET /libpod/pods/json`). */
+interface ListedPod {
+  Id: string;
+  Labels?: Record<string, string> | null;
+  Name: string;
+  Status: string;
+}
+
+/** One pod a session's end reached, in words: `` `name` (pod) ``. */
+const namedPod = (pod: ListedPod): string => `\`${pod.Name}\` (pod)`;
+
+/** What a session's end did to its pods and containers. */
 export interface ContainersEnded {
   failed: string[];
   kept: string[];
@@ -683,7 +860,13 @@ export interface ContainersEnded {
 /** Each runtime socket on this machine, once each: Docker's and Podman's may be one. */
 const runtimeSockets = async (): Promise<string[]> => {
   const found = await Promise.all(KINDS.map((kind) => upstreamOf(kind, false)));
-  return [...new Set(found.filter((path): path is string => !!path))];
+  return [
+    ...new Set(
+      found.flatMap((upstream) =>
+        upstream && "path" in upstream ? [upstream.path] : []
+      )
+    ),
+  ];
 };
 
 /** A runtime that is not there, or refuses this user, holds nothing of a session's. */
@@ -692,66 +875,176 @@ const unreachable = (error: unknown): boolean =>
     (error as NodeJS.ErrnoException).code ?? ""
   );
 
-/** Stops and, unless named, removes `containers` on `docker`, into `ended`. */
-const endEach = (
-  docker: Docker,
-  containers: readonly Docker.ContainerInfo[],
-  ended: ContainersEnded
-): Promise<unknown> =>
-  Promise.all(
-    containers.map(async (container) => {
-      const one = docker.getContainer(container.Id);
-      const keep = container.Labels?.[NAMED_LABEL] === "true";
-      try {
-        if (container.State !== "exited" && container.State !== "created") {
-          // No `t`: the runtime's own stop, its stop signal, then SIGKILL
-          // after the container's stop timeout. 304: it stopped meanwhile.
-          await one.stop().catch((error: { statusCode?: number }) => {
-            if (error.statusCode !== 304) {
-              throw error;
-            }
-          });
-        }
-        if (keep) {
-          ended.kept.push(named(container));
-        } else {
-          await one.remove();
-          ended.removed.push(named(container));
-        }
-      } catch (error) {
-        ended.failed.push(`${named(container)} (${said(error)})`);
+/** A libpod API call on `socketPath`: its status and JSON answer. */
+const libpod = async (
+  socketPath: string,
+  method: string,
+  path: string
+): Promise<{ body: unknown; status: number }> => {
+  const answer = await fetch(`http://d/libpod${path}`, {
+    method,
+    unix: socketPath,
+  } as RequestInit);
+  const text = await answer.text();
+  let body: unknown = text;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Not JSON: its text stands.
+  }
+  return { status: answer.status, body };
+};
+
+/** The label filter as the Engine and libpod APIs take it, in a query. */
+const filterQuery = (labels: readonly string[]): string =>
+  `filters=${encodeURIComponent(JSON.stringify({ label: labels }))}`;
+
+/** The pods on `socketPath` with every one of `labels`; none where the runtime has no pods (Docker answers 404). */
+const podsWith = async (
+  socketPath: string,
+  labels: readonly string[]
+): Promise<ListedPod[]> => {
+  const { status, body } = await libpod(
+    socketPath,
+    "GET",
+    `/pods/json?${filterQuery(labels)}`
+  ).catch((error: unknown) => {
+    if (unreachable(error)) {
+      return { status: 404, body: [] };
+    }
+    throw error;
+  });
+  if (status === 404) {
+    return [];
+  }
+  if (status !== 200 || !Array.isArray(body)) {
+    throw new Error(`listing pods answered ${status}: ${String(body)}`);
+  }
+  return body as ListedPod[];
+};
+
+/** The containers on `socketPath` with every one of `labels`, stopped ones too. */
+const containersWith = (
+  socketPath: string,
+  labels: readonly string[]
+): Promise<Docker.ContainerInfo[]> =>
+  new Docker({ socketPath })
+    .listContainers({ all: true, filters: { label: [...labels] } })
+    .catch((error: unknown) => {
+      if (unreachable(error)) {
+        return [];
       }
-    })
-  );
+      throw error;
+    });
+
+/** Stops `pod` and, unless named, removes it with what it holds, into `ended`. */
+const endPod = async (
+  socketPath: string,
+  pod: ListedPod,
+  ended: ContainersEnded
+): Promise<void> => {
+  try {
+    // No `t`: each container's own stop timeout. 304: it was stopped.
+    const stopped = await libpod(socketPath, "POST", `/pods/${pod.Id}/stop`);
+    if (stopped.status !== 200 && stopped.status !== 304) {
+      throw new Error(
+        `stop answered ${stopped.status}: ${JSON.stringify(stopped.body)}`
+      );
+    }
+    if (pod.Labels?.[NAMED_LABEL] === "true") {
+      ended.kept.push(namedPod(pod));
+      return;
+    }
+    const removed = await libpod(
+      socketPath,
+      "DELETE",
+      `/pods/${pod.Id}?force=true`
+    );
+    if (removed.status !== 200) {
+      throw new Error(
+        `remove answered ${removed.status}: ${JSON.stringify(removed.body)}`
+      );
+    }
+    ended.removed.push(namedPod(pod));
+  } catch (error) {
+    ended.failed.push(`${namedPod(pod)} (${said(error)})`);
+  }
+};
+
+/** Stops `container` and, unless named, removes it, into `ended`. */
+const endContainer = async (
+  socketPath: string,
+  container: Docker.ContainerInfo,
+  ended: ContainersEnded
+): Promise<void> => {
+  const one = new Docker({ socketPath }).getContainer(container.Id);
+  try {
+    if (container.State !== "exited" && container.State !== "created") {
+      // No `t`: the runtime's own stop, its stop signal, then SIGKILL after
+      // the container's stop timeout. 304: it stopped meanwhile.
+      await one.stop().catch((error: { statusCode?: number }) => {
+        if (error.statusCode !== 304) {
+          throw error;
+        }
+      });
+    }
+    if (container.Labels?.[NAMED_LABEL] === "true") {
+      ended.kept.push(namedContainer(container));
+      return;
+    }
+    await one.remove();
+    ended.removed.push(namedContainer(container));
+  } catch (error) {
+    ended.failed.push(`${namedContainer(container)} (${said(error)})`);
+  }
+};
+
+/** The labels that find session `instanceId`'s pods and containers made through this agent's doors. */
+const sessionFilter = async (instanceId: string): Promise<string[]> =>
+  ownFilter(await owner(), instanceId);
 
 /**
- * Every container labelled with session `instanceId` and this machine, on
- * each runtime here, stopped, and removed unless it was named; the
- * session's doors closed first. What was done, by container.
+ * Session `instanceId`'s pods and containers on each runtime here, as they
+ * stand: each pod, then each container, so a container a removed pod held
+ * is gone by its turn. `only`: the ids an ending wrote down, and nothing
+ * else.
+ */
+const endResources = async (
+  instanceId: string,
+  only?: EndingRecord
+): Promise<ContainersEnded> => {
+  const labels = await sessionFilter(instanceId);
+  const ended: ContainersEnded = { removed: [], kept: [], failed: [] };
+  const pods = only && new Set(only.pods);
+  const containers = only && new Set(only.containers);
+  for (const socketPath of await runtimeSockets()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time, its pods together and then its containers
+    const podsHere = (await podsWith(socketPath, labels)).filter(
+      (pod) => !pods || pods.has(pod.Id)
+    );
+    await Promise.all(podsHere.map((pod) => endPod(socketPath, pod, ended)));
+    const containersHere = (await containersWith(socketPath, labels)).filter(
+      (container) => !containers || containers.has(container.Id)
+    );
+    await Promise.all(
+      containersHere.map((container) =>
+        endContainer(socketPath, container, ended)
+      )
+    );
+  }
+  return ended;
+};
+
+/**
+ * Every pod and container session `instanceId` made through this agent's
+ * doors, ended whole: for a session the hub no longer has, which nothing
+ * wakes again. Its doors closed first.
  */
 export const endSessionContainers = async (
   instanceId: string
 ): Promise<ContainersEnded> => {
   await closeContainerDoors(instanceId);
-  const own = await owner();
-  const ended: ContainersEnded = { removed: [], kept: [], failed: [] };
-  for (const socketPath of await runtimeSockets()) {
-    const docker = new Docker({ socketPath });
-    // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time, its containers together
-    const containers = await docker
-      .listContainers({
-        all: true,
-        filters: { label: ownFilter(own, instanceId) },
-      })
-      .catch((error: unknown) => {
-        if (unreachable(error)) {
-          return [];
-        }
-        throw error;
-      });
-    await endEach(docker, containers, ended);
-  }
-  return ended;
+  return await endResources(instanceId);
 };
 
 /** What a session's notice says of its ended containers; none when nothing was there. */
@@ -762,46 +1055,87 @@ export const containersEndedWords = (
     ? undefined
     : containerWords.stopped(ended.removed, ended.kept, ended.failed);
 
-/** Writes down that session `instanceId`'s ending is under way. */
+const endingFile = (instanceId: string): string =>
+  join(ENDING_DIR(), instanceId);
+
+/**
+ * Session `instanceId`'s ending begun: its doors closed, so nothing more is
+ * made through them, then the ids of every pod and container it made
+ * written down ({@link EndingRecord}): what {@link finishEnding} ends, and
+ * nothing a session woken since makes.
+ */
 export const beginEnding = async (instanceId: string): Promise<void> => {
+  await closeContainerDoors(instanceId);
+  const labels = await sessionFilter(instanceId);
+  const record: EndingRecord = { containers: [], pods: [] };
+  for (const socketPath of await runtimeSockets()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time
+    const [pods, containers] = await Promise.all([
+      podsWith(socketPath, labels),
+      containersWith(socketPath, labels),
+    ]);
+    record.pods.push(...pods.map((pod) => pod.Id));
+    record.containers.push(...containers.map((container) => container.Id));
+  }
   await mkdir(ENDING_DIR(), { recursive: true, mode: 0o700 });
-  await writeFile(join(ENDING_DIR(), instanceId), "");
+  await writeFile(endingFile(instanceId), `${JSON.stringify(record)}\n`, {
+    mode: 0o600,
+  });
 };
 
-/** Crosses session `instanceId`'s ending off. */
-export const finishEnding = (instanceId: string): Promise<void> =>
-  rm(join(ENDING_DIR(), instanceId), { force: true });
+/**
+ * Session `instanceId`'s ending, as written down, done: the pods and
+ * containers it names that are still there ended, and the ending crossed
+ * off once none failed. One whose file cannot be read ends nothing, and is
+ * crossed off with a line in the log.
+ */
+export const finishEnding = async (
+  instanceId: string
+): Promise<ContainersEnded> => {
+  const file = endingFile(instanceId);
+  let record: EndingRecord;
+  try {
+    record = JSON.parse(await readFile(file, "utf8")) as EndingRecord;
+    if (!(Array.isArray(record.containers) && Array.isArray(record.pods))) {
+      throw new Error("it names no pods and containers");
+    }
+  } catch (error) {
+    console.warn(
+      `[containers] ${instanceId}'s ending at ${file} cannot be read, so it ends nothing: ${said(error)}`
+    );
+    await rm(file, { force: true });
+    return { removed: [], kept: [], failed: [] };
+  }
+  const ended = await endResources(instanceId, record);
+  if (ended.failed.length === 0) {
+    await rm(file, { force: true });
+  }
+  return ended;
+};
 
 /**
  * The sessions whose containers are owed an ending as the hub welcomes this
  * agent: each whose ending was written down and not crossed off (an agent
- * that stopped midway), and each with a container labelled for this machine
- * whose session the hub no longer has here (`instances`, the welcome's
- * every session of this machine: one forgotten while the machine was
- * away). A container labelled for another machine is that machine's.
+ * that stopped midway), and each with a pod or container labelled for this
+ * machine and hub whose session the hub no longer has here (`instances`,
+ * the welcome's every session of this machine: one forgotten while the
+ * machine was away).
  */
 export const sessionsOwedEnding = async (
   instances: readonly string[]
 ): Promise<{ gone: string[]; unfinished: string[] }> => {
   const unfinished = await readdir(ENDING_DIR()).catch(() => [] as string[]);
-  const own = await owner();
+  const labels = ownFilter(await owner());
   const had = new Set(instances);
   const gone = new Set<string>();
   for (const socketPath of await runtimeSockets()) {
     // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time
-    const containers = await new Docker({ socketPath })
-      .listContainers({
-        all: true,
-        filters: { label: ownFilter(own) },
-      })
-      .catch((error: unknown) => {
-        if (unreachable(error)) {
-          return [];
-        }
-        throw error;
-      });
-    for (const container of containers) {
-      const session = container.Labels?.[SESSION_LABEL];
+    const [pods, containers] = await Promise.all([
+      podsWith(socketPath, labels),
+      containersWith(socketPath, labels),
+    ]);
+    for (const made of [...pods, ...containers]) {
+      const session = made.Labels?.[SESSION_LABEL];
       if (session && !had.has(session) && !unfinished.includes(session)) {
         gone.add(session);
       }

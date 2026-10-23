@@ -159,6 +159,7 @@ import {
   COMPACTION_ORIGIN,
   CONFIGURE_BINARY_UPDATES,
   CONTAINERS_ENDED,
+  CONTAINERS_UNTRACKED,
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
@@ -25500,17 +25501,23 @@ export const createServer = (
   };
 
   /**
-   * A session ended, and its machine stopped the containers its work started
-   * (core `CONTAINERS_ENDED`, agent session-containers.ts). The session that
-   * delegated it is told, naming it and its item; a session nobody delegated
-   * is the person's own, and is told itself, in the hub's word, which waits
-   * for whoever wakes it next. Once per ending; one from a machine that does
-   * not run the session is nobody's.
+   * What its machine said of a session's containers (agent
+   * session-containers.ts), in the hub's word, once per notice; one from a
+   * machine that does not run the session is nobody's.
+   *
+   * - `ended` (core `CONTAINERS_ENDED`): the session ended, and the containers
+   *   its work started were stopped. The session that delegated it is told,
+   *   naming it and its item; a session nobody delegated is the person's
+   *   own, and is told itself, a word that waits for whoever wakes it next.
+   * - `untracked` (core `CONTAINERS_UNTRACKED`): as it launches, the session
+   *   reaches a runtime with no door, so what it starts there will not stop
+   *   with it. The session itself is told: it is the one starting them.
    */
-  const tellContainersEnded = (
+  const tellContainers = (
     machineId: string,
     instanceId: string,
-    said: { uuid?: unknown; content?: unknown }
+    said: { uuid?: unknown; content?: unknown },
+    notice: "ended" | "untracked"
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (
@@ -25530,7 +25537,10 @@ export const createServer = (
     if (leaksTold.size > LEAKS_KEPT && oldest !== undefined) {
       leaksTold.delete(oldest);
     }
-    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    const item =
+      notice === "ended" && row.workItemId
+        ? db.workItem(row.workItemId)
+        : undefined;
     const parent = item?.parentInstanceId;
     console.info(
       `[containers] ${row.id}${parent ? `, told to ${parent}` : ""}: ${said.content}`
@@ -32519,8 +32529,10 @@ export const createServer = (
               ) {
                 break;
               }
-              // The containers its work started stopped as it ended (agent
-              // session-containers.ts): its parent, else it, is told. Read
+              // What its machine said of its containers (agent
+              // session-containers.ts): they stopped as it ended, its parent,
+              // else it, is told; or what it starts at a runtime with no door
+              // will not, and it is told. Read
               // before an ended session's frames are dropped: the agent says
               // it once their stop timeouts have run, after its stop was
               // confirmed (r180: the agent's line was there, the hub's never).
@@ -32530,12 +32542,14 @@ export const createServer = (
                 ).message;
                 if (
                   said.type === "system" &&
-                  said.subtype === CONTAINERS_ENDED
+                  (said.subtype === CONTAINERS_ENDED ||
+                    said.subtype === CONTAINERS_UNTRACKED)
                 ) {
-                  tellContainersEnded(
+                  tellContainers(
                     message.machineId,
                     message.instanceId,
-                    said as { uuid?: unknown; content?: unknown }
+                    said as { uuid?: unknown; content?: unknown },
+                    said.subtype === CONTAINERS_ENDED ? "ended" : "untracked"
                   );
                   break;
                 }

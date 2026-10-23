@@ -400,6 +400,15 @@ export const LEAK_FOUND = "leak_found";
 export const CONTAINERS_ENDED = "containers_ended";
 
 /**
+ * A session reaches a container runtime with no door of CawCo's (a
+ * `tcp://` or `ssh://` endpoint), so what it starts there does not stop
+ * with it (agent session-containers.ts). The agent's frame to the hub as the
+ * session launches (`uuid` names it, so one said again is told once), and
+ * the hub tells the session, in its own word.
+ */
+export const CONTAINERS_UNTRACKED = "containers_untracked";
+
+/**
  * A session's start waits for its machine's memory: the machine's room on
  * memory (core machine-room.ts `measureMemoryRoom`: Linux's memory available
  * and the room under its keeper's cgroup limit; the Mac's pressure level)
