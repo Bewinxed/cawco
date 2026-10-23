@@ -510,6 +510,48 @@ export function afterSkeleton(): {
   };
 }
 
+/**
+ * A blur that moves with a CSS animation on `node`, driven by script: each
+ * frame while the animation named `name` runs, `node`'s inline `filter` is
+ * `blur(px × (1 − p))`, p its progress on `curve` (the curve its keyframes
+ * name), the same clock; cleared once it ends. The look is the keyframes'
+ * own blur, frame for frame. Why by script: WebKit 2359 kills its web
+ * process on a blur an animation or a transition moves, as the owner's
+ * iPhone Safari hangs (scripts/probe-kit/specs/web/safari-blurs.ts, the
+ * send/stop glyph caught with `icon-swap` running at every crash), and it
+ * draws a blur a script sets each frame (the recall wheel's rows) whole.
+ */
+export function blurAlong(
+  node: HTMLElement,
+  name: string,
+  px: number,
+  curve: (t: number) => number
+): void {
+  const run = node
+    .getAnimations()
+    .find(
+      (one) =>
+        (one as Animation & { animationName?: string }).animationName === name
+    );
+  if (!run) {
+    return;
+  }
+  const frame = () => {
+    const progress = run.effect?.getComputedTiming().progress;
+    if (
+      run.playState === "finished" ||
+      progress === null ||
+      progress === undefined
+    ) {
+      node.style.removeProperty("filter");
+      return;
+    }
+    node.style.filter = `blur(${(px * (1 - curve(progress))).toFixed(3)}px)`;
+    requestAnimationFrame(frame);
+  };
+  frame();
+}
+
 /** {@link revealOn}'s arrival, for an attachment: content unveiled where its skeleton stood. */
 export function revealHere(node: Element): void {
   revealOn(node, "in");

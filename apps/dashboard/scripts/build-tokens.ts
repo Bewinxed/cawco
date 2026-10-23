@@ -270,8 +270,9 @@ const KEYFRAMES: Record<string, string> = {
   "mention-tip-in": "from {\n  opacity: 0;\n  scale: var(--press-scale);\n}",
   "mark-in":
     "from {\n  opacity: 0;\n  scale: 0.25;\n  filter: blur(var(--space-1));\n}",
-  "icon-swap":
-    "from {\n  opacity: 0;\n  transform: scale(0.25);\n  filter: blur(var(--space-1));\n}",
+  // Its blur is set each frame by script on the same clock (motion/curves
+  // `blurAlong`): WebKit 2359 kills its web process on a blur a keyframe moves.
+  "icon-swap": "from {\n  opacity: 0;\n  transform: scale(0.25);\n}",
   "icon-swap-still": "from {\n  opacity: 0;\n}",
   "sheet-in": "from {\n  transform: var(--sheet-away);\n}",
   "sheet-out": "to {\n  transform: var(--sheet-away);\n}",

@@ -277,7 +277,26 @@ const spec: Spec = {
     );
 
     // 3. Reduced motion: still, and the swap at once.
+    // Step 4's swap played out first: a skeleton still leaving would be the
+    // one Svelte brings back for the next wait, its reveal still running.
+    await page.locator(SKELETON).waitFor({ state: "detached" });
+    await page.locator(ROW_SKELETON).first().waitFor({ state: "detached" });
     await page.emulateMedia({ reducedMotion: "reduce" });
+    // The page has heard it (the query's change event, which the motion
+    // helpers' MediaQuery reads), a frame on, before the swap is asked.
+    await page.evaluate(
+      () =>
+        new Promise<void>((heard) => {
+          const query = matchMedia("(prefers-reduced-motion: reduce)");
+          const on = () =>
+            requestAnimationFrame(() => requestAnimationFrame(() => heard()));
+          if (query.matches) {
+            on();
+          } else {
+            query.addEventListener("change", on, { once: true });
+          }
+        })
+    );
     await call(page, "wait");
     await page.locator(BAR).first().waitFor();
     const still = await page.evaluate(

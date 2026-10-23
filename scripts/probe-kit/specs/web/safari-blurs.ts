@@ -15,7 +15,9 @@
  *  - the compaction divider's chevron, out of a 4px blur as its summary
  *    opens (CompactionDivider, traffic bench);
  *  - the send and stop glyphs' swap, a turn starting and ending (Composer
- *    `glyphOut`, `icon-swap`);
+ *    `glyphOut`, `glyphIn`), its blur set each frame by script: as
+ *    keyframes (`icon-swap`'s filter) it killed the web process, caught
+ *    running at every crash on the session page and the queued edit;
  *  - the queued edit's row, rising out of a 4px blur (Composer `[data-slot="edit-row"]`);
  *  - a minimized question's bar, coming up out of a 4px blur, and the card
  *    again (Composer `askedIn`);
@@ -28,7 +30,10 @@
  *    reveal's blur (motion/curves `reveal`, the skeleton bench).
  *
  * The queued edit's row hung it (its blur is gone, Composer `[data-slot="edit-row"]`);
- * every other one draws.
+ * so did the send/stop glyph's swap while its blur was keyframes, one run in
+ * three (its blur is now set each frame by script, the look the same); every
+ * other one draws. A crash or a hang says the page's last frames' running
+ * animations, and the browser's own last lines (crash-watch.ts).
  *
  * Each case on a page of its own: its motion happened (read from the DOM),
  * and the page answered a script within {@link ANSWERS_MS} the whole way.
@@ -40,6 +45,7 @@ import { machineWords } from "../../../../packages/core/src/words/machine";
 import { seedDecisions } from "../../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
+import { framesText } from "../../crash-watch";
 import {
   COMPOSER,
   COMPOSER_FIELD,
@@ -126,11 +132,16 @@ async function drive(
         error instanceof Error ? error.message.split("\n")[0] : String(error),
     }))
   );
-  kit.check(
+  const ok = kit.check(
     `${what}: it moves, and the page keeps answering`,
     run.result.happened && run.longest < ANSWERS_MS && !page.isClosed(),
     `${run.result.detail}; longest ${Math.round(run.longest)}ms`
   );
+  // A hang or a crash says what the page was running as it stopped
+  // (crash-watch.ts; a crash also says it with its browser's lines).
+  if (!ok) {
+    console.log(`STOPPED ${what}\n${framesText(page)}`);
+  }
 }
 
 const present = (page: Page, selector: string, timeout = 10_000) =>
@@ -332,6 +343,24 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
     page,
     "the send and stop glyphs swap as a turn starts and ends",
     async () => {
+      // Each frame, the largest blur a swapping glyph carries: it still
+      // blurs, set by script (Composer `glyphIn`, `glyphOut`).
+      await page.evaluate(() => {
+        const seen = { blur: 0 };
+        (window as unknown as { __glyphBlur: typeof seen }).__glyphBlur = seen;
+        const look = () => {
+          for (const one of document.querySelectorAll<HTMLElement>(
+            '[data-slot="swap"]'
+          )) {
+            const px = Number.parseFloat(
+              one.style.filter.split("blur(")[1]?.split("px")[0] ?? "0"
+            );
+            seen.blur = Math.max(seen.blur, px);
+          }
+          requestAnimationFrame(look);
+        };
+        requestAnimationFrame(look);
+      });
       await fleet.send(talk, `${SLOW} a short while`);
       const stop = await present(
         page,
@@ -346,9 +375,14 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
           { timeout: 10_000 }
         )
       );
+      const blurred = await page.evaluate(
+        () =>
+          (window as unknown as { __glyphBlur: { blur: number } }).__glyphBlur
+            .blur
+      );
       return {
-        happened: stop && back,
-        detail: `stop ${stop}, send again ${back}`,
+        happened: stop && back && blurred > 0,
+        detail: `stop ${stop}, send again ${back}, the glyph blurred to ${blurred.toFixed(2)}px`,
       };
     }
   );
@@ -659,7 +693,7 @@ async function loads(kit: Kit, fleet: KitFleet, base: string) {
         );
         return { shell, frame: frame.kind === "answered" };
       });
-      kit.check(
+      const ok = kit.check(
         `${where}, ${theme}: it loads, its shell stands, a frame lands and the page keeps answering`,
         loaded &&
           run.result.shell &&
@@ -668,6 +702,9 @@ async function loads(kit: Kit, fleet: KitFleet, base: string) {
           !page.isClosed(),
         `loaded ${loaded}, shell ${run.result.shell}, frame ${run.result.frame}; longest ${Math.round(run.longest)}ms`
       );
+      if (!ok) {
+        console.log(`STOPPED ${where}, ${theme}\n${framesText(page)}`);
+      }
       await page.close();
     }
   }

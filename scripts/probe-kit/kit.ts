@@ -48,6 +48,13 @@ import {
   tagOf,
   takeLaunches,
 } from "./browser-leftovers";
+import {
+  type BrowserLog,
+  browserLog,
+  crashText,
+  watchBrowser,
+  watchContext,
+} from "./crash-watch";
 
 export const ROOT = resolve(import.meta.dir, "../..");
 
@@ -881,6 +888,10 @@ export class Run {
   /** The descriptor holding the checkout's build shared while this run serves it. */
   private output: number | null = null;
   private readonly browsers = new Map<string, Promise<Browser>>();
+  /** Each WebKit launch's own output (crash-watch.ts), by its browser. */
+  private readonly logs = new WeakMap<Browser, BrowserLog>();
+  /** The run is closing its browsers: a disconnect now is asked for. */
+  private readonly ending: { closing: boolean } = { closing: false };
   /** The launch tags of {@link browsers}: they stay open across specs and are checked as the run closes. */
   private readonly sharedLaunches = new Set<string>();
 
@@ -969,14 +980,28 @@ export class Run {
     // `PROBE_WEBKIT` names a WebKit build to run (its `pw_run.sh`) where the
     // one this playwright-core expects is not installed; a page's own
     // `webkit` revision names one in Playwright's browser cache.
+    // A WebKit launch keeps what its process says, and a disconnect the run
+    // did not ask for is said with it (crash-watch.ts).
+    const log = browserLog();
     const launch = {
       webkit: () =>
-        webkit.launch({
-          env,
-          executablePath: revision
-            ? pinnedWebkit(revision)
-            : process.env.PROBE_WEBKIT,
-        }),
+        webkit
+          .launch({
+            env,
+            executablePath: revision
+              ? pinnedWebkit(revision)
+              : process.env.PROBE_WEBKIT,
+            logger: log.logger,
+          })
+          .then((browser) => {
+            this.logs.set(browser, log);
+            watchBrowser(browser, log, (line) => {
+              if (!this.ending.closing) {
+                console.log(`CRASH ${line}`);
+              }
+            });
+            return browser;
+          }),
       firefox: () => firefox.launch({ env }),
       chromium: () =>
         chromium.launch({
@@ -1186,6 +1211,9 @@ export class Run {
           }
         }, options.theme ?? "light");
         await context.addInitScript(installRuns);
+        if (engine === "webkit") {
+          await watchContext(context);
+        }
         for (const script of options.init ?? []) {
           // biome-ignore lint/performance/noAwaitInLoops: each script before the next, in order
           await context.addInitScript(script);
@@ -1196,6 +1224,13 @@ export class Run {
         // every send still waiting, so the crash fails the spec, never hangs it.
         page.on("crash", () => {
           kit.check("the page's renderer runs to the end", false, page.url());
+          // What it was doing as it died (crash-watch.ts): its last frames'
+          // animations, and its browser's own last lines.
+          if (engine === "webkit") {
+            console.log(
+              `CRASH ${page.url()}\n${crashText(page, this.logs.get(browser))}`
+            );
+          }
           page.close().catch(() => undefined);
         });
         // The page stands for its device in what it points with: a desk's
@@ -1257,6 +1292,7 @@ export class Run {
   }
 
   async close(): Promise<void> {
+    this.ending.closing = true;
     for (const browser of this.browsers.values()) {
       // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
       await (await browser).close().catch(() => undefined);
