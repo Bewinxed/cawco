@@ -2558,8 +2558,8 @@ ws_preview_mode() {
   [[ $1 == port ]] || body="{\"mode\":\"host\",\"pattern\":\"https://p-{port}.localtest.me:$first\"}"
   as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' -X PUT http://127.0.0.1:3456/api/preview-settings -H 'content-type: application/json' -d "$body"
 }
-# The preview's host-mode name (`p-<port>.localtest.me:<listener port>`), as the hub gives a client its origin.
-ws_preview_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.host'; }
+# The preview's host-mode name (`p-<port>.localtest.me:<listener port>`): the host of the origin the hub gives a client.
+ws_preview_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.origin ? new URL(d.origin).host : ""'; }
 # One request to the preview's host-mode name ($1), with the pass cookie $2 or none: its body, then `HTTP <status>`.
 ws_preview_by_host() {
   local host=$1 cookie=${2:-}

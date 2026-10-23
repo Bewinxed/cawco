@@ -284,16 +284,27 @@ const systemdJob = (service: string): KeeperJob => {
         "SubState",
         "-p",
         "ExecMainStatus",
+        "-p",
+        "NRestarts",
         unit,
       ]);
       const property = (name: string): string | undefined =>
         new RegExp(`^${name}=(.*)$`, "m").exec(shown.stdout)?.[1];
       const active = property("ActiveState");
       // `failed`, or waiting out RestartSec= to start again (`activating
-      // (auto-restart)`), or `inactive`: it exited, by itself, since it started.
+      // (auto-restart)`), or `inactive`: it exited, by itself, since it
+      // started. Or Restart= has already started it again since: a look
+      // that fell between two of its starts saw it running, and only the
+      // restart counter says it failed. A start resets it ("Each time an
+      // automatic restart is scheduled (due to Restart=) it is increased by
+      // one … Manual restarts will reset the counter", systemd#6495), so it
+      // counts this start's failures alone (keeperheld, c0f34de50: a loaded
+      // machine's look missed both windows and the keeper started thrice).
+      const restarts = Number(property("NRestarts") ?? 0);
       return active === "failed" ||
         active === "inactive" ||
-        property("SubState") === "auto-restart"
+        property("SubState") === "auto-restart" ||
+        restarts > 0
         ? `it exited with status ${property("ExecMainStatus") ?? "unknown"} (${active}, ${property("SubState")})`
         : undefined;
     },
