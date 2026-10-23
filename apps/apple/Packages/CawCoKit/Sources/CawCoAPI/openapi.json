@@ -38912,7 +38912,7 @@
             }
           },
           "decisions": {
-            "description": "A page's choices in page order, each answered or not ({@link DecisionAnswer}); on a whole read of a page that asks any.",
+            "description": "A page's choices in page order, each answered or not ({@link DecisionAnswer}); on every read of a page that asks any.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/DecisionAnswer"
