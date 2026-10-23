@@ -300,8 +300,8 @@ const cutShortPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   );
   // git's local clone linked the source's object files (`--local`); the cut
   // gave each its own inode before its checkout (workspace.ts
-  // `createWorkspace`, boundary.ts `ownInodes`), so a cut cut short leaves no
-  // file the source's place would deny.
+  // `createWorkspace`, boundary.ts `ownInodes`, on Linux and macOS alike), so
+  // a cut cut short leaves no file the source's place would deny.
   const objects = join(workspace.path, ".git", "objects");
   const listed = (await Bun.$`find ${objects} -type f`.quiet().nothrow().text())
     .split("\n")
@@ -311,10 +311,9 @@ const cutShortPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   )
     .split("\n")
     .filter(Boolean);
-  // Linux only: a macOS clone's linked files stay linked (`ownInodes` runs on Linux).
   kit.check(
-    "(1) the cut held in its checkout shares no object file's inode with the repository it was cut from (Linux; on macOS its files stay linked)",
-    listed > 0 && (process.platform !== "linux" || shared.length === 0),
+    "(1) the cut held in its checkout shares no object file's inode with the repository it was cut from (on macOS each an APFS clone)",
+    listed > 0 && shared.length === 0,
     `${listed} object files, ${shared.length} sharing an inode${shared.length > 0 ? `: ${shared.slice(0, 3).join(", ")}` : ""}`
   );
 
@@ -536,6 +535,33 @@ const strangerPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   );
 };
 
+/** What a process's environment says it is called with, `CAWCO_SESSION_CREDENTIAL=`. */
+const CREDENTIAL = /(?:^|\s)CAWCO_SESSION_CREDENTIAL=(\S+)/;
+
+/**
+ * The session credential process `pid` runs with: its environment, read from
+ * `/proc` on Linux, and on macOS, which has none, from `ps -E` ("Display the
+ * environment as well"), a process of the same user's.
+ */
+const credentialOf = async (pid: number | undefined): Promise<string> => {
+  if (pid === undefined) {
+    return "";
+  }
+  if (process.platform === "linux") {
+    return (
+      (await Bun.file(`/proc/${pid}/environ`).text())
+        .split("\0")
+        .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
+        ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? ""
+    );
+  }
+  const listed = await Bun.$`ps -E -ww -o command= -p ${pid}`
+    .quiet()
+    .nothrow()
+    .text();
+  return CREDENTIAL.exec(listed)?.[1] ?? "";
+};
+
 /** The fleet, its project and parent, and M delegated, landed and retired: (1)'s first half. */
 const setUp = async (kit: Kit): Promise<Scene> => {
   const fleet = await kit.fleet(respond);
@@ -588,11 +614,7 @@ const setUp = async (kit: Kit): Promise<Scene> => {
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
-  const credential =
-    (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
-      .split("\0")
-      .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-      ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  const credential = await credentialOf(await fleet.sessionPid(parent));
 
   const started = await fleet.api<{
     instanceId: string;

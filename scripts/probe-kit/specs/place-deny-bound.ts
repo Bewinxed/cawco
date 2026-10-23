@@ -18,9 +18,10 @@
  *   object file in its `.git/objects` (over 3,000). Your words in a thread
  *   wake Caw: his place's boundary starts and runs, and the policy it started
  *   with denies at most `LINKED_MAX` linked entries, none under
- *   `.git/objects`, the 31 dirs standing for their files.
+ *   `.git/objects`, the 31 dirs standing for their files; and the place's
+ *   empty Claude Code hooks dir, a person's own, for writing.
  * - B: project "Crowded", Caw on, its place holding 3,100 files only their
- *   owner may read (0600) and 3,100 protected config folders (`.vscode`),
+ *   owner may read (0600) and 3,100 empty protected config folders (`.vscode`),
  *   each list past srt's cap alone. Your words wake Caw: his boundary starts
  *   and runs, the policy's denies in the place within the budget (at most
  *   `OWNER_ONLY_MAX` for reading; protected, owner-only and linked for
@@ -48,7 +49,8 @@ import {
   realpath,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { isAlive, listedPid } from "../../../packages/core/src/signal";
 import { SRT_REFUSED } from "../../../packages/core/src/srt-refusal";
 import {
@@ -98,6 +100,19 @@ const linkedCount = async (dir: string): Promise<number> =>
     .split("\n")
     .filter(Boolean).length;
 
+/** `command` run to its end, or an error naming `what` with git's own words. */
+const ran = async (
+  command: ReturnType<typeof Bun.$>,
+  what: string
+): Promise<void> => {
+  const run = await command.quiet().nothrow();
+  if (run.exitCode !== 0) {
+    throw new Error(
+      `${what} failed (exit ${run.exitCode}): ${run.stderr.toString().trim()}`
+    );
+  }
+};
+
 /** A repository at `repo` with its first commit, as the fleet's owner. */
 const repository = async (
   repo: string,
@@ -110,10 +125,12 @@ const repository = async (
       writeFile(join(repo, name), text)
     )
   );
-  await Bun.$`git init -q -b main && git add -A && git commit -qm 'First commit'`
-    .cwd(repo)
-    .env({ ...process.env, HOME: home })
-    .quiet();
+  await ran(
+    Bun.$`git init -q -b main && git add -A && git commit -qm 'First commit'`
+      .cwd(repo)
+      .env({ ...process.env, HOME: home }),
+    `the first commit in ${repo}`
+  );
 };
 
 /** A project with Caw on over `cwd`; no thread yet, so Caw has not started. */
@@ -210,20 +227,28 @@ const wokenPlace = async (
 
 /** A: linked files past srt's cap, and a git object tree linked whole. */
 const boundLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
-  const place = join(fleet.sandbox, "bound");
-  const elsewhere = join(fleet.sandbox, "elsewhere");
+  // By its real path: on macOS the sandbox is under /var, a link to
+  // /private/var, and a local clone through a linked path is refused.
+  await mkdir(join(fleet.sandbox, "bound"), { recursive: true });
+  const place = await realpath(join(fleet.sandbox, "bound"));
+  const elsewhere = join(dirname(place), "elsewhere");
   await repository(place, home, { "README.md": "bound\n" });
   await plant(elsewhere, (copy, dir, f) => writeFile(copy, `${dir}/${f}\n`));
   await plant(join(place, "shared"), (file, dir, f) =>
     link(join(elsewhere, dir, `f${pad(f, 3)}`), file)
   );
-  await Bun.$`git add -A && git commit -qm 'Linked files'`
-    .cwd(place)
-    .env({ ...process.env, HOME: home })
-    .quiet();
-  await Bun.$`git clone --quiet --no-checkout --local ${place} ${join(fleet.sandbox, "husk")}`
-    .env({ ...process.env, HOME: home })
-    .quiet();
+  await ran(
+    Bun.$`git add -A && git commit -qm 'Linked files'`
+      .cwd(place)
+      .env({ ...process.env, HOME: home }),
+    "the linked files' commit"
+  );
+  await ran(
+    Bun.$`git clone --quiet --no-checkout --local ${place} ${join(dirname(place), "husk")}`.env(
+      { ...process.env, HOME: home }
+    ),
+    "the local clone beside the place"
+  );
   const objects = await linkedCount(join(place, ".git", "objects"));
   const shared = await linkedCount(join(place, "shared"));
   kit.check(
@@ -232,18 +257,24 @@ const boundLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
     `${shared} linked files in shared/, ${objects} in .git/objects`
   );
 
+  // A person's own empty hooks dir: a hook planted in it would run in their
+  // own Claude Code, so it is denied however empty.
+  const hooks = projectClaudeDir(place, "hooks");
+  await mkdir(hooks, { recursive: true });
   const project = await cawProject(fleet, "Bound", place);
   const started = await wokenPlace(fleet, home, project, "Bound");
   const { denyWrite } = started;
-  const inPlace = denyWrite.filter((path) => path.startsWith(`${place}/`));
+  // The policy names every path by its real path.
+  const real = await realpath(place);
+  const inPlace = denyWrite.filter((path) => path.startsWith(`${real}/`));
   const underObjects = inPlace.filter((path) =>
-    path.startsWith(join(place, ".git", "objects"))
+    path.startsWith(join(real, ".git", "objects"))
   );
   const sharedDirs = Array.from({ length: DIRS }, (_, d) =>
-    join(place, "shared", `d${pad(d, 2)}`)
+    join(real, "shared", `d${pad(d, 2)}`)
   );
   const sharedEntries = inPlace.filter((path) =>
-    path.startsWith(join(place, "shared", "d"))
+    path.startsWith(join(real, "shared", "d"))
   );
   kit.check(
     "A: your words wake Caw, his place's boundary starts and runs",
@@ -260,6 +291,12 @@ const boundLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
       sharedEntries.length === DIRS,
     `${denyWrite.length} denied for writing, ${inPlace.length} in the place, ${underObjects.length} under .git/objects; shared: ${sharedEntries.slice(0, 4).join(", ")}${sharedEntries.length > 4 ? ` and ${sharedEntries.length - 4} more` : ""}`
   );
+  const realHooks = projectClaudeDir(real, "hooks");
+  kit.check(
+    "A: the place's empty hooks dir of its Claude Code config, a person's own, is denied for writing",
+    denyWrite.includes(realHooks),
+    `${realHooks} ${denyWrite.includes(realHooks) ? "in" : "not in"} denyWrite; protected in the place: ${inPlace.filter((path) => path.includes("/.")).join(", ") || "none"}`
+  );
 };
 
 /** B: owner-only files and protected config, each past srt's cap alone; Caw still wakes. */
@@ -273,19 +310,18 @@ const crowdedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
     await writeFile(file, "only mine\n");
     await chmod(file, 0o600);
   });
-  // Each with a file: an empty one reads as a stand-in an earlier build
-  // made, which a place leaves unbound (workspace-policy.ts `standInAsMade`).
-  await plant(join(place, "pkgs"), async (dir) => {
-    await mkdir(join(dir, ".vscode"), { recursive: true });
-    await writeFile(join(dir, ".vscode", "settings.json"), "{}\n");
-  });
+  // Empty, as a person's own may be: denied all the same.
+  await plant(join(place, "pkgs"), (dir) =>
+    mkdir(join(dir, ".vscode"), { recursive: true })
+  );
   const project = await cawProject(fleet, "Crowded", place);
   const started = await wokenPlace(fleet, home, project, "Crowded");
+  const real = await realpath(place);
   const readInPlace = started.denyRead.filter((path) =>
-    path.startsWith(`${place}/`)
+    path.startsWith(`${real}/`)
   );
   const writeInPlace = started.denyWrite.filter((path) =>
-    path.startsWith(`${place}/`)
+    path.startsWith(`${real}/`)
   );
   const paths = started.denyRead.length + started.denyWrite.length;
   kit.check(
@@ -299,8 +335,8 @@ const crowdedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
       readInPlace.length <= OWNER_ONLY_MAX &&
       writeInPlace.length <= PROTECTED_MAX + OWNER_ONLY_MAX + LINKED_MAX &&
       paths < SRT_PATHS &&
-      readInPlace.every((path) => path.startsWith(join(place, "vault"))) &&
-      writeInPlace.some((path) => path.startsWith(join(place, "pkgs"))),
+      readInPlace.every((path) => path.startsWith(join(real, "vault"))) &&
+      writeInPlace.some((path) => path.startsWith(join(real, "pkgs"))),
     `${readInPlace.length} denied for reading in the place (${readInPlace.slice(0, 3).join(", ")}…), ${writeInPlace.length} for writing (${writeInPlace.slice(0, 3).join(", ")}…); ${started.denyRead.length} + ${started.denyWrite.length} in all`
   );
 };
@@ -335,21 +371,32 @@ const refusedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
     })
   );
   const thread = await openThread(fleet, project, "Spilled");
+  // Your first words in a project made from a folder open its Setup thread
+  // (caw.ts `wakeForSetup`), which notes a start that failed as "could not
+  // start", its words the note's body; a later thread's words note it as not
+  // woken, its words in `notWoken` (`wakeForYou`). Either is the person's.
+  const notes = () =>
+    fleet
+      .query<{ body: string; event: string | null }>(
+        "SELECT body, event FROM thread_messages WHERE thread_id = ? AND author = 'event'",
+        thread
+      )
+      .map((row) => {
+        const event = JSON.parse(row.event ?? "{}") as {
+          notWoken?: { reason?: string; words?: string };
+          what?: string;
+        };
+        return {
+          what: event.what ?? "",
+          words: event.notWoken?.words ?? row.body,
+        };
+      });
   const note = await until(
-    "C: the note that Caw was not woken",
+    "C: the note that Caw did not start",
     () =>
-      fleet
-        .query<{ event: string | null }>(
-          "SELECT event FROM thread_messages WHERE thread_id = ? AND author = 'event'",
-          thread
-        )
-        .map(
-          (row) =>
-            JSON.parse(row.event ?? "{}") as {
-              notWoken?: { reason?: string; words?: string };
-            }
-        )
-        .find((event) => event.notWoken)?.notWoken,
+      notes().find((one) =>
+        ["not-woken", "could-not-start"].includes(one.what)
+      ),
     () => true,
     240_000
   ).catch(() => undefined);
@@ -359,14 +406,12 @@ const refusedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
     thread
   )[0]?.n;
   kit.check(
-    "C: past srt's cap, your words do not wake Caw, and the note names why in srt's own words after the host's line: its profile's size and bwrap's cap",
-    // "place" when his session runs and its boundary is read again,
-    // "could-not-start" when his session's own start needs it (caw.ts `deliver`).
-    ["place", "could-not-start"].includes(note?.reason ?? "") &&
+    "C: past srt's cap, your words do not wake Caw, and the thread's note names why in srt's own words after the host's line: its profile's size and bwrap's cap",
+    note !== undefined &&
       caw === 0 &&
       words.includes(`${SRT_REFUSED}: Sandbox profile has`) &&
       words.includes("bwrap accepts at most 9000"),
-    `${JSON.stringify(note ?? "no note")}; Caw's messages ${caw}; places ${ids.join(", ")}`
+    `${JSON.stringify(note ?? "no note")}; every note: ${JSON.stringify(notes()).slice(0, 600)}; Caw's messages ${caw}; places ${ids.join(", ")}`
   );
 };
 

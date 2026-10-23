@@ -726,10 +726,9 @@ export const createWorkspace = async (
     // git linked the source's object files into the clone (`--local`); each
     // gets its own inode now, before the long fetch and checkout, so a cut
     // cut short there (an agent's restart) leaves nothing linked to the
-    // source, whose place's boundary would deny every linked file.
-    if (process.platform === "linux") {
-      await ownInodes(path);
-    }
+    // source, whose place's boundary would deny every linked file. On macOS
+    // each copy is an APFS clone, so it costs no space.
+    await ownInodes(path);
     if (cut) {
       await fetchCut(path, id, base, cut, authed);
     }
