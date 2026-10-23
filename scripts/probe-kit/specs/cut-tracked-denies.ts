@@ -54,6 +54,24 @@
  *   `git` first on every command's PATH there). Before the fix git printed
  *   "unable to unlink old '.mcp.json'" and the checkout moved the rest.
  *
+ * Harness config is judged at any depth and in any letter case (core
+ * workspace-policy.ts `HARNESS_CONFIG`; agent worktree-guard.ts
+ * `denyPathspecs(…, "config")` with case-insensitive globs at any depth;
+ * boundary-policy.ts `anyCase`):
+ *
+ * - (g) A delegate writes `.MCP.json` (mixed case, spelled apart so the
+ *   sandbox judges the path, not the command's words) at the clone root. On
+ *   macOS the boundary denies it in any letter case — on APFS `.MCP.json` is
+ *   the file Claude Code reads as `.mcp.json` — so the write fails; on Linux
+ *   srt's literal deny leaves it a distinct file the commit check still keeps
+ *   from landing, so the write exits 0. Either way `.mcp.json` on the host is
+ *   unchanged.
+ * - (h) A delegate commits a nested `pkg/.pi/extensions/x.ts` and, through
+ *   git's index alone, a mixed-case `.MCP.json`, then finishes: the landing is
+ *   refused, the finish naming BOTH as harness config no workspace's commit
+ *   changes (`ownConfigChanges` over the depth-and-case pathspecs), and
+ *   origin's main does not move.
+ *
  *   bun scripts/probe-kit/run.ts cut-tracked-denies
  */
 import { existsSync } from "node:fs";
@@ -81,6 +99,11 @@ const LAND_COMMIT = "Probe commit landed over a moved .mcp.json";
 const CONFIG = "PROBE-CONFIG-COMMIT";
 const CONFIG_MADE = "PROBE-CONFIG-COMMIT-MADE";
 const CONFIG_TITLE = "Commit a .mcp.json change";
+const DEPTH = "PROBE-TRACKED-DEPTH";
+const DEPTH_END = "PROBE-TRACKED-DEPTH-END";
+const DEPTH_TITLE = "Harness config at depth and in case";
+/** A nested harness-config path: srt denies only the root `.pi`, the commit check reaches here. */
+const PI_FILE = "pkg/.pi/extensions/x.ts";
 const FINISH = "mcp__cawco__finish_item";
 const DELEGATE = "mcp__cawco__delegate";
 /** What finish_item answers a blocked finish (work-items.ts `finishItem`). */
@@ -159,6 +182,25 @@ const CONFIG_COMMAND = [
   `echo ${apart(CONFIG_MADE)}`,
 ].join("\n");
 
+/**
+ * (g)+(h): a mixed-case `.MCP.json` write at the clone root (its name spelled
+ * apart so the sandbox judges the path, not a rule reading the command), then
+ * a commit of a nested `pkg/.pi/extensions/x.ts` and a commit of a mixed-case
+ * `.MCP.json` through the index alone (no working write the sandbox would
+ * deny on either platform). `set +e` so the macOS deny of the first write does
+ * not abort the rest.
+ */
+const DEPTH_COMMAND = [
+  "set +e",
+  `M=".MC""P.json"`,
+  `printf '%s\\n' '${HOSTILE_MCP}' > "$M" 2>/dev/null; echo ${apart("MCP2-WRITE:")}$?`,
+  `mkdir -p pkg/.pi/extensions && printf 'export const x = 1;\\n' > ${PI_FILE} && git add ${PI_FILE} && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Probe commit of a nested .pi extension'`,
+  `git update-index --add --cacheinfo "100644,$(printf '%s\\n' '${HOSTILE_MCP}' | git hash-object -w --stdin),$M"`,
+  'git update-index --skip-worktree "$M"',
+  `git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Probe commit of a mixed-case .MCP.json'`,
+  `echo ${apart(DEPTH_END)}`,
+].join("\n");
+
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
   everyMs: 5,
@@ -181,7 +223,13 @@ const bash = (command: string, description: string): Reply =>
 const ASKED = new RegExp(`${ASK} ([0-9a-f-]{36})`);
 
 /** Which session has made its one call already. */
-const called = { delegate: false, finish: false, land: false, config: false };
+const called = {
+  delegate: false,
+  finish: false,
+  land: false,
+  config: false,
+  depth: false,
+};
 
 /** `name` called once, after finding it: `done` from then on. */
 const once = (
@@ -266,6 +314,24 @@ const respond = (request: Seen): Reply => {
       "config",
       FINISH,
       { headline: "Committed.", summary: "Committed another .mcp.json." },
+      "Stopped."
+    );
+  }
+  if (request.all.includes(DEPTH)) {
+    if (!request.all.includes(DEPTH_END)) {
+      return bash(
+        DEPTH_COMMAND,
+        "Write mixed-case .MCP.json; commit a nested .pi extension and an index .MCP.json"
+      );
+    }
+    return once(
+      request,
+      "depth",
+      FINISH,
+      {
+        headline: "Committed.",
+        summary: "Committed a nested .pi extension and a mixed-case .MCP.json.",
+      },
       "Stopped."
     );
   }
@@ -653,6 +719,86 @@ const configPhase = async (
   );
 };
 
+/**
+ * (g) A mixed-case `.MCP.json` write at the clone root, and (h) commits of a
+ * nested `pkg/.pi/extensions/x.ts` and a mixed-case `.MCP.json` that do not
+ * land. Harness config is denied at any depth and in any letter case.
+ */
+const depthPhase = async (
+  { check, note }: Kit,
+  fleet: KitFleet,
+  parent: string,
+  src: string,
+  bare: string
+): Promise<void> => {
+  const before = (
+    await Bun.$`git --git-dir ${bare} rev-parse main`.quiet().nothrow().text()
+  ).trim();
+  // Origin's own `.mcp.json`, whatever the earlier phases left main at: the
+  // clone is cut from it, so the host file equals it unless the write changed
+  // it.
+  const originMcp = await Bun.$`git --git-dir ${bare} show main:.mcp.json`
+    .quiet()
+    .nothrow()
+    .text();
+  const started = await delegate(
+    fleet,
+    parent,
+    src,
+    DEPTH_TITLE,
+    `${DEPTH}: write a mixed-case .MCP.json, commit a nested .pi extension and an index .MCP.json, then finish.`
+  );
+  const clone =
+    (await until(
+      "the depth delegate's clone",
+      () => workspaceOf(fleet, started.workspaceId)?.path,
+      Boolean,
+      300_000
+    ).catch(() => undefined)) ?? "";
+  const said =
+    (await until(
+      "the depth command finished",
+      () => fleet.seen.find((one) => one.all.includes(DEPTH_END))?.all,
+      Boolean,
+      300_000
+    ).catch(() => undefined)) ?? "";
+  const wrote = after(said, "MCP2-WRITE:");
+  const mcpOnHost = clone ? await textAt(join(clone, ".mcp.json")) : undefined;
+  // macOS folds `.MCP.json` onto `.mcp.json` (APFS) and the boundary denies it
+  // in any case, so the write fails; Linux's literal srt leaves it a distinct
+  // file (the write exits 0), and the commit check keeps it from landing. On
+  // both, the harness's lowercase `.mcp.json` on the host is untouched.
+  const macDenied = process.platform !== "darwin" || wrote !== "0";
+  check(
+    "(g) a mixed-case .MCP.json write at the clone root cannot corrupt the harness's .mcp.json: macOS denies it in any letter case (APFS folds it onto .mcp.json), Linux leaves it a distinct file the commit check still keeps from landing; either way .mcp.json on the host holds origin's text",
+    mcpOnHost === originMcp && macDenied,
+    `platform ${process.platform}; .MCP.json write exit ${wrote ?? "unread"}; .mcp.json on host ${JSON.stringify(mcpOnHost)}; origin ${JSON.stringify(originMcp)}`
+  );
+  const answer = await until(
+    "the depth delegate's finish answered",
+    () =>
+      fleet.seen.find(
+        (one) => one.all.includes(DEPTH_END) && one.all.includes(CONFIG_REFUSED)
+      )?.all,
+    Boolean,
+    300_000
+  ).catch(() => undefined);
+  const now = (
+    await Bun.$`git --git-dir ${bare} rev-parse main`.quiet().nothrow().text()
+  ).trim();
+  const at = answer?.lastIndexOf(CONFIG_REFUSED) ?? -1;
+  const refusal = answer?.slice(Math.max(0, at - 600), at + 200) ?? "";
+  note(refusal);
+  check(
+    "(h) commits adding a nested pkg/.pi/extensions/x.ts and a mixed-case .MCP.json (through the index alone) do not land: the finish names BOTH as harness config no workspace's commit changes, at any depth and in any letter case, and origin's main does not move",
+    refusal.includes(".MCP.json") &&
+      refusal.includes(".pi/extensions/x.ts") &&
+      refusal.includes(CONFIG_REFUSED) &&
+      before === now,
+    `${refusal || "no refusal seen"}; main ${before.slice(0, 9)} → ${now.slice(0, 9)}`
+  );
+};
+
 const spec: Spec = {
   name: "cut-tracked-denies",
   host: "it delegates, so its fleet cuts workspaces",
@@ -664,6 +810,7 @@ const spec: Spec = {
       await cutPhase(kit, fleet, parent, held);
     }
     await configPhase(kit, fleet, parent, src, bare);
+    await depthPhase(kit, fleet, parent, src, bare);
   },
 };
 
