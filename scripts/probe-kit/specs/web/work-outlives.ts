@@ -951,6 +951,7 @@ async function forgetLeg(
     failed && (await textOf(page, tray)).includes(STOP_FAILED),
     await textOf(page, tray)
   );
+  await settle(page);
   await page.locator(`${tray} [data-stop-cancel]`).click();
   await settle(page, 500);
   const said = await textOf(page, where);
@@ -963,6 +964,10 @@ async function forgetLeg(
     said
   );
   await reload(page);
+  // The rail draws its project rows once the hub has listed them: the parked
+  // line comes with its row, then is read once its arrival has landed.
+  await page.waitForSelector(where, { timeout: 10_000 }).catch(() => undefined);
+  await settle(page);
   const kept = await textOf(page, where);
   kit.check(
     "forget: a reload keeps the failure where it is parked",
@@ -1142,6 +1147,10 @@ async function cawOffLeg(
     failed && (await textOf(page, tray)).includes(STOP_FAILED),
     await textOf(page, tray)
   );
+  // Close pressed once the failure has landed: its line grows the tray,
+  // which keeps itself in view as it grows (StopTray's `unfoldHere`), and a
+  // press made while it grew left the tray standing in WebKit.
+  await settle(page);
   await pick(kit, page, pass, page.locator(`${tray} [data-stop-cancel]`));
   await until(
     async () => (await textOf(page, parked)).includes(STOP_FAILED),
@@ -1197,6 +1206,7 @@ async function cawOffLeg(
         .catch(() => null)) === "fail",
     5000
   );
+  await settle(page);
   await pick(kit, page, pass, page.locator(`${tray} [data-stop-cancel]`));
   await until(
     async () => (await textOf(page, parked)).includes(STOP_FAILED),
@@ -1567,9 +1577,19 @@ async function artifactMenuLeg(
         })
       : route.fallback()
   );
-  await page
-    .getByRole("button", { name: `Remove probe-older-${n}` })
-    .click({ force: true });
+  // Pressed once the rows the list's read brought have landed: arriving,
+  // a row is uncovered by its clip (reflow, motion/rows.svelte.ts), and a
+  // press on a part still clipped lands on what is under it; forced, the
+  // press went out mid-arrival and nothing was asked of the hub.
+  await settle(page);
+  let asked = 0;
+  const onAsk = (request: { method: () => string; url: () => string }) => {
+    if (request.method() === "DELETE" && request.url().endsWith(older)) {
+      asked += 1;
+    }
+  };
+  page.on("request", onAsk);
+  await page.getByRole("button", { name: `Remove probe-older-${n}` }).click();
   const removeLine = `[data-artifact-remove-refused="${older}"]`;
   await until(
     async () => (await textOf(page, removeLine)).includes("embeds"),
@@ -1583,8 +1603,9 @@ async function artifactMenuLeg(
       (await page
         .locator(`[data-artifact-row][data-artifact="${older}"]`)
         .count()) === 1,
-    JSON.stringify(removeSaid)
+    JSON.stringify({ ...removeSaid, asked })
   );
+  page.off("request", onAsk);
   await page.unroute(one);
 
   // A refused show: the menu closes, the pane's own line says it.

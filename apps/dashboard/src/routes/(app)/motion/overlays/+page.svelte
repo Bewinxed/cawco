@@ -8,7 +8,8 @@
    * so what it opens stands over the page and nothing else. A script reads
    * the counts from `window.__overlays`: a control in an open overlay takes
    * a press on the first try, and once it has closed the next press, where
-   * it stood, lands on the page (probe-kit `overlay-taps`).
+   * it stood, lands on the page (probe-kit `overlay-taps`). `show(kind)`
+   * opens one from code, over another already open (layer-stack).
    */
   // biome-ignore-all lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
@@ -69,7 +70,15 @@
   }
 
   Object.assign(globalThis, {
-    __overlays: { counts: () => ({ ...counts }), open: () => ({ ...open }) },
+    __overlays: {
+      counts: () => ({ ...counts }),
+      open: () => ({ ...open }),
+      // Opens `kind` from code, as the app opens one over another that holds
+      // the page (Add machine from the new session's sheet).
+      show: (kind: Kind) => {
+        open[kind] = true;
+      },
+    },
   });
 </script>
 

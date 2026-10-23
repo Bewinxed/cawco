@@ -33,6 +33,9 @@
  * - A kit popover over a sticky table head (the overlays bench, desk): a
  *   sticky head on `--layer-sticky` set under the popover's place, and the
  *   popover first at that point.
+ * - A kit alert dialog opened over a drawer opened after it mounted (the
+ *   overlays bench, desk and phone, Chromium and WebKit): the point at its
+ *   centre inside it, the drawer still open.
  * - The skip link on focus (desk): first at its own centre, over the shell.
  * - The rail sheet under 900px (the lift bench, narrowDesk 680): the sheet over its scrim
  *   over the top bar, and the scrim over the bar beside the sheet.
@@ -764,18 +767,19 @@ async function popoverOverSticky(kit: Kit, base: string): Promise<void> {
     await page.close();
     return;
   }
-  // A sticky head as the tool matrix draws one (`sticky z-(--layer-sticky)`),
-  // set across the popover's place in the page's flow.
+  // A sticky head on the sticky role, set across the popover's place in the
+  // page's flow. Its styles are its own, the role read from its token: a
+  // utility class added at runtime is drawn only if the build emitted it,
+  // and no source has used `z-(--layer-sticky)` since c7f1ab369, so the
+  // class drew nothing and the head computed `auto`.
   await page.evaluate(
     ({ top, height }) => {
       const scroller = document.createElement("div");
       scroller.dataset.slot = "probe-scroller";
-      scroller.className = "overflow-auto";
-      scroller.style.cssText = `position:absolute;inset-inline:0;top:${top}px;height:${height}px`;
+      scroller.style.cssText = `position:absolute;inset-inline:0;top:${top}px;height:${height}px;overflow:auto`;
       const head = document.createElement("div");
       head.dataset.slot = "probe-sticky-head";
-      head.className = "sticky z-(--layer-sticky) h-auto bg-surface-raised";
-      head.style.cssText = `top:0;height:${height}px`;
+      head.style.cssText = `position:sticky;top:0;z-index:var(--layer-sticky);height:${height}px;background:var(--surface-raised)`;
       scroller.append(head);
       document.querySelector("main")?.append(scroller);
     },
@@ -798,6 +802,64 @@ async function popoverOverSticky(kit: Kit, base: string): Promise<void> {
     z === sticky && chain[0]?.z === float && head > 0
   );
   await page.close();
+}
+
+/**
+ * A kit alert dialog opened over a drawer opened after it mounted (the
+ * overlays bench, both on `--layer-float`): the dialog enters the page as
+ * it opens (root-presence.svelte.ts), so it is the later of the two and
+ * drawn on top: the point at its centre is inside it, the drawer still
+ * open under it. At the desk and the phone, in Chromium and WebKit.
+ */
+async function alertOverDrawer(kit: Kit, base: string): Promise<void> {
+  const drawer = '[data-slot="drawer-content"][data-state="open"]';
+  const alert = '[data-slot="alert-dialog-content"][data-state="open"]';
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["desk", "phone"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+      const page = await kit.page(view, { engine });
+      await open(page, `${base}/motion/overlays`, '[data-open="drawer"]');
+      await page.locator('[data-open="drawer"]').click();
+      await page.waitForSelector(drawer);
+      await settle(page, 400);
+      await page.evaluate(() =>
+        (
+          globalThis as unknown as {
+            __overlays: { show: (kind: string) => void };
+          }
+        ).__overlays.show("alert-dialog")
+      );
+      await page.waitForSelector(alert);
+      await settle(page, 400);
+      const read = await page.evaluate(
+        ([a, d]) => {
+          const box = document.querySelector(a)?.getBoundingClientRect();
+          if (!box) {
+            return { inside: false, hit: "no alert dialog", drawerOpen: false };
+          }
+          const hit = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2
+          );
+          const slot = hit?.closest("[data-slot]")?.getAttribute("data-slot");
+          return {
+            inside: Boolean(hit?.closest(a)),
+            hit: hit
+              ? `${hit.tagName.toLowerCase()} in ${slot ?? "-"}`
+              : "nothing",
+            drawerOpen: document.querySelector(d) !== null,
+          };
+        },
+        [alert, drawer] as const
+      );
+      kit.check(
+        `alert-over-drawer ${view} ${engine}: the alert dialog, opened over a drawer opened after it mounted, is topmost: the point at its centre is inside it, the drawer still open`,
+        read.inside && read.drawerOpen,
+        JSON.stringify(read)
+      );
+      await page.close();
+    }
+  }
 }
 
 async function skipLink(kit: Kit, base: string): Promise<void> {
@@ -881,6 +943,7 @@ const spec: Spec = {
         return skillChips(k, b, "webkit");
       },
       popoverOverSticky,
+      alertOverDrawer,
       skipLink,
       railSheet,
     ]) {
