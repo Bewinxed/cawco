@@ -357,6 +357,7 @@ import {
   withMovedLine,
   withPresenceLine,
 } from "@cawco/core";
+import { readTrial } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
   BINARY_UPDATE_PHASES,
@@ -27023,6 +27024,11 @@ export const createServer = (
         // The `.local` name it holds on its networks (mdns.ts), or null:
         // what the app keeps for a hub it found on this network.
         localName: localHubName() ?? null,
+        // An update of the hub's own machine is on trial (core
+        // binary-installation.ts `readTrial`): the build answering here may
+        // yet be rolled back, so a machine waiting for it (agent
+        // binary-update.ts `hubWaitFor`) goes on only once it is confirmed.
+        trial: (await readTrial()) !== undefined,
       }))
       // HTTPS on the machine's tailnet name (tailnet-https.ts): where it
       // stands, the step that needs the person while one does. Every change

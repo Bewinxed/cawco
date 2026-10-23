@@ -215,6 +215,9 @@
     machine("r14-unanswered", "obelisk-of-light", "linux", {
       binaryUpdate: update({ phase: "waiting-for-hub", hubWait: "unanswered" }),
     }),
+    machine("r14-trial", "nixbox", "linux", {
+      binaryUpdate: update({ phase: "waiting-for-hub", hubWait: "trial" }),
+    }),
   ];
 
   const OFF: BinaryUpdatePolicy = { autoUpdate: false, channel: "stable" };

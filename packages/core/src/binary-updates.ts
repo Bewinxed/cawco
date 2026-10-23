@@ -1,4 +1,6 @@
 /** Browser-neutral release policy and machine state consumed by API clients. */
+import { updatesWords } from "./words/updates";
+
 export interface BinaryUpdatePolicy {
   /** One setting for the whole fleet: a machine does not pick its own. */
   autoUpdate: boolean;
@@ -14,8 +16,10 @@ export interface BinaryUpdatePolicy {
  * session at once (`retiringKeepers`). `waiting-for-hub`: a machine other
  * than the hub's own was told to install a build (a command, or auto-update)
  * whose wire protocol its hub does not speak yet, or its hub did not say
- * which it speaks (`hubWait`); the install stands, and goes ahead by itself
- * once the hub runs a build that overlaps it. Nothing failed.
+ * which it speaks, or the hub's own machine is still deciding the trial of
+ * the build it runs (`hubWait`); the install stands, and goes ahead by itself
+ * once the hub runs a build that overlaps it and has confirmed it. Nothing
+ * failed.
  */
 export const BINARY_UPDATE_PHASES = [
   "none",
@@ -200,6 +204,31 @@ export const AGENT_RESTARTED_MID_REQUEST =
 export const HUB_RESTARTING =
   "The hub is restarting. This call was not started; call it again in a minute.";
 
+/**
+ * What `waiting-for-hub` waits for: the hub to run a build whose wire
+ * protocol overlaps the offered one (`behind`), the hub to answer for its
+ * protocol at all (`unanswered`, a hub mid-restart), or the trial of the
+ * build the hub runs to be confirmed (`trial`): a hub that rolls back must
+ * never leave its machines ahead of it on a protocol it does not speak.
+ */
+export type HubWait = "behind" | "unanswered" | "trial";
+
+/** What a machine waiting for its hub (`waiting-for-hub`) says it waits for, by its `hubWait`. */
+export const hubWaitWords = (version: string, wait: HubWait): string => {
+  switch (wait) {
+    case "behind":
+      return updatesWords.waitsForHubToTake(version);
+    case "unanswered":
+      return updatesWords.waitsForHubToAnswer(version);
+    case "trial":
+      return updatesWords.waitsForHubTrial(version);
+    default: {
+      const unhandled: never = wait;
+      throw new Error(`unhandled hub wait: ${String(unhandled)}`);
+    }
+  }
+};
+
 const counted = (n: number, one: string, many: string): string =>
   `${n} ${n === 1 ? one : many}`;
 
@@ -315,12 +344,8 @@ export interface BinaryUpdateState {
   heldChildren?: number;
   /** True on the machine that runs the hub. */
   hostsHub: boolean;
-  /**
-   * What `waiting-for-hub` waits for: the hub to run a build whose wire
-   * protocol overlaps the offered one (`behind`), or the hub to answer for
-   * its protocol at all (`unanswered`, a hub mid-restart).
-   */
-  hubWait?: "behind" | "unanswered";
+  /** What `waiting-for-hub` waits for ({@link HubWait}). */
+  hubWait?: HubWait;
   installedVersion: string;
   /** The build whose session keeper could not start; the keeper is not handed to it again by itself. */
   keeperFailedVersion?: string;

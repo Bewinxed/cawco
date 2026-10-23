@@ -21,17 +21,21 @@ export const updatesWords = {
   /** A Check for updates refused, under it. */
   noNewBuilds: (why: string) =>
     `No new builds could be looked for: ${why}. Machines keep the build they run; Try again to check.`,
-  /**
+  /*
    * A machine other than the hub's own is to install `version`
-   * (`waiting-for-hub`): the hub does not speak its wire protocol yet
-   * (`answered`, the state's `hubWait` "behind"), or did not say which it
-   * speaks (a hub mid-restart). It installs by itself once the hub runs a
-   * build that does.
+   * (`waiting-for-hub`), each by the state's `hubWait` (core binary-updates.ts
+   * `hubWaitWords`); it installs by itself once the hub runs a build that
+   * speaks it and has confirmed it.
    */
-  waitsForHub: (version: string, answered: boolean) =>
-    answered
-      ? `Waits for its hub to take ${version} first`
-      : `Waits for its hub to answer before installing ${version}`,
+  /** `behind`: the hub does not speak the build's wire protocol yet. */
+  waitsForHubToTake: (version: string) =>
+    `Waits for its hub to take ${version} first`,
+  /** `unanswered`: the hub did not say which protocol it speaks (a hub mid-restart). */
+  waitsForHubToAnswer: (version: string) =>
+    `Waits for its hub to answer before installing ${version}`,
+  /** `trial`: the hub speaks it, and its own machine has not yet confirmed the build it runs. */
+  waitsForHubTrial: (version: string) =>
+    `Waits for its hub to finish installing ${version}`,
   /** The machine's line in the notice of an install under way, while it waits for its hub. */
   installLineWaitsForHub: (name: string) => `· ${name} · waiting for its hub`,
 };

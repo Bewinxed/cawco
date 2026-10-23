@@ -110,7 +110,12 @@ public enum UpdateRows {
         case "waiting-for-channel":
             return UpdateCell(row: 10, text: "Stays on \(current) until \(channelName(policy.channel)) has a newer build", icon: .clock)
         case "waiting-for-hub":
-            return UpdateCell(row: 14, text: Words.Updates.waitsForHub(version: v, answered: state.hubWait != "unanswered"),
+            let waits = switch state.hubWait ?? "behind" {
+            case "unanswered": Words.Updates.waitsForHubToAnswer(version: v)
+            case "trial": Words.Updates.waitsForHubTrial(version: v)
+            default: Words.Updates.waitsForHubToTake(version: v)
+            }
+            return UpdateCell(row: 14, text: waits,
                               icon: .clock, buttons: policy.autoUpdate ? [] : [.cancel])
         case "available":
             return UpdateCell(row: 11, text: words(v, "available"), icon: .download, buttons: [.install])

@@ -346,7 +346,8 @@ What follows from that, concretely, and what must stay true:
   other than the hub's own installs only a build whose `protocolRange`
   (`packages/core/src/runtime.ts`) overlaps the hub's. One told to install a build its hub
   doesn't speak yet waits for its hub (`waiting-for-hub`), its install standing, and goes
-  ahead by itself once the hub runs a build that does. The other direction is held at
+  ahead by itself once the hub runs a build that does and its machine has confirmed that
+  build's trial (`/health`'s `trial`), so a hub that rolls back never leaves a machine ahead of it. The other direction is held at
   build time: `bun run openapi:check` refuses a hub that no longer answers a route, or a
   response shape, that a published nightly's agent calls (`packages/hub/scripts/agent-calls.ts`),
   unless `protocolRange` moves past that build. Whoever holds the private
