@@ -72,10 +72,11 @@ const TURN = 'section[data-slot="turn"]';
 /**
  * The mock's answers: a word, or for HOLD one word and then a space every
  * 20s for 40 minutes, so its live line keeps its height while the stream
- * stays alive.
+ * stays alive. The person's words are read before the reminders the hub
+ * puts after them (core injected.ts, "[CawCo presence] …").
  */
 const respond = (request: Seen): Reply =>
-  request.last.trim() === HOLD
+  (request.last.split("<system-reminder>")[0] ?? "").trim() === HOLD
     ? { everyMs: 20_000, words: ["Working.", ...new Array(120).fill(" ")] }
     : { everyMs: 20, words: ["Ready."] };
 
