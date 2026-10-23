@@ -2383,6 +2383,7 @@ export interface DbShape {
         | "replacedBy"
         | "landingSince"
         | "landingPhase"
+        | "gatePasses"
         | "lastTurnAt"
         | "submission"
         | "waitUntil"

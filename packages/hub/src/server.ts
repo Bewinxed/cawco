@@ -25093,6 +25093,7 @@ export const createServer = (
       filingUuid: crypto.randomUUID(),
       compactUuid: crypto.randomUUID(),
       compacted: false,
+      endedStep: null,
     };
     db.atLimit.putCompaction(plan);
     console.info(
@@ -25134,20 +25135,40 @@ export const createServer = (
   /**
    * Moves `instanceId`'s compaction on: at the end of a turn of it, or as
    * its machine comes back or the hub starts (a step a restart cut: sent if
-   * it never went). A step's turn has ended once its send is read and no
-   * turn of it is open; then the filing turn is followed by the `/compact`,
-   * and the `/compact`'s end ends the compaction, compacted when Claude
-   * Code said its boundary. A step its session refused ends it stopped.
+   * it never went). A step's turn has ended once its send is read and its
+   * turn's end was heard (`endedStep`, stored) or no turn of it is open;
+   * then the filing turn is followed by the `/compact`, and the
+   * `/compact`'s end ends the compaction, compacted when Claude Code said
+   * its boundary. A step its session refused ends it stopped.
    */
-  const advanceCompaction = (instanceId: string, turnEnded = false): void => {
+  const advanceCompaction = (instanceId: string): void => {
     const plan = db.atLimit.compaction(instanceId);
     const [row] = db.getInstancesByIds([instanceId]);
     if (!(plan && row && registry.agent(row.machineId))) {
       return;
     }
-    if (stepEnded(plan, row, turnEnded)) {
+    if (stepEnded(plan, row)) {
       nextCompactionStep(plan, row);
     }
+  };
+
+  /**
+   * A turn of `instanceId` ended while it compacts after a move: when the
+   * current step's send was read, that step's turn is over, stored on the
+   * compaction (`endedStep`) before anything moves on, so a hub that
+   * restarts before the next step goes moves on from it
+   * ({@link recoverCompaction}). Then the compaction goes on.
+   */
+  const compactionTurnEnded = (instanceId: string): void => {
+    const plan = db.atLimit.compaction(instanceId);
+    if (!plan) {
+      return;
+    }
+    const step = stepUuid(plan);
+    if (plan.endedStep !== step && db.sendRecord(step)?.state === "read") {
+      db.atLimit.patchCompaction(instanceId, { endedStep: step });
+    }
+    advanceCompaction(instanceId);
   };
 
   /**
@@ -25165,6 +25186,15 @@ export const createServer = (
       return;
     }
     const sent = db.sendRecord(stepUuid(plan));
+    // Its turn's end was heard and stored before the hub stopped: it goes
+    // on from there, whatever the machine says now.
+    if (sent?.state === "read" && plan.endedStep === stepUuid(plan)) {
+      console.info(
+        `[at-limit] ${sessionName(row)}'s ${stepWords(plan.stage)} had ended before the hub restarted, as the hub stored; the compaction goes on.`
+      );
+      nextCompactionStep(plan, row);
+      return;
+    }
     if (sent?.state === "read" && (await sessionIdle(row))) {
       const now = db.atLimit.compaction(instanceId);
       if (now?.stage === plan.stage) {
@@ -25187,8 +25217,7 @@ export const createServer = (
    */
   const stepEnded = (
     plan: LimitCompaction,
-    row: { id: string; machineId: string },
-    turnEnded: boolean
+    row: { id: string; machineId: string }
   ): boolean => {
     const sent = db.sendRecord(stepUuid(plan));
     if (!sent) {
@@ -25208,7 +25237,10 @@ export const createServer = (
       return false;
     }
     const open = db.ownedInstance(row.id, row.machineId)?.turnOpenAt ?? null;
-    return sent.state === "read" && (turnEnded || open === null);
+    return (
+      sent.state === "read" &&
+      (plan.endedStep === stepUuid(plan) || open === null)
+    );
   };
 
   /**
@@ -33930,7 +33962,7 @@ export const createServer = (
                     }
                     atLimit.turnEnded(cacheRow.id);
                     // A compaction after a move: its next step, or its end.
-                    advanceCompaction(cacheRow.id, true);
+                    compactionTurnEnded(cacheRow.id);
                   } else if (cacheRow) {
                     // A pi or OpenCode session's context, as its harness
                     // reported its last request.

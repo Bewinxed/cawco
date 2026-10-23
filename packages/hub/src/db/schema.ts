@@ -1248,11 +1248,27 @@ export type WorkItemState =
 /**
  * Where a work item's landing stands ({@link workItems} `landingPhase`), kept
  * so a hub that starts mid-landing goes on from there:
- * `completing`, its `finish_item` stored while work it delegated is still
- * live; it lands once every item it delegated, queued ones included, has
- * ended (work-items.ts `completeIfDrained`).
+ * - `completing`: its `finish_item` stored while work it delegated is still
+ *   live; it lands once every item it delegated, queued ones included, has
+ *   ended (work-items.ts `completeIfDrained`).
+ * - `gating`: its landing gate runs on its tree (at finish_item, or on top
+ *   of its base); each step that passed is kept ({@link GatePass}), so a
+ *   gate a restart cut runs from the step it was on.
+ * - `turn`: in its turn to land, rebased again, the steps the rebase moved
+ *   run again, then the push.
  */
-export type LandingPhase = "completing";
+export type LandingPhase = "completing" | "gating" | "turn";
+
+/**
+ * A landing gate command that passed on a tree, with the stage it ran in
+ * (`at finish_item`, `while gating on top of main`, `in its turn to land on
+ * main`), for the line of a step its pass lets skip ({@link workItems}
+ * `gatePasses`, keyed by what it passed on: work-items.ts `passKey`).
+ */
+export interface GatePass {
+  command: string;
+  stage: string;
+}
 
 /** What a work item's landing put where ({@link workItems} `landed`). */
 export interface WorkLanding {
@@ -1383,8 +1399,9 @@ export const workItems = sqliteTable(
     /**
      * When the hub began landing it for a `finish_item` (its landing gate,
      * then the push), while that runs. Set, the item is landing: a hub that
-     * starts finds it here and runs the landing again from the first, on
-     * {@link submission}.
+     * starts finds it here and runs the landing again on {@link submission},
+     * each gate step that passed kept ({@link gatePasses}), so its gate goes
+     * on from the step it was on.
      */
     landingSince: timestamp("landing_since"),
     /**
@@ -1392,6 +1409,15 @@ export const workItems = sqliteTable(
      * ({@link LandingPhase}); null while it runs from the first.
      */
     landingPhase: text("landing_phase").$type<LandingPhase>(),
+    /**
+     * The landing gate's steps that passed for it while it is live, by what
+     * each passed on (work-items.ts `passKey`: the whole tree, or the trees
+     * of the paths a step declares), each kept as it passes: a step runs at
+     * most once on one such key, a hub restart included. Null: none yet.
+     */
+    gatePasses: text("gate_passes", { mode: "json" }).$type<
+      Record<string, GatePass[]>
+    >(),
     /**
      * When its session called `finish_item` (to land, or blocked) in the
      * turn still under way: that call is the turn's last step. While set, a
@@ -2430,6 +2456,13 @@ export const limitCompactions = sqliteTable("limit_compactions", {
   compactUuid: text("compact_uuid").notNull(),
   /** Claude Code said its compaction boundary after the `/compact` went: it compacted. */
   compacted: integer("compacted", { mode: "boolean" }).notNull().default(false),
+  /**
+   * The step (its send's uuid) whose turn's end the hub heard, the turn's
+   * result read after its send was: the stored frame a hub that restarts
+   * before the next step went moves the compaction on from (server.ts
+   * `recoverCompaction`). Null until a step's turn ends.
+   */
+  endedStep: text("ended_step"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

@@ -132,6 +132,8 @@ import type {
   WorkspaceRow,
 } from "./db";
 import type {
+  GatePass,
+  LandingPhase,
   Origin,
   WorkBudget,
   WorkItemSubmission,
@@ -1652,15 +1654,6 @@ interface StepOutcome {
   where?: string;
 }
 
-/**
- * A gate command that passed on a tree, with the stage it ran in (`at
- * finish_item`, `while gating on top of main`, `in its turn to land on
- * main`), for the line of a step its pass lets skip.
- */
-interface Passed {
-  command: string;
-  stage: string;
-}
 
 /** Every path the steps declare as their inputs (`on:`), read once per look at the workspace. */
 const inputPathsOf = (steps: readonly GateStep[]): string[] => [
@@ -1723,7 +1716,7 @@ const TREE_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
  */
 const priorPass = (
   step: GateStep,
-  passed: Passed[],
+  passed: GatePass[],
   said: (stage: string) => string
 ): string | undefined => {
   const command = step.command.trim();
@@ -2325,17 +2318,44 @@ export const createWorkItems = ({
   const landingStops = new Map<string, AbortController>();
   /**
    * Items whose landing waits for something now: what its status says, and
-   * since when. In memory: a hub that starts runs the landing again from the
-   * first.
+   * since when. In memory: a hub that starts says it again as the landing
+   * it resumes waits ({@link resumeLandings}).
    */
   const landingWaits = new Map<string, { words: string; since: number }>();
   /**
-   * The gate commands that passed for each live item, by what they passed
-   * on ({@link passKey}: the whole tree, or the trees of the paths a step
-   * declares): one command runs at most once on one such key
-   * ({@link gateOnce}). In memory: a hub that starts runs them again.
+   * The gate commands that passed for a live item, by what they passed on
+   * ({@link passKey}: the whole tree, or the trees of the paths a step
+   * declares), as its row keeps them (`gatePasses`): one command runs at
+   * most once on one such key ({@link gateOnce}), a hub restart included.
    */
-  const passes = new Map<string, Map<string, Passed[]>>();
+  const passesOf = (itemId: string): Map<string, GatePass[]> =>
+    new Map(Object.entries(db.workItem(itemId)?.gatePasses ?? {}));
+  /** `pass` kept on `item`'s row under `key`, as its step passes. */
+  const keepPass = (itemId: string, key: string, pass: GatePass): void => {
+    const kept = db.workItem(itemId)?.gatePasses ?? {};
+    update(itemId, {
+      gatePasses: { ...kept, [key]: [...(kept[key] ?? []), pass] },
+    });
+  };
+  /** The passes `taken` let go of: their run's workspace moved while it ran. */
+  const dropPasses = (
+    itemId: string,
+    taken: readonly { key: string; pass: GatePass }[]
+  ): void => {
+    const kept = { ...(db.workItem(itemId)?.gatePasses ?? {}) };
+    for (const { key, pass } of taken) {
+      kept[key] = (kept[key] ?? []).filter(
+        (each) => !(each.command === pass.command && each.stage === pass.stage)
+      );
+    }
+    update(itemId, { gatePasses: kept });
+  };
+  /** Where `item`'s landing stands now ({@link LandingPhase}), stored as it moves there. */
+  const landingAt = (item: WorkItemRow, phase: LandingPhase): void => {
+    if (db.workItem(item.id)?.landingPhase !== phase) {
+      update(item.id, { landingPhase: phase });
+    }
+  };
   /**
    * What an item's landing waits for, as its status says it (WorkItemSummary
    * `checkQueue`): a shared slot ("queued for …"), its machine's pause
@@ -5913,7 +5933,6 @@ export const createWorkItems = ({
     item: WorkItemRow,
     change: Parameters<DbShape["updateWorkItem"]>[1]
   ): WorkItemRow => {
-    passes.delete(item.id);
     if (!LIVE.has(item.state)) {
       return item;
     }
@@ -5928,7 +5947,12 @@ export const createWorkItems = ({
           }
         : {};
     const ended =
-      update(item.id, { ...change, ...kept, endedAt: new Date() }) ?? item;
+      update(item.id, {
+        ...change,
+        ...kept,
+        gatePasses: null,
+        endedAt: new Date(),
+      }) ?? item;
     settleSoon(item.workspaceId);
     return ended;
   };
@@ -6425,7 +6449,8 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     item: WorkItemRow,
     steps: GateStep[],
-    how: GateHow
+    how: GateHow,
+    passed?: (step: GateStep) => void
   ): Promise<GateRun> => {
     let commit: Promise<WorkspaceCommit> | undefined;
     /** The step running now, for the words of its waits. */
@@ -6626,7 +6651,9 @@ export const createWorkItems = ({
           durationMs: Date.now() - started,
           passed: result.exitCode === 0,
         });
-        if (result.exitCode !== 0 && step.stopsRest) {
+        if (result.exitCode === 0) {
+          passed?.(step);
+        } else if (step.stopsRest) {
           stopped = step;
         }
       }
@@ -6711,36 +6738,41 @@ export const createWorkItems = ({
     const { steps } = gate;
     const inputPaths = inputPathsOf(steps);
     const state = await treeState(workspace, item, inputPaths, how.inTurn);
-    const kept = passes.get(item.id);
+    const kept = passesOf(item.id);
     const prior = steps.map((step): string | undefined => {
       if (!state || step.nothing) {
         return undefined;
       }
       const { key, said } = passKey(step, state);
-      return priorPass(step, kept?.get(key) ?? [], said);
+      return priorPass(step, kept.get(key) ?? [], said);
     });
     const due = steps.filter(
       (step, at) => !step.nothing && prior[at] === undefined
     );
+    // Each pass is kept as its step passes, so a gate a restart cuts runs
+    // again from the step it was on; a run whose workspace moved under it
+    // lets this run's passes go at its end.
+    const taken: { key: string; pass: GatePass }[] = [];
+    const passed = state
+      ? (step: GateStep) => {
+          const one = {
+            key: passKey(step, state).key,
+            pass: { command: step.command.trim(), stage },
+          };
+          taken.push(one);
+          keepPass(item.id, one.key, one.pass);
+        }
+      : undefined;
     const run =
       due.length > 0
-        ? await runGate(workspace, item, due, how)
+        ? await runGate(workspace, item, due, how, passed)
         : { declared: gate.declared, outcomes: [] };
     if (
-      state &&
-      due.length > 0 &&
-      (await treeState(workspace, item, inputPaths, how.inTurn))?.stamp ===
-        state.stamp
+      taken.length > 0 &&
+      (await treeState(workspace, item, inputPaths, how.inTurn))?.stamp !==
+        state?.stamp
     ) {
-      const byKey = kept ?? new Map<string, Passed[]>();
-      for (const each of run.outcomes.filter((outcome) => outcome.passed)) {
-        const { key } = passKey(each.step, state);
-        byKey.set(key, [
-          ...(byKey.get(key) ?? []),
-          { command: each.step.command.trim(), stage },
-        ]);
-      }
-      passes.set(item.id, byKey);
+      dropPasses(item.id, taken);
     }
     const ran = [...run.outcomes];
     return {
@@ -6964,6 +6996,7 @@ export const createWorkItems = ({
     ): Promise<Failed<GateRun> | undefined> => {
       const how = landingHow(item.id, base, turning, stepped.at(-1));
       how.say(null);
+      landingAt(item, turning ? "turn" : "gating");
       const run = await gateOnce(
         workspace,
         item,
@@ -7853,6 +7886,7 @@ export const createWorkItems = ({
     if (refused) {
       return await reportLanding(item, row, workspace, submission, refused);
     }
+    landingAt(item, "gating");
     const run = await gateOnce(
       workspace,
       item,
@@ -8742,11 +8776,13 @@ export const createWorkItems = ({
 
     /**
      * An agent has registered: every item on its machine left landing by a
-     * hub that stopped mid-run has its landing run again from the first, on
-     * the stored submission, through {@link settleLanding}. A landing needs
-     * no word to the session — its parent has the report; a failure, or a
-     * gate that cannot run, is sent to the session as the tool would have
-     * answered. An item this hub is running now is left to that run.
+     * hub that stopped mid-run has its landing run again on the stored
+     * submission ({@link landStored}), its gate from the step it was on (each
+     * pass is kept, {@link gateOnce}); a completing one lands if its own
+     * delegates ended meanwhile ({@link completeIfDrained}). An item this
+     * hub is running now is left to that run. Then each `finish_item` turn
+     * the stopped hub never heard end is released once the machine says the
+     * session is between turns ({@link releaseLastTurns}).
      */
     resumeLandings(machineId: string): void {
       for (const item of liveItemsOn(machineId)) {
@@ -8760,7 +8796,12 @@ export const createWorkItems = ({
           completeIfDrained(item);
           continue;
         }
-        console.log(`resumed the landing of item ${item.id}`);
+        // Its gate goes on from the step it was on: what passed is kept
+        // on its row ({@link gateOnce}).
+        const kept = [...passesOf(item.id).values()].flat().length;
+        console.log(
+          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} gate pass(es) kept`
+        );
         landStored(item, submission);
       }
       releaseLastTurns(machineId);

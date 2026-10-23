@@ -26,6 +26,12 @@ export interface LimitCompaction {
   carryUuid: string | null;
   compacted: boolean;
   compactUuid: string;
+  /**
+   * The step (its send's uuid) whose turn the hub heard end, its result
+   * read after the step was: kept so a hub that restarts before the next
+   * step goes moves on from it. Null until a step's turn ends.
+   */
+  endedStep: string | null;
   filingUuid: string;
   instanceId: string;
   lineId: string;
@@ -54,10 +60,12 @@ export interface AtLimitDb {
   readonly forget: (instanceIds: string[]) => void;
   readonly hold: (instanceId: string) => LimitHold | undefined;
   readonly holds: () => LimitHold[];
-  /** Moves a compaction on: its stage, that it compacted, or its line as it now reads. */
+  /** Moves a compaction on: its stage, the step whose turn ended, that it compacted, or its line as it now reads. */
   readonly patchCompaction: (
     instanceId: string,
-    patch: Partial<Pick<LimitCompaction, "compacted" | "move" | "stage">>
+    patch: Partial<
+      Pick<LimitCompaction, "compacted" | "endedStep" | "move" | "stage">
+    >
   ) => void;
   /** Starts a session's compaction, in place of any it had. */
   readonly putCompaction: (compaction: LimitCompaction) => void;
@@ -86,6 +94,7 @@ const toCompaction = (
   filingUuid: row.filingUuid,
   compactUuid: row.compactUuid,
   compacted: row.compacted,
+  endedStep: row.endedStep,
 });
 
 const toEvent = (row: typeof limitEvents.$inferSelect): LimitEvent => ({
