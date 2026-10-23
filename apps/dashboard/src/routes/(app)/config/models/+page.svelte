@@ -24,6 +24,7 @@
   } from "#lib/cawco/suggest.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconGlobe, IconJev, IconRules } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -366,13 +367,7 @@
             }}
           >
             {#if phase === "exchanging"}
-              <span
-                data-slot="dot"
-                aria-hidden="true"
-                class="loops size-space-2 flex-none rounded-pill bg-ink-muted opacity-60 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100 motion-safe:animate-breath"
-                data-box
-                data-pulse
-              ></span>
+              <LiveDot data-pulse data-slot="dot" size="row" tone="muted" />
               <span>Finishing the connection with OpenRouter…</span>
             {:else if phase === "connected" && openrouter?.connectedAt}
               <svg

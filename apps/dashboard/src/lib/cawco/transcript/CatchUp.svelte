@@ -13,21 +13,20 @@
 <script lang="ts">
   import { shellWords } from "@cawco/core";
   import { rise } from "#lib/cawco/motion/curves.svelte.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
 </script>
 
 <!-- Comes and goes as "Jump to latest" does, which shares its dock. -->
 <div
   aria-busy="true"
-  class="inline-flex items-center gap-space-2 py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong"
+  class="mark-line inline-flex items-center gap-space-2 py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong"
   role="status"
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
   <!-- The one thing that moves, and only for a reader who has not asked for
        less: the dot beats on --breath. Still, the tag's presence carries it. -->
-  <span
-    aria-hidden="true"
-    class="loops size-(--status-dot-size) flex-none rounded-pill bg-status-live-ink motion-safe:animate-breath"
-    data-slot="beat"
-  ></span>{shellWords.catchingUp}
+  <LiveDot data-slot="beat" tone="live-ink" /><span
+    >{shellWords.catchingUp}</span
+  >
 </div>

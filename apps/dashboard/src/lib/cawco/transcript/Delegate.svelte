@@ -1,4 +1,7 @@
 <script lang="ts">
+  import type { DelegateAskStatus } from "@cawco/core";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   /**
    * A fleet delegate — a session this one spawned with `delegate` or
    * `start_session` — folded onto the parent's spine the way a subagent branch
@@ -7,9 +10,7 @@
    * only composes what the store already holds: the hub's record of its asks
    * and reports, the daemon's pulse, and, once opened, its live transcript.
    */
-  import type { DelegateAskStatus } from "@cawco/core";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconChevronRight, IconExternal } from "#lib/icons.js";
   import { formatDuration } from "#lib/utils/time.js";
@@ -583,9 +584,7 @@
               aria-hidden="true"
               class="rail-cell h-lh"
               >{#if status.beat}
-                <span
-                  class="loops size-(--status-dot-size) flex-none rounded-pill bg-status-live-glyph motion-safe:animate-breath"
-                ></span>
+                <LiveDot />
               {/if}</span
             >
             <span>{status.text}</span>

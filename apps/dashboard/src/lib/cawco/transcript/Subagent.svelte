@@ -2,6 +2,7 @@
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChevronRight } from "#lib/icons.js";
   import type { SubagentState } from "#lib/utils/flow-types.js";
   import { formatDuration } from "#lib/utils/time.js";
@@ -167,9 +168,7 @@
         class="rail-line items-start mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-c-measure"
       >
         <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
-          ><span
-            class="breathe loops size-(--status-dot-size) flex-none rounded-pill bg-status-live-glyph"
-          ></span></span
+          ><LiveDot /></span
         ><span>{view.currentStep}</span>
       </p>
     {:else if failed && branch.error}

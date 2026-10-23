@@ -1,4 +1,14 @@
 <script lang="ts">
+  import { projectWords } from "@cawco/core";
+  import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
+  import {
+    flagsOf,
+    type StageKind,
+    type TaskSummary,
+  } from "#lib/cawco/project-tasks.js";
+  import TaskRing from "#lib/cawco/TaskRing.svelte";
+  import { isRetry } from "#lib/cawco/tasks/retry.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   /**
    * One task on the board: its id, its title, and only what it has to say
    * past that — an attempt running or failed, what it waits on, its to-dos.
@@ -15,16 +25,7 @@
    * is also what a drag carries, and the one object a move flies (`land`):
    * a card that changes column travels there from where it was drawn.
    */
-  import { projectWords } from "@cawco/core";
-  import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
-  import {
-    flagsOf,
-    type StageKind,
-    type TaskSummary,
-  } from "#lib/cawco/project-tasks.js";
-  import TaskRing from "#lib/cawco/TaskRing.svelte";
-  import { isRetry } from "#lib/cawco/tasks/retry.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
     IconError,
     IconLock,
@@ -176,13 +177,7 @@
         />
         <span>{asks ? "its session asks you" : "an action waits on you"}</span>
       {:else if flags.live}
-        <span
-          data-task-card-live
-          data-slot="dot"
-          aria-hidden="true"
-          class="loops size-space-2 flex-none rounded-pill bg-status-live-glyph motion-safe:animate-breath"
-          data-box
-        ></span>
+        <LiveDot data-slot="dot" data-task-card-live size="row" />
         {#if retry}
           <span>retrying · attempt {task.attempts.length}</span>
         {:else}

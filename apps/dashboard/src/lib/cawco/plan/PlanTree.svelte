@@ -62,6 +62,7 @@
     );
 
   import type { SessionPlan } from "@cawco/core";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
 </script>
 
 <script lang="ts">
@@ -88,11 +89,12 @@
       <IconTick
         class="size-icon-md text-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
       />
+    {:else if status === "in_progress"}
+      <LiveDot data-plan-pane-live data-slot="dot" />
     {:else}
       <span
-        data-plan-pane-live={status === "in_progress" || undefined}
         data-slot="dot"
-        class="loops size-(--status-dot-size) rounded-pill inset-ring inset-ring-ink-subtle data-plan-pane-live:inset-ring-0 data-plan-pane-live:bg-status-live-glyph motion-safe:data-plan-pane-live:animate-breath"
+        class="size-(--status-dot-size) rounded-pill inset-ring inset-ring-ink-subtle"
       ></span>
     {/if}
   </span>
