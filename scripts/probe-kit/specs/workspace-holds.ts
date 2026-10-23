@@ -30,9 +30,15 @@
  *     host with its working directory in D's clone stands for one the
  *     boundary never started; D finishes: its workspace retires, both are
  *     gone, and the agent's log names the one it ended.
- * (t) The repository's own tree (a shallow clone of this checkout's HEAD:
- *     mocks/, artifacts/srt-eval, .design-foundations/build and the rest
- *     that a Mac workspace held as 377 deleted files on 2026-10-23): T's cut
+ * (u) macOS: U's clone holds a file its owner may not unlink (`chflags
+ *     uchg`), so its removal stops part-way: the archive fails, said in the
+ *     hub's log, and the row is never held for what the cut-off removal left
+ *     (on 2026-10-23 a Mac workspace was held for 377 "deleted" files, whole
+ *     top-level entries a removal had taken before it stopped); once the
+ *     flag is gone, the next sweep retires it.
+ * (t) The repository's own tree (this checkout's tracked files at its HEAD,
+ *     as one commit: mocks/, artifacts/, .design-foundations/ and the rest
+ *     that Mac workspace lost): T's cut
  *     has every tracked file on the host and inside its boundary (no ` D`
  *     line either way); T finishes blocked and its workspace retires, not
  *     held. A failure names the deleted paths by folder.
@@ -52,8 +58,8 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
-const TAG = /PROBE-HOLDS-([NLXSRDT])\b/;
-type Tag = "N" | "L" | "X" | "S" | "R" | "D" | "T";
+const TAG = /PROBE-HOLDS-([NLXSRDUT])\b/;
+type Tag = "N" | "L" | "X" | "S" | "R" | "D" | "U" | "T";
 const FINISH = "mcp__cawco__finish_item";
 const COMMIT =
   "git -c user.name=Delegate -c user.email=d@probe.test commit -qm";
@@ -93,6 +99,8 @@ const firstCommand = (tag: Tag): string => {
       return `mkdir -p "$TMPDIR/gopath/pkg/mod/example.com/m@v1.0.0/sub" && echo package > "$TMPDIR/gopath/pkg/mod/example.com/m@v1.0.0/sub/m.go" && chmod -R a-w "$TMPDIR/gopath/pkg/mod" && echo ${said("MADE-R")}`;
     case "D":
       return `mkdir -p "$TMPDIR/d" && ( nohup sleep ${INSIDE_SLEEP} > /dev/null 2>&1 & ) && echo ${said("MADE-D")}`;
+    case "U":
+      return `printf 'junk/\\n' > .gitignore && mkdir -p junk && echo locked > junk/locked && git add .gitignore && ${COMMIT} 'Ignore junk' && echo ${said("MADE-U")}`;
     case "T":
       return `echo T-INSIDE-$(git status --porcelain | grep -c '^ D')-END && echo ${said("MADE-T")}`;
     default:
@@ -184,7 +192,7 @@ const respond = (request: Seen): Reply => {
     read.inside = inside === undefined ? undefined : Number(inside);
   }
   if (
-    (tag === "L" || tag === "S") &&
+    (tag === "L" || tag === "S" || tag === "U") &&
     !request.all.includes(seen(`WENT-${tag}`))
   ) {
     return waitFor(tag);
@@ -474,6 +482,68 @@ const processesLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   host.kill("SIGKILL");
 };
 
+/**
+ * (u) A clone whose removal stops part-way: a file in it its owner may not
+ * unlink (`chflags uchg`, macOS; Linux gives an unprivileged user no such
+ * file). Its workspace is never read as holding what is left: the archive
+ * fails, said in the hub's log, with no clone at its path and the row not
+ * held; once the flag is gone, the next sweep retires it.
+ */
+const removalLeg = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  if (process.platform !== "darwin") {
+    kit.note(
+      "(u) runs on macOS: an unprivileged user can make a file it may not unlink there (chflags uchg), and nowhere on Linux"
+    );
+    return;
+  }
+  const u = await scene.delegate("U", scene.src);
+  const wu = scene.workspaceOf(u.workspaceId);
+  const locked = join(wu.path, "junk", "locked");
+  await until(
+    "U's junk file in its clone",
+    () => existsSync(locked),
+    (there) => there,
+    ITEM_MS
+  ).catch(() => false);
+  await Bun.$`chflags uchg ${locked}`.quiet().nothrow();
+  await writeFile(join(wu.tmp ?? "", goFile("U")), "go\n");
+  const item = await scene.ended(u);
+  const removing = `${wu.path}.cawco-removing`;
+  const failed = await until(
+    "U's archive failed on its locked file",
+    async () =>
+      (await scene.fleet.logs("hub"))
+        .split("\n")
+        .find(
+          (line) =>
+            line.includes(wu.id) && line.includes(workWords.notRetired(""))
+        ),
+    (line) => line !== undefined,
+    SETTLE_MS
+  ).catch(() => undefined);
+  const row = scene.workspaceOf(wu.id);
+  check(
+    "(u) U's clone cannot be removed whole: its archive fails, said in the hub's log; no clone is left at its path, and its row is not held",
+    item?.state === "done" &&
+      failed !== undefined &&
+      row.state !== "held" &&
+      !existsSync(wu.path) &&
+      existsSync(removing),
+    `${item?.state}; ${row.state}; clone ${existsSync(wu.path) ? "stands" : "gone"}; ${removing} ${existsSync(removing) ? "stands" : "gone"}; ${failed ?? (await linesOf(scene.fleet, wu.id))}`
+  );
+  await Bun.$`chflags -R nouchg ${removing}`.quiet().nothrow();
+  await scene.fleet.api("/api/workspaces/retire", {});
+  const retired = await scene.stateBecomes(wu.id, "archived");
+  check(
+    "(u) once the flag is gone, the next sweep retires it and nothing of it is left",
+    retired.state === "archived" &&
+      !existsSync(removing) &&
+      !existsSync(wu.path),
+    `${retired.state}; ${removing} ${existsSync(removing) ? "stands" : "gone"}; ${await linesOf(scene.fleet, wu.id)}`
+  );
+};
+
 /** The deleted paths of `git status --porcelain` output, counted by folder. */
 const deletedByFolder = (status: string): string => {
   const counts = new Map<string, number>();
@@ -654,6 +724,7 @@ const spec: Spec = {
     await stoppedLeg(kit, scene);
     await readOnlyLeg(kit, scene);
     await processesLeg(kit, scene);
+    await removalLeg(kit, scene);
     await treeLeg(kit, scene, tree);
     // Whatever a failed leg left read-only goes with the fleet.
     await chmod(fleet.sandbox, 0o755).catch(() => undefined);

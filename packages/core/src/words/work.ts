@@ -54,6 +54,8 @@ export const workWords = {
   /** `stop_delegate`'s word when what the workspace holds could not be read as it stopped. */
   stopUnread: (ws: string, error: string) =>
     `What its workspace ${ws} holds could not be read now (${error}): if it holds work that is nowhere else it is held as its session ends, and you are told then.`,
+  /** The hub's log line for a settle whose close failed (hub work-items.ts `settle`): `reason` its machine's words. */
+  notRetired: (reason: string) => `not retired: ${reason}`,
   /** `stop_delegate`'s word on a stopped item whose workspace is gone. */
   stopGone: (ws: string) =>
     `Its workspace ${ws} is gone or archived: nothing is held.`,

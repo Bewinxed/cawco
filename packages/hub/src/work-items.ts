@@ -3825,7 +3825,7 @@ export const createWorkItems = ({
       const reason = error instanceof Error ? error.message : String(error);
       if (settleFailures.get(workspace.id) !== reason) {
         console.warn(
-          `[workspaces] ${workspace.id} on ${machine}: not retired: ${reason}`
+          `[workspaces] ${workspace.id} on ${machine}: ${workWords.notRetired(reason)}`
         );
       }
       settleFailures.set(workspace.id, reason);

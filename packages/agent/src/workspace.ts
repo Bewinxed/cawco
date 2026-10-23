@@ -14,6 +14,7 @@ import {
   open,
   readdir,
   readFile,
+  rename,
   rm,
   stat,
   writeFile,
@@ -1704,6 +1705,34 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
 export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
   closeClone({ ...(ref as WorkspaceArchive), unlanded: "keep" }, true);
 
+/** Where a clone is moved as its removal begins ({@link removeClone}): beside it, on its filesystem. */
+const removingOf = (path: string): string => `${path}.cawco-removing`;
+
+/**
+ * Removes the clone at `path` once nothing of it is held: renamed out of its
+ * path first, in one step, then removed ({@link removeTree}). A removal that
+ * stops part-way (a file its owner may not unlink: a macOS `uchg` flag, a
+ * bind mount still held) leaves no clone at the path, so the next archive
+ * reads nothing there and only finishes the removal, rather than reading a
+ * half-deleted tree as work. On the Mac on 2026-10-23 workspace 032d6b65
+ * was held for "377 changed files", every one a deletion: whole top-level
+ * entries (`mocks/`, `artifacts/`, `patches/`, LICENSE, WORDS.md and 13
+ * more) gone and `.git` standing, the shape of a recursive removal cut off
+ * part-way through its folder's entries, and the sweep after it read what
+ * was left as held. What an earlier removal left at {@link removingOf} goes
+ * first; one that still cannot go throws, with the clone untouched.
+ */
+const removeClone = async (path: string): Promise<void> => {
+  const removing = removingOf(path);
+  await removeTree(removing);
+  await rename(path, removing).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  });
+  await removeTree(removing);
+};
+
 /** How many times {@link endLeftInside} reads and kills: enough for a process forked between a reading and its kill. */
 const LEFT_INSIDE_PASSES = 5;
 
@@ -1850,7 +1879,7 @@ const closeClone = async (
       };
   const cached = await cacheOfClone(path);
   await closeBoundary(workspace);
-  await removeTree(workspace.path);
+  await removeClone(workspace.path);
   await Promise.all(cached.map(removeTree));
   console.info(
     `[workspace] ${request.id}: archived; its ${goneFolder(path, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is cut again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
