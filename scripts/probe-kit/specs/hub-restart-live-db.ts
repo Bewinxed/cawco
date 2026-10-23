@@ -23,6 +23,9 @@
  * (a) From the hub's first answer, `/health` probed once a second for
  *     {@link WATCH_MS}, through the agent's register: every probe answered
  *     within {@link SLOWEST_MS}.
+ * (b) Noted: how long after its launch the hub first answered `/health`, on
+ *     the copy's first open and on a second one (the next update's restart),
+ *     and the one-time repairs `data_migrations` records.
  *
  * `PROBE_CPU_PROF=1` writes the hub's CPU profile (Chrome .cpuprofile) to
  * the spec's folder; the hub ends itself {@link PROFILE_MS} after it starts.
@@ -41,7 +44,7 @@ import {
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The live hub's own machine, obelisk: the register that held the hub. */
 const HUB_MACHINE = "d04ca118428001f1";
@@ -177,20 +180,25 @@ async function run(kit: Kit): Promise<void> {
   const loopback = "localhost,127.0.0.1,::1";
   fleet.launch("sessiond");
   await fleet.sessiondUp();
-  fleet.launch("hub", [], {
+  const hubEnv = {
     HTTP_PROXY: nowhere,
     http_proxy: nowhere,
     HTTPS_PROXY: nowhere,
     https_proxy: nowhere,
     NO_PROXY: loopback,
     no_proxy: loopback,
+  };
+  const firstBoot = await bootHub(fleet, {
+    ...hubEnv,
     ...(profile
       ? {
           BUN_OPTIONS: `--cpu-prof --cpu-prof-dir=${kit.out} --preload ${ending}`,
         }
       : {}),
   });
-  await fleet.hubUp();
+  kit.note(
+    `first open of the copy: /health first answered ${firstBoot} ms after the hub's launch`
+  );
   // What the hub said as it opened the copy (its migrations among it) and
   // its first answer, kept with the run.
   const firstHealth = await fetch(`${fleet.base}/health`).then((response) =>
@@ -240,6 +248,35 @@ async function run(kit: Kit): Promise<void> {
     registered.length > 0 && missed.length === 0 && slowest <= SLOWEST_MS,
     `${reads.length} probes, ${missed.length} unanswered (at ${missed.map((one) => `${(one.at / 1000).toFixed(0)}s`).join(", ") || "none"}), slowest ${slowest} ms; registers ${registered.length}; each probe in probes.json`
   );
+  if (profile) {
+    return;
+  }
+
+  // (b) The update's next restart: the same copy opened again, its
+  // migrations and its one-time repairs already in it.
+  await fleet.stop("hub");
+  const secondBoot = await bootHub(fleet, hubEnv);
+  const marked = new Database(dbPath, { readonly: true });
+  const repairs = (
+    marked.query("SELECT name FROM data_migrations ORDER BY name").all() as {
+      name: string;
+    }[]
+  ).map((row) => row.name);
+  marked.close();
+  kit.note(
+    `second open of the copy: /health first answered ${secondBoot} ms after the hub's launch (first open ${firstBoot} ms); data_migrations holds ${JSON.stringify(repairs)}`
+  );
 }
+
+/** The hub launched with `env`, and how long after its launch `/health` first answered ok. */
+const bootHub = async (
+  fleet: KitFleet,
+  env: Record<string, string>
+): Promise<number> => {
+  const launched = Date.now();
+  fleet.launch("hub", [], env);
+  await fleet.hubUp();
+  return Date.now() - launched;
+};
 
 export default { name: "hub-restart-live-db", run } satisfies Spec;

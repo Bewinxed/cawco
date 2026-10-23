@@ -6,6 +6,14 @@ import type { SkillFile } from "./index";
  * hub hashes what it resolved with this, and a machine hashes what it holds on
  * disk with it, so the two agree on what "the same bytes" means.
  */
+/**
+ * What {@link hashFiles} hashes, named: a change to what it hashes changes
+ * this too, and the hub then rehashes every stored row once (hub db
+ * `rehashStoredFilesOnce`, keyed `file_hashes:<scheme>` in
+ * `data_migrations`). a1c94e85 put the execute bit in.
+ */
+export const FILE_HASH_SCHEME = "path-exec-content";
+
 export const hashFiles = (files: SkillFile[]): string => {
   const hasher = new Bun.CryptoHasher("sha256");
   for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {

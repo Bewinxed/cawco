@@ -66,7 +66,7 @@ import {
   scoped,
   stoppedWords,
 } from "@cawco/core";
-import { hashFiles } from "@cawco/core/file-hash";
+import { FILE_HASH_SCHEME, hashFiles } from "@cawco/core/file-hash";
 import {
   type MachinePath,
   MachinePathRefused,
@@ -3202,47 +3202,95 @@ const make = async (path: string): Promise<DbShape> => {
     "DELETE FROM instance_changes RETURNING id"
   );
 
+  /**
+   * The hash a row of files is stored under: always its files' own
+   * (hashFiles), whatever its writer passed, so a stored hash changes exactly
+   * when its files do and no write leaves the two disagreeing.
+   */
+  const storedHash = (
+    files: SkillFile[] | null | undefined,
+    given: string | null | undefined
+  ): string | null => (files ? hashFiles(files) : (given ?? null));
+
+  /** Each of `rows` whose stored hash is not its files' own, written its own through `write`. */
+  const rehashRows = <
+    Row extends { files: SkillFile[] | null; hash: string | null },
+  >(
+    rows: Row[],
+    write: (row: Row, hash: string | null) => void
+  ): void => {
+    for (const row of rows) {
+      const hash = storedHash(row.files, row.hash);
+      if (hash !== row.hash) {
+        write(row, hash);
+      }
+    }
+  };
+
+  /** The repair below, once per hashFiles scheme. */
+  function rehashStoredFilesOnce(): void {
+    const name = `file_hashes:${FILE_HASH_SCHEME}`;
+    db.transaction((tx) => {
+      if (
+        tx
+          .select()
+          .from(dataMigrations)
+          .where(eq(dataMigrations.name, name))
+          .get()
+      ) {
+        return;
+      }
+      rehashRows(
+        tx
+          .select({ name: skills.name, hash: skills.hash, files: skills.files })
+          .from(skills)
+          .all(),
+        (row, hash) =>
+          tx.update(skills).set({ hash }).where(eq(skills.name, row.name)).run()
+      );
+      rehashRows(
+        tx
+          .select({ id: plugins.id, hash: plugins.hash, files: plugins.files })
+          .from(plugins)
+          .all(),
+        (row, hash) =>
+          tx.update(plugins).set({ hash }).where(eq(plugins.id, row.id)).run()
+      );
+      rehashRows(
+        tx
+          .select({
+            id: fleetSkillHistory.id,
+            hash: fleetSkillHistory.hash,
+            files: fleetSkillHistory.files,
+          })
+          .from(fleetSkillHistory)
+          .all(),
+        (row, hash) =>
+          tx
+            .update(fleetSkillHistory)
+            .set({ hash: hash ?? row.hash })
+            .where(eq(fleetSkillHistory.id, row.id))
+            .run()
+      );
+      tx.insert(dataMigrations).values({ name, at: new Date() }).run();
+    });
+  }
+
   // A stored skill's or plugin's hash is what its files hash to with the
   // hashFiles this hub runs, because that is the hash every machine takes of
   // its disk. a1c94e85 put each file's execute bit into it, and the rows
   // resolved before that kept the old hash: no machine's untouched copy ever
   // matched it, so each one read as edited and a vendored plugin as missing
-  // its bytes. Every row whose hash and files disagree is rehashed at open,
-  // with no history row, since its bytes did not move.
-  for (const row of db
-    .select({ name: skills.name, hash: skills.hash, files: skills.files })
-    .from(skills)
-    .all()) {
-    const hash = row.files ? hashFiles(row.files) : row.hash;
-    if (hash !== row.hash) {
-      db.update(skills).set({ hash }).where(eq(skills.name, row.name)).run();
-    }
-  }
-  for (const row of db
-    .select({ id: plugins.id, hash: plugins.hash, files: plugins.files })
-    .from(plugins)
-    .all()) {
-    const hash = row.files ? hashFiles(row.files) : row.hash;
-    if (hash !== row.hash) {
-      db.update(plugins).set({ hash }).where(eq(plugins.id, row.id)).run();
-    }
-  }
-  for (const row of db
-    .select({
-      id: fleetSkillHistory.id,
-      hash: fleetSkillHistory.hash,
-      files: fleetSkillHistory.files,
-    })
-    .from(fleetSkillHistory)
-    .all()) {
-    const hash = hashFiles(row.files);
-    if (hash !== row.hash) {
-      db.update(fleetSkillHistory)
-        .set({ hash })
-        .where(eq(fleetSkillHistory.id, row.id))
-        .run();
-    }
-  }
+  // its bytes. Every row whose hash and files disagree is rehashed, with no
+  // history row, since its bytes did not move: once for each hashFiles
+  // scheme (`FILE_HASH_SCHEME`), recorded in `data_migrations`. Run at every
+  // open, it read and hashed every file the fleet holds and ever held, about
+  // 78 MB and 300 ms of each start on the live hub (2026-10-23). A row
+  // written since cannot disagree: every write of files takes its hash from
+  // them here ({@link storedHash}), so a skill's or plugin's hash changes
+  // exactly when its files do, which is also what fleetConfig's files kept
+  // by hash rest on (`keptFiles`).
+  rehashStoredFilesOnce();
 
   type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -4045,17 +4093,15 @@ const make = async (path: string): Promise<DbShape> => {
     }
   };
 
-  /** A skill's version, kept before it is replaced or destroyed. */
+  /** A skill's version, kept before it is replaced or destroyed: under its files' own hash. */
   const recordFleetSkill = ({
     name,
     skillSource,
-    hash,
     files,
     source,
   }: {
     name: string;
     skillSource: string;
-    hash: string;
     files: SkillFile[];
     source: string;
   }): void => {
@@ -4063,7 +4109,7 @@ const make = async (path: string): Promise<DbShape> => {
       .values({
         name,
         skillSource,
-        hash,
+        hash: hashFiles(files),
         bytes: files.reduce(
           (total, file) =>
             total + Buffer.byteLength(file.contentBase64, "base64"),
@@ -6793,7 +6839,7 @@ const make = async (path: string): Promise<DbShape> => {
         .set(
           error === undefined
             ? {
-                hash: hash ?? null,
+                hash: storedHash(files, hash),
                 bytes: bytes ?? null,
                 error: null,
                 files: files ?? null,
@@ -6982,6 +7028,7 @@ const make = async (path: string): Promise<DbShape> => {
       // last copy that worked: the machines are serving it, and a repo that was
       // unreachable for a minute is no reason to take a working skill off them.
       const keep = error !== undefined && stored?.source === source;
+      const fileHash = files ? storedHash(files, hash) : hash;
       // What this change replaces is kept first, as a hook's or a memory
       // document's is: every refresh, adopt, new source or restore that
       // moves the fleet's copy leaves the old one in the skill's history.
@@ -6989,13 +7036,12 @@ const make = async (path: string): Promise<DbShape> => {
         !keep &&
         stored?.hash &&
         stored.files &&
-        hash !== undefined &&
-        hash !== stored.hash
+        fileHash !== undefined &&
+        fileHash !== stored.hash
       ) {
         recordFleetSkill({
           name,
           skillSource: stored.source,
-          hash: stored.hash,
           files: stored.files,
           source: "fleet",
         });
@@ -7004,7 +7050,7 @@ const make = async (path: string): Promise<DbShape> => {
         name,
         source,
         enabled: enabled ?? true,
-        hash: (keep ? stored.hash : hash) ?? null,
+        hash: (keep ? stored.hash : fileHash) ?? null,
         bytes: (keep ? stored.bytes : bytes) ?? null,
         error: error ?? null,
         files: (keep ? stored.files : files) ?? null,
@@ -7091,7 +7137,6 @@ const make = async (path: string): Promise<DbShape> => {
         recordFleetSkill({
           name,
           skillSource: stored.source,
-          hash: stored.hash,
           files: stored.files,
           source: "fleet",
         });
