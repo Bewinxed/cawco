@@ -47,9 +47,9 @@
  *
  *   bun scripts/probe-kit/run.ts session-containers
  */
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   ENDING_DIR_NAME,
   type EndingRecord,
@@ -222,7 +222,7 @@ const run = async (
  */
 const findRuntime = async (): Promise<Runtime | { missing: string }> => {
   const podmanCli = Bun.which("podman");
-  const podmanSocket = `/run/user/${process.getuid?.() ?? 0}/podman/podman.sock`;
+  const podmanSocket = PODMAN_SOCKET();
   if (podmanCli && existsSync(podmanSocket)) {
     return { kind: "podman", cli: podmanCli, socket: podmanSocket };
   }
@@ -500,6 +500,117 @@ const podsEnded = async (kit: Kit): Promise<void> => {
   );
 };
 
+/** The rootless Podman service's own socket, as podman(1) names it. */
+const PODMAN_SOCKET = (): string =>
+  `/run/user/${process.getuid?.() ?? 0}/podman/podman.sock`;
+
+/**
+ * The pause image a pod's infra container runs on the spec's own Podman
+ * service, where the machine's has no catatonit to build its own
+ * (containers.conf(5) `infra_image`: "Infra (pause) container image for pod
+ * infra containers").
+ */
+const PAUSE_IMAGE = "registry.k8s.io/pause:3.10";
+
+/** The spec's own Podman service, when it runs one, and its files. */
+let service:
+  { child: ReturnType<typeof Bun.spawn>; files: string[] } | undefined;
+
+/** Whether a pod with an infra container is made on the Podman service at `socket`: `podman --url … pod create`, removed at once. */
+const podMakes = async (
+  socket: string
+): Promise<{ code: number; out: string }> => {
+  const name = `cawco-probe-podcheck-${tag}-${crypto.randomUUID().slice(0, 4)}`;
+  const made = await run(runtime.cli, [
+    "--url",
+    `${UNIX}${socket}`,
+    "pod",
+    "create",
+    ...MARKS.split(" "),
+    "--name",
+    name,
+  ]);
+  if (made.code === 0) {
+    await run(runtime.cli, [
+      "--url",
+      `${UNIX}${socket}`,
+      "pod",
+      "rm",
+      "-f",
+      name,
+    ]);
+  }
+  return made;
+};
+
+/**
+ * A Podman service of the spec's own (`podman system service`), on the
+ * machine's storage, whose pods' infra containers run {@link PAUSE_IMAGE}
+ * (`CONTAINERS_CONF_OVERRIDE`: "the config file will be loaded last",
+ * containers.conf(5)), so pods and kube plays run where the host has no
+ * catatonit. The machine's own Podman configuration is not touched. Its
+ * socket, once it answers; none when it does not.
+ */
+const ownService = async (): Promise<string | undefined> => {
+  if ((await run(runtime.cli, ["image", "exists", PAUSE_IMAGE])).code !== 0) {
+    const pulled = await run(runtime.cli, ["pull", "-q", PAUSE_IMAGE]);
+    if (pulled.code !== 0) {
+      console.log(
+        `session-containers: ${PAUSE_IMAGE} could not be pulled: ${pulled.out}`
+      );
+      return;
+    }
+  }
+  const dir = dirname(PODMAN_SOCKET());
+  const conf = join(dir, `cawco-probe-${tag}.conf`);
+  const socket = join(dir, `cawco-probe-${tag}.sock`);
+  await writeFile(conf, `[engine]\ninfra_image = "${PAUSE_IMAGE}"\n`);
+  service = {
+    child: Bun.spawn(
+      [runtime.cli, "system", "service", "--time=0", `${UNIX}${socket}`],
+      {
+        env: { ...outside(), CONTAINERS_CONF_OVERRIDE: conf },
+        stdout: "ignore",
+        stderr: "ignore",
+      }
+    ),
+    files: [conf, socket],
+  };
+  /** Whether the service answers its ping yet. */
+  const pings = async (): Promise<true | undefined> => {
+    if (!existsSync(socket)) {
+      return;
+    }
+    try {
+      const answer = await fetch("http://d/_ping", {
+        unix: socket,
+      } as RequestInit);
+      return answer.ok ? true : undefined;
+    } catch {
+      // Not listening yet.
+    }
+  };
+  const answered = await until(
+    "the spec's own Podman service answering",
+    pings,
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  return answered ? socket : undefined;
+};
+
+/** The spec's own Podman service stopped and its files gone, when it ran one. */
+const stopService = (): void => {
+  if (!service) {
+    return;
+  }
+  service.child.kill("SIGTERM");
+  for (const file of service.files) {
+    rmSync(file, { force: true });
+  }
+  service = undefined;
+};
+
 /** (c0) the runtime found, the image there, and on Podman whether pods get infra; the agent's environment. */
 const prepare = async (
   kit: Kit
@@ -540,153 +651,164 @@ const prepare = async (
     return { DOCKER_HOST: `${UNIX}${runtime.socket}` };
   }
   // A pod's infra container needs catatonit on the host ({@link infra}).
-  const podCheck = `cawco-probe-podcheck-${tag}`;
-  const podMade = await run(runtime.cli, [
-    "pod",
-    "create",
-    ...MARKS.split(" "),
-    "--name",
-    podCheck,
-  ]);
-  infra = podMade.code === 0;
-  if (infra) {
-    await run(runtime.cli, ["pod", "rm", "-f", podCheck]);
-  } else {
+  const made = await podMakes(runtime.socket);
+  infra = made.code === 0;
+  if (!infra) {
+    const own = await ownService();
+    const ownMade = own ? await podMakes(own) : undefined;
+    infra = ownMade?.code === 0;
     console.log(
-      `NOTE session-containers: this machine's Podman makes no pod with an infra container (podman pod create: exit ${podMade.code}: ${podMade.out}); the session's pod is made --infra=false, and the kube play leg waits for catatonit (\`sudo apt install catatonit\`)`
+      infra && own
+        ? `NOTE session-containers: this machine's Podman makes no pod with an infra container (${made.out}); the spec runs its own Podman service at ${own} with infra_image=${PAUSE_IMAGE} (containers.conf(5): "Infra (pause) container image for pod infra containers"), and the session's pods and kube play run there`
+        : `NOTE session-containers: this machine's Podman makes no pod with an infra container (${made.out}), nor did the spec's own service (${ownMade?.out ?? "it did not start"}); the session's pod is made --infra=false, and the kube play leg waits for catatonit (\`sudo apt install catatonit\`)`
     );
+    if (infra && own) {
+      runtime = { ...runtime, socket: own };
+    } else {
+      stopService();
+    }
   }
-  return { DOCKER_HOST: UNTRACKED };
+  return {
+    DOCKER_HOST: UNTRACKED,
+    ...(runtime.socket === PODMAN_SOCKET()
+      ? {}
+      : { CONTAINER_HOST: `${UNIX}${runtime.socket}` }),
+  };
 };
 
 const spec: Spec = {
   name: "session-containers",
   host: "it runs containers on the machine's own runtime, which no workspace reaches",
   run: async (kit: Kit) => {
-    const { check } = kit;
-    const agentEnv = await prepare(kit);
-    if (!agentEnv) {
-      return;
-    }
-    const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent", [], agentEnv);
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
-    const outsideRun = await run(runtime.cli, [
-      "run",
-      "-d",
-      ...MARKS.split(" "),
-      IMAGE,
-      "sleep",
-      OUTSIDE,
-    ]);
     try {
-      // ── (u1) a runtime no door reaches ──────────────────────────────────
-      session = await launchSession(kit, fleet);
-
-      // ── (c1)–(c3) the session's containers and pods, and one outside ────
-      for (const [at, [name]] of commands().entries()) {
-        // biome-ignore lint/performance/noAwaitInLoops: one command at a time, each read back before the next
-        await fleet.send(session, `${name}: start it.`);
-        await until(
-          `the ${name} command's end`,
-          () =>
-            fleet.seen.filter((request) => request.afterTool).length >= at + 1,
-          Boolean,
-          300_000
-        ).catch(() => undefined);
-      }
-      const sleeps = sessionSleeps();
-      const made = await Promise.all(sleeps.map(sleeping));
-      check(
-        "(c1) each container the session started runs, labelled with it",
-        made.every(
-          (one) =>
-            one?.State === "running" && one.Labels?.[SESSION_LABEL] === session
-        ),
-        `on ${runtime.kind}, session ${session}: ${sleeps.map((arg, at) => `sleep ${arg}: ${said(made[at])}`).join("; ")}; the commands ran: ${[...ran].join(", ")}`
-      );
-      const mine = await sleeping(OUTSIDE);
-      check(
-        "(c2) the spec's own container runs, with no session's label",
-        mine?.State === "running" && !mine.Labels?.[SESSION_LABEL],
-        `${outsideRun.out}: ${said(mine)}`
-      );
-      if (podman()) {
-        const pods = await podsOf(session);
-        check(
-          "(c3) its pods carry the session's label: the one it created, and the kube play's where it ran",
-          pods.length === (infra ? 2 : 1) &&
-            (!infra || pods.some((pod) => pod.Name === KUBE_POD)),
-          `${JSON.stringify(pods.map((pod) => [pod.Name, pod.Status]))}; its pod ${podMode()}`
-        );
-      }
-
-      // ── (s1), (s2) an ending left by an agent that died midway ───────────
-      await endingLeft(
-        kit,
-        fleet,
-        made[sleeps.indexOf(ENDED_EARLIER)],
-        agentEnv
-      );
-
-      // ── the session ends ────────────────────────────────────────────────
-      const hubBefore = await fleet.logMark("hub");
-      await fleet.stopSession(session);
-      const [runGone, sinceGone] = await Promise.all([
-        gone(RUN),
-        gone(STARTED_SINCE),
-      ]);
-      check(
-        "(e1) its unnamed containers are stopped and removed, the one started since the old ending too",
-        runGone && sinceGone,
-        `sleep ${RUN}: ${said(await sleeping(RUN))}; sleep ${STARTED_SINCE}: ${said(await sleeping(STARTED_SINCE))}`
-      );
-      const kept = await sleeping(NAMED);
-      check(
-        "(e2) the container it named is stopped and kept",
-        kept?.State === "exited",
-        said(kept)
-      );
-      check(
-        "(k1) the container Compose named is stopped and removed",
-        await gone(COMPOSED),
-        said(await sleeping(COMPOSED))
-      );
-      await podsEnded(kit);
-      const ours = await sleeping(OUTSIDE);
-      check(
-        "(e3) the spec's own container still runs",
-        ours?.State === "running",
-        said(ours)
-      );
-      const told = await until(
-        "the hub's notice of the ended containers",
-        async () =>
-          (await hubBefore.since())
-            .split("\n")
-            .find(
-              (line) =>
-                line.includes(containerWords.ended) && line.includes(session)
-            ),
-        Boolean,
-        30_000
-      ).catch(() => undefined);
-      check(
-        "(n1) the hub tells what was stopped, naming the kept one",
-        !!told?.includes(NAMED_NAME),
-        told ?? "no such line in the hub's log"
-      );
+      await provenOn(kit);
     } finally {
       // Everything this run started, in its session or not, by its own mark.
-      await removeMarked(`${RUN_MARK}=${tag}`);
+      if (runtime.socket) {
+        await removeMarked(`${RUN_MARK}=${tag}`);
+      }
+      stopService();
     }
   },
+};
+
+/** The spec's legs, on the machine's runtime ({@link prepare}). */
+const provenOn = async (kit: Kit): Promise<void> => {
+  const { check } = kit;
+  const agentEnv = await prepare(kit);
+  if (!agentEnv) {
+    return;
+  }
+  const fleet = await kit.fleet(respond);
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.fileAccount();
+  fleet.launch("agent", [], agentEnv);
+  await fleet.agentUp();
+  await fleet.accountSignedIn();
+  const outsideRun = await run(runtime.cli, [
+    "run",
+    "-d",
+    ...MARKS.split(" "),
+    IMAGE,
+    "sleep",
+    OUTSIDE,
+  ]);
+  {
+    // ── (u1) a runtime no door reaches ──────────────────────────────────
+    session = await launchSession(kit, fleet);
+
+    // ── (c1)–(c3) the session's containers and pods, and one outside ────
+    for (const [at, [name]] of commands().entries()) {
+      // biome-ignore lint/performance/noAwaitInLoops: one command at a time, each read back before the next
+      await fleet.send(session, `${name}: start it.`);
+      await until(
+        `the ${name} command's end`,
+        () =>
+          fleet.seen.filter((request) => request.afterTool).length >= at + 1,
+        Boolean,
+        300_000
+      ).catch(() => undefined);
+    }
+    const sleeps = sessionSleeps();
+    const made = await Promise.all(sleeps.map(sleeping));
+    check(
+      "(c1) each container the session started runs, labelled with it",
+      made.every(
+        (one) =>
+          one?.State === "running" && one.Labels?.[SESSION_LABEL] === session
+      ),
+      `on ${runtime.kind}, session ${session}: ${sleeps.map((arg, at) => `sleep ${arg}: ${said(made[at])}`).join("; ")}; the commands ran: ${[...ran].join(", ")}`
+    );
+    const mine = await sleeping(OUTSIDE);
+    check(
+      "(c2) the spec's own container runs, with no session's label",
+      mine?.State === "running" && !mine.Labels?.[SESSION_LABEL],
+      `${outsideRun.out}: ${said(mine)}`
+    );
+    if (podman()) {
+      const pods = await podsOf(session);
+      check(
+        "(c3) its pods carry the session's label: the one it created, and the kube play's where it ran",
+        pods.length === (infra ? 2 : 1) &&
+          (!infra || pods.some((pod) => pod.Name === KUBE_POD)),
+        `${JSON.stringify(pods.map((pod) => [pod.Name, pod.Status]))}; its pod ${podMode()}`
+      );
+    }
+
+    // ── (s1), (s2) an ending left by an agent that died midway ───────────
+    await endingLeft(kit, fleet, made[sleeps.indexOf(ENDED_EARLIER)], agentEnv);
+
+    // ── the session ends ────────────────────────────────────────────────
+    const hubBefore = await fleet.logMark("hub");
+    await fleet.stopSession(session);
+    const [runGone, sinceGone] = await Promise.all([
+      gone(RUN),
+      gone(STARTED_SINCE),
+    ]);
+    check(
+      "(e1) its unnamed containers are stopped and removed, the one started since the old ending too",
+      runGone && sinceGone,
+      `sleep ${RUN}: ${said(await sleeping(RUN))}; sleep ${STARTED_SINCE}: ${said(await sleeping(STARTED_SINCE))}`
+    );
+    const kept = await sleeping(NAMED);
+    check(
+      "(e2) the container it named is stopped and kept",
+      kept?.State === "exited",
+      said(kept)
+    );
+    check(
+      "(k1) the container Compose named is stopped and removed",
+      await gone(COMPOSED),
+      said(await sleeping(COMPOSED))
+    );
+    await podsEnded(kit);
+    const ours = await sleeping(OUTSIDE);
+    check(
+      "(e3) the spec's own container still runs",
+      ours?.State === "running",
+      said(ours)
+    );
+    const told = await until(
+      "the hub's notice of the ended containers",
+      async () =>
+        (await hubBefore.since())
+          .split("\n")
+          .find(
+            (line) =>
+              line.includes(containerWords.ended) && line.includes(session)
+          ),
+      Boolean,
+      30_000
+    ).catch(() => undefined);
+    check(
+      "(n1) the hub tells what was stopped, naming the kept one",
+      !!told?.includes(NAMED_NAME),
+      told ?? "no such line in the hub's log"
+    );
+  }
 };
 
 export default spec;
