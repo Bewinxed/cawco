@@ -72,7 +72,7 @@ const PIN = `{
   ],
 }`;
 
-const PIN_STORY = `import { ComposerDraft } from "../transcript/composer-draft.svelte";
+export const PIN_STORY = `import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import PinCard from "../preview/PinCard.svelte";
 
 const none = () => undefined;

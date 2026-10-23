@@ -111,6 +111,8 @@ interface ModuleNode {
   id: string | null;
   importedModules: Set<ModuleNode>;
   importers: Set<ModuleNode>;
+  /** When it was last changed under a page (Vite's HMR), whose importers then ask for it with `?t=`; 0 when never. */
+  lastHMRTimestamp: number;
   /** Its code as last served; null until a page asked for it. */
   transformResult: { code: string; map?: unknown } | null;
   url: string;
@@ -132,6 +134,7 @@ interface DevServer {
       moduleGraph: {
         getModuleById: (id: string) => ModuleNode | undefined;
         getModulesByFile: (file: string) => Set<ModuleNode> | undefined;
+        idToModuleMap: Map<string, ModuleNode>;
         invalidateModule: (mod: ModuleNode) => void;
       };
     };
@@ -755,7 +758,7 @@ const COLLECTOR = `<script>window.__cawcoErrors=[];addEventListener("error",func
  * (Nuxt's is `/_nuxt/`), so it is written without it.
  */
 function canvasPage(): string {
-  const entry = `/@id/__x00__${VIRTUAL_STAGE}entry.js`;
+  const entry = CANVAS_ENTRY;
   const main = `<main id="cawco-canvas" class="cawco-canvas"></main>`;
   let html = existsSync(shellFile())
     ? readFileSync(shellFile(), "utf8")
@@ -1006,11 +1009,14 @@ async function serveCanvas(
     ).searchParams.getAll("file");
     // JSON in a script element: no `<` closes it early.
     const plan = JSON.stringify(planOf(files)).replaceAll("<", "\\u003c");
+    const preloads = preloadsOf(files)
+      .map((url) => `<link rel="modulepreload" href="${escapeAttr(url)}">`)
+      .join("");
     const html = await dev.transformIndexHtml(
       req.url ?? CANVAS_PATH,
       canvasPage().replace(
         "</head>",
-        `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script></head>`
+        `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script>${preloads}</head>`
       ),
       (req as IncomingMessage & { originalUrl?: string }).originalUrl
     );
@@ -1021,6 +1027,104 @@ async function serveCanvas(
     next(error);
   }
 }
+
+/** An attribute's value, its quotes and ampersands written as entities. */
+const escapeAttr = (value: string): string =>
+  value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+
+/**
+ * Every module a page of `files`' canvas loaded before, by the address the
+ * page asks for it: the stage's entry and each section's module, and all
+ * they import, as Vite's graph holds them (a module is in it once a page
+ * asked for it). The canvas page preloads them (`modulepreload`), so the
+ * browser asks for its whole graph at once, where each level of imports was
+ * a round trip of its own: a canvas through the hub's preview proxy, some
+ * 350 ms a request, waited ~25 of them in turn (the comment card's, 10 to
+ * 18 s to draw). A module changed under a page is asked for with its
+ * `?t=` (Vite's import analysis), and preloaded so. A stage no page has
+ * drawn yet preloads nothing.
+ */
+function preloadsOf(files: string[]): string[] {
+  const graph = server?.environments.client.moduleGraph;
+  if (!graph) {
+    return [];
+  }
+  const sections = new Set<ModuleNode>();
+  const starts = [...graph.idToModuleMap.values()].filter((mod) => {
+    if (!mod.transformResult) {
+      return false;
+    }
+    const section = mod.id ? sectionOfId(mod.id) : null;
+    if (section !== null && files.includes(section)) {
+      sections.add(mod);
+      return true;
+    }
+    // The page's own scripts: the canvas's entry, and Vite's client, which its HTML transform adds.
+    return servedAt(mod) === CANVAS_ENTRY || servedAt(mod) === VITE_CLIENT;
+  });
+  const seen = new Set<ModuleNode>(starts);
+  const queue = [...starts];
+  // Breadth first: an array's iterator reaches what is pushed while it runs.
+  for (const mod of queue) {
+    for (const next of mod.importedModules) {
+      if (!seen.has(next) && next.transformResult) {
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return queue.map((mod) => {
+    // A section's module is a dynamic import of an address the runtime builds, which Vite asks for with `?import` first.
+    const asked = sections.has(mod)
+      ? withQuery(servedAt(mod), "import", true)
+      : servedAt(mod);
+    return mod.lastHMRTimestamp > 0
+      ? withQuery(asked, `t=${mod.lastHMRTimestamp}`, false)
+      : asked;
+  });
+}
+
+/**
+ * The address a page asks for `mod` at, as Vite's import analysis writes
+ * it: Vite's client at `/@vite/client`; a virtual module's id (`\0…`)
+ * under `/@id/` (its `wrapId`); a module that is neither script nor style
+ * (JSON, a `?url` asset) with `?import` first (its `isExplicitImportRequired`).
+ */
+const servedAt = (mod: ModuleNode): string => {
+  if (mod.file?.endsWith(VITE_CLIENT_FILE)) {
+    return VITE_CLIENT;
+  }
+  const url = mod.url.startsWith("/")
+    ? mod.url
+    : `/@id/${mod.url.replace("\0", "__x00__")}`;
+  const bare = url.split("?")[0] as string;
+  const script = JS_SOURCE.test(bare) || !LAST_SEGMENT_EXT.test(bare);
+  return script || STYLE_SOURCE.test(bare)
+    ? url
+    : withQuery(url, "import", true);
+};
+
+/** Vite's client module, by its file. */
+const VITE_CLIENT_FILE = "/vite/dist/client/client.mjs";
+/** What Vite serves as a script whatever it is asked with (its `knownJsSrcRE`). */
+const JS_SOURCE = /\.(?:[jt]sx?|m[jt]s|vue|marko|svelte|astro|imba|mdx)$/;
+/** A style sheet (its `CSS_LANGS_RE`). */
+const STYLE_SOURCE = /\.(?:css|less|sass|scss|styl|stylus|pcss|postcss|sss)$/;
+/** A path whose last segment has an extension. */
+const LAST_SEGMENT_EXT = /\.[^/.]+$/;
+
+/** `url` with `query` added, at the start of its query (Vite's `injectQuery`) or its end. */
+const withQuery = (url: string, query: string, first: boolean): string => {
+  const [path, search] = url.split("?") as [string, string | undefined];
+  if (!search) {
+    return `${path}?${query}`;
+  }
+  return first ? `${path}?${query}&${search}` : `${path}?${search}&${query}`;
+};
+
+/** The canvas page's entry, and Vite's client, by the addresses the page asks for them. */
+const CANVAS_ENTRY = `/@id/__x00__${VIRTUAL_STAGE}entry.js`;
+const VITE_CLIENT = "/@vite/client";
 
 /**
  * Each states file's {@link SectionPlan} (from the toolchain root), read
