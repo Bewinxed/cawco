@@ -20,14 +20,17 @@
  * - a pi extension (a module registering the tool `hcprobe_pi_tool`);
  * - a skill, fetched from a SKILL.md this spec serves on loopback.
  *
- * - r1. The rearm delegate's boundary is handed over once the hooks dir is
- *   made (agent boundary.ts `rearmMoved`).
+ * - r1. On Linux the rearm delegate's boundary is handed over once the hooks
+ *   dir is made (agent boundary.ts `rearmMoved`): srt binds a read path only
+ *   when it resolves. On macOS it is kept: Seatbelt grants the dir by path
+ *   rule, there or not.
  * - r2. Told to go on, its next call meets the hook placed while it ran
- *   (claude.ts `#takeFleetSettings`), whose script its old boundary never
+ *   (claude.ts `#takeFleetSettings`), whose script its first boundary never
  *   held: the result carries the marker. It waits again.
  * - r3. The hooks dir is taken away while its boundary runs, and a fleet
- *   change has the sync make it again: the boundary, whose bind held the old
- *   dir, is handed over (its form names the dir's device and inode).
+ *   change has the sync make it again: on Linux the boundary, whose bind held
+ *   the old dir, is handed over (its form names the dir's device and inode);
+ *   on macOS it is kept, as in r1.
  * - r4. Told to go on, its next call meets the marker hook again.
  *
  * Then a Claude Code, an OpenCode and a pi delegate work in workspaces of A,
@@ -49,7 +52,8 @@
  *   requests.
  * - p6. `git status --porcelain` is empty in both checkouts and in each of
  *   A's workspace clones while its delegate runs (the probe's own write
- *   aside), and none holds a `.claude/settings.json`.
+ *   aside), and none holds a `.claude/settings.json` that sets anything: a
+ *   Linux clone holds the boundary's `{}` stand-in for that deny path.
  * - p7. The machine's row says the Notification hook unsupported, naming
  *   OpenCode and pi.
  * - p8. In each of A's three sessions the rewrite hook ran (its words reached
@@ -62,7 +66,7 @@
  *
  *   bun scripts/probe-kit/run.ts harness-config-placement
  */
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
@@ -230,24 +234,14 @@ const cawcoCall = (
   }
 };
 
-/** The write each harness's file tool takes: Claude Code's `Write`, OpenCode's and pi's `write`. */
-const writeCall = (
-  request: Seen,
-  name: Leg,
-  path: string
-): Reply | undefined => {
+/** The write each harness's file tool takes: Claude Code's `Write`, OpenCode 2.0.29's and pi's `write` (both `path`). */
+const writeCall = (request: Seen, path: string): Reply | undefined => {
   if (request.toolNames.includes("Write")) {
     return useTool("Write", { file_path: path, content: "kept" });
   }
-  if (!request.toolNames.includes("write")) {
-    return;
-  }
-  return useTool(
-    "write",
-    name === "pi"
-      ? { path, content: "kept" }
-      : { filePath: path, content: "kept" }
-  );
+  return request.toolNames.includes("write")
+    ? useTool("write", { path, content: "kept" })
+    : undefined;
 };
 
 /** One act's call, by the tools the session is offered; none when it cannot make it. */
@@ -287,7 +281,7 @@ const actCall = (
     case "write": {
       const clone = cloneOf(name);
       const call = clone
-        ? writeCall(request, name, join(clone, writeName(name)))
+        ? writeCall(request, join(clone, writeName(name)))
         : undefined;
       return call ? { call } : undefined;
     }
@@ -465,15 +459,43 @@ const reportOf = (fleet: KitFleet) =>
     skills?: Record<string, { state: string; detail?: string }>;
   };
 
-/** Whether a folder is clean and holds no project settings file: `git status --porcelain`'s words, or "clean". */
+/**
+ * What a folder's `.claude/settings.json` sets: none when it is absent or
+ * an empty object, which a Linux workspace's clone holds while its boundary
+ * runs (the stand-in srt binds onto itself for the deny path, `{}`: core
+ * workspace-policy.ts `cloneDenies`, agent boundary-host.ts `standIn`).
+ */
+const settingsAt = (path: string): string | undefined => {
+  const file = projectClaudeDir(path, "settings.json");
+  if (!existsSync(file)) {
+    return;
+  }
+  const held = readFileSync(file, "utf8");
+  try {
+    const parsed: unknown = JSON.parse(held);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      Object.keys(parsed).length === 0
+    ) {
+      return;
+    }
+  } catch {
+    // Said below as it stands.
+  }
+  return held.slice(0, 200);
+};
+
+/** Whether a folder is clean and its project settings file sets nothing: `git status --porcelain`'s words, or "clean". */
 const cleanAt = async (
   path: string
 ): Promise<{ clean: boolean; said: string }> => {
   const status = await porcelain(path);
-  const settings = existsSync(projectClaudeDir(path, "settings.json"));
+  const settings = settingsAt(path);
   return {
-    clean: status === "" && !settings,
-    said: `${status || "clean"}${settings ? "; holds a project settings file" : ""}`,
+    clean: status === "" && settings === undefined,
+    said: `${status || "clean"}${settings === undefined ? "" : `; its project settings file sets ${settings}`}`,
   };
 };
 
@@ -645,6 +667,40 @@ const heldBy = (path: string): string | undefined => {
   return held ? `${held.dev}:${held.ino}` : undefined;
 };
 
+/** macOS's boundary is Seatbelt's: it grants a read path by rule, there or not. */
+const SEATBELT = process.platform === "darwin";
+
+/**
+ * Whether a running boundary took the hooks dir once it moved, and the
+ * generation it is of: on Linux a later one, srt's bind holding the dir as
+ * it stood when the sandbox started (agent boundary.ts `syncedPresence`); on
+ * macOS the same one, Seatbelt granting the dir by its path rule
+ * (`(allow file-read* (subpath …))`, agent boundary-policy.ts
+ * `seatbeltProfile`), so it is never handed over for it.
+ */
+const tookMove = async (
+  fleet: KitFleet,
+  workspace: string,
+  before: string | undefined
+): Promise<{ gen: string | undefined; took: boolean }> => {
+  if (SEATBELT) {
+    const gen = await generationOf(fleet, workspace);
+    return { gen, took: gen !== undefined && gen === before };
+  }
+  const gen = await until(
+    "the boundary handed over",
+    () => generationOf(fleet, workspace),
+    (now) => now !== undefined && now !== before,
+    120_000
+  ).catch(() => undefined);
+  return { gen, took: gen !== undefined && gen !== before };
+};
+
+/** What {@link tookMove} asks of this OS's boundary, for a check's name. */
+const TOOK = SEATBELT
+  ? "kept, Seatbelt granting the dir by path"
+  : "handed over, srt binding the dir as it stood";
+
 /**
  * r0: the rearm delegate, started with the fleet's hooks dir gone: its
  * workspace and the generation its boundary started as, once it waits.
@@ -681,16 +737,11 @@ const readRearm = async (
   fleet: KitFleet,
   started: { gen: string | undefined; item: string; workspace: string }
 ): Promise<void> => {
-  const gen = await until(
-    "the rearm delegate's boundary handed over",
-    () => generationOf(fleet, started.workspace),
-    (now) => now !== undefined && now !== started.gen,
-    120_000
-  ).catch(() => undefined);
+  const { gen, took } = await tookMove(fleet, started.workspace, started.gen);
   kit.check(
-    "r1: the rearm delegate's boundary was handed over once the hooks dir was made",
-    gen !== undefined && gen !== started.gen,
-    `started as ${started.gen ?? "none"}, now ${gen ?? "the same"}`
+    `r1: the rearm delegate's boundary, once the hooks dir was made: ${TOOK}`,
+    took,
+    `started as ${started.gen ?? "none"}, now ${gen ?? "none"}`
   );
   const instance = workspaceOf(fleet, started.item)?.instance;
   if (instance) {
@@ -739,19 +790,16 @@ const readRecreated = async (
   await hubCall(fleet, "PUT", `/api/fleet/hooks/${notifyId}`, {
     name: `hcprobe notify ${RUN} again`,
   });
-  const gen = await until(
-    "the rearm delegate's boundary handed over again",
-    () => generationOf(fleet, started.workspace),
-    (now) => now !== undefined && now !== before.gen,
+  const after = await until(
+    "the hooks dir made again",
+    () => heldBy(hooksDir),
+    (held) => held !== undefined,
     120_000
   ).catch(() => undefined);
-  const after = heldBy(hooksDir);
+  const { gen, took } = await tookMove(fleet, started.workspace, before.gen);
   kit.check(
-    "r3: the hooks dir made again under a running boundary has it handed over",
-    gen !== undefined &&
-      gen !== before.gen &&
-      after !== undefined &&
-      after !== before.dir,
+    `r3: the rearm delegate's boundary, the hooks dir made again under it: ${TOOK}`,
+    took && after !== undefined && after !== before.dir,
     JSON.stringify({ gen: [before.gen, gen], dir: [before.dir, after] })
   );
   const instance = workspaceOf(fleet, started.item)?.instance;
