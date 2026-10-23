@@ -451,7 +451,10 @@ export class CawLead {
         return { kind: "say", text: `Retrying ${this.retrying?.id}` };
       case "done":
         return { kind: "say", text: `${this.landed} landed` };
-      default:
+      case "ready":
+      case "idle":
+      case "sleeping":
+      case "compacted":
         return null;
     }
   });
@@ -483,7 +486,8 @@ export class CawLead {
         return "Reconnecting to the hub";
       case "idle":
         return "Awake · nothing due";
-      default:
+      case "ready":
+      case "compacted":
         return "Awake · resting";
     }
   });

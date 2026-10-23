@@ -155,6 +155,7 @@
     type ComposeTarget,
     type PaneKey,
     type PreviewPinAt,
+    pageMessage,
     previewBox,
     previewCompose,
     previewError,
@@ -2365,8 +2366,11 @@
       picking = { id: ask };
       return;
     }
-    const message = event.data;
-    switch (message?.type) {
+    const message = pageMessage(event.data);
+    if (!message) {
+      return;
+    }
+    switch (message.type) {
       case "cawco:ready":
       case "cawco:navigated": {
         const at = previewUrl(message.url, paneOrigin);
@@ -2617,8 +2621,6 @@
         }
         break;
       }
-      default:
-        break;
     }
   }
   /**
