@@ -302,7 +302,6 @@ async function run(kit: Kit): Promise<void> {
     );
     const id8 = (pending[0]?.uuid ?? "").slice(0, 8);
 
-
     // 2. While the turn runs: the queued event, drawn as the note.
     const drawnLine = (want: (kind: string) => boolean) =>
       heard.findLast((line) => {
