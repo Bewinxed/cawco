@@ -355,12 +355,17 @@ const landedLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   ).catch(() => "");
   const x = await scene.delegate("X", scene.src);
   const xItem = await scene.ended(x);
-  const main = await gitIn(wl.path, "ls-remote", "origin", "refs/heads/main");
+  // Main's tip once X landed, as the hub recorded its landing: the clone's
+  // origin is the hub's remote, which the probe's own git has no credential for.
+  const landed = scene.fleet.query<{ landed: string | null }>(
+    "SELECT landed FROM work_items WHERE id = ?",
+    x.workItemId
+  )[0]?.landed;
+  const main =
+    (JSON.parse(landed ?? "null") as { sha?: string } | null)?.sha ?? "";
   check(
     "(l) X lands the same change on main as a commit of its own while L waits",
-    xItem?.state === "done" &&
-      main.length > 0 &&
-      !main.startsWith(own.split("\t")[0] ?? "-"),
+    xItem?.state === "done" && main.length === 40 && !own.startsWith(main),
     `${xItem?.state} ${xItem?.error ?? ""}; L ${own}; main ${main}`
   );
   await writeFile(join(wl.tmp ?? "", goFile("L")), "go\n");
@@ -368,11 +373,12 @@ const landedLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   const retired = await scene.stateBecomes(wl.id, "archived");
   const head = JSON.parse(retired.head ?? "null") as { commit?: string } | null;
   check(
-    "(l) L finishes blocked, its commit on no remote by hash; its workspace retires, not held, its head at main's tip",
+    "(l) L finishes blocked (its item failed), its commit on no remote by hash; its workspace retires, not held, its head at main's tip",
     lItem?.state === "failed" &&
       retired.state === "archived" &&
       !existsSync(wl.path) &&
-      main.startsWith(head?.commit ?? "-"),
+      main !== "" &&
+      head?.commit === main,
     `${lItem?.state}; ${retired.state}; head ${retired.head}; main ${main}; ${await linesOf(scene.fleet, wl.id)}`
   );
 };
@@ -533,10 +539,12 @@ const projectAt = async (
   await mkdir(dir, { recursive: true });
   const env = { ...process.env, HOME: home };
   if (from) {
-    await Bun.$`git clone -q --depth 1 --no-local ${`file://${from}`} ${dir}`
+    // The checkout's tracked files at its HEAD, as one commit on `main` of a
+    // repository of its own: the run's checkout may be detached, and a
+    // shallow history is no history a hub's remote takes.
+    await Bun.$`sh -c ${'git -C "$1" archive --format=tar HEAD | tar -x -C "$2" && cd "$2" && git init -q -b main && git add -A -f && git commit -qm "The tree at the run\'s HEAD"'} sh ${from} ${dir}`
       .env(env)
       .quiet();
-    await Bun.$`git -C ${dir} remote remove origin`.env(env).quiet();
   } else {
     await Bun.$`sh -c ${"git init -q -b main && echo holds > README.md && git add -A && git commit -qm 'First commit'"}`
       .cwd(dir)
