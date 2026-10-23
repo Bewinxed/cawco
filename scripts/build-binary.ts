@@ -14,7 +14,7 @@
  *       `--skip-prepare` it prepares first.
  *
  * release.ts runs `prepare` once and every compile (the proof build, stage
- * 2's two, the four release targets) at once beside it; build-stage2.ts and
+ * 2's three, the four release targets) at once beside it; build-stage2.ts and
  * the probe kit call the exports.
  */
 import { existsSync, readFileSync } from "node:fs";

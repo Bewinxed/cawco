@@ -46,8 +46,10 @@ TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-tmp-$(printf %s "$out
 ln -sfn "$out/tmp" "$TMPDIR"
 export TMPDIR
 
-# The builds (scripts/binary/build-stage2.ts): two of this tree.
-export BASE=0.0.1-test.2 NEXT=0.0.1-test.3
+# The builds (scripts/binary/build-stage2.ts): three of this tree. NIGHTLY is NEXT as the nightly channel publishes
+# it: a version in the shape release.ts gives a nightly (`<base>-nightly.<sequence>+<commit:12>`), its sequence and
+# commit NEXT's, so its feed's manifest is one releaseTag reads and its binary says the version its manifest names.
+export BASE=0.0.1-test.2 NEXT=0.0.1-test.3 NIGHTLY=0.0.1-nightly.30+333333333333
 # The proof's own pace for the update's timed steps (packages/core/src/clock.ts, replaced in proof builds by
 # scripts/binary/proof-clock.ts): the trial window (180 s), the confirm hold (60 s), the first retry delay (60 s), how
 # long a retiring keeper sits empty (20 s), a drain's wait on the work in flight (45 s, agent binary-update.ts
@@ -210,7 +212,7 @@ EOF
 orchestrate() {
   python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
   command -v flock > /dev/null || { echo "flock (util-linux) is needed: one proof at a time builds into the image store" >&2; exit 2; }
-  for need in cawco-2 cawco-3 keys/test-release-private.pem keys/test-release-public.pem; do
+  for need in cawco-2 cawco-3 cawco-nightly keys/test-release-private.pem keys/test-release-public.pem; do
     [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
   done
   free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
@@ -266,7 +268,7 @@ orchestrate() {
     feed migrating ok stable 0.0.1-test.8 8888888888888888888888888888888888888888 "$out/shared/migrating-cawco" "$key" 32 "$((schema + 1))" & pids+=($!)
     feed swapbroken ok stable 0.0.1-test.6 3434343434343434343434343434343434343434 "$out/shared/broken-cawco" "$key" 34 "$schema" & pids+=($!)
     # The newer build on the nightly channel, beside base's older one on stable: a nightly hub's fleet (nightlyjoin).
-    feed nightly ok nightly "$NEXT" 3333333333333333333333333333333333333333 "$bins/cawco-3" "$key" 30 "$schema" & pids+=($!)
+    feed nightly ok nightly "$NIGHTLY" 3333333333333333333333333333333333333333 "$bins/cawco-nightly" "$key" 30 "$schema" & pids+=($!)
     feed refusals tampered stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" tamper & pids+=($!)
     feed refusals badsig stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" bad-signature & pids+=($!)
     feed refusals nosig stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" no-signature & pids+=($!)
@@ -3396,7 +3398,7 @@ command_route_installs_hubs_build() {
   wait_until 120 '[[ "$(hub_api /api/agents | json "d => d.find(a => a.hostname === \"joiner\")?.status")" == online ]]'
   id=$(machine_id joiner)
   hub_version=$(hub_api /health | json 'd => d.build?.version')
-  [[ $hub_version == "$NEXT" ]]
+  [[ $hub_version == "$NIGHTLY" ]]
   [[ "$(build_version "$id")" == "$hub_version" ]] \
     || { echo "ASSERTION FAILED: the command route installed $(build_version "$id") on the joined machine, not the hub's $hub_version (the fleet's channel is nightly; $BASE is the newest stable)"; return 1; }
 }
@@ -3405,7 +3407,7 @@ rig_nightlyjoin() {
   use_feed base
   use_feed nightly
   setup "boot the machines: hub joiner" machines hub joiner
-  setup "install the hub from $NEXT on the nightly channel" install_hub "$NEXT" nightly
+  setup "install the hub from $NIGHTLY on the nightly channel" install_hub "$NIGHTLY" nightly
   setup "the fleet's channel is nightly" put_policy nightly false
   setup_done
   check "a machine added by the command route to a nightly hub, an older build the newest stable, installs the hub's build" command_route_installs_hubs_build 600

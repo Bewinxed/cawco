@@ -1,5 +1,5 @@
 /**
- * Builds what prove-stage2.sh needs into OUTPUT: the proof's key pair and two
+ * Builds what prove-stage2.sh needs into OUTPUT: the proof's key pair and three
  * real linux-x64 builds of the repository's entry point, each with that key's
  * public half embedded as the release key and the stub harnesses linked in
  * (and with them the proof clock, scripts/binary/proof-clock.ts). Usage:
@@ -11,14 +11,18 @@
  *
  * - cawco-2, 0.0.1-test.2: this tree. Every rig installs it.
  * - cawco-3, 0.0.1-test.3: this tree again, newer: the build each rig updates to.
+ * - cawco-nightly, 0.0.1-nightly.30+333333333333: build 3 as the nightly
+ *   channel publishes it, its version in the shape release.ts gives a nightly
+ *   (`<base>-nightly.<sequence>+<commit:12>`), which `releaseTag` reads and
+ *   the agent holds the binary's own version to (nightlyjoin's hub).
  *
- * Both compile at once.
+ * All compile at once.
  *
  * KEPT BETWEEN RUNS, in the proof cache (`CAWCO_PROOF_CACHE`, default
  * ~/.cache/cawco-proof). The key pair is made once and kept there, mode 0600:
  * it signs only the proof's fixtures, and only proof builds trust it; the
  * release key is never in reach of this script (release.ts holds it). Builds
- * 2 and 3 are kept by the key of the proof inputs at HEAD (proof-inputs.ts),
+ * 2, 3 and nightly are kept by the key of the proof inputs at HEAD (proof-inputs.ts),
  * so a commit that changes none of them (docs, the Apple app, the release
  * script) compiles nothing; a checkout with changes to them always compiles.
  * A published release leaves its own key's builds alone in the cache
@@ -83,13 +87,18 @@ const publicKey = (
 ).trim();
 const keyId = hash(publicKey);
 
-// Builds 2 and 3: this tree, kept by its proof inputs' key when they are committed.
+// Builds 2, 3 and nightly: this tree, kept by its proof inputs' key when they are committed.
 const inputs = (await proofInputsChanged(repository))
   ? undefined
   : await proofInputsKey(repository, "HEAD");
 const builds = [
   ["2", "0.0.1-test.2", "2222222222222222222222222222222222222222"],
   ["3", "0.0.1-test.3", "3333333333333333333333333333333333333333"],
+  [
+    "nightly",
+    "0.0.1-nightly.30+333333333333",
+    "3333333333333333333333333333333333333333",
+  ],
 ] as const;
 const keptDir = inputs
   ? join(cache, "builds", `${inputs.slice(0, 16)}-${keyId}`)
@@ -131,9 +140,9 @@ await Promise.all(
   })
 );
 console.log(
-  `Built 2 binaries in ${output} (${
+  `Built ${builds.length} binaries in ${output} (${
     keptDir
-      ? `builds 2 and 3 kept in ${keptDir}`
-      : "builds 2 and 3 from a checkout with changes to the proof inputs, not kept"
+      ? `builds ${builds.map(([name]) => name).join(", ")} kept in ${keptDir}`
+      : "from a checkout with changes to the proof inputs, not kept"
   }), with the proof key from ${keys}`
 );
