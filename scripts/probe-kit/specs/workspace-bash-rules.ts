@@ -32,6 +32,10 @@
  *   workspace, launched through its door.
  * - w8. The second repository's emptied prefix: the Bash call is refused,
  *   and nothing runs.
+ * - w9. A Claude Code CLI launched as the build before the prefix launched
+ *   one (its hook in shell form, no prefix in its environment), in the
+ *   Claude delegate's clone on its workspace's hook: its Bash calls run
+ *   inside (w5's namespace and workspace), none refused, and `cd` follows.
  *
  * Run on the host, outside every workspace boundary (it delegates, so its
  * fleet cuts workspaces):
@@ -40,8 +44,10 @@
  */
 import { readlinkSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { Boundary } from "../../../packages/agent/src/boundary";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import {
   MACHINE,
@@ -50,7 +56,8 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
+import { legacyClaudeOptions } from "../legacy-claude";
 
 const MCP_VERSION = "1.11.0";
 const ASK_COMMAND = "echo probe-ask-rule";
@@ -765,6 +772,7 @@ const run = async (kit: Kit) => {
   const claude = await delegate("claude", repo, "Claude delegate");
   await ruleLegs(kit, fleet, claude);
   await insideLegs(kit, fleet, claude);
+  await legacyLeg(kit, fleet, claude);
   await browserLeg(kit, fleet, "claude", claude, "claude-7");
   await browserLeg(
     kit,
@@ -785,6 +793,94 @@ const run = async (kit: Kit) => {
     kit,
     fleet,
     await delegate("claude", emptiedRepo, "Emptied delegate")
+  );
+};
+
+/**
+ * w9: a Claude Code CLI launched as the build before the shell prefix
+ * launched a workspace's (legacy-claude.ts: its hook in shell form, no prefix
+ * in its environment), in the Claude delegate's clone, on its workspace's
+ * own hook, judge and boundary: the judge rewrites each Bash call through the
+ * executor (agent boundary-judge.ts `throughExecutor`), and it runs inside,
+ * none refused, the working directory following. The update itself, the
+ * build before's judge answering first, is claude-prefix p14's.
+ */
+const legacyLeg = async (kit: Kit, fleet: KitFleet, claude: Delegate) => {
+  const home = fleet.env.HOME as string;
+  const boundary = JSON.parse(
+    await readFile(
+      join(home, ".cawco", "workspaces", claude.workspace, "boundary.json"),
+      "utf8"
+    )
+  ) as Boundary;
+  const cli = Bun.which("claude");
+  const configDir = join(fleet.sandbox, "legacy-claude");
+  await mkdir(configDir, { recursive: true });
+  // The Agent SDK the agent itself runs Claude Code through: its dependency.
+  const { query } = (await import(
+    createRequire(join(ROOT, "packages", "agent", "package.json")).resolve(
+      "@anthropic-ai/claude-agent-sdk"
+    )
+  )) as typeof import("../../../packages/agent/node_modules/@anthropic-ai/claude-agent-sdk");
+  const step = stepOf(
+    shell("Bash", [
+      "mkdir -p legacy && cd legacy && readlink /proc/self/ns/pid 2>/dev/null; printf 'ws=%s\\n' \"$CAWCO_WORKSPACE\"",
+      "pwd",
+    ])
+  );
+  steps.set("legacy-1", step);
+  const handle = query({
+    prompt: "Run step PROBE-WBR-legacy-1.",
+    options: {
+      pathToClaudeCodeExecutable: cli ?? "claude",
+      cwd: claude.clone,
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      settingSources: ["project", "local"],
+      // Its shell is what this leg proves: the repository's server is w6's.
+      strictMcpConfig: true,
+      ...(await legacyClaudeOptions(boundary)),
+      env: {
+        ...Object.fromEntries(
+          Object.entries(fleet.env).filter(
+            ([name]) => !name.startsWith("CLAUDE")
+          )
+        ),
+        CLAUDE_CONFIG_DIR: configDir,
+        CLAUDE_CODE_TMPDIR: boundary.claudeTmp,
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+        ANTHROPIC_API_KEY: "sk-probe",
+      },
+    },
+  });
+  const deadline = setTimeout(() => handle.interrupt(), 240_000);
+  try {
+    for await (const message of handle) {
+      if (message.type === "result") {
+        break;
+      }
+    }
+  } finally {
+    clearTimeout(deadline);
+  }
+  const [moved, stayed] = step.results;
+  const text = moved?.text ?? "";
+  const namespace = NAMESPACE.exec(text)?.[0] ?? "";
+  const path =
+    stayed?.text
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("/")) ?? "";
+  kit.check(
+    "w9: a CLI launched before the prefix (its hook in shell form, no prefix in its environment) has its Bash calls run inside the workspace's boundary, none refused, its working directory following",
+    cli !== null &&
+      step.results.length === 2 &&
+      step.results.every((one) => !one.failed) &&
+      WORKSPACE.exec(text)?.[1] === claude.workspace &&
+      (process.platform !== "linux" ||
+        (namespace !== "" && namespace !== hostNamespace())) &&
+      path.endsWith("/legacy"),
+    `claude ${cli ?? "not on PATH"}; host ${hostNamespace()}; workspace ${claude.workspace}; ${JSON.stringify(step.results)}`
   );
 };
 

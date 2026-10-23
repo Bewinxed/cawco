@@ -1,5 +1,5 @@
 /**
- * `boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX POLICY BUILD`: a
+ * `boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY BUILD`: a
  * workspace's judge, which answers its hook (`boundary.ts` {@link hookScript})
  * for every shell or path-naming tool call of a work item's claude session
  * (`HOOKED_TOOLS`). sessiond holds it beside the boundary, so it outlives the
@@ -13,9 +13,18 @@
  * judge answers it with no decision, and the CLI's own rules (deny, ask,
  * allow, from every settings source) judge the command as the model wrote
  * it; never `allow`, which would answer an `ask` rule for the person. When
- * the CLI's prefix is not PREFIX (a settings file's `env` emptied it, or the
- * CLI was launched before it had one) the call is refused: it would run
- * outside the boundary. Every other call — the CLI's own file tools, MCP
+ * the CLI's prefix is another (a settings file's `env` changed it) the call
+ * is refused: it would run outside the boundary. A CLI whose environment
+ * names no prefix at all was launched by a build before the prefix (every
+ * CLI since gets it, and a settings file can give a variable a string but
+ * never take one away): its call is rewritten to run through the executor,
+ * inside, as that build did, so a turn running across a deploy goes on, and
+ * the agent relaunches it onto the prefix as the turn ends. The rewrite
+ * carries the directory the command ended in back out (the executor's
+ * `--cwd-out`, a file under CLAUDE_TMP, which nothing inside can write) and
+ * `cd`s there, so the session's working directory still follows its `cd`s;
+ * it runs in the CLI's own shell, on the host, so it names `cat` and `rm` by
+ * their absolute paths. Every other call — the CLI's own file tools, MCP
  * calls — is judged by the workspace's policy (`workspace-judge.ts`, read
  * again for each call, since the agent writes it again as the machine
  * changes): each path it names that the policy refuses refuses the call,
@@ -29,7 +38,8 @@
  * and node's built-ins, and the judge.
  *
  * The wire: the hook sends the call's JSON on one line and its CLI's shell
- * prefix, in hex, on the next; the judge answers `0` and what the hook prints
+ * prefix, in hex, on the next (`-` when it names none); the judge answers
+ * `0` and what the hook prints
  * on stdout, or `2` and why the call is refused, and closes. Anything it
  * cannot do answers `2`: a call never runs outside the boundary or the
  * policy.
@@ -39,6 +49,7 @@
  * still asks this one, so it leaves only once HOOK has not named SOCKET for
  * GRACE_S, the longest a hook lives, and goes with the workspace's state dir.
  */
+import { randomUUID } from "node:crypto";
 import { accessSync, constants, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
@@ -46,11 +57,20 @@ import { join } from "node:path";
 /** The judge's module; only its type is imported here, which Bun erases. */
 type Judge = typeof import("@cawco/core/workspace-judge");
 
-const [socket, hook, graceS, exec, prefix, policyFile, build] =
+const [socket, hook, graceS, exec, prefix, claudeTmp, policyFile, build] =
   process.argv.slice(2);
-if (!(socket && hook && graceS && exec && prefix && policyFile && build)) {
+if (!(
+  socket &&
+  hook &&
+  graceS &&
+  exec &&
+  prefix &&
+  claudeTmp &&
+  policyFile &&
+  build
+)) {
   throw new Error(
-    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX POLICY BUILD"
+    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY BUILD"
   );
 }
 
@@ -73,9 +93,33 @@ const refuse = (reason: string): string => `2\n${reason}`;
 
 /** What the model reads when its CLI's shell prefix is not the workspace's. */
 const UNPREFIXED =
-  "cawco: this session's shell commands would run outside the workspace's boundary (CLAUDE_CODE_SHELL_PREFIX is not the workspace's executor), so this call did not run. Say so and end your turn: a session launched before its workspace had that prefix is relaunched with it between turns, and a settings file that sets CLAUDE_CODE_SHELL_PREFIX is the person's to change.";
+  "cawco: this session's shell commands would run outside the workspace's boundary (a settings file sets CLAUDE_CODE_SHELL_PREFIX to something other than the workspace's executor), so this call did not run. Say so and end your turn: that setting is the person's to change.";
 
 const HEX = /^(?:[0-9a-f]{2})*$/;
+
+/** What the hook sends for a CLI whose environment names no shell prefix: one launched before it had one. */
+const NO_PREFIX = "-";
+
+const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+
+/**
+ * Shell call `call` of a CLI launched before the prefix, rewritten to run
+ * inside the boundary through the executor, its directory carried back
+ * (the module's doc), word for word as that build's judge rewrote it.
+ * Allowed, as that build allowed it: the CLI judged its rules on this
+ * rewrite all along, until it is relaunched.
+ */
+const throughExecutor = (call: Record<string, unknown>): string => {
+  const ended = quote(join(claudeTmp, `.cwd-${randomUUID()}`));
+  const command = `${quote(exec)} --session --cwd-out ${ended} ${quote(call.command as string)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(/bin/cat ${ended})"; fi; /bin/rm -f ${ended}; (exit $__cawco_status)`;
+  return `0\n${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow",
+      updatedInput: { ...call, command },
+    },
+  })}`;
+};
 
 /** The answer to one call, as the hook's JSON input names it, from a CLI whose shell prefix is `shellPrefix` (in hex). */
 const answer = (text: string, shellPrefix: string): string => {
@@ -102,6 +146,9 @@ const answer = (text: string, shellPrefix: string): string => {
       // Monitor's websocket form runs no command, so there is nothing to bound.
       if (typeof call.command !== "string") {
         return "0\n";
+      }
+      if (shellPrefix === NO_PREFIX) {
+        return throughExecutor(call);
       }
       if (!HEX.test(shellPrefix)) {
         throw new Error("the hook sent no shell prefix");

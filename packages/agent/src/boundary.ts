@@ -30,8 +30,8 @@
  * Both run the same runner ({@link RUNNER}), which takes every command of the
  * workspace over a FIFO and runs it inside: one network namespace on Linux,
  * so a dev server one command starts answers the next. Commands go in
- * through one executor, `~/.cawco/workspaces/<id>/exec [--session | --claude]
- * COMMAND` ({@link execScript}), that every harness runs its shell commands
+ * through one executor, `~/.cawco/workspaces/<id>/exec [--session [--cwd-out
+ * FILE] | --claude] COMMAND` ({@link execScript}), that every harness runs its shell commands
  * through: claude by its shell prefix (`CLAUDE_CODE_SHELL_PREFIX`, the
  * workspace's `claude-prefix` script, {@link claudePrefixScript}), which the
  * CLI applies after its permission rules have judged the command as the
@@ -239,7 +239,7 @@ import { workspaceRecords } from "./workspace-records";
 export interface Boundary {
   /** The temp root its sessions' Claude Code CLIs run with (`CLAUDE_CODE_TMPDIR`, core `workspaceClaudeTmpDir`): written on the host, read inside, so a background task's output is there for the session's shell. */
   readonly claudeTmp: string;
-  /** `exec [--session | --claude] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}); `--claude` is a claude session's shell prefix's ({@link execScript}). */
+  /** `exec [--session [--cwd-out FILE] | --claude] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}), and FILE gets the directory it ended in; `--claude` is a claude session's shell prefix's ({@link execScript}). */
   readonly exec: string;
   /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
   readonly hook: string;
@@ -492,6 +492,14 @@ interface JudgeAt {
  * refuses the call; one the CLI drops (a delegate's CLI on the host kept the
  * prefix its host set, r175) leaves the workspace's in both.
  *
+ * A CLI whose environment names no prefix at all predates the prefix: every
+ * CLI a build since launches has it set (claude.ts `sessionEnv`), and a
+ * settings file gives a variable a string, never takes one away. The hook
+ * says so (`-` for the prefix), and the judge runs that CLI's shell call
+ * inside the boundary the way the build before did, by rewriting it, so a
+ * turn running across a deploy goes on; the CLI is relaunched onto the
+ * prefix as that turn ends ({@link hookFailsOpen}).
+ *
  * The CLI runs it in exec form, never through the prefix it judges, and
  * blocks the call on any failure of it, a script that cannot start, a crash
  * or a timeout among them (`onFailure: "block"`,
@@ -507,7 +515,7 @@ interface JudgeAt {
  * `Socket` as the agent writes the hook ({@link socketAddress}), and AF_UNIX
  * and SOCK_STREAM are 1 on Linux and macOS alike. The call's JSON goes over
  * on one line (a line break in JSON is whitespace or invalid), the prefix on
- * the next, in hex, empty when the CLI has none.
+ * the next, in hex, or `-` when the CLI's environment names none.
  */
 const hookScript = (
   id: string,
@@ -527,7 +535,7 @@ alarm ${HOOK_LIMIT_S};
 $call = do { local $/; <STDIN> };
 refuse("cawco: the call reached the boundary hook with no input, so it did not run") unless length $call;
 $call =~ tr/\\r\\n/  /;
-$prefix = unpack('H*', defined $ENV{CLAUDE_CODE_SHELL_PREFIX} ? $ENV{CLAUDE_CODE_SHELL_PREFIX} : '');
+$prefix = defined $ENV{CLAUDE_CODE_SHELL_PREFIX} ? unpack('H*', $ENV{CLAUDE_CODE_SHELL_PREFIX}) : '-';
 socket(JUDGE, 1, 1, 0) or refuse("cawco: the boundary hook could not open a socket ($!), so this call did not run");
 connect(JUDGE, pack('H*', '${judge.address}')) or refuse("cawco: the workspace's judge at $judge did not answer ($!), so this call did not run");
 select((select(JUDGE), $| = 1)[0]);
@@ -736,6 +744,7 @@ const judgeFor = async (
     String(HOOK_TIMEOUT_S),
     held.exec,
     claudePrefixOf(id),
+    workspaceClaudeTmpDir(id),
     policy,
   ];
   // The keeper it runs on is part of its form: after a keeper handover, the
@@ -1776,9 +1785,9 @@ export interface LaunchedHook {
    * Whether the CLI runs its shell commands through the workspace's shell
    * prefix ({@link claudePrefixScript}): one launched with the exec-form hook
    * was launched with the prefix too (claude.ts `sessionEnv`). One launched
-   * before either had its commands rewritten by the hook, which no longer
-   * rewrites: the judge refuses its shell calls, and it is relaunched
-   * ({@link hookFailsOpen}).
+   * before either has its shell calls rewritten through the executor as its
+   * build did (the judge tells it by its environment naming no prefix), and
+   * is relaunched as its turn ends ({@link hookFailsOpen}).
    */
   readonly prefixed: boolean;
 }
@@ -1863,8 +1872,9 @@ export const workspaceHook = (
  * its rules: its hook runs what can go missing ({@link LaunchedHook.needs}),
  * it runs on shell tools alone ({@link LaunchedHook.gatesFiles}), or the CLI
  * runs its shell commands through no shell prefix of the workspace's
- * ({@link LaunchedHook.prefixed}), whose shell calls the judge refuses. Such
- * a CLI is relaunched onto the workspace's hook and prefix between turns.
+ * ({@link LaunchedHook.prefixed}), so its shell calls meet its permission
+ * rules as the judge rewrote them, not as the model wrote them. Such a CLI
+ * is relaunched onto the workspace's hook and prefix between turns.
  */
 export const hookFailsOpen = (hook: LaunchedHook): boolean =>
   hook.needs.length > 0 || !hook.gatesFiles || !hook.prefixed;
@@ -6187,6 +6197,14 @@ const claudeCwdTail = (id: string): string => {
  * first, as `--session` does, and on status 0 the directory it ended in is
  * written to the CLI's file on the host, as the tail's `&&` would. One with
  * no such tail runs as it is: the tail's write fails inside, never outside.
+ *
+ * `--session --cwd-out FILE` is the judge's rewrite of a shell call from a
+ * claude CLI launched before the prefix (`boundary-judge.ts`
+ * `throughExecutor`), the form that build's judge wrote too: on status 0 the
+ * directory the command ended in is written to FILE on the host, and the
+ * rewrite's own shell `cd`s there. So a call an earlier build's judge
+ * answered just before an update runs on this executor, and one this build's
+ * judge answered runs on the earlier executor until it is written again.
  */
 const execScript = (
   id: string,
@@ -6204,8 +6222,9 @@ const execScript = (
   const path = `printf '%s' ${shellQuote(helpers)}"$caller_path" > "$req/path"`;
   return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
-# exec [--session | --claude] COMMAND — a session's command (--session) shows
-# the workspace's notice first; --claude is a claude session's shell prefix's.
+# exec [--session [--cwd-out FILE] | --claude] COMMAND — a session's command
+# (--session) shows the workspace's notice first, and FILE gets the directory
+# it ended in; --claude is a claude session's shell prefix's.
 caller_path=$PATH
 PATH=${SYSTEM_PATH}
 export PATH
@@ -6237,9 +6256,11 @@ ${linux ? mountCheck(id, held.gen, pid) : ""}
 session=
 claude=
 if [ "$1" = --session ]; then session=1; shift; elif [ "$1" = --claude ]; then claude=1; shift; fi
-command=$1
-# Where the CLI reads a Bash or Monitor call's next working directory from.
+# Where the CLI reads a Bash or Monitor call's next working directory from:
+# the file the judge's rewrite names, or the CLI's own tail.
 cwd_file=
+if [ -n "$session" ] && [ "$1" = --cwd-out ]; then cwd_file=$2; shift 2; fi
+command=$1
 if [ -n "$claude" ]; then
   tail=${shellQuote(claudeCwdTail(id))}
   if [[ $command =~ $tail ]]; then

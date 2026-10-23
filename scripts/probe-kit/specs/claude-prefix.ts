@@ -49,6 +49,12 @@
  * - p13. A fleet change to `probegate`'s config gives its gate URL a new
  *   mark (so a session's harness dials it anew), and the gate runs the new
  *   config.
+ * - p14. A CLI launched as the build before the prefix launched one (its
+ *   hook in shell form, no prefix in its environment) goes on across an
+ *   update mid-turn: its first Bash call is answered by that build's judge
+ *   (its script from git), the hook is then pointed at this build's judge,
+ *   and every call runs inside through the executor, none refused, its
+ *   working directory following.
  *
  *   bun scripts/probe-kit/run.ts claude-prefix
  */
@@ -61,13 +67,15 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import type { Subprocess } from "bun";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { isAlive, listedPid } from "../../../packages/core/src/signal";
 import { until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { BEFORE_PREFIX, legacyClaudeOptions } from "../legacy-claude";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const FIXTURE = join(import.meta.dir, "..", "fixtures", "where-mcp-server.ts");
@@ -322,8 +330,30 @@ const run = async (kit: Kit) => {
     policy,
     `${JSON.stringify(await workspacePolicy(ref), null, 2)}\n`
   );
-  // The judge, as armHook writes and starts it: its two scripts in the state
-  // dir, on bun, listening on a socket of its own.
+  // A judge as armHook starts one: its script on bun, from the dir beside
+  // the judge it imports, listening on a socket of its own (in the run's
+  // temp dir, outside its HOME), ready once it says so.
+  const judges: { proc: Subprocess; socket: string }[] = [];
+  const startJudge = async (
+    script: string,
+    handed: string[]
+  ): Promise<string> => {
+    const listening = join(
+      process.env.TMPDIR ?? "/tmp",
+      `cpj-${crypto.randomUUID().slice(0, 8)}.sock`
+    );
+    const proc = Bun.spawn([bun, script, listening, ...handed], {
+      cwd: dirname(script),
+      stdout: "pipe",
+      stderr: "inherit",
+    });
+    judges.push({ proc, socket: listening });
+    const says = proc.stdout.getReader();
+    await says.read();
+    says.releaseLock();
+    return listening;
+  };
+  // This build's judge, its two scripts in the state dir.
   await copyFile(
     join(ROOT, "packages", "agent", "src", "boundary-judge.ts"),
     join(state, "boundary-judge.ts")
@@ -332,27 +362,15 @@ const run = async (kit: Kit) => {
     join(ROOT, "packages", "core", "src", "workspace-judge.ts"),
     join(state, "workspace-judge.ts")
   );
-  const socket = join(
-    process.env.TMPDIR ?? "/tmp",
-    `cpj-${crypto.randomUUID().slice(0, 8)}.sock`
-  );
-  const judge = Bun.spawn(
-    [
-      bun,
-      join(state, "boundary-judge.ts"),
-      socket,
-      parts.hookAt,
-      "90",
-      parts.execAt,
-      parts.prefixAt,
-      policy,
-      "probe-build",
-    ],
-    { cwd: state, stdout: "pipe", stderr: "inherit" }
-  );
-  const judgeSays = judge.stdout.getReader();
-  await judgeSays.read();
-  judgeSays.releaseLock();
+  const socket = await startJudge(join(state, "boundary-judge.ts"), [
+    parts.hookAt,
+    "90",
+    parts.execAt,
+    parts.prefixAt,
+    parts.claudeTmp,
+    policy,
+    "probe-build",
+  ]);
   await writeFile(parts.hookAt, await parts.hook(socket));
   await chmod(parts.hookAt, 0o755);
   const boundary = {
@@ -399,11 +417,31 @@ const run = async (kit: Kit) => {
       ([name]) => !(name.startsWith("CLAUDE") || name.startsWith("ANTHROPIC"))
     )
   );
+  /**
+   * One session through `plan`, launched as claude.ts launches a
+   * workspace's, or (`legacy`) as the build before the prefix did; `before`
+   * runs once as the mock is about to make the call at its index.
+   */
   const session = async (
     plan: Call[],
-    hooked: typeof boundary
+    hooked: typeof boundary,
+    launch: {
+      before?: Map<number, () => Promise<void>>;
+      legacy?: boolean;
+    } = {}
   ): Promise<Ran> => {
     const ran: Ran = { asks: [], mcp: "", results: [] };
+    const before = new Map(launch.before);
+    /** The mock's reply once `made` calls have their results: the plan's next call, after what runs before it. */
+    const nextReply = async (made: number): Promise<Response> => {
+      const next = plan[made];
+      const step = before.get(made);
+      if (next && step) {
+        before.delete(made);
+        await step();
+      }
+      return next ? calls(next) : said("done");
+    };
     const mock = Bun.serve({
       port: 0,
       async fetch(request) {
@@ -443,11 +481,12 @@ const run = async (kit: Kit) => {
             text: textOf(block.content),
           });
         }
-        const next = plan[results.length];
-        return next ? calls(next) : said("done");
+        return nextReply(results.length);
       },
     });
-    const bounded = claudeBoundaryOptions(hooked);
+    const bounded = launch.legacy
+      ? await legacyClaudeOptions(hooked)
+      : claudeBoundaryOptions(hooked);
     try {
       const handle = query({
         prompt: "Run the probe's steps.",
@@ -465,7 +504,9 @@ const run = async (kit: Kit) => {
             ANTHROPIC_BASE_URL: `http://127.0.0.1:${mock.port}`,
             ANTHROPIC_API_KEY: "sk-probe",
             CLAUDE_CODE_TMPDIR: hooked.claudeTmp,
-            CLAUDE_CODE_SHELL_PREFIX: hooked.prefix,
+            ...(launch.legacy
+              ? {}
+              : { CLAUDE_CODE_SHELL_PREFIX: hooked.prefix }),
           },
           canUseTool: (toolName, input) => {
             ran.asks.push(`${toolName} ${JSON.stringify(input)}`);
@@ -738,13 +779,73 @@ const run = async (kit: Kit) => {
         !(await Bun.file(join(clone, "probe-hookless")).exists()),
       JSON.stringify(gone.results)
     );
+
+    // ── A CLI launched before the prefix, mid-turn across an update ────
+    // The build before's judge, its two scripts as that build wrote them,
+    // answers the hook until the update points it at this build's judge.
+    const earlier = join(state, "judge-before-prefix");
+    await mkdir(earlier, { recursive: true });
+    await Promise.all(
+      [
+        ["agent", "boundary-judge.ts"],
+        ["core", "workspace-judge.ts"],
+      ].map(async ([pkg, name]) =>
+        writeFile(
+          join(earlier, name as string),
+          (
+            await Bun.$`git -C ${ROOT} show ${`${BEFORE_PREFIX}:packages/${pkg}/src/${name}`}`.quiet()
+          ).stdout
+        )
+      )
+    );
+    const earlierSocket = await startJudge(join(earlier, "boundary-judge.ts"), [
+      parts.hookAt,
+      "90",
+      parts.execAt,
+      parts.scratch,
+      policy,
+      "probe-before",
+    ]);
+    await writeFile(parts.hookAt, await parts.hook(earlierSocket));
+    const legacy = await session(
+      [
+        bash(
+          `mkdir -p legacy && cd legacy && printf 'ws=%s\\n' "$CAWCO_WORKSPACE"`
+        ),
+        bash(`printf 'ws=%s\\n' "$CAWCO_WORKSPACE" && pwd`),
+        bash("cd .. && mkdir -p legacy2 && cd legacy2"),
+        bash("pwd"),
+      ],
+      boundary,
+      {
+        legacy: true,
+        // The update: this build's agent points the hook at its own judge
+        // (boundary.ts armHook) while the turn runs.
+        before: new Map([
+          [1, async () => writeFile(parts.hookAt, await parts.hook(socket))],
+        ]),
+      }
+    );
+    const legacySaid = legacy.results.map((one) => one.text.trim());
+    check(
+      "p14: a CLI launched before the prefix (its hook in shell form, no prefix in its environment) goes on across an update mid-turn: the build before's judge, then this build's, run each Bash call inside through the executor, none refused, its working directory following",
+      legacy.results.length === 4 &&
+        legacy.results.every((one) => !one.error) &&
+        legacySaid[0] === `ws=${id}` &&
+        legacySaid[1] === `ws=${id}\n${join(clone, "legacy")}` &&
+        legacySaid[3] === join(clone, "legacy2"),
+      JSON.stringify(legacy.results)
+    );
   } finally {
     await gateway.stop(true);
     mcpHost.stopAll();
-    judge.kill();
     runner.kill();
-    // The judge's socket is in the run's temp dir, outside its HOME.
-    await rm(socket, { force: true });
+    await Promise.all(
+      judges.map(({ proc, socket: listening }) => {
+        proc.kill();
+        return rm(listening, { force: true });
+      })
+    );
   }
 };
 
