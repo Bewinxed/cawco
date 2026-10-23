@@ -670,6 +670,22 @@ async function runView(view) {
     await sampleDuring("a hover on a chip", () => page.locator('.var[data-machine="save"][data-state="filled"][data-vary="2"]').hover());
     await sampleDuring("a hover on a state", () => page.locator('.node[data-machine="save"][data-state="empty"]').hover());
     await page.mouse.move(5, 5); await settle(300);
+  } else {
+    // Under touch a keep is a tap: every frame of its tier change, the lowest reading.
+    const tapSample = async (name, sel) => {
+      await page.locator(sel).scrollIntoViewIfNeeded(); await settle(200);
+      const b = await page.locator(sel).boundingBox();
+      await ev(() => { window.__tiers = null; __k.sampleTiers(450).then((f) => { window.__tiers = f; }); });
+      await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+      await page.waitForFunction(() => window.__tiers !== null, null, { timeout: 3000 });
+      const f = await ev(() => window.__tiers);
+      const low = f.slice().sort((a, b) => a.r - b.r)[0], frames = new Set(f.map((x) => x.t)).size;
+      ok(V, "7 every frame of " + name + " reads 4.5:1 or better (chips and states)", frames > 5 && low.r >= 4.5, frames + " frames, lowest " + low.r + " (" + low.text + ", " + low.layer + " layer, at " + low.t + "ms)");
+      await settle(300);
+    };
+    await tapSample("a keep by tap (one chip to its sibling)", '.var[data-machine="save"][data-state="failed"][data-vary="1"]');
+    await tapSample("a keep by tap on another machine (kept to current)", '.var[data-machine="when"][data-vary="0"]');
+    await tapSample("a keep by tap back (current to kept)", '.var[data-machine="save"][data-state="failed"][data-vary="0"]');
   }
 
   // Right after a redraw (the graph drawn anew, as a capture's resize or a tab does), every chip's tier layer
