@@ -61,6 +61,9 @@
  *     before the grace, opaque past its fade); the frames land in the
  *     skeletons' cells, the first row on its skeleton's corner, and the
  *     skeletons go.
+ *     At a desk and a phone, a states file deep in its project keeps its
+ *     path on one row inside the section's head: its folders cut to an
+ *     ellipsis, its own name whole, the whole path its title (14d).
  * 15. A section that didn't load (its helper throws): it says so where its
  *     frames would stand, named by its component, with the error and its
  *     place under Show details, and the report holds the page error; no
@@ -1407,6 +1410,76 @@ async function endless(kit: Kit, stage: Stage): Promise<void> {
   );
 }
 
+/**
+ * Leg 14d: a section on its way from a states file deep in its project (the
+ * owner: "look at the path above spilling out ... this is terrible ux for a
+ * loading/pending state"), on a desk and a phone: its file stands on one
+ * row inside the section's head, its folders cut to an ellipsis and its own
+ * name whole, the whole path its title, and nothing of it link-styled.
+ */
+async function deepPath(kit: Kit, stage: Stage): Promise<void> {
+  const file =
+    "src/lib/cawco/tasks/stage/project-redesign-card/states/DeepLate.stories.js";
+  for (const size of ["desk", "phone"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const page = await kit.page(size, { init: [BRIDGE] });
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        errors.push(message.text());
+      }
+    });
+    await page.goto(canvasUrl(stage, [file], { name: "Deep canvas" }), {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForSelector(".cawco-section-status", { state: "attached" });
+    const seen = await page.evaluate(() => {
+      const path = document.querySelector<HTMLElement>(".cawco-section-file");
+      const head = path?.parentElement;
+      const folder = path?.querySelector<HTMLElement>(
+        ".cawco-section-file-folder"
+      );
+      const own = path?.querySelector<HTMLElement>(".cawco-section-file-name");
+      if (!(path && head && folder && own)) {
+        return null;
+      }
+      const box = path.getBoundingClientRect();
+      const within = head.getBoundingClientRect();
+      const read = getComputedStyle(path);
+      return {
+        text: path.textContent,
+        title: path.title,
+        height: path.offsetHeight,
+        line: Number.parseFloat(read.lineHeight),
+        start: box.left - within.left,
+        end: within.right - box.right,
+        folderCut: folder.scrollWidth > folder.clientWidth,
+        folderEllipsis: getComputedStyle(folder).textOverflow,
+        ownWhole: own.scrollWidth <= own.clientWidth,
+        links: head.querySelectorAll("a").length,
+        decoration: read.textDecorationLine,
+      };
+    });
+    kit.check(
+      `14d: at ${size}, a deep states file's path stands on one row inside its section's head while it waits: its folders cut to an ellipsis, its own name whole, the whole path its title, no link`,
+      seen !== null &&
+        seen.text === file &&
+        seen.title === file &&
+        seen.height <= Math.ceil(seen.line) &&
+        seen.start >= -0.5 &&
+        seen.end >= -0.5 &&
+        seen.folderCut &&
+        seen.folderEllipsis === "ellipsis" &&
+        seen.ownWhole &&
+        seen.links === 0 &&
+        seen.decoration === "none" &&
+        errors.length === 0,
+      `${JSON.stringify(seen)}; console errors ${JSON.stringify(errors)}`
+    );
+    await page.close();
+  }
+}
+
 /** Leg 16: a size container with no width of its own fails at the frame's floor, in words; with a viewport it draws. */
 async function floor(kit: Kit, stage: Stage): Promise<void> {
   const page = await kit.page("desk", { init: [BRIDGE] });
@@ -1443,6 +1516,7 @@ const spec: Spec = {
       await lazy(kit, svelte);
       await kept(kit, svelte);
       await waiting(kit, svelte);
+      await deepPath(kit, svelte);
       await floor(kit, svelte);
       await daemonRender(kit, svelte);
       await endless(kit, svelte);

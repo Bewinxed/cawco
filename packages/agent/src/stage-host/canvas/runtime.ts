@@ -252,14 +252,26 @@ function viewOf(params: URLSearchParams): View {
   };
 }
 
-/** A section's head: its name in plain words in the title role, over its file in small print. */
+/**
+ * A section's head: its name in plain words in the title role, over its file
+ * in small print on one row inside the head (PAGE_CSS), its middle let go
+ * first so its file's own name stays; the whole path on hover.
+ */
 const headOf = (head: HTMLElement, file: string, name: string): void => {
   const named = document.createElement("span");
   named.className = "cawco-section-title";
   named.textContent = name;
   const path = document.createElement("span");
   path.className = "cawco-section-file";
-  path.textContent = file;
+  path.title = file;
+  const cut = file.lastIndexOf("/") + 1;
+  const folder = document.createElement("span");
+  folder.className = "cawco-section-file-folder";
+  folder.textContent = file.slice(0, cut);
+  const own = document.createElement("span");
+  own.className = "cawco-section-file-name";
+  own.textContent = file.slice(cut);
+  path.append(folder, own);
   head.replaceChildren(named, path);
 };
 

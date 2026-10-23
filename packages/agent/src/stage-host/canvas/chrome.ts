@@ -206,10 +206,14 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 .cawco-section[data-cawco-asleep] .cawco-grid { display: none; }
 /* A section's head: its name in plain words in the title role, its file in small print under it, and while it is on its way
    the status line beside the name, on the title's row, so its going moves nothing. */
-.cawco-section-head { display: grid; grid-template-columns: auto auto; justify-content: start; gap: var(--space-1) var(--space-3);
+.cawco-section-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-3);
   padding-block-end: var(--space-1); border-block-end: 1px solid var(--border-well); }
 .cawco-section-title { grid-column: 1; font: var(--type-title); color: var(--ink-strong); text-wrap: balance; }
-.cawco-section-file { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); overflow-wrap: anywhere; }
+/* The file on one row across the head, never widening it (inline-size containment): its folders give way first, then its own
+   name, each to an ellipsis; the whole path is its title. */
+.cawco-section-file { grid-column: 1 / -1; display: flex; contain: inline-size; white-space: nowrap; font: var(--type-meta); color: var(--ink-muted); }
+.cawco-section-file-folder { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.cawco-section-file-name { flex-shrink: 0; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* A section on its way (DESIGN.md's Real Wait Rule): nothing until the wait has lasted the grace, then the line saying what it
    waits for and each story's frame as a skeleton where its frame lands; they hold their room from the first, so nothing moves. */
 .cawco-waiting { animation: cawco-wait 1ms var(--dur-wait-grace) both; }

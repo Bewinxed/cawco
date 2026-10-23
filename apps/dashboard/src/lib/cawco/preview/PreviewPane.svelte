@@ -55,7 +55,6 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import {
@@ -151,6 +150,7 @@
   import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
   import CanvasView from "./CanvasView.svelte";
   import CommentRail from "./CommentRail.svelte";
+  import CoverState, { type CoverWaiting } from "./CoverState.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
   import type { CommentDrafts } from "./comment-drafts.svelte";
   import {
@@ -1159,21 +1159,25 @@
   /** A down stage's own words stand unfolded (Show details). */
   let stageDetails = $state(false);
   const stageDetailsId = `${paneId}-stage-details`;
-  /** What the cover says while the page is on its way; null when nothing is, or once it has stood past its time ({@link neverDrawn}). */
-  const stageWaiting = $derived.by(() => {
+  /**
+   * What the cover says while the page is on its way; null when nothing is,
+   * or once it has stood past its time ({@link neverDrawn}). A sheet's stage
+   * starting names its folder, which CoverState holds on one row.
+   */
+  const stageWaiting = $derived.by((): CoverWaiting | null => {
     if (neverDrawn) {
       return null;
     }
     switch (staged?.status) {
       case "starting":
         return served
-          ? sheetWords.serverStarting
-          : sheetWords.starting(staged.dir);
+          ? { line: sheetWords.serverStarting }
+          : { dir: staged.dir };
       case "waking":
       case "asleep":
-        return sheetWords.waking;
+        return { line: sheetWords.waking };
       case "live":
-        return compiling ? sheetWords.compiling : null;
+        return compiling ? { line: sheetWords.compiling } : null;
       case "error":
       case undefined:
         break;
@@ -3797,15 +3801,7 @@
         />
       </div>
       {#if stageWaiting}
-        <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
-        <p
-          class="mark-line mt-space-3 mx-0 mb-0 flex items-start gap-space-2 text-ink-muted type-meta animate-wait-grace-in group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
-          data-slot="cover-state"
-        >
-          <span class="mark-cell"><LiveDot /></span><span class="min-w-0"
-            >{stageWaiting}</span
-          >
-        </p>
+        <CoverState waiting={stageWaiting} />
       {/if}
     </div>
     {#if canvasView?.map && artifact && isSheet}
