@@ -515,7 +515,7 @@
               aria-describedby={noKey ? "connect-add-waits" : undefined}
               class="flex-none"
               disabled={noKey}
-              label="Add machine"
+              label={connectWords.addMachine}
               onclick={addOverSsh}
               {pending}
               pendingLabel="Adding…"

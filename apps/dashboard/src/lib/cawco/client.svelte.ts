@@ -109,9 +109,9 @@ import type {
   WorkItemSummary,
   WorkspaceHolding,
 } from "@cawco/core";
-import {
+import { 
   ASK_USER_QUESTION,
-  accountsWords,
+  accountsWords,askWords,
   CAWCO_SCRATCH_TAG,
   CONTROL_SUPPORTED_COMMANDS,
   capHolds,
@@ -8752,7 +8752,7 @@ export async function takeOverBrowser(
     }
     return null;
   } catch (error) {
-    return `Couldn't take over. ${error instanceof Error ? error.message : String(error)} The agent is still waiting; try Take over again.`;
+    return `${askWords.cantTakeOver} ${error instanceof Error ? error.message : String(error)} ${askWords.stillWaiting}`;
   }
 }
 

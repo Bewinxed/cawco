@@ -20,7 +20,7 @@
 </script>
 
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords, transcriptWords } from "@cawco/core";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
@@ -1369,7 +1369,7 @@
   variant="folder"
 >
   <TabsList
-    aria-label="Open sessions in this group"
+    aria-label={transcriptWords.openSessions}
     onscroll={scrolledUnderCard}
     scrollable
   >
@@ -1509,7 +1509,7 @@
               }}
             >
               <IconInfo />
-              <span>Session details</span>
+              <span>{transcriptWords.sessionDetails}</span>
             </ContextMenu.Item>
             <ContextMenu.Item
               onSelect={() =>
@@ -1824,7 +1824,7 @@
       align="start"
       alignOffset={cardPlace ? cardPlace.offset : 0}
       anchor={detailAnchor}
-      aria-label="Session details"
+      aria-label={transcriptWords.sessionDetails}
       as={Popover.Content}
       collisionPadding={12}
       customAnchor={detailAnchor}

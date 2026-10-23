@@ -11,7 +11,7 @@
 </script>
 
 <script lang="ts">
-  import {
+  import { askWords,
     damagedWords,
     getToolGlance,
     machineLabel,
@@ -515,7 +515,7 @@
             variant="secondary"
           >
             <IconTick />
-            <span>{request.browserAsk ? "Take over" : "Approve"}</span>
+            <span>{request.browserAsk ? askWords.takeOver : "Approve"}</span>
           </Button>
         </div>
         <!-- A refused take-over, under the buttons that asked: its words

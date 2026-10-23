@@ -19,6 +19,7 @@ import { commonWords } from "../../../packages/core/src/words/common";
 import { CONFIG_SECTIONS } from "../../../packages/core/src/words/configure";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
+import { machineWords } from "../../../packages/core/src/words/machine";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { memoryWords } from "../../../packages/core/src/words/memory";
 import { projectWords } from "../../../packages/core/src/words/project";
@@ -351,7 +352,7 @@ const recentOpen = async (page: Page) => {
 
 /** Add machine's window (connect/), and its title before an install starts. */
 const CONNECT_WINDOW = "[data-connect-window][data-state=open]";
-const ADD_MACHINE_TITLE = /^Add machine$/;
+const ADD_MACHINE_TITLE = exactly(connectWords.addMachine);
 /** The stored transcript's title, as its row says it. */
 const STORED_TITLE = /Sketch the tray's empty state/;
 /** The usage page's project filter, opened. */
@@ -519,7 +520,7 @@ const INSPECT = "Inspect";
 const INSPECTOR_ROW = "aside[aria-label=Inspector] li[data-prop]";
 /** The machines popover's trigger, Connect a machine's, and the routing's Fill first card. */
 const MACHINES = /machine/;
-const ADD_MACHINE = /^Add machine$/;
+const ADD_MACHINE = exactly(connectWords.addMachine);
 const FILL_FIRST = (() => {
   const strategy = accountsWords.strategies.find(
     (one) => one.id === "fill-first"
@@ -708,7 +709,7 @@ const toKeyStep = async (page: Page) => {
 };
 
 /** The keychain dialog's password field and its Unlock (UnlockKeychain's). */
-const KEYCHAIN_PASSWORD = /^Login password for /;
+const KEYCHAIN_PASSWORD = startsWith(machineWords.loginPasswordFor(""));
 const UNLOCK = /^Unlock$/;
 /** The machine control a keychain's unlock sends (UnlockKeychain `machineControl(…, "unlockKeychain")`). */
 const UNLOCK_CONTROL = (frame: string) => frame.includes('"unlockKeychain"');
@@ -721,7 +722,7 @@ const openKeychain = async (page: Page) => {
     .getByText(STUDIO_HOST, { exact: true })
     .first()
     .click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Unlock keychain…" }).click();
+  await page.getByRole("menuitem", { name: machineWords.unlockKeychain }).click();
 };
 
 /** What a Mac answers its keychain's unlock with (core `AuthState`). */
@@ -1136,7 +1137,7 @@ const machinesOpen = async (page: Page) => {
 };
 /** A context menu's submenu standing open, the Pause until… row and its ends, and a session menu's Account. */
 const SUB_MENU = "[data-slot=context-menu-sub-content][data-state=open]";
-const PAUSE_UNTIL = /^Pause until/;
+const PAUSE_UNTIL = startsWith(machineWords.pauseUntil);
 const PAUSE_ENDS = /\d/;
 const ACCOUNT_ITEM = /^Account/;
 
@@ -2498,7 +2499,7 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: `${UNLOCK_TILE} [role=status]:has([data-tone=ok])`,
-          says: / is unlocked/,
+          says: new RegExp(literal(machineWords.unlocked(""))),
         },
       },
       {
@@ -2509,7 +2510,7 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: `${UNLOCK_TILE} [role=status]:has([data-tone=caution])`,
-          says: / cannot read its logins/,
+          says: new RegExp(literal(machineWords.cantReadLogins(""))),
         },
       },
       {

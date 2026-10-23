@@ -415,7 +415,7 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
             hang.frame = bounds
             hang.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             hang.accessibilityContainerType = .semanticGroup
-            hang.accessibilityLabel = "Session details"
+            hang.accessibilityLabel = Words.Transcript.sessionDetails
             addSubview(hang)
             addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
         }

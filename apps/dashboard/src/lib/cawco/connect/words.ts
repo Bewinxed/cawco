@@ -34,7 +34,7 @@ export const machineWord = (install: Install): string => {
 /** The window's title: the target over SSH, the machine once it is in, "New machine" by a command. */
 export const titleOf = (install: Install | null): string => {
   if (!install) {
-    return "Add machine";
+    return connectWords.addMachine;
   }
   if (install.state === "joined") {
     return machineWord(install);

@@ -789,6 +789,11 @@ public enum Words {
 
     public enum Transcript {
         // packages/core/src/words/transcript.ts `transcriptWords`
+        /// A tab's details card, and the tabs of a pane's group.
+        public static let sessionDetails = "Session details"
+
+        public static let openSessions = "Open sessions in this group"
+
         /// The transcript's landmark, as a screen reader names it.
         public static let transcript = "Session transcript"
 
@@ -812,6 +817,71 @@ public enum Words {
 
         /// A stored session's menu: its words carried into a new session.
         public static let continueInNew = "Continue in new session…"
+    }
+
+    public enum Asks {
+        // packages/core/src/words/asks.ts `askWords`
+        /// The card's title, as a screen reader names it.
+        public static func permissionFrom(who: String) -> String {
+            "Permission request from \(who)"
+        }
+
+        public static func questionFrom(who: String) -> String {
+            "Question from \(who)"
+        }
+
+        public static func browserAskFrom(who: String) -> String {
+            "Browser ask from \(who)"
+        }
+
+        /// A browser ask, as Needs you names its kind.
+        public static let browserAsk = "Browser ask"
+
+        /// A browser ask's yes, and while it goes.
+        public static let takeOver = "Take over"
+
+        public static let takingOver = "Taking over…"
+
+        /// A take-over the hub refused: what it said goes between.
+        public static let cantTakeOver = "Couldn't take over."
+
+        public static let stillWaiting = "The agent is still waiting; try Take over again."
+
+        /// A question's own answer field.
+        public static let yourAnswer = "Your answer…"
+
+        public static func yourAnswerTo(question: String) -> String {
+            "Your answer to: \(question)"
+        }
+
+        /// A long command's toggle, either way.
+        public static let wholeCommand = "Show the whole command"
+
+        public static let commandOnOneLine = "Show the command on one line"
+    }
+
+    public enum Machine {
+        // packages/core/src/words/machine.ts `machineWords`
+        /// The menu's way to a Mac's login keychain, for an agent outside the desktop session.
+        public static let unlockKeychain = "Unlock keychain…"
+
+        /// The menu's pause, until a time picked.
+        public static let pauseUntil = "Pause until…"
+
+        public static let copyMachineId = "Copy machine id"
+
+        /// The unlock's field, and what it ended in.
+        public static func loginPasswordFor(host: String) -> String {
+            "Login password for \(host)"
+        }
+
+        public static func unlocked(host: String) -> String {
+            "\(host) is unlocked"
+        }
+
+        public static func cantReadLogins(host: String) -> String {
+            "\(host) cannot read its logins"
+        }
     }
 
     public enum Sidebar {

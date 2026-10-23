@@ -29,6 +29,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -451,7 +452,7 @@ async function run(kit: Kit): Promise<void> {
     );
     kit.check(
       "the session's details card is open over it",
-      card.some((n) => n.label === "Session details"),
+      card.some((n) => n.label === transcriptWords.sessionDetails),
       "its tab tapped"
     );
     await turnInFront("details card open", true);

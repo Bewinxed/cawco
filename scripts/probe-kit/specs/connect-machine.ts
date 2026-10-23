@@ -635,10 +635,10 @@ async function walk(
     opensOn === connectWords.overSsh && !noKey.text.includes("Can the hub"),
     `${opensOn}; ${noKey.text.slice(0, 120)}`
   );
-  const waits = await page.evaluate((win) => {
+  const waits = await page.evaluate(([win, add]) => {
     const button = [
       ...document.querySelectorAll<HTMLButtonElement>(`${win} button`),
-    ].find((one) => one.textContent?.trim().startsWith("Add machine"));
+    ].find((one) => one.textContent?.trim().startsWith(add));
     const said = button?.getAttribute("aria-describedby");
     const words = said ? document.getElementById(said) : null;
     const a = button?.getBoundingClientRect();
@@ -656,7 +656,7 @@ async function walk(
         b.right <= a.left
       ),
     };
-  }, WINDOW);
+  }, [WINDOW, connectWords.addMachine] as const);
   kit.check(
     `${leg}: (9) with no hub key, Add machine is disabled and says why in words beside it, no title`,
     waits.disabled &&
@@ -1113,7 +1113,7 @@ async function walk(
   writeFileSync(join(fleet.sandbox, "ssh-target", "home", ".hold"), "");
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Add machine" })
+    .getByRole("button", { name: connectWords.addMachine })
     .click();
   await settled(page, "running", "Fetching the signed build");
   const id = new URL(page.url()).searchParams.get("install") ?? "";
@@ -1304,7 +1304,7 @@ async function walk(
   await fillPort(page, options.port);
   await page
     .locator(WINDOW)
-    .getByRole("button", { name: "Add machine" })
+    .getByRole("button", { name: connectWords.addMachine })
     .click();
   await settled(page, "running", "Fetching the signed build");
   const second = new URL(page.url()).searchParams.get("install");
@@ -1394,7 +1394,7 @@ async function walk(
     await settled(page, "reach", "Sign in");
     await page
       .locator(WINDOW)
-      .getByRole("button", { name: "Add machine" })
+      .getByRole("button", { name: connectWords.addMachine })
       .click();
     failedId = await until(
       "the install that fails",

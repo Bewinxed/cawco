@@ -36,6 +36,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import type { SheetWeight } from "../../../packages/core/src/stage";
+import { connectWords } from "../../../packages/core/src/words/connect";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -47,7 +48,7 @@ const SCRATCH = "src/lib/cawco/probe-sheet-weight";
 const EMPTY_STARTS = "src/lib/components/ui/empty/EmptyStarts.stories.ts";
 /** Its two-word button labels the review read, and their siblings. */
 const SPACED = [
-  "Add machine",
+  connectWords.addMachine,
   mcpWords.add,
   "Ask Caw for this view",
   "Remove the filter",

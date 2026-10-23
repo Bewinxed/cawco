@@ -24,8 +24,8 @@
    * can be judged without its page's live store. A press here goes nowhere;
    * on its surface it puts the words where they go.
    */
-  import {
-    CAW_NO_MACHINE,
+  import { 
+    CAW_NO_MACHINE,connectWords,
     delegateTypesWords,
     mcpWords,
     memoryWords,
@@ -78,7 +78,11 @@
 </script>
 
 {#snippet addMachine()}
-  <Button aria-haspopup="dialog" label="Add machine" variant="outline" />
+  <Button
+    aria-haspopup="dialog"
+    label={connectWords.addMachine}
+    variant="outline"
+  />
 {/snippet}
 
 {#snippet createRoutine()}

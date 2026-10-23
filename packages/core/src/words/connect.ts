@@ -29,6 +29,9 @@ export const connectWords = {
     "Updates are installed from the CawCo app, automatically when this machine is idle or with Install now. Nothing was changed.",
   /** Where the builds the fleet runs are chosen. */
   updatesPlace: configurePage("updates"),
+  /** Its every way in: the button, the window's first title, its Needs you row ("Add machine · over SSH"). */
+  addMachine: "Add machine",
+  addMachineOver: (way: string) => `Add machine · ${way}`,
   /** The window's two ways in, each a tab. */
   overSsh: "Over SSH",
   byCommand: "By a command",

@@ -76,6 +76,16 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/transcript.ts", export: "transcriptWords", as: "" }],
   },
   {
+    // An ask's card, row and peek.
+    swift: "Asks",
+    members: [{ file: "words/asks.ts", export: "askWords", as: "" }],
+  },
+  {
+    // A machine's menu and its keychain unlock.
+    swift: "Machine",
+    members: [{ file: "words/machine.ts", export: "machineWords", as: "" }],
+  },
+  {
     swift: "Sidebar",
     members: [{ file: "words/sidebar.ts", export: "sidebarWords", as: "" }],
   },

@@ -59,10 +59,10 @@
    * and the first line's ✕ is Not now: it leaves Needs you, stays in Files
    * with its dot, and comes back when it is raised again.
    */
-  import {
+  import { 
     type ArtifactKind,
-    artifactWords,
-    causeLine,
+    artifactWords,askWords,
+    causeLine,connectWords, 
     pairingWords,
     presenceWords,
     questionsOf,
@@ -337,8 +337,8 @@
           .join(" · ");
       case "install":
         return item.install.route === "ssh"
-          ? "Add machine · over SSH"
-          : "Add machine · by a command";
+          ? connectWords.addMachineOver("over SSH")
+          : connectWords.addMachineOver("by a command");
       case "action":
       case "artifact":
       case "ask":
@@ -483,7 +483,7 @@
     request: { browserAsk?: unknown };
   }): string => {
     if (ask.request.browserAsk) {
-      return "Browser ask";
+      return askWords.browserAsk;
     }
     return ask.isQuestion ? "Question" : "Permission";
   };
@@ -1308,11 +1308,11 @@
           disabled={held || (answering && pressed !== "allow")}
           failed={answerRefused !== null && pressed === "allow"}
           icon={item.request.browserAsk ? IconInteract : IconTick}
-          label={item.request.browserAsk ? "Take over" : "Approve"}
+          label={item.request.browserAsk ? askWords.takeOver : "Approve"}
           onclick={() => answer("allow")}
           {onkeydown}
           pending={answering && pressed === "allow"}
-          pendingLabel={item.request.browserAsk ? "Taking over…" : "Approving…"}
+          pendingLabel={item.request.browserAsk ? askWords.takingOver : "Approving…"}
           size="sm"
           variant="secondary"
         />

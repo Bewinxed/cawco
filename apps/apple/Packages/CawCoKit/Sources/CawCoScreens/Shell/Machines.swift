@@ -676,7 +676,7 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
             first.append(signIn)
         }
         if MachineHealth.isMac(machine), machine.auth == .unreadableCredentials {
-            first.append(UIAction(title: "Unlock keychain…", image: Glyph.key.image) { [weak self] _ in self?.unlock() })
+            first.append(UIAction(title: Words.Machine.unlockKeychain, image: Glyph.key.image) { [weak self] _ in self?.unlock() })
         }
         if UpdateRows.installableNow(machine) {
             first.append(UIAction(title: "Install update now", image: Glyph.download.image) { _ in
@@ -685,7 +685,7 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
         }
         var sections = [UIMenu(options: .displayInline, children: first)]
         sections.append(UIMenu(options: .displayInline, children: [
-            copyItem("Copy machine id", what: "Machine id", text: machine.machineId),
+            copyItem(Words.Machine.copyMachineId, what: "Machine id", text: machine.machineId),
             copyItem("Copy hostname", what: "Hostname", text: machine.hostname),
         ]))
         if machine.status != "online" {

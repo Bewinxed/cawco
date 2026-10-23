@@ -4,7 +4,7 @@
     UserAnswers,
     UserQuestion,
   } from "@cawco/core";
-  import { askerLine, questionsOf } from "@cawco/core";
+  import { askerLine, askWords, questionsOf } from "@cawco/core";
   /**
    * The one human-in-the-loop surface, held in the composer's grown shape
    * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /
@@ -120,11 +120,11 @@
   /** What the card is, as its title and a screen reader name it. */
   const cardLabel = $derived.by(() => {
     if (browserAsk) {
-      return `Browser ask from ${asker}`;
+      return askWords.browserAskFrom(asker);
     }
     return questions
-      ? `Question from ${asker}`
-      : `Permission request from ${who}`;
+      ? askWords.questionFrom(asker)
+      : askWords.permissionFrom(who);
   });
 
   /** Names each question's lede, which labels its option group. */
@@ -715,12 +715,12 @@
         {#if otherAt === 0}
           <Input
             data-other
-            aria-label={`Your answer to: ${browserAsk.reason}`}
+            aria-label={askWords.yourAnswerTo(browserAsk.reason)}
             class="flex-1"
             disabled={!answerable}
             oninput={(event) => writeOther(event.currentTarget.value)}
             onkeydown={otherKey}
-            placeholder="Your answer…"
+            placeholder={askWords.yourAnswer}
             value={others[browserAsk.reason] ?? ""}
             bind:ref={otherField}
           />
@@ -760,7 +760,7 @@
           disabled={disabledOf("allow")}
           failed={takeRefused !== null}
           icon={IconInteract}
-          label="Take over"
+          label={askWords.takeOver}
           onclick={takeOver}
           pending={pendingOf("allow")}
           pendingLabel="Taking over…"
@@ -906,12 +906,12 @@
                step under the choices. -->
           <Input
             data-other
-            aria-label={`Your answer to: ${q.question}`}
+            aria-label={askWords.yourAnswerTo(q.question)}
             class="mb-space-2"
             disabled={!answerable}
             oninput={(event) => writeOther(event.currentTarget.value)}
             onkeydown={otherKey}
-            placeholder="Your answer…"
+            placeholder={askWords.yourAnswer}
             value={others[q.question] ?? ""}
             bind:ref={otherField}
           />
@@ -1002,15 +1002,15 @@
               data-cmd-toggle
               aria-expanded={commandOpen}
               aria-label={commandOpen
-                ? "Show the command on one line"
-                : "Show the whole command"}
+                ? askWords.commandOnOneLine
+                : askWords.wholeCommand}
               class="touch-hit flex-none -my-space-1"
               tone="muted"
               onclick={() => {
                 commandOpen = !commandOpen;
               }}
               size="icon-xs"
-              title={commandOpen ? "Show less" : "Show the whole command"}
+              title={commandOpen ? "Show less" : askWords.wholeCommand}
               variant="ghost"
             >
               <IconChevronDown

@@ -48,12 +48,14 @@ import { platform, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import { keychainLocked } from "../../../packages/agent/src/login-keychain";
+import { machineWords } from "../../../packages/core/src/words/machine";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { open, settle } from "../kit";
+import { startsWith } from "../words";
 
 const MACHINES_BUTTON = /^\d+ machines?/;
-const UNLOCK_ITEM = /^Unlock keychain/;
+const UNLOCK_ITEM = startsWith(machineWords.unlockKeychain);
 const UNLOCK_BUTTON = /^Unlock$/;
 /** What puts the step away: Done once answered, Close while it works, Cancel on the form. */
 const PUT_AWAY = /^(Done|Close|Cancel)$/;
@@ -358,7 +360,7 @@ async function machineMenu(page: Page): Promise<string[]> {
   await row.click({ button: "right" });
   const menu = page
     .getByRole("menu")
-    .filter({ has: page.getByRole("menuitem", { name: "Copy machine id" }) });
+    .filter({ has: page.getByRole("menuitem", { name: machineWords.copyMachineId }) });
   const opened = await menu
     .first()
     .waitFor({ timeout: 5000 })

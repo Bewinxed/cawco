@@ -25,8 +25,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
+import { startsWith } from "../words";
 import { callsInOrder, say } from "./mock";
 import {
   type Data,
@@ -37,9 +40,6 @@ import {
   type Leg,
   shows,
 } from "./suite";
-import { transcriptWords } from "../../../packages/core/src/words/transcript";
-import { spawnWords } from "../../../packages/core/src/words/spawn";
-import { startsWith } from "../words";
 
 const SPAWN = "JOURNEY-SPAWN";
 const START = /^Start/;
@@ -47,7 +47,7 @@ const START = /^Start/;
 const NEW_SESSION = /^(New session|Start session)$/;
 const MACHINES_CHIP = /^Machines:/;
 const PROJECT_CHIP = /^Project:/;
-const SESSION_TABS = "Open sessions in this group";
+const SESSION_TABS = transcriptWords.openSessions;
 const MODE_FLAG = "--permission-mode";
 const PERMISSION_MODE = startsWith(spawnWords.permissionModeHead);
 const IN_FULL_SEND = startsWith(spawnWords.permissionMode(spawnWords.modes.fullSend));
@@ -309,7 +309,7 @@ async function walk(leg: Leg): Promise<void> {
     .getByRole("tablist", { name: SESSION_TABS })
     .getByRole("tab", { selected: true })
     .filter({ visible: true });
-  const card = page.getByLabel("Session details", { exact: true });
+  const card = page.getByLabel(transcriptWords.sessionDetails, { exact: true });
   await leg.step(
     "Open the session's card",
     () => tab.first().click(),

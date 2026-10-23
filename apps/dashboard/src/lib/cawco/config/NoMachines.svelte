@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords, connectWords } from "@cawco/core";
   /**
    * A Configure group that is about machines, with none joined yet: the kit's
    * empty block (DESIGN.md, Empty: a 20px mark, a title, one line saying
@@ -23,7 +23,7 @@
   {#snippet action()}
     <Button
       aria-haspopup="dialog"
-      label="Add machine"
+      label={connectWords.addMachine}
       onclick={(event) => connect.openNew(event.currentTarget)}
       variant="outline"
     />

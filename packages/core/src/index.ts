@@ -2211,6 +2211,7 @@ export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
 export * from "./words/artifacts";
+export * from "./words/asks";
 export * from "./words/blocks";
 export * from "./words/catalog";
 export * from "./words/caw-head";
@@ -2226,6 +2227,7 @@ export * from "./words/files";
 export * from "./words/helpers";
 export * from "./words/leaks";
 export * from "./words/lfs";
+export * from "./words/machine";
 export * from "./words/made";
 export * from "./words/mcp";
 export * from "./words/memory";

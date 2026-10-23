@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {
+  import { connectWords,
     machineLabel,
     workspaceNeedsDetails,
     workspaceNeedsReason,
@@ -374,6 +374,6 @@
     type="button"
   >
     <IconPlus aria-hidden="true" class="size-icon-md" />
-    <span>Add machine</span>
+    <span>{connectWords.addMachine}</span>
   </button>
 {/if}

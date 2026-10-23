@@ -10,7 +10,7 @@
    * Right-click on a machine's heading — what you can do to the box, not to
    * a session. What it asks stands under the row (`AskHere`).
    */
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel, machineWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -153,7 +153,7 @@
         }}
       >
         <IconKey />
-        <span>Unlock keychain…</span>
+        <span>{machineWords.unlockKeychain}</span>
       </ContextMenu.Item>
     {/if}
     {#if phase === "available"}
@@ -176,7 +176,7 @@
       <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
       <ContextMenu.SubTrigger gap="item">
         <IconPause class="size-icon-md" />
-        <span>Pause until…</span>
+        <span>{machineWords.pauseUntil}</span>
       </ContextMenu.SubTrigger>
       <!-- Each end says its clock beside it: no sums before choosing. -->
       <ContextMenu.SubContent min="standard">
@@ -195,7 +195,7 @@
     <ContextMenu.Separator />
 
     <ContextMenu.CopyItem text={machine.machineId} what="Machine id">
-      Copy machine id
+      {machineWords.copyMachineId}
     </ContextMenu.CopyItem>
     <ContextMenu.CopyItem text={machine.hostname} what="Hostname">
       Copy hostname

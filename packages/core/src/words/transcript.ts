@@ -5,6 +5,9 @@
  * (scripts/probe-words-check.ts refuses a copy).
  */
 export const transcriptWords = {
+  /** A tab's details card, and the tabs of a pane's group. */
+  sessionDetails: "Session details",
+  openSessions: "Open sessions in this group",
   /** The transcript's landmark, as a screen reader names it. */
   transcript: "Session transcript",
   /** The composer's send. */

@@ -12,9 +12,11 @@
  */
 import { existsSync } from "node:fs";
 import type { Page } from "playwright-core";
+import { askWords } from "../../../packages/core/src/words/asks";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import { caw, cawSays, needsCount, ZERO } from "../caw-head";
 import type { KitFleet } from "../kit";
+import { startsWith } from "../words";
 import {
   asking,
   commandFor,
@@ -39,7 +41,7 @@ export const ONE_NEEDS = needsCount(1);
 /** Caw's head counting zero as a number: a zero by another name. */
 const ZERO_NEEDS = needsCount(0);
 /** A session's ask, by its card's name (Prompt.svelte). */
-const ASK_CARD = /^Permission request from/;
+const ASK_CARD = startsWith(askWords.permissionFrom(""));
 
 /** A session's ask, as its pane draws it over the composer. */
 export const askCard = (page: Page) =>

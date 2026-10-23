@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CAW_NO_MACHINE, routinesWords as words } from "@cawco/core";
+  import { CAW_NO_MACHINE, connectWords, routinesWords as words } from "@cawco/core";
   import { untrack } from "svelte";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
   import BlockPage, {
@@ -1148,7 +1148,7 @@
 {#snippet addMachineByHand()}
   <Button
     aria-haspopup="dialog"
-    label="Add machine"
+    label={connectWords.addMachine}
     onclick={(event) => connect.openNew(event.currentTarget)}
     variant="outline"
   />

@@ -37,6 +37,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
+import { askWords } from "../../../packages/core/src/words/asks";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { freshApp, simulatorApp, staleApp } from "../../lib/apple-app";
@@ -740,7 +741,7 @@ async function run(kit: Kit): Promise<void> {
       STAND_MS
     ).catch(() => undefined);
     await pause(2000);
-    const opened = await tap("Show the whole command");
+    const opened = await tap(askWords.wholeCommand);
     await pause(2000);
     const open = await rest(launched, "opened");
     await sh(
@@ -1313,7 +1314,7 @@ async function onSimulator(
       await rest(id, "card-from-drawer")
     );
     // On the drawer's card: the whole command opened, then Deny.
-    const opened = await tap((label) => label === "Show the whole command");
+    const opened = await tap((label) => label === askWords.wholeCommand);
     await pause(2000);
     report(
       "the probe's whole command opened",
