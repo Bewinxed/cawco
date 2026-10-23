@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { lstat, realpath } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
 import {
   type CommandQueue,
   type CommandQueueFrame,
@@ -21,12 +21,12 @@ import {
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { workspaceDenies } from "@cawco/core/workspace-policy";
 import {
   agentCommandStarted,
   ensureBoundary,
   whileSandboxDown,
 } from "./boundary";
+import { type DenyPaths, denyPaths } from "./worktree-guard";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -550,27 +550,18 @@ const MOVE_TARGET = /^[\w./@^~-]+$/;
 /** How long a move on the host waits between looks at a boundary that still runs something. */
 const BUSY_LOOK_MS = 2000;
 
-/**
- * The deny paths of `workspace`'s clone a git command there may hit, by path
- * in the clone, each as a literal pathspec: every clone-side deny path but
- * those in `.git`, which git tracks none of. On macOS srt's own names
- * (`.vscode`, `.gitmodules`, …) are not denied (workspace-policy.ts
- * `cloneDenies`, `srt`); on Linux srt binds them read-only too.
- */
+/** {@link denyPaths}, each as one shell word of a literal pathspec. */
 const denyPathspecs = async (
   workspace: WorkspaceRef,
-  which: "boundary" | "config" = "boundary"
-): Promise<string[]> => {
-  const clone = await realpath(workspace.path);
-  return (await workspaceDenies(workspace))
-    .filter(
-      (deny) =>
-        !deny.srt || (which === "boundary" && process.platform === "linux")
-    )
-    .map((deny) => relative(clone, deny.path))
-    .filter((path) => path !== ".git" && !path.startsWith(".git/"))
-    .map((path) => `':(literal)${path}'`);
-};
+  which: DenyPaths = "boundary"
+): Promise<string[]> =>
+  (await denyPaths(workspace, which)).map((path) =>
+    shellWord(`:(literal)${path}`)
+  );
+
+/** `text` as one shell word. */
+const shellWord = (text: string): string =>
+  `'${text.replaceAll("'", "'\\''")}'`;
 
 /**
  * The harness project config that commits no branch of `workspace`'s

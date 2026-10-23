@@ -45,6 +45,12 @@
  *   landing is refused, its finish naming `.mcp.json` as harness project
  *   config no workspace's commit changes, and origin's main is as (b) left
  *   it (workflow-command.ts `ownConfigChanges`).
+ * - (f) In (d)'s boundary the session's own `git checkout --detach
+ *   origin/main`, whose `.mcp.json` differs from HEAD's, exits non-zero
+ *   naming `.mcp.json`, and the worktree is as it was: the same HEAD, the
+ *   same `.mcp.json`, a clean status (agent worktree-guard.ts `gitShim`, the
+ *   `git` first on every command's PATH there). Before the fix git printed
+ *   "unable to unlink old '.mcp.json'" and the checkout moved the rest.
  *
  *   bun scripts/probe-kit/run.ts cut-tracked-denies
  */
@@ -81,6 +87,8 @@ const BLOCKED = "The item failed as blocked";
 const GIT_REFUSED = /unable to (create file|unlink old) /;
 /** What a refused move of config says (workflow-command.ts `ownConfigWords`). */
 const CONFIG_REFUSED = "which no workspace's commit changes";
+/** What the boundary's git says of a move it refused before it ran (worktree-guard.ts `gitShim`). */
+const SHIM_REFUSED = "did not run, and the worktree is as it was";
 /** The agent's line for a move it ran on the host (workflow-command.ts `onHost`). */
 const ON_HOST = "ran on the host, its sandbox down, as it writes";
 /** A held workspace's settle: its session's sleep, then its machine's archive. */
@@ -133,6 +141,9 @@ const NEW_COMMAND = [
   `rm -f "$m" 2>/dev/null; echo ${apart("MCP-RM:")}$?`,
   `mv "$m" moved-probe.json 2>/dev/null; echo ${apart("MCP-MV:")}$?`,
   `printf '{}\\n' > "$o" 2>/dev/null; echo ${apart("OPENCODE-WRITE:")}$?`,
+  `git checkout -q --detach origin/main 2> "$TMPDIR/co.err"; echo ${apart("CO-EXIT:")}$?`,
+  `echo ${apart("CO-SAID:")}"$(tr '\\n ' '__' < "$TMPDIR/co.err")"`,
+  `echo ${apart("CO-HEAD:")}"$(git rev-parse HEAD)"`,
   `echo ${apart(NEW_END)}`,
 ].join("\n");
 
@@ -556,6 +567,23 @@ const cutPhase = async (
       opencodeAfter === MAIN_OPENCODE &&
       !moved,
     `exits ${JSON.stringify(exits)}; .mcp.json ${JSON.stringify(mcpAfter)}; opencode.json ${JSON.stringify(opencodeAfter)}; moved-probe.json ${moved ? "there" : "absent"}`
+  );
+  const checkedOut = {
+    exit: after(said, "CO-EXIT:"),
+    said: after(said, "CO-SAID:")?.replaceAll("_", " ") ?? "",
+    head: after(said, "CO-HEAD:"),
+  };
+  const statusAfter = clone ? await gitIn(clone, "status", "--porcelain") : "?";
+  check(
+    "(f) in its boundary the session's own git checkout of origin/main, whose .mcp.json differs, exits non-zero naming .mcp.json, and the worktree is as it was: HEAD, .mcp.json and a clean status",
+    checkedOut.exit !== undefined &&
+      checkedOut.exit !== "0" &&
+      checkedOut.said.includes(".mcp.json") &&
+      checkedOut.said.includes(SHIM_REFUSED) &&
+      checkedOut.head === head &&
+      (await textAt(join(clone, ".mcp.json"))) === MAIN_MCP &&
+      statusAfter === "",
+    `${JSON.stringify(checkedOut)}; status ${JSON.stringify(statusAfter.slice(0, 300))}`
   );
 };
 

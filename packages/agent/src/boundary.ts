@@ -234,6 +234,7 @@ import {
 } from "./tool-door";
 import { SYSTEM_PATH, workspaceNeeds } from "./workspace-needs";
 import { workspaceRecords } from "./workspace-records";
+import { denyPaths, GIT_MOVE, gitShim } from "./worktree-guard";
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
@@ -1062,6 +1063,27 @@ const writeXcodeHome = async (id: string): Promise<void> => {
   );
 };
 
+/**
+ * The `git` first on workspace `id`'s commands' PATH and its judge, in its
+ * read-only bin (worktree-guard.ts `gitShim`), on both OSes: a session's
+ * move of the worktree never ends 0 with a path the boundary keeps dropped
+ * or stale, whichever harness runs it.
+ */
+const writeGitShim = async (id: string, path: string): Promise<void> => {
+  const bin = gitHelperDirOf(id);
+  await mkdir(bin, { recursive: true });
+  const shim = gitShim(
+    id,
+    bin,
+    await realpath(path),
+    await denyPaths({ id, path }, "boundary")
+  );
+  await Promise.all([
+    writeWhole(join(bin, "git"), shim.git, 0o755),
+    writeWhole(join(bin, GIT_MOVE), shim.move, 0o755),
+  ]);
+};
+
 const writeShims = async (id: string, runtime: string): Promise<void> => {
   const bin = gitHelperDirOf(id);
   await mkdir(bin, { recursive: true });
@@ -1298,6 +1320,7 @@ const armHookNow = async (
   await writeGuardedGhConfig(id);
   await writeUpstreamRule(id);
   await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id), 0o644);
+  await writeGitShim(id, held.path);
   // The copy of gh's token an earlier build's executor kept beside the
   // workspace: nothing reads it now, and a token is kept nowhere it is not used.
   await rm(join(stateDir(id), "gh-token"), { force: true });
