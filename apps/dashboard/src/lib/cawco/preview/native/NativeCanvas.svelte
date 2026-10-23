@@ -14,7 +14,7 @@
 <NativeSurface
   bind:wire
   subtitle="drawn 12 s ago"
-  title="CawCo iOS"
+  title="CawCo iOS · stills"
   wireControl
 >
   <div class="relative bg-surface-page" data-slot="native-canvas">

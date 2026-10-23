@@ -32,7 +32,10 @@
     still = false,
     wire = $bindable(false),
     same = null,
+    hover = null,
   }: {
+    /** A node held under the pointer, by its label: a story's pointer. */
+    hover?: string | null;
     /** Words on the picked box naming it the node another picture picks too. */
     same?: string | null;
     /** The live app with its tree over it, or the agent's HTML mirror of it. */
@@ -137,7 +140,13 @@
             >
               <AppStandIn bind:root={screen} />
             </div>
-            <NodeTree bind:picked pin={PIN.number} root={screen} {wire} />
+            <NodeTree
+              bind:picked
+              {hover}
+              pin={PIN.number}
+              root={screen}
+              {wire}
+            />
           </div>
         </div>
         <p
