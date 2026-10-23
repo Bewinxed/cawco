@@ -9328,9 +9328,11 @@ const deletedOnAnother = async (on: On) => {
   // Deleted as the person deletes, in its thread: the first desk's pane's doc and its device copy hold the deletion.
   const card = await openThread(first.there, set.frame, 1);
   await card.locator('[data-slot="delete"]').click();
+  // The ask's confirm: its action that isn't Cancel (AskHere.svelte).
   await card
-    .locator('[data-ask="delete"]')
-    .getByRole("button", { name: "Delete comment" })
+    .locator(
+      '[data-ask="delete"] [data-slot="actions"] button:not([data-ask-cancel])'
+    )
     .click();
   const closed = await card
     .waitFor({ state: "detached", timeout: 5000 })
