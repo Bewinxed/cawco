@@ -77,6 +77,7 @@ import { syncHarnessConfig } from "./fleet-harness-config";
 import {
   type FleetHarnessSet,
   readFleetHarnessSet,
+  type SetHarnessConfig,
   type SetHook,
   writeFleetHarnessSet,
 } from "./fleet-harness-set";
@@ -195,6 +196,13 @@ interface Sidecar {
    * and {@link readFleetDenials} says so.
    */
   deniedTools?: string[];
+  /**
+   * The harness config rows the last sync could not make ready, by their
+   * report key (fleet-harness-config.ts `syncHarnessConfig`), each with its
+   * words: a status read says them failed as the sync did, until a sync
+   * makes them. The ready ones are the harness set's (fleet-harness-set.ts).
+   */
+  harnessConfigFailed: Record<string, FleetItemState>;
   /**
    * Hook id → what cawco last registered for it. `command` is the identity
    * {@link withoutHooks} removes by — a command handler's `command` verbatim,
@@ -356,6 +364,7 @@ const readSidecar = async (): Promise<Sidecar> => {
     // None until the first sync: the machine has not heard the list.
     ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
     hooks: stored?.hooks ?? {},
+    harnessConfigFailed: stored?.harnessConfigFailed ?? {},
     ...(stored?.placedMcp ? { placedMcp: stored.placedMcp } : {}),
     placedMemory: stored?.placedMemory ?? {},
     placedSkills: stored?.placedSkills ?? {},
@@ -1943,6 +1952,23 @@ export function memoryPlan(
 const DRIFTED = "edited on this machine — adopt it or overwrite";
 
 /** A file CawCo wrote that a status read finds gone (`null` hash), or changed. */
+/**
+ * A ready harness config row as a status read finds it: applied while the
+ * file it loads from is there (an OpenCode plugin's module, a pi
+ * extension's file or package dir, fleet-harness-config.ts), failed as
+ * absent once it is gone. Claude Code settings live in the set itself.
+ */
+const harnessConfigHeld = async (
+  row: SetHarnessConfig
+): Promise<FleetItemState> =>
+  row.entry === undefined || (await stat(row.entry).catch(() => undefined))
+    ? { state: "applied" }
+    : {
+        state: "failed",
+        cause: "absent",
+        detail: `${row.entry} is not on disk`,
+      };
+
 const absentOrDrifted = (
   fileHash: string | null,
   gone: string
@@ -2756,7 +2782,7 @@ const syncHooks = async (
       continue;
     }
     set.placedHooks[hook.id] = { ...one, cwd: hook.cwd as string };
-    const note = hookWorkspaceNote(hook, true);
+    const note = hookWorkspaceNote(hook);
     written[hook.id] = {
       hash: hashes.get(hook.id) ?? hook.hash,
       command: identityOf(handler),
@@ -2813,7 +2839,7 @@ const syncHooks = async (
           handlerFor(hook, scriptPaths.get(hook.id)),
           false
         );
-        const note = hookWorkspaceNote(hook, false);
+        const note = hookWorkspaceNote(hook);
         written[hook.id] = {
           hash: hashes.get(hook.id) ?? hook.hash,
           command: identityOf(handler),
@@ -2980,6 +3006,11 @@ const converge = async (
       ...(memory ? { memory } : {}),
       memoryDocs,
       hooks: hooks.records,
+      harnessConfigFailed: Object.fromEntries(
+        Object.entries(harnessStates).filter(
+          ([, state]) => state.state === "failed"
+        )
+      ),
       placedMemory,
       placedSkills,
     } satisfies Sidecar);
@@ -3149,14 +3180,19 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         ? { state: "applied" }
         : absentOrDrifted(fileHash, `${file} is not on disk`);
   }
-  // What the last sync made ready of the fleet's settings, plugins and
-  // extensions is what sessions load.
-  report.harnessConfig = Object.fromEntries(
-    Object.keys((await readFleetHarnessSet()).config).map((key) => [
-      key,
-      { state: "applied" as const },
-    ])
-  );
+  // The fleet's settings, plugins and extensions: each row the last sync
+  // made ready, which sessions load, applied while its file is on disk; each
+  // it could not, failed in the sync's words.
+  report.harnessConfig = {
+    ...managed.harnessConfigFailed,
+    ...Object.fromEntries(
+      await Promise.all(
+        Object.entries((await readFleetHarnessSet()).config).map(
+          async ([key, row]) => [key, await harnessConfigHeld(row)] as const
+        )
+      )
+    ),
+  };
   // Read once, at the first project copy that asks.
   let readSet: Promise<FleetHarnessSet> | undefined;
   const harnessSet = (): Promise<FleetHarnessSet> => {
