@@ -281,6 +281,12 @@
     );
     /* The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through. */
     --c-target-tint: oklch(from var(--brand-solid) l c h / 0.08);
+    /* The overlay's see-through done wash over what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): status-done-bg at 40%, never the opaque chip fill and never coral; drawn by the overlay over the element, not under it, so the element's words read through it. */
+    --c-change-wash: color-mix(
+      in oklab,
+      var(--status-done-bg) 40%,
+      transparent
+    );
     --brand-ink: var(--coral-11);
     /* Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills. */
     --brand-ink-strong: light-dark(oklch(55% 0.165 33), oklch(76% 0.12 34));
@@ -408,7 +414,7 @@
     --presence-off: var(--neutral-8);
     /* Every scrollbar's thumb, inherited from the root. */
     --scrollbar-thumb: oklch(from var(--muted-foreground) l c h / 0.35);
-    /* The band of raised surface that crosses a skeleton once per loop. */
+    /* The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse). */
     --skeleton-sheen: oklch(from var(--surface-raised) l c h / 0.6);
     /* List bullets in rendered markdown. */
     --prose-bullet: oklch(from var(--muted-foreground) l c h / 0.55);
@@ -793,6 +799,14 @@
     --c-find-w: 520px;
     /* The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own. */
     --c-new-session-pop-w: 569px;
+    /* Add machine's step rail (connect/RunningStep): the connector's line stands on the middle of a step's 16px glyph. */
+    --c-step-rail-x: calc(var(--icon-md) / 2);
+    /* Add machine's step rail: from a step's row top to its glyph's foot (the row's 30px, its glyph centred), where the connector to the next step starts. */
+    --c-step-rail-top: calc((var(--c-btn-h-sm) + var(--icon-md)) / 2);
+    /* Add machine's step rail: from a step's foot to the next step's glyph top, where the connector ends (the room above a glyph centred in its 30px row). */
+    --c-step-rail-gap: calc((var(--c-btn-h-sm) - var(--icon-md)) / 2);
+    /* Add machine's raised body on the desk (the kit dialog's `connect` width, its tray's padding round it) and its output sheet: the width at which the command route's longest address row (a Tailscale name and "anywhere on the tailnet") and the install's one line stand on one line each in the label and code roles, so no step of the window wraps a row and its height ladder holds. */
+    --c-connect-w: 480px;
     /* A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line. */
     --c-panel-w: 380px;
     /* The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next. */
@@ -905,6 +919,8 @@
     --c-inline-chip-line: var(--c-row-mark);
     /* An inline chip's fill past its line, above and below, given back by an equal negative margin: the chip draws 22px tall and lays out as its 18px line, inside any line of text from 13px up. Web only. */
     --c-inline-chip-pad: 2px;
+    /* The most an inline chip's label stands across (a session, a pin, a decision card, an artifact, a task, a plan, any thing named in running text): past it the label ends in an ellipsis, its whole name in the chip's accessible name and its peek or card. An absolute length, never a percentage, so it bounds the chip's min-content too: in an auto-sized grid or flex track a percentage counts for nothing, and a long name claimed its whole nowrap width (a 390 page scrolled 660px sideways). 32ch: the most a line of chat reads as one name. Web only. */
+    --c-inline-chip-max-w: 32ch;
     /* A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger. */
     --c-peek-glyph: var(--icon-md);
     --c-tray-gap: var(--space-2);
@@ -1468,8 +1484,6 @@
     --c-skeleton-card-h: 54px;
     /* The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page). */
     --c-offer-text-basis: 240px;
-    /* A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome. */
-    --layer-sticky: 10;
     /* The hub band's slot under the bar: over the page column it opens above, its shadow on the page. */
     --layer-band: 20;
     /* The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage. */
@@ -1482,7 +1496,7 @@
     --layer-bar: 60;
     /* A toolbar fixed over the page (the task board's bulk bar): over the bar and the dock, under the phone's preview sheet. */
     --layer-toolbar: 70;
-    /* The phone's preview sheet host (SideSheet): over every page layer, under the floating surfaces. */
+    /* A phone's sheet that is part of the page, holding nothing (no scrim, the page above it live): the preview sheet host (SideSheet) and Caw's panel on a project's page (CawFloat). Over every page layer, under the floating surfaces, so a menu or a sheet opened from the page stands over it. */
     --layer-sheet: 80;
     /* A canvas stage standing in the phone's preview sheet: just over the sheet it stands in. */
     --layer-sheet-stage: 90;
@@ -1526,7 +1540,7 @@
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-    /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
+    /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
     --ease-crossfade: cubic-bezier(0.42, 0, 0.58, 1);
     /* A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap. */
     --ease-arrive: cubic-bezier(0.2, 0, 0, 1);
@@ -1579,6 +1593,10 @@
     --dur-hold: 1.2s;
     /* One turn of an ambient loop: spinner, pulse, ping. */
     --dur-loop: 1.2s;
+    /* One pulse of a skeleton while it waits: its opacity from 1 down to --skeleton-pulse-floor and back, on --ease-crossfade, looping until what it stands for arrives. transitions.dev Skeleton loader and reveal, --pulse-dur: 1000ms (the owner's pick: "transitions.dev exactly"). */
+    --dur-skeleton-pulse: 1000ms;
+    /* A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms. */
+    --dur-skeleton-reveal: 400ms;
     --c-500: 500ms;
     --breath: calc(var(--c-500) * 4);
     --press-scale: 0.97;
@@ -1597,8 +1615,6 @@
     --echo-opacity: 0.45;
     /* The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1). */
     --breath-floor: 0.8;
-    /* The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5. */
-    --glyph-duo-status-opacity: 0.57;
     /* How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track. */
     --account-week-mix: 0.32;
     /* An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 against the border-control track it lies on, in both schemes (by day cyan and green set the floor at 0.82, at night rose at 0.80); on the raised surface they hold more. */
@@ -1608,6 +1624,10 @@
     --pop-rise: 8px;
     /* How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr. */
     --fold-blur: 2px;
+    /* The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5. */
+    --skeleton-pulse-floor: 0.5;
+    /* How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px. */
+    --skeleton-reveal-blur: 2px;
     /* A control's colours on one clock: its fill, edge, ink and its gradient's stops (Tailwind's registered --tw-gradient-from and --tw-gradient-to, as its own transition-colors lists them), so a highlight drawn as a gradient over the fill (action-surface) changes with the fill. */
     --transition-control:
       background-color var(--dur-control) var(--ease-out),
@@ -1753,7 +1773,6 @@
     --tab-rim-mix-chosen: 0.78;
     --tab-rim-mix-idle: 0.54;
     --breath-floor: 0.58;
-    --glyph-duo-status-opacity: 0.46;
     --account-week-mix: 0.63;
   }
 
