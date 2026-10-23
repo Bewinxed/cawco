@@ -7216,6 +7216,54 @@
       },
       "$description": "The new-project page's column."
     },
+    "c-address-tray-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 384,
+        "unit": "px"
+      },
+      "$description": "The cawco address tray's width where it floats under Settings' Set up (the advisor's 384px Family tray)."
+    },
+    "c-address-caw": {
+      "$type": "dimension",
+      "$value": {
+        "value": 64,
+        "unit": "px"
+      },
+      "$description": "Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card)."
+    },
+    "c-address-caw-title": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "Caw's still box in the address tray's title slot (stations)."
+    },
+    "c-address-qr": {
+      "$type": "dimension",
+      "$value": {
+        "value": 112,
+        "unit": "px"
+      },
+      "$description": "The QR on the address tray's phone step: the address a phone opens once."
+    },
+    "c-address-raw-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 192,
+        "unit": "px"
+      },
+      "$description": "The tallest the address tray's Raw well stands before it scrolls."
+    },
+    "c-address-phone-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 780,
+        "unit": "px"
+      },
+      "$description": "The phone screen the address tray's Phone story stands its sheet in."
+    },
     "c-caw-hero": {
       "$type": "dimension",
       "$value": {

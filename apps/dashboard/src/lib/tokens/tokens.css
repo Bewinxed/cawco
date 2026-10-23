@@ -1426,6 +1426,18 @@
     --c-deck-gap: 12px;
     /* The new-project page's column. */
     --c-new-project-w: 72rem;
+    /* The cawco address tray's width where it floats under Settings' Set up (the advisor's 384px Family tray). */
+    --c-address-tray-w: 384px;
+    /* Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card). */
+    --c-address-caw: 64px;
+    /* Caw's still box in the address tray's title slot (stations). */
+    --c-address-caw-title: 40px;
+    /* The QR on the address tray's phone step: the address a phone opens once. */
+    --c-address-qr: 112px;
+    /* The tallest the address tray's Raw well stands before it scrolls. */
+    --c-address-raw-h: 192px;
+    /* The phone screen the address tray's Phone story stands its sheet in. */
+    --c-address-phone-h: 780px;
     /* The slot that holds Caw at his hero size over the new-project page; equal to CAW_SIZE in project/new/+page.svelte. */
     --c-caw-hero: 80px;
     /* The least a context meter's bar draws in the session details strip. */

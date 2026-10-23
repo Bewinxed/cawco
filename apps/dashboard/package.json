@@ -53,6 +53,7 @@
     "tailwind-variants": "^3.3.1",
     "tldts": "7.4.18",
     "torph": "^0.1.3",
+    "uqr": "0.1.3",
     "virtua": "0.53.4",
     "web-haptics": "0.0.6",
     "y-indexeddb": "9.0.12",

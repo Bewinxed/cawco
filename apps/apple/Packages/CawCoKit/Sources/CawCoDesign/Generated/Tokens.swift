@@ -1242,6 +1242,18 @@ public enum Size {
     public static let cDeckGap: Double = 12
     /// The new-project page's column.
     public static let cNewProjectW: Double = 1152
+    /// The cawco address tray's width where it floats under Settings' Set up (the advisor's 384px Family tray).
+    public static let cAddressTrayW: Double = 384
+    /// Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card).
+    public static let cAddressCaw: Double = 64
+    /// Caw's still box in the address tray's title slot (stations).
+    public static let cAddressCawTitle: Double = 40
+    /// The QR on the address tray's phone step: the address a phone opens once.
+    public static let cAddressQr: Double = 112
+    /// The tallest the address tray's Raw well stands before it scrolls.
+    public static let cAddressRawH: Double = 192
+    /// The phone screen the address tray's Phone story stands its sheet in.
+    public static let cAddressPhoneH: Double = 780
     /// The slot that holds Caw at his hero size over the new-project page; equal to CAW_SIZE in project/new/+page.svelte.
     public static let cCawHero: Double = 80
     /// The least a context meter's bar draws in the session details strip.

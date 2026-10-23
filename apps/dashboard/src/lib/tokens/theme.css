@@ -607,6 +607,12 @@
   --spacing-c-pipeline-count-w: var(--c-pipeline-count-w);
   --spacing-c-deck-gap: var(--c-deck-gap);
   --spacing-c-new-project-w: var(--c-new-project-w);
+  --spacing-c-address-tray-w: var(--c-address-tray-w);
+  --spacing-c-address-caw: var(--c-address-caw);
+  --spacing-c-address-caw-title: var(--c-address-caw-title);
+  --spacing-c-address-qr: var(--c-address-qr);
+  --spacing-c-address-raw-h: var(--c-address-raw-h);
+  --spacing-c-address-phone-h: var(--c-address-phone-h);
   --spacing-c-caw-hero: var(--c-caw-hero);
   --spacing-c-context-bar-min: var(--c-context-bar-min);
   --spacing-c-context-bar-max: var(--c-context-bar-max);
