@@ -829,7 +829,7 @@ export interface HandoffDeps {
    */
   readonly instancesByShortId?: (prefix: string) => InstanceRow[];
   /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
-  readonly lands?: LandsMode;
+  readonly lands?: ItemEnd;
   /** Whether this session leads the project of the work item a session runs: it may steer, answer and stop it. */
   readonly ledBy?: (instanceId: string) => boolean;
   /** The session's project: its delegate types shadow the fleet's. */
@@ -958,6 +958,8 @@ export interface HandoffActions {
       inputs?: unknown[];
       /** Where its commits go once it passes the landing gate; `main` by default. */
       lands?: LandsMode;
+      /** Runs on the machine itself with no clone or boundary, landing nothing (work-items.ts `startHost`). */
+      host?: boolean;
       /** Files in its workspace the hub copies into the project's folder. */
       outputs?: string[];
       /** Its group under this session: one combined report once all have ended. */
@@ -1086,6 +1088,13 @@ export interface HandoffActions {
     value: unknown
   ) => Promise<string>;
 }
+
+/**
+ * How a work item's session ends its work, as its finish_item says: the
+ * clone's landing (`LandsMode`), or `host`, a host-scope item with no clone,
+ * whose report is all it hands in.
+ */
+export type ItemEnd = LandsMode | "host";
 
 /** The structured result of startSession / delegate — the id, title, and the model-facing prose. */
 export interface HandoffResult {

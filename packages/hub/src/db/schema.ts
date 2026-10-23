@@ -1376,6 +1376,15 @@ export const workspaces = sqliteTable("workspaces", {
    */
   stageFor: text("stage_for"),
   /**
+   * A host-scope delegate's (work-items.ts `startHost`): no clone and no
+   * boundary. `path` (and `repoRoot`) is the folder on the machine its
+   * session runs in, on the host, with the machine's own network, processes
+   * and the agent user's groups. Nothing is cut, landed, held or archived
+   * for it: no machine call names it, its row is where its items ran. Never
+   * listed among a machine's active or live workspaces.
+   */
+  host: integer("host", { mode: "boolean" }).notNull().default(false),
+  /**
    * What its clone held that is nowhere else when it was filed `held`, as
    * its machine read it once its boundary was closed; null in any other
    * state.

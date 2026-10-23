@@ -2003,6 +2003,13 @@
       "when": 1792738217593,
       "tag": "0293_fleet_deltas",
       "breakpoints": true
+    },
+    {
+      "idx": 294,
+      "version": "6",
+      "when": 1792751218508,
+      "tag": "0294_host_workspaces",
+      "breakpoints": true
     }
   ]
 }

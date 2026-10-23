@@ -92,6 +92,7 @@ import {
   sizeWords,
   WORK_ITEM_ORIGIN,
   type WorkspaceLanding,
+  withHostLine,
   withInputsLine,
   withLandingLine,
   withWorkspaceLine,
@@ -698,6 +699,13 @@ export interface WorkItemRequest {
   group?: string;
   harness?: HarnessKind;
   /**
+   * Host scope: its session runs on the machine itself (`machineId`, the
+   * parent's by default) in `cwd` (the agent user's home when left out),
+   * with no clone and no boundary ({@link startHost}). It lands nothing, and
+   * takes nothing that needs a clone ({@link hostProblem}).
+   */
+  host?: boolean;
+  /**
    * What its parent hands it (core handed-input.ts), written into its
    * workspace's `$TMPDIR/inputs/` before the brief that names them: files
    * on the parent's machine by absolute path (agent inputs.ts), and what
@@ -1111,16 +1119,31 @@ export interface ItemPlacement {
   launchesOn?: string;
 }
 
-/** A workspace as its machine is told about it. */
-const refOf = (workspace: WorkspaceRow): WorkspaceRef => ({
-  id: workspace.id,
-  path: workspace.path,
-});
+/**
+ * A workspace as its machine is told about it: a clone and its boundary. A
+ * host-scope row (schema.ts `workspaces.host`) is the host's own folder,
+ * which no machine call may treat as a clone (an archive deletes one), so
+ * naming one throws.
+ */
+const refOf = (workspace: WorkspaceRow): WorkspaceRef => {
+  if (workspace.host) {
+    throw new Error(
+      `workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}: no clone and no boundary to act on`
+    );
+  }
+  return { id: workspace.id, path: workspace.path };
+};
+
+/** The boundary a session in `workspace` runs inside: none for a host-scope one. */
+const boundaryOf = (workspace: WorkspaceRow): WorkspaceRef | undefined =>
+  workspace.host ? undefined : refOf(workspace);
 
 /**
  * The item's session: nested under its parent, working in the workspace's
  * checkout, every shell command inside the workspace's boundary, and its
- * parent's project's, as the workspace is one of that project's places.
+ * parent's project's, as the workspace is one of that project's places. A
+ * host-scope item's session names no workspace: the machine starts it in
+ * its folder on the host, unbounded (agent session.ts `#sessionContext`).
  */
 const spawnOf = (
   instanceId: string,
@@ -1128,11 +1151,14 @@ const spawnOf = (
   parent: Parent,
   workspace: WorkspaceRow,
   settings: Settings
-): NamedSpawn => ({
-  ...sessionOf(instanceId, title, parent, settings),
-  cwd: workspace.path,
-  workspace: refOf(workspace),
-});
+): NamedSpawn => {
+  const bound = boundaryOf(workspace);
+  return {
+    ...sessionOf(instanceId, title, parent, settings),
+    cwd: workspace.path,
+    ...(bound ? { workspace: bound } : {}),
+  };
+};
 
 /** {@link spawnOf} but where it works: what placement reads of the session. */
 const sessionOf = (
@@ -1178,7 +1204,9 @@ const sessionOf = (
  * copies inputs by path (none for a workspace cut before it was recorded).
  */
 const placeOf = (workspace: WorkspaceRow): string =>
-  `${workspace.path}, branch ${workspace.branch}${workspace.tmp ? `, TMPDIR ${workspace.tmp}` : ""}`;
+  workspace.host
+    ? `${workspace.path} on the host, no clone and no boundary`
+    : `${workspace.path}, branch ${workspace.branch}${workspace.tmp ? `, TMPDIR ${workspace.tmp}` : ""}`;
 
 /** What a fork reads before its brief: its parent's turns are behind it, and they are not its orders. */
 const forkLine = (workspace: WorkspaceRow): string =>
@@ -1372,8 +1400,40 @@ const fromProblem = (request: WorkItemRequest): string | undefined => {
     : undefined;
 };
 
-/** Why a request's title, owned files, budget, group or `from` cannot stand; nothing when they can. */
+/**
+ * A host-scope request with what needs a clone, each refused in a line of
+ * its own: there is no workspace to cut, continue, own files in, hand files
+ * into or collect from, and nothing lands.
+ */
+const hostProblem = (request: WorkItemRequest): string | undefined => {
+  if (!request.host) {
+    return;
+  }
+  const refused = [
+    request.from !== undefined &&
+      "from: a host delegate has no clone to start at another workspace's commits.",
+    request.workspace !== undefined &&
+      "workspace: a host delegate is a new session; continue one with handoff.",
+    request.owns?.length &&
+      "owns: a host delegate has no clone whose files it could own.",
+    request.inputs?.length &&
+      "inputs: a host delegate has no $TMPDIR/inputs/; name the paths on its machine in the brief.",
+    request.outputs?.length &&
+      "outputs: nothing is collected from a host delegate; its report carries the result.",
+    request.lands !== undefined &&
+      request.lands !== "none" &&
+      `lands ${request.lands}: a host delegate lands nothing; leave lands out.`,
+    (request.reuse !== undefined || request.task !== undefined) &&
+      "a task's attempt runs in a clone of its project.",
+  ].filter((line): line is string => typeof line === "string");
+  return refused.length > 0
+    ? `Host scope refuses ${refused.length === 1 ? "this" : "these"}:\n${refused.map((line) => `- ${line}`).join("\n")}`
+    : undefined;
+};
+
+/** Why a request's title, owned files, budget, group, `from` or host scope cannot stand; nothing when they can. */
 const requestProblem = (request: WorkItemRequest): string | undefined =>
+  hostProblem(request) ??
   fromProblem(request) ??
   titleProblem(request.title) ??
   (request.owns ? ownsProblem(request.owns) : undefined) ??
@@ -2321,7 +2381,7 @@ export const createWorkItems = ({
   const boundOf = (row: InstanceRow): WorkspaceRef | undefined => {
     const item = itemOf(row);
     const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-    return workspace ? refOf(workspace) : leadPlace(row);
+    return workspace ? boundaryOf(workspace) : leadPlace(row);
   };
 
   /** The pause of the machine a workspace is on, in words; undefined when it is not paused. */
@@ -3552,7 +3612,12 @@ export const createWorkItems = ({
    */
   const settle = async (id: string): Promise<Settled> => {
     const [workspace] = db.workspacesNamed(id);
-    if (workspace?.state !== "active" || workspace.checksFor) {
+    // A host-scope row has no clone to close: nothing of it settles.
+    if (
+      workspace?.state !== "active" ||
+      workspace.checksFor ||
+      workspace.host
+    ) {
       return { kind: "none" };
     }
     const items = db.workItemsIn(workspace.id);
@@ -3711,7 +3776,12 @@ export const createWorkItems = ({
     inWorkspaceTurn(id, async () => {
       await settle(id);
       const [workspace] = db.workspacesNamed(id);
-      if (!workspace || workspace.state === "archived" || workspace.checksFor) {
+      if (
+        !workspace ||
+        workspace.state === "archived" ||
+        workspace.checksFor ||
+        workspace.host
+      ) {
         return;
       }
       if (isHeld(workspace)) {
@@ -3760,6 +3830,12 @@ export const createWorkItems = ({
       throw new WorkItemRefusal(
         409,
         `Workspace ${handle(workspace.id)} is already archived.`
+      );
+    }
+    if (workspace.host) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`
       );
     }
     if (workspace.checksFor) {
@@ -4013,6 +4089,12 @@ export const createWorkItems = ({
         `Not continued: ${archivedWords(workspace)} Delegate without workspace to start a new one.`
       );
     }
+    if (workspace.host) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}, not a clone: continue its session with handoff, or delegate with host again.`
+      );
+    }
     if (workspace.checksFor) {
       throw new WorkItemRefusal(
         409,
@@ -4039,7 +4121,7 @@ export const createWorkItems = ({
    */
   const boundaryUp = async (needle: string): Promise<void> => {
     const [workspace] = db.workspacesNamed(needle.trim());
-    if (!workspace || workspace.state === "archived") {
+    if (!workspace || workspace.state === "archived" || workspace.host) {
       return;
     }
     const boundaryPid = (await call(
@@ -4211,10 +4293,16 @@ export const createWorkItems = ({
         `Workspace ${handle(source.id)} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`
       );
     }
-    if (source.state === "archived" || source.checksFor) {
+    if (source.state === "archived" || source.checksFor || source.host) {
+      let why = "it is archived, its clone gone";
+      if (source.host) {
+        why = "it is a host-scope delegate's folder, not a clone";
+      } else if (source.checksFor) {
+        why = "it runs a landing gate's build";
+      }
       throw new WorkItemRefusal(
         409,
-        `Workspace ${handle(source.id)} has no branch to cut from: ${source.checksFor ? "it runs a landing gate's build" : "it is archived, its clone gone"}. Delegate without from.`
+        `Workspace ${handle(source.id)} has no branch to cut from: ${why}. Delegate without from.`
       );
     }
     const live = items.find((item) => LIVE.has(item.state));
@@ -4311,7 +4399,7 @@ export const createWorkItems = ({
           "A fork copies a conversation stored on the parent's machine; drop machine, or delegate without fork."
         );
       }
-      if (!request.cwd?.trim()) {
+      if (!(request.host || request.cwd?.trim())) {
         throw new WorkItemRefusal(
           400,
           "A delegate on another machine needs cwd: the repository's absolute path on that machine."
@@ -4569,6 +4657,10 @@ export const createWorkItems = ({
   const withClone = async (
     workspace: WorkspaceRow
   ): Promise<WorkspaceRow | undefined> => {
+    // A host-scope row's folder is the machine's own: there is no clone.
+    if (workspace.host) {
+      return workspace;
+    }
     if (recuttable(workspace)) {
       return await recut(workspace);
     }
@@ -4985,9 +5077,46 @@ export const createWorkItems = ({
         );
       }
     }
+    if (request.host) {
+      return startHost(request, parent);
+    }
     return request.workspace
       ? await startFollowUp(request.workspace, request, parent, inputs)
       : await startFresh(request, parent, projectId, inputs);
+  };
+
+  /**
+   * A host-scope item ({@link WorkItemRequest.host}): its row of the host
+   * kind filed for the folder it runs in (`cwd` on its machine, the agent
+   * user's home by default), with nothing cut, then its session spawned
+   * there with no boundary ({@link spawnOf}). Its machine and model are
+   * checked as a new workspace's are; the folder is the machine's own, so
+   * no project place, repository or clone is recorded for it.
+   */
+  const startHost = (
+    request: WorkItemRequest,
+    parent: Parent
+  ): WorkItemStart => {
+    const machineId = targetMachine(request, parent);
+    notPaused(machineId);
+    const settings = settingsOf(request, parent);
+    modelOffered(machineId, settings);
+    const path = cwdOn(machineId, request.cwd?.trim() || "~");
+    const workspace = db.createWorkspace({
+      id: crypto.randomUUID(),
+      machineId,
+      repoRoot: path,
+      path,
+      branch: "",
+      base: "",
+      state: "active",
+      host: true,
+      createdByInstanceId: parent.id,
+    });
+    console.log(
+      `[workspaces] ${workspace.id} on ${machineName(machineId)}: a host-scope delegate's folder ${path}, no clone and no boundary`
+    );
+    return spawnIn(workspace, settings, parent, request, NO_INPUTS);
   };
 
   /**
@@ -5141,7 +5270,8 @@ export const createWorkItems = ({
       byPerson: request.byPerson ?? false,
       ...(request.task ? { taskId: request.task.id } : {}),
       ...(projectId ? { projectId } : {}),
-      lands: request.lands ?? "main",
+      // Host scope lands nothing ({@link startHost}).
+      lands: request.host ? "none" : (request.lands ?? "main"),
       outputs: request.outputs?.length ? request.outputs : null,
       group: request.group?.trim() || null,
       owns: request.owns?.length ? request.owns : null,
@@ -5249,20 +5379,27 @@ export const createWorkItems = ({
     }
     /** Its first message, which names its inputs: sent once they are in. */
     const brief = (): void => {
+      const content = withInputsLine(
+        `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
+        inputs.files
+      );
       send(
         messageOf(
           instanceId,
           workspace.machineId,
           parent,
-          withWorkspaceLine(
-            withInputsLine(
-              `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
-              inputs.files
-            ),
-            workspace.repoRoot,
-            workspace.base,
-            landingOf(item)
-          )
+          workspace.host
+            ? withHostLine(
+                content,
+                workspace.path,
+                machineName(workspace.machineId)
+              )
+            : withWorkspaceLine(
+                content,
+                workspace.repoRoot,
+                workspace.base,
+                landingOf(item)
+              )
         )
       );
     };
@@ -5308,7 +5445,9 @@ export const createWorkItems = ({
       item,
       workspace,
       text:
-        `Started work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}): ` +
+        (workspace.host
+          ? `Started work item ${item.id.slice(0, 8)} with host scope on ${machineName(workspace.machineId)} (${placeOf(workspace)}; nothing lands): `
+          : `Started work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}): `) +
         (settings.forkOf
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${sessionLink(instanceId, request.title)}, ${label}. It starts with every turn of yours so far.`
           : `a fresh ${harness} session, ${sessionLink(instanceId, request.title)}, ${label}.`) +
@@ -5321,6 +5460,15 @@ export const createWorkItems = ({
         inputsSaid(inputs),
     };
   };
+
+  /** The live items on `machineId`, in a clone or with host scope. */
+  const liveItemsOn = (machineId: string): WorkItemRow[] =>
+    db
+      .liveWorkItems()
+      .filter(
+        (item) =>
+          db.workspacesNamed(item.workspaceId)[0]?.machineId === machineId
+      );
 
   /** The item a session runs, when it runs one. */
   const itemOf = (row: InstanceRow): WorkItemRow | undefined =>
@@ -5631,7 +5779,12 @@ export const createWorkItems = ({
    */
   const followsUp = async (item: WorkItemRow): Promise<boolean> => {
     const [workspace] = db.workspacesNamed(item.workspaceId);
-    if (!workspace || workspace.state === "archived" || workspace.checksFor) {
+    if (
+      !workspace ||
+      workspace.state === "archived" ||
+      workspace.checksFor ||
+      workspace.host
+    ) {
       return false;
     }
     if (isHeld(workspace)) {
@@ -5720,7 +5873,7 @@ export const createWorkItems = ({
     item: WorkItemRow
   ): Promise<string | undefined> => {
     const [workspace] = db.workspacesNamed(item.workspaceId);
-    if (workspace?.state !== "active") {
+    if (workspace?.state !== "active" || workspace.host) {
       return;
     }
     const run = runIn(workspace, item);
@@ -6897,7 +7050,7 @@ export const createWorkItems = ({
       submission.summary,
       landing,
       collected,
-      `${await changesSince(workspace, item)}${findingsBlock(submission.findings)}${shipped}`
+      `${workspace.host ? "" : await changesSince(workspace, item)}${findingsBlock(submission.findings)}${shipped}`
     );
     const lines = landingGateLines(landing);
     const gateSaid = `${lines ? `\n\nLanding gate:\n${lines}` : ""}${shipped}`;
@@ -7146,6 +7299,15 @@ export const createWorkItems = ({
     const [row] = db.getInstancesByIds([item.instanceId]);
     const [workspace] = db.workspacesNamed(item.workspaceId);
     const settled = { landingSince: null, submission: null };
+    // Host scope: no clone, so no gate, no landing and no diffstat; the
+    // report is the whole of it.
+    if (workspace.host) {
+      return await reportLanding(item, row, workspace, submission, {
+        kind: "done",
+        line: "Nothing landed: it ran with host scope.",
+        gate: { declared: false, outcomes: [] },
+      });
+    }
     const gate = await gateSteps(workspace, item);
     if ("refusal" in gate) {
       const refused = update(item.id, settled) ?? item;
@@ -7346,12 +7508,9 @@ export const createWorkItems = ({
      * live item on it and every delegate still queued.
      */
     pauseChanged(machineId: string): void {
-      for (const workspace of db.activeWorkspacesOn(machineId)) {
-        for (const item of db.workItemsIn(workspace.id)) {
-          if (LIVE.has(item.state)) {
-            published(item);
-          }
-        }
+      // Every live item on it, a host-scope one's too (no active clone lists it).
+      for (const item of liveItemsOn(machineId)) {
+        published(item);
       }
       for (const queued of db.queuedWorkItems()) {
         if (!db.workItem(queued.id)) {
@@ -8056,30 +8215,28 @@ export const createWorkItems = ({
      * answered. An item this hub is running now is left to that run.
      */
     resumeLandings(machineId: string): void {
-      for (const workspace of db.activeWorkspacesOn(machineId)) {
-        for (const item of db.workItemsIn(workspace.id)) {
-          const { submission } = item;
-          if (!(item.landingSince && submission) || finishing.has(item.id)) {
-            continue;
-          }
-          console.log(`resumed the landing of item ${item.id}`);
-          const [row] = db.getInstancesByIds([item.instanceId]);
-          settleLanding(item, submission)
-            .then(({ done, text }) => {
-              if (!done) {
-                tell(row, text);
-              }
-            })
-            .catch((error: unknown) => {
-              const reason =
-                error instanceof Error ? error.message : String(error);
-              console.error(`[work-items] ${item.id}: ${reason}`);
-              tell(
-                row,
-                `Your work item's landing gate could not run: ${reason}. Call finish_item again.`
-              );
-            });
+      for (const item of liveItemsOn(machineId)) {
+        const { submission } = item;
+        if (!(item.landingSince && submission) || finishing.has(item.id)) {
+          continue;
         }
+        console.log(`resumed the landing of item ${item.id}`);
+        const [row] = db.getInstancesByIds([item.instanceId]);
+        settleLanding(item, submission)
+          .then(({ done, text }) => {
+            if (!done) {
+              tell(row, text);
+            }
+          })
+          .catch((error: unknown) => {
+            const reason =
+              error instanceof Error ? error.message : String(error);
+            console.error(`[work-items] ${item.id}: ${reason}`);
+            tell(
+              row,
+              `Your work item's landing gate could not run: ${reason}. Call finish_item again.`
+            );
+          });
       }
     },
 
@@ -8112,6 +8269,12 @@ export const createWorkItems = ({
         );
       }
       const [named] = db.workspacesNamed(item.workspaceId);
+      if (named?.host) {
+        throw new WorkItemRefusal(
+          409,
+          `${item.title} (${handle(item.id)}) runs with host scope on ${machineName(named.machineId)}: it has no $TMPDIR/inputs/. Name the paths on its machine in the message, without inputs.`
+        );
+      }
       const [caller] = db.getInstancesByIds([from]);
       if (!caller) {
         throw new WorkItemRefusal(404, `unknown session ${from}`);
@@ -8189,13 +8352,13 @@ export const createWorkItems = ({
     workspaceOf(row: InstanceRow): WorkspaceRef | undefined {
       const item = itemOf(row);
       const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-      return workspace ? refOf(workspace) : undefined;
+      return workspace ? boundaryOf(workspace) : undefined;
     },
 
     /** Workspace `id` as a spawn or a stage is bounded to it; undefined when no workspace has that id. */
     workspaceRef(id: string): WorkspaceRef | undefined {
       const workspace = db.workspacesNamed(id).find((one) => one.id === id);
-      return workspace ? refOf(workspace) : undefined;
+      return workspace ? boundaryOf(workspace) : undefined;
     },
 
     /**

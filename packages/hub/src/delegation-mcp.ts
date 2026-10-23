@@ -3,7 +3,6 @@ import { unwatchFile, watchFile } from "node:fs";
 import {
   type Envelope,
   type InstanceRow,
-  type LandsMode,
   parseConnectionTool,
   type SendPayload,
 } from "@cawco/core";
@@ -26,6 +25,7 @@ import type {
   ForkOrigin,
   HandoffDeps,
   HandoffThreads,
+  ItemEnd,
   SendDelivery,
 } from "./delegation-actions";
 import {
@@ -230,7 +230,7 @@ export function createDelegationMcp(options: {
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
   /** Where a work item lands: what its session's finish_item says happens. */
-  workItemLands?: (workItemId: string) => LandsMode | undefined;
+  workItemLands?: (workItemId: string) => ItemEnd | undefined;
   /** "Build the design system" filed in the hub's words (design-offers.ts `fileBuild`). */
   designBuild?: TaskToolContext["designBuild"];
   /** Duplicates for a task a session filed with `task_create` (jev-tasks.ts). */
@@ -377,7 +377,7 @@ export function createDelegationMcp(options: {
   }
 
   /** How the work item a session runs lands, when it runs one. */
-  const landsOf = (actor: InstanceRow | undefined): LandsMode | undefined =>
+  const landsOf = (actor: InstanceRow | undefined): ItemEnd | undefined =>
     actor?.workItemId ? options.workItemLands?.(actor.workItemId) : undefined;
 
   /**

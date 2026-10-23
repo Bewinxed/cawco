@@ -24098,7 +24098,16 @@ export const createServer = (
     hubTools,
     browserTools: (actor, toolUseId) => browserAsks.tools(actor, toolUseId),
     workItemTask: (id) => db.workItem(id)?.taskId,
-    workItemLands: (id) => db.workItem(id)?.lands,
+    // A host-scope item ends with its report alone (work-items.ts `startHost`).
+    workItemLands: (id) => {
+      const item = db.workItem(id);
+      if (!item) {
+        return;
+      }
+      return db.workspacesNamed(item.workspaceId)[0]?.host
+        ? "host"
+        : item.lands;
+    },
     designBuild: (projectId, actor, stage) =>
       designOffers.fileBuild(projectId, actor, stage),
     duplicates: (projectId, task) => jevTasks.filed(projectId, task, "session"),
@@ -30270,6 +30279,7 @@ export const createServer = (
             // Each a path or a held kind (core handed-input.ts), checked in words by work-items.
             inputs: t.Optional(t.Array(t.Unknown())),
             lands: t.Optional(LANDS),
+            host: t.Optional(t.Boolean()),
             outputs: t.Optional(t.Array(t.String())),
             group: t.Optional(t.String()),
             owns: t.Optional(t.Array(t.String())),

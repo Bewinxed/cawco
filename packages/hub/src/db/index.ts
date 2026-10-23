@@ -589,7 +589,7 @@ export interface DbShape {
   ) => boolean;
   /** Approved actions: one exact tool call each, run once (actions.ts). */
   readonly actions: ActionsDb;
-  /** A machine's active workspaces: an item there is live, or the hub has not settled it since. */
+  /** A machine's active workspaces with a clone: an item there is live, or the hub has not settled it since. Never a host-scope row (schema.ts `workspaces.host`). */
   readonly activeWorkspacesOn: (machineId: string) => WorkspaceRow[];
   /** Adds counted capability uses, summing into any row already there. */
   readonly addCapabilityUsage: (
@@ -1212,7 +1212,7 @@ export interface DbShape {
   readonly liveWorkItems: () => WorkItemRow[];
   /** The work items a session delegated that are still `starting`/`running`. */
   readonly liveWorkItemsOf: (parentInstanceId: string) => WorkItemRow[];
-  /** The ids of a machine's workspaces with a live work item (starting or running). */
+  /** The ids of a machine's workspaces with a clone and a live work item (starting or running). */
   readonly liveWorkspacesOn: (machineId: string) => string[];
   /** The lines its machine said, kept on the session's row, each kind oldest first. */
   readonly machineLinesOf: (id: string) => MachineLine[];
@@ -9411,7 +9411,8 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(workspaces.machineId, machineId),
-            eq(workspaces.state, "active")
+            eq(workspaces.state, "active"),
+            eq(workspaces.host, false)
           )
         )
         .all(),
@@ -9430,6 +9431,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(workspaces.machineId, machineId),
+            eq(workspaces.host, false),
             inArray(workItems.state, ["starting", "running"])
           )
         )

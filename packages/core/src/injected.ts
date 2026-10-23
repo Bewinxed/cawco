@@ -241,6 +241,22 @@ export const withWorkspaceLine = (
   );
 
 /**
+ * The opening of a host-scope work item's session (hub work-items.ts
+ * `startHost`): on `machine` itself in `cwd`, no clone and no boundary, so
+ * its commands have what a session the person starts there has. Nothing it
+ * does is landed; its report is the whole of what reaches its parent.
+ */
+export const withHostLine = (
+  text: string,
+  cwd: string,
+  machine: string
+): string =>
+  afterMarker(
+    text,
+    `You run on ${machine} itself, in ${cwd}, with host scope: no clone and no boundary. Your shell commands have what a session started on this machine has: its network and listening sockets, every process, the agent user's groups (docker and the like) and its files. Nothing you do is committed, pushed or landed: finish_item hands your report to your parent, so quote in it the real output of each command that proves the work.`
+  );
+
+/**
  * `text` with the line that names a delegate's inputs right after any
  * hand-off marker: where they are, `$TMPDIR/inputs/` in its workspace, and
  * where each was read on its parent's machine. `text` as it is without any.

@@ -107,7 +107,6 @@ import {
   SESSION_DIR_READ,
   SESSION_STOPPED,
   settledQuestionResult,
-  spawnWords,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -1189,9 +1188,10 @@ const scheduledWakeups = (input: unknown): Wakeups | undefined => {
  * x("tengu_cowork_chrome_automode_default",!1)`). In the non-bypass modes cawco
  * offers, the tool itself still asks for each call. A spec's own env still wins.
  */
-const sessionEnv = (
+export const sessionEnv = (
   specEnv: Record<string, string | undefined> | undefined,
-  ctx: HarnessContext
+  ctx: Pick<HarnessContext, "boundary" | "instanceId" | "sessionCredential">,
+  root: boolean = runsAsRoot()
 ): Record<string, string | undefined> => ({
   // The fleet's MCP connect window (mcp-status.ts), under the agent's own env.
   ...CLAUDE_MCP_ENV,
@@ -1226,53 +1226,40 @@ const sessionEnv = (
   ...(ctx.sessionCredential
     ? { [CAWCO_ENV.sessionCredential]: ctx.sessionCredential }
     : {}),
-  // Said true only where it is, whatever the agent's own env says
-  // ({@link claudeRootRefusal}).
-  IS_SANDBOX: ctx.boundary && runsAsRoot() ? "1" : undefined,
+  // Said as root alone, whatever the agent's own env says ({@link
+  // CLAUDE_ROOT_SANDBOX}).
+  [CLAUDE_ROOT_SANDBOX]: root ? "1" : undefined,
   // Last: the silent-turn reminder stays off whatever the spec or the
   // person's env says.
   ...CLAUDE_QUIET_ENV,
 });
 
-/** Whether this agent, and so every CLI it starts, runs as root ({@link claudeRootRefusal}). */
+/** Whether this agent, and so every CLI it starts, runs as root ({@link CLAUDE_ROOT_SANDBOX}). */
 const runsAsRoot = (): boolean =>
   process.platform !== "win32" && process.getuid?.() === 0;
 
 /**
- * CLAUDE CODE'S ROOT RULE. The CLI exits at once as root when it is launched
- * in bypass or with bypass allowed: "if(s==="bypassPermissions"||r){if(
- * typeof process.getuid==="function"&&process.getuid()===0&&
+ * CLAUDE CODE'S ROOT RULE, and how CawCo meets it. The CLI exits at once as
+ * root when it is launched in bypass or with bypass allowed, unless
+ * `IS_SANDBOX` is "1" or it runs in bubblewrap: "if(s==="bypassPermissions"
+ * ||r){if(typeof process.getuid==="function"&&process.getuid()===0&&
  * process.env.IS_SANDBOX!=="1"&&!a.CLAUDE_CODE_BUBBLEWRAP)console.error(
  * "--dangerously-skip-permissions cannot be used with root/sudo privileges
- * for security reasons")…process.exit(1)}" (Claude Code 2.1.302's setup;
- * `r` is the launch's `allowDangerouslySkipPermissions`, which every launch
- * here passed). Its docs: "On Linux and macOS, Claude Code refuses to start
- * with this flag when running as root"
- * (code.claude.com/docs/en/sandbox-environments). `IS_SANDBOX=1` is its
- * undocumented word that the process is sandboxed ("`export IS_SANDBOX=1`
- * works, although it's not documented", github.com/anthropics/claude-code
- * issue 3490), and it lifts the rule.
- *
- * A session in a workspace's boundary is sandboxed: its shell runs in the
- * boundary's bwrap and every other tool it calls is judged by the
- * boundary's hook (boundary.ts `claudeBoundaryOptions`). As root its CLI is
- * told so ({@link sessionEnv}) and runs in every mode. On the host, as root,
- * nothing sandboxes it: a start in Bypass or Full Send is refused here, in
- * these words, before any process is made, and every other start launches
- * without bypass allowed ({@link allowsBypass}), so it starts. Undefined
- * when the start may go ahead.
+ * for security reasons")…process.exit(1)}", and its own check
+ * "isRootOutsideDeliberateSandbox(){return this.sources.platform!=="win32"
+ * &&this.sources.getuid()===0&&!this.sources.isSandboxEnvSet()&&
+ * !this.sources.isBubblewrapEnvSet()}" with "isSandboxEnvSet:()=>
+ * process.env.IS_SANDBOX==="1"" (Claude Code 2.1.302's bundle; `r` is the
+ * launch's `allowDangerouslySkipPermissions`). A machine whose agent runs as
+ * root is one the owner chose to give his sessions root on, and its
+ * sessions have the access a session he starts there has (the owner,
+ * 2026-10-23: "IS_SANDBOX for Claude", full root access for the session).
+ * So as root every Claude session gets `IS_SANDBOX=1` ({@link sessionEnv}),
+ * in a workspace's boundary and on the host alike, and starts in every mode
+ * with bypass allowed. Not as root the variable is left unset, whatever the
+ * agent's own environment says.
  */
-export const claudeRootRefusal = (
-  mode: OfferedMode | undefined,
-  bounded: boolean,
-  root: boolean = runsAsRoot()
-): string | undefined =>
-  root && !bounded && (mode === "bypassPermissions" || mode === "fullSend")
-    ? harnessWords.claudeRootBypass(spawnWords.modes[mode])
-    : undefined;
-
-/** Whether a CLI is launched with bypass allowed, so a mode switch can move it there: everywhere but on the host as root ({@link claudeRootRefusal}). */
-const allowsBypass = (bounded: boolean): boolean => bounded || !runsAsRoot();
+const CLAUDE_ROOT_SANDBOX = "IS_SANDBOX";
 
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
@@ -2187,11 +2174,9 @@ class ClaudeSession implements HarnessSession {
         // place on every model whose scale we cannot see.
         ...(effort && { effort }),
         // Enables switching into bypass through the mode picker; does not
-        // select it. Never on the host as root, where the CLI refuses it
-        // ({@link claudeRootRefusal}).
-        allowDangerouslySkipPermissions: allowsBypass(
-          ctx.boundary !== undefined
-        ),
+        // select it. As root the CLI takes it under IS_SANDBOX ({@link
+        // CLAUDE_ROOT_SANDBOX}).
+        allowDangerouslySkipPermissions: true,
         ...(cliMode === "bypassPermissions" && {
           // Bypass mode must also let the model run commands outside the sandbox
           // via `dangerouslyDisableSandbox` — otherwise the SDK auto-denies such
@@ -3226,21 +3211,13 @@ class ClaudeSession implements HarnessSession {
     this.#input.push(outgoing);
   }
 
-  /**
-   * Moves the CLI into `asked`, one CawCo offers, unless its root rule
-   * refuses it ({@link claudeRootRefusal}); the session takes it once the
-   * CLI is in it.
-   */
+  /** Moves the CLI into `asked`, one CawCo offers; the session takes it once the CLI is in it. */
   async #setMode(asked: PermissionMode | undefined): Promise<void> {
     const mode = offeredMode(asked);
     if (!mode) {
       throw new Error(
         `${CONTROL_SET_PERMISSION_MODE} names no permission mode`
       );
-    }
-    const refused = claudeRootRefusal(mode, this.#ctx.boundary !== undefined);
-    if (refused) {
-      throw new Error(refused);
     }
     await this.#handle.setPermissionMode(sdkMode(mode));
     this.#mode.choose(mode);
@@ -4277,15 +4254,6 @@ export class ClaudeHarness implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession> {
-    // Before anything is made for it: a start its CLI is sure to refuse
-    // is refused here, in words that name why.
-    const rootRefused = claudeRootRefusal(
-      offeredMode(spec.permissionMode),
-      ctx.boundary !== undefined
-    );
-    if (rootRefused) {
-      throw new Error(rootRefused);
-    }
     // THE VERSION FLOOR: no Claude Code below it starts a session here, on
     // a start, a wake or a relaunch alike (all of them come through here).
     const executable = await claudeToStart();

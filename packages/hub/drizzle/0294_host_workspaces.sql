@@ -1,0 +1,1 @@
+ALTER TABLE `workspaces` ADD `host` integer DEFAULT false NOT NULL;

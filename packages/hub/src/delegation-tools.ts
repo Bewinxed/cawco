@@ -38,6 +38,7 @@ import {
 import {
   type HandoffDeps,
   handoffActions,
+  type ItemEnd,
   SPAWNING_TOOLS,
 } from "./delegation-actions";
 import { sentence, tool } from "./mcp-tool";
@@ -149,9 +150,12 @@ const forgeWriteOf = (asked: {
  * What `finish_item` says: the report is all the parent reads, carrying the
  * deliverable and its proof, and what the hub does
  * with the work: the session's own work item's landing (`lands`), so a
- * delegate is never told the hub pushes to the base branch when it does not.
+ * delegate is never told the hub pushes to the base branch when it does not;
+ * a host-scope item's report is all it hands in.
  */
-const finishItemDescription = (lands: LandsMode = "main"): string => {
+const finishItemDescription = (lands: ItemEnd = "main"): string => {
+  const reads =
+    " Your parent reads this report alone; chat messages reach no one. A report pointing at a chat message is refused.";
   const proof =
     " Your parent reads this report alone; chat messages reach no one. `summary` carries the deliverable whole, or names the file (in the repository or your outputs) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.";
   const gate = "the landing gate (install, lint, typecheck, the iOS build)";
@@ -162,6 +166,8 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
   const close =
     " `blocked` only when something outside your control stops the work. A task attempt's first call lists its open to-dos once: tick the done ones with todo_write, explain the rest, call again.";
   switch (lands) {
+    case "host":
+      return `Finish your work item. Nothing is landed: you ran on the machine itself.${reads} \`summary\` carries the findings and changes whole, then the proof: each command's real output, and what you could not run.${close}`;
     case "branch":
       return `Finish your work item. Commit and do not push.${proof} Then ${gate} runs on your commits and the hub pushes your branch to origin, not the base branch.${back}${outputs}${close}`;
     case "pr":
@@ -562,6 +568,7 @@ export function handoffTools(deps: HandoffDeps) {
         "Unless forked it cannot see this conversation: `prompt` stands alone with intent, constraints, acceptance criteria, the commands whose output proves the work, and what not to do. Ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` (list_delegate_types) over harness and model. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
         "Its commands run in a boundary: they write only its clone, its scratch dir and the workspaces' cache; no credential store, SSH key, key agent or service manager; another machine only through a delegate there. " +
+        "When the machine itself is the subject (an audit, containment, ops on its services, containers or network), set `host`: the delegate runs on that machine with no clone and no boundary, as a session started there does, lands nothing, and still reports back. " +
         "To follow up, handoff to the delegate or delegate with its `workspace`; to finish an ended delegate's commits in a fresh session, delegate with `from`. Prefer a fresh delegate unless the old session is warm and holds context the task needs.",
       {
         prompt: z
@@ -586,7 +593,7 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "The repository a new workspace is cut from, an absolute path on `machine`. Default: this session's."
+            "The repository a new workspace is cut from, an absolute path on `machine`. Default: this session's. With host: the folder it runs in; default the agent user's home."
           ),
         machine: z
           .string()
@@ -627,7 +634,13 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
           .optional()
           .describe(
-            "main (default): rebased onto the default branch after its gate. branch: pushed to cawco/<item>. pr: that, with a pull request. none: nothing pushed; name its deliverables in outputs."
+            "main (default): rebased onto the default branch after its gate. branch: pushed to cawco/<item>. pr: that, with a pull request. none: nothing pushed; name its deliverables in outputs. Work on a machine rather than a repository: host instead."
+          ),
+        host: z
+          .boolean()
+          .optional()
+          .describe(
+            "Run on `machine` itself in `cwd`, outside any clone or boundary: its network, processes and the agent user's groups (docker). For work whose subject is the machine. Lands nothing; not with from, workspace, owns, inputs or outputs."
           ),
         outputs: z
           .array(z.string())
@@ -655,6 +668,7 @@ export function handoffTools(deps: HandoffDeps) {
         inputs,
         machine,
         lands,
+        host,
         outputs,
         group,
         owns,
@@ -675,6 +689,7 @@ export function handoffTools(deps: HandoffDeps) {
           inputs,
           machine,
           lands,
+          host,
           outputs,
           group,
           owns,

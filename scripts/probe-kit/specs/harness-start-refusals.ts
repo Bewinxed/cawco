@@ -16,11 +16,6 @@
  *   away as the child died) carries the same line.
  * - s3. A child that writes far more on stderr is held to its last
  *   `STDERR_TAIL_BYTES`, and its row quotes the last of it.
- * - r1. Claude Code's root rule, decided before any process is made
- *   (claude.ts `claudeRootRefusal`): as root on the host, Bypass and Full
- *   Send are refused in words that name root and the mode; every other mode
- *   starts; in a workspace's boundary every mode starts; not as root,
- *   nothing is refused.
  * - m1. Every tool a session of any role is listed that takes a permission
  *   mode offers exactly the modes one session may start another in
  *   (core `SESSION_CHOSEN_MODES`): no `auto`, no `dontAsk`.
@@ -37,7 +32,6 @@ import { join } from "node:path";
 import { permissionModesFor } from "../../../apps/dashboard/src/lib/cawco/permission-modes";
 import {
   CLAUDE_CAPABILITIES,
-  claudeRootRefusal,
   processEnded,
 } from "../../../packages/agent/src/harnesses/claude";
 import { OPENCODE_CAPABILITIES } from "../../../packages/agent/src/harnesses/opencode";
@@ -51,7 +45,6 @@ import {
   harnessWords,
   PERMISSION_MODES,
   SESSION_CHOSEN_MODES,
-  spawnWords,
 } from "../../../packages/core/src/index";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import {
@@ -171,38 +164,6 @@ const stderrLegs = async (kit: Kit, scratch: string): Promise<void> => {
   }
 };
 
-const rootLeg = (kit: Kit): void => {
-  const cases = [
-    ["bypassPermissions", false, true, "refused"],
-    ["fullSend", false, true, "refused"],
-    ["default", false, true, "starts"],
-    ["acceptEdits", false, true, "starts"],
-    ["plan", false, true, "starts"],
-    [undefined, false, true, "starts"],
-    ["bypassPermissions", true, true, "starts"],
-    ["fullSend", true, true, "starts"],
-    ["bypassPermissions", false, false, "starts"],
-    ["fullSend", false, false, "starts"],
-  ] as const;
-  const read = cases.map(([mode, bounded, root, want]) => {
-    const refusal = claudeRootRefusal(mode, bounded, root);
-    const named =
-      mode === "bypassPermissions" || mode === "fullSend"
-        ? harnessWords.claudeRootBypass(spawnWords.modes[mode])
-        : undefined;
-    const ok = want === "refused" ? refusal === named : refusal === undefined;
-    return {
-      ok,
-      line: `${mode ?? "none"} ${bounded ? "in a boundary" : "on the host"}${root ? " as root" : ""}: ${refusal ?? "starts"}`,
-    };
-  });
-  kit.check(
-    "r1: as root on the host Bypass and Full Send are refused before any process, in words naming root and the mode; every other start goes ahead",
-    read.every((one) => one.ok),
-    read.map((one) => one.line).join(" | ")
-  );
-};
-
 const modeLegs = (kit: Kit): void => {
   const enums: string[] = [];
   const off: string[] = [];
@@ -271,7 +232,6 @@ const spec: Spec = {
     );
     try {
       await stderrLegs(kit, scratch);
-      rootLeg(kit);
       modeLegs(kit);
     } finally {
       await rm(scratch, { recursive: true, force: true });

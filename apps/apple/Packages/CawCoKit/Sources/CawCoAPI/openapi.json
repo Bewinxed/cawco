@@ -32207,6 +32207,9 @@
           "holding": {
             "$ref": "#/components/schemas/WorkspaceHolding"
           },
+          "host": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
@@ -32301,6 +32304,7 @@
           "checksFor",
           "createdAt",
           "createdByInstanceId",
+          "host",
           "id",
           "machineId",
           "path",
