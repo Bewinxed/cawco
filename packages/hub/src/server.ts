@@ -12803,8 +12803,11 @@ export const createServer = (
   const artifactLane = createArtifactLane({
     lifetime,
     read: () => artifacts.needs(),
-    broadcast: (frame) =>
-      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
+    broadcast: (frame) => {
+      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame });
+      // A pin answered: an artifact's push still saying more asks comes to its count.
+      push.needsNow(unparked(frame.needs));
+    },
     left: (id) => {
       notifications.clear([artifactCollapseId(id)], "settled");
     },

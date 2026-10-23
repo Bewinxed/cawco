@@ -35,7 +35,7 @@ export const artifactWords = {
   pickedShort: (made: number, asked: number) => `${made} of ${asked}`,
   /** Written and not sent: picks, notes, pins and ink. */
   unsent: (count: number) => `${count} unsent`,
-  /** An agent's answers on open pins the person hasn't looked at. */
+  /** Open pins whose agent's reply asks the person something: the row's line, the push's body. */
   newAnswers: (count: number) =>
     count === 1 ? "1 new answer" : `${count} new answers`,
   /** The one reason, an answer on one pin: where it is. */

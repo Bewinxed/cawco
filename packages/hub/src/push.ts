@@ -946,6 +946,14 @@ export const createPush = ({
     );
   };
 
+  /** Collapse ids the device shows as themselves (a burst of one), until they clear: what a quiet update may replace in place. */
+  const alone = new Set<string>();
+  notifications.onCleared((ids) => {
+    for (const id of ids) {
+      alone.delete(id);
+    }
+  });
+
   /** The burst items arrive into, while it is open. */
   let open: Burst | undefined;
   /**
@@ -1016,6 +1024,13 @@ export const createPush = ({
         burst,
         outstanding: new Set(ids),
       });
+    }
+    for (const one of ids) {
+      if (items.length === 1) {
+        alone.add(one);
+      } else {
+        alone.delete(one);
+      }
     }
     burst.showing = notification.collapseId;
     burst.shown = items;
@@ -1555,6 +1570,94 @@ export const createPush = ({
     return askName(row, payload.workflowRunId, instanceId);
   };
 
+  /** How many of an artifact's pins ask the person, as its Needs-you item counts them. */
+  const askingOf = (need: ArtifactNeed): number => {
+    const reason = need.pending.find((one) => one.kind === "answer");
+    return reason?.kind === "answer" ? reason.count : 0;
+  };
+
+  /** By artifact: how many asking pins its push says ({@link Push.pinAsked}), while it stands. */
+  const pinCounts = new Map<string, number>();
+
+  /**
+   * An artifact's push for `count` pins asking: one alone says the reply
+   * `text`'s first line, sealed; several say how many. About no session for
+   * the gate, as {@link artifactLeft}.
+   */
+  const pinArrival = (
+    need: ArtifactNeed,
+    count: number,
+    text?: string
+  ): Arrival => {
+    const many = artifactWords.newAnswers(count);
+    const project = projectName(need.project);
+    return {
+      ask: false,
+      instanceId: null,
+      landedAt: new Date(),
+      still: () => artifactWaiting(need.artifactId, need.raisedAt),
+      notification: {
+        shown: alertOf(
+          sessionName(need.instanceId) ?? "A session",
+          project,
+          many
+        ),
+        sealed: alertOf(
+          need.name,
+          project,
+          count === 1 && text ? (firstLine(text) ?? many) : many
+        ),
+        category: PUSH_CATEGORIES.taskOpenOnly,
+        collapseId: artifactCollapseId(need.artifactId),
+        threadId: need.artifactId,
+        data: {
+          kind: "artifact",
+          artifactId: need.artifactId,
+          instanceId: need.instanceId,
+          machineId: need.machineId,
+          projectId: need.project,
+        },
+      },
+    };
+  };
+
+  /**
+   * Artifact `artifactId`'s pins asking fell from `was` to `count` (`need`
+   * its item now; none once it left the lane, whose `left` takes its push
+   * down): its push still in the open burst goes out with the new count;
+   * one shown alone is replaced quietly, or taken down at 0.
+   */
+  const pinsFell = (
+    artifactId: string,
+    was: number,
+    count: number,
+    need: ArtifactNeed | undefined
+  ): void => {
+    const id = artifactCollapseId(artifactId);
+    if (count === 0) {
+      pinCounts.delete(artifactId);
+      open?.items.delete(id);
+      if (need && alone.has(id)) {
+        console.log(`[notify] push ${id}: no pin asks any more, taken down`);
+        notifications.clear([id], "settled");
+      }
+      return;
+    }
+    pinCounts.set(artifactId, count);
+    if (!need) {
+      return;
+    }
+    const next = pinArrival(need, count);
+    if (open?.items.has(id)) {
+      open.items.set(id, next);
+    } else if (alone.has(id)) {
+      console.log(
+        `[notify] push ${id}: ${was} pins asked, now ${count}; replaced quietly`
+      );
+      replace({ ...next.notification, quiet: true });
+    }
+  };
+
   return {
     /**
      * A session (or a workflow) is blocked on you: a permission or a question.
@@ -1638,45 +1741,32 @@ export const createPush = ({
      * answered, takes it down.
      */
     pinAsked(need: ArtifactNeed, text: string): void {
-      const reason = need.pending.find((one) => one.kind === "answer");
-      const count = reason?.kind === "answer" ? reason.count : 1;
-      const many = artifactWords.newAnswers(count);
-      const project = projectName(need.project);
-      const collapseId = artifactCollapseId(need.artifactId);
+      const count = askingOf(need);
+      pinCounts.set(need.artifactId, count);
       console.log(
-        `[push] ${collapseId}: a pin asks the person (${count} asking), arrives`
+        `[push] ${artifactCollapseId(need.artifactId)}: a pin asks the person (${count} asking), arrives`
       );
-      arrive(
-        {
-          ask: false,
-          instanceId: null,
-          landedAt: new Date(),
-          still: () => artifactWaiting(need.artifactId, need.raisedAt),
-          notification: {
-            shown: alertOf(
-              sessionName(need.instanceId) ?? "A session",
-              project,
-              many
-            ),
-            sealed: alertOf(
-              need.name,
-              project,
-              count === 1 ? (firstLine(text) ?? many) : many
-            ),
-            category: PUSH_CATEGORIES.taskOpenOnly,
-            collapseId,
-            threadId: need.artifactId,
-            data: {
-              kind: "artifact",
-              artifactId: need.artifactId,
-              instanceId: need.instanceId,
-              machineId: need.machineId,
-              projectId: need.project,
-            },
-          },
-        },
-        false
-      );
+      arrive(pinArrival(need, count, text), false);
+    },
+
+    /**
+     * Needs you's artifacts as they stand now (artifacts/lane.ts, at each
+     * change), unparked. An artifact whose pins asking fell below what its
+     * push says (the person replied on one, or resolved it) has that push
+     * brought to the new count, as an answered ask's burst push is: still
+     * waiting in the open burst, it goes out with the new count; shown
+     * alone on the device, it is replaced quietly (no sound, passive) under
+     * the same collapse id, or taken down at 0 while the artifact stays in
+     * the lane for something else (one that left is the lane's `left`).
+     */
+    needsNow(needs: readonly ArtifactNeed[]): void {
+      for (const [artifactId, was] of pinCounts) {
+        const need = needs.find((one) => one.artifactId === artifactId);
+        const count = need ? askingOf(need) : 0;
+        if (count < was) {
+          pinsFell(artifactId, was, count, need);
+        }
+      }
     },
 
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */

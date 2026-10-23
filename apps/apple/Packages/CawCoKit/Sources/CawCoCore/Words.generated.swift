@@ -1223,7 +1223,7 @@ public enum Words {
             "\(count) unsent"
         }
 
-        /// An agent's answers on open pins the person hasn't looked at.
+        /// Open pins whose agent's reply asks the person something: the row's line, the push's body.
         public static func newAnswers(count: Int) -> String {
             count == 1 ? "1 new answer" : "\(count) new answers"
         }

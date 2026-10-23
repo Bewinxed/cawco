@@ -33,7 +33,8 @@
  *   is the row "1 new answer on pin N" and one push under `artifact-<id>`,
  *   its `thread-id` the artifact's id, its sealed body the reply; three
  *   asking replies in a burst's window are the row "3 new answers" and one
- *   push saying so; the person's reply on one makes it 2, a resolve 1.
+ *   push saying so; the person's reply on one makes it 2, and the device's
+ *   notification is replaced in place, quietly, saying 2; a resolve 1.
  *
  * Retirement:
  * - answered: a partial Send leaves the picks not made, once the session
@@ -263,6 +264,8 @@ interface Pushed {
     aps?: {
       alert?: { body?: string; title?: string };
       category?: string;
+      "interruption-level"?: string;
+      sound?: string;
       "thread-id"?: string;
     };
     cawco?: { artifactId?: string; instanceId?: string; kind?: string };
@@ -1060,8 +1063,9 @@ const pinAsks = async (
     cleared === null,
     String(cleared)
   );
+  // The tab stays open: the person answers from it later with no new look,
+  // as one does with a page left open at the desk.
   await Bun.sleep(4500);
-  await page.close();
   await Bun.sleep(BURST_QUIET_MS);
 
   const manyFrom = phone.pushed.length;
@@ -1101,7 +1105,7 @@ const pinAsks = async (
     })
   );
 
-  page = await ownTab(at, id);
+  const quietFrom = phone.pushed.length;
   await inDoc(page, (doc) => {
     const marks = doc.getMap("pins");
     const pin = marks.get("probe-pin-3") as { thread: object[] };
@@ -1125,6 +1129,29 @@ const pinAsks = async (
     "the person replies to one of the three: the row's count is 2",
     two === artifactWords.newAnswers(2),
     String(two)
+  );
+  const quiet = await until(
+    "the quiet push saying 2",
+    () => ours(quietFrom)[0],
+    Boolean,
+    LANE_MS
+  ).catch(() => undefined);
+  await Bun.sleep(BURST_QUIET_MS);
+  const quietSealed = quiet?.payload.e
+    ? await phone.open(quiet.payload.e)
+    : null;
+  kit.check(
+    "the person answers one of the three: the device's one notification for it is replaced in place, quietly, saying 2",
+    ours(quietFrom).length === 1 &&
+      quiet?.payload.aps?.["interruption-level"] === "passive" &&
+      quiet.payload.aps.sound === undefined &&
+      quiet.payload.aps.alert?.body === artifactWords.newAnswers(2) &&
+      quietSealed?.body === artifactWords.newAnswers(2),
+    JSON.stringify({
+      pushes: ours(quietFrom).length,
+      aps: quiet?.payload.aps,
+      sealed: quietSealed,
+    })
   );
   await inDoc(page, (doc) => {
     const marks = doc.getMap("pins");
