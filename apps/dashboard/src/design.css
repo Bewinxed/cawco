@@ -1128,11 +1128,17 @@
    corner of its own, as wide as its story or the screen, whichever is less,
    centred over what holds it, so a story as wide as the screen reaches both
    its edges (the page's column is the screen's width under the phone's
-   line). */
+   line). The screen is the page's scroller's room (`--page-room`,
+   Decisions.svelte), never the window's `100vi`, which counts a
+   scrollbar's gutter: bled to it, a well stood the gutter's width past the
+   page and scrolled it sideways. */
 @utility well-bleed {
-  inline-size: min(var(--picture-w), 100vi);
+  inline-size: min(var(--picture-w), var(--page-room, 100vi));
   max-inline-size: none;
-  margin-inline-start: min(0px, (100% - min(var(--picture-w), 100vi)) / 2);
+  margin-inline-start: min(
+    0px,
+    (100% - min(var(--picture-w), var(--page-room, 100vi))) / 2
+  );
   padding-inline: 0;
   border-inline-width: 0;
   border-radius: 0;
@@ -1142,7 +1148,11 @@
 @utility well-bleed-words {
   padding-inline: max(
     0px,
-    var(--bleed) - (100vi - min(var(--picture-w), 100vi)) / 2
+    var(--bleed) -
+      (
+        var(--page-room, 100vi) - min(var(--picture-w), var(--page-room, 100vi))
+      ) /
+      2
   );
 }
 /* A well's surface easing its edge and radius as it lands, its opacity on

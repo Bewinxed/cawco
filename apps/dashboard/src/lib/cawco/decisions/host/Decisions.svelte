@@ -113,6 +113,26 @@
     sizes.observe(box);
     return () => sizes.disconnect();
   });
+  /**
+   * The scroller's room, px: the window's width less a scrollbar's gutter,
+   * what a well on a phone reaches across (design.css `well-bleed`). The
+   * window's own width (`100vi`) counts the gutter, so a well bled to it
+   * stood a scrollbar's width past the page and scrolled it sideways.
+   */
+  let pageRoom = $state<number | null>(null);
+  $effect(() => {
+    const box = scroller;
+    if (!box) {
+      return;
+    }
+    const read = () => {
+      pageRoom = box.clientWidth;
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(box);
+    return () => sizes.disconnect();
+  });
   const ids = $derived(cards.map((card) => card.id));
   /** Cards picked as core `pickMade` counts them, as artifact_list, artifact_read and the graph do. */
   const count = $derived(
@@ -247,6 +267,7 @@
   data-pictured={storyWidth > 0 ? "" : undefined}
   data-slot="decision-page"
   style:--page-w={pageWidth === null ? undefined : `${pageWidth}px`}
+  style:--page-room={pageRoom === null ? undefined : `${pageRoom}px`}
 >
   <div
     bind:this={scroller}

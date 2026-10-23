@@ -68,6 +68,8 @@ export const VIEWS = {
   /** An iPad mini's portrait: the journeys' tablet. */
   tabletPortrait: { width: 768, height: 1024, touch: true },
   phone: { width: 390, height: 844, touch: true },
+  /** A desk panel as narrow as the phone: a mouse, its scrollbars a desk's. */
+  deskPanel: { width: 390, height: 844, touch: false },
   /** Past the phone's line and under the drawer's: the rail is a sheet, the bar is the desk's. */
   narrowDesk: { width: 680, height: 900, touch: false },
   /** The widest phone, a Pro Max's 430pt. */

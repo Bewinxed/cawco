@@ -505,9 +505,58 @@ async function waitView(kit: Kit, page: Page, label: string) {
   await page.unroute(`${SILENT_ORIGIN}/**`);
 }
 
+/**
+ * 11. A pictured page at 390 in a window whose scrollbars take their width
+ * (a desk panel's Chromium): no element paints past the window, and the
+ * page's scroller holds no more than its own width (design.css
+ * `well-bleed` reaches `--page-room`, not `100vi`).
+ */
+async function gutterView(kit: Kit) {
+  const page = await kit.page("deskPanel", { theme: "dark", scrollbars: true });
+  await openCapturePage(page, "media");
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 3
+  );
+  await settle(page, 600);
+  const room = await page.evaluate(() => {
+    const root = document.querySelector("[data-slot=decision-page]");
+    const scroller = root?.firstElementChild as HTMLElement | null;
+    const width = scroller?.clientWidth ?? document.documentElement.clientWidth;
+    const spills = [...(scroller?.querySelectorAll("*") ?? [])]
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(
+        ({ el, r }) =>
+          r.width > 1 &&
+          r.right > 0 &&
+          r.left < width &&
+          (r.left < -0.5 || r.right > width + 0.5) &&
+          !el.closest("[data-slot=media-stage]")?.contains(el.parentElement)
+      )
+      .map(
+        ({ el, r }) =>
+          `${el.tagName.toLowerCase()}${el.getAttribute("data-slot") ? `[${el.getAttribute("data-slot")}]` : ""} ${Math.round(r.left)} to ${Math.round(r.right)}`
+      );
+    return {
+      pictured: root?.hasAttribute("data-pictured") ?? false,
+      window: innerWidth,
+      width,
+      holds: scroller?.scrollWidth ?? 0,
+      in: scroller?.clientWidth ?? 0,
+      spills,
+    };
+  });
+  kit.check(
+    `390 with classic scrollbars: the pictured page's scroller holds ${room.holds} in ${room.in} (window ${room.window}, room ${room.width}), ${room.spills.length} spills${room.spills.length ? ` (${room.spills.slice(0, 3).join("; ")})` : ""}`,
+    room.pictured && room.holds <= room.in && room.spills.length === 0,
+    JSON.stringify(room)
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "decision-review",
   run: async (kit: Kit) => {
+    await gutterView(kit);
     for (const { view, theme, label } of VIEWS) {
       const page = await kit.page(view, { theme });
       await readView(kit, page, view, label);
