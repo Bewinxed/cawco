@@ -469,8 +469,8 @@ const spec: Spec = {
       fleet.launch("hub");
       await fleet.hubUp();
       const back = Date.now();
-      // The agent's socket comes back on its own backoff (daemon.ts
-      // `reconnect`), which a hub down past a minute has grown to ~30 s.
+      // The agent registers again at the hub's first answer (daemon.ts
+      // `HUB_PROBE`; spec hub-down-reconnect).
       await fleet.agentUp();
       const registered = Date.now();
       await until(

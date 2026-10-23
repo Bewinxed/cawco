@@ -219,7 +219,7 @@ import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
 import { readConfig, writeConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
-import { rediscoverHub, toWsUrl } from "./discovery";
+import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
 import { forgePost } from "./forges/forge";
 import { setHubGitOrigins } from "./git-credential";
 import type { Harness } from "./harness";
@@ -959,6 +959,22 @@ export const reconnect = Schedule.concat(
 ).pipe(Schedule.jittered);
 
 /**
+ * How often a daemon backed off past this asks its hub's `/health` whether
+ * it answers again, through every wait of the series longer than it.
+ *
+ * The backoff above spares a hub that is down or refusing this daemon; it
+ * also kept a daemon away for up to 30 s after its hub came back from an
+ * outage past the knock window (a hub down 65 s: registered 19–30 s after it
+ * answered, binary-update-waits-for-hub, 2026-10-24). A `/health` that did
+ * not answer during a wait and then answers ends that wait at once; one that
+ * answered from the start (a hub up, refusing or dropping this daemon's
+ * socket) never does, so a flap still pays the whole backoff. A down hub
+ * gets one refused connection a second. Ours: one second, the series' own
+ * first step.
+ */
+const HUB_PROBE = Duration.seconds(1);
+
+/**
  * How long a connection must stand before losing it counts as a fresh outage
  * rather than another failure in a failing series.
  *
@@ -1034,6 +1050,8 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
     readonly healthyAfter?: Duration.Duration;
     readonly schedule?: typeof reconnect;
     readonly now?: () => number;
+    /** Whether the hub answers now ({@link HUB_PROBE}): a wait it did not answer through ends at its first answer. */
+    readonly hubAnswers?: () => Effect.Effect<boolean>;
     readonly rediscover?: {
       readonly failureCount?: number;
       readonly window?: Duration.Duration;
@@ -1051,6 +1069,42 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
   const failureWindow = Duration.toMillis(
     rediscover?.window ?? REDISCOVERY_FAILURE_WINDOW
   );
+
+  const hubAnswers = options?.hubAnswers;
+  /**
+   * One wait of the series, `delay` long: waited here, asking the hub every
+   * {@link HUB_PROBE} when it is longer than that, and ended at the hub's
+   * first answer after one it did not give. Hands the retry no delay of its
+   * own once it has waited.
+   */
+  const waitOut = (
+    delay: Duration.Duration
+  ): Effect.Effect<Duration.Duration> => {
+    const ms = Duration.toMillis(delay);
+    if (!hubAnswers || ms <= Duration.toMillis(HUB_PROBE)) {
+      return Effect.succeed(delay);
+    }
+    return Effect.gen(function* () {
+      const end = now() + ms;
+      let missed = false;
+      while (now() < end) {
+        const answers = yield* hubAnswers();
+        if (answers && missed) {
+          yield* Effect.logInfo(
+            "the hub answers again — reconnecting before the backoff ends"
+          );
+          return Duration.zero;
+        }
+        missed ||= !answers;
+        yield* Effect.sleep(
+          Duration.millis(
+            Math.max(0, Math.min(Duration.toMillis(HUB_PROBE), end - now()))
+          )
+        );
+      }
+      return Duration.zero;
+    });
+  };
 
   const buildSeries = () => {
     // Series-scoped, not attempt-scoped: unlike `liveAt` below, this must
@@ -1117,7 +1171,13 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
             : Effect.fail(error)
         )
       );
-    }).pipe(Effect.retry(options?.schedule ?? reconnect));
+    }).pipe(
+      Effect.retry(
+        (options?.schedule ?? reconnect).pipe(
+          Schedule.modifyDelay(({ duration }) => waitOut(duration))
+        )
+      )
+    );
   };
   return Effect.forever(Effect.suspend(buildSeries));
 };
@@ -3785,29 +3845,38 @@ export const startDaemon = (rediscover = false) =>
             markLive
           )
         ),
-      rediscover
-        ? {
-            rediscover: {
-              onTrigger: () =>
-                Effect.promise(async () => {
-                  const winner = await rediscoverHub({
-                    log: (line) => Effect.runSync(Effect.logInfo(line)),
-                  });
-                  if (winner) {
-                    hubUrl = toWsUrl(winner);
-                  }
-                }).pipe(
-                  // A rediscovery attempt that throws (a probe rejecting oddly, a
-                  // malformed tailscale JSON) must never take the reconnect loop
-                  // down with it — worst case is the pinned URL simply stays put
-                  // and the backoff series it was already running continues.
-                  Effect.catchDefect((defect) =>
-                    Effect.logWarning(`rediscovery failed: ${String(defect)}`)
-                  )
-                ),
-            },
-          }
-        : undefined
+      {
+        hubAnswers: () =>
+          Effect.promise(async () => {
+            const base = toHttpBase(hubUrl);
+            if (!base) {
+              return false;
+            }
+            const read = await hubIdAt(base);
+            return read.kind === "answered" && read.value !== undefined;
+          }),
+        ...(rediscover && {
+          rediscover: {
+            onTrigger: () =>
+              Effect.promise(async () => {
+                const winner = await rediscoverHub({
+                  log: (line) => Effect.runSync(Effect.logInfo(line)),
+                });
+                if (winner) {
+                  hubUrl = toWsUrl(winner);
+                }
+              }).pipe(
+                // A rediscovery attempt that throws (a probe rejecting oddly, a
+                // malformed tailscale JSON) must never take the reconnect loop
+                // down with it — worst case is the pinned URL simply stays put
+                // and the backoff series it was already running continues.
+                Effect.catchDefect((defect) =>
+                  Effect.logWarning(`rediscovery failed: ${String(defect)}`)
+                )
+              ),
+          },
+        }),
+      }
     );
   }).pipe(Effect.scoped);
 
