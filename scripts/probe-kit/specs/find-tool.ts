@@ -33,12 +33,24 @@
  *    a concise hit: the excerpt is cut from the whole turn, filtered.
  * j. `before` keeps the evidence at or before its day: a thread's message
  *    of September comes back, October's does not.
+ * l. `by: "person"` with no query lists only the person's words (their
+ *    turns and thread messages, none of the agent's replies), each a hit of
+ *    its own, newest first; a page of two says has_more and its cursor gives
+ *    the next, older, with nothing shown twice; `since` today leaves out
+ *    September's thread message, `before` that day's end keeps it. With no
+ *    query and no filter, find is still refused (e).
+ * m. A page with one card picked and one carrying a note alone: artifact_list
+ *    says 1/2 picked and artifact_read says "1 of 2 picked" (core `pickMade`,
+ *    the one count both read).
  *
  *   bun scripts/probe-kit/run.ts find-tool
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { ANSWER_MAX_CHARS } from "../../../packages/hub/src/find-tool";
+import {
+  ANSWER_MAX_CHARS,
+  LISTING_EXAMPLE,
+} from "../../../packages/hub/src/find-tool";
 import { toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -105,10 +117,12 @@ interface Hit {
   title: string;
   when: string | null;
   where: string;
+  who?: string;
 }
 interface Answer {
   has_more?: boolean;
   hits?: Hit[];
+  newest_first?: true;
   next_cursor?: string | null;
   note?: string;
   total?: number;
@@ -433,10 +447,11 @@ const scopeLegs = async (kit: Kit, probe: Probe, seeded: Seeded) => {
 const refusalLegs = async (kit: Kit, probe: Probe, seeded: Seeded) => {
   const empty = await probe.find(seeded.orchestrator, { query: "  " });
   kit.check(
-    "e: an empty query is refused, saying what is wrong and giving one call that works",
+    "e: an empty query with no filter is refused, saying what is wrong and giving calls that work, a listing among them",
     empty.refused &&
       empty.text.includes("query is empty") &&
-      empty.text.includes('Example: {"query"'),
+      empty.text.includes('Example: {"query"') &&
+      empty.text.includes(LISTING_EXAMPLE),
     empty.text
   );
   const kind = await probe.find(seeded.orchestrator, {
@@ -774,6 +789,121 @@ const beforeLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
   );
 };
 
+/** l: everything the person said, newest first, page by page. */
+const personLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const ask = { by: "person", since: today, project: "all", limit: 2 };
+  const pages: Called[] = [];
+  let cursor: string | null | undefined;
+  do {
+    // biome-ignore lint/performance/noAwaitInLoops: each page is asked from the cursor the last one gave
+    const page = await probe.find(seeded.orchestrator, {
+      ...ask,
+      ...(cursor ? { cursor } : {}),
+    });
+    pages.push(page);
+    cursor = page.refused ? null : page.answer.next_cursor;
+  } while (cursor && pages.length < 20);
+  const hits = pages.flatMap((page) => page.answer.hits ?? []);
+  const words = hits.map((hit) => hit.excerpt ?? "");
+  const at = (line: string) =>
+    words.findIndex((excerpt) => excerpt.includes(line.slice(0, 18)));
+  const [one, two, three] = [SAY.one, SAY.two, SAY.three].map(at);
+  const refs = hits.map((hit) => hit.ref ?? "");
+  const shown = pages
+    .map((page, i) => `page ${i + 1}: ${said(page)}`)
+    .join("\n");
+  kit.check(
+    "l: by person, no query, since today: only the person's words, each a hit, none of the agent's replies",
+    pages.every((page) => !page.refused && page.answer.newest_first) &&
+      hits.length >= 4 &&
+      hits.every((hit) => hit.who === "person") &&
+      !Object.values(REPLY).some((reply) =>
+        words.some((excerpt) => excerpt.includes(reply.slice(0, 18)))
+      ),
+    shown
+  );
+  kit.check(
+    "l: newest first across pages of two: the talker's third line before its second before its first, nothing twice",
+    three >= 0 &&
+      two > three &&
+      one > two &&
+      new Set(refs).size === refs.length &&
+      pages[0]?.answer.has_more === true &&
+      typeof pages[0]?.answer.next_cursor === "string",
+    `third ${three}, second ${two}, first ${one}; refs ${refs.join(", ")}\n${shown}`
+  );
+  const september = (more: object) =>
+    probe.find(seeded.orchestrator, {
+      by: "person",
+      project: "all",
+      kinds: ["thread"],
+      limit: 50,
+      ...more,
+    });
+  const since = await september({ since: today });
+  const before = await september({ since: "2026-09-01", before: "2026-09-01" });
+  kit.check(
+    "l: since today leaves out September's thread message; since and before that day keep only it",
+    !(
+      since.refused ||
+      since.text.includes("okapi cache was on in September") ||
+      before.refused
+    ) &&
+      (before.answer.hits ?? []).length === 1 &&
+      before.text.includes("okapi cache was on in September"),
+    `since today: ${said(since)}\nSeptember 1: ${said(before)}`
+  );
+};
+
+/** m: one card picked, one with a note alone: both tools say 1 of 2. */
+const pickCountLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
+  const choice = (card: string) =>
+    `<div data-cawco-choice="${card}"><button data-option="${card}-a">A</button><button data-option="${card}-b">B</button></div>`;
+  const made = await probe.tool(seeded.talker, "artifact_create", {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the clip controls and the springs",
+    name: "pick-count",
+    html: `<h1>Two choices</h1>${choice("clip-controls")}${choice("springs")}`,
+  });
+  const id =
+    (
+      await probe.fleet.api<{ id: string; name: string }[]>(
+        `/api/instances/${seeded.talker.id}/artifacts`
+      )
+    ).find((one) => one.name === "pick-count")?.id ?? "";
+  const update = await probe.tool(seeded.talker, "artifact_update", {
+    id,
+    patch: [
+      {
+        op: "add",
+        path: "/clip-controls",
+        value: { options: ["clip-controls-a"] },
+      },
+      {
+        op: "add",
+        path: "/springs",
+        value: { options: [], note: "Softer than the last ones." },
+      },
+    ],
+  });
+  const list = await probe.tool(seeded.talker, "artifact_list", {});
+  const read = await probe.tool(seeded.talker, "artifact_read", { id });
+  const line = list.text
+    .split("\n")
+    .find((each) => each.includes("pick-count"));
+  kit.check(
+    "m: a page with one card picked and one with a note alone: artifact_list says 1/2 picked, artifact_read says 1 of 2 picked",
+    Boolean(id) &&
+      !update.refused &&
+      Boolean(line?.includes("1/2 picked")) &&
+      read.text.includes("Choices (1 of 2 picked)") &&
+      read.text.includes("Softer than the last ones."),
+    `create: ${made.text.slice(0, 300)}\nupdate: ${update.text.slice(0, 300)}\nlist line: ${line}\nread: ${read.text.slice(0, 900)}`
+  );
+};
+
 const run = async (kit: Kit) => {
   const probe = await standUp(kit);
   const seeded = await seed(probe);
@@ -788,6 +918,8 @@ const run = async (kit: Kit) => {
   await purgeLeg(kit, probe, seeded);
   await beforeLeg(kit, probe, seeded);
   await farSecretLeg(kit, probe, seeded);
+  await personLeg(kit, probe, seeded);
+  await pickCountLeg(kit, probe, seeded);
 };
 
 export default { name: "find-tool", run } satisfies Spec;

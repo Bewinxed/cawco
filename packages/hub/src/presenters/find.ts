@@ -63,15 +63,14 @@ interface Turn {
   who: string;
 }
 
-/** What a search answers. */
-interface Searched {
+/** What a search answers; a listing (no words, `by`) is newest first, its total unknown. */
+type Searched = {
   has_more: boolean;
   hits: Hit[];
   next_cursor: string | null;
   note?: string;
-  total: number;
   unsearched?: string[];
-}
+} & ({ total: number } | { newest_first: true });
 
 /** What `around` answers. */
 interface Around {
@@ -86,6 +85,16 @@ const hitLine = (hit: Hit, now: number): string =>
 const turnLine = (turn: Turn, now: number): string =>
   `- ${turn.here ? "▶ " : ""}${turn.who}${turn.when ? `, ${whenWords(turn.when, now)}` : ""}: ${quote(turn.text, 2000)}${turn.ref ? ` (${refWords(turn.ref)})` : ""}`;
 
+/** A page's first line: how many, in which order; a listing's total is unknown. */
+const headOf = (answer: Searched): string => {
+  if (answer.hits.length === 0) {
+    return "No hits.";
+  }
+  return "total" in answer
+    ? `${count(answer.total, "hit")}, best first:`
+    : `${count(answer.hits.length, "thing")} said, newest first:`;
+};
+
 /** `find`: a page of hits, or the turns `around` one. */
 export const findWords = (answer: Searched | Around): string => {
   const now = Date.now();
@@ -97,9 +106,7 @@ export const findWords = (answer: Searched | Around): string => {
     );
   }
   return lines(
-    answer.hits.length === 0
-      ? "No hits."
-      : `${count(answer.total, "hit")}, best first:`,
+    headOf(answer),
     answer.hits.map((hit) => hitLine(hit, now)),
     answer.note,
     answer.has_more &&

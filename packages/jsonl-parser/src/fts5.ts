@@ -35,6 +35,12 @@ import {
  * was most of what a sync wrote. A record with no time is deduplicated on its
  * `doc_id`.
  *
+ * `docs_author_ts` serves a listing with no words ({@link TranscriptIndex.listed}):
+ * one author's documents newest first, read backwards off the index from the
+ * window's end and stopped at its limit, never a scan of `docs`. Each author's
+ * new documents are its newest, so a sync's entries land at the right edge of
+ * that author's range: a handful of pages a sync, one per author written.
+ *
  * Nothing is indexed by the session: search filters on it after the FTS
  * match, never through an index, and `docs_session` cost each live session a
  * page split every other sync.
@@ -69,6 +75,7 @@ CREATE TABLE IF NOT EXISTS docs (
   text TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS docs_key ON docs(coalesce(ts, ''), doc_id, harness);
+CREATE INDEX IF NOT EXISTS docs_author_ts ON docs(author, ts);
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
   text, thinking, tools,
   content='docs', content_rowid='id',
@@ -169,6 +176,19 @@ export interface SearchOptions {
   /** Only documents of these conversations, by session id. */
   sessions?: readonly string[];
   /** Only documents written at or before this ISO time; one with no time is left out. */
+  before?: string;
+}
+
+/** What a listing with no words asks for: one author's documents, newest first. */
+export interface ListOptions {
+  author: DocAuthor;
+  /** How many documents to answer with, every conversation together. */
+  limit: number;
+  /** Only documents of these conversations, by session id. */
+  sessions?: readonly string[];
+  /** Only documents written at or after this ISO time. */
+  since?: string;
+  /** Only documents written at or before this ISO time. */
   before?: string;
 }
 
@@ -817,6 +837,80 @@ export class TranscriptIndex {
         }),
       }))
       .slice(0, limit);
+  }
+
+  /**
+   * One author's documents with no words to match, newest first: the newest
+   * `limit` of them in the window (and conversations) asked, read backwards
+   * off `docs_author_ts` and stopped at the limit. A document with no time is
+   * in no window and is left out. Answered as conversations, newest first,
+   * each with every listed moment of it, newest first; a moment's snippet is
+   * the start of its words.
+   */
+  listed(options: ListOptions): ConversationHit[] {
+    const author = this.#strings.get(options.author);
+    if (author === undefined || options.limit < 1) {
+      return [];
+    }
+    const params: (string | number)[] = [author];
+    let filters = "";
+    if (options.since !== undefined) {
+      filters += " AND d.ts >= ?";
+      params.push(options.since);
+    }
+    if (options.before !== undefined) {
+      filters += " AND d.ts <= ?";
+      params.push(options.before);
+    }
+    if (options.sessions !== undefined) {
+      const ids = options.sessions.flatMap((session) => {
+        const id = this.#strings.get(session);
+        return id === undefined ? [] : [id];
+      });
+      if (ids.length === 0) {
+        return [];
+      }
+      filters += " AND d.session IN (SELECT value FROM json_each(?))";
+      params.push(JSON.stringify(ids));
+    }
+    const ids = (
+      this.db
+        .prepare(
+          `SELECT d.id FROM docs d INDEXED BY docs_author_ts
+           WHERE d.author = ? AND d.ts IS NOT NULL${filters}
+           ORDER BY d.ts DESC, d.id DESC
+           LIMIT ?`,
+        )
+        .all(...params, options.limit) as { id: number }[]
+    ).map((row) => row.id);
+    const described = this.#described(ids);
+    const conversations = new Map<string, ConversationHit>();
+    for (const id of ids) {
+      const doc = described.get(id);
+      if (!doc) {
+        continue;
+      }
+      const key = `${doc.harness}\u0000${doc.session_id}`;
+      const hit = conversations.get(key) ?? {
+        harness: doc.harness,
+        sessionId: doc.session_id,
+        cwd: doc.cwd,
+        model: doc.model,
+        sidechain: doc.sidechain === 1,
+        score: 0,
+        moments: [],
+      };
+      conversations.set(key, hit);
+      hit.moments.push({
+        docId: doc.doc_id,
+        role: doc.role,
+        author: doc.author,
+        timestamp: doc.ts,
+        score: 0,
+        snippet: doc.gist,
+      });
+    }
+    return [...conversations.values()];
   }
 
   /**

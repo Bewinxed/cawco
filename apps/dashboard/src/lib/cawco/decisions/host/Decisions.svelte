@@ -28,7 +28,7 @@
   turns coral where it stands. Change takes it back the same way.
 -->
 <script lang="ts">
-  import { pickOf, readProgram } from "@cawco/core/decisions";
+  import { pickMade, readProgram } from "@cawco/core/decisions";
   import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -110,9 +110,9 @@
     return () => sizes.disconnect();
   });
   const ids = $derived(cards.map((card) => card.id));
-  /** Cards picked as core `pickOf` counts them, as artifact_list and the graph do. */
+  /** Cards picked as core `pickMade` counts them, as artifact_list, artifact_read and the graph do. */
   const count = $derived(
-    cards.filter((card) => pickOf(card, picks.now[card.id]).picked).length
+    cards.filter((card) => pickMade(card, picks.now[card.id])).length
   );
   /** The bar's share filled, 0 to 1. */
   const share = $derived(ids.length ? count / ids.length : 0);

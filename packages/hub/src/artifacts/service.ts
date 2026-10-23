@@ -86,7 +86,9 @@ import {
   type GraphLinks,
   type GraphPlace,
   PLACES_KEY,
+  pickMade,
   pickOf,
+  picksMade,
 } from "@cawco/core/decisions";
 import {
   excerptOf,
@@ -914,14 +916,14 @@ const answerOf = (
       ? { id, ...question, answer: "open", note: said.note }
       : { id, ...question, answer: "cleared", ...said };
   }
-  const gone = card ? pickOf(card, entry).gone : [];
-  if (gone.length > 0) {
+  // Picked by the one rule every count reads (core `pickMade`); else a pick on options a revision took out.
+  if (!pickMade(card, entry)) {
     return {
       id,
       ...question,
       answer: "gone",
       options: entry.options,
-      gone,
+      gone: card ? pickOf(card, entry).gone : [],
       ...said,
     };
   }
@@ -936,6 +938,15 @@ const answerOf = (
     ...said,
   };
 };
+
+/** The person's picks and notes written since their last send (a card's places on the graph are no answer): what Send sends of the page's choices. */
+const unsentChoices = (
+  state: Record<string, ChoiceEntry>,
+  sentAt: string | null
+): number =>
+  Object.entries(state).filter(
+    ([key, entry]) => key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
+  ).length;
 
 /** The page hash the newest entry was made on: a preview's, which the hub never built. */
 const newestHash = (state: Record<string, ChoiceEntry>): string | null =>
@@ -4948,17 +4959,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     state: Record<string, ChoiceEntry>
   ): Pick<ArtifactFacts, "firstUnpicked" | "picks"> => {
-    const asked = choicesAsked(row);
-    // A program's pick counts while its card still offers every option of it.
-    const unpicked = asked.filter(
-      ({ card, id }) => !(card ? pickOf(card, state[id]).picked : id in state)
-    );
+    const { asked, made, firstUnpicked } = picksMade(choicesAsked(row), state);
     return {
-      firstUnpicked: unpicked[0]?.id ?? null,
-      picks:
-        asked.length > 0
-          ? { asked: asked.length, made: asked.length - unpicked.length }
-          : null,
+      firstUnpicked,
+      picks: asked > 0 ? { asked, made } : null,
     };
   };
 
@@ -5009,9 +5013,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       pins: pins.length,
       revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
       handed: meta.get(HANDED) === true,
-      unsent: Object.entries(state).filter(
-        ([key, entry]) => key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
-      ).length,
+      unsent: unsentChoices(state, sentAt),
     };
     factsKept.set(row.id, { facts, mark });
     return heldNext ? { ...facts, handed: true } : facts;
@@ -5200,19 +5202,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const pins = Object.values(
       doc.getMap("pins").toJSON() as Record<string, Pin>
     ).filter((pin) => !pin.resolvedAt).length;
-    const asked = choicesAsked(row);
+    const { asked, made } = picksMade(choicesAsked(row), state);
     const picks =
-      asked.length > 0
+      asked > 0
         ? {
-            asked: asked.length,
-            // A program's pick counts while its card still offers every option of it.
-            made: asked.filter(({ card, id }) =>
-              card ? pickOf(card, state[id]).picked : id in state
-            ).length,
-            unsent: Object.entries(state).filter(
-              ([key, entry]) =>
-                key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
-            ).length,
+            asked,
+            made,
+            unsent: unsentChoices(state, sentAt),
           }
         : undefined;
     const shown = inPanel(row);

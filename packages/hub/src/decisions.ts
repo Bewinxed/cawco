@@ -61,6 +61,7 @@ import {
   logOf,
   PLACES_KEY,
   pickOf,
+  picksMade,
   type RecordCard,
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
@@ -737,8 +738,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
       artifactId: artifact?.id ?? null,
       writer: writerOf(artifact),
       cards: page.cards.length,
-      picked: page.cards.filter((card) => pickOf(card, state[card.id]).picked)
-        .length,
+      picked: picksMade(
+        page.cards.map((card) => ({ id: card.id, card })),
+        state
+      ).made,
       notes: page.cards.filter((card) => state[card.id]?.note?.trim()).length,
       decided:
         record?.cards.filter((card) => card.chosen.length > 0).length ?? 0,

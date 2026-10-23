@@ -198,6 +198,34 @@ export const pickOf = (
   return { picked: chosen.length > 0 && gone.length === 0, gone };
 };
 
+/**
+ * Whether the person picked on one choice a page asks: an option chosen that
+ * its card still offers (a plain page's choice has no card: any option). A
+ * note alone is a note, never a pick. The one rule every "picked" count reads:
+ * artifact_list, artifact_read, Needs you, the graph and the page's own bar.
+ */
+export const pickMade = (
+  card: { options: Pick<DecisionOption, "id">[] } | undefined,
+  entry: { options?: string[] } | undefined
+): boolean =>
+  card ? pickOf(card, entry).picked : (entry?.options?.length ?? 0) > 0;
+
+/** A page's choices counted by {@link pickMade}: how many it asks, how many are picked, and its first one not picked. */
+export const picksMade = (
+  asked: readonly {
+    card?: { options: Pick<DecisionOption, "id">[] };
+    id: string;
+  }[],
+  state: Readonly<Record<string, { options?: string[] } | undefined>>
+): { asked: number; firstUnpicked: string | null; made: number } => {
+  const unpicked = asked.filter(({ card, id }) => !pickMade(card, state[id]));
+  return {
+    asked: asked.length,
+    made: asked.length - unpicked.length,
+    firstUnpicked: unpicked[0]?.id ?? null,
+  };
+};
+
 /** One card's place on the graph, as the person dragged it. */
 export interface GraphPlace {
   x: number;

@@ -120,6 +120,29 @@ const PAGES_KEPT = 16;
 const THREAD_MOMENTS = 3;
 
 /**
+ * How many of one author's words a listing (no words, a `by`) reads, newest
+ * first: from each machine's index (agent search/index.ts, the same bound),
+ * and from the threads kept at the hub. Older words are the next listing's,
+ * asked `before` the last one read (find-tool.ts pages so).
+ */
+const LISTED_DOCS = 200;
+
+/** How many characters of a thread message a listing's moment carries; an agent's find cuts its own from the whole message. */
+const LISTED_CHARS = 240;
+
+const SPACES = /\s+/g;
+
+/** A conversation's or thread's moments; none for anything else. */
+const momentsOf = (result: FindResult): FindMoment[] =>
+  result.kind === "conversation" || result.kind === "thread"
+    ? result.moments
+    : [];
+
+/** A listed result's newest moment, ms epoch. */
+const newestOf = (result: FindResult): number =>
+  Math.max(0, ...momentsOf(result).map((moment) => moment.at ?? 0));
+
+/**
  * How far back the waiting list looks for reports and tasks: what was
  * reported or moved to a stage of yours in this many days; the answer says
  * the window. Artifacts are Needs you's, whatever their age: they leave by
@@ -1100,28 +1123,56 @@ export const createFind = (deps: FindDeps) => {
     if (request.author === "caw") {
       return { asked: false, machines: [] };
     }
-    const { author, where } = request;
-    // Narrowed to a machine, only it is asked; to a project, each machine
-    // for that project's sessions on it, so its matches are never cut by
-    // other projects' ranking above them.
-    const machines = [...matched.held.machines.values()].filter(
+    const asked = await askMachines(
+      query.words.join(" "),
+      request.author,
+      request.where,
+      matched.held,
+      limit
+    );
+    if (!kinds || kinds.has("conversation")) {
+      foldTranscripts(found, asked, matched.held, matched.needsYou, now);
+    }
+    return { asked: true, machines: asked.map((each) => each.coverage) };
+  };
+
+  /**
+   * Every machine `request` reaches, asked for `words` (none: a listing of
+   * its author's words, newest first, `limit` documents). Narrowed to a
+   * machine, only it is asked; to a project, each machine for that project's
+   * sessions on it, so its matches are never cut by other projects' ranking
+   * above them.
+   */
+  const askMachines = (
+    words: string,
+    author: TranscriptQuery["author"],
+    where: FindWhere | undefined,
+    held: Names,
+    limit: number
+  ): Promise<Asked[]> => {
+    const machines = [...held.machines.values()].filter(
       (machine) => !where?.machineId || machine.machineId === where.machineId
     );
     const sessionsOn = (machineId: string): string[] =>
-      [...matched.held.conversations.values()].flatMap(({ row }) =>
+      [...held.conversations.values()].flatMap(({ row }) =>
         row.projectId === where?.projectId && row.machineId === machineId
           ? [row.sessionId, ...row.priorSessionIds].filter(
               (id): id is string => !!id
             )
           : []
       );
-    const asked = await Promise.all(
+    return Promise.all(
       machines.map((machine) =>
-        askOne(machine, query.words.join(" "), {
+        askOne(machine, words, {
           limit,
           ...(author ? { author } : {}),
           ...(where?.projectId
             ? { sessions: sessionsOn(machine.machineId) }
+            : {}),
+          // A listing reads its window from the index; a search keeps its
+          // own `since` at the hub, over what it ranked.
+          ...(words === "" && where?.since !== undefined
+            ? { since: new Date(where.since).toISOString() }
             : {}),
           ...(where?.before === undefined
             ? {}
@@ -1129,10 +1180,93 @@ export const createFind = (deps: FindDeps) => {
         })
       )
     );
-    if (!kinds || kinds.has("conversation")) {
-      foldTranscripts(found, asked, matched.held, matched.needsYou, now);
+  };
+
+  /** A listing's thread messages: `author`'s in `where`'s window, the newest {@link LISTED_DOCS}, each thread with its own, newest first. */
+  const listThreads = (
+    found: Map<string, FindResult>,
+    author: MomentAuthor,
+    where: FindWhere,
+    held: Names
+  ) => {
+    const lines = held.threadLines
+      .filter((line) => line.who === author && inWindow(line.at, where))
+      .toSorted((a, b) => b.at - a.at)
+      .slice(0, LISTED_DOCS);
+    for (const line of lines) {
+      const entry = held.threads.get(line.threadId);
+      if (entry?.result.kind !== "thread") {
+        continue;
+      }
+      const key = `thread:${line.threadId}`;
+      const before = found.get(key);
+      const moment: FindMoment = {
+        docId: line.id,
+        author: line.who,
+        at: line.at,
+        excerpt: line.body.replace(SPACES, " ").trim().slice(0, LISTED_CHARS),
+      };
+      found.set(
+        key,
+        before?.kind === "thread"
+          ? { ...before, moments: [...before.moments, moment] }
+          : {
+              ...entry.result,
+              moments: [moment],
+              matched: ["transcript"],
+              score: 0,
+            }
+      );
     }
-    return { asked: true, machines: asked.map((each) => each.coverage) };
+  };
+
+  /**
+   * A listing: no words, one author's (`by`). Their words newest first, the
+   * threads' kept at the hub and each machine's off its index's author and
+   * time ({@link LISTED_DOCS} of the window from each); each result holds its
+   * listed moments, and the results are ordered by their newest.
+   */
+  const listAll = async (
+    request: Omit<FindRequest, "cursor" | "limit" | "q"> & {
+      author: MomentAuthor;
+    },
+    kinds: ReadonlySet<FindKind> | null,
+    started: number
+  ) => {
+    const now = Date.now();
+    const held = namesNow(now);
+    const namesMs = Math.round((performance.now() - started) * 10) / 10;
+    const where = request.where ?? {};
+    const found = new Map<string, FindResult>();
+    if (!kinds || kinds.has("thread")) {
+      listThreads(found, request.author, where, held);
+    }
+    const askedAt = performance.now();
+    // Caw's words are his threads', kept at the hub: no machine is asked for them.
+    const { author } = request;
+    const transcripts =
+      request.transcripts &&
+      author !== "caw" &&
+      (!kinds || kinds.has("conversation"));
+    const asked = transcripts
+      ? await askMachines("", author, where, held, LISTED_DOCS)
+      : [];
+    foldTranscripts(found, asked, held, deps.needsYou(), now);
+    const purged = where.unpurged ? deps.purged() : new Set<string>();
+    const ranked = [...found.values()]
+      .flatMap((result) => within(result, where, purged) ?? [])
+      .filter((result) => momentsOf(result).length > 0)
+      .toSorted((a, b) => newestOf(b) - newestOf(a));
+    return {
+      ranked,
+      coverage: transcripts
+        ? { asked: true, machines: asked.map((each) => each.coverage) }
+        : { asked: false, machines: unasked(held.machines) },
+      namesMs,
+      transcriptsMs: transcripts
+        ? Math.round(performance.now() - askedAt)
+        : null,
+    };
   };
 
   /** Every result of a find, ranked: names, then transcripts when asked; kept for its next pages. */
@@ -1143,6 +1277,9 @@ export const createFind = (deps: FindDeps) => {
     limit: number,
     started: number
   ) => {
+    if (query.tokens.length === 0 && request.author !== undefined) {
+      return listAll({ ...request, author: request.author }, kinds, started);
+    }
     const now = Date.now();
     const matched = findNames(query, kinds, now);
     const namesMs = Math.round((performance.now() - started) * 10) / 10;
@@ -1155,10 +1292,14 @@ export const createFind = (deps: FindDeps) => {
         ? [...results].flatMap((result) => within(result, where, purged) ?? [])
         : [...results];
     if (!askTranscripts) {
+      // No words: what moved last, newest first.
+      const order =
+        query.tokens.length === 0
+          ? (a: FindResult, b: FindResult) =>
+              (b.lastActivity ?? 0) - (a.lastActivity ?? 0) || b.score - a.score
+          : (a: FindResult, b: FindResult) => b.score - a.score;
       return {
-        ranked: kept(matched.found.values()).toSorted(
-          (a, b) => b.score - a.score
-        ),
+        ranked: kept(matched.found.values()).toSorted(order),
         coverage: { asked: false, machines: unasked(matched.held.machines) },
         namesMs,
         transcriptsMs: null,
@@ -1289,6 +1430,22 @@ export const createFind = (deps: FindDeps) => {
         coverage: fresh.coverage,
         timing: { namesMs: fresh.namesMs, transcriptsMs: fresh.transcriptsMs },
       };
+    },
+
+    /**
+     * A listing whole, unpaged: `request.author`'s words in its window,
+     * newest first ({@link listAll}), for an agent's find to page moment by
+     * moment (find-tool.ts).
+     */
+    async listing(
+      request: Omit<FindRequest, "cursor" | "limit" | "q"> & {
+        author: MomentAuthor;
+      }
+    ): Promise<{ coverage: FindCoverage; results: FindResult[] }> {
+      const named = request.kinds?.length ? new Set(request.kinds) : null;
+      const kinds = named ?? new Set<FindKind>(["conversation", "thread"]);
+      const listed = await listAll(request, kinds, performance.now());
+      return { results: listed.ranked, coverage: listed.coverage };
     },
 
     /**

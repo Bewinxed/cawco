@@ -21,7 +21,7 @@ export interface TranscriptQuery {
    * out.
    */
   before?: string;
-  /** How many conversations to answer with. */
+  /** How many conversations to answer with; for a listing (no words), how many documents. */
   limit?: number;
   /**
    * Only these conversations, by their harness session ids: a find narrowed
@@ -29,6 +29,8 @@ export interface TranscriptQuery {
    * by other projects' ranking above them.
    */
   sessions?: string[];
+  /** Only words said at or after this ISO time: a listing's window start. */
+  since?: string;
 }
 
 /** One place in a machine's transcript that matched. */
