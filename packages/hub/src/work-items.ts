@@ -97,6 +97,10 @@ import {
   withWorkspaceLine,
   workWords,
 } from "@cawco/core";
+import {
+  AGENT_RESTARTED_MID_REQUEST,
+  AGENT_RESTARTING,
+} from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
 import { type HeldInput, handedInputs } from "@cawco/core/handed-input";
 import {
@@ -940,6 +944,13 @@ export interface WorkItemDeps {
   /** It could not be cut again, for `reason`: what was kept for the session fails with it. */
   readonly recutFailed?: (instanceId: string, reason: string) => void;
   /**
+   * It was not cut yet because its machine's agent is restarting, or
+   * restarted as it cut ({@link recutWaitsForAgent}): what was kept for the
+   * session goes through the send path again (server.ts `releaseOwed`),
+   * whose hold asks for the cut again ({@link WorkItems.recutFor}).
+   */
+  readonly recutKept?: (instanceId: string) => void;
+  /**
    * Hands a report to the parent of the item's session: `body` the full
    * report, `headline` its one-or-two-sentence outcome when there is one.
    */
@@ -1304,6 +1315,34 @@ const restsInWait = (tool: string): boolean => {
 
 /** A harness gets one minute after its declared deadline to start a turn. */
 const WAIT_RESUME_GRACE_MS = 60_000;
+
+/**
+ * How soon a cut again its agent refused behind its restart's fence is asked
+ * again if the agent's register has not asked it first: the minute the
+ * refusal itself names ("retry it in a minute").
+ */
+const RESTART_RECUT_MS = 60_000;
+
+/**
+ * Whether a cut again failed only for its machine's agent's restart, and
+ * what it waits for: `fenced`, refused behind the fence an agent raises
+ * before it restarts (an install, `cawco service restart agent`), so the
+ * agent's next register asks it again; `restarted`, cut short as the agent
+ * ended and answered so by the agent that came back, so it is asked again
+ * now, the agent clearing its own unfinished cut first (agent workspace.ts
+ * `clearOwnCut`). On 2026-10-23 a handoff to a retired delegate sent as its
+ * machine's agent restarted for an update failed, "The agent is restarting.
+ * This request was not started; retry it in a minute.", while one to a live
+ * session there was queued until the update was done.
+ */
+const recutWaitsForAgent = (
+  message: string
+): "fenced" | "restarted" | undefined => {
+  if (message === AGENT_RESTARTING) {
+    return "fenced";
+  }
+  return message === AGENT_RESTARTED_MID_REQUEST ? "restarted" : undefined;
+};
 const waitClock = (at: Date): string =>
   at.toLocaleTimeString("en-GB", {
     hour: "2-digit",
@@ -2012,6 +2051,7 @@ export const createWorkItems = ({
   reclaimUnread,
   recutDone,
   recutFailed,
+  recutKept,
   report,
   resolveHanded,
   inputRefusal,
@@ -7570,7 +7610,10 @@ export const createWorkItems = ({
      * then what was kept for it goes ({@link WorkItemDeps.recutDone}); its
      * settle meanwhile is deferred by the send on its way ({@link holdOn}).
      * Fails it with why the cut could not be made
-     * ({@link WorkItemDeps.recutFailed}). Nothing for a session whose
+     * ({@link WorkItemDeps.recutFailed}), unless only its machine's agent's
+     * restart stopped the cut ({@link recutWaitsForAgent}): then it stays
+     * kept, and the cut is asked again once the agent is back
+     * ({@link WorkItemDeps.recutKept}). Nothing for a session whose
      * workspace is neither retired nor in a turn. Never throws.
      */
     recutFor(instanceId: string): void {
@@ -7598,7 +7641,21 @@ export const createWorkItems = ({
         .then(
           () => recutDone?.(instanceId),
           (error: unknown) => {
-            const reason = `Its workspace ${handle(workspace.id)} retired and could not be cut again: ${error instanceof Error ? error.message : String(error)}`;
+            const message =
+              error instanceof Error ? error.message : String(error);
+            const wait = recutWaitsForAgent(message);
+            if (wait !== undefined) {
+              console.info(
+                `[workspaces] ${instanceId}: its workspace ${handle(workspace.id)} is not cut again yet, its machine's agent answering "${message}"; what was sent to it is kept at the hub, and the cut is asked again ${wait === "fenced" ? `once the agent is back (at the latest in ${RESTART_RECUT_MS / 1000} s)` : "now"}`
+              );
+              if (wait === "fenced") {
+                lifetime.after(RESTART_RECUT_MS, () => recutKept?.(instanceId));
+              } else {
+                recutKept?.(instanceId);
+              }
+              return;
+            }
+            const reason = `Its workspace ${handle(workspace.id)} retired and could not be cut again: ${message}`;
             console.warn(`[workspaces] ${instanceId}: ${reason}`);
             recutFailed?.(instanceId, reason);
           }

@@ -398,6 +398,7 @@ import {
 } from "./workflow-command";
 import {
   archiveWorkspace,
+  clearInterruptedCuts,
   createWorkspace,
   discardWorkspace,
   workspaceAt,
@@ -3135,6 +3136,10 @@ export const startDaemon = (rediscover = false) =>
         )
       )
     );
+    // Before any cut: each its last process left under way is cleared when
+    // its path holds only what that cut wrote (workspace.ts). Begun, not
+    // awaited: every cut waits for it, nothing else does.
+    clearInterruptedCuts();
     // First: CLIs already running read their workspace's hook on every shell
     // call, and one an earlier build wrote runs what this build no longer has.
     // Begun, not awaited: registration and custody go on meanwhile, and each

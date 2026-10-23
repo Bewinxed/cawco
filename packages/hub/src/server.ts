@@ -22354,6 +22354,9 @@ export const createServer = (
         failSend(send, reason);
       }
     },
+    // Not cut yet for its agent's restart: what was kept goes through the
+    // send path again, whose hold asks for the cut again.
+    recutKept: (instanceId) => releaseOwed({ instanceId }),
     // A delegate's finish_item ends its turn: what its harness holds unread
     // waits at the hub, and goes once that turn is over.
     reclaimUnread,

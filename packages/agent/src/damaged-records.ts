@@ -170,9 +170,9 @@ const withoutTemporaries = async (dir: string): Promise<string[]> => {
   return names.filter((name) => !name.startsWith("."));
 };
 
-/** A workspace's records: what it was cut as, its boundary, its accounts, its policy, each older boundary still recorded, and a place's folder. */
+/** A workspace's records: what it was cut as, its cut under way, its boundary, its accounts, its policy, each older boundary still recorded, and a place's folder. */
 const WORKSPACE_RECORD =
-  /^(create|boundary|accounts|policy|place|retiring-[^/]+)\.json$/;
+  /^(create|cut|boundary|accounts|policy|place|retiring-[^/]+)\.json$/;
 /** A workspace's text records: the gate an executor waits at. */
 const WORKSPACE_TEXT = /^gate$/;
 

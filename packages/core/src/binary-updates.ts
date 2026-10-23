@@ -190,6 +190,13 @@ export const UPDATE_TRIAL_MS = 180_000;
 /** What a request refused by a raised fence answers: it was not started. */
 export const AGENT_RESTARTING =
   "The agent is restarting. This request was not started; retry it in a minute.";
+/**
+ * What a request the hub sends again answers when this agent's last process
+ * was running it as it ended (agent request-record.ts): not run again, its
+ * outcome unknown. The agent asked is back by then.
+ */
+export const AGENT_RESTARTED_MID_REQUEST =
+  "This machine's agent restarted while it was running this request, so it was not run again and whether it finished is not known; look at what it does before asking again.";
 export const HUB_RESTARTING =
   "The hub is restarting. This call was not started; call it again in a minute.";
 

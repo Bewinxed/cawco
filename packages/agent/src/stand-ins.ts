@@ -250,40 +250,63 @@ export const straysIn = async (
   path: string,
   placed: readonly string[]
 ): Promise<string[]> => {
+  const { folder, walk } = await strayReader(path, placed);
+  return await walk(folder);
+};
+
+/**
+ * Of `entries`, paths relative to the folder at `path`, those not CawCo's by
+ * {@link straysIn}'s rule, each a dir walked when it holds something of
+ * CawCo's: what of an interrupted cut's folder git does not track and CawCo
+ * did not write (workspace.ts `ownCutProblem`).
+ */
+export const straysAmong = async (
+  path: string,
+  placed: readonly string[],
+  entries: readonly string[]
+): Promise<string[]> => {
+  const { folder, strayOf } = await strayReader(path, placed);
+  const strays: string[] = [];
+  for (const entry of entries) {
+    // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, a husk holds a handful
+    strays.push(...(await strayOf(join(folder, entry))));
+  }
+  return strays;
+};
+
+/** {@link straysIn}'s reading of the folder at `path`: an entry's strays, and a dir's. */
+const strayReader = async (path: string, placed: readonly string[]) => {
   const folder = await realpath(path);
   const denies = cloneDenies(folder);
   const known = [...denies.map((one) => one.path), ...placed];
+  const strayOf = async (entry: string): Promise<string[]> => {
+    const found = await statOf(entry);
+    const deny = denies.find((one) => one.path === entry);
+    if (!found || placed.includes(entry)) {
+      return [];
+    }
+    // A dir above something CawCo's, a deny dir among them (the project
+    // skills, holding the skills the fleet placed): walked.
+    const holds =
+      found.isDirectory() && known.some((one) => one.startsWith(`${entry}/`));
+    if (deny && !holds) {
+      const ours =
+        leftMountPoint(found) ||
+        (await asMade({ path: entry, empty: deny.empty, found })) ||
+        (await lfsMarker(entry, found));
+      return ours ? [] : [relative(folder, entry)];
+    }
+    return holds ? await walk(entry) : [relative(folder, entry)];
+  };
   const walk = async (dir: string): Promise<string[]> => {
     const strays: string[] = [];
     for (const name of await readdir(dir)) {
-      const entry = join(dir, name);
       // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, a husk holds a handful
-      const found = await statOf(entry);
-      const deny = denies.find((one) => one.path === entry);
-      if (!found || placed.includes(entry)) {
-        continue;
-      }
-      // A dir above something CawCo's, a deny dir among them (the project
-      // skills, holding the skills the fleet placed): walked.
-      const holds =
-        found.isDirectory() && known.some((one) => one.startsWith(`${entry}/`));
-      if (deny && !holds) {
-        const ours =
-          leftMountPoint(found) ||
-          (await asMade({ path: entry, empty: deny.empty, found })) ||
-          (await lfsMarker(entry, found));
-        if (!ours) {
-          strays.push(relative(folder, entry));
-        }
-      } else if (holds) {
-        strays.push(...(await walk(entry)));
-      } else {
-        strays.push(relative(folder, entry));
-      }
+      strays.push(...(await strayOf(join(dir, name))));
     }
     return strays;
   };
-  return await walk(folder);
+  return { folder, strayOf, walk };
 };
 
 /**
