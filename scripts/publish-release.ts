@@ -12,6 +12,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Subprocess } from "bun";
 import {
   NIGHTLY_TAG_PREFIX,
   RELEASE_REPOSITORY,
@@ -21,20 +22,37 @@ import type { ReleaseManifest } from "../packages/core/src/release-manifest";
 /** How many nightly pre-releases are kept; older ones are deleted with their tags. */
 const NIGHTLIES_KEPT = 5;
 
+/** The gh calls running now, so a stop can end them before it removes the draft they write to. */
+const calls = new Set<Subprocess>();
+
 async function gh(args: string[]): Promise<string> {
   const child = Bun.spawn(["gh", ...args, "--repo", RELEASE_REPOSITORY], {
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [out, err, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  if (code !== 0) {
-    throw new Error(`gh ${args[0]} ${args[1]} failed: ${err.trim()}`);
+  calls.add(child);
+  try {
+    const [out, err, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (code !== 0) {
+      throw new Error(`gh ${args[0]} ${args[1]} failed: ${err.trim()}`);
+    }
+    return out;
+  } finally {
+    calls.delete(child);
   }
-  return out;
+}
+
+/** Every gh call running now ended (SIGTERM), once each has. */
+export async function endCalls(): Promise<void> {
+  const ending = [...calls];
+  for (const child of ending) {
+    child.kill("SIGTERM");
+  }
+  await Promise.all(ending.map((child) => child.exited));
 }
 
 /** What a draft is made from: the build's version, commit, channel and notes, and its tag. */
@@ -80,14 +98,31 @@ export async function uploadAssets(
   await gh(["release", "upload", tag, ...files, "--clobber"]);
 }
 
-/** The draft `tag` removed, when there is one; a published release is left alone. */
-export async function deleteDraft(tag: string): Promise<void> {
+/** gh's words for a tag with no release (cli/cli pkg/cmd/release/shared/fetch.go `ErrReleaseNotFound`). */
+const NOT_FOUND = "release not found";
+
+/**
+ * The draft `tag` removed, when there is one; a published release is left
+ * alone. Answers whether a draft was removed. Only a release gh says is not
+ * there counts as none: any other failure to read it is thrown, never taken
+ * for "no draft" (nightly 5186's stop read it with no cwd and left its draft).
+ * A draft has no git tag (GitHub makes the tag when a release is published),
+ * so there is no tag to remove with it.
+ */
+export async function deleteDraft(tag: string): Promise<boolean> {
   const viewed = await gh(["release", "view", tag, "--json", "isDraft"]).catch(
-    () => undefined
+    (error: unknown) => {
+      if (String(error).includes(NOT_FOUND)) {
+        return;
+      }
+      throw error;
+    }
   );
-  if (viewed && (JSON.parse(viewed) as { isDraft: boolean }).isDraft) {
-    await gh(["release", "delete", tag, "--yes"]);
+  if (!(viewed && (JSON.parse(viewed) as { isDraft: boolean }).isDraft)) {
+    return false;
   }
+  await gh(["release", "delete", tag, "--yes"]);
+  return true;
 }
 
 /**

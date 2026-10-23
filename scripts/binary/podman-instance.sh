@@ -49,6 +49,9 @@ runroot = "$run/run"
 additionalimagestores = [$([[ -n $images ]] && printf '"%s"' "$images")]
 CONF
   printf '{"auths":{}}\n' > "$root.auth.json"
+  # The run dir, recorded beside the storage: a release that stops sweeps exactly the run dirs its staging records
+  # (proof-sweep.sh), never another proof's by its name.
+  echo "$run" > "$root.run-dir"
   # The storage comes from storage.conf alone: any of --root, --runroot or --storage-driver on the command line drops
   # its driver options, `additionalimagestores` among them (measured on podman 5.7: `info` shows GraphOptions {} and
   # the store's images are pulled from a registry instead), so the instance would never see the image store.
@@ -58,7 +61,7 @@ CONF
 # The instance's run dir and config files, its storage kept (the image store's instance).
 podman_instance_closed() {
   local name=$1 root=$2
-  rm -rf "$(podman_instance_run "$name")" "$root.containers.conf" "$root.storage.conf" "$root.auth.json" 2> /dev/null || true
+  rm -rf "$(podman_instance_run "$name")" "$root.containers.conf" "$root.storage.conf" "$root.auth.json" "$root.run-dir" 2> /dev/null || true
 }
 
 PROOF_SWEEP=$(dirname "$(realpath "${BASH_SOURCE[0]}")")/proof-sweep.sh

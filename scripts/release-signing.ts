@@ -46,6 +46,11 @@ export async function underSigningEnv(
       stdio: ["inherit", "inherit", "inherit"],
     }
   );
+  // A stop sent to this process (ship.sh hands the unit's SIGTERM to it alone) is the run's: it clears its own work
+  // and ends, and this process ends with it.
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.on(signal, () => run.kill(signal));
+  }
   process.exit(await run.exited);
 }
 

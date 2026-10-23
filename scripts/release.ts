@@ -34,6 +34,7 @@
  */
 import { Database } from "bun:sqlite";
 import { createPublicKey } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   cp,
   lstat,
@@ -46,7 +47,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { AGENT_BUNDLE_EXECUTABLE } from "../packages/core/src/agent-bundle";
 import { releaseTag } from "../packages/core/src/binary-distribution";
@@ -77,6 +78,7 @@ import { holdAwake } from "./lib/hold-awake";
 import {
   createDraft,
   deleteDraft,
+  endCalls,
   promoteRelease,
   uploadAssets,
 } from "./publish-release";
@@ -164,8 +166,12 @@ const isDarwin = (target: string): boolean => target.startsWith("darwin");
 interface Learned {
   /** Apple's secrets as the files rcodesign reads, once written. */
   apple?: Promise<{ apiKey: string; identity: string }>;
-  /** Whether this build's draft release exists, to remove if the build fails. */
-  drafted: boolean;
+  /**
+   * The draft release this build makes, by its exact tag, from the moment it
+   * is asked for: a build that fails or is stopped removes it (`created` has
+   * settled first, so a draft still being made is removed too).
+   */
+  draft?: { created: Promise<unknown>; tag: string };
   /** The proof inputs' key at the commit (proof-inputs.ts). */
   inputs?: string;
   manifest?: ReleaseManifest;
@@ -190,7 +196,9 @@ const releaseSteps = (
   publish: boolean,
   run: Runner,
   learned: Learned,
-  secrets: ReturnType<typeof takeReleaseSecrets>
+  secrets: ReturnType<typeof takeReleaseSecrets>,
+  /** Holds a GitHub call from starting while a stop is clearing the run: it never returns then. */
+  notStopped: () => Promise<void>
 ): Step[] => {
   const trees = treesOf(current.commit);
   const staging = stagingOf(current.commit);
@@ -276,11 +284,17 @@ const releaseSteps = (
     );
     const upload: Step[] = publish
       ? [
-          step(`upload ${target}`, [`archive ${target}`, "draft"], 5, () =>
-            uploadAssets(tag(), [
-              join(staging, archiveName(target)),
-              join(staging, `${archiveName(target)}.sha256`),
-            ])
+          step(
+            `upload ${target}`,
+            [`archive ${target}`, "draft"],
+            5,
+            async () => {
+              await notStopped();
+              await uploadAssets(tag(), [
+                join(staging, archiveName(target)),
+                join(staging, `${archiveName(target)}.sha256`),
+              ]);
+            }
           ),
         ]
       : [];
@@ -454,21 +468,24 @@ const releaseSteps = (
     ...(publish
       ? [
           step("draft", ["version"], 2, async () => {
+            await notStopped();
             const { channel: on, commit, notes, version } = manifest();
-            await createDraft({
+            const created = createDraft({
               channel: on,
               commit,
               notes,
               version,
               tag: tag(),
             });
-            learned.drafted = true;
+            // Recorded before the first await: a stop from here on removes it.
+            learned.draft = { created, tag: tag() };
+            await created;
           }),
         ]
       : []),
     ...TARGETS.flatMap(targetSteps),
     step("promote", proving, 5, () =>
-      promote(current, publish, staging, manifest(), secrets)
+      promote(current, publish, staging, manifest(), secrets, notStopped)
     ),
     ...(publish
       ? [
@@ -888,7 +905,8 @@ const promote = async (
   publish: boolean,
   staging: string,
   manifest: ReleaseManifest,
-  secrets: ReturnType<typeof takeReleaseSecrets>
+  secrets: ReturnType<typeof takeReleaseSecrets>,
+  notStopped: () => Promise<void>
 ): Promise<void> => {
   manifest.artifacts.sort(
     (a, b) =>
@@ -929,6 +947,7 @@ const promote = async (
   await writeFile(join(current.output, "release.json"), manifestText);
   console.log(`Local artifacts ready: ${published}`);
   if (publish) {
+    await notStopped();
     await promoteRelease(releaseTag(manifest), published, manifest);
   }
 };
@@ -997,8 +1016,9 @@ if (argv.includes("--dry-run")) {
         },
         publishing,
         dry,
-        { drafted: false },
-        {}
+        {},
+        {},
+        () => Promise.resolve()
       )
     )
   );
@@ -1026,6 +1046,23 @@ if (resolved.exitCode !== 0) {
   refuse(`${commitInput} is not a commit here`);
 }
 const requestedCommit = resolved.stdout.toString().trim();
+/**
+ * The repository every worktree of this one shares (its main checkout, or the
+ * bare repository): a run's trees are removed and pruned from there, and a
+ * stop runs from there, never from the checkout this script runs from, which
+ * ship.sh made (its runner) and may be gone by then. A spawn whose cwd is gone
+ * fails before it starts: nightly 5186's stop said "ENOENT: no such file or
+ * directory, posix_spawn 'git'" and left its trees' records.
+ */
+const commonDir = git("rev-parse", "--path-format=absolute", "--git-common-dir")
+  .stdout.toString()
+  .trim();
+const mainRepo = commonDir.endsWith("/.git") ? dirname(commonDir) : commonDir;
+/** proof-sweep.sh as it is now, read once: a stop runs it whether or not this checkout is still on the disk. */
+const SWEEP_SCRIPT = await readFile(
+  join(import.meta.dir, "binary", "proof-sweep.sh"),
+  "utf8"
+);
 if (
   git("merge-base", "--is-ancestor", requestedCommit, "origin/main")
     .exitCode !== 0
@@ -1353,53 +1390,108 @@ const release = async (): Promise<void> => {
 };
 /**
  * Ends what container proofs left (scripts/binary/proof-sweep.sh): every
- * process naming one of `dirs` or, with `stale`, a proof run dir whose owner
- * is gone (conmon and its container, pasta, aardvark-dns), their mounts in
- * podman's rootless mount namespace, and the dirs themselves. Not a `run`: a
- * stop runs it after its commands have ended.
+ * process naming one of `dirs` or a proof run dir one of them records (conmon
+ * and its container, pasta, aardvark-dns), their mounts in podman's rootless
+ * mount namespace, and the dirs themselves; with `stale`, also every proof run
+ * dir whose owner is gone. Not a `run`: a stop runs it after its commands have
+ * ended. Answers how many processes it ended and dirs it removed.
  */
-const sweep = async (dirs: string[], stale: boolean): Promise<void> => {
-  const args = [
-    "bash",
-    join(import.meta.dir, "binary", "proof-sweep.sh"),
-    ...(stale ? ["--stale"] : []),
-    ...dirs,
-  ];
-  const status = await Bun.spawn(args, {
-    cwd: repo,
-    stdout: "inherit",
-    stderr: "inherit",
-  }).exited;
+const sweep = async (
+  dirs: string[],
+  stale: boolean
+): Promise<{ ended: number; removed: number }> => {
+  const args = [...(stale ? ["--stale"] : []), ...dirs];
+  const child = Bun.spawn(
+    ["bash", "-c", SWEEP_SCRIPT, "proof-sweep.sh", ...args],
+    { cwd: mainRepo, stdout: "pipe", stderr: "inherit" }
+  );
+  const said = await new Response(child.stdout).text();
+  process.stdout.write(said);
+  const status = await child.exited;
   if (status !== 0) {
     throw new Error(
-      `The proof sweep failed with exit status ${status}: ${args.join(" ")}`
+      `The proof sweep failed with exit status ${status}: proof-sweep.sh ${args.join(" ")}`
     );
   }
+  const count = (prefix: string): number =>
+    said.split("\n").filter((line) => line.startsWith(prefix)).length;
+  return {
+    ended: count("proof-sweep: ended pid "),
+    removed: count("proof-sweep: removed "),
+  };
 };
-/** A worktree a build made, removed as a worktree and from the disk. */
-const removeTree = async (checkout: string): Promise<void> => {
-  await Bun.spawn(["git", "worktree", "remove", "--force", checkout], {
-    cwd: repo,
-    stdout: "ignore",
-    stderr: "ignore",
-  }).exited;
-  await rm(checkout, { recursive: true, force: true });
+/** A git command run in {@link mainRepo}, its status and output. */
+const gitMain = async (
+  ...args: string[]
+): Promise<{ out: string; status: number }> => {
+  const child = Bun.spawn(["git", "-C", mainRepo, ...args], {
+    cwd: mainRepo,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [out, err, status] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  return { out: out || err, status };
+};
+/** The worktrees git records now, by path. */
+const recordedTrees = async (): Promise<Set<string>> => {
+  const listed = await gitMain("worktree", "list", "--porcelain");
+  if (listed.status !== 0) {
+    throw new Error(`git worktree list failed: ${listed.out.trim()}`);
+  }
+  return new Set(
+    listed.out
+      .split("\n")
+      .filter((line) => line.startsWith("worktree "))
+      .map((line) => line.slice("worktree ".length))
+  );
 };
 /**
- * The trees and staging a build left: each tree removed as a worktree, the
- * staging with everything its proofs left (`sweep`), and every proof run dir
- * whose owner is gone: this build's rigs, ended by now.
+ * The trees and staging a build left: each tree removed as a worktree and
+ * from the disk, the records of any whose folder went another way pruned,
+ * then the staging with everything its proofs left (`sweep`, by the run dirs
+ * its proofs recorded). Throws when a tree's record outlives it. Answers what
+ * it cleared, in words.
  */
-const clear = async (checkouts: string[], staging?: string): Promise<void> => {
-  await Promise.all(checkouts.map(removeTree));
-  if (checkouts.length > 0) {
-    await Bun.spawn(["git", "worktree", "prune"], {
-      cwd: repo,
-      stdout: "ignore",
-      stderr: "ignore",
-    }).exited;
+const clear = async (
+  checkouts: string[],
+  staging?: string
+): Promise<string[]> => {
+  const recorded = await recordedTrees();
+  const trees = checkouts.filter(
+    (checkout) => recorded.has(checkout) || existsSync(checkout)
+  );
+  await Promise.all(
+    trees.map(async (checkout) => {
+      await gitMain("worktree", "remove", "--force", checkout);
+      await rm(checkout, { recursive: true, force: true });
+    })
+  );
+  if (trees.length > 0) {
+    const pruned = await gitMain("worktree", "prune");
+    if (pruned.status !== 0) {
+      throw new Error(`git worktree prune failed: ${pruned.out.trim()}`);
+    }
+    const left = [...(await recordedTrees())].filter((path) =>
+      checkouts.includes(path)
+    );
+    if (left.length > 0) {
+      throw new Error(`git still records ${left.join(", ")}`);
+    }
   }
-  await sweep(staging ? [staging] : [], true);
+  const staged = staging !== undefined && existsSync(staging);
+  const { ended, removed } = await sweep(staging ? [staging] : [], false);
+  return [
+    ...(trees.length > 0 ? [`${trees.length} worktree(s)`] : []),
+    ...(staged ? ["its staging"] : []),
+    ...(ended > 0 ? [`${ended} proof process(es)`] : []),
+    ...(removed > (staged ? 1 : 0)
+      ? [`${removed - (staged ? 1 : 0)} proof run dir(s)`]
+      : []),
+  ];
 };
 /**
  * Every staging no live build holds (by the holder records in the lock's
@@ -1550,20 +1642,46 @@ const acquire = async (): Promise<boolean> => {
   }
 };
 
-// A stop (SIGTERM from a task stop, SIGINT) ends the commands it waits on,
-// clears its own trees and staging, and lets the lock go. Nothing starts
-// after it: `run` waits on it instead of spawning.
+/** What the build running now has learned: its draft, for a stop to remove. */
+let learnedNow: Learned | undefined;
+const said = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+// A stop (SIGTERM from a unit stop, which ship.sh hands on, or SIGINT) is the
+// one owner of the run's cleanup: it ends the commands and GitHub calls it
+// waits on, removes this run's draft release by its tag, clears its trees,
+// staging and proofs, says in one line what it cleared, and lets the lock go.
+// Nothing starts after it: `run` and every GitHub step wait on it instead, and
+// a build that fails under it leaves the cleanup to it.
 const stop = async (signal: "SIGTERM" | "SIGINT"): Promise<never> => {
   console.log(`Release build stopped by ${signal}: clearing its work`);
-  await endGroups(me.groups);
+  // Every spawn from here runs from the main checkout, whatever became of this one.
+  process.chdir(mainRepo);
+  await Promise.all([endGroups(me.groups), endCalls()]);
   await Promise.all([...running].map((child) => child.exited));
+  const cleared: string[] = [];
+  const failed: string[] = [];
+  const draft = learnedNow?.draft;
+  if (draft) {
+    await draft.created.catch(() => undefined);
+    try {
+      if (await deleteDraft(draft.tag)) {
+        cleared.push(`draft release ${draft.tag}`);
+      }
+    } catch (error) {
+      failed.push(`draft release ${draft.tag} (${said(error)})`);
+    }
+  }
   try {
-    await clear(me.checkouts ?? [], me.staging);
+    cleared.push(...(await clear(me.checkouts ?? [], me.staging)));
   } catch (error) {
     // The next run's sweep ends what this one could not.
-    console.error(
-      `Release build stopped, and clearing its work failed: ${error instanceof Error ? error.message : String(error)}`
-    );
+    failed.push(`its trees and staging (${said(error)})`);
+  }
+  const line = `Release build stopped by ${signal}: cleared ${cleared.join(", ") || "nothing it had made"}`;
+  if (failed.length > 0) {
+    console.error(`${line}; could not clear ${failed.join("; ")}`);
+  } else {
+    console.log(line);
   }
   await release();
   process.exit(signal === "SIGINT" ? 130 : 143);
@@ -1607,11 +1725,23 @@ const build = async (current: Request): Promise<void> => {
   me.staging = staging;
   await writeHolder();
   await mkdir(staging, { recursive: true });
-  const learned: Learned = { drafted: false };
+  const learned: Learned = {};
+  learnedNow = learned;
   let failedClear: unknown;
   try {
     await runSteps(
-      releaseSteps(current, publishing, runCommand, learned, releaseSecrets),
+      releaseSteps(
+        current,
+        publishing,
+        runCommand,
+        learned,
+        releaseSecrets,
+        async () => {
+          if (stopped) {
+            await stopped;
+          }
+        }
+      ),
       {
         say: (line) => console.log(line),
         failed: async () => {
@@ -1624,13 +1754,20 @@ const build = async (current: Request): Promise<void> => {
     );
     logStep(`build of ${current.commit.slice(0, 12)}, in all`, building);
   } catch (error) {
-    if (learned.drafted && learned.manifest) {
+    // A step that failed under a stop (a command or gh call it ended) is the
+    // stop's to clear, in its order: nightly 5186's upload failed beside its
+    // stop and the two cleared at once.
+    if (stopped) {
+      await stopped;
+    }
+    const { draft } = learned;
+    if (draft) {
       // A build that did not promote leaves no draft behind it.
-      await deleteDraft(releaseTag(learned.manifest)).catch(
-        (cleanup: unknown) =>
-          console.error(
-            `Removing the draft of ${learned.manifest?.version} failed: ${cleanup instanceof Error ? cleanup.message : String(cleanup)}`
-          )
+      await draft.created.catch(() => undefined);
+      await deleteDraft(draft.tag).catch((cleanup: unknown) =>
+        console.error(
+          `Removing the draft release ${draft.tag} failed: ${said(cleanup)}`
+        )
       );
     }
     const kept = await keepEvidence(current.commit, staging);
@@ -1654,6 +1791,7 @@ const build = async (current: Request): Promise<void> => {
     });
     me.checkouts = undefined;
     me.staging = undefined;
+    learnedNow = undefined;
     await writeHolder();
   }
   if (failedClear) {

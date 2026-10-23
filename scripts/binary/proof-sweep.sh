@@ -4,16 +4,18 @@
 # staging): every process whose command line names a path under DIR, with all it started (conmon and its container,
 # pasta and aardvark-dns of the instance's rootless netns, a podman client), then every mount under DIR in podman's
 # rootless mount namespace (a container's userdata/shm, the instance's rootless-netns), then DIR itself, removed from
-# inside the user namespace that wrote its files. --stale adds every `$XDG_RUNTIME_DIR/cawco-proof-<name>-<pid>` run
+# inside the user namespace that wrote its files. Each run dir a DIR records (`<storage>.run-dir`, podman-instance.sh)
+# is swept with it: a release's staging names its own proofs' instances exactly. --stale adds every `$XDG_RUNTIME_DIR/cawco-proof-<name>-<pid>` run
 # dir whose owner pid is not a live prove-stage script (the pid is gone, or reused by something else). One line per
 # thing ended. Only processes and mounts that name one of these dirs are touched: no other podman container of the
 # host is, and a live proof's run dir is never taken with --stale.
 set -euo pipefail
 dirs=()
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 if [[ ${1:-} == --stale ]]; then
   shift
   shopt -s nullglob
-  for run in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/cawco-proof-*-*; do
+  for run in "$runtime"/cawco-proof-*-*; do
     pid=${run##*-}
     [[ $pid =~ ^[0-9]+$ ]] || continue
     # The owner is alive only while that pid is still the prove-stage script that named the dir.
@@ -26,6 +28,18 @@ fi
 for dir in "$@"; do
   [[ $dir = /* && $dir != / ]] || { echo "proof-sweep: $dir is not an absolute directory" >&2; exit 2; }
   dirs+=("${dir%/}")
+done
+# The run dirs a DIR records (podman-instance.sh writes `<storage>.run-dir` beside each instance's storage): a release's
+# staging names its proofs' instances by the exact run dir each wrote, so a stop sweeps those and no other proof's.
+for dir in "$@"; do
+  [[ -d $dir ]] || continue
+  while IFS= read -r -d '' record; do
+    recorded=$(< "$record")
+    # Only a proof run dir itself: `cawco-proof-<name>` directly under the runtime dir.
+    if [[ ${recorded%/*} == "$runtime" && ${recorded##*/} == cawco-proof-?* && ${recorded##*/} != *..* ]]; then
+      dirs+=("$recorded")
+    fi
+  done < <(find "$dir" -maxdepth 4 -name '*.run-dir' -type f -print0 2> /dev/null)
 done
 (( ${#dirs[@]} > 0 )) || exit 0
 
