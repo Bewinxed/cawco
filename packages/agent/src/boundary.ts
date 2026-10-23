@@ -119,6 +119,7 @@ import {
 import {
   AGENT_SOCKET_ENV,
   darwinUserDirs,
+  fleetSyncedPaths,
   forgetWorkspaceTmp,
   hostCaEnv,
   linkWorkspaceTmp,
@@ -2919,6 +2920,25 @@ interface Plan {
 /** The generation every form is computed for ({@link Plan.form}): no boundary has it. */
 const FORM_GENERATION = "form";
 
+/**
+ * Which of the paths the fleet sync writes (core `fleetSyncedPaths`, the
+ * fleet's hook scripts among them) stand on this machine now, for a Linux
+ * boundary's form: srt binds a read path back only when it resolves ("Not
+ * restoring … nothing there resolves (absent, dangling or unreadable)", its
+ * linux-sandbox-utils.js 0.0.81), so a boundary started before one was made
+ * has none of it. Made since, it is a later form, and the boundary is handed
+ * over to it ({@link rearmMoved}). Seatbelt grants by path rule, there or not.
+ */
+const syncedPresence = async (): Promise<string> =>
+  (
+    await Promise.all(
+      fleetSyncedPaths().map(
+        async (path) =>
+          `${path} ${(await stat(path).catch(() => undefined)) ? "1" : "0"}`
+      )
+    )
+  ).join("\n");
+
 /** The form a boundary of workspace `ref` takes in this build on this machine now. */
 const formOf = async (ref: WorkspaceRef): Promise<string> =>
   (await planFor(ref, FORM_GENERATION)).form;
@@ -3064,6 +3084,8 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     ],
     form: hash
       .update(settings)
+      .update("\0")
+      .update(await syncedPresence())
       .update("\0")
       .update(launcher)
       .update("\0")
@@ -4834,6 +4856,37 @@ const inUseNow = async (): Promise<string[]> => {
     }
   }
   return used;
+};
+
+/**
+ * Each boundary in use whose form moved since it started, handed over to
+ * one of the form now as soon as nothing runs in it ({@link ensure}'s
+ * {@link replaceOlder}), so a session's next command, hook or server start
+ * runs in it: after a fleet sync made a path a boundary reads (the fleet's
+ * hook scripts, {@link syncedPresence}), a session started before it, or
+ * before this build, reaches what it holds. One not in use takes the form
+ * now at its next ensure.
+ */
+export const rearmMoved = async (why: string): Promise<void> => {
+  for (const id of await inUseNow()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one small record read and one form per boundary in use
+    const held = await readHeld(id).catch(() => undefined);
+    if (!held) {
+      continue;
+    }
+    const ref = { id, path: held.path };
+    if (held.form === (await formOf(ref))) {
+      continue;
+    }
+    console.info(
+      `[workspace] ${id}: its boundary's form moved (${why}), so it is handed over once nothing runs in it`
+    );
+    await ensureBoundary(ref).catch((error: unknown) => {
+      console.warn(
+        `[workspace] ${id}: its boundary was not handed over to its new form: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  }
 };
 
 /** A machine's accounts changed (a sign-in, an account removed): every running boundary is checked for a narrowed access. */

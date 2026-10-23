@@ -148,6 +148,7 @@ import {
   boundaryFor,
   endSessionWork,
   hookArmed,
+  rearmMoved,
   recheckNarrowed,
   sandboxOf,
   shellQuote,
@@ -5483,8 +5484,21 @@ export class SessionSupervisor {
         });
       }
       this.#healFleetMcp([...this.#sessions.keys()]);
+      this.#rearmMoved();
     }).catch((error: unknown) =>
       warn(`the fleet converge failed: ${errorText(error)}`)
+    );
+  }
+
+  /**
+   * What a converge wrote that a boundary reads (the fleet's hook scripts):
+   * each boundary in use that started without it is handed over to one that
+   * has it (boundary.ts `rearmMoved`). Nothing waits on it.
+   */
+  #rearmMoved(): void {
+    rearmMoved("the fleet sync wrote what a boundary reads").catch(
+      (error: unknown) =>
+        warn(`the boundaries were not looked at again: ${errorText(error)}`)
     );
   }
 
