@@ -57,8 +57,9 @@
  *   `moveRowsToAccount` with `laterSince`): its chip says it moves to B when
  *   its work in flight ends, and nothing runs on B. The command ends
  *   {@link COMMAND_S} seconds in; its notice's turn on A is refused, and
- *   within {@link MOVE_WITHIN_MS} of that it runs on B, the command's output
- *   with it, and its chip says nothing once it runs there.
+ *   within {@link MOVE_WITHIN_MS} of that it runs on B, the command's end
+ *   notice ({@link COMMAND_ENDED}) with it, and its chip says nothing once it
+ *   runs there.
  *
  *   bun scripts/probe-kit/run.ts limit-stall
  */
@@ -181,8 +182,14 @@ const memoryOf = (leg: Leg) => `PROBE-MEMORY-${leg}`;
 const NOTE = "PROBE-NOTE-while-stopped";
 /** How long the carry leg's background command runs: its move waits for it. */
 const COMMAND_S: Partial<Record<Leg, number>> = { carry: 90 };
-/** What the carry leg's background command says as it ends. */
-const COMMAND_DONE = "PROBE-CARRY-command-done";
+/** The carry leg's background command, as its description names it. */
+const COMMAND_TITLE = "A long command in the background";
+/**
+ * The command's end as the conversation carries it: Claude Code's
+ * `<task-notification>` says the command completed and names its output
+ * file; the output itself stays in that file, never in the words.
+ */
+const COMMAND_ENDED = `Background command "${COMMAND_TITLE}" completed`;
 /** The warm leg's brief answer's cache: written for an hour (the mock's `cache` is 1h). */
 const WARM_CACHE = { read: 0, write: 30_000 };
 const HOUR = 3_600_000;
@@ -256,8 +263,8 @@ const child = (request: Seen, leg: Leg): Reply => {
   const seconds = COMMAND_S[leg];
   if (seconds !== undefined && !state.worked && !request.afterTool) {
     return useTool("Bash", {
-      command: `sleep ${seconds} && echo ${COMMAND_DONE}`,
-      description: "A long command in the background",
+      command: `sleep ${seconds}`,
+      description: COMMAND_TITLE,
       run_in_background: true,
     });
   }
@@ -1165,7 +1172,7 @@ const clockOf = (at: number): string =>
  * no person waits on it, so its move to B waits for that command, its chip
  * saying so, and nothing runs on B while it runs. Once it ends, the turn its
  * notice starts is refused on A, and it runs on B within
- * {@link MOVE_WITHIN_MS} of that, the command's output with it; its chip
+ * {@link MOVE_WITHIN_MS} of that, the command's end notice with it; its chip
  * says nothing once it runs there.
  */
 const carryLeg = async (
@@ -1192,7 +1199,7 @@ const carryLeg = async (
   ).catch(() => undefined);
   const ended = fleet.seen.find(
     (one) =>
-      one.all.includes(briefOf("carry")) && one.all.includes(COMMAND_DONE)
+      one.all.includes(briefOf("carry")) && one.all.includes(COMMAND_ENDED)
   );
   kit.check(
     "carry: stopped at A's limit with its command running, its move to B waits for that command, its chip saying so, and nothing runs on B before the command ends",
@@ -1205,11 +1212,11 @@ const carryLeg = async (
     `${onB ? `first request on B ${onB.at - refusedAt} ms after A's refusal` : "nothing on B"}; the command's end first seen ${ended ? `${ended.at - refusedAt} ms after` : "never"}; chips ${JSON.stringify([...new Set(chips)])}; account ${look.accountOf(instance)}`
   );
   kit.check(
-    `carry: once its command ended, it runs on B within ${MOVE_WITHIN_MS / 1000} s, the command's output with it`,
+    `carry: once its command ended, it runs on B within ${MOVE_WITHIN_MS / 1000} s, the command's end notice with it`,
     !!onB &&
       !!ended &&
       onB.at - ended.at <= MOVE_WITHIN_MS &&
-      onB.all.includes(COMMAND_DONE),
+      onB.all.includes(COMMAND_ENDED),
     `${onB && ended ? `${onB.at - ended.at} ms after the command's end` : "never"}`
   );
   const after = await until(
