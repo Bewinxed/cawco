@@ -272,6 +272,7 @@ export class TranscriptSearchService {
       ...(author ? { author } : {}),
       ...narrowed,
       ...(options?.toolOutput ? { toolOutput: true } : {}),
+      ...(options?.context ? { context: true } : {}),
     });
   }
 

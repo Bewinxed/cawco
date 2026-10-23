@@ -179,6 +179,11 @@ export interface FindWhere {
 export interface FindRequest {
   /** Only words said by this author (`by=me`: the person's own). */
   author?: MomentAuthor;
+  /**
+   * Each moment carries the words around it ({@link HeldMoment}): the
+   * person's Find asks while it hides secrets (find-secrets.ts).
+   */
+  context?: true;
   cursor?: string;
   kinds?: FindKind[];
   limit?: number;
@@ -193,6 +198,14 @@ export interface FindRequest {
   transcripts: boolean;
   where?: FindWhere;
 }
+
+/**
+ * A moment as the engine holds it: the words around its excerpt ride along
+ * when asked (`FindRequest.context`, and a thread message's whole body), for
+ * the person's secret filter to read (find-secrets.ts), which takes them off
+ * before an answer leaves the hub.
+ */
+export type HeldMoment = FindMoment & { context?: string };
 
 /** A purged session's key in {@link FindDeps.purged}: its machine and harness session id. */
 export const purgedKey = (machineId: string, sessionId: string): string =>
@@ -477,11 +490,12 @@ const lineScore = (line: ThreadLine, words: string[]): number => {
 /** What one moment of a machine's answer is in an answer. */
 const momentOf = (
   moment: TranscriptAnswer["conversations"][number]["moments"][number]
-): FindMoment => ({
+): HeldMoment => ({
   docId: moment.docId,
   author: moment.author,
   at: moment.timestamp ? Date.parse(moment.timestamp) || null : null,
   excerpt: moment.snippet,
+  ...(moment.context === undefined ? {} : { context: moment.context }),
 });
 
 /** A conversation the hub never started (a stored CLI session), as its machine's transcript has it. */
@@ -1006,11 +1020,12 @@ export const createFind = (deps: FindDeps) => {
       const best = lines
         .toSorted((a, b) => b.score - a.score || b.line.at - a.line.at)
         .slice(0, THREAD_MOMENTS);
-      const moments = best.map(({ line }): FindMoment => ({
+      const moments = best.map(({ line }): HeldMoment => ({
         docId: line.id,
         author: line.who,
         at: line.at,
         excerpt: excerptOf(line.body, words),
+        context: line.body,
       }));
       const match = 0.15 + 0.35 * (best[0]?.score ?? 0);
       const key = `thread:${threadId}`;
@@ -1132,7 +1147,7 @@ export const createFind = (deps: FindDeps) => {
     const asked = await askMachines(
       query.words.join(" "),
       request.author,
-      request.toolOutput,
+      { context: request.context, toolOutput: request.toolOutput },
       request.where,
       matched.held,
       limit
@@ -1153,7 +1168,7 @@ export const createFind = (deps: FindDeps) => {
   const askMachines = (
     words: string,
     author: TranscriptQuery["author"],
-    toolOutput: true | undefined,
+    asks: Pick<FindRequest, "context" | "toolOutput">,
     where: FindWhere | undefined,
     held: Names,
     limit: number
@@ -1174,7 +1189,8 @@ export const createFind = (deps: FindDeps) => {
         askOne(machine, words, {
           limit,
           ...(author ? { author } : {}),
-          ...(toolOutput ? { toolOutput } : {}),
+          ...(asks.toolOutput ? { toolOutput: true } : {}),
+          ...(asks.context ? { context: true } : {}),
           ...(where?.projectId
             ? { sessions: sessionsOn(machine.machineId) }
             : {}),
@@ -1258,7 +1274,7 @@ export const createFind = (deps: FindDeps) => {
       author !== "caw" &&
       (!kinds || kinds.has("conversation"));
     const asked = transcripts
-      ? await askMachines("", author, undefined, where, held, LISTED_DOCS)
+      ? await askMachines("", author, {}, where, held, LISTED_DOCS)
       : [];
     foldTranscripts(found, asked, held, deps.needsYou(), now);
     const purged = where.unpurged ? deps.purged() : new Set<string>();
@@ -1358,6 +1374,7 @@ export const createFind = (deps: FindDeps) => {
       request.author ?? "",
       request.transcripts,
       request.toolOutput ?? false,
+      request.context ?? false,
       request.where ?? {},
     ]);
     const kept = paging ? pages.get(key) : undefined;
@@ -1698,11 +1715,14 @@ export const answerFind = async (
     limit?: string;
     q?: string;
     transcripts?: "0" | "1";
-  }
+  },
+  /** Each moment carries the words around it, for the secret filter (find-secrets.ts). */
+  context: boolean
 ): Promise<FindAnswer> => {
   try {
     const { total: _total, ...answer } = await find.find({
       q: query.q ?? "",
+      ...(context ? { context: true as const } : {}),
       ...(query.limit ? { limit: Number(query.limit) || DEFAULT_LIMIT } : {}),
       ...(query.cursor ? { cursor: query.cursor } : {}),
       ...(query.by ? { author: AUTHOR_OF[query.by] } : {}),

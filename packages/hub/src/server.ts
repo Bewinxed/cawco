@@ -629,7 +629,7 @@ import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_QUERY } from "./find";
-import { withSecrets } from "./find-secrets";
+import { forScreens } from "./find-secrets";
 import { createFindTool } from "./find-tool";
 import {
   type FleetChoicesStore,
@@ -28286,8 +28286,8 @@ export const createServer = (
       // While "Hide secrets in Find" is on, each answer names where its
       // secrets stand (find-secrets.ts), for every screen to draw as dots.
       .get("/api/find", { query: FIND_QUERY }, async ({ query }) => {
-        const answer = await answerFind(find, query);
-        return db.findSettings.hideSecrets() ? withSecrets(answer) : answer;
+        const hide = db.findSettings.hideSecrets();
+        return forScreens(await answerFind(find, query, hide), hide);
       })
       .get("/api/find/waiting", () => find.waiting())
       // The person's Find settings, the same on every screen: kept at the hub.

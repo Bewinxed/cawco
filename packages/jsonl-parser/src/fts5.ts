@@ -186,6 +186,8 @@ export interface SearchOptions {
   before?: string;
   /** Match what tools answered too (`output`); otherwise only what was said, thought and called. */
   toolOutput?: boolean;
+  /** Each moment carries the words around its snippet ({@link Moment.context}). */
+  context?: boolean;
 }
 
 /** What a listing with no words asks for: one author's documents, newest first. */
@@ -213,6 +215,38 @@ export interface Moment {
   score: number;
   /** The matching words, terms between 「 and 」. */
   snippet: string;
+  /**
+   * The words its snippet was cut from, {@link CONTEXT_CHARS} either side of
+   * it, when the search asked (`context`): what the hub's secret filter reads,
+   * since a password typed in prose is told by a word that may stand outside
+   * the snippet.
+   */
+  context?: string;
+}
+
+/** How many characters of a document a moment's context keeps either side of its snippet. */
+const CONTEXT_CHARS = 1000;
+const ELLIPSIS = "…";
+const MARKS = /[「」]/g;
+
+/**
+ * `snippet`'s words in `doc` with {@link CONTEXT_CHARS} either side: found in
+ * the first of its columns that holds them; undefined when none does.
+ */
+function contextOf(
+  snippet: string,
+  doc: { output: string | null; text: string; thinking: string | null },
+): string | undefined {
+  let core = snippet.replace(MARKS, "");
+  core = core.startsWith(ELLIPSIS) ? core.slice(ELLIPSIS.length) : core;
+  core = core.endsWith(ELLIPSIS) ? core.slice(0, -ELLIPSIS.length) : core;
+  for (const words of [doc.text, doc.thinking, doc.output]) {
+    const at = words && core ? words.indexOf(core) : -1;
+    if (words && at >= 0) {
+      return words.slice(Math.max(0, at - CONTEXT_CHARS), at + core.length + CONTEXT_CHARS);
+    }
+  }
+  return undefined;
 }
 
 /** A conversation that matched, with its best few moments, best first. */
@@ -837,26 +871,51 @@ export class TranscriptIndex {
         excerpts.set(id, snip);
       }
     }
+    const words = options.context
+      ? this.#words(kept.flatMap((each) => each.moments.map((moment) => moment.id)))
+      : new Map<number, { output: string | null; text: string; thinking: string | null }>();
     return kept
       .map((each) => ({
         ...each.hit,
         moments: each.moments.flatMap((moment): Moment[] => {
           const row = described.get(moment.id);
-          return row
-            ? [
-                {
-                  docId: row.doc_id,
-                  role: row.role,
-                  author: row.author,
-                  timestamp: row.ts,
-                  score: moment.score,
-                  snippet: excerpts.get(moment.id) ?? row.gist,
-                },
-              ]
-            : [];
+          if (!row) {
+            return [];
+          }
+          const snippet = excerpts.get(moment.id) ?? row.gist;
+          const doc = words.get(moment.id);
+          const context = doc ? contextOf(snippet, doc) : undefined;
+          return [
+            {
+              docId: row.doc_id,
+              role: row.role,
+              author: row.author,
+              timestamp: row.ts,
+              score: moment.score,
+              snippet,
+              ...(context === undefined ? {} : { context }),
+            },
+          ];
         }),
       }))
       .slice(0, limit);
+  }
+
+  /** Every column of words of each of `ids`: what a moment's context is cut from. */
+  #words(
+    ids: number[],
+  ): Map<number, { output: string | null; text: string; thinking: string | null }> {
+    const rows = this.db
+      .prepare(
+        `SELECT d.id, d.text, d.thinking, d.output FROM json_each(?) AS k JOIN docs d ON d.id = k.value`,
+      )
+      .all(JSON.stringify(ids)) as {
+      id: number;
+      output: string | null;
+      text: string;
+      thinking: string | null;
+    }[];
+    return new Map(rows.map(({ id, ...doc }) => [id, doc]));
   }
 
   /**

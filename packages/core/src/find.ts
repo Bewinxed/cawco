@@ -21,6 +21,11 @@ export interface TranscriptQuery {
    * out.
    */
   before?: string;
+  /**
+   * Each moment carries the words around its snippet (`TranscriptMoment.context`):
+   * the person's Find asks while it hides secrets, for the hub's filter to read.
+   */
+  context?: boolean;
   /** How many conversations to answer with; for a listing (no words), how many documents. */
   limit?: number;
   /**
@@ -42,6 +47,12 @@ export interface TranscriptQuery {
 /** One place in a machine's transcript that matched. */
 export interface TranscriptMoment {
   author: TranscriptAuthor;
+  /**
+   * The words its snippet was cut from, a thousand characters either side,
+   * when the query asked (`context`): the hub's secret filter reads them, and
+   * they go no further than the hub.
+   */
+  context?: string;
   docId: string;
   role: string;
   /** The machine's BM25, weighed by author; higher is better. Comparable within one machine's answer only. */

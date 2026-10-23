@@ -146,7 +146,8 @@
         aria-hidden="true"
         data-box
       >
-        <span class="truncate"
+        <span
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-2 group-data-phone/row:line-clamp-std-2 group-data-phone/row:overflow-clip"
           ><span class="pe-space-1">↳</span>
           {row.reason.source}
           “<Said runs={row.reason.parts} {shown} />”</span

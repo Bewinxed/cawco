@@ -213,7 +213,8 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     slug: "devices",
     group: "Hub",
     label: "Devices",
-    purpose: "Which browsers, apps and machines may run your fleet",
+    purpose:
+      "Which browsers, apps and machines may run your fleet, and what Find shows on them",
     counted: false,
     badge: "fleet-faults",
     icon: "lock-keyhole-minimalistic-bold-duotone",

@@ -32,7 +32,7 @@
 {#each pieces as piece, i (piece.secret ?? `said:${i}`)}{#if piece.secret && !shown.has(piece.secret)}<span
       data-slot="secret"
       data-secret={piece.secret}
-      class="relative inline-block px-space-1 rounded-xs bg-surface-fill text-ink-muted tracking-caps select-none whitespace-nowrap align-baseline hover:text-ink-strong before:absolute before:inset-x-0 before:-inset-y-space-3"
+      class="inline-block px-space-1 rounded-xs bg-surface-fill text-ink-muted tracking-caps select-none whitespace-nowrap align-baseline hover:text-ink-strong"
       aria-label={words.hidden}
       role="img"
       title={words.hidden}>{words.dots}</span

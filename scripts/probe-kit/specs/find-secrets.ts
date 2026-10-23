@@ -19,12 +19,16 @@
  *    its record, the secret itself `[redacted]` by the agents' filter.
  * d. An agent's `find` matches what a tool returned in another session; the
  *    person's `GET /api/find` matches what was said, not what tools returned.
+ * e. A password typed in prose, the word "password" more than the snippet's
+ *    16 words before it, is named a secret in the excerpt: the hub reads the
+ *    words around it, and they never reach the screen.
  *
  *   bun scripts/probe-kit/run.ts find-secrets
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
+import { unmarked } from "../../../packages/core/src/find-match";
 import { PRESENCE_ONBOARDING_SKIPPED } from "../../../packages/core/src/presence-onboarding";
 import { findSecretWords } from "../../../packages/core/src/words/find-secrets";
 import { shellWords } from "../../../packages/core/src/words/shell";
@@ -38,6 +42,9 @@ import { exactly } from "../words";
 /** A made-up token in a GitHub token's shape (secretlint's GitHub rule): never a real one. */
 const TOKEN = "ghp_Pr0beWalrusK3yNotRealAbCdEfGh1234IjK";
 const SAID = `PROBE-SECRET the walrus deploy key is ${TOKEN} for the staging box.`;
+/** A made-up password typed in prose, more than the snippet's 16 words after "password": never a real one. */
+const FAR_PASSWORD = "Xk8#pLm2Qw";
+const FAR = `PROBE-FAR my password for the build box that we set up last spring on the shared rack beside the old printer near the window is ${FAR_PASSWORD} for the pangolin queue.`;
 const WORD = "walrus";
 /** A word only a tool's output holds: the command that prints it never spells it. */
 const OUTPUT_WORD = "capybaraledger";
@@ -118,7 +125,7 @@ interface Found {
   results: {
     id: string;
     kind: string;
-    moments?: { excerpt: string; secrets?: unknown }[];
+    moments?: { excerpt: string; secrets?: unknown; context?: unknown }[];
   }[];
 }
 
@@ -164,13 +171,15 @@ const openFind = async (page: Page) => {
 
 /** What the result row of `id` draws, read from the DOM once every machine answered. */
 const readRow = async (page: Page, id: string) => {
-  const row = page.locator(`[data-key="conversation:${id}"]`).first();
-  await row.waitFor({ state: "visible", timeout: 60_000 });
+  // Every machine answered whole ("All machines answered", no "still
+  // indexing"): an answer while an index catches up may be short, and the
+  // one after it can take the row away under the leg.
   await page
     .locator('[data-slot="covered"]')
     .first()
-    .waitFor({ state: "visible", timeout: 30_000 })
-    .catch(() => undefined);
+    .waitFor({ state: "visible", timeout: 60_000 });
+  const row = page.locator(`[data-key="conversation:${id}"]`).first();
+  await row.waitFor({ state: "visible", timeout: 30_000 });
   return row;
 };
 
@@ -278,6 +287,47 @@ const leg = async (
       before.text.toLowerCase().includes(WORD),
     JSON.stringify(before)
   );
+  // The dots stand where a touch or a pointer reaches them: inside what
+  // their line draws (a phone wraps it to two lines), not cut by its
+  // ellipsis, and nothing above them takes the press.
+  // Read where the person presses, once the rows stand still: a row that
+  // arrives is uncovered by a clip (motion/rows.svelte.ts), and takes no
+  // press until it stands whole.
+  const reachOf = () =>
+    masked.first().evaluate((dots) => {
+      const box = dots.getBoundingClientRect();
+      const line = dots
+        .closest('[data-slot="reason"]')
+        ?.firstElementChild?.getBoundingClientRect();
+      const top = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2
+      );
+      return {
+        inside: line
+          ? box.left >= line.left - 0.5 &&
+            box.right <= line.right + 0.5 &&
+            box.top >= line.top - 0.5 &&
+            box.bottom <= line.bottom + 0.5
+          : false,
+        onTop: top?.closest("[data-secret]") === dots,
+        box: [box.left, box.top, box.width, box.height].map(Math.round),
+        line: line
+          ? [line.left, line.top, line.width, line.height].map(Math.round)
+          : null,
+      };
+    });
+  const reach = await until(
+    "the dots take a press",
+    reachOf,
+    (read) => read.inside && read.onTop,
+    5000
+  ).catch(reachOf);
+  kit.check(
+    `a ${name}: the dots stand inside their line, not cut by its ellipsis, and a press at their middle lands on them`,
+    reach.inside && reach.onTop,
+    JSON.stringify(reach)
+  );
   const url = page.url();
   await masked.first().click();
   const shown = row.locator('[data-slot="secret"][data-shown]');
@@ -375,6 +425,8 @@ const run = async (kit: Kit) => {
   await tell(fleet, secret.id, SAID);
   const tooled = await sessionIn(fleet, "Ledger run", cwd, project.id);
   await tell(fleet, tooled.id, RUN);
+  const far = await sessionIn(fleet, "Build box", cwd, project.id);
+  await tell(fleet, far.id, FAR);
   const asker = await sessionIn(fleet, "Asker", cwd, project.id);
 
   const held = await until(
@@ -387,13 +439,40 @@ const run = async (kit: Kit) => {
     INDEXED_MS
   ).catch(() => undefined);
   kit.check(
-    "the machine's index holds the secret's turn, and the hub names its secret in the excerpt",
+    "the machine's index holds the secret's turn, and the hub names its secret in the excerpt; no moment carries the words around it",
     held?.results.some(
       (result) =>
         result.id === secret.id &&
         result.moments?.some((moment) => Array.isArray(moment.secrets))
-    ) ?? false,
+    ) === true &&
+      held?.results.every((result) =>
+        (result.moments ?? []).every((moment) => moment.context === undefined)
+      ) === true,
     JSON.stringify(held?.results ?? "never held").slice(0, 900)
+  );
+
+  // e: a password typed in prose, the word that tells it outside the excerpt.
+  const prose = await until(
+    "the far password's turn in /api/find",
+    () => engineFind(fleet, "pangolin"),
+    (answer) =>
+      answer.results.some(
+        (result) => result.id === far.id && (result.moments?.length ?? 0) > 0
+      ),
+    INDEXED_MS
+  ).catch(() => undefined);
+  const proseMoment = prose?.results.find((result) => result.id === far.id)
+    ?.moments?.[0];
+  const proseWords = unmarked(proseMoment?.excerpt ?? "");
+  const proseSpans = (proseMoment?.secrets ?? []) as [number, number][];
+  kit.check(
+    'e: a password typed in prose more than 16 words after "password" is named a secret in the excerpt, exactly its own characters, though the excerpt does not hold the word "password"',
+    !proseWords.toLowerCase().includes("password") &&
+      proseSpans.length === 1 &&
+      proseSpans.some(
+        ([start, end]) => proseWords.slice(start, end) === FAR_PASSWORD
+      ),
+    JSON.stringify(proseMoment ?? prose?.results ?? "never held")
   );
 
   // c and d: an agent's find, through the hub's tool door as the asker.

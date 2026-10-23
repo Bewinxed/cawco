@@ -119,7 +119,8 @@
           tabindex="-1"
           type="button"
         >
-          <span class="flex-1 min-w-0 truncate"
+          <span
+            class="flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap group-data-phone/peek:whitespace-normal group-data-phone/peek:line-clamp-2 group-data-phone/peek:line-clamp-std-2 group-data-phone/peek:overflow-clip"
             >{AUTHOR[moment.author]}{#if moment.at !== null}<span
                 class="px-space-1">·</span
               ><span data-slot="num" class="num">{age(moment.at, now)}</span
