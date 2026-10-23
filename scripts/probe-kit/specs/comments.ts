@@ -9511,7 +9511,8 @@ const draftChecks = async (on: On) => {
  * design-graph mockup's app.js rebuilds its panels: emptied, then filled two
  * frames later, every 400 ms. Each row's value reads the same words, so only
  * its place names it. `probeRedraw.stop()` empties it for good; `back()`
- * fills it once.
+ * fills it once; `hold()` stops the redraws with the panel filled and
+ * `go()` starts them again; `fills` counts every fill.
  */
 const REDRAW_PAGE = `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9528,26 +9529,52 @@ const REDRAW_PAGE = `<!doctype html>
 <script>
   const panel = document.getElementById("panel");
   const rows = ["Name", "When", "At", "Time zone"];
+  let fills = 0;
+  let held = false;
   const fill = () => {
     panel.innerHTML = rows
       .map((label) => '<div class="row"><span class="label">' + label + '</span><span class="value">Not set</span></div>')
       .join("");
+    fills += 1;
   };
   const redraw = () => {
     panel.replaceChildren();
-    requestAnimationFrame(() => requestAnimationFrame(fill));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      fill();
+      if (held) {
+        clearInterval(timer);
+      }
+    }));
   };
   fill();
-  const timer = setInterval(redraw, 400);
+  let timer = setInterval(redraw, 400);
   window.probeRedraw = {
     stop: () => {
       clearInterval(timer);
       panel.replaceChildren();
     },
     back: () => fill(),
+    hold: () => {
+      held = true;
+      if (panel.children.length > 0) {
+        clearInterval(timer);
+      }
+    },
+    go: () => {
+      held = false;
+      clearInterval(timer);
+      timer = setInterval(redraw, 400);
+    },
+    get fills() {
+      return fills;
+    },
   };
 </script>
 </body></html>`;
+/** The redraw page's own handle on its redraws, as the leg reaches it. */
+interface Redraw {
+  probeRedraw: { fills: number; go: () => void; hold: () => void };
+}
 /** The value the redraw leg pins: the second row's, whose words every row's value reads. */
 const REDRAWN = "#panel .row:nth-child(2) .value";
 
@@ -9610,11 +9637,17 @@ const redrawChecks = async (on: On) => {
   await frame.waitForSelector(REDRAWN);
   await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
   await pageInComment(frame, true);
-  // Pressed while it stands, then written over three of its redraws.
-  // Read once the frame is the pane's current one, shown and taking presses
-  // (PreviewPane: a frame standing in while its next load comes is inert).
+  // Pressed while it stands, then written over three of its redraws. The
+  // redraws are held for the press (the panel left filled), so the press
+  // lands on the value whatever the machine's pace: an emptied panel
+  // standing two frames under load took a press meant for the value, and
+  // the comment went on #panel. Read once the frame is the pane's current
+  // one, shown and taking presses (PreviewPane: a frame standing in while
+  // its next load comes is inert), and the value's box the same two frames
+  // running.
+  await frame.evaluate(() => (window as unknown as Redraw).probeRedraw.hold());
   const value = await until(
-    "the second row's value drawn, in the pane's current frame",
+    "the second row's value drawn and standing still, in the pane's current frame",
     async () => {
       const current = await (
         await frame.frameElement()
@@ -9625,7 +9658,29 @@ const redrawChecks = async (on: On) => {
             (el as HTMLIFrameElement).hasAttribute("data-ready")
         )
         .catch(() => false);
-      return current
+      const still =
+        current &&
+        (await frame
+          .evaluate(
+            (sel) =>
+              new Promise<boolean>((done) => {
+                const read = () => {
+                  const r = document
+                    .querySelector(sel)
+                    ?.getBoundingClientRect();
+                  return r ? `${r.x},${r.y},${r.width},${r.height}` : null;
+                };
+                const first = read();
+                requestAnimationFrame(() =>
+                  requestAnimationFrame(() =>
+                    done(first !== null && first === read())
+                  )
+                );
+              }),
+            REDRAWN
+          )
+          .catch(() => false));
+      return still
         ? await screenBox(on, frame, REDRAWN).catch(() => undefined)
         : undefined;
     },
@@ -9639,7 +9694,19 @@ const redrawChecks = async (on: On) => {
     value.y + value.h / 2,
     null
   );
-  await settle(on.page, 1300);
+  // The redraws again, and the comment written once three have passed: the
+  // page's own count of them, not a span of time.
+  const pressedAt = await frame.evaluate(() => {
+    const redraw = (window as unknown as Redraw).probeRedraw;
+    redraw.go();
+    return redraw.fills;
+  });
+  await frame.waitForFunction(
+    (n) => (window as unknown as Redraw).probeRedraw.fills >= n + 3,
+    pressedAt,
+    { timeout: 15_000 }
+  );
+  await settle(on.page, 0);
   await on.page
     .locator(COMPOSE)
     .getByRole("combobox")
