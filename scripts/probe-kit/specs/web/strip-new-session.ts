@@ -47,6 +47,7 @@ import { commonWords } from "../../../../packages/core/src/words/common";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
+import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 
 const PLUS = '[data-slot="strip-new"] [data-tnew]';
 const POPOVER = "[data-ns-popover]";
@@ -1029,7 +1030,7 @@ const turnActions = (page: Page) =>
 async function forkHereLeg(kit: Kit, base: string, source: string) {
   const page = await popoverPage(kit, base, source, "light");
   const fork = page
-    .getByRole("button", { name: "Fork from here" })
+    .getByRole("button", { name: transcriptWords.forkFromHere })
     .filter({ visible: true })
     .last();
   const offered = await fork
@@ -1100,7 +1101,7 @@ async function forkHereLeg(kit: Kit, base: string, source: string) {
   );
   kit.check(
     "1440 (fine): Esc closes it, the focus back on Fork from here",
-    back === "Fork from here",
+    back === transcriptWords.forkFromHere,
     `focus on ${back}`
   );
   await page.close();
@@ -1138,7 +1139,7 @@ async function reviveLeg(
   await field.click();
   await page.keyboard.type(revive.words);
   await page
-    .getByRole("button", { name: "Send message" })
+    .getByRole("button", { name: transcriptWords.sendMessage })
     .filter({ visible: true })
     .first()
     .click();

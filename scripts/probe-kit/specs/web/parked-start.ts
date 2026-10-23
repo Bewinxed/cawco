@@ -60,6 +60,7 @@ import {
   type Spec,
   settle,
 } from "../../kit";
+import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 
 /** The form on a desk: the popover. */
 const DESK_FORM = "[data-ns-popover]";
@@ -468,7 +469,7 @@ async function openContinue(page: Page, sourceUrl: string) {
   await tab.waitFor({ state: "visible", timeout: 60_000 });
   await tab.click({ button: "right" });
   const item = page
-    .getByRole("menuitem", { name: "Continue in new session…" })
+    .getByRole("menuitem", { name: transcriptWords.continueInNew })
     .first();
   await item.waitFor({ state: "visible", timeout: 10_000 });
   await item.click();

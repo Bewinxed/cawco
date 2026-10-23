@@ -25,6 +25,7 @@ import {
   type Leg,
   shows,
 } from "./suite";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 const SAID = "JOURNEY-SAID";
 const MORE = "JOURNEY-MORE";
@@ -166,7 +167,7 @@ async function walk(leg: Leg): Promise<void> {
         `opened at ${at}; the transcript holds the words in ${records.join(", ") || "no record"}`
       );
       const said = page
-        .getByRole("log", { name: "Session transcript" })
+        .getByRole("log", { name: transcriptWords.transcript })
         .getByText(nonce)
         .filter({ visible: true })
         .first();

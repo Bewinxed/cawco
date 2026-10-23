@@ -25,7 +25,6 @@
     "Full Send": 1,
     "in its own view": 1,
     "Permission mode:": 1,
-    "Send message": 1,
     "Session details": 1,
     "Switch to Full Send": 1
   },
@@ -40,15 +39,13 @@
   },
   "scripts/probe-kit/journeys/j7-comments.ts": {
     "Comments on": 1,
-    "Preview mode": 1,
-    "Session transcript": 1
+    "Preview mode": 1
   },
   "scripts/probe-kit/journeys/j8-routines.ts": {
     "More for": 1
   },
   "scripts/probe-kit/journeys/j9-jump.ts": {
-    "Jump to session": 1,
-    "Session transcript": 1
+    "Jump to session": 1
   },
   "scripts/probe-kit/specs/account-join.ts": {
     "didn't answer": 1,
@@ -191,8 +188,7 @@
     "Show details": 1
   },
   "scripts/probe-kit/specs/composer-canvas.ts": {
-    "didn't open": 1,
-    "Send message": 4
+    "didn't open": 1
   },
   "scripts/probe-kit/specs/config-undo.ts": {
     "More for": 1,
@@ -370,8 +366,7 @@
     "project offer": 1
   },
   "scripts/probe-kit/specs/ios-scroll-up.ts": {
-    "in place": 1,
-    "Session transcript": 1
+    "in place": 1
   },
   "scripts/probe-kit/specs/ios-seen.ts": {
     "active on": 2,
@@ -667,17 +662,8 @@
     "Current context": 1,
     "Fetched. The machines": 1
   },
-  "scripts/probe-kit/specs/web/own-message-actions.ts": {
-    "Cancel edit": 1,
-    "Copy message": 2,
-    "Couldn't send that message.": 1,
-    "Edit message": 4,
-    "Fork from here": 1,
-    "Send edited message": 2
-  },
   "scripts/probe-kit/specs/web/parked-start.ts": {
     "Choose a mode": 1,
-    "Continue in new session…": 1,
     "Continue session": 3,
     "Started on": 2
   },
@@ -706,11 +692,8 @@
   "scripts/probe-kit/specs/web/strip-new-session.ts": {
     "A permission mode must be chosen": 3,
     "Choose a mode": 6,
-    "Couldn't send that message": 1,
-    "Fork from here": 2,
     "Fork session": 2,
     "Nothing was started": 2,
-    "Send message": 1,
     "Start session": 1
   },
   "scripts/probe-kit/specs/web/tabs-region-errors.ts": {

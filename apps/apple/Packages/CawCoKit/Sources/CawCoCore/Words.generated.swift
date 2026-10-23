@@ -786,6 +786,33 @@ public enum Words {
         public static let sendAgain = "Send again"
     }
 
+    public enum Transcript {
+        // packages/core/src/words/transcript.ts `transcriptWords`
+        /// The transcript's landmark, as a screen reader names it.
+        public static let transcript = "Session transcript"
+
+        /// The composer's send.
+        public static let sendMessage = "Send message"
+
+        /// A message's actions, under it.
+        public static let copyMessage = "Copy message"
+
+        public static let editMessage = "Edit message"
+
+        public static let forkFromHere = "Fork from here"
+
+        /// An edit's controls.
+        public static let cancelEdit = "Cancel edit"
+
+        public static let sendEdited = "Send edited message"
+
+        /// A send the hub refused, with what it said.
+        public static let notSent = "Couldn't send that message."
+
+        /// A stored session's menu: its words carried into a new session.
+        public static let continueInNew = "Continue in new session…"
+    }
+
     public enum Sidebar {
         // packages/core/src/words/sidebar.ts `sidebarWords`
         /// The projects list is empty and no machine runs CawCo yet.

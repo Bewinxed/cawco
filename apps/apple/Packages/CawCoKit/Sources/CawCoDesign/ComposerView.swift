@@ -1040,7 +1040,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             gradient.isHidden = !enabled && action == .send
             actionBox.backgroundColor = Palette.actionSolid
             actionBox.layer.borderWidth = 0
-            actionBox.accessibilityLabel = action == .stop ? "Stop the agent" : "Send message"
+            actionBox.accessibilityLabel = action == .stop ? "Stop the agent" : Words.Transcript.sendMessage
             // Said as it is drawn: a dimmed box is "dimmed" to VoiceOver too.
             actionBox.accessibilityTraits = actionBox.isEnabled ? .button : [.button, .notEnabled]
         }

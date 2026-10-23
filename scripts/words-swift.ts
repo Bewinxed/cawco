@@ -71,6 +71,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/common.ts", export: "commonWords", as: "" }],
   },
   {
+    // A session's transcript and its composer.
+    swift: "Transcript",
+    members: [{ file: "words/transcript.ts", export: "transcriptWords", as: "" }],
+  },
+  {
     swift: "Sidebar",
     members: [{ file: "words/sidebar.ts", export: "sidebarWords", as: "" }],
   },

@@ -19,6 +19,7 @@ import {
   shows,
   unmet,
 } from "./suite";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 /** How the comments notice opens (core injected.ts `artifactCommentsNotice`). */
 const NOTICE = "[CawCo] The person commented on the page";
@@ -148,7 +149,7 @@ async function walk(leg: Leg): Promise<void> {
       );
       await shows(
         page
-          .getByRole("log", { name: "Session transcript" })
+          .getByRole("log", { name: transcriptWords.transcript })
           .getByText(`Comments on ${PAGE}`),
         `the session's “Comments on ${PAGE}” line`
       );

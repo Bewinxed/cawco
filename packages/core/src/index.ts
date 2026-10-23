@@ -2241,6 +2241,7 @@ export * from "./words/sidebar";
 export * from "./words/skills";
 export * from "./words/spend";
 export * from "./words/tailnet";
+export * from "./words/transcript";
 export * from "./words/views";
 export * from "./words/work";
 export * from "./words/workspace-needs";

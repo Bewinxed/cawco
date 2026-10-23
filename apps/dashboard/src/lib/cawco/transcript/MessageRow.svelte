@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { transcriptWords } from "@cawco/core";
   import type { HarnessKind, PermissionMode } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -456,7 +457,7 @@
       return recovery.line;
     }
     const said = recovery?.line ?? reason;
-    return `Couldn't send that message.${said ? ` ${said}` : ""}`;
+    return `${transcriptWords.notSent}${said ? ` ${said}` : ""}`;
   });
   /**
    * A retry goes out from this row and says so on its button, pending in
@@ -715,7 +716,7 @@
             {#if editing}
               <Textarea
                 aria-describedby={`${message.id}-edit-cost`}
-                aria-label="Edit message"
+                aria-label={transcriptWords.editMessage}
                 disabled={editPending}
                 onkeydown={editKeydown}
                 bind:ref={editor}
@@ -742,14 +743,14 @@
                   size="xs"
                   variant="outline"
                 >
-                  Cancel edit
+                  {transcriptWords.cancelEdit}
                 </Button>
                 <Button
                   aria-describedby={`${message.id}-edit-cost`}
                   data-slot="action"
                   disabled={!(canEdit && editContent.trim())}
                   failed={!!editError}
-                  label="Send edited message"
+                  label={transcriptWords.sendEdited}
                   onclick={submitEdit}
                   pending={editPending || modePending}
                   pendingLabel="Sending…"
@@ -943,7 +944,7 @@
                         size="xs"
                         variant="outline"
                       >
-                        Edit message
+                        {transcriptWords.editMessage}
                       </Button>
                     {/if}
                   {/if}
@@ -969,12 +970,12 @@
             class="flex flex-wrap justify-end gap-space-1 mt-space-1 -me-space-2 opacity-0 pointer-events-none motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto has-focus-visible:opacity-100 has-focus-visible:pointer-events-auto data-pending:opacity-100 data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
           >
             {#if canCopy}
-              <Tip label="Copy message">
+              <Tip label={transcriptWords.copyMessage}>
                 {#snippet children(tip)}
                   <Button
                     {...tip}
                     aria-busy={copying || undefined}
-                    aria-label="Copy message"
+                    aria-label={transcriptWords.copyMessage}
                     onclick={whileIdle<MouseEvent>(() => copying, copyWords)}
                     size="icon-sm"
                     variant="ghost"
@@ -989,11 +990,11 @@
               </Tip>
             {/if}
             {#if editsHere}
-              <Tip label="Edit message">
+              <Tip label={transcriptWords.editMessage}>
                 {#snippet children(tip)}
                   <Button
                     {...tip}
-                    aria-label="Edit message"
+                    aria-label={transcriptWords.editMessage}
                     onclick={startEditing}
                     size="icon-sm"
                     variant="ghost"
@@ -1004,13 +1005,13 @@
               </Tip>
             {/if}
             {#if canFork}
-              <Tip label="Fork from here">
+              <Tip label={transcriptWords.forkFromHere}>
                 {#snippet children(tip)}
                   <Button
                     {...tip}
                     aria-busy={forkPending || undefined}
                     aria-disabled={forkPending || undefined}
-                    aria-label="Fork from here"
+                    aria-label={transcriptWords.forkFromHere}
                     onclick={whileIdle<MouseEvent>(() => forkPending, branch)}
                     size="icon-sm"
                     variant="ghost"

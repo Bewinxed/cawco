@@ -37,6 +37,7 @@ import {
   type Leg,
   shows,
 } from "./suite";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 const SPAWN = "JOURNEY-SPAWN";
 const START = /^Start/;
@@ -371,7 +372,7 @@ async function walk(leg: Leg): Promise<void> {
     .filter({ visible: true })
     .first();
   const sendButton = page
-    .getByRole("button", { name: "Send message" })
+    .getByRole("button", { name: transcriptWords.sendMessage })
     .filter({ visible: true })
     .first();
   const childLink = page.getByRole("link", {

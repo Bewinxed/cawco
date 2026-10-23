@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { transcriptWords } from "@cawco/core";
   import type { NeutralSessionInfo } from "@cawco/core";
   /**
    * Right-click on a stored session, wherever one is listed. The row itself stays
@@ -162,7 +163,7 @@
         })}
     >
       <IconArrowRight />
-      <span>Continue in new session…</span>
+      <span>{transcriptWords.continueInNew}</span>
     </ContextMenu.Item>
     <ContextMenu.Item onSelect={() => window.open(href, "_blank", "noopener")}>
       <IconExternal />
@@ -170,7 +171,7 @@
     </ContextMenu.Item>
     <ContextMenu.PendingItem
       icon={IconFork}
-      label="Fork from here"
+      label={transcriptWords.forkFromHere}
       pendingLabel="Forking…"
       run={fork}
     />

@@ -52,6 +52,7 @@ import {
   settle,
   type View,
 } from "../../kit";
+import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 
 const ONE = "hello";
 const LONG =
@@ -428,7 +429,7 @@ async function copyEditLeg(
 ) {
   await reveal(page, LONG, touch);
   const turn = byId(page, await idOf(page, LONG));
-  const copy = turn.getByRole("button", { name: "Copy message" });
+  const copy = turn.getByRole("button", { name: transcriptWords.copyMessage });
   if (touch) {
     await copy.tap();
   } else {
@@ -450,19 +451,19 @@ async function copyEditLeg(
     pasted
   );
   await reveal(page, LONG, touch);
-  const edit = turn.getByRole("button", { name: "Edit message" });
+  const edit = turn.getByRole("button", { name: transcriptWords.editMessage });
   if (touch) {
     await edit.tap();
   } else {
     await edit.click();
   }
   await settle(page, 300);
-  const state = await turn.evaluate((el) => {
+  const state = await turn.evaluate((el, sendEdited) => {
     const field = el.querySelector("textarea");
     const cost = el.querySelector('[data-slot="edit-cost"]');
     const send = [...el.querySelectorAll("button")].find(
       // A pending button keeps both its words in one cell: its text starts with its label.
-      (b) => b.textContent?.trim().startsWith("Send edited message")
+      (b) => b.textContent?.trim().startsWith(sendEdited)
     );
     const c = cost?.getBoundingClientRect();
     const s = send?.getBoundingClientRect();
@@ -477,7 +478,7 @@ async function copyEditLeg(
       described:
         field?.getAttribute("aria-describedby") === cost?.id && !!cost?.id,
     };
-  });
+  }, transcriptWords.sendEdited);
   kit.check(
     `${label}: Edit message opens the words in place, the cost said above Send edited message`,
     state.value === LONG &&
@@ -487,7 +488,7 @@ async function copyEditLeg(
       state.described,
     JSON.stringify(state)
   );
-  const cancel = turn.getByRole("button", { name: "Cancel edit" });
+  const cancel = turn.getByRole("button", { name: transcriptWords.cancelEdit });
   if (touch) {
     await cancel.tap();
   } else {
@@ -518,7 +519,7 @@ async function keyboardLeg(kit: Kit, page: Page, label: string) {
     (document.activeElement as HTMLElement | null)?.blur();
     window.scrollTo(0, 0);
   });
-  const presses = await tabTo(page, LONG, "Copy message");
+  const presses = await tabTo(page, LONG, transcriptWords.copyMessage);
   await settle(page, 350);
   const shown = await page.evaluate(measure, LONG);
   kit.check(
@@ -543,7 +544,7 @@ async function keyboardLeg(kit: Kit, page: Page, label: string) {
   await page.evaluate(() =>
     (document.activeElement as HTMLElement | null)?.blur()
   );
-  const toEdit = await tabTo(page, LONG, "Edit message");
+  const toEdit = await tabTo(page, LONG, transcriptWords.editMessage);
   await page.keyboard.press("Enter");
   await settle(page, 300);
   const editing = await page.evaluate(
@@ -587,12 +588,12 @@ async function forkLeg(
     await page.evaluate(() =>
       (document.activeElement as HTMLElement | null)?.blur()
     );
-    await tabTo(page, LONG, "Fork from here");
+    await tabTo(page, LONG, transcriptWords.forkFromHere);
     await page.keyboard.press("Enter");
   } else {
     await reveal(page, LONG, how === "tap");
     const fork = turnOf(page, LONG).getByRole("button", {
-      name: "Fork from here",
+      name: transcriptWords.forkFromHere,
     });
     if (how === "tap") {
       await fork.tap();
@@ -655,13 +656,13 @@ const spec: Spec = {
     }
 
     const findings: string[] = [];
-    const full = ["Copy message", "Edit message", "Fork from here"];
-    const queued = ["Copy message", "Edit message"];
+    const full = [transcriptWords.copyMessage, transcriptWords.editMessage, transcriptWords.forkFromHere];
+    const queued = [transcriptWords.copyMessage, transcriptWords.editMessage];
     for (const leg of LEGS) {
       const page = await sessionPage(kit, base, source, leg);
       // The session's first message has no answer above it to rewind to or
       // branch from: Copy alone.
-      await rowLeg(kit, page, leg.label, ONE, ["Copy message"], leg.touch);
+      await rowLeg(kit, page, leg.label, ONE, [transcriptWords.copyMessage], leg.touch);
       await rowLeg(kit, page, leg.label, LONG, full, leg.touch);
       await rowLeg(kit, page, leg.label, AFTER, full, leg.touch);
       await copyEditLeg(kit, page, leg.label, leg.touch);
@@ -788,9 +789,9 @@ async function failedLeg(kit: Kit, base: string, source: string) {
     }));
   kit.check(
     "1440: a failed send's row holds Copy message alone; Send again stands in its failure block under the reason",
-    row.join("|") === "Copy message" &&
+    row.join("|") === transcriptWords.copyMessage &&
       failure.actions.some((one) => one?.startsWith(commonWords.sendAgain)) &&
-      (failure.reason ?? "").startsWith("Couldn't send that message."),
+      (failure.reason ?? "").startsWith(transcriptWords.notSent),
     JSON.stringify({ row, failure })
   );
   await page.close();
@@ -805,7 +806,7 @@ async function liftLeg(kit: Kit, base: string, held: string) {
   });
   await reveal(page, text, false);
   await turnOf(page, text)
-    .getByRole("button", { name: "Edit message" })
+    .getByRole("button", { name: transcriptWords.editMessage })
     .click();
   const field = page.locator(COMPOSER).filter({ visible: true }).first();
   const lifted = await until(
@@ -842,10 +843,10 @@ async function rewindLeg(
   });
   await reveal(page, LONG, false);
   const turnRow = byId(page, await idOf(page, LONG));
-  await turnRow.getByRole("button", { name: "Edit message" }).click();
-  const field = turnRow.getByRole("textbox", { name: "Edit message" });
+  await turnRow.getByRole("button", { name: transcriptWords.editMessage }).click();
+  const field = turnRow.getByRole("textbox", { name: transcriptWords.editMessage });
   await field.fill(EDITED);
-  await turnRow.getByRole("button", { name: "Send edited message" }).click();
+  await turnRow.getByRole("button", { name: transcriptWords.sendEdited }).click();
   const read = () =>
     page.evaluate(() =>
       [

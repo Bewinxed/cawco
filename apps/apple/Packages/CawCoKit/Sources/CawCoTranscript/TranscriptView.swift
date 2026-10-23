@@ -246,7 +246,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         collection.keyboardDismissMode = .interactive
         collection.selfSizingInvalidation = .enabledIncludingConstraints
         collection.contentInset.bottom = Space.space5
-        collection.accessibilityLabel = "Session transcript"
+        collection.accessibilityLabel = Words.Transcript.transcript
         collection.translatesAutoresizingMaskIntoConstraints = false
         addSubview(collection)
         NSLayoutConstraint.activate([

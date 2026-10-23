@@ -68,6 +68,7 @@ import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 const AXE = "/opt/homebrew/bin/axe";
 /** The paired captures of the board's page with a view placed on it, by device. */
@@ -1060,7 +1061,7 @@ async function askViewLeg(
   // The popover opens with Caw's field taking the keyboard: the words go straight in.
   await device.type(words);
   since = device.heard.length;
-  await device.choose("Send message", true);
+  await device.choose(transcriptWords.sendMessage, true);
   const thread = await device
     .next(
       "the hub's thread for the ask",

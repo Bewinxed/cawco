@@ -106,6 +106,7 @@ import {
   VIEWS,
 } from "../kit";
 import { emulateMotion } from "../motion";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 const PILL = 'form[data-slot="cin"]';
 const FIELD = COMPOSER;
@@ -736,7 +737,7 @@ const swapCheck = async (on: On, clock: Clock) => {
     await until(
       "the button back on Send",
       () => page.locator(SEND).getAttribute("aria-label"),
-      (label) => label === "Send message",
+      (label) => label === transcriptWords.sendMessage,
       60_000
     );
     await page.focus(FIELD);
@@ -786,7 +787,7 @@ const swapCheck = async (on: On, clock: Clock) => {
         };
       }, SEND);
     const settledNow = (seen: Awaited<ReturnType<typeof button>>) =>
-      seen.label === "Send message" && seen.busy === null && seen.leaving === 0;
+      seen.label === transcriptWords.sendMessage && seen.busy === null && seen.leaving === 0;
     const ready = await until(
       "the last press settled",
       button,
@@ -872,7 +873,7 @@ const swapCheck = async (on: On, clock: Clock) => {
   await until(
     "the button back on Send",
     () => page.locator(SEND).getAttribute("aria-label"),
-    (label) => label === "Send message",
+    (label) => label === transcriptWords.sendMessage,
     60_000
   ).catch(() => undefined);
   await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
@@ -2083,7 +2084,7 @@ const heldExportCheck = async (on: On) => {
       sent === 0 &&
       after2.field === words &&
       after2.canvas &&
-      after2.label === "Send message" &&
+      after2.label === transcriptWords.sendMessage &&
       after2.busy === null,
     `held ${held} export request(s); said after ${after} ms: "${said}"; sent ${sent}; ${JSON.stringify(after2)}`
   );

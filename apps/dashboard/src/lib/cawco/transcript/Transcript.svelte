@@ -29,7 +29,7 @@
 </script>
 
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { transcriptWords, commonWords } from "@cawco/core";
   /**
    * The scrolling transcript: the folded rows, virtualized. The live tail rides
    * as rows of its own (see `buildRowsFrom`), so streaming text, an open reasoning
@@ -3905,7 +3905,7 @@
 <div
   data-tx-columns
   data-slot="tr"
-  aria-label="Session transcript"
+  aria-label={transcriptWords.transcript}
   style:--foot-room={"max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"}
   class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
   {onscroll}
