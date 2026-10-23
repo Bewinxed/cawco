@@ -32492,6 +32492,27 @@ export const createServer = (
               ) {
                 break;
               }
+              // The containers its work started stopped as it ended (agent
+              // session-containers.ts): its parent, else it, is told. Read
+              // before an ended session's frames are dropped: the agent says
+              // it once their stop timeouts have run, after its stop was
+              // confirmed (r180: the agent's line was there, the hub's never).
+              if (kind === "frame" && message.instanceId) {
+                const said = (
+                  message.payload as FramePayload & { kind: "frame" }
+                ).message;
+                if (
+                  said.type === "system" &&
+                  said.subtype === CONTAINERS_ENDED
+                ) {
+                  tellContainersEnded(
+                    message.machineId,
+                    message.instanceId,
+                    said as { uuid?: unknown; content?: unknown }
+                  );
+                  break;
+                }
+              }
               if (
                 ownedSession?.endConfirmedAt &&
                 (kind === "frame" ||
@@ -32704,19 +32725,6 @@ export const createServer = (
                   frame.message.subtype === LEAK_FOUND
                 ) {
                   tellLeak(
-                    message.machineId,
-                    message.instanceId,
-                    frame.message as { uuid?: unknown; content?: unknown }
-                  );
-                  break;
-                }
-                // The containers its work started stopped as it ended (agent
-                // session-containers.ts): its parent, else it, is told.
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === CONTAINERS_ENDED
-                ) {
-                  tellContainersEnded(
                     message.machineId,
                     message.instanceId,
                     frame.message as { uuid?: unknown; content?: unknown }
