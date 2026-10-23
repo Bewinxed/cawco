@@ -519,38 +519,14 @@ const DIR_OR_FILE = ["(", "-type", "d", "-o", "-type", "f", ")"];
  * or file of its own, which srt binds onto itself and so leaves nothing on
  * the host. One that is absent is never denied to srt, which would make its
  * mount point in the person's folder.
+ *
+ * Every one, empty or not: an empty `.claude/hooks` or `.vscode` is the
+ * person's, and a hook planted there runs in their own Claude Code. CawCo
+ * makes no stand-in in a place (stand-ins.ts `removeStandIns`), so nothing
+ * there is CawCo's to leave unbound; one an earlier build made is denied
+ * like the rest, which only keeps it as it is.
  */
-const protectedIn = async (root: string): Promise<string[]> => {
-  const found = await foundProtected(root);
-  const made = await Promise.all(
-    found.map((path) => standInAsMade(root, path))
-  );
-  return found.filter((_, at) => !made[at]);
-};
-
-/**
- * Whether `path` is still exactly a stand-in an earlier build made in a
- * place (an empty dir, or a file holding a stand-in's text): left
- * unbound so the agent can take it away (stand-ins.ts `removeStandIns`); the
- * place's guard still sees every change to it.
- */
-const standInAsMade = async (root: string, path: string): Promise<boolean> => {
-  const texts = new Set(
-    cloneDenies(root).flatMap(({ empty }) =>
-      empty.kind === "file" ? [empty.text] : []
-    )
-  );
-  const found = await stat(path).catch(() => undefined);
-  if (found?.isDirectory()) {
-    return (await readdir(path).catch(() => ["?"])).length === 0;
-  }
-  return (
-    found?.isFile() === true &&
-    texts.has(await readFile(path, "utf8").catch(() => "\0"))
-  );
-};
-
-const foundProtected = async (root: string): Promise<string[]> =>
+const protectedIn = async (root: string): Promise<string[]> =>
   findIn(
     root,
     [

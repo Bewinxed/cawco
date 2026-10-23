@@ -6835,10 +6835,29 @@ const OWN_INODE_BATCH = 64;
 /** A multi-linked file as `find -printf '%D %i %p\0'` names it: its device, inode and path. */
 const LINKED_FILE = /^(\d+) (\d+) (.*)$/s;
 
-/** The files under `root` with more than one link, each with its inode as `<device> <inode>`. */
+/**
+ * The files under `root` with more than one link, each with its inode as
+ * `<device> <inode>`: GNU find names both (`-printf`); BSD find (macOS) has
+ * no `-printf`, so each file it lists is looked up.
+ */
 const linkedFiles = async (
   root: string
 ): Promise<{ inode: string; file: string }[]> => {
+  if (process.platform === "darwin") {
+    const listed =
+      await Bun.$`/usr/bin/find ${root} -xdev -type f -links +1 -print0`
+        .env(hostEnvironment())
+        .quiet()
+        .nothrow();
+    const files = listed.stdout.toString().split("\0").filter(Boolean);
+    const found = await Promise.all(
+      files.map(async (file) => {
+        const info = await lstat(file).catch(() => undefined);
+        return info ? [{ inode: `${info.dev} ${info.ino}`, file }] : [];
+      })
+    );
+    return found.flat();
+  }
   const listed =
     await Bun.$`/usr/bin/find ${root} -xdev -type f -links +1 -printf ${"%D %i %p\\0"}`
       .env(hostEnvironment())
@@ -6854,7 +6873,31 @@ const linkedFiles = async (
 };
 
 /**
- * Gives every file in a Linux clone an inode of its own, but one it shares
+ * A copy of `file` at `copy` with an inode of its own: on macOS an APFS
+ * clone (`cp -c`, clonefile(2): "the cloned file dst shares its data blocks
+ * with the src file but has its own copy of attributes"), which costs no
+ * space, since Bun's `copyFile` there copies the data (`fcopyfile` with
+ * `COPYFILE_DATA`); elsewhere a reflink where the filesystem has them, else
+ * a copy.
+ */
+const copyApart = async (file: string, copy: string): Promise<void> => {
+  if (process.platform === "darwin") {
+    const cloned = await Bun.$`/bin/cp -c ${file} ${copy}`
+      .env(hostEnvironment())
+      .quiet()
+      .nothrow();
+    if (cloned.exitCode !== 0) {
+      throw new Error(
+        `${file} could not be cloned apart: ${cloned.stderr.toString().trim() || `cp exited ${cloned.exitCode}`}`
+      );
+    }
+    return;
+  }
+  await copyFile(file, copy, constants.COPYFILE_FICLONE);
+};
+
+/**
+ * Gives every file in a clone an inode of its own, but one it shares
  * with the workspaces' bun cache, and answers how many it copied. bun
  * installs by hardlinking from its cache, so a clone installed from the
  * host's bun cache shares inodes with it and every host tree installed from
@@ -6867,7 +6910,9 @@ const linkedFiles = async (
  * never beside an older generation still running in the clone at a handover
  * ({@link launch}); and as a clone is cut, right after git made it
  * (workspace.ts `createWorkspace`), so a cut cut short before its boundary
- * leaves no husk sharing the source's objects.
+ * leaves no husk sharing the source's objects. On macOS only there, where
+ * git's local clone links the source's objects too and each copy is an APFS
+ * clone ({@link copyApart}).
  */
 export const ownInodes = async (path: string): Promise<number> => {
   const linked = await linkedFiles(path);
@@ -6886,7 +6931,7 @@ export const ownInodes = async (path: string): Promise<number> => {
     await Promise.all(
       files.slice(at, at + OWN_INODE_BATCH).map(async (file) => {
         const copy = `${file}.cawco-own-inode`;
-        await copyFile(file, copy, constants.COPYFILE_FICLONE);
+        await copyApart(file, copy);
         await chmod(copy, (await stat(file)).mode);
         await rename(copy, file);
       })
