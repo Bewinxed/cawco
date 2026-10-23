@@ -29,6 +29,7 @@
     unwatchDelegate,
     watchDelegate,
   } from "./client.svelte";
+  import { provideEntrance } from "./hover-entrance";
   import { dur, easeOut, lifting, motionOk } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
 
@@ -147,6 +148,8 @@
    * the rise and a size tween a frame behind it.
    */
   let entered = $state(false);
+  // What it holds lands within that entrance (hover-entrance.ts).
+  provideEntrance(() => !entered);
 
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {

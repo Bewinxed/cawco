@@ -17,6 +17,7 @@
    */
   import type { Component } from "svelte";
   import { tick, untrack } from "svelte";
+  import type { TransitionConfig } from "svelte/transition";
   import {
     describeTool,
     type ToolCallStatus,
@@ -30,6 +31,7 @@
     IconRules,
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
+  import { entrance } from "../hover-entrance";
   import MessageBody from "../MessageBody.svelte";
   import {
     afterSkeleton,
@@ -218,10 +220,17 @@
 
   /**
    * The rows or the facts come by the skeleton's reveal only where its
-   * skeleton stood: drawn in a panel that is coming in (HoverPanel), they
-   * are part of its one entrance, never a second motion a frame behind it.
+   * skeleton stood and the panel holding the tail has come in: while it is
+   * still coming in (HoverPanel, hover-entrance.ts) the skeleton and what
+   * it stood for swap at once, part of its one entrance, never a second
+   * motion a frame behind it.
    */
-  const { arrive, stood } = afterSkeleton();
+  const { arrive: afterIt, stood } = afterSkeleton();
+  const comingIn = entrance();
+  const arrive = (node: Element): TransitionConfig =>
+    comingIn() ? { duration: 0 } : afterIt(node);
+  const leave = (node: HTMLElement): TransitionConfig =>
+    comingIn() ? { duration: 0 } : revealOut(node);
 
   /**
    * The keys on screen, oldest first: SLOTS of them, one more while it
@@ -448,7 +457,7 @@
       aria-label="Loading its transcript"
       class="flex-none flex flex-col"
       role="status"
-      out:revealOut
+      out:leave
       {@attach stood}
     >
       <div
