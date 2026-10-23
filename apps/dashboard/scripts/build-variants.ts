@@ -34,8 +34,9 @@ const OUT = "src/lib/tokens/variants.css";
 const SOURCES = new Glob("src/lib/**/*.{svelte,css}");
 const ROUTES = new Glob("src/routes/**/*.svelte");
 const PAIR = /\[(data|aria)-([a-z-]+)=["']?([a-z0-9-]+)["']?\]/g;
+/** A variant the committed file names, however a printer spaced it. */
 const WRITTEN =
-  /@custom-variant [a-z0-9-]+ \(&\[(data|aria)-([a-z-]+)="([a-z0-9-]+)"\]\);/g;
+  /@custom-variant\s+[a-z0-9-]+\s*\(\s*&\[(data|aria)-([a-z-]+)=["']?([a-z0-9-]+)["']?\]\s*\)\s*;/g;
 /** Tailwind's own boolean ARIA variants, each `[aria-x="true"]`. */
 const ARIA_STATIC = [
   "busy",

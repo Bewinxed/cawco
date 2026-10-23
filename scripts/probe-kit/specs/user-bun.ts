@@ -24,13 +24,18 @@
  *   with the three declared steps passing, and the stand-in recorded
  *   `install --frozen-lockfile`, `run lint:changed` and `run typecheck`, each
  *   run in a clone, not the project's checkout.
+ * - A, on OpenCode and pi: a delegate on each runs the same install through
+ *   its harness's shell tool, recorded in its own clone, so every harness's
+ *   sessions see the same bun.
  * - B, a sheet's stage: a session in a Vite + Svelte checkout (its bun.lock,
  *   nothing installed) makes a component canvas; its stage is live, and the
  *   stand-in recorded the stage clone's `install --frozen-lockfile` and the
  *   stage host (`.cawco/stage/host.mjs`).
  *
  * Then the agent is started again with no bun on its PATH (every dir holding
- * one left out, the stand-in removed):
+ * one left out, the stand-in removed). It runs on its own bun still, as
+ * CawCo's own scripts do (agent boundary.ts `bunScriptRuntime`), so its
+ * workspaces' boundaries start:
  *
  * - C, the landing gate: a second delegate commits and finishes; its
  *   finish_item answer says it did not land, its first step `bun install
@@ -56,7 +61,13 @@ import {
 import { delimiter, dirname, join } from "node:path";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { workWords } from "../../../packages/core/src/words/work";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  type Harness,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
 
@@ -83,14 +94,16 @@ const STORY = "src/Card.stories.js";
 const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 600);
 const STATUS = /"status":"(\w+)"/;
 
-type Tag = "A" | "C";
+type Tag = "A" | "C" | "O" | "P";
 /** A delegate's prompt marker: the report its parent reads never carries it. */
-const TAG = /PROBE-USERBUN-([AC]):/;
-/** What each delegate commits. */
-const FILES: Record<Tag, string> = {
+const TAG = /PROBE-USERBUN-([ACOP]):/;
+/** What each Claude Code delegate commits. */
+const FILES: Record<"A" | "C", string> = {
   A: "src/a.ts",
   C: "src/c.ts",
 };
+/** The delegates on the other harnesses, which only install: OpenCode's, pi's. */
+const HARNESS_OF: Record<"O" | "P", Harness> = { O: "opencode", P: "pi" };
 
 /** `marker` spelled apart in a command, so only the command's output carries it whole. */
 const apart = (marker: string): string =>
@@ -113,8 +126,29 @@ const tool = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
-/** A delegate's turns: A installs first, then each commits its file and finishes once. */
+/**
+ * An OpenCode or pi delegate's turns: the project's install through its
+ * harness's own shell tool (`bash` on both), then done.
+ */
+const installTurn = (request: Seen, tag: "O" | "P"): Reply => {
+  const shell = request.toolNames.find((name) => name.toLowerCase() === "bash");
+  if (request.all.includes(`INSTALLED-${tag}`) || !shell) {
+    return text(shell ? "done" : "no shell tool offered");
+  }
+  const command = `${INSTALL}; echo ${apart(`INSTALLED-${tag}`)}`;
+  return tool(
+    shell,
+    tag === "P"
+      ? { command }
+      : { command, description: "Install the project's dependencies" }
+  );
+};
+
+/** A Claude Code delegate's turns: A installs first, then each commits its file and finishes once. */
 const delegateTurn = (request: Seen, tag: Tag): Reply => {
+  if (tag === "O" || tag === "P") {
+    return installTurn(request, tag);
+  }
   delegateSteps[tag] ??= {};
   const step = delegateSteps[tag];
   if (tag === "A" && !request.all.includes("INSTALLED-A")) {
@@ -354,13 +388,13 @@ const run = async (kit: Kit) => {
       "SELECT state, error, result FROM work_items WHERE id = ?",
       id
     )[0];
-  const delegate = (tag: Tag) =>
+  const delegate = (tag: Tag, harness: Harness = "claude") =>
     fleet.api<{ workItemId: string }>("/api/work-items", {
       parentInstanceId: parent,
       title: `User bun ${tag}`,
-      prompt: `PROBE-USERBUN-${tag}: commit a file, then finish.`,
-      harness: "claude",
-      model: "claude-haiku-4-5",
+      prompt: `PROBE-USERBUN-${tag}: do the probe's steps.`,
+      harness,
+      model: MODEL[harness],
       cwd: ts,
     });
   const realTs = await realpath(ts);
@@ -419,6 +453,31 @@ const run = async (kit: Kit) => {
       ran(argsOf(TYPECHECK)) >= 1,
     callsSaid(afterGate)
   );
+
+  // A, on OpenCode and pi: each delegate's own install, in its own clone.
+  for (const tag of ["O", "P"] as const) {
+    const harness = HARNESS_OF[tag];
+    // biome-ignore lint/performance/noAwaitInLoops: one delegate at a time, each install told apart by the clones before it
+    const clonesBefore = new Set((await calls()).map((one) => one.pwd));
+    await delegate(tag, harness);
+    await until(
+      `${tag}'s install ran`,
+      () => fleet.seen.some((one) => one.all.includes(`INSTALLED-${tag}`)),
+      Boolean,
+      600_000
+    ).catch(() => false);
+    const own = (await calls()).filter(
+      (one) =>
+        one.args === argsOf(INSTALL) &&
+        inClone(one) &&
+        !clonesBefore.has(one.pwd)
+    );
+    check(
+      `A: a ${harness} delegate's \`${INSTALL}\` in its workspace ran the PATH's bun, in its own clone`,
+      own.length === 1,
+      callsSaid(await calls())
+    );
+  }
 
   // B: a sheet's stage.
   const session = await fleet.spawn("claude", "Cards", bunCards);

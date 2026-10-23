@@ -104,9 +104,13 @@ const CSS_VALUE = /:[^;{}]*(?=[;}])/g;
 /** A hex colour, which Prettier prints in lower case. */
 const CSS_HEX = /#[\da-fA-F]{3,8}\b/g;
 
-/** CSS outside comments and strings as Prettier prints its numbers and its values' hex colours. */
+/** A run of spaces or tabs between two words on a line: one space wherever CSS reads it. */
+const CSS_SPACES = /(?<=\S)[ \t]{2,}(?=\S)/g;
+
+/** CSS outside comments and strings as Prettier prints its numbers, its values' hex colours and the spaces between its words. */
 const cssPlain = (css: string): string =>
   css
+    .replace(CSS_SPACES, " ")
     .replace(CSS_DECIMAL, cssDecimal)
     .replace(CSS_VALUE, (value) =>
       value.replace(CSS_HEX, (hex) => hex.toLowerCase())
@@ -114,11 +118,13 @@ const cssPlain = (css: string): string =>
 
 /**
  * `css` with every decimal outside comments and strings as Prettier prints
- * it (`0.010` is `0.01`, `1.50px` is `1.5px`, `.5em` is `0.5em`), and every
- * hex colour in a value in lower case (`#F2D36B` is `#f2d36b`). Bun 1.4.4's
- * `bun fmt` prints both as written, where the canary before it printed them
- * as Prettier does, so a generator's CSS printed differently on each Bun.
- * Given them already canonical, every Bun prints them alike.
+ * it (`0.010` is `0.01`, `1.50px` is `1.5px`, `.5em` is `0.5em`), every hex
+ * colour in a value in lower case (`#F2D36B` is `#f2d36b`), and one space
+ * between two words on a line (`@custom-variant a   (…)` is
+ * `@custom-variant a (…)`). Bun 1.4.4's `bun fmt` prints each as written,
+ * where the canary before it printed the first two as Prettier does, so a
+ * generator's CSS printed differently on each Bun. Given them already
+ * canonical, every Bun prints them alike.
  */
 const cssCanonical = (css: string): string => {
   let out = "";
