@@ -99,6 +99,7 @@
     letGo,
     type Stage,
   } from "../canvas/stage.svelte";
+  import { artifactReached } from "../files/reached";
   import { frameObserver, frameSize } from "../frame-observer";
   import { resolveSessionTitle } from "../links";
   import {
@@ -781,10 +782,19 @@
       return;
     }
     saidFor = revision;
-    artifactShown(instanceId, id, { revision, ...word }).catch(() => {
-      // Unheard: the next change of state says it again.
-      saidFor = null;
-    });
+    const sawIt = word.ok;
+    artifactShown(instanceId, id, { revision, ...word }).then(
+      () => {
+        // On screen and heard: it reached the person, and Files lists it.
+        if (sawIt) {
+          artifactReached(instanceId, id);
+        }
+      },
+      () => {
+        // Unheard: the next change of state says it again.
+        saidFor = null;
+      }
+    );
   });
 
   /**

@@ -103,6 +103,8 @@ export interface BrowsersDeps {
   call: RelayCall;
   db: { artifacts: ArtifactsDb; browsers: BrowsersDb };
   instance: (id: string) => InstanceRow | undefined;
+  /** Whether the session's work item ended: its browser artifact went with it (server.ts `endBrowserOf`), and none is made again. */
+  itemEnded: (instance: InstanceRow) => boolean;
   /** The session's live peers: every session on `machineId` in `projectId` (null: in none) that runs or sleeps. */
   liveSessions: (machineId: string, projectId: string | null) => InstanceRow[];
   machineName: (machineId: string) => string;
@@ -381,10 +383,17 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       };
     },
 
-    /** Every session lists its browser once its machine runs one for it: the artifact made the first time. */
+    /**
+     * Every session lists its browser once its machine runs one for it: the
+     * artifact made the first time. A session whose work item ended has
+     * none: its browser artifact ended with the item.
+     */
     listed(instance: InstanceRow): void {
       const key = browserKeyOf(instance);
-      if (db.browsers.get(instance.machineId, key)) {
+      if (
+        db.browsers.get(instance.machineId, key) &&
+        !deps.itemEnded(instance)
+      ) {
         artifactFor(instance, key);
       }
     },

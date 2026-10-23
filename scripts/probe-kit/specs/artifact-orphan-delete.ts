@@ -1,26 +1,26 @@
 /**
- * An artifact always has someone who can remove it. While its writer can
- * still act, only the writer deletes it; once it can't (its item ended and
- * its workspace was discarded), any session up its delegation tree does. On
- * a scratch fleet (real hub, agent and sessiond; Claude Code against the
- * mock model), in a project, as the Backlot case had it (2026-10-22: three
- * pages of a done delegate whose workspace was discarded, which nobody could
- * delete). This spec delegates, so its fleet cuts workspaces: it runs on the
- * host, outside every boundary.
+ * An artifact always has someone who can remove it, and whoever is up a
+ * delegation tree cleans up after a delegate whose work item ended, whatever
+ * its workspace's state (owner, 2026-10-23: a project's Files crowded with
+ * done delegates' leftovers the parent was refused). On a scratch fleet
+ * (real hub, agent and sessiond; Claude Code against the mock model), in a
+ * project, as the Backlot case had it (2026-10-22: three pages of a done
+ * delegate whose workspace was discarded, which nobody could delete). This
+ * spec delegates, so its fleet cuts workspaces: it runs on the host, outside
+ * every boundary. A live delegate's refusal is files-reached's.
  *
- * A parent delegates; the child creates a page, commits a file on no remote
- * and fails its item as blocked, so its workspace is held. Then:
- * - (a) while the child can still act (its workspace held: a handoff
- *   reopens it), the parent's artifact_delete is refused, saying that
- *   session deletes it now and the parent can once it can't; the page stays;
- * - (b) a session of the project outside the tree is refused, its words
+ * A parent delegates; the child creates two pages, commits a file on no
+ * remote and fails its item as blocked, so its workspace is held. Then:
+ * - (a) a session of the project outside the tree is refused, its words
  *   naming who deletes it: the writer, the sessions up its tree, the person;
- * - (c) the parent discards the workspace (a carry holds the commit), and the
- *   child can no longer act: the parent's handoff to it is refused naming
- *   the discard; the discard's answer names the page the child left, by
- *   link and id, and says artifact_delete removes it from here;
+ * - (b) the item ended, its workspace still held (a handoff would reopen
+ *   it): the parent's artifact_delete of the first page succeeds;
+ * - (c) the parent discards the workspace (a carry holds the commit): the
+ *   parent's handoff to the child is refused naming the discard; the
+ *   discard's answer names the page the child left, by link and id, and
+ *   says artifact_delete removes it from here;
  * - (d) the outsider is still refused, with the same words;
- * - (e) the parent's artifact_delete succeeds, and the page is gone.
+ * - (e) the parent's artifact_delete of the second succeeds, and it is gone.
  *
  *   bun scripts/probe-kit/run.ts artifact-orphan-delete
  */
@@ -35,6 +35,7 @@ import { shaped } from "../words";
 const CHILD = "PROBE-ORPHAN-CHILD";
 const MADE = "PROBE-ORPHAN-MADE";
 const PAGE_NAME = "orphan-page";
+const SECOND_NAME = "orphan-second";
 
 const CREATE = "mcp__cawco__artifact_create";
 const FINISH = "mcp__cawco__finish_item";
@@ -43,12 +44,11 @@ const BLOCKED = "The item failed as blocked";
 /** artifact_create's answer in its words (hub presenters/artifacts.ts `artifactCreatedWords`): the page made, and its link. */
 const MADE_PAGE =
   /Made orphan-page \(page [0-9a-f]{8}\)[\s\S]*?cawco:artifact\/[0-9a-f-]{36}/;
+const MADE_SECOND =
+  /Made orphan-second \(page [0-9a-f]{8}\)[\s\S]*?cawco:artifact\/[0-9a-f-]{36}/;
 
-/** The parent's refusal while its writer can still act (artifacts/service.ts `deletable`). */
-const STILL_ACTS = "that session can still act";
 /** The outsider's refusal: who deletes it (artifacts/service.ts `deletable`). */
-const WHO_DELETES =
-  "That session deletes it while it can still act; after that, the sessions up its delegation tree do, and the person can from the dashboard. This session is neither.";
+const WHO_DELETES = shaped(artifactToolWords.notInTree);
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -83,10 +83,19 @@ const child = (request: Seen): Reply => {
       blocked: { command: "probe", error: "the probe ends this item here" },
     });
   }
-  if (MADE_PAGE.test(request.all)) {
+  if (MADE_SECOND.test(request.all)) {
     return useTool("Bash", {
       command: `echo left > orphan-probe.txt && git add orphan-probe.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Probe commit on no remote' && echo ${MADE}`,
       description: "Probe step",
+    });
+  }
+  if (MADE_PAGE.test(request.all)) {
+    return useTool(CREATE, {
+      kind: "page",
+      does: "judge",
+      ask: "Judge the second mock of the edit surface",
+      name: SECOND_NAME,
+      html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Second</title></head><body><h1>Second</h1></body></html>`,
     });
   }
   return found(request, CREATE, {
@@ -133,13 +142,14 @@ const callAs = async (
   return { isError: said.refused, text: said.text };
 };
 
-/** The child's page on the hub, by its name: its id and writer, or undefined once gone. */
+/** The child's page `name` on the hub: its id and writer, or undefined once gone. */
 const pageOf = (
-  fleet: KitFleet
+  fleet: KitFleet,
+  name = PAGE_NAME
 ): { id: string; instance_id: string | null } | undefined =>
   fleet.query<{ id: string; instance_id: string | null }>(
     "SELECT id, instance_id FROM artifacts WHERE name = ? AND kind = 'page'",
-    PAGE_NAME
+    name
   )[0];
 
 const run = async (kit: Kit) => {
@@ -196,42 +206,40 @@ const run = async (kit: Kit) => {
     240_000
   );
   const page = pageOf(fleet);
+  const second = pageOf(fleet, SECOND_NAME);
   check(
-    "setup: the child wrote its page, and its item ended",
-    page?.instance_id === started.instanceId,
-    JSON.stringify(page ?? null)
+    "setup: the child wrote its two pages, and its item ended",
+    page?.instance_id === started.instanceId &&
+      second?.instance_id === started.instanceId,
+    JSON.stringify([page ?? null, second ?? null])
   );
-  if (!page) {
+  if (!(page && second)) {
     return;
   }
 
-  // (a) The child can still act: its workspace is held, a handoff reopens it.
+  // (a) A session outside the tree is refused, naming who deletes it.
+  const outsideEarly = await callAs(fleet, outsider, "artifact_delete", {
+    id: page.id,
+  });
+  check(
+    "(a) a session of the project outside the tree is refused, naming the writer, the sessions up its tree and the person",
+    outsideEarly.isError &&
+      WHO_DELETES.test(outsideEarly.text) &&
+      outsideEarly.text.includes(`cawco:session/${started.instanceId}`) &&
+      pageOf(fleet)?.id === page.id,
+    outsideEarly.text.slice(0, 600)
+  );
+
+  // (b) The item ended, its workspace held: the parent deletes the first page.
   const early = await callAs(fleet, parent, "artifact_delete", { id: page.id });
   const [workspace] = fleet.query<{ state: string }>(
     "SELECT state FROM workspaces WHERE id = ?",
     started.workspaceId
   );
   check(
-    "(a) while the child can still act, the parent's artifact_delete is refused, and the page stays",
-    early.isError &&
-      early.text.includes(STILL_ACTS) &&
-      shaped(artifactToolWords.makerDeletes).test(early.text) &&
-      pageOf(fleet)?.id === page.id &&
-      workspace?.state !== "archived",
+    "(b) its item ended and its workspace still held, the parent's artifact_delete succeeds, and the page is gone",
+    !(early.isError || pageOf(fleet)) && workspace?.state !== "archived",
     `workspace ${workspace?.state}; ${early.text.slice(0, 600)}`
-  );
-
-  // (b) A session outside the tree is refused, naming who deletes it.
-  const outsideEarly = await callAs(fleet, outsider, "artifact_delete", {
-    id: page.id,
-  });
-  check(
-    "(b) a session of the project outside the tree is refused, naming the writer, the sessions up its tree and the person",
-    outsideEarly.isError &&
-      outsideEarly.text.includes(WHO_DELETES) &&
-      outsideEarly.text.includes(`cawco:session/${started.instanceId}`) &&
-      pageOf(fleet)?.id === page.id,
-    outsideEarly.text.slice(0, 600)
   );
 
   // (c) The parent discards the workspace: the child can no longer act.
@@ -256,32 +264,32 @@ const run = async (kit: Kit) => {
   );
   check(
     "(c) the discard's answer names the page the child left, by its link and handle, and says artifact_delete removes it from here",
-    discarded.text.includes(`cawco:artifact/${page.id}`) &&
-      discarded.text.includes(`(page ${page.id.slice(0, 8)})`) &&
-      discarded.text.includes(
-        "Their sessions can no longer act, so artifact_delete removes them from here."
-      ),
+    discarded.text.includes(`cawco:artifact/${second.id}`) &&
+      discarded.text.includes(`(page ${second.id.slice(0, 8)})`) &&
+      discarded.text.includes(artifactToolWords.leftoverEnded),
     discarded.text.slice(0, 900)
   );
 
   // (d) The outsider is refused still.
   const outsideLate = await callAs(fleet, outsider, "artifact_delete", {
-    id: page.id,
+    id: second.id,
   });
   check(
     "(d) once the child can't act, the outsider is still refused with the same words, and the page stays",
     outsideLate.isError &&
-      outsideLate.text.includes(WHO_DELETES) &&
-      pageOf(fleet)?.id === page.id,
+      WHO_DELETES.test(outsideLate.text) &&
+      pageOf(fleet, SECOND_NAME)?.id === second.id,
     outsideLate.text.slice(0, 600)
   );
 
-  // (e) The parent deletes it.
-  const late = await callAs(fleet, parent, "artifact_delete", { id: page.id });
+  // (e) The parent deletes the second.
+  const late = await callAs(fleet, parent, "artifact_delete", {
+    id: second.id,
+  });
   check(
     "(e) the parent's artifact_delete succeeds, and the page is gone from the hub",
-    !late.isError && late.text.includes("Your panel") && !pageOf(fleet),
-    `${late.text.slice(0, 600)}; row ${JSON.stringify(pageOf(fleet) ?? null)}`
+    !(late.isError || pageOf(fleet, SECOND_NAME)),
+    `${late.text.slice(0, 600)}; row ${JSON.stringify(pageOf(fleet, SECOND_NAME) ?? null)}`
   );
 };
 

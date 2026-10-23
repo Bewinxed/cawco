@@ -1366,6 +1366,13 @@ export interface ArtifactServiceDeps {
   ) => Promise<void>;
   instance: (id: string) => InstanceRow | undefined;
   /**
+   * Whether the session's work item ended (done, failed or cancelled),
+   * whatever its workspace's state: the sessions up its delegation tree may
+   * then delete what it wrote ({@link Artifacts.remove}). False for a session
+   * with no item, and while its item is live (a reopened one included).
+   */
+  itemEnded: (instance: InstanceRow) => boolean;
+  /**
    * Page `name`'s source kept in `instance`'s project folder at
    * `decisions/<name>/`, as a build with `keep` keeps it: a held next
    * version's, once its parent opens it. Why not, when the folder refuses.
@@ -1539,13 +1546,14 @@ export interface ArtifactServiceDeps {
    * workspace was discarded or retired past cutting again, or a newer item
    * holds that workspace, or the session itself ended for good (continued
    * into another, its conversation gone). What it wrote is then deleted by
-   * the sessions up its delegation tree ({@link Artifacts.remove}).
+   * the sessions up its delegation tree ({@link Artifacts.remove}), as it is
+   * once its work item ended ({@link ArtifactServiceDeps.itemEnded}).
    */
   stranded: (instance: InstanceRow) => boolean;
   /**
    * Every session of `instance`'s delegation tree (delegation-tree.ts
    * `treeSessions`): each reads, never changes, the others' artifacts of
-   * its project; one up a writer that can no longer act deletes that
+   * its project; one up a writer whose work item ended deletes that
    * writer's ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
@@ -1836,10 +1844,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Artifact `id` for a delete: the session's own ({@link own}), or another
-   * session's whose writer can no longer act ({@link ArtifactServiceDeps.stranded})
-   * when this session is up the writer's delegation tree, so an artifact
-   * always has someone who can remove it. Its content stays the writer's: no
-   * other change widens so. Refused otherwise, naming who deletes it.
+   * session's whose work item ended ({@link ArtifactServiceDeps.itemEnded})
+   * or that can no longer act at all ({@link ArtifactServiceDeps.stranded})
+   * when this session is up the writer's delegation tree, so whoever is up
+   * the tree cleans up after a delegate whose work is over. Its content
+   * stays the writer's while its item is live: no other change widens so.
+   * Refused otherwise, naming who deletes it.
    */
   const deletable = (instance: InstanceRow, id: string): ArtifactRow => {
     const row = db.get(id);
@@ -1848,7 +1858,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return own(instance, id);
     }
     const up = above(writer).has(instance.id);
-    if (up && deps.stranded(writer)) {
+    if (up && (deps.itemEnded(writer) || deps.stranded(writer))) {
       return row;
     }
     const whose = `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is ${sessionLink(writer.id, sessionLabel(writer).name)}'s`;
@@ -1856,7 +1866,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       403,
       up
         ? artifactToolWords.makerDeletes(whose)
-        : `${whose}. That session deletes it while it can still act; after that, the sessions up its delegation tree do, and the person can from the dashboard. This session is neither.`
+        : artifactToolWords.notInTree(whose)
     );
   };
 
@@ -5052,6 +5062,75 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
   };
 
+  /* ── Files: what reached the person ─────────────────────────────────── */
+
+  /**
+   * Whether `row` waits on the person now: Needs you raises it (a pick or a
+   * judgement asked and not moved on from, picks or pins owed, while its
+   * session can act: needs.ts `needOf`), or it is a try its session put in
+   * front of them, not handed up and not ended.
+   */
+  const waitsOnPerson = (row: ArtifactRow): boolean => {
+    const kept = factsOf(row);
+    const facts = { ...kept, asked: askOf(row, kept) };
+    const sessions = sessionsOf(row, kept);
+    if (row.does === "try") {
+      return !(
+        facts.draft ||
+        facts.handed ||
+        row.heldFor !== null ||
+        sessions.ended ||
+        movedOn(row.id, facts.asked, sessions.steps)
+      );
+    }
+    return mayWait(row, kept) && needOf(row, facts, sessions) !== null;
+  };
+
+  /**
+   * Whether `row` reached the person, so Files lists it: a view of theirs
+   * had it on screen at least once (`openedRevision`, `shownAt`), it waits
+   * on them ({@link waitsOnPerson}), or they made it (their composer canvas,
+   * the one create that writes `meta.draft`). A browser is a tool, never a
+   * file. Nothing is deleted by it: the panel's menu ({@link Artifacts.list})
+   * and `artifact_list` keep every artifact, and one that reaches the person
+   * later is listed from then on.
+   */
+  const reachedPerson = (row: ArtifactRow): boolean =>
+    row.kind !== "browser" &&
+    (row.openedRevision !== null ||
+      row.shownAt !== null ||
+      docs.doc(row.id).getMap("meta").has("draft") ||
+      waitsOnPerson(row));
+
+  /** The artifacts each decision page's Canvas and Preview pieces show, by the page's id, read once per change of it. */
+  const mediaKept = new Map<string, { at: number; ids: string[] }>();
+  const mediaOf = (row: ArtifactRow): string[] => {
+    const at = row.updatedAt.getTime();
+    const kept = mediaKept.get(row.id);
+    if (kept?.at === at) {
+      return kept.ids;
+    }
+    const program = programOf(row);
+    const ids =
+      program === undefined
+        ? []
+        : readKept(program).artifacts.map((media) => media.id);
+    mediaKept.set(row.id, { at, ids });
+    return ids;
+  };
+
+  /**
+   * Files' list of the session's artifacts, newest first: those that
+   * reached the person ({@link reachedPerson}), less a listed decision
+   * page's embedded media (its Canvases and Previews), which are reached
+   * through their page and get no row of their own.
+   */
+  const filesOf = (instance: InstanceRow): ArtifactRow[] => {
+    const rows = db.ofInstance(instance.id).filter(reachedPerson);
+    const embedded = new Set(rows.flatMap(mediaOf));
+    return rows.filter((row) => !embedded.has(row.id));
+  };
+
   /**
    * `writer`'s create, revision or show of artifact `id`: its ask stands
    * again from now, and when it asks a pick or a judgement the writer's
@@ -5305,23 +5384,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     named: (instanceId: string, asked: string): string =>
       whole(sessionOf(instanceId), asked),
 
+    /** Every artifact the session holds, newest first: its panel's menu, where each stays reachable. */
     list: (instanceId: string): ArtifactSummary[] => {
       const instance = sessionOf(instanceId);
       deps.listing(instance);
       return db.ofInstance(instance.id).map(summaryOf);
     },
 
+    /** Files' list: the session's artifacts that reached the person, newest first ({@link filesOf}). */
+    files: (instanceId: string): ArtifactSummary[] =>
+      filesOf(sessionOf(instanceId)).map(summaryOf),
+
     /**
-     * Files' search over the session's artifacts, by the find engine's own
-     * matcher (find-names `matchOf`, what Find and the composer's finder
-     * answer with): every word must match the name, the kind words, or the
-     * words on its page, at the transcript's lower weight. Best match first,
-     * then newest; a page that matched by its words brings the words round
-     * the first hit (`excerptOf`).
+     * Files' search over the artifacts Files lists ({@link filesOf}), by
+     * the find engine's own matcher (find-names `matchOf`, what Find and the
+     * composer's finder answer with): every word must match the name, the
+     * kind words, or the words on its page, at the transcript's lower
+     * weight. Best match first, then newest; a page that matched by its
+     * words brings the words round the first hit (`excerptOf`).
      */
     search: (instanceId: string, q: string): ArtifactHit[] => {
       const query = parse(q);
-      const rows = db.ofInstance(sessionOf(instanceId).id);
+      const rows = filesOf(sessionOf(instanceId));
       if (query.tokens.length === 0) {
         return rows.map((row) => ({ id: row.id, excerpt: null }));
       }
@@ -6313,7 +6397,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      *   ({@link ArtifactServiceDeps.personShown}), or closes the panel: an
      *   agent taking something away never brings a different artifact
      *   forward as if it wanted the person there.
-     * A session up the delegation tree of a writer that can no longer act
+     * A session up the delegation tree of a writer whose work item ended
      * removes that writer's too ({@link deletable}); the writer's panel that
      * showed it closes, else it hears its artifacts again.
      * Answers what the panel shows after.
@@ -6361,6 +6445,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       await deps.close(instance.id);
       return { showing: null };
+    },
+
+    /**
+     * Session `instanceId`'s browser artifact, once its work item ended: it
+     * goes from every list, and the panel that showed it closes. Its
+     * browser itself is its project's (or its machine's), shared by every
+     * session there, and stays. Nothing when it has none.
+     */
+    dropBrowser: async (instanceId: string): Promise<void> => {
+      const row = db
+        .ofInstance(instanceId)
+        .find((one) => one.kind === "browser");
+      if (!row) {
+        return;
+      }
+      const shown = inPanel(row);
+      discard(row);
+      if (shown) {
+        await deps.close(instanceId);
+      } else {
+        deps.relist(instanceId);
+      }
     },
 
     /**

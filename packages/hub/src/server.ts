@@ -368,6 +368,8 @@ import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { workspaceReach } from "@cawco/core/boundary-reach";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
+  BROWSER_CLOSE_PAGES,
+  type BrowserClosePagesArgs,
   type BrowserFrame,
   type BrowserHandedBackFrame,
   isBrowserKey,
@@ -508,7 +510,12 @@ import { bodyLimitRefusal } from "./body-limits";
 import { briefingsObserve } from "./briefings";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
-import { BrowserRefusal, browserRoutes, createBrowsers } from "./browsers";
+import {
+  BrowserRefusal,
+  answered as browserAnswered,
+  browserRoutes,
+  createBrowsers,
+} from "./browsers";
 import {
   attemptTry,
   type Caw,
@@ -882,6 +889,7 @@ import {
 import {
   createWorkItems,
   type ItemPlacement,
+  isLive,
   LEAF_DELEGATE_REFUSAL,
   outputsFolder,
   SESSION_TITLE_DESCRIPTION,
@@ -3194,6 +3202,7 @@ export const createServer = (
       callAgent(machineId, method, args, timeoutMs),
     db: { artifacts: db.artifacts, browsers: db.browsers },
     instance: (id) => db.getInstancesByIds([id])[0],
+    itemEnded: (row) => itemEnded(row),
     liveSessions: (machineId, projectId) =>
       db
         .listInstances()
@@ -12695,6 +12704,18 @@ export const createServer = (
     return refused === "workspace-archived" || refused === "item-superseded";
   };
   /**
+   * Whether the session's work item ended (done, failed or cancelled),
+   * whatever its workspace's state: its artifacts are then deleted up its
+   * delegation tree (artifacts/service.ts `deletable`). False for a session
+   * with no item, and while its item is live again (a reopen).
+   */
+  const itemEnded = (instance: InstanceRow): boolean => {
+    const item = instance.workItemId
+      ? db.workItem(instance.workItemId)
+      : undefined;
+    return !!item && !isLive(item.state);
+  };
+  /**
    * What `discard_workspace` answers past its carry: the artifacts the
    * workspace's sessions still hold in their panels, each by its link and
    * id, and who removes them now. Empty when they hold none.
@@ -12724,10 +12745,10 @@ export const createServer = (
           `${artifactLink(row.id, row.name)} (${row.kind} ${idHandle(row.id)})`
       )
       .join(", ");
-    const now = sessions.every(({ session }) => stranded(session));
-    return now
-      ? ` Its delegates left ${sessions.length === 1 ? "this artifact" : `these ${sessions.length} artifacts`} in the person's panel: ${listed}. Their sessions can no longer act, so artifact_delete removes them from here.`
-      : ` Its delegates left ${sessions.length === 1 ? "this artifact" : `these ${sessions.length} artifacts`} in the person's panel: ${listed}. Their sessions can still act, as a handoff cuts their workspace again: a handoff to each asks it to delete what it left.`;
+    const now = sessions.every(
+      ({ session }) => itemEnded(session) || stranded(session)
+    );
+    return ` Its delegates left ${sessions.length === 1 ? "this artifact" : `these ${sessions.length} artifacts`} in the person's panel: ${listed}. ${now ? artifactToolWords.leftoverEnded : artifactToolWords.leftoverLive}`;
   };
   const artifacts: Artifacts = createArtifacts({
     // The panel closes at once; a preview's machine that can't stop its
@@ -12787,6 +12808,7 @@ export const createServer = (
     clearArtifactWait: (instanceId, artifactId) =>
       plans.clearArtifactWait(instanceId, artifactId),
     stranded,
+    itemEnded,
     // Caw answers the pins of his project's sessions whose writer ended, and
     // reads every page of his project (decisions.ts).
     ledProjects: (instance) =>
@@ -13141,6 +13163,44 @@ export const createServer = (
       );
     },
   });
+  /**
+   * Browser sessions end with their item: the session's browser artifact
+   * goes from every list (artifacts/service.ts `dropBrowser`), and its
+   * door's pages close on its machine's browsers (agent browser/gate.ts
+   * `closeWorkspaceBrowsers`), its connections there cut. Until now they
+   * closed only with the workspace's boundary (an archive or a discard).
+   * Another live item in the same workspace keeps them. The browser itself
+   * is its project's, shared by its sessions, and runs on.
+   */
+  const endBrowserOf = (item: WorkItemRow): void => {
+    detach(artifacts.dropBrowser(item.instanceId), "browser artifact drop");
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    if (
+      !workspace ||
+      workspace.state === "archived" ||
+      db
+        .workItemsIn(workspace.id)
+        .some((other) => other.id !== item.id && isLive(other.state))
+    ) {
+      return;
+    }
+    const pages: BrowserClosePagesArgs = { id: workspace.id };
+    detach(
+      callAgent(
+        workspace.machineId,
+        BROWSER_CLOSE_PAGES,
+        [pages],
+        BUSY_TIMEOUT_MS
+      ).then((read) =>
+        browserAnswered<unknown>(
+          read,
+          machineName(workspace.machineId),
+          `close workspace ${workspace.id.slice(0, 8)}'s pages`
+        )
+      ),
+      "browser pages close"
+    );
+  };
   /**
    * A project's page lives as long as its source in the project's folder:
    * a commit that takes `decisions/<name>/`'s page.oui or index.html out and
@@ -22150,6 +22210,7 @@ export const createServer = (
         projectStarters.itemEnded(item);
         designVerify.itemEnded(item);
         watch?.itemEnded(item);
+        endBrowserOf(item);
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),

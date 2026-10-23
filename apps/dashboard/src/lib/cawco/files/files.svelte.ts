@@ -4,8 +4,9 @@
  * or files for a session easily").
  *
  * What it holds, per session, both read from the hub, so neither depends on
- * the transcript pages this tab has loaded: its artifacts (`listArtifacts`,
- * newest first, each with the thumbnail the hub keeps of it) and its
+ * the transcript pages this tab has loaded: its artifacts that reached the
+ * person (`listFiles`, newest first, each with the thumbnail the hub keeps
+ * of it; every other one stays in its panel's menu) and its
  * attachments (`listAttachments`: every text, file and picture its
  * conversation carried, the person's and the agent's, newest first). Each
  * read is read when Files opens, and again once each time the session moves
@@ -21,7 +22,7 @@
 import type { ArtifactSummary, SessionAttachment } from "@cawco/core";
 import { field, KIND_WORDS, matchOf, parse } from "@cawco/core/find-match";
 import { SvelteMap } from "svelte/reactivity";
-import { listArtifacts, listAttachments } from "../artifact-api";
+import { listAttachments, listFiles } from "../artifact-api";
 import { cawco } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { failureWords } from "../hub-read";
@@ -29,6 +30,7 @@ import { extensionOf } from "../lightbox/extension";
 import { readJson, writeJson } from "../storage";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
+import { onArtifactReached } from "./reached";
 
 /** One of a session's lists as Files last read it. */
 export interface ListRead<T> {
@@ -85,7 +87,7 @@ class SessionReads<T> {
   }
 }
 
-const artifactReads = new SessionReads<ArtifactSummary>(listArtifacts);
+const artifactReads = new SessionReads<ArtifactSummary>(listFiles);
 /** The harness each session's attachments were read under, for who sent them. */
 const harnessOf = new SvelteMap<string, string>();
 const attachmentReads = new SessionReads<SessionAttachment>(
@@ -104,6 +106,18 @@ export const artifactsOf = (
 /** Reads the session's artifacts again; its promise settles once the hub answered. */
 export const readArtifacts = (instanceId: string): Promise<void> =>
   artifactReads.read(instanceId);
+
+/*
+ * An artifact a view of this tab had on screen has reached the person
+ * (files/reached.ts): Files, once it read the session, reads it again when
+ * it doesn't list it.
+ */
+onArtifactReached((instanceId, id) => {
+  const list = artifactReads.of(instanceId)?.list;
+  if (list && !list.some((artifact) => artifact.id === id)) {
+    readArtifacts(instanceId);
+  }
+});
 
 /** Reads the session's attachments again; its promise settles once the hub answered. */
 export const readAttachments = (instanceId: string): Promise<void> =>

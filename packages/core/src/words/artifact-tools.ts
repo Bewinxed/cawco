@@ -21,9 +21,18 @@ export const artifactToolWords = {
   noArtifact: (id: string) => `This session has no artifact ${id}.`,
   noPin: (pin: string) =>
     `No artifact of this session holds pin ${pin}. comment_read lists its pins with their ids.`,
-  /** A delete asked of an artifact whose maker can still act: `whose` names it and its maker. */
+  /** A delete asked up the tree of an artifact whose maker's work item is still live: `whose` names it and its maker. */
   makerDeletes: (whose: string) =>
-    `${whose}, and that session can still act: it deletes it now (a handoff asks it to). Once it can't (its item ended and its workspace was discarded or archived, or the session ended for good), you, up its delegation tree, can delete it.`,
+    `${whose}, and its work item is still live: that session deletes it now (a handoff asks it to). Once its item ends (done, failed or cancelled), you, up its delegation tree, can delete it.`,
+  /** A delete asked by a session outside the maker's delegation tree: `whose` names it and its maker. */
+  notInTree: (whose: string) =>
+    `${whose}. That session deletes it while its work item is live; once its item ends, the sessions up its delegation tree do, and the person can from the dashboard. This session is neither.`,
+  /** `discard_workspace`'s answer on what its delegates left, their work items all ended. */
+  leftoverEnded:
+    "Their work items ended, so artifact_delete removes them from here.",
+  /** The same, while one's item is still live. */
+  leftoverLive:
+    "Their work items are still live: a handoff to each asks it to delete what it left.",
   /** A preview of a workspace the session may not preview. */
   notYourDelegate: (workspace: string) =>
     `"${workspace}" is not your delegate's workspace — you can only preview your own workspace or your delegates'.`,

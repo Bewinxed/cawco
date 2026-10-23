@@ -27,11 +27,23 @@ async function ok(response: Response): Promise<Response> {
   return response;
 }
 
-/** A session's artifacts, newest first (Projects spec §5.10): the panel's list. */
+/** Every artifact a session holds, newest first (Projects spec §5.10): the panel's menu. */
 export async function listArtifacts(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
   return (await ok(await fetch(artifactsPath(instanceId)))).json();
+}
+
+/**
+ * A session's artifacts that reached the person, newest first: Files'
+ * Artifacts. The hub keeps the rule (artifacts/service.ts `filesOf`): seen
+ * in their view, waiting on them or made by them; never a browser, nor a
+ * listed decision page's embedded media.
+ */
+export async function listFiles(
+  instanceId: string
+): Promise<ArtifactSummary[]> {
+  return (await ok(await fetch(artifactsPath(instanceId, "files")))).json();
 }
 
 /**

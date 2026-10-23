@@ -47,9 +47,7 @@
   },
   "scripts/probe-kit/specs/artifact-orphan-delete.ts": {
     "Discarded workspace": 1,
-    "its workspace": 1,
-    "Their sessions can no longer act, so artifact_delete removes them from here.": 1,
-    "Your panel": 1
+    "its workspace": 1
   },
   "scripts/probe-kit/specs/artifact-resize-loop-thread.ts": {
     "Event setup:": 2

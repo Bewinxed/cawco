@@ -77,6 +77,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
+  BROWSER_CLOSE_PAGES,
   BROWSER_HANDBACK,
   BROWSER_LISTEN,
   BROWSER_REMOVE,
@@ -86,6 +87,7 @@ import {
   BROWSER_STOP,
   BROWSER_VIEWER_TOKEN,
   BROWSER_VIEWERS,
+  type BrowserClosePagesArgs,
   type BrowserKey,
   type BrowserShieldArgs,
   type BrowserStartArgs,
@@ -186,6 +188,7 @@ import {
   watchBrowsers,
 } from "./browser/browsers";
 import { sweepBrowserDoors } from "./browser/door";
+import { closeWorkspaceBrowsers } from "./browser/gate";
 import {
   certifyRelay,
   relayReachChanged,
@@ -3463,6 +3466,16 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(BROWSER_REMOVE, async (args) =>
       removeBrowser(browserKeyOf(args))
     );
+    // A work item ended: its door's pages close on every browser here
+    // (browser/gate.ts), the browsers themselves running on.
+    supervisor.registerDaemonFunction(BROWSER_CLOSE_PAGES, async (args) => {
+      const { id } = (args ?? {}) as Partial<BrowserClosePagesArgs>;
+      if (typeof id !== "string" || id.length === 0) {
+        throw new Error("browser.closePages takes the door's id");
+      }
+      await closeWorkspaceBrowsers(id);
+      return true;
+    });
     // The person takes a browser over privately and hands it back
     // (browser/shield.ts); a take-over with no view for two minutes is
     // handed back here, and the hub told.

@@ -295,6 +295,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       }
       return new Response(shape, { status: 422 });
     })
+    // Every artifact the session holds: its panel's menu.
     .get("/api/instances/:id/artifacts", ({ params }) => {
       try {
         return artifacts.list(params.id);
@@ -302,6 +303,19 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // Files' list: the session's artifacts that reached the person. The
+    // dashboard's alone, so out of the app's API document.
+    .get(
+      "/api/instances/:id/artifacts/files",
+      { detail: { hide: true } },
+      ({ params }) => {
+        try {
+          return artifacts.files(params.id);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // Files' search: the session's artifacts a query matches by name or by
     // the words on their page, best first, with the words round a hit.
     .get(
