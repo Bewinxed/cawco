@@ -42,6 +42,9 @@ export const sheetWords = {
   serverDownTitle: (port: number) => `The server on port ${port} isn't running`,
   /** The line under it, in plain words; the server's own words stand under Show details. */
   serverDownLine: "It stopped before it answered. Try again starts it again.",
+  /** The stage's refusal where the machine's PATH has no bun (agent user-bun.ts), and how to get it (bun.com/docs/installation). */
+  noBun:
+    "A sheet's stage runs on this machine's own bun, and its PATH has none, so it can't start: install it with `curl -fsSL https://bun.com/install | bash` (bun.com/docs/installation), then call again.",
   /** Where the page would be, when the stage stood on its way past the time it is given to serve (core `STAGE_READY_MS`) and the canvas never drew. */
   neverDrawnTitle: "The canvas couldn't be drawn",
   /** The line under it, in plain words: how long it was given, then the two ways out; the stage's own words stand under Show details. */

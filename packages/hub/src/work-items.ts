@@ -1997,7 +1997,7 @@ const gateSection = (
   landing: Exclude<Landed, { kind: "retry" | "stopped" }>
 ): string => {
   const lines = landingGateLines(landing);
-  return lines ? `\n\nLanding gate, run by the hub:\n${lines}` : "";
+  return lines ? `\n\n${workWords.gateHeading}\n${lines}` : "";
 };
 
 /**

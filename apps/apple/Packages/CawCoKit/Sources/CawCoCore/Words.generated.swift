@@ -1527,6 +1527,9 @@ public enum Words {
         /// The line under it, in plain words; the server's own words stand under Show details.
         public static let serverDownLine = "It stopped before it answered. Try again starts it again."
 
+        /// The stage's refusal where the machine's PATH has no bun (agent user-bun.ts), and how to get it (bun.com/docs/installation).
+        public static let noBun = "A sheet's stage runs on this machine's own bun, and its PATH has none, so it can't start: install it with `curl -fsSL https://bun.com/install | bash` (bun.com/docs/installation), then call again."
+
         /// Where the page would be, when the stage stood on its way past the time it is given to serve (core `STAGE_READY_MS`) and the canvas never drew.
         public static let neverDrawnTitle = "The canvas couldn't be drawn"
 

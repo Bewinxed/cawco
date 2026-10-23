@@ -6,8 +6,8 @@
  * inside it ({@link cawcoStage}, {@link stamp}) and nothing written into the
  * project. The daemon (agent `stage.ts`) writes this file, bundled, to
  * `<toolchain root>/.cawco/stage/host.mjs` and runs it there inside the
- * workspace's boundary on the agent's own bun (boundary.ts
- * `bunScriptRuntime`: a binary install's run as bun with `BUN_BE_BUN=1`), a
+ * workspace's boundary on the machine's own bun (agent user-bun.ts: the first
+ * on the agent's PATH, never the runtime a binary install embeds), a
  * process of its own, so the project's toolchain never meets CawCo's process
  * (the spike: the compiled binary's own module graph can't load a project's
  * Vite, `Cannot find module 'rolldown/parseAst'`).

@@ -600,9 +600,12 @@ const socketAddress = async (id: string, socket: string): Promise<string> => {
 };
 
 /**
- * The bun the agent's plain Bun scripts run on, the boundary's and a stage's
- * host (stage.ts): `<binary root>/run` with {@link BUN_SCRIPT_ENV} in a
- * binary install, bun in a checkout.
+ * The bun CawCo's own plain Bun scripts run on, which load nothing of a
+ * person's project: the boundary's host, judge and log client, and the login
+ * keychain's lock probe (login-keychain.ts). `<binary root>/run` with
+ * {@link BUN_SCRIPT_ENV} in a binary install, bun in a checkout. Anything run
+ * against a project or workspace runs on the machine's own bun instead
+ * (user-bun.ts).
  */
 export const bunScriptRuntime = (): string =>
   standalone ? join(binaryRoot(), "run") : (Bun.which("bun") ?? "bun");

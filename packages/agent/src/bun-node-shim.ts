@@ -39,6 +39,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { userBun } from "./user-bun";
 
 /** The root of Bun's `BUN_NODE_DIR` on this OS. */
 const BUN_NODE_ROOT = process.platform === "darwin" ? "/private/tmp" : "/tmp";
@@ -99,7 +100,7 @@ const linked = async (link: string, bun: string): Promise<void> => {
  * not this user's own.
  */
 export const bunNodeShim = async (): Promise<string | undefined> => {
-  const found = Bun.which("bun");
+  const found = userBun();
   if (!found) {
     return unmade("no bun on the agent's PATH");
   }

@@ -79,12 +79,7 @@ import {
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
-import {
-  BUN_SCRIPT_ENV,
-  bunScriptRuntime,
-  ensureBoundary,
-  shellQuote,
-} from "./boundary";
+import { ensureBoundary, shellQuote } from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
 import {
@@ -99,6 +94,7 @@ import {
 } from "./stage-clone";
 import { stageHost } from "./stage-host/build";
 import { type RenderAsk, type Rendered, renderCanvas } from "./stage-render";
+import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
 
 type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
@@ -551,17 +547,15 @@ function stageFor(
         : `${missing} The stage runs in a clone of your checkout, ${root}, whose dependencies install inside its own boundary by the project's own package manager.`
     );
   }
-  // Every stage runs on the agent's own bun, whatever the lockfile: Vite's
-  // `native` config loader imports the project's config with the stage's
-  // runtime (stage-host/host.ts `startVite`), and bun reads what Vite's
-  // default bundler does (TS enums, extensionless relative imports,
+  // Every stage runs on the machine's own bun (user-bun.ts), whatever the
+  // lockfile: Vite's `native` config loader imports the project's config with
+  // the stage's runtime (stage-host/host.ts `startVite`), and bun reads what
+  // Vite's default bundler does (TS enums, extensionless relative imports,
   // `__dirname` in ESM), where node strips types only ("TypeScript enum is
   // not supported in strip-only mode", measured on node 26).
-  const runtime = bunScriptRuntime();
-  if (!existsSync(runtime)) {
-    throw new StageRefusal(
-      `The bun every stage runs on (${runtime}) isn't on this machine, so ${dir}'s stage can't start.`
-    );
+  const runtime = userBun();
+  if (!runtime) {
+    throw new StageRefusal(sheetWords.noBun);
   }
   const kit = "@sveltejs/kit" in deps;
   // SvelteKit narrows Vite's served files to `src/` and its own folders: a
@@ -947,7 +941,6 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
     ? [
         `exec ${shellQuote(stage.runs.runtime)} ${HOST_FILE}`,
         {
-          ...BUN_SCRIPT_ENV,
           CAWCO_STAGE: "1",
           CAWCO_STAGE_PORT: String(stage.port),
           CAWCO_STAGE_FRAMEWORK: stage.runs.framework,
