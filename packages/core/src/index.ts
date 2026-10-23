@@ -2110,6 +2110,7 @@ export * from "./words/artifact-tools";
 export * from "./words/artifacts";
 export * from "./words/asks";
 export * from "./words/blocks";
+export * from "./words/browser";
 export * from "./words/catalog";
 export * from "./words/caw-head";
 export * from "./words/comments";

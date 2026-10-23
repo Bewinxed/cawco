@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     artifactWords,
+    browserWords,
     commentWords,
     commonWords,
     hostModeDomain,
@@ -63,7 +64,9 @@
     IconComment,
     IconExternal,
     IconEyeClosed,
+    IconGlobe,
     IconInteract,
+    IconLock,
     IconPen,
     IconPlus,
     IconRefresh,
@@ -141,6 +144,8 @@
     retryComment,
     sendArtifact,
   } from "./artifact-doc";
+  import BrowserView from "./BrowserView.svelte";
+  import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
   import CanvasView from "./CanvasView.svelte";
   import CommentRail from "./CommentRail.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
@@ -346,7 +351,12 @@
    * under the pattern's domain, else its port on this tab's host. The page
    * runs at its root as on its own server.
    */
-  const route = $derived(preview ? previewRoute(preview, location) : null);
+  // A browser is drawn here from its stream (BrowserView), never framed from an origin.
+  const route = $derived(
+    preview && preview.artifact.kind !== "browser"
+      ? previewRoute(preview, location)
+      : null
+  );
   const paneOrigin = $derived(route?.origin ?? "");
   /**
    * Where the reader had gone inside this show, kept per session so a reload
@@ -1256,7 +1266,8 @@
   $effect(() => {
     const id = artifactId;
     const session = instanceId;
-    if (!id) {
+    // A browser keeps nothing in a doc: no pins, no ink, no picks (§5.11, "Private").
+    if (!id || isBrowser) {
       return;
     }
     docSync = { state: "reading" };
@@ -2305,6 +2316,10 @@
    * J and K stand on, is for where no control has the focus.
    */
   function paneKey(event: KeyboardEvent) {
+    // A browser has no modes, pins or rail: its keys are the browser's own.
+    if (isBrowser) {
+      return;
+    }
     const { target } = event;
     if (
       event.defaultPrevented ||
@@ -2687,6 +2702,48 @@
    * Undock fly that same iframe between the composer and here.
    */
   const isCanvas = $derived(artifact?.kind === "canvas");
+  /*
+   * A browser (Projects spec §5.11, "The view") is its stream in the well
+   * (BrowserView), its head's own control Take over, or Hand back while the
+   * person holds it. It has no modes, comments or ink: what the person sees
+   * there reaches no agent.
+   */
+  const isBrowser = $derived(artifact?.kind === "browser");
+  const browserRow = $derived(isBrowser ? fleet.browser(instanceId) : null);
+  const browserMachine = $derived.by(() => {
+    const machineId = owner?.machineId ?? browserRow?.machineId ?? "";
+    const known = fleet.machines.find((one) => one.machineId === machineId);
+    return {
+      machineId,
+      name: browserRow?.machineName ?? known?.hostname ?? machineId,
+      online: known?.online ?? false,
+    };
+  });
+  let browserActing = $state(false);
+  /** Take over from the panel, or Hand back while the person holds it; a refusal on the pane's line. */
+  async function browserControl() {
+    const row = browserRow;
+    if (!row) {
+      return;
+    }
+    browserActing = true;
+    const holding = !!row.takeover;
+    const why = holding
+      ? await handBackFromPanel(row.key, row.machineId)
+      : await takeOverFromPanel(row.key, {
+          instanceId,
+          machineId: row.machineId,
+        });
+    browserActing = false;
+    failure = why
+      ? {
+          message: holding
+            ? browserWords.cantHandBack(why)
+            : browserWords.cantTakeOver(why),
+          again: null,
+        }
+      : null;
+  }
   const holder = Symbol("panel");
   let canvasSlot = $state<HTMLElement>();
   let stage = $state<Stage>();
@@ -2847,6 +2904,14 @@
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
+    if (isBrowser && browserRow) {
+      all.push({
+        key: "control",
+        priority: HEAD_PRIORITY.control,
+        bar: controlBar,
+        menu: controlMenu,
+      });
+    }
     // A decision page's one Send is its own, at its foot (its doc's
     // `ownSend`): the head stands none for it.
     if (artifact && unsentCount > 0 && !view?.ownSend) {
@@ -2898,6 +2963,9 @@
         bar: inspectBar,
         menu: inspectMenu,
       });
+    }
+    if (isBrowser) {
+      return all;
     }
     if (!isCanvas) {
       all.push({
@@ -2963,6 +3031,31 @@
     )}
   >
     <IconSend /><span>{commentWords.sendCount(unsentCount)}</span>
+  </DropdownMenu.Item>
+{/snippet}
+
+{#snippet controlBar()}
+  <!-- A browser's Take over, or Hand back while the person holds it (WORDS.md). -->
+  {@const holding = !!browserRow?.takeover}
+  <Button
+    data-slot="browser-take"
+    label={holding ? browserWords.handBack : browserWords.takeOver}
+    onclick={browserControl}
+    pending={browserActing}
+    pendingLabel={holding ? browserWords.handingBack : browserWords.takingOver}
+    size="sm"
+    variant={holding ? "outline" : "default"}
+  />
+{/snippet}
+{#snippet controlMenu()}
+  {@const holding = !!browserRow?.takeover}
+  <DropdownMenu.Item
+    disabled={browserActing}
+    onSelect={whileIdle(() => browserActing, browserControl)}
+  >
+    {#if holding}<IconLock />{:else}<IconGlobe />{/if}<span
+      >{holding ? browserWords.handBack : browserWords.takeOver}</span
+    >
   </DropdownMenu.Item>
 {/snippet}
 
@@ -3306,7 +3399,7 @@
 {:else}
   <SideSurface
     of="preview"
-    mode={isCanvas ? undefined : mode}
+    mode={isCanvas || isBrowser ? undefined : mode}
     closeFailed={failure?.again === "close"}
     {closing}
     items={headItems}
@@ -3396,6 +3489,13 @@
       class="absolute inset-0 pointer-events-none"
       bind:this={canvasSlot}
     ></div>
+  {:else if isBrowser && artifact}
+    <BrowserView
+      artifactId={artifact.id}
+      browser={browserRow}
+      {instanceId}
+      machine={browserMachine}
+    />
   {:else if unreached}
     <!-- This tab can't reach the preview's own origin: what failed, by its
          own cause, its fix, and where to switch how previews are reached. -->

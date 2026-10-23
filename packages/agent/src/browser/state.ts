@@ -346,6 +346,20 @@ export const slotted = async (
   );
 };
 
+/**
+ * Whether something else listens on one of `record`'s ports now. The ports
+ * sit inside Linux's ephemeral range (32768–60999 by default), so any
+ * program's connection, or a listener another program left, can hold one
+ * across a restart; a browser that is not running holds none of its own.
+ */
+export const portsTaken = async (record: BrowserRecord): Promise<boolean> => {
+  if (record.slot === undefined) {
+    return false;
+  }
+  const free = await Promise.all(Object.values(portsOf(record)).map(portFree));
+  return !free.every(Boolean);
+};
+
 /** The ports `record`'s host uses: DevTools on the local host, all three in a container. Only a browser that has started has any. */
 export const portsOf = (record: BrowserRecord): BrowserPorts => {
   if (record.slot === undefined) {

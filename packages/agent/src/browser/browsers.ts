@@ -61,6 +61,7 @@ import {
   forgetBrowser,
   type Progress,
   portsOf,
+  portsTaken,
   readBrowser,
   recordFor,
   slotted,
@@ -495,12 +496,24 @@ export const startBrowser = (
     if (relay) {
       record = { ...record, relay };
     }
-    record = await slotted(record, await host.heldSlots?.());
+    const held = (await host.heldSlots?.()) ?? new Set<number>();
+    record = await slotted(record, held);
     if (await standsAsAsked(record, host, relay, rules)) {
       record = { ...record, lastUsedAt: Date.now() };
       await writeBrowser(record);
       told();
       return rowOf(record);
+    }
+    // Its kept slot's ports taken by another program while it was down (a
+    // restart, a connection's ephemeral port): it moves to a slot whose
+    // ports are free, rather than failing to bind them.
+    if (!(await host.running(record)) && (await portsTaken(record))) {
+      const from = portsOf(record);
+      const { slot: taken, ...unslotted } = record;
+      record = await slotted(unslotted, new Set([...held, taken as number]));
+      console.info(
+        `[browser] ${key}: another program holds its ports (${Object.values(from).join(", ")}); moved to ${Object.values(portsOf(record)).join(", ")}`
+      );
     }
     starting.set(key, { state: "starting" });
     told();
@@ -522,7 +535,16 @@ export const startBrowser = (
       starting.delete(key);
       return rowOf(record);
     } catch (error) {
-      record = { ...record, state: "failed", why: why(error) };
+      // A browser that didn't start shows the person nothing to hold: a
+      // take-over it carried (from before a restart) ends with it, and the
+      // shield's watch answers its ask as stopped. One still running keeps it.
+      const running = await host.running(record).catch(() => false);
+      record = {
+        ...record,
+        state: "failed",
+        why: why(error),
+        ...(running ? {} : { takeover: null }),
+      };
       await writeBrowser(record);
       console.warn(`[browser] ${key} failed to start: ${record.why}`);
       throw error;

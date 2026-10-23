@@ -40,6 +40,25 @@ const machines = $derived<PaneMachine[]>(
 );
 
 export const fleetPane: PaneFleet = {
+  // A browser artifact's key is its page (core `ArtifactKind`), on the
+  // session's machine: the hub's artifact-session frame reads it the same way.
+  browser: (instanceId) => {
+    const shown = cawco.previews[instanceId];
+    const key =
+      shown?.artifact.kind === "browser" &&
+      shown.source &&
+      "page" in shown.source
+        ? shown.source.page
+        : null;
+    const machineId = cawco.instanceIndex.byId.get(instanceId)?.machineId;
+    return (
+      (key &&
+        cawco.browsers?.find(
+          (one) => one.key === key && one.machineId === machineId
+        )) ||
+      null
+    );
+  },
   preview: (instanceId) => cawco.previews[instanceId],
   session: (instanceId) => cawco.instanceIndex.byId.get(instanceId),
   get machines() {

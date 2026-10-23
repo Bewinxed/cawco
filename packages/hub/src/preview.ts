@@ -344,33 +344,14 @@ async function servePage(
 }
 
 /**
- * A browser artifact's frame on the preview origin: an empty page carrying
- * the overlay, so a show is answered. The browser itself is drawn by the
- * panel from its stream (Projects spec §5.11, the view), never served here.
- */
-const serveBrowser = (
-  artifactId: string,
-  _pathname: string,
-  deps: PreviewListenerDeps
-): Promise<Response> =>
-  Promise.resolve(
-    new Response(
-      injectOverlay(
-        '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>',
-        { artifact: artifactId, ...deps.seed(artifactId) }
-      ),
-      { headers: { "content-type": "text/html; charset=utf-8" } }
-    )
-  );
-
-/**
- * What the hub serves for an artifact it holds: a page's files, a
- * canvas's host page, or a browser's empty frame. A sheet is its
- * workspace's stage, relayed as a port preview: its source names no page,
- * and it never comes here.
+ * What the hub serves for an artifact it holds: a page's files, or a
+ * canvas's host page. A sheet is its workspace's stage, relayed as a port
+ * preview: its source names no page, and it never comes here. A browser is
+ * drawn by its panel from its stream (Projects spec §5.11, the view; hub
+ * browser-routes.ts), and no origin serves it.
  */
 const HUB_SERVES: Record<
-  Exclude<ArtifactKind, "component">,
+  Exclude<ArtifactKind, "component" | "browser">,
   (
     artifactId: string,
     pathname: string,
@@ -382,7 +363,6 @@ const HUB_SERVES: Record<
   preview: servePage,
   canvas: (artifactId, pathname, deps) =>
     serveCanvas(artifactId, pathname, deps.seed),
-  browser: serveBrowser,
 };
 
 type ListenerSocket = PreviewSocket | ArtifactSocket;
@@ -810,6 +790,12 @@ async function serveSession(
   if (!target) {
     previewFailed(HOP, instanceId, "its session shows no preview");
     return downResponse("closed", 404);
+  }
+  if (target.artifact.kind === "browser") {
+    return new Response(
+      "A browser is drawn by its panel from its stream; no page serves it.",
+      { status: 404 }
+    );
   }
   if ("page" in target.source && target.artifact.kind !== "component") {
     // A project's page is served on its project's origin alone, at its own

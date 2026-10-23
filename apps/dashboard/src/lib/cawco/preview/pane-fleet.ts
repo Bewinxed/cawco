@@ -7,6 +7,7 @@
  * The pane is the same component in both; it reads the store its tree set.
  */
 import type { PreviewFrame } from "@cawco/core";
+import type { ListedBrowser } from "@cawco/core/browser";
 import { createContext } from "svelte";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import type { PageThumbnail } from "./wire";
@@ -40,6 +41,12 @@ export interface PaneMachine {
 }
 
 export interface PaneFleet {
+  /**
+   * The browser the session's panel shows (its browser artifact's key, on
+   * the session's machine), as the hub lists it; null while the panel shows
+   * no browser, or its machine has reported none for that key.
+   */
+  browser: (instanceId: string) => ListedBrowser | null;
   /** Closes the session's panel. */
   closePreview: (instanceId: string) => Promise<void>;
   /** A machine's folders, for a page's place picker. */
