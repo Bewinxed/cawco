@@ -116,8 +116,17 @@
  *    while more is below and at its head once scrolled to its end; the page
  *    never scrolling sideways; no two cards, options or parts of an option
  *    meeting, and every option's words inside its cell.
+ * 15. One Yjs per realm: a page served with the overlay, as the hub serves
+ *    a decision page, whose three Previews embed canvases of a card that
+ *    keeps its words in a Yjs doc and syncs it with y-protocols (the
+ *    dashboard's comment rail, through y-websocket), each embed given the
+ *    overlay as a machine's preview proxy gives it, in Chromium and WebKit:
+ *    no console message on the page or any frame says "Yjs was already
+ *    imported", and every card in every embed builds its doc on the
+ *    overlay's Yjs (its `Doc` is `window.cawcoArtifact.Y.Doc`).
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
+ *   bun scripts/probe-kit/run.ts web decision-embed --leg one-yjs   # 15 alone
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { cpSync, mkdirSync, rmSync } from "node:fs";
@@ -126,6 +135,7 @@ import type { Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
+  APP,
   blankEmbeds,
   CAWCO_BRIDGE,
   captureFaults,
@@ -1868,6 +1878,276 @@ async function realSizeLegs(
   }
 }
 
+// --- 15. One Yjs per realm ----------------------------------------------------
+
+const SHARED = "src/Shared.stories.js";
+const SHARED_ID = idOf("shared-note");
+const SHARED_PAIR_ID = idOf("shared-and-pinned");
+const SHARED_PAGE = "shared";
+/** What Yjs logs when a second copy of it loads into a realm (yjs src/index.js). */
+const YJS_TWICE = /Yjs was already imported/;
+/** Three Previews of a card that keeps its words in a Yjs doc: every story, one by name, and one beside a card that imports no Yjs. */
+const SHARED_PROGRAM = [
+  `root = Decisions("Shared notes", [shared])`,
+  `shared = Decision("shared", "Which note card reads best?", [lone, reply], "Each card keeps its words in a shared document.", [every])`,
+  `lone = Option("lone", "The note", "One line kept in the document.", true, [one], "Replies stand a click away.")`,
+  `reply = Option("reply", "The reply", "A reply beside the pinned note.", false, [pair], "Two cards to read.")`,
+  `every = Preview("${SHARED_ID}", "Every shared card")`,
+  `one = Preview("${SHARED_ID}", "The note alone", ["Note"])`,
+  `pair = Preview("${SHARED_PAIR_ID}", "The reply beside the pinned note", ["Reply", "Pinned"])`,
+].join("\n");
+/** `--leg one-yjs`: item 15 alone. */
+const ONLY_LEG = process.argv.includes("--leg")
+  ? process.argv[process.argv.indexOf("--leg") + 1]
+  : undefined;
+
+/**
+ * 15. The shared page in Chromium and WebKit: no realm logs a second Yjs,
+ * and every card in each embed builds its doc on the overlay's.
+ */
+async function oneYjs(
+  kit: Kit,
+  stage: Awaited<ReturnType<typeof startDecisionStage>>
+): Promise<void> {
+  for (const engine of ["chromium", "webkit"] as const) {
+    const leg = `${engine} 1440px light, ${SHARED_PAGE}`;
+    const page = await kit.page("desk", { engine, theme: "light" });
+    const twice: string[] = [];
+    page.on("console", (message) => {
+      if (YJS_TWICE.test(message.text())) {
+        twice.push(
+          `[${message.type()}] ${message.text().slice(0, 160)} (${message.location().url})`
+        );
+      }
+    });
+    await page.goto(stage.pageUrl(SHARED_PAGE, "light"), { waitUntil: "load" });
+    await page.waitForFunction(
+      (selector) => document.querySelectorAll(selector).length === 3,
+      EMBED_FRAME,
+      { timeout: 60_000 }
+    );
+    const cards: {
+      caption: string;
+      loads: string[];
+      marks: string[] | null;
+    }[] = [];
+    for (const handle of await page.$$(EMBED_FRAME)) {
+      await handle.scrollIntoViewIfNeeded();
+      const frame = await handle.contentFrame();
+      const caption = await handle.evaluate(
+        (el) =>
+          el
+            .closest("figure")
+            ?.querySelector("[data-slot=media-caption]")
+            ?.textContent?.trim() ?? ""
+      );
+      const marks = await frame
+        ?.waitForFunction(
+          () => {
+            const rest = [
+              ...document.querySelectorAll<HTMLElement>(
+                '.cawco-frame[data-cawco-interaction="rest"]'
+              ),
+            ];
+            const said = rest.every((one) =>
+              ["drawn", "failed", "empty"].includes(
+                one.querySelector<HTMLElement>(".cawco-frame-status")?.dataset
+                  .state ?? ""
+              )
+            );
+            return rest.length > 0 && said
+              ? [
+                  ...document.querySelectorAll<HTMLElement>(
+                    '.cawco-frame[data-cawco-interaction="rest"] [data-one-yjs]'
+                  ),
+                ].map((one) => one.dataset.oneYjs ?? "")
+              : null;
+          },
+          undefined,
+          { timeout: STAGE_WAIT_MS, polling: 250 }
+        )
+        .then(
+          async (answer) => (await answer.jsonValue()) as string[],
+          () => null
+        );
+      // Where the embed's realm loaded a Yjs from: the overlay's script, and any module of the page's.
+      const loads =
+        (await frame?.evaluate(() =>
+          performance
+            .getEntriesByType("resource")
+            .map((one) => one.name)
+            .filter(
+              (name) => name.includes("yjs") || name.includes("__cawco/overlay")
+            )
+        )) ?? [];
+      cards.push({ caption, marks: marks ?? null, loads });
+    }
+    await settle(page, 1000);
+    const said = cards.map(
+      ({ caption, marks }) =>
+        `“${caption}”: ${marks ? marks.join(", ") || "no shared card" : "nothing drawn"}`
+    );
+    kit.check(
+      `${leg}: no realm logs "Yjs was already imported", the page or its ${cards.length} embeds (${twice.length} found)`,
+      twice.length === 0,
+      [
+        ...new Set(twice),
+        ...cards.map(
+          ({ caption, loads }) => `“${caption}” loaded ${loads.join(", ")}`
+        ),
+      ].join("\n    ")
+    );
+    kit.check(
+      `${leg}: every shared card in every embed builds its doc on the overlay's Yjs (${said.join("; ")})`,
+      cards.length === 3 &&
+        cards.every(
+          ({ marks }) =>
+            !!marks && marks.length > 0 && marks.every((one) => one === "true")
+        ),
+      said.join("\n    ")
+    );
+    await page.close();
+
+    // The canvas on the stage's own port, as the daemon draws it (agent
+    // stage-render.ts): no overlay, so the project's own Yjs, once.
+    const bare = await kit.page("desk", { engine, theme: "light" });
+    const bareTwice: string[] = [];
+    bare.on("console", (message) => {
+      if (YJS_TWICE.test(message.text())) {
+        bareTwice.push(message.text().slice(0, 160));
+      }
+    });
+    await bare.goto(
+      `http://127.0.0.1:${stage.stagePort}/@cawco/canvas?file=${encodeURIComponent(SHARED)}&by=stage`,
+      { waitUntil: "load" }
+    );
+    const bareMarks = await bare
+      .waitForFunction(
+        () => {
+          const marks = [
+            ...document.querySelectorAll<HTMLElement>(
+              '.cawco-frame[data-cawco-interaction="rest"] [data-one-yjs]'
+            ),
+          ].map((one) => one.dataset.oneYjs ?? "");
+          return marks.length === 2 ? marks : null;
+        },
+        undefined,
+        { timeout: STAGE_WAIT_MS, polling: 250 }
+      )
+      .then(
+        async (answer) => (await answer.jsonValue()) as string[],
+        () => [] as string[]
+      );
+    await settle(bare, 1000);
+    const bareLoads = await bare.evaluate(() =>
+      performance
+        .getEntriesByType("resource")
+        .map((one) => one.name)
+        .filter((name) => name.includes("yjs"))
+    );
+    kit.check(
+      `${engine}, the shared canvas on the stage's own port (as the daemon draws it): both cards draw on the project's own Yjs, loaded once, and nothing logs "Yjs was already imported" (cards ${bareMarks.join(", ") || "none drawn"}; ${bareTwice.length} found; loaded ${bareLoads.join(", ")})`,
+      bareMarks.length === 2 &&
+        bareMarks.every((one) => one === "no overlay") &&
+        bareTwice.length === 0,
+      bareTwice.join("\n    ")
+    );
+    await bare.close();
+  }
+}
+
+/** The dashboard's Needs you card: its sheet sends through artifact-doc.ts, which imports yjs, y-websocket and y-indexeddb. */
+const NEEDS = "src/lib/cawco/home/NeedsCard.stories.ts";
+const NEEDS_ID = idOf("needs-card");
+const NEEDS_PAGE = "needs";
+/** A Yjs of the dashboard's own, as its stage would serve it: from node_modules, or pre-bundled. */
+const DASHBOARD_YJS = /node_modules\/yjs|deps\/yjs/;
+const NEEDS_PROGRAM = [
+  `root = Decisions("The held post", [held])`,
+  `held = Decision("held", "Does the held post read right?", [send, keep], "Its card is the dashboard's own.", [card])`,
+  `send = Option("send", "Send it", "The post goes out as written.", true, [], "Nothing more is checked.")`,
+  `keep = Option("keep", "Keep it held", "One more look first.", false, [], "The post waits a day.")`,
+  `card = Preview("${NEEDS_ID}", "The Needs you card")`,
+].join("\n");
+
+/**
+ * 15, on the dashboard's own stage (SvelteKit, its config's pre-bundling):
+ * a decision page with the overlay embedding the Needs you card, whose
+ * sheet imports the dashboard's artifact-doc.ts, in Chromium and WebKit;
+ * no realm logs a second Yjs, and the embed loads no Yjs of the
+ * dashboard's own (neither `node_modules/yjs` nor a pre-bundled one).
+ */
+async function oneYjsOnDashboard(kit: Kit): Promise<void> {
+  const stage = await startDecisionStage(
+    new Map([[NEEDS_PAGE, NEEDS_PROGRAM]]),
+    { [NEEDS_ID]: [NEEDS] },
+    { root: APP, kit: true },
+    {},
+    new Set([NEEDS_PAGE])
+  );
+  try {
+    for (const engine of ["chromium", "webkit"] as const) {
+      const leg = `${engine} 1440px light, the dashboard's ${NEEDS_PAGE} page`;
+      const page = await kit.page("desk", { engine, theme: "light" });
+      const twice: string[] = [];
+      page.on("console", (message) => {
+        if (YJS_TWICE.test(message.text())) {
+          twice.push(
+            `[${message.type()}] ${message.text().slice(0, 160)} (${message.location().url})`
+          );
+        }
+      });
+      await page.goto(stage.pageUrl(NEEDS_PAGE, "light"), {
+        waitUntil: "load",
+      });
+      const handle = await page.waitForSelector(EMBED_FRAME, {
+        timeout: 60_000,
+      });
+      await handle.scrollIntoViewIfNeeded();
+      const frame = await handle.contentFrame();
+      const drawn = await frame
+        ?.waitForFunction(
+          () => {
+            const rest = [
+              ...document.querySelectorAll<HTMLElement>(
+                '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status'
+              ),
+            ].map((one) => one.dataset.state ?? "");
+            return rest.length > 0 && rest.every((one) => one === "drawn");
+          },
+          undefined,
+          { timeout: STAGE_WAIT_MS * 2, polling: 250 }
+        )
+        .then(
+          () => true,
+          () => false
+        );
+      await settle(page, 1000);
+      const loads =
+        (await frame?.evaluate(() =>
+          performance
+            .getEntriesByType("resource")
+            .map((one) => one.name)
+            .filter(
+              (name) => name.includes("yjs") || name.includes("__cawco/overlay")
+            )
+        )) ?? [];
+      const own = loads.filter((one) => DASHBOARD_YJS.test(one));
+      kit.check(
+        `${leg}: every card drawn, no realm logs "Yjs was already imported" and the embed loads no Yjs of the dashboard's own (${twice.length} found; drawn ${drawn}; loaded ${loads.join(", ")})`,
+        drawn === true && twice.length === 0 && own.length === 0,
+        [...new Set(twice), ...own].join("\n    ")
+      );
+      await page.close();
+    }
+  } finally {
+    await stage.stop();
+  }
+}
+
+/** How long an embed of the shared page has to draw: its first load optimizes the fixture's dependencies. */
+const STAGE_WAIT_MS = 120_000;
+
 const spec: Spec = {
   name: "decision-embed",
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every assertion in the order the spec's head lists them
@@ -1881,6 +2161,7 @@ const spec: Spec = {
       [PICTURED_PAGE, PICTURED_PROGRAM],
       [WORDED_PAGE, WORDED_PROGRAM],
       [REAL_PAGE, REAL_PROGRAM],
+      [SHARED_PAGE, SHARED_PROGRAM],
     ] as const) {
       let refusal = "";
       try {
@@ -1902,6 +2183,7 @@ const spec: Spec = {
         [PICTURED_PAGE, PICTURED_PROGRAM],
         [WORDED_PAGE, WORDED_PROGRAM],
         [REAL_PAGE, REAL_PROGRAM],
+        [SHARED_PAGE, SHARED_PROGRAM],
       ]),
       {
         [BOOK_ID]: [LEDGER, NOTE],
@@ -1912,11 +2194,19 @@ const spec: Spec = {
         [MONTH_ID]: [LEDGER],
         [SHEET_ID]: [SHEET],
         [BOARD_ID]: [BOARD],
+        [SHARED_ID]: [SHARED],
+        [SHARED_PAIR_ID]: [SHARED, NOTE],
       },
       { root: fixtureRoot(), kit: false },
-      { [LONG_ID]: LONG_PAGE }
+      { [LONG_ID]: LONG_PAGE },
+      new Set([SHARED_PAGE])
     );
     try {
+      if (ONLY_LEG === "one-yjs") {
+        await oneYjs(kit, stage);
+        await oneYjsOnDashboard(kit);
+        return;
+      }
       for (const view of ["desk", "phone"] as const) {
         for (const theme of THEMES) {
           const leg = `${view === "desk" ? "1440×900" : "390×844"} ${theme}`;
@@ -2520,6 +2810,8 @@ const spec: Spec = {
       await widthLegs(kit, stage);
       await loadsClean(kit, stage);
       await realSizeLegs(kit, stage);
+      await oneYjs(kit, stage);
+      await oneYjsOnDashboard(kit);
     } finally {
       await stage.stop();
     }

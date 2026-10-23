@@ -2564,13 +2564,79 @@ function cawcoKit() {
   };
 }
 
+/** The page's one Yjs, as a module of the stage's client ({@link cawcoYjs}). */
+const YJS_MODULE = "\0cawco:yjs";
+
+/** What {@link cawcoYjs} uses of a plugin hook's context. */
+interface YjsHookContext {
+  environment: { name: string };
+  resolve: (
+    id: string,
+    importer?: string,
+    options?: { skipSelf?: boolean }
+  ) => Promise<{ id: string } | null>;
+}
+
+/**
+ * `yjs` on a stage's page is one copy. The overlay's script runs before
+ * every module of the page and loads its own Yjs first (preview-overlay
+ * artifact.ts `SHARED_YJS`, `window.cawcoArtifact.Y`); a story whose
+ * component imported the project's Yjs (the dashboard's comment rail,
+ * through y-websocket) loaded a second, and Yjs logged "Yjs was already
+ * imported", its constructor checks failing across the two. So every
+ * `import … from "yjs"` of the client resolves to {@link YJS_MODULE}: the
+ * overlay's Yjs where the overlay runs in the page (a canvas in a panel or
+ * a decision page's embed, through a preview origin), the project's own
+ * where none does (a canvas the daemon draws on the stage's own port,
+ * stage-render.ts; a frame whose same-origin parent's overlay stands down,
+ * overlay.ts), each member by the project's Yjs's own export names. Yjs is
+ * left out of Vite's pre-bundling, which makes it external to every bundle
+ * of the dependencies pre-bundled (Vite 8.3.4 `runOptimizeDeps`: `const
+ * external = [...optimizeDeps.exclude ?? []]`), so a pre-bundled
+ * y-websocket's, y-protocols' or y-indexeddb's `import * as Y from "yjs"`
+ * resolves here too, never to a copy in their chunk.
+ */
+function cawcoYjs() {
+  return {
+    name: "cawco:stage-yjs",
+    enforce: "pre" as const,
+    config: () => ({ optimizeDeps: { exclude: ["yjs"] } }),
+    resolveId(this: YjsHookContext, id: string, importer: string | undefined) {
+      return id === "yjs" &&
+        importer !== YJS_MODULE &&
+        this.environment.name === "client"
+        ? YJS_MODULE
+        : null;
+    },
+    async load(this: YjsHookContext, id: string) {
+      if (id !== YJS_MODULE) {
+        return null;
+      }
+      const own = await this.resolve("yjs", YJS_MODULE, { skipSelf: true });
+      if (!own) {
+        throw new Error(
+          "The project imports yjs, and it does not resolve from the project's root."
+        );
+      }
+      const names = Object.keys(
+        await import(pathToFileURL(own.id.split("?")[0] as string).href)
+      ).filter((name) => name !== "default");
+      return [
+        'const Y = globalThis.cawcoArtifact?.Y ?? (await import("yjs"));',
+        `export const { ${names.join(", ")} } = Y;`,
+      ].join("\n");
+    },
+  };
+}
+
 const CONFIGS = ["ts", "mts", "js", "mjs", "cts", "cjs"].map(
   (ext) => `vite.config.${ext}`
 );
 
-/** The stage's plugins for the Vite inside any toolchain: a Svelte element carries its place already; SvelteKit's client modules are stubs. */
+/** The stage's plugins for the Vite inside any toolchain: one Yjs on the page; a Svelte element carries its place already; SvelteKit's client modules are stubs. */
 const plugins = () => [
   cawcoStage(),
+  cawcoYjs(),
   ...(framework === "svelte" ? [] : [stamp()]),
   ...(kit ? [cawcoKit()] : []),
 ];

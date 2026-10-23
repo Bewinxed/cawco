@@ -46,16 +46,9 @@ import {
 } from "@cawco/core/doc-link";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { WebsocketProvider } from "y-websocket";
-import {
-  applyUpdate,
-  Doc,
-  encodeStateAsUpdate,
-  Array as YArray,
-  YArrayEvent,
-  YEvent,
-  Map as YMap,
-  YMapEvent,
-} from "yjs";
+// biome-ignore lint/performance/noNamespaceImport: the whole of Yjs is what the overlay hands a page as its one copy (`SHARED_YJS`)
+import * as Yjs from "yjs";
+import { applyUpdate, Doc } from "yjs";
 import { here } from "./boot";
 
 /** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
@@ -172,20 +165,16 @@ export interface ArtifactHold {
 }
 
 /**
- * The Yjs a canvas's host page runs on: the members it and y-excalidraw
- * use, so every other page's overlay keeps the rest of Yjs out of its
- * bundle. canvas-host/yjs.ts re-exports these by name.
+ * The Yjs every module of the page runs on where the overlay runs: the
+ * whole of it, its module namespace, so the page loads no second copy. A
+ * second copy logs "Yjs was already imported" and breaks the constructor
+ * checks across the two (`instanceof Y.Map` false for a map made by the
+ * other). The overlay's script runs before any of the page's, so its copy
+ * is the first; a canvas's host page binds it by name (canvas-host/yjs.ts),
+ * and a stage's Vite serves it as the page's `yjs` (agent stage-host
+ * host.ts `cawcoYjs`), y-websocket's and y-protocols' imports included.
  */
-const SHARED_YJS = Object.freeze({
-  applyUpdate,
-  Array: YArray,
-  Doc,
-  encodeStateAsUpdate,
-  Map: YMap,
-  YArrayEvent,
-  YEvent,
-  YMapEvent,
-});
+const SHARED_YJS = Yjs;
 
 /** What a canvas's host page takes from the overlay: its Yjs, the doc now, and every doc after. */
 export interface ArtifactGlobal {

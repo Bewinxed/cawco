@@ -24,6 +24,12 @@ import { PNG } from "pngjs";
 import { buildStageHost } from "../../packages/agent/src/stage-host/build";
 import { decisionHostFile } from "../../packages/core/src/decision-host";
 import {
+  injectOverlay,
+  OVERLAY_KEY,
+  OVERLAY_PATH,
+  overlayResponse,
+} from "../../packages/core/src/preview-proxy";
+import {
   checkProgram,
   DECISION_ASSETS,
   programHost,
@@ -188,8 +194,35 @@ interface Socket {
   up?: WebSocket;
 }
 
-/** The embed origin: the ping the hub answers on a preview origin, and the stage behind it. */
-function embedOrigin(stage: number) {
+/**
+ * The overlay on a page this harness serves, as a preview origin serves it
+ * (core preview-proxy.ts): its script at {@link OVERLAY_PATH}, its host's
+ * origins (`parents`) frozen before it, and its tag injected before every
+ * script of each HTML page (`injectOverlay`). Null where the page is not on.
+ */
+async function overlayAnswer(
+  request: Request,
+  parents: readonly string[]
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  return url.pathname === OVERLAY_PATH
+    ? await overlayResponse(
+        parents,
+        request.headers.get("accept-encoding"),
+        url.searchParams.get(OVERLAY_KEY)
+      )
+    : null;
+}
+
+/**
+ * The embed origin: the ping the hub answers on a preview origin, and the
+ * stage behind it; with `overlaid`, the overlay too, on every page it relays
+ * (a machine's preview proxy, agent preview.ts), framed by `parents()`.
+ */
+function embedOrigin(
+  stage: number,
+  overlaid: (() => readonly string[]) | null = null
+) {
   return Bun.serve<Socket>({
     hostname: "127.0.0.1",
     port: 0,
@@ -199,6 +232,10 @@ function embedOrigin(stage: number) {
         return new Response("ok", {
           headers: { "access-control-allow-origin": "*" },
         });
+      }
+      const script = overlaid ? await overlayAnswer(request, overlaid()) : null;
+      if (script) {
+        return script;
       }
       if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
         const offered = request.headers.get("sec-websocket-protocol");
@@ -228,6 +265,12 @@ function embedOrigin(stage: number) {
       const out = new Headers(answer.headers);
       out.delete("content-encoding");
       out.delete("content-length");
+      if (overlaid && out.get("content-type")?.startsWith("text/html")) {
+        return new Response(injectOverlay(await answer.text()), {
+          status: answer.status,
+          headers: out,
+        });
+      }
       return new Response(answer.body, {
         status: answer.status,
         headers: out,
@@ -288,19 +331,62 @@ export interface StageProject {
 }
 
 /**
+ * A decision page as the hub serves it: `program` in the host page, the
+ * media its Previews embed beside it (each canvas of `files` on the origin
+ * `embedAt`, in `theme`; each page artifact of `pages`), and the overlay
+ * where `withOverlay`, else the stand-in bridge's pick (`PICK_PATH`).
+ */
+function decisionPage(
+  program: string,
+  media: {
+    embedAt: string;
+    files: Readonly<Record<string, readonly string[]>>;
+    pages: Readonly<Record<string, string>>;
+    theme: string;
+  },
+  withOverlay: boolean
+): Response {
+  const named = Object.fromEntries([
+    ...Object.entries(media.files).map(([id, held]) => [
+      id,
+      {
+        kind: "component",
+        name: held[0]?.split("/").at(-1) ?? id,
+        embed: `${media.embedAt}/@cawco/canvas?${held.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&scheme=${media.theme}`,
+      },
+    ]),
+    ...Object.keys(media.pages).map((id) => [id, { kind: "page", name: id }]),
+  ]);
+  const title = program.match(TITLE)?.[1] ?? "";
+  // The overlay's own pick where it runs; the stand-in bridge's otherwise.
+  const html = programHost(program, title, {}).replace(
+    "</body>",
+    `${scriptJson("cawco-media", named)}\n${withOverlay ? "" : `<script src="${PICK_PATH}"></script>\n`}</body>`
+  );
+  return new Response(withOverlay ? injectOverlay(html) : html, {
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+}
+
+/**
  * Starts the stage of `project` (the dashboard's own by default) and serves
  * each program of `programs` (by page name) as the hub's decision host
  * draws it, each id of `files` (the states files of one component canvas,
  * from the project's root, by artifact id) a canvas its Previews embed, and
  * each id of `pages` a page artifact (its HTML) at its own address on the
  * page's origin, as the hub serves one (`/__cawco/page/<id>/`).
+ * Each program named in `overlaid` is served with the overlay, as the hub
+ * serves a decision page, and its Previews embed through an origin that
+ * gives every page the overlay, as a machine's preview proxy does: such a
+ * page needs no `CAWCO_BRIDGE`, the overlay being its bridge.
  * Answers once the stage says it is ready.
  */
 export async function startDecisionStage(
   programs: ReadonlyMap<string, string>,
   files: Readonly<Record<string, readonly string[]>>,
   project: StageProject = { root: APP, kit: true },
-  pages: Readonly<Record<string, string>> = {}
+  pages: Readonly<Record<string, string>> = {},
+  overlaid: ReadonlySet<string> = new Set()
 ): Promise<DecisionStage> {
   const host = join(project.root, ".cawco/stage/host.mjs");
   mkdirSync(join(project.root, ".cawco/stage"), { recursive: true });
@@ -325,12 +411,29 @@ export async function startDecisionStage(
   stage.stdout.on("data", hear);
   stage.stderr.on("data", hear);
   const embedHost = embedOrigin(stagePort);
+  /** The decision pages' origin: the one an overlaid embed's overlay is framed from. */
+  const parents: string[] = [];
+  const overlaidHost =
+    overlaid.size > 0 ? embedOrigin(stagePort, () => parents) : null;
   const picking = await pickWiring();
+  // The top document has no parent to frame it.
+  const answerOverlay = overlaidHost
+    ? (request: Request) => overlayAnswer(request, [])
+    : () => Promise.resolve(null);
+  const pageOf = (name: string, program: string, theme: string) => {
+    const on = overlaidHost !== null && overlaid.has(name);
+    const embedAt = `http://127.0.0.1:${on ? overlaidHost.port : embedHost.port}`;
+    return decisionPage(program, { files, pages, embedAt, theme }, on);
+  };
   const served = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const { pathname } = new URL(request.url);
+      const script = await answerOverlay(request);
+      if (script) {
+        return script;
+      }
       const artifact = pathname.match(PAGE_ARTIFACT)?.[1];
       if (artifact && pages[artifact] !== undefined) {
         return new Response(pages[artifact], {
@@ -353,30 +456,14 @@ export async function startDecisionStage(
       if (!(program && theme)) {
         return new Response("Not found", { status: 404 });
       }
-      const media = Object.fromEntries([
-        ...Object.entries(files).map(([id, held]) => [
-          id,
-          {
-            kind: "component",
-            name: held[0]?.split("/").at(-1) ?? id,
-            embed: `http://127.0.0.1:${embedHost.port}/@cawco/canvas?${held.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&scheme=${theme}`,
-          },
-        ]),
-        ...Object.keys(pages).map((id) => [id, { kind: "page", name: id }]),
-      ]);
-      const title = program.match(TITLE)?.[1] ?? "";
-      const html = programHost(program, title, {}).replace(
-        "</body>",
-        `${scriptJson("cawco-media", media)}\n<script src="${PICK_PATH}"></script>\n</body>`
-      );
-      return new Response(html, {
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      return pageOf(String(name), program, theme);
     },
   });
+  parents.push(`http://127.0.0.1:${served.port}`);
   const stop = async () => {
     await served.stop(true);
     await embedHost.stop(true);
+    await overlaidHost?.stop(true);
     stage.kill();
   };
   try {

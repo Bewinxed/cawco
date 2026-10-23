@@ -8,7 +8,7 @@
  * `buildCanvasHost`). The overlay's script runs before the host's module:
  * it is a classic script at the head of the page, the module is deferred.
  *
- * Exported: what the host code and y-excalidraw use, the members the
+ * Exported: what the host code and y-excalidraw use, of the whole Yjs the
  * overlay hands over (`SHARED_YJS`).
  */
 import type { ArtifactGlobal } from "../preview-overlay/artifact";
