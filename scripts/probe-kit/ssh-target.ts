@@ -71,8 +71,10 @@ export const machineBin = (dir: string): string => {
     "sed",
     "mv",
     "id",
-    // The hub reads where the machine listens, and ends its own stale
-    // session, with these (hub ssh-tunnels.ts `listenersOn`, `endStaleOn`).
+    // The hub reads where the machine listens, records the session holding
+    // its port and ends that one alone, with these and `ps`, `sed`, `kill`
+    // (hub ssh-tunnels.ts `listenersOn`, `holderOn`, `endOwnOn`). No `tr`:
+    // the hub's commands must not need one.
     "ss",
     // A clone and push through the hub's remote (ssh-reach (i)).
     "git",

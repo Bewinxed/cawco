@@ -106,6 +106,7 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -126,7 +127,7 @@ import {
 } from "../../../packages/core/src/signal";
 import type { RelayAnswer } from "../../../packages/core/src/stream-relay";
 import { connectWords } from "../../../packages/core/src/words/connect";
-import { until } from "../../scratch-fleet";
+import { ACCOUNT, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { machineBin } from "../ssh-target";
 
@@ -309,6 +310,15 @@ async function furnish(fleet: KitFleet, offered: string): Promise<Box> {
   const bin = join(dir, "hub-bin");
   const binary = join(home, ".local", "share", "cawco", "binary");
   mkdirSync(join(binary, "current"), { recursive: true });
+  // The probe's Claude account, signed in with the fleet's fake login, in
+  // the box's HOME as in every machine's of the fleet (scratch-fleet.ts
+  // `furnish`): the hub starts no Claude session on a machine with no CawCo
+  // account signed in (hub placement.ts `noAccountRefusal`), and (u) starts one.
+  cpSync(
+    join(fleet.home, ".cawco", "accounts", ACCOUNT),
+    join(home, ".cawco", "accounts", ACCOUNT),
+    { recursive: true }
+  );
   mkdirSync(join(home, ".ssh"), { recursive: true, mode: 0o700 });
   mkdirSync(bin, { recursive: true });
   const path = machineBin(join(dir, "machine-bin"));
@@ -727,7 +737,10 @@ async function joins(
  * socket heard a challenge, proved itself to no hub (agent hub-proof.ts).
  * Now, once (b) and (c) have joined the box: its config names the hub at
  * its forward and that hub's id; its first fleet sync has landed, the
- * sidecar holding the fleet's denials; a session started there runs; and
+ * sidecar holding the fleet's denials; once the probe's account (in the
+ * box's HOME since {@link furnish}) reads signed in there, a session
+ * started there runs (2026-10-23, before the box had an account: `[hub]
+ * refused spawn: No Claude account is signed in on …`); and
  * the hub refused nothing anonymous through the box's forward, nor said a
  * sync did not land there, since the hub started.
  */
@@ -770,6 +783,21 @@ async function sessionStarts(
         line.includes("not this machine's agent") ||
         line.includes("sync from the hub refused")
     );
+  // The probe's account, which the box's HOME holds, read signed in there
+  // by the box's agent: what the hub places a Claude session on.
+  const signins = () =>
+    fleet.query<{ machine_id: string; state: string }>(
+      "SELECT machine_id, state FROM account_signins WHERE account_id = ?",
+      ACCOUNT
+    );
+  const signedIn = await until(
+    "the probe's Claude account signed in on the box",
+    () => signins(),
+    (rows) =>
+      rows.some((row) => row.machine_id === BOX && row.state === "signed-in"),
+    120_000
+  ).catch(() => undefined);
+  const spawnLines = await linesFrom(fleet);
   const started = Date.now();
   const session = await fleet
     .spawn("claude", "ssh-reach u", box.home, {}, BOX)
@@ -778,6 +806,9 @@ async function sessionStarts(
       (error: Error) => ({ id: "", error: error.message })
     );
   const tookMs = Date.now() - started;
+  const refusedSpawn = (await spawnLines()).filter((line) =>
+    line.includes("[hub] refused spawn")
+  );
   const onBox = fleet.query<{ last_error: string | null; status: string }>(
     "SELECT status, last_error FROM instances WHERE machine_id = ? ORDER BY created_at DESC LIMIT 1",
     BOX
@@ -802,7 +833,7 @@ async function sessionStarts(
       session.id !== "" &&
       anonymous.length === 0 &&
       unlanded.length === 0,
-    `config ${JSON.stringify(config)} (hub ${hubId}, forward port ${port}); sidecar ${denials ? `deniedTools ${JSON.stringify(denials.deniedTools)}` : "none within 30 s"}; agent synced: ${synced}, refused: ${JSON.stringify(refusedHere)}; session ${session.id || session.error} after ${tookMs} ms, row ${JSON.stringify(onBox)}; anonymous refusals ${JSON.stringify(anonymous)}; syncs not landed ${JSON.stringify(unlanded)}`
+    `config ${JSON.stringify(config)} (hub ${hubId}, forward port ${port}); sidecar ${denials ? `deniedTools ${JSON.stringify(denials.deniedTools)}` : "none within 30 s"}; agent synced: ${synced}, refused: ${JSON.stringify(refusedHere)}; account sign-ins ${JSON.stringify(signedIn ?? signins())}${signedIn ? "" : " (not signed in on the box within 120 s)"}; session ${session.id || session.error} after ${tookMs} ms, row ${JSON.stringify(onBox)}, spawns the hub refused ${JSON.stringify(refusedSpawn)}; anonymous refusals ${JSON.stringify(anonymous)}; syncs not landed ${JSON.stringify(unlanded)}`
   );
 }
 
@@ -1713,6 +1744,8 @@ async function run(kit: Kit): Promise<void> {
   const bin = join(fleet.sandbox, "box", "hub-bin");
   fleet.launch("hub", [], { PATH: `${bin}:${fleet.env.PATH}` });
   await fleet.hubUp();
+  // The probe's account, filed before the box's agent reports it signed in.
+  fleet.fileAccount();
   const offer = await fleet
     .api<{ manifest?: { version?: string } }>("/api/binary-updates/latest")
     .then(

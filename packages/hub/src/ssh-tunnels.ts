@@ -153,8 +153,14 @@ const listenersOn = (port: number): string =>
 const listenersOf = (port: number): string =>
   `PATH="$PATH:/usr/sbin:/sbin"; if command -v ss >/dev/null 2>&1; then pids=$(ss -ltnpH "sport = :${port}" | sed -n "s/.*pid=\\([0-9][0-9]*\\).*/\\1/p"); elif command -v lsof >/dev/null 2>&1; then pids=$(lsof -nP -iTCP:${port} -sTCP:LISTEN -Fp | sed -n "s/^p//p"); else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi`;
 
-/** The shell words for `$pid`'s start, in `ps -o lstart=`'s words with its spaces squeezed. */
-const START_OF_PID = `$(ps -o lstart= -p "$pid" | tr -s " " | sed "s/^ //;s/ $//")`;
+/**
+ * The shell words for `$pid`'s start, in `ps -o lstart=`'s words with its
+ * spaces squeezed by `sed` alone, which {@link listenersOf} needs already: a
+ * machine whose PATH had no `tr` read every start as nothing, so no session
+ * was recorded and a silent drop's stale session was never ended (ssh-reach
+ * (g), 2026-10-23: `sh: 1: tr: not found`).
+ */
+const START_OF_PID = `$(ps -o lstart= -p "$pid" | sed "s/  */ /g;s/^ //;s/ $//")`;
 
 /**
  * The machine's command that prints each process listening on `port` as
