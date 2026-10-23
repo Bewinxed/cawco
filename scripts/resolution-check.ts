@@ -112,18 +112,10 @@ const leaksOf = async (
       "--listFilesOnly",
       "--traceResolution",
     ],
-    // GOGC=off: Golar's Go runtime died in a garbage collection's stack scan
-    // in one run of the twenty in three ("fatal error: traceback did not
-    // unwind completely", exit 134, a different project each time: Go's
-    // own unwinder, as in golang/go#81959), failing the landing gate twice
-    // on a tree that checks clean. A listing that collects nothing never
-    // scans a stack; it holds 1.19 GB at most instead of 1.01 (the hub's
-    // project, measured), and exits within seconds.
     {
       cwd: ROOT,
       stdout: "pipe",
       stderr: "pipe",
-      env: { ...process.env, GOGC: "off" },
     }
   );
   const [out, err, code] = await Promise.all([
@@ -184,17 +176,11 @@ const leaksUnder = async (
   projects: string[]
 ): Promise<Leak[]> => {
   const folders = await insides(root);
-  // One project at a time: the Golar fork (0.1.11-cawco.1 to .3, one Go build) crashed its Go
-  // runtime with several traces at once (exit 134, "fatal error: traceback
-  // did not unwind completely", "sweep increased allocation count", "fault";
-  // 4 of 25 runs of this check at four or twenty at once), and never in 100
-  // traces one after another.
-  const leaks: Leak[] = [];
-  for (const project of projects) {
-    // biome-ignore lint/performance/noAwaitInLoops: one trace at a time, as above
-    leaks.push(...(await leaksOf(root, project, folders)));
-  }
-  return leaks;
+  return (
+    await Promise.all(
+      projects.map((project) => leaksOf(root, project, folders))
+    )
+  ).flat();
 };
 
 const describe = (root: string, leak: Leak): string =>
