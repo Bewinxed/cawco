@@ -50,7 +50,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { IconExternal, IconGlobe } from "#lib/icons.js";
+  import { IconDocuments, IconExternal, IconGlobe } from "#lib/icons.js";
   import FailurePlace from "./FailurePlace.svelte";
   import { END_PEERS, STEP_PEERS } from "./looks";
   import type {
@@ -238,6 +238,15 @@
   }
 </script>
 
+<!-- Copy's glyph, the one the house's copy box draws (CopyBox). -->
+{#snippet copyGlyph()}
+  <IconDocuments
+    aria-hidden="true"
+    class="size-icon-sm text-ink-muted"
+    data-box
+  />
+{/snippet}
+
 <!-- The title: thing and action, the word set in the mono face as the
      word to type. -->
 {#snippet heading()}
@@ -339,11 +348,16 @@
       />
     </Field>
     <div class={STEP_PEERS}>
+      <!-- The step's controls are the kit's secondary, as every step's
+           are: held until a key is pasted, it is that button's own
+           disabled state (neutral at half strength), never a coral fill
+           washed out. -->
       <Button
         disabled={key.trim() === ""}
         label={words.addCawco}
         onclick={() => onact?.("add-cawco")}
         size="sm"
+        variant="secondary"
       />
     </div>
   {:else if step.step === "headscale"}
@@ -482,6 +496,7 @@
               target="_blank"
             />
             <CopyButton
+              icon={copyGlyph}
               aria-label={words.copyNamed(place.http)}
               size="sm"
               text={place.http}
@@ -551,6 +566,7 @@
           >
             {@render link(words.open, shownAddress)}
             <CopyButton
+              icon={copyGlyph}
               aria-label={words.copyNamed(shownAddress)}
               size="sm"
               text={shownAddress}

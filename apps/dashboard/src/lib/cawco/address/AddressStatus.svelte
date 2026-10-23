@@ -21,9 +21,9 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconExternal, IconGlobe } from "#lib/icons.js";
+  import { IconDocuments, IconExternal, IconGlobe } from "#lib/icons.js";
   import FailurePlace from "./FailurePlace.svelte";
-  import { END_PEERS } from "./looks";
+  import { END_PEERS, STEP_PEERS } from "./looks";
   import type { AddressAct, AddressFailure, AddressNet } from "./model";
   import { addressPages, addressWords as words } from "./words";
 
@@ -71,6 +71,15 @@
   });
 </script>
 
+<!-- Copy's glyph, the one the house's copy box draws (CopyBox). -->
+{#snippet copyGlyph()}
+  <IconDocuments
+    aria-hidden="true"
+    class="size-icon-sm text-ink-muted"
+    data-box
+  />
+{/snippet}
+
 {#snippet heading()}
   {words.titleBefore}<code class="font-mono">{words.word}</code>
 {/snippet}
@@ -110,7 +119,9 @@
             {words.expiryNote(words.word)}
           </p>
           <p class={META} data-address-meta>{words.meta(net, host)}</p>
-          <div class={END_PEERS}>
+          <!-- Open the Machines page, then Skip, from the start edge: the
+               order and place step 4's controls have in the journey. -->
+          <div class={STEP_PEERS}>
             {@render link(words.openMachines, addressPages.machines)}
             <Button
               label={presenceWords.skip}
@@ -157,6 +168,7 @@
                 target="_blank"
               />
               <CopyButton
+                icon={copyGlyph}
                 aria-label={words.copyNamed(http)}
                 size="sm"
                 text={http}

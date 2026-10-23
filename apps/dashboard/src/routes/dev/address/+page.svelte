@@ -58,7 +58,7 @@
   interface State {
     id: string;
     label: string;
-    /** Its letter in the design (A to S), the alternative's none. */
+    /** Its letter in the design (A to S); the alternative's, the frame it stands for. */
     letter: string;
     /** The stories it draws, by their desk name; a phone draws `<name>Phone` where it has one. */
     stories: string[];
@@ -97,10 +97,13 @@
     named("S", "wrong-tailnet", "Wrong tailnet", ["WrongTailnet"]),
   ];
   const ALTERNATIVE: State[] = [
-    named("", "entry", "Entry", ["Entry"]),
-    named("", "pending", "Pending", ["Pending"]),
-    named("", "ready", "Ready, and the second row", ["Ready", "KeepSignedIn"]),
-    named("", "failure", "Failure", ["Failure"]),
+    // Each by the letter of the recommended frame it stands for: the entry
+    // A, joining B, the ticked row G, and the failure P (design.md: "as
+    // frame P with the badge after the title").
+    named("A", "entry", "Entry", ["Entry"]),
+    named("B", "pending", "Pending", ["Pending"]),
+    named("G", "ready", "Ready, and the second row", ["Ready", "KeepSignedIn"]),
+    named("P", "failure", "Failure", ["Failure"]),
   ];
   const STATES: Record<Design, State[]> = {
     recommended: RECOMMENDED,
@@ -343,7 +346,12 @@
       ]}
       {@attach morph()}
     >
-      <ul class="m-0 list-none p-0" {@attach reflow()}>
+      <!-- Rows part with a hairline, as the panel's rows of one list do
+           (CawPanel's Notices). -->
+      <ul
+        class="m-0 list-none divide-y divide-border-hairline p-0"
+        {@attach reflow()}
+      >
         {#if !left}
           <!-- Keyed by place, not by state: a switch to the next state
                is the same row drawn with the hub's next journey, so its

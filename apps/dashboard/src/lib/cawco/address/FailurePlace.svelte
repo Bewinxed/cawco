@@ -9,10 +9,11 @@
    * (motion/fold `unfold`) in the figure face. The card's title, meta line
    * and Later stay around it, so the row is still the same row.
    *
-   * Signed into another tailnet, Remove is set apart from Sign in again:
-   * the destructive one at the far side at the desk, under it on a phone,
-   * never the column's width, and the hint about which account to use
-   * stands under Sign in again, the control it is about.
+   * Signed into another tailnet, Sign in again and Remove stand as every
+   * failure's pair does, centred side by side at the desk and the column's
+   * width on a phone; Remove is set apart by its destructive edge and ink
+   * and a wider gap, and the hint about which account to use stands under
+   * the pair, named by Sign in again.
    */
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
@@ -21,7 +22,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronDown, IconExternal } from "#lib/icons.js";
-  import { CENTRED_PEERS } from "./looks";
+  import { CENTRED_APART, CENTRED_PEERS } from "./looks";
   import type { AddressAct, AddressFailure } from "./model";
   import { addressPages, failureWords, addressWords as words } from "./words";
 
@@ -104,16 +105,11 @@
     {/if}
   </div>
   {#if failure === "wrong-tailnet"}
-    <!-- Sign in again first, its hint under it; Remove apart from it. -->
-    <div
-      class="flex min-w-0 flex-row-reverse flex-wrap items-start justify-center gap-x-space-6 gap-y-space-3 max-phone:flex-col max-phone:items-center max-phone:self-stretch"
-    >
-      <div
-        class="flex min-w-0 flex-col items-center gap-space-1 max-phone:items-stretch max-phone:self-stretch"
-      >
-        {@render out(words.signInAgain, signIn, "sign-in-again", hintId)}
-        <p class="m-0 {NOTE}" id={hintId}>{words.signInWithHost(host)}</p>
-      </div>
+    <!-- The pair centred as every failure's way out stands, Sign in
+         again first; Remove kept apart by its destructive edge and ink and
+         a wider gap; the hint about which account under the pair. -->
+    <div class={CENTRED_APART}>
+      {@render out(words.signInAgain, signIn, "sign-in-again", hintId)}
       <Button
         aria-expanded={asker.pending?.at === "address-remove"}
         disabled={asker.pending?.at === "address-remove"}
@@ -123,6 +119,7 @@
         variant="destructive"
       />
     </div>
+    <p class="m-0 {NOTE}" id={hintId}>{words.signInWithHost(host)}</p>
     <div class="min-w-0 self-stretch text-start">
       <AskHere {asker} at="address-remove" />
     </div>

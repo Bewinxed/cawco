@@ -20,3 +20,7 @@ export const END_PEERS =
 /** The failure form's way out: centred side by side; stacked on a phone. */
 export const CENTRED_PEERS =
   "flex min-w-0 flex-wrap items-center justify-center gap-space-2 max-phone:grid max-phone:grid-cols-1 max-phone:self-stretch";
+
+/** The same, a pair whose second is destructive: a wider gap sets it apart at the desk. */
+export const CENTRED_APART =
+  "flex min-w-0 flex-wrap items-center justify-center gap-x-space-5 gap-y-space-2 max-phone:grid max-phone:grid-cols-1 max-phone:gap-space-3 max-phone:self-stretch";
