@@ -8,6 +8,16 @@
 # A store package's own undeclared import is declared in the root package.json,
 # the one node_modules above the store, until bun ships packageExtensions
 # (oven-sh/bun#40053): bits-ui for vaul-svelte (huntabyte/vaul-svelte#130).
+# Types count too: TypeScript looks an import nothing in the checkout answers
+# up in every folder above it, so on the owner's Mac ~/node_modules answered
+# it (scripts/resolution-check.ts fails on that). The root declares what store
+# packages' declarations import undeclared: buffer, events, process, punycode
+# and string_decoder (@types/node, bun-types and others name the builtins
+# bare), undici-types (gaxios), zod (playwright-core, jsrepo), @clack/prompts,
+# fast-glob and picocolors (jsrepo), type-fest (mermaid). openai and
+# @anthropic-ai/sdk probe undici and node-fetch types in each of ten parent
+# folders by relative path, past any root; their patches drop the probes, and
+# their fetch options are Bun's and the global RequestInit.
 # drizzle-kit's bare import() of drizzle-orm (drizzle-team/drizzle-orm#6156) is
 # answered by NODE_PATH in packages/hub's db scripts instead, so it reaches the
 # hub's own copy on the host and in a workspace alike.

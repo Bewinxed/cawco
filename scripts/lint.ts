@@ -93,6 +93,8 @@ const checks: Check[] = [
   bun("scripts/page-imports-check.ts"),
   bun("scripts/probe-words-check.ts"),
   bun("scripts/design-rules.ts", "--check"),
+  // Every module a TypeScript project resolves lies inside the checkout.
+  bun("scripts/resolution-check.ts"),
 ];
 
 await runChecks("lint", checks);
