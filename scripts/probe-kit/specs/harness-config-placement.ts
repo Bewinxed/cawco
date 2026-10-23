@@ -24,7 +24,11 @@
  *   made (agent boundary.ts `rearmMoved`).
  * - r2. Told to go on, its next call meets the hook placed while it ran
  *   (claude.ts `#takeFleetSettings`), whose script its old boundary never
- *   held: the result carries the marker.
+ *   held: the result carries the marker. It waits again.
+ * - r3. The hooks dir is taken away while its boundary runs, and a fleet
+ *   change has the sync make it again: the boundary, whose bind held the old
+ *   dir, is handed over (its form names the dir's device and inode).
+ * - r4. Told to go on, its next call meets the marker hook again.
  *
  * Then a Claude Code, an OpenCode and a pi delegate work in workspaces of A,
  * and a Claude Code session works in B's checkout: `echo HCPROBE-CALL-<tag>`,
@@ -58,7 +62,7 @@
  *
  *   bun scripts/probe-kit/run.ts harness-config-placement
  */
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
@@ -86,8 +90,9 @@ const SKILL_MARK = `HCPROBE-SKILL-${RUN}`;
 const SKILL = "hcprobe-skill";
 const OPENCODE_TOOL = "hcprobe_opencode_tool";
 const PI_TOOL = "hcprobe_pi_tool";
-/** What tells the rearm delegate to go on. */
+/** What tells the rearm delegate to go on, after its first wait and after its second. */
 const GO = `HCPROBE-GO-${RUN}`;
+const GO_AGAIN = `HCPROBE-GO-AGAIN-${RUN}`;
 /** How a delegate's report to its parent opens (core `reportMarker`). */
 const REPORT = "[Report from delegate ";
 /** The shell as each harness names it. */
@@ -109,15 +114,25 @@ const TAGS = {
 } as const;
 type Leg = keyof typeof TAGS;
 
-/** What a session does, in order: one tool call each, `wait` ending its turn until the spec says go. */
-type Act = "call" | "write" | "setting" | "warm" | "wait" | "finish";
+/** What a session does, in order: one tool call each, a wait ending its turn until the spec says go. */
+type Act =
+  | "call"
+  | "write"
+  | "setting"
+  | "warm"
+  | "wait"
+  | "recall"
+  | "waitAgain"
+  | "finish";
 const PLAN: Record<Leg, readonly Act[]> = {
   claude: ["call", "write", "setting", "finish"],
   opencode: ["call", "write", "setting", "finish"],
   pi: ["call", "write", "setting", "finish"],
   other: ["call", "setting"],
-  rearm: ["warm", "wait", "call", "finish"],
+  rearm: ["warm", "wait", "call", "waitAgain", "recall", "finish"],
 };
+/** What a turn after each wait waits for. */
+const GOES: Partial<Record<Act, string>> = { wait: GO, waitAgain: GO_AGAIN };
 
 /** The file each of A's sessions writes into its clone. */
 const writeName = (leg: Leg): string => `HCPROBE-WRITE-${TAGS[leg]}.txt`;
@@ -250,10 +265,11 @@ const actCall = (
         ? { call: useTool(shell, { command: `echo ${tag} warm` }) }
         : undefined;
     case "call":
+    case "recall":
       return shell
         ? {
             call: useTool(shell, {
-              command: `echo HCPROBE-CALL-${tag}`,
+              command: `echo HCPROBE-CALL-${tag} ${act}`,
               description: "Probe the hook",
             }),
           }
@@ -276,6 +292,7 @@ const actCall = (
       return call ? { call } : undefined;
     }
     case "wait":
+    case "waitAgain":
       return cawcoCall(request, leg, WAITS, "wait_item", {
         minutes: 60,
         reason: "The probe drives this delegate.",
@@ -322,11 +339,9 @@ const respond = (request: Seen): Reply => {
     leg.pending = undefined;
   }
   const act = PLAN[name][leg.at];
-  // The rearm delegate's turn after its wait ends until it is told to go.
-  if (
-    !act ||
-    (PLAN[name][leg.at - 1] === "wait" && !request.all.includes(GO))
-  ) {
+  // The rearm delegate's turn after a wait ends until it is told to go.
+  const go = GOES[PLAN[name][leg.at - 1] as Act];
+  if (!act || (go !== undefined && !request.all.includes(go))) {
     return text("Waiting for the probe.");
   }
   const made = actCall(request, name, leg, act);
@@ -620,6 +635,16 @@ const generationOf = async (
     ).catch(() => undefined)
   )?.gen;
 
+/** The fleet's hooks dir on the scratch machine (core `fleetHooksDir`). */
+const hooksDirOf = (fleet: KitFleet): string =>
+  join(fleet.env.XDG_DATA_HOME as string, "cawco", "fleet-hooks");
+
+/** What a bind of the hooks dir holds: its device and inode, or none. */
+const heldBy = (path: string): string | undefined => {
+  const held = statSync(path, { throwIfNoEntry: false });
+  return held ? `${held.dev}:${held.ino}` : undefined;
+};
+
 /**
  * r0: the rearm delegate, started with the fleet's hooks dir gone: its
  * workspace and the generation its boundary started as, once it waits.
@@ -630,11 +655,7 @@ const startRearm = async (
   parent: string,
   repo: string
 ): Promise<{ gen: string | undefined; item: string; workspace: string }> => {
-  const hooksDir = join(
-    fleet.env.XDG_DATA_HOME as string,
-    "cawco",
-    "fleet-hooks"
-  );
+  const hooksDir = hooksDirOf(fleet);
   await rm(hooksDir, { recursive: true, force: true });
   const item = await delegate(fleet, parent, "rearm", "claude", repo);
   await until(
@@ -685,6 +706,68 @@ const readRearm = async (
     "r2: a hook placed while a Claude Code session ran fired on its next call, from a script its first boundary never held",
     leg?.results.call?.includes(`${HOOK_MARK} tool=Bash`) === true,
     leg?.results.call?.slice(0, 400) ?? "no call answered"
+  );
+};
+
+/**
+ * r3, r4: with the rearm delegate waiting again, the hooks dir taken away
+ * under its running boundary and made again by the sync a fleet change
+ * brings: the boundary is handed over, and its next call meets the hook.
+ */
+const readRecreated = async (
+  kit: Kit,
+  fleet: KitFleet,
+  started: { item: string; workspace: string },
+  notifyId: string
+): Promise<void> => {
+  await until(
+    "the rearm delegate waits again",
+    () => shown.get("rearm"),
+    (waiting) =>
+      (waiting?.at ?? 0) >= PLAN.rearm.indexOf("recall") &&
+      waiting?.pending === undefined,
+    180_000
+  ).catch(() => undefined);
+  const hooksDir = hooksDirOf(fleet);
+  const before = {
+    gen: await generationOf(fleet, started.workspace),
+    dir: heldBy(hooksDir),
+  };
+  await rm(hooksDir, { recursive: true, force: true });
+  // A fleet change: the machine's next sync makes the dir and its scripts
+  // again (agent fleet.ts `syncHooks`).
+  await hubCall(fleet, "PUT", `/api/fleet/hooks/${notifyId}`, {
+    name: `hcprobe notify ${RUN} again`,
+  });
+  const gen = await until(
+    "the rearm delegate's boundary handed over again",
+    () => generationOf(fleet, started.workspace),
+    (now) => now !== undefined && now !== before.gen,
+    120_000
+  ).catch(() => undefined);
+  const after = heldBy(hooksDir);
+  kit.check(
+    "r3: the hooks dir made again under a running boundary has it handed over",
+    gen !== undefined &&
+      gen !== before.gen &&
+      after !== undefined &&
+      after !== before.dir,
+    JSON.stringify({ gen: [before.gen, gen], dir: [before.dir, after] })
+  );
+  const instance = workspaceOf(fleet, started.item)?.instance;
+  if (instance) {
+    await fleet.send(instance, `${GO_AGAIN}: go on.`);
+  }
+  const leg = await until(
+    "the rearm delegate's call after the dir was made again",
+    () => shown.get("rearm"),
+    (one) => one?.results.recall !== undefined,
+    180_000
+  ).catch(() => shown.get("rearm"));
+  kit.check(
+    "r4: its next call meets the marker hook from the dir made again",
+    leg?.results.recall?.includes(`${HOOK_MARK} tool=Bash`) === true,
+    leg?.results.recall?.slice(0, 400) ?? "no call answered"
   );
 };
 
@@ -863,6 +946,7 @@ const run = async (kit: Kit) => {
     source.stop(true);
   }
   await readRearm(kit, fleet, rearm);
+  await readRecreated(kit, fleet, rearm, placed.notifyId);
 
   // A's delegates, one per harness, each in a workspace of A; B's session
   // in its checkout.
