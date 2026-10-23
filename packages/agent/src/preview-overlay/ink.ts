@@ -335,6 +335,9 @@ const MOVES: MutationObserverInit = {
   subtree: true,
 };
 
+/** The room kept under the page's foot, px ({@link insetFoot}). */
+let footRoom = 0;
+
 /**
  * The overlay's layers at the page's origin, each holding a mark as big as
  * the page's scroll, and each holding none folded away. `layer`, about to
@@ -345,6 +348,7 @@ const MOVES: MutationObserverInit = {
  * a mark nothing is read: reading the scroll lays the whole page out there
  * and then, before the browser would (a page of 300 sections: 50 ms of its
  * style and layout as it opened, preview-bound 12), for nothing to draw.
+ * Each runs past the page's foot by the room {@link insetFoot} keeps there.
  */
 export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
   if (holds) {
@@ -367,12 +371,24 @@ export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
     Math.max(root.scrollWidth, document.body?.scrollWidth ?? 0)
   );
   const height = String(
-    Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0)
+    Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0) + footRoom
   );
   for (const one of holding) {
     one.setAttribute("width", width);
     one.setAttribute("height", height);
   }
+};
+
+/**
+ * Room under the page's foot, as iOS insets a scroll view's content above
+ * its keyboard: the layers run `px` past the page's scroll, so the page
+ * scrolls that much further and a pin the host's chrome covers there can be
+ * lifted clear of it (pins.ts `bringOut`); 0 gives the page its own scroll
+ * back. The page's own layout is never touched. Takes hold at the next
+ * {@link fitToPage}.
+ */
+export const insetFoot = (px: number) => {
+  footRoom = Math.max(0, px);
 };
 
 /** A pen's pressure, or the middle one where it reports none; a mouse's and a finger's are always the middle one. */

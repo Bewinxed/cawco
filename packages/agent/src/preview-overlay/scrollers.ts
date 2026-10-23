@@ -58,6 +58,23 @@ export function bandsAt(x: number, covered: ViewBox[], r: number): Band[] {
   return bands;
 }
 
+/**
+ * The room a disc of radius `r` at the viewport's `x` needs under the page's
+ * foot to scroll clear of every `covered` box over that x: from the highest
+ * one's top to the viewport's foot, and the gap a lifted mark keeps; 0 when
+ * none stands over it.
+ */
+export function liftUnder(x: number, covered: ViewBox[], r: number): number {
+  const over = covered.filter(
+    (box) => x + r + CLEAR_GAP > box.x && x - r - CLEAR_GAP < box.x + box.w
+  );
+  if (over.length === 0) {
+    return 0;
+  }
+  const top = Math.min(...over.map((box) => box.y));
+  return Math.ceil(innerHeight - top + r + CLEAR_GAP);
+}
+
 export const inBands = (y: number, bands: Band[]) =>
   bands.some((band) => y >= band.top && y <= band.bottom);
 

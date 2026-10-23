@@ -239,9 +239,9 @@
  * - foot sheet: on a page whose line stands in the frame's bottom third with
  *   room to scroll below it, the composer a tap opens and the thread its
  *   pill opens each stand as the foot sheet with the pill wholly above the
- *   sheet's top and the line inside the frame's viewport; on a page no
- *   scroll can lift, the page stays put, the pill inside its viewport, and
- *   the thread's pin is told `stuck`.
+ *   sheet's top and the line inside the frame's viewport; on a page too
+ *   short to scroll it there, the same, lifted into room the overlay makes
+ *   under the page's foot; each sheet closed, the page's scroll is its own.
  * The captures for the reviewer (light and dark, desk and 390) are written
  * under the run's output folder (`kit.out`/commenting); nothing here opens
  * them.
@@ -10112,12 +10112,6 @@ const clearOfSheet = (read: FootRead | null) =>
   read.mark.top >= -0.5 &&
   read.mark.bottom <= read.view + 0.5;
 
-/** The pin's pill inside the frame's viewport, the screen's px. */
-const pillInView = (read: FootRead | null, frameTop: number) =>
-  !!read?.pill &&
-  read.pill.top >= frameTop - 0.5 &&
-  read.pill.bottom <= frameTop + read.view + 0.5;
-
 /**
  * The phone's invariant: a comment's thread or composer standing at the
  * well's foot never covers the element the comment is about. At 390×844,
@@ -10127,12 +10121,11 @@ const pillInView = (read: FootRead | null, frameTop: number) =>
  * pill stands wholly above the sheet's top and the line inside the frame's
  * viewport; (ii) the comment written, the page scrolled back and its pill
  * tapped, its thread rises as the foot sheet and the pill stands above it
- * the same way. On a page exactly the frame's height (preview-overlay
- * pins.ts `reveal`: `bringInto` finds no band under the sheet a scroll can
- * reach, so the pin is brought only into the viewport, where it stands, and
- * an open thread's is told `stuck`): the page does not scroll, the pill
- * stays inside the frame's viewport, and the thread's `cawco:pin-at` says
- * `stuck`; how far the sheet stands over the pill there is said.
+ * the same way. On a page exactly the frame's height, which no scroll of its
+ * own can lift (preview-overlay pins.ts `bringOut`), the overlay makes room
+ * under the page's foot (ink.ts `insetFoot`) and lifts the pill the same
+ * way: the page scrolls past its own height, the pill wholly above the
+ * sheet's top. Each time a sheet closes, the page's scroll is its own again.
  */
 const footSheetChecks = async (on: On) => {
   const { origin } = new URL(on.page.url());
@@ -10206,15 +10199,11 @@ interface FootRig {
   frameTop: number;
   on: On;
   phone: Page;
+  /** How far the page scrolls of its own, before any sheet stands. */
+  room: number;
   tag: string;
   tall: boolean;
 }
-
-/** How far the sheet's top stands over the pill's foot, px (negative: clear of it). */
-const coverBy = (read: FootRead | null) =>
-  read?.pill && read.sheet
-    ? Math.round((read.pill.bottom - read.sheet.top) * 10) / 10
-    : null;
 
 /** One page of the foot-sheet leg on `phone`: the composer, then the thread. */
 const footOn = async (
@@ -10234,36 +10223,16 @@ const footOn = async (
   }
   await frame.waitForSelector("#mark");
   await settle(phone, 600);
-  // The page's words to the pane of its pins, as the pane hears them.
-  await phone.evaluate(() => {
-    const held = window as unknown as { footPinAt?: unknown };
-    addEventListener("message", (event) => {
-      const data = event.data as { type?: string } | null;
-      if (data?.type === "cawco:pin-at") {
-        held.footPinAt = data;
-      }
-    });
-  });
   await commentOnPhone(phone);
   await pageInComment(frame, true);
   const frameTop = await phone.evaluate((sel) => {
     const el = document.querySelector<HTMLIFrameElement>(sel);
     return el ? el.getBoundingClientRect().top + el.clientTop : 0;
   }, FRAME);
-  const rig: FootRig = { frame, frameTop, on, phone, tag, tall };
-  const number = await footCompose(rig, engine);
-  if (number) {
-    await footThread(rig, number);
-  }
-};
-
-/** (i) A tap on the line: its composer, the foot sheet; then the comment written. Answers its pin's number, 0 when none was written. */
-const footCompose = async (rig: FootRig, engine: string) => {
-  const { frame, frameTop, on, phone, tag, tall } = rig;
   const before = await footRead(phone, frame, COMPOSE, DRAFT_FACE);
   if (!before) {
     on.kit.check(`${tag}: the line is read`, false, "none");
-    return 0;
+    return;
   }
   on.kit.check(
     `${tag}: the line stands in the frame's bottom third, the page ${tall ? "scrolling past it" : "not scrolling"}`,
@@ -10272,6 +10241,52 @@ const footCompose = async (rig: FootRig, engine: string) => {
       (tall ? before.room > before.view : before.room <= 0),
     JSON.stringify(before)
   );
+  const rig: FootRig = {
+    frame,
+    frameTop,
+    on,
+    phone,
+    room: before.room,
+    tag,
+    tall,
+  };
+  const number = await footCompose(rig, engine);
+  if (number) {
+    await footThread(rig, number);
+  }
+};
+
+/** The pill clear of the sheet, said as the page's kind has it: a short page lifted into the room the overlay made under its foot. */
+const footClear = (
+  rig: FootRig,
+  step: string,
+  sheet: string,
+  read: FootRead | null
+) =>
+  rig.on.kit.check(
+    rig.tall
+      ? `${rig.tag} ${step}: ${sheet} stands as the well's foot sheet and the pill stands wholly above its top, the line inside the frame's viewport`
+      : `${rig.tag} ${step}: no scroll of the page's own lifts the pill, so the overlay makes room under its foot: the page scrolls past its own height, ${sheet} stands as the well's foot sheet, the pill wholly above its top and the line inside the frame's viewport`,
+    clearOfSheet(read) &&
+      (rig.tall || (!!read && read.scrollY > 0 && read.room > rig.room)),
+    JSON.stringify(read)
+  );
+
+/** Once `what` has closed: no sheet stands, and the page scrolls as far as its own height lets it, the room under its foot taken back. */
+const footBack = async (rig: FootRig, what: string, sheet: string) => {
+  const back = await footSettled(() =>
+    footRead(rig.phone, rig.frame, sheet, DRAFT_FACE)
+  );
+  rig.on.kit.check(
+    `${rig.tag}: ${what} closed, the page's scroll is its own again (${rig.room}px, as before any sheet)`,
+    !!back && back.sheet === null && Math.abs(back.room - rig.room) <= 0.5,
+    JSON.stringify(back)
+  );
+};
+
+/** (i) A tap on the line: its composer, the foot sheet; then the comment written. Answers its pin's number, 0 when none was written. */
+const footCompose = async (rig: FootRig, engine: string) => {
+  const { frame, frameTop, on, phone, tag, tall } = rig;
   const outer = await phone.locator(FRAME).boundingBox();
   const mark = await frame.locator("#mark").evaluate((el) => {
     const r = el.getBoundingClientRect();
@@ -10289,21 +10304,7 @@ const footCompose = async (rig: FootRig, engine: string) => {
   const composing = await footSettled(() =>
     footRead(phone, frame, COMPOSE, DRAFT_FACE)
   );
-  if (tall) {
-    on.kit.check(
-      `${tag} (i): the composer stands as the well's foot sheet and the new comment's pill stands wholly above its top, the line inside the frame's viewport`,
-      clearOfSheet(composing),
-      JSON.stringify(composing)
-    );
-  } else {
-    on.kit.check(
-      `${tag} (i): no scroll lifts the pill above the composer: the page stays at 0 and the pill inside the frame's viewport (reveal's viewport fallback); the sheet stands ${coverBy(composing)}px over the pill's foot`,
-      !!composing?.sheet?.isSheet &&
-        composing.scrollY === 0 &&
-        pillInView(composing, frameTop),
-      JSON.stringify(composing)
-    );
-  }
+  footClear(rig, "(i)", "the new comment's composer", composing);
   await phone
     .locator(COMPOSE)
     .getByRole("combobox")
@@ -10313,6 +10314,7 @@ const footCompose = async (rig: FootRig, engine: string) => {
     .locator(COMPOSE)
     .waitFor({ state: "detached", timeout: 8000 })
     .catch(() => undefined);
+  await footBack(rig, "the comment written and its composer", COMPOSE);
   const number = Number(
     (
       Object.values((await docOf(frame)).pins as Pins).find(
@@ -10332,7 +10334,7 @@ const DRAFT_FACE = '[data-pin="new"] [data-face]';
 
 /** (ii) The page back where the line stands in the bottom third, pin `number`'s pill tapped: its thread, the foot sheet. */
 const footThread = async (rig: FootRig, number: number) => {
-  const { frame, frameTop, on, phone, tag, tall } = rig;
+  const { frame, on, phone, tag } = rig;
   await frame.evaluate(() => scrollTo(0, 0));
   await settle(phone, 300);
   const pill = await frame
@@ -10343,9 +10345,6 @@ const footThread = async (rig: FootRig, number: number) => {
     on.kit.check(`${tag}: pin ${number}'s pill on the page`, false, "none");
     return;
   }
-  await phone.evaluate(() => {
-    (window as unknown as { footPinAt?: unknown }).footPinAt = undefined;
-  });
   await pressFramePoint(
     frame,
     { x: pill.x + pill.width / 2, y: pill.y + pill.height / 2 },
@@ -10359,33 +10358,17 @@ const footThread = async (rig: FootRig, number: number) => {
   const reading = await footSettled(() =>
     footRead(phone, frame, card, `g[data-pin="${number}"] [data-face]`)
   );
-  if (tall) {
-    on.kit.check(
-      `${tag} (ii): pin ${number}'s thread stands as the well's foot sheet and its pill stands wholly above its top, the line inside the frame's viewport`,
-      clearOfSheet(reading),
-      JSON.stringify(reading)
-    );
-  } else {
-    const told = await phone.evaluate(
-      () =>
-        (window as unknown as { footPinAt?: { stuck?: boolean } }).footPinAt ??
-        null
-    );
-    on.kit.check(
-      `${tag} (ii): no scroll lifts pin ${number} above its thread: the page stays at 0, the pill inside the frame's viewport, and the page tells the pane it is stuck; the sheet stands ${coverBy(reading)}px over the pill's foot`,
-      !!reading?.sheet?.isSheet &&
-        reading.scrollY === 0 &&
-        pillInView(reading, frameTop) &&
-        told?.stuck === true,
-      JSON.stringify({ ...reading, stuck: told?.stuck ?? null })
-    );
-  }
+  footClear(rig, "(ii)", `pin ${number}'s thread`, reading);
   await phone
     .locator(card)
     .getByRole("button", { name: "Close", exact: true })
     .click()
     .catch(() => undefined);
-  await settle(phone, 400);
+  await phone
+    .locator(card)
+    .waitFor({ state: "detached", timeout: 8000 })
+    .catch(() => undefined);
+  await footBack(rig, `pin ${number}'s thread`, card);
 };
 
 const spec: Spec = { name: "comments", run };

@@ -62,13 +62,14 @@ import { absences } from "./absent";
 import { artifact } from "./artifact";
 import { clipOf, rectOf } from "./frames";
 import { newId } from "./id";
-import { fitToPage } from "./ink";
+import { fitToPage, insetFoot } from "./ink";
 import { motionOk } from "./motion";
 import { durationMs, type InkChrome } from "./radial";
 import {
   bandsAt,
   bringInto,
   inBands,
+  liftUnder,
   scrollersOf,
   scrollMoves,
 } from "./scrollers";
@@ -428,8 +429,12 @@ export function startPins(deps: PinsDeps): Pins {
   const echoed = new Map<string, number>();
   /** What of the page's viewport the host's chrome covers (`cawco:covered`): a phone's card or rail. */
   let covered: Box[] = [];
-  /** Pins no scroll brought out from under the host's chrome when they were last revealed. */
-  const stuck = new Set<string>();
+  /**
+   * Whose pill the room under the page's foot was made for (ink.ts
+   * `insetFoot`): a pin's id, or {@link DRAFT_PIN} for the comment being
+   * written; null while the page has its own scroll.
+   */
+  let insetFor: string | null = null;
 
   const anchoredEl = (pin: Pin): Element | null =>
     "selector" in pin.anchor ? (deps.locate(pin.anchor)?.el ?? null) : null;
@@ -1052,8 +1057,7 @@ export function startPins(deps: PinsDeps): Pins {
   /**
    * The open pin's pill in the viewport, and the box of what it stands on,
    * for the host's thread card, which stands beside the pill where it has
-   * room; `stuck` while no scroll brings it out from under the host's
-   * chrome. The comment being written, the same for its composer.
+   * room. The comment being written, the same for its composer.
    */
   const tell = () => {
     if (tracked) {
@@ -1064,7 +1068,6 @@ export function startPins(deps: PinsDeps): Pins {
         ...(shown?.pill
           ? { mark: shownBox(shown, shown.pill), box: shownStanding(shown) }
           : {}),
-        ...(stuck.has(tracked) ? { stuck: true } : {}),
       });
     }
     if (drafted?.standing && drafted.pill) {
@@ -1095,42 +1098,69 @@ export function startPins(deps: PinsDeps): Pins {
    * from under every box the host's chrome covers the page with (a phone's
    * card or rail), each scroller round it moved as little as lands it there
    * (scrollers.ts `bringInto`). A pin already standing there stays where the
-   * person is looking. One no scroll can bring out from under the host's
-   * chrome is `stuck`: the host makes room for it.
+   * person is looking.
    */
   const reveal = (id: string) => {
-    stuck.delete(id);
     const where = placed.get(id);
-    if (where && !where.page && bringOut(where)) {
-      stuck.add(id);
+    if (where && !where.page) {
+      bringOut(where, id);
     }
   };
 
   /**
-   * A pill standing at `where` (a pin's, or the comment being written)
-   * brought out as {@link reveal} says; true when no scroll brings it out
-   * from under the host's chrome.
+   * A pill standing at `where`, `owner`'s (a pin's id, or {@link DRAFT_PIN}
+   * for the comment being written), brought out as {@link reveal} says. One
+   * no scroll can lift clear of what the host's chrome covers (a page too
+   * short to scroll it there) is given room under the page's foot, the
+   * covered height and the gap a lifted pill keeps (scrollers.ts
+   * `liftUnder`), as iOS insets content above its keyboard, and lifted into
+   * it; the room stays while `owner`'s pill is the one kept clear
+   * ({@link staleInset}).
    */
-  const bringOut = (where: Standing & { pill?: Pill }): boolean => {
+  const bringOut = (where: Standing & { pill?: Pill }, owner: string) => {
     const r = (where.pill?.box.h ?? 20) / 2;
     const x = where.at[0] - scrollX;
     const y = where.at[1] - scrollY;
     const clear = bandsAt(x, covered, r);
     if (where.shown && inBands(y, clear)) {
-      return false;
+      return;
     }
     const chain = scrollersOf(where.el);
-    const landed = bringInto(chain, y, clear);
-    if (landed) {
-      scrollMoves(landed, motionOk() ? "smooth" : "auto");
+    let landed = bringInto(chain, y, clear);
+    const room = landed ? 0 : liftUnder(x, covered, r);
+    if (room > 0) {
+      insetFor = owner;
+      insetFoot(room);
+      fitToPage(layer, true);
+      landed = bringInto(chain, y, clear);
+    }
+    // Out from under nothing (no room lifts it: its scrollers are not the
+    // page's): at least in the viewport.
+    const moves = landed ?? bringInto(chain, y, bandsAt(x, [], r));
+    if (moves) {
+      scrollMoves(moves, motionOk() ? "smooth" : "auto");
+    }
+  };
+
+  /**
+   * Whether the room under the page's foot is no longer needed: nothing
+   * covers the page, or the pill it was made for is no longer the open
+   * thread's, the stepped-to one's or the comment being written. Taken back
+   * here; the caller draws, which fits the layers to the page's own scroll.
+   */
+  const staleInset = () => {
+    const kept =
+      insetFor !== null &&
+      covered.length > 0 &&
+      (insetFor === tracked ||
+        insetFor === focused ||
+        (insetFor === DRAFT_PIN && !!drafted && !drafted.parked));
+    if (insetFor === null || kept) {
       return false;
     }
-    // Out from under nothing: at least in the viewport.
-    const shown = bringInto(chain, y, bandsAt(x, [], r));
-    if (shown) {
-      scrollMoves(shown, motionOk() ? "smooth" : "auto");
-    }
-    return covered.length > 0;
+    insetFor = null;
+    insetFoot(0);
+    return true;
   };
 
   /**
@@ -1147,7 +1177,7 @@ export function startPins(deps: PinsDeps): Pins {
     }
     const draft = drafted?.parked ? undefined : drafted;
     if (draft?.standing && draft.pill && under(draft.standing, draft.pill)) {
-      bringOut({ ...draft.standing, pill: draft.pill });
+      bringOut({ ...draft.standing, pill: draft.pill }, DRAFT_PIN);
     }
   };
 
@@ -1225,6 +1255,7 @@ export function startPins(deps: PinsDeps): Pins {
     },
     draft: (target) => {
       drafted = target ? { ...target } : null;
+      staleInset();
       draw();
     },
     pinInk: (group, kind, elements) => {
@@ -1265,12 +1296,13 @@ export function startPins(deps: PinsDeps): Pins {
     focus: (id, scroll) => {
       const before = focused;
       focused = id;
+      const stale = staleInset();
       const el: Element | null = id ? (placed.get(id)?.el ?? null) : null;
       if (scroll && id) {
         reveal(id);
       }
       deps.outline(el, true);
-      if (before !== id) {
+      if (before !== id || stale) {
         // Its pill takes, or gives back, the focus ring.
         draw();
       }
@@ -1284,6 +1316,11 @@ export function startPins(deps: PinsDeps): Pins {
     },
     cover: (boxes) => {
       covered = boxes;
+      // Nothing covers the page now (the sheet closed): the room under its
+      // foot is taken back, and the page has its own scroll again.
+      if (staleInset()) {
+        draw();
+      }
       // What covers the page changed under an open thread (its card came to
       // a phone's foot, the rail opened there): its pin is brought out again.
       keepClear();
@@ -1309,7 +1346,12 @@ export function startPins(deps: PinsDeps): Pins {
     track: (id) => {
       const before = tracked;
       tracked = id;
+      // A thread that closed or gave way to another takes back the room made for its pin.
+      const stale = staleInset();
       if (before === id) {
+        if (stale) {
+          draw();
+        }
         tell();
         return;
       }
