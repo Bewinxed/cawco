@@ -14,13 +14,15 @@
  * - (a) a session of the project outside the tree is refused, its words
  *   naming who deletes it: the writer, the sessions up its tree, the person;
  * - (b) the item ended, its workspace still held (a handoff would reopen
- *   it): the parent's artifact_delete of the first page succeeds;
+ *   it): the parent's artifact_delete of the first page, by its name,
+ *   succeeds;
  * - (c) the parent discards the workspace (a carry holds the commit): the
  *   parent's handoff to the child is refused naming the discard; the
  *   discard's answer names the page the child left, by link and id, and
  *   says artifact_delete removes it from here;
  * - (d) the outsider is still refused, with the same words;
- * - (e) the parent's artifact_delete of the second succeeds, and it is gone.
+ * - (e) the parent's artifact_delete of the second, by its handle,
+ *   succeeds, and it is gone.
  *
  *   bun scripts/probe-kit/run.ts artifact-orphan-delete
  */
@@ -231,13 +233,18 @@ const run = async (kit: Kit) => {
   );
 
   // (b) The item ended, its workspace held: the parent deletes the first page.
-  const early = await callAs(fleet, parent, "artifact_delete", { id: page.id });
+  // By its name, as an agent names it: a name or handle resolved to the
+  // writer's row before the tree is asked (2026-10-23: every name refused
+  // with "only that session changes it").
+  const early = await callAs(fleet, parent, "artifact_delete", {
+    id: PAGE_NAME,
+  });
   const [workspace] = fleet.query<{ state: string }>(
     "SELECT state FROM workspaces WHERE id = ?",
     started.workspaceId
   );
   check(
-    "(b) its item ended and its workspace still held, the parent's artifact_delete succeeds, and the page is gone",
+    "(b) its item ended and its workspace still held, the parent's artifact_delete of the page by its name succeeds, and the page is gone",
     !(early.isError || pageOf(fleet)) && workspace?.state !== "archived",
     `workspace ${workspace?.state}; ${early.text.slice(0, 600)}`
   );
@@ -283,11 +290,12 @@ const run = async (kit: Kit) => {
   );
 
   // (e) The parent deletes the second.
+  // By its handle, the id's first eight.
   const late = await callAs(fleet, parent, "artifact_delete", {
-    id: second.id,
+    id: second.id.slice(0, 8),
   });
   check(
-    "(e) the parent's artifact_delete succeeds, and the page is gone from the hub",
+    "(e) the parent's artifact_delete of the second page by its handle succeeds, and it is gone from the hub",
     !(late.isError || pageOf(fleet, SECOND_NAME)),
     `${late.text.slice(0, 600)}; row ${JSON.stringify(pageOf(fleet, SECOND_NAME) ?? null)}`
   );

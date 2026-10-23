@@ -1854,22 +1854,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Artifact `id` for a delete: the session's own ({@link own}), or another
-   * session's whose work item ended ({@link ArtifactServiceDeps.itemEnded})
-   * or that can no longer act at all ({@link ArtifactServiceDeps.stranded})
-   * when this session is up the writer's delegation tree, so whoever is up
-   * the tree cleans up after a delegate whose work is over. Its content
-   * stays the writer's while its item is live: no other change widens so.
-   * Refused otherwise, naming who deletes it.
+   * Artifact `asked` for a delete, named as every artifact tool names one
+   * (its id, handle or name, {@link whole}): the session's own
+   * ({@link own}), or another session's whose work item ended
+   * ({@link ArtifactServiceDeps.itemEnded}) or whose asks are over for good
+   * ({@link ArtifactServiceDeps.finished}: ended, its workspace archived or
+   * moved on, its conversation gone, nothing to give it a turn again) when
+   * this session is up the writer's delegation tree, at any depth, so
+   * whoever is up the tree cleans up after a session that can no longer
+   * act. Its content stays the writer's while it can: no other change
+   * widens so. Refused otherwise, naming who deletes it.
    */
-  const deletable = (instance: InstanceRow, id: string): ArtifactRow => {
+  const deletable = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const row = db.get(id);
     const writer = row && row.heldFor === null ? holder(row) : undefined;
     if (!(row && writer) || writer.id === instance.id) {
       return own(instance, id);
     }
     const up = above(writer).has(instance.id);
-    if (up && (deps.itemEnded(writer) || deps.stranded(writer))) {
+    if (up && (deps.itemEnded(writer) || deps.finished(writer))) {
       return row;
     }
     const whose = `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is ${sessionLink(writer.id, sessionLabel(writer).name)}'s`;

@@ -22,7 +22,9 @@
  * (c) A delegate's browser artifact is no file: its menu has it, Files never.
  * (d) The parent's artifact_delete of a live delegate's canvas is refused,
  *     naming that its item is still live; an outsider's of an ended one is
- *     refused, naming who deletes it; the parent's of the ended one succeeds.
+ *     refused, naming who deletes it; the parent's of the ended one, and of
+ *     its own ended delegate's two levels down, each named by its name as
+ *     an agent names it, succeed.
  * (e) The live delegate's item ends: its browser artifact leaves every list
  *     and the hub, and the parent's artifact_delete of its canvas succeeds.
  *
@@ -97,11 +99,17 @@ const run = async (kit: Kit) => {
   const outsider = await fleet.spawn("claude", "Outsider", src, inProject);
   const ended = await fleet.spawn("claude", "Ended delegate", src, inProject);
   const live = await fleet.spawn("claude", "Live delegate", src, inProject);
+  const nested = await fleet.spawn("claude", "Nested delegate", src, inProject);
 
   // The delegates: each a work item in a workspace of its own, as `delegate`
-  // writes them, the parent its parent.
+  // writes them, the parent its parent; the nested one the ended delegate's
+  // own, its item already done.
   const now = Date.now();
-  for (const child of [ended, live]) {
+  for (const [child, above, state, title] of [
+    [ended, parent, "running", "Ended delegate"],
+    [live, parent, "running", "Live delegate"],
+    [nested, ended, "done", "Nested delegate"],
+  ] as const) {
     const workspace = crypto.randomUUID();
     const item = crypto.randomUUID();
     fleet.write(
@@ -111,23 +119,24 @@ const run = async (kit: Kit) => {
       src,
       join(fleet.sandbox, `ws-${workspace.slice(0, 8)}`),
       `ws/${workspace.slice(0, 8)}`,
-      parent,
+      above,
       now
     );
     fleet.write(
-      "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, harness, state, project_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 'claude', 'running', ?, ?)",
+      "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, harness, state, project_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 'claude', ?, ?, ?)",
       item,
       workspace,
-      parent,
+      above,
       child,
       "Check your own screens.",
-      child === ended ? "Ended delegate" : "Live delegate",
+      title,
+      state,
       project.id,
       now
     );
     fleet.write(
       "UPDATE instances SET parent_instance_id = ?, work_item_id = ? WHERE id = ?",
-      parent,
+      above,
       item,
       child
     );
@@ -277,6 +286,12 @@ mockup = Preview("${mock.id}", "The mock")`,
     does: "judge",
     ask: "Judge what the delegate drew",
   });
+  const nestedCanvas = await create(nested, {
+    kind: "canvas",
+    name: "nested-canvas",
+    does: "judge",
+    ask: "Judge what the delegate drew",
+  });
   await fleet.stopSession(ended);
   await until(
     "the ended delegate's item ended",
@@ -308,13 +323,23 @@ mockup = Preview("${mock.id}", "The mock")`,
       !!rowOf(endedCanvas.id),
     refusedOutside.text.slice(0, 600)
   );
+  // Named as an agent names it: by its name (2026-10-23, every name refused).
   const deletedEnded = await callAs(fleet, parent, "artifact_delete", {
-    id: endedCanvas.id,
+    id: "ended-canvas",
   });
   check(
-    "(d) the parent's artifact_delete of the ended delegate's canvas succeeds, and it is gone from the hub",
+    "(d) the parent's artifact_delete of the ended delegate's canvas, by its name, succeeds, and it is gone from the hub",
     !(deletedEnded.isError || rowOf(endedCanvas.id)),
     `${deletedEnded.text.slice(0, 600)}; row ${JSON.stringify(rowOf(endedCanvas.id) ?? null)}`
+  );
+  // Two levels down: a delegate of the ended delegate, its own item done.
+  const deletedNested = await callAs(fleet, parent, "artifact_delete", {
+    id: "nested-canvas",
+  });
+  check(
+    "(d) the parent's artifact_delete of its delegate's delegate's canvas, by its name, succeeds once that one's item ended",
+    !(deletedNested.isError || rowOf(nestedCanvas.id)),
+    `${deletedNested.text.slice(0, 600)}; row ${JSON.stringify(rowOf(nestedCanvas.id) ?? null)}`
   );
 
   // (e) The live delegate's item ends.
@@ -347,11 +372,12 @@ mockup = Preview("${mock.id}", "The mock")`,
       !rowOf(browser.id),
     `menu [${gone.menu.map((one) => `${one.kind} ${one.name}`).join(", ")}]`
   );
+  // By its handle, the id's first eight.
   const deletedLive = await callAs(fleet, parent, "artifact_delete", {
-    id: liveCanvas.id,
+    id: liveCanvas.id.slice(0, 8),
   });
   check(
-    "(e) once its item ended, the parent's artifact_delete of that delegate's canvas succeeds",
+    "(e) once its item ended, the parent's artifact_delete of that delegate's canvas, by its handle, succeeds",
     !(deletedLive.isError || rowOf(liveCanvas.id)),
     deletedLive.text.slice(0, 600)
   );
