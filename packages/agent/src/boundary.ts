@@ -2757,10 +2757,13 @@ const LAUNCH = [
  * into its request's FIFO (`$req/out`, `$req/err`), never those FIFOs opened
  * as its own fds; so is its stdin, copied by a `cat` out of `$req/in` when
  * its executor hands it one (a claude session's prefix, {@link execScript}),
- * and `/dev/null` otherwise. That `cat` lives as long as its executor's stdin
- * stays open, which may outlast the command, so its stderr is no stream of
- * the command's: holding one, it held the executor waiting on its output
- * after the command had ended. A program with a confining AppArmor profile of its own
+ * and `/dev/null` otherwise. That `cat` would live as long as its executor's
+ * stdin stays open, which may outlast the command, so its stderr is no
+ * stream of the command's: holding one, it held the executor waiting on its
+ * output after the command had ended. The command's shell ends it as it
+ * exits (its EXIT trap): with no place's reaper ({@link LAUNCH}) a copy whose
+ * host side stayed open was left reading in the boundary, its parent gone
+ * (`cat <req>/in`, 2026-10-23). A program with a confining AppArmor profile of its own
  * passes an exec transition, and the kernel revalidates every fd it inherits
  * against that profile, closing those it may not use: a FIFO or file is
  * checked by its path, which no such profile names, while a pipe is not
@@ -2799,7 +2802,7 @@ while :; do
     esac
     (
       printf '%s\\n' "$sandbox" > "$req/sandbox"
-      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c 'set -- "$1" "$CAWCO_SEARCHABLE_PATH"; unset CAWCO_SEARCHABLE_PATH; if [ -p "$1/in" ]; then exec < <(exec cat "$1/in" 2>/dev/null); fi; . "$1/env" >/dev/null 2>&1; export PATH="$2"; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
+      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c 'set -- "$1" "$CAWCO_SEARCHABLE_PATH"; unset CAWCO_SEARCHABLE_PATH; if [ -p "$1/in" ]; then exec < <(exec cat "$1/in" 2>/dev/null); trap "kill $! 2>/dev/null" EXIT; fi; . "$1/env" >/dev/null 2>&1; export PATH="$2"; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
       echo $! > "$req/pid"
       wait $!
       echo $? > "$req/status"
