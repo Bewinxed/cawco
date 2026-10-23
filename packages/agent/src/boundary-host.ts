@@ -35,12 +35,16 @@
  * working directory.
  *
  * A plain Bun script, never a module of cawco, importing nothing of it but
- * core's dependency-free dir names (`claude-dirs.ts`), mount table
- * (`mount-table.ts`), nested-boundary words (`boundary-nesting.ts`), socat
- * backlog (`socat.ts`) and hub preview origins (`hub-previews.ts`),
- * with safe git and state files, the signal wall's sending half
- * (`signal-wall.ts`, through sandbox-end.ts), and the agent's own
- * dependency-free proxy relay (`proxy-relay.ts`): a binary install runs
+ * these, which reach no other file of the repository and never core's index
+ * (the probe kit's sandbox-end e5 walks them): core's dir names
+ * (`claude-dirs.ts`), mount table (`mount-table.ts`), nested-boundary words
+ * (`boundary-nesting.ts`, with the host environment it reads,
+ * `session-env.ts`, and CawCo's variable names, `cawco-env.ts`), socat
+ * backlog (`socat.ts`), hub preview origins (`hub-previews.ts`), git dir
+ * test (`git-dir.ts`), safe git (`safe-git.ts`) and state files
+ * (`state-file.ts`), the signal wall's sending half (`signal-wall.ts`, through
+ * sandbox-end.ts and state-file.ts), and the agent's own proxy relay
+ * (`proxy-relay.ts`) and sandbox end (`sandbox-end.ts`): a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
  * runs it on bun.
  */

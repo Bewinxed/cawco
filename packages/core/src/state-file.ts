@@ -37,7 +37,7 @@ import {
 } from "node:fs";
 import { link, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { processGroup } from "./process-identity";
+import { isAlive, listedPid } from "./signal-wall";
 
 export interface StateWriteOptions {
   /**
@@ -78,9 +78,11 @@ export const stateTemporaryTarget = (name: string): string | undefined =>
 /**
  * Whether `name` is a write that never finished: a temporary file of this
  * module's whose writer is gone (a crash, a SIGKILL). Nothing reads one, and
- * the agent's sweep removes it. Its writer is looked for in the system's own
- * list (`/proc/<pid>` or `kinfo_proc`): one named by a pid no process can
- * have here (0, 1) was never this module's, and is no write of its.
+ * the agent's sweep removes it. Its writer is asked of the kernel (signal 0,
+ * the signal wall's `isAlive`, which needs no process reader: this module
+ * is the srt host's too); one not this user's to signal is alive all the
+ * same. One named by a pid no process can have here (0, 1) was never this
+ * module's, and is no write of its; one past any pid is no process.
  */
 export const isStrayTemporary = (name: string): boolean => {
   const named = TEMPORARY.exec(name)?.[2];
@@ -88,7 +90,10 @@ export const isStrayTemporary = (name: string): boolean => {
     return false;
   }
   const pid = Number(named);
-  return pid > 1 && processGroup(pid) === undefined;
+  if (pid <= 1) {
+    return false;
+  }
+  return !(Number.isSafeInteger(pid) && isAlive(listedPid(pid)));
 };
 
 const toBytes = (data: string | Uint8Array): Uint8Array =>

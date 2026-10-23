@@ -22,6 +22,10 @@
  *   sandbox-end.ts, which between them reach no other file of the
  *   repository; it reaches no signal.ts, and sends no signal of its own
  *   (no raw call in its text).
+ * - e6. Every file the host reaches by its imports is one its header names,
+ *   and none is core's index, signal.ts or the process reader
+ *   (process-identity.ts, which loads bun:ffi); its bundle builds, its size
+ *   said (832440 bytes when it carried core's index, at 358fabf4c).
  *
  * What it cannot show, a host leg: a real srt host whose guard restarts its
  * sandbox (a guarded path renamed on the host) leaves no process of the old
@@ -199,12 +203,52 @@ const importLeg = (kit: Kit): void => {
   );
 };
 
+/** What the host's header says it imports (boundary-host.ts), and nothing else. */
+const HOST_REACHES = new Set([
+  "packages/agent/src/boundary-host.ts",
+  "packages/core/src/claude-dirs.ts",
+  "packages/core/src/mount-table.ts",
+  "packages/core/src/boundary-nesting.ts",
+  "packages/core/src/session-env.ts",
+  "packages/core/src/cawco-env.ts",
+  "packages/core/src/socat.ts",
+  "packages/core/src/hub-previews.ts",
+  "packages/core/src/git-dir.ts",
+  "packages/core/src/safe-git.ts",
+  "packages/core/src/state-file.ts",
+  "packages/core/src/signal-wall.ts",
+  "packages/agent/src/proxy-relay.ts",
+  "packages/agent/src/sandbox-end.ts",
+]);
+
+const indexLeg = async (kit: Kit): Promise<void> => {
+  const host = reached(HOST);
+  const extra = [...host].filter((file) => !HOST_REACHES.has(file));
+  const built = await Bun.build({
+    entrypoints: [HOST],
+    target: "bun",
+    format: "esm",
+    minify: true,
+  });
+  const size = built.outputs.reduce((sum, output) => sum + output.size, 0);
+  kit.check(
+    "e6: the srt host reaches only the files its header names, never core's index, signal.ts or the process reader, and its bundle builds",
+    extra.length === 0 &&
+      !host.has("packages/core/src/index.ts") &&
+      !host.has("packages/core/src/signal.ts") &&
+      !host.has("packages/core/src/process-identity.ts") &&
+      built.success,
+    `reaches ${host.size} files${extra.length > 0 ? `, beyond its header: ${extra.join(", ")}` : ""}; bundle ${built.success ? `${size} bytes` : built.logs.map(String).join(" | ")}`
+  );
+};
+
 const spec: Spec = {
   name: "sandbox-end",
   run: async (kit: Kit) => {
     pureLegs(kit);
     await liveLegs(kit);
     importLeg(kit);
+    await indexLeg(kit);
   },
 };
 

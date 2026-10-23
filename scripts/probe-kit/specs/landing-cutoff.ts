@@ -54,10 +54,25 @@
  *   restarted; E ends done, its checkout holding D's large file, downloaded
  *   from the project's own repository on the hub; the second mock is asked
  *   nothing, and the hub logs no LFS request for the second project.
+ * - F, a guard's restart ends the old sandbox whole: a delegate starts a
+ *   `sleep` in the background, inside its sandbox. The spec reads the
+ *   sandbox's outer bwrap and init (the generation's `sandbox` file,
+ *   `OUTER INNER …`) and the sleep's host pid, then replaces the clone's
+ *   `.git/config` on the host (a new inode), which drops its protected bind.
+ *   The agent says the sandbox restarted; within 10 s the old init, the old
+ *   outer bwrap and the sleep are gone (boundary-host.ts `kill`, sandbox-end.ts
+ *   `endSandbox`: the init before the outer, never by `--die-with-parent`
+ *   alone); a new sandbox runs, its init another
+ *   live process; the item ends done.
+ * - G, the host's own close ends its sandbox whole: the same, but the spec
+ *   sends the srt host SIGTERM (its signal handler, then `finish`). Within
+ *   10 s the old init, outer, sleep and the host itself are gone; the
+ *   delegate's next command starts a new boundary, whose sandbox's init is
+ *   another live process; the item ends done.
  *
  *   bun scripts/probe-kit/run.ts landing-cutoff
  */
-import { watch } from "node:fs";
+import { readFileSync, watch } from "node:fs";
 import {
   mkdir,
   readdir,
@@ -71,16 +86,24 @@ import {
   isAlive,
   listedPid,
   type Pid,
+  signal,
 } from "../../../packages/core/src/signal";
+import { readRecord } from "../../../packages/core/src/state-file";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-CUTOFF-([ABCDE])/;
-type Tag = "A" | "B" | "C" | "D" | "E";
-/** A's background command, found on the host by its argv. */
-const SLEEP = ["sleep", "7311"];
+const TAG = /PROBE-CUTOFF-([ABCDEFG])/;
+type Tag = "A" | "B" | "C" | "D" | "E" | "F" | "G";
+/** Each background command (A's, F's, G's), found on the host by its argv. */
+const SLEEP: Partial<Record<Tag, string[]>> = {
+  A: ["sleep", "7311"],
+  F: ["sleep", "7312"],
+  G: ["sleep", "7313"],
+};
+/** How long a sandbox's processes get to be gone once it was ended. */
+const GONE_MS = 10_000;
 /** The agent's words for a sandbox the host stopped (boundary-host.ts). */
 const RESTARTED = "was changed on the host";
 /**
@@ -176,6 +199,21 @@ const steps: Record<
     finished: false,
     searched: false,
   },
+  // F and G commit nothing, and run a sleep in the background.
+  F: {
+    armed: false,
+    background: false,
+    committed: true,
+    finished: false,
+    searched: false,
+  },
+  G: {
+    armed: false,
+    background: false,
+    committed: true,
+    finished: false,
+    searched: false,
+  },
 };
 
 const respond = (request: Seen): Reply => {
@@ -207,7 +245,7 @@ const respond = (request: Seen): Reply => {
   if (!step.background) {
     step.background = true;
     return tool("Bash", {
-      command: SLEEP.join(" "),
+      command: (SLEEP[tag] ?? []).join(" "),
       description: "Run in the background",
       run_in_background: true,
     });
@@ -235,9 +273,9 @@ const respond = (request: Seen): Reply => {
   return text("done");
 };
 
-/** The host pid of the process whose argv is {@link SLEEP}, if one runs. */
-const sleepPid = async (): Promise<Pid | undefined> => {
-  const wanted = `${SLEEP.join("\0")}\0`;
+/** The host pid of the process whose argv is `argv` (one of {@link SLEEP}), if one runs. */
+const sleepPid = async (command: string[]): Promise<Pid | undefined> => {
+  const wanted = `${command.join("\0")}\0`;
   for (const pid of await readdir("/proc")) {
     if (!PID.test(pid)) {
       continue;
@@ -247,6 +285,16 @@ const sleepPid = async (): Promise<Pid | undefined> => {
     if (argv === wanted) {
       return listedPid(Number(pid));
     }
+  }
+};
+
+/** Whether `pid` is a live process now: there, and not a zombie its parent has yet to reap. */
+const liveNow = (pid: number): boolean => {
+  try {
+    const line = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return line.at(line.lastIndexOf(")") + 2) !== "Z";
+  } catch {
+    return false;
   }
 };
 
@@ -341,6 +389,155 @@ interface ItemRow {
   state: string;
   workspace_id: string;
 }
+
+/** A workspace's boundary as its files name it ({@link boundaryOf}). */
+interface Boundary {
+  gen: string;
+  host: number;
+  inner: number;
+  outer: number;
+}
+
+/**
+ * Workspace `id`'s current boundary as its files name it: its srt host's
+ * pid and generation (`boundary.json`, agent boundary.ts `readHeld`), and
+ * its sandbox's outer bwrap and init (the generation's `sandbox` file,
+ * boundary-host.ts `placeFile`). Undefined while it has none.
+ */
+const boundaryOf = async (
+  home: string,
+  id: string
+): Promise<Boundary | undefined> => {
+  const state = join(home, ".cawco", "workspaces", id);
+  const held = await readRecord<{ gen: string; pid: number }>(
+    join(state, "boundary.json")
+  ).catch(() => undefined);
+  if (!held) {
+    return;
+  }
+  const [outer, inner] = (
+    await readFile(
+      join(state, "boundaries", held.gen, "sandbox"),
+      "utf8"
+    ).catch(() => "")
+  )
+    .trim()
+    .split(" ")
+    .map(Number);
+  return outer && inner
+    ? { gen: held.gen, host: held.pid, outer, inner }
+    : undefined;
+};
+
+/** What a delegate's hook is given, after its sleep runs and before it is let finish. */
+interface Armed {
+  config: string;
+  /** The scratch fleet's HOME, under which its workspaces' state is. */
+  home: string;
+  restarts: () => Promise<string[]>;
+  sleeping: Pid | undefined;
+  workspace: string;
+}
+
+/**
+ * Ends `tag`'s sandbox with `end` and reads what is left: whether its old
+ * init, outer bwrap and background sleep (and with `host`, its srt host)
+ * are gone within {@link GONE_MS}, and the sandbox that runs after.
+ */
+const endsWhole = async (
+  tag: Tag,
+  { home, workspace, sleeping }: Armed,
+  end: (old: Boundary) => Promise<unknown>,
+  host: boolean
+) => {
+  const old = await boundaryOf(home, workspace);
+  if (!(old && sleeping)) {
+    return {
+      said: `no boundary or sleep read: ${JSON.stringify(old)}, sleep ${sleeping}`,
+      gone: false,
+      fresh: undefined,
+      ended: undefined,
+    };
+  }
+  const watched = [old.inner, old.outer, sleeping, ...(host ? [old.host] : [])];
+  const ended = await end(old);
+  const gone = await until(
+    `${tag}'s old sandbox gone`,
+    () => (watched.some(liveNow) ? undefined : true),
+    Boolean,
+    GONE_MS
+  ).catch(() => false);
+  const fresh = await until(
+    `${tag}'s new sandbox runs`,
+    async () => {
+      const now = await boundaryOf(home, workspace);
+      return now && now.inner !== old.inner && liveNow(now.inner)
+        ? now
+        : undefined;
+    },
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  return {
+    said: `old: host ${old.host}, gen ${old.gen}, outer ${old.outer}, init ${old.inner}, sleep ${sleeping}; still running after ${GONE_MS / 1000} s: ${watched.filter(liveNow).join(", ") || "none"}; new: ${fresh ? `gen ${fresh.gen}, outer ${fresh.outer}, init ${fresh.inner}` : "none"}`,
+    gone,
+    fresh,
+    ended,
+  };
+};
+
+/** F's hook: a guarded path replaced on the host, which the srt host's guard answers with a restart. */
+const guardRestart = async (armed: Armed) => {
+  const said = (await armed.restarts()).length;
+  return await endsWhole(
+    "F",
+    armed,
+    async () => {
+      // A new inode where the sandbox binds `.git/config`: its bind drops,
+      // and the host's guard restarts the sandbox.
+      await replaceInPlace(armed.config);
+      return await until(
+        "F's restart said",
+        async () => (await armed.restarts()).at(said),
+        Boolean,
+        60_000
+      ).catch(() => undefined);
+    },
+    false
+  );
+};
+
+/** G's hook: the srt host its record names sent SIGTERM (its handler, then `finish`). */
+const hostClose = (armed: Armed) =>
+  endsWhole(
+    "G",
+    armed,
+    async (old) => {
+      const argv = await readFile(`/proc/${old.host}/cmdline`, "utf8").catch(
+        () => ""
+      );
+      // Only the srt host its record names: a checkout's boundary-host.ts, a
+      // binary install's srt/host.js.
+      if (!(argv.includes("boundary-host") || argv.includes("host.js"))) {
+        return `pid ${old.host} is not the srt host: ${argv.replaceAll("\0", " ")}`;
+      }
+      return signal(listedPid(old.host), "SIGTERM");
+    },
+    true
+  );
+
+/** What F's or G's hook read, as its check says it. */
+const endedWhole = (
+  hooked: Awaited<ReturnType<typeof endsWhole>> | undefined,
+  sent: (ended: unknown) => boolean
+): { ok: boolean; said: string } => ({
+  ok:
+    hooked !== undefined &&
+    sent(hooked.ended) &&
+    hooked.gone &&
+    hooked.fresh !== undefined,
+  said: `${String(hooked?.ended ?? "nothing ended it")}\n${hooked?.said ?? ""}`,
+});
 
 const run = async (kit: Kit) => {
   const { check } = kit;
@@ -441,7 +638,11 @@ const run = async (kit: Kit) => {
     });
 
     /** Delegates `tag`, waits until it is ready to finish, arms it, and answers its item once it ended. */
-    const delegate = async (tag: Tag) => {
+    const delegate = async <T = undefined>(
+      tag: Tag,
+      /** Run once its background sleep runs, before it is let finish. */
+      hook?: (armed: Armed) => Promise<T>
+    ) => {
       const item = await fleet.api<{ workItemId: string }>("/api/work-items", {
         parentInstanceId: parent,
         title: `Commit and land ${tag}`,
@@ -455,10 +656,15 @@ const run = async (kit: Kit) => {
           "SELECT state, error, result, workspace_id FROM work_items WHERE id = ?",
           item.workItemId
         )[0];
-      const sleeping =
-        tag === "A"
-          ? await until("A's background sleep runs", sleepPid, Boolean, 300_000)
-          : undefined;
+      const argv = SLEEP[tag];
+      const sleeping = argv
+        ? await until(
+            `${tag}'s background sleep runs`,
+            () => sleepPid(argv),
+            Boolean,
+            300_000
+          )
+        : undefined;
       /**
        * The init of each sandbox workspace `id` runs now: the second word of
        * each generation's `sandbox` file (agent boundary.ts `generationDir`,
@@ -543,6 +749,9 @@ const run = async (kit: Kit) => {
       if (key) {
         await Bun.$`git config --file ${config} ${key[0]} ${key[1]}`.quiet();
       }
+      const hooked = hook
+        ? await hook({ config, home, restarts, sleeping, workspace })
+        : undefined;
       steps[tag].armed = true;
       const row = await until(
         `${tag}'s item ended`,
@@ -570,6 +779,7 @@ const run = async (kit: Kit) => {
         told: await told(),
         sleepAlive: sleeping === undefined ? undefined : isAlive(sleeping),
         sleeping,
+        hooked,
       };
     };
     const onMain = async (tag: Tag) => {
@@ -711,6 +921,32 @@ const run = async (kit: Kit) => {
       "D, E: the server D's .lfsconfig names for pushes was asked nothing, and the hub logs no LFS request for the other project",
       refusing.asked.length === 0 && toOther.length === 0,
       `refusing mock: ${refusing.asked.join(", ") || "nothing"}\nhub, other project: ${toOther.join("\n") || "nothing"}`
+    );
+
+    // F, a guard's restart; G, the srt host's own close
+    const f = await delegate("F", guardRestart);
+    const fEnded = endedWhole(f.hooked, Boolean);
+    check(
+      "F: a guard's restart: the agent says the sandbox restarted, its old init, outer bwrap and background sleep are gone within 10 s, and a new sandbox runs",
+      fEnded.ok,
+      fEnded.said
+    );
+    check(
+      "F: its item ends done, nothing to land",
+      f.row.state === "done",
+      f.said
+    );
+    const g = await delegate("G", hostClose);
+    const gEnded = endedWhole(g.hooked, (ended) => ended === "sent");
+    check(
+      "G: the srt host's own close (SIGTERM, then finish): its old init, outer bwrap, background sleep and the host are gone within 10 s, and the delegate's next command runs in a new sandbox",
+      gEnded.ok,
+      gEnded.said
+    );
+    check(
+      "G: its item ends done, nothing to land",
+      g.row.state === "done",
+      g.said
     );
   } finally {
     named.stop();

@@ -32,7 +32,7 @@
  * stay out, so a rig started from a session's shell names its own keeper and
  * hub rather than inheriting the live ones.
  */
-import { CAWCO_ENV } from "./index";
+import { CAWCO_ENV } from "./cawco-env";
 
 /** CawCo's embedded pi's package dir: CawCo's own module graph's, never another process's. */
 const EMBEDDED_PI_DIR = "PI_PACKAGE_DIR";
