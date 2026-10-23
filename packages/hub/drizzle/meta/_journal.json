@@ -2073,6 +2073,13 @@
       "when": 1792790267836,
       "tag": "0303_blocked_items",
       "breakpoints": true
+    },
+    {
+      "idx": 304,
+      "version": "6",
+      "when": 1792790285278,
+      "tag": "0304_session_tasks",
+      "breakpoints": true
     }
   ]
 }

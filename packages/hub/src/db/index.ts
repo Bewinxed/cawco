@@ -242,6 +242,7 @@ import {
   workspaces,
 } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
@@ -2012,6 +2013,8 @@ export interface DbShape {
   readonly sessionPlan: (instanceId: string) => SessionPlanRow | undefined;
   /** What a session has done that taints its memory notes; undefined for one that has done nothing the hub keeps. */
   readonly sessionTaint: (instanceId: string) => SessionTaintRow | undefined;
+  /** The background tasks each Claude session's process runs now (session-tasks.ts). */
+  readonly sessionTasks: SessionTasksDb;
   /**
    * A machine's word on Claude, as a beat's Claude report says it (a keychain
    * unlocked from the dashboard, a login gone under it). Answers whether the
@@ -9792,6 +9795,7 @@ const make = async (path: string): Promise<DbShape> => {
     },
     previews: previewsDb(db),
     moveEndings: moveEndingsDb(db),
+    sessionTasks: sessionTasksDb(db),
     owedMoves: owedMovesDb(db),
     previewPasses: previewPassesDb(db),
     streamRelay: streamRelayDb(db),

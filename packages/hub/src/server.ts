@@ -20,6 +20,7 @@ import type {
   ControlPayload,
   DelegateEvent,
   DeliveryMark,
+  EndedTask,
   Envelope,
   ErrorFrame,
   FleetConvergeFrame,
@@ -10224,14 +10225,31 @@ export const createServer = (
       }
       lifetime.cancel(laterWaits.get(row.id)?.timer);
       laterWaits.delete(row.id);
-      if (outcome?.state === "carried" && outcome.ended) {
-        db.moveEndings.put(row.id, outcome.ended);
-        ended.set(row.id, outcome.ended);
+      if (outcome?.state === "carried") {
+        keepEnded(row.id, outcome.ended, ended);
       }
       db.patchInstance(row.id, { accountId });
       moved.push(row.id);
     }
     return { moved, kept, ended };
+  };
+
+  /**
+   * A carried move's word on what it ended with `instanceId`'s process,
+   * kept (db `move_endings`) for its next launch to tell
+   * ({@link tellEndedByMove}); what the hub kept of its background tasks is
+   * the move's to tell now, never a cut's too ({@link tellCutTasks}).
+   */
+  const keepEnded = (
+    instanceId: string,
+    what: MoveEnded | undefined,
+    into: Map<string, MoveEnded>
+  ): void => {
+    db.sessionTasks.clear(instanceId);
+    if (what) {
+      db.moveEndings.put(instanceId, what);
+      into.set(instanceId, what);
+    }
   };
 
   /**
@@ -10362,7 +10380,7 @@ export const createServer = (
    */
   const endedByMoveWords = (ended: MoveEnded): string =>
     [
-      `You were moved to another account. Claude Code doesn't bring back background work when it resumes a session, so the move ended what your old process was still running:`,
+      `You were moved to another account. Claude Code doesn't bring back background work when it resumes a session, so the move ended what your old process was still running. Each was interrupted, its outcome unknown: it may or may not have finished what it started.`,
       ...ended.tasks.map((task) =>
         [
           `- Background task ${task.taskId} (${task.type}): ${task.description}.`,
@@ -10379,6 +10397,24 @@ export const createServer = (
             `- ${ended.wakeups} one-time wake-up(s) you had scheduled. One you set with CronCreate comes back if its time hasn't passed; a self-paced loop's next wake-up (ScheduleWakeup) doesn't. Check with CronList.`,
           ]
         : []),
+      "Start again whatever you still need, then carry on.",
+    ].join("\n");
+
+  /**
+   * The words a session reads of the background tasks its process took with
+   * it ({@link tellCutTasks}): what cut them, each task by its id, kind and
+   * description with its output line ({@link endedTaskOutputWords}),
+   * interrupted with its outcome unknown.
+   */
+  const cutTasksWords = (how: string, cut: readonly EndedTask[]): string =>
+    [
+      `${how}, which ended ${cut.length === 1 ? "the background task" : `the ${cut.length} background tasks`} it was running; Claude Code doesn't bring them back. Each was interrupted, its outcome unknown: it may or may not have finished what it started.`,
+      ...cut.map((task) =>
+        [
+          `- Background task ${task.taskId} (${task.type}): ${task.description}.`,
+          endedTaskOutputWords(task),
+        ].join("\n")
+      ),
       "Start again whatever you still need, then carry on.",
     ].join("\n");
 
@@ -17399,6 +17435,16 @@ export const createServer = (
     const inFlight = inFlightRefusal(row.id);
     if (inFlight) {
       console.info(`[hub] not restoring ${row.id}: ${inFlight}`);
+      return;
+    }
+    // A work item's session restored after a restart is started again: one
+    // whose type, machine or account is missing is blocked, not failed
+    // (work-items.ts `blockIfMissing`).
+    const block = workItems.blockIfMissing(row);
+    if (block) {
+      console.warn(
+        `[hub] not restoring ${row.id}, its work item is blocked: ${blockWords(block)}`
+      );
       return;
     }
     const refuse = (refusal: string): void => {
@@ -25341,6 +25387,194 @@ export const createServer = (
   };
 
   /**
+   * A Claude session's CLI listed its background tasks (its
+   * `background_tasks_changed`, the whole list each time): kept on the
+   * hub's records, ambient ones left out, so what a restart or a kill of
+   * its process cuts is known after it ({@link tellCutTasks}).
+   */
+  const keepTasks = (instanceId: string, message: unknown): void => {
+    const frame = message as {
+      subtype?: string;
+      tasks?: {
+        ambient?: boolean;
+        description?: string;
+        task_id?: string;
+        task_type?: string;
+      }[];
+      type?: string;
+    };
+    if (
+      frame.type !== "system" ||
+      frame.subtype !== "background_tasks_changed" ||
+      !Array.isArray(frame.tasks)
+    ) {
+      return;
+    }
+    db.sessionTasks.replace(
+      instanceId,
+      frame.tasks.flatMap((task) =>
+        task.ambient || !task.task_id
+          ? []
+          : [
+              {
+                taskId: task.task_id,
+                type: task.task_type ?? "task",
+                description: task.description ?? "",
+              },
+            ]
+      ),
+      new Date()
+    );
+  };
+
+  /** How long the hub waits for a session's next process to come up to read what a cut task printed. */
+  const CUT_OUTPUT_WAIT_MS = 60_000;
+
+  /**
+   * The last of what background task `taskId` printed, read through the
+   * session's process now (the CLI's `get_task_output`, which reads a task
+   * of the session's whether running or ended), as a move's ended task
+   * carries it: the output, that its read went unanswered, or neither.
+   */
+  const cutTaskOutput = async (
+    row: InstanceRow,
+    taskId: string
+  ): Promise<Pick<EndedTask, "output" | "outputUnread">> => {
+    const requestId = crypto.randomUUID();
+    const answer = asRead(
+      await awaitReply(row.machineId, requestId, READ_TIMEOUT_MS, () => {
+        const agent = registry.agent(row.machineId);
+        return agent
+          ? sendAnswerable(agent, {
+              verb: "control",
+              machineId: row.machineId,
+              instanceId: row.id,
+              requestId,
+              payload: {
+                instanceId: row.id,
+                requestId,
+                method: "getTaskOutput",
+                args: [taskId],
+              },
+            } satisfies Envelope<ControlPayload>)
+          : undefined;
+      })
+    );
+    switch (answer.kind) {
+      case "unanswered":
+        return { outputUnread: { after: answer.after } };
+      case "answered": {
+        const read = answer.value.ok
+          ? (answer.value.result as { output?: unknown } | undefined)
+          : undefined;
+        return typeof read?.output === "string" && read.output
+          ? { output: read.output }
+          : {};
+      }
+      default:
+        throw unreachable(answer);
+    }
+  };
+
+  /** Resolves once `instanceId`'s process is up (running), or after `ms`; true when it is. */
+  const untilUp = async (instanceId: string, ms: number): Promise<boolean> => {
+    const until = Date.now() + ms;
+    for (;;) {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (row?.status === "running" && registry.agent(row.machineId)) {
+        return true;
+      }
+      if (
+        Date.now() >= until ||
+        !row ||
+        row.status === "stopped" ||
+        row.status === "discarded" ||
+        row.status === "error"
+      ) {
+        return false;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one look a second until it is up
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  };
+
+  /**
+   * THE RULE THAT A CUT IS NEVER SILENT: the background tasks `row`'s
+   * process was running before `before` (kept by {@link keepTasks}) went
+   * with that process, cut by `how`: CawCo restarting it, or a signal
+   * killing it. Claude Code brings none back on resume, so once its next
+   * process is up the session is told each one, interrupted, its outcome
+   * unknown, with the last of what it printed as that process reads it
+   * ({@link cutTaskOutput}), in a message its transcript shows: the line
+   * the person and the session both read. Once: the same cut says it under
+   * one uuid. A move tells what it ended its own way ({@link tellEndedByMove}).
+   */
+  const tellCutTasks = (
+    row: { id: string; machineId: string },
+    before: Date,
+    how: string
+  ): void => {
+    const cut = db.sessionTasks.takeBefore(row.id, before);
+    if (cut.length === 0) {
+      return;
+    }
+    console.info(
+      `[hub] ${row.id}: ${cut.length} background task(s) went with its process (${how}); it is told each, interrupted, with its output so far`
+    );
+    detach(
+      (async () => {
+        const up = await untilUp(row.id, CUT_OUTPUT_WAIT_MS);
+        const [now] = db.getInstancesByIds([row.id]);
+        const told: EndedTask[] = [];
+        for (const task of cut) {
+          told.push({
+            taskId: task.taskId,
+            type: task.type,
+            description: task.description,
+            // biome-ignore lint/performance/noAwaitInLoops: one read at a time on the session's own process
+            ...(up && now ? await cutTaskOutput(now, task.taskId) : {}),
+          });
+        }
+        deliverSend({
+          verb: "send",
+          machineId: now?.machineId ?? row.machineId,
+          instanceId: row.id,
+          payload: {
+            instanceId: row.id,
+            message: {
+              type: "user",
+              uuid: uuidOf(`${row.id}\u0000cut\u0000${before.getTime()}`),
+              message: { role: "user", content: cutTasksWords(how, told) },
+              parent_tool_use_id: null,
+              origin: { kind: "system", name: "restore" },
+            },
+          },
+        } satisfies Envelope<SendPayload>);
+      })(),
+      "cut tasks"
+    );
+  };
+
+  /**
+   * A launch of `row`'s (its `init`, a register's restore, its server's
+   * stop): what its last process ran in the background went with it, a turn
+   * cut or not, told once its process is up ({@link tellCutTasks}).
+   */
+  const tellCutAtLaunch = (
+    row: PublicInstanceRow | undefined,
+    serverStopped?: Date
+  ): void => {
+    const launchedAt = serverStopped ?? row?.spawnedAt;
+    if (row && launchedAt) {
+      tellCutTasks(
+        row,
+        launchedAt,
+        `CawCo restarted this session's process at ${utcClock(launchedAt)}`
+      );
+    }
+  };
+
+  /**
    * The send that hands a cut turn back, by a uuid its turn decides: one
    * made again for the same turn (a second register, a hub that died after
    * making it) is the same send, which {@link deliverSend} hands over once.
@@ -25537,6 +25771,7 @@ export const createServer = (
    */
   const resumeCutTurn = (instanceId: string, serverStopped?: Date): void => {
     const [row] = db.getInstancesByIds([instanceId]);
+    tellCutAtLaunch(row, serverStopped);
     const cut = row
       ? cutTurnOf(row, serverStopped ? "serverStopped" : "restored")
       : undefined;
@@ -25650,6 +25885,11 @@ export const createServer = (
     signalDeaths.set(instanceId, now);
     sessionAsleep(machineId, instanceId);
     const resumes = resumeKilledTurn(instanceId, died.signal, new Date(now));
+    tellCutTasks(
+      row,
+      new Date(now),
+      `Your process was killed (${died.signal}) at ${utcClock(new Date(now))}`
+    );
     // Its own line: who ended it (no part of CawCo) and what starts it again.
     noteAtLimit(row, {
       kind: "ended",
@@ -34208,6 +34448,10 @@ export const createServer = (
               // dashboards do; a turn's end is answered above.
               if (kind === "frame" && message.instanceId && !internal) {
                 ruleEngine.observe(
+                  message.instanceId,
+                  (message.payload as FramePayload & { kind: "frame" }).message
+                );
+                keepTasks(
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );

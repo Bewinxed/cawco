@@ -2430,6 +2430,30 @@ export const moveEndings = sqliteTable("move_endings", {
 });
 
 /**
+ * The background tasks a Claude session's process is running now, as its
+ * CLI last listed them (its `background_tasks_changed`, replaced whole each
+ * time, ambient ones left out), each kept from when the hub first heard of
+ * it. A process restarted or killed takes them with it, and Claude Code
+ * restores none on resume: the session is told each was interrupted, its
+ * outcome unknown, with its output so far (server.ts `tellCutTasks`).
+ */
+export const sessionTasks = sqliteTable(
+  "session_tasks",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+    /** Its kind as Claude Code names it: `local_bash`, `monitor`, `local_agent`, … */
+    type: text("type").notNull(),
+    description: text("description").notNull(),
+    /** When the hub first heard of it. */
+    since: timestamp("since").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.taskId] })]
+);
+
+/**
  * A move a session owes to its next launch (server.ts `owedMoves`): a
  * person's, rebalance's or the at-limit controller's move to another
  * account, or a relaunch its model's change of provider asked
