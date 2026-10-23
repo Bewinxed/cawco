@@ -482,6 +482,16 @@ interface JudgeAt {
  * call cost each one a process start a loaded Mac takes long to schedule;
  * the judge starts once, and the hook is perl with nothing to load.
  *
+ * What the hook reads is never a prefix the CLI does not wrap with. Claude
+ * Code 2.1.302 wraps a Bash call by its own environment
+ * (`gt=a.CLAUDE_CODE_SHELL_PREFIX;if(gt)Dt=Npe(gt,Dt)`), and starts a hook
+ * with that environment and its settings' env for children over it
+ * (`os()`: `i={...process.env}; for (… of settingsEnvForChildren) i[…]=…`).
+ * So a settings file's empty prefix that the CLI takes, into its own
+ * environment or only its children's, reaches the hook, and the judge
+ * refuses the call; one the CLI drops (a delegate's CLI on the host kept the
+ * prefix its host set, r175) leaves the workspace's in both.
+ *
  * The CLI runs it in exec form, never through the prefix it judges, and
  * blocks the call on any failure of it, a script that cannot start, a crash
  * or a timeout among them (`onFailure: "block"`,
