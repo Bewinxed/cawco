@@ -96,4 +96,11 @@ export const workWords = {
   stoppedBy: (who: string) => `Stopped by ${who}.`,
   /** The heading over a stopped item's delegates and how each ended. */
   stoppedDelegates: "How each delegate under it ended:",
+  /**
+   * A work item whose session sat in its provider's retry until its
+   * deadline for that (hub provider-retries.ts): the provider's words, the
+   * deadline, and when the provider said it would try again, if it said.
+   */
+  providerRetryEnded: (message: string, deadline: string, next?: string) =>
+    `Its provider refused the turn and kept retrying ("${message}"), so the item ended at its deadline for a provider's retry, ${deadline}${next ? `: the provider's next attempt was at ${next}, past it` : ""}. Delegate the work again once the provider answers.`,
 };

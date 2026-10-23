@@ -9114,6 +9114,22 @@ export const createWorkItems = ({
       return ended;
     },
 
+    /**
+     * Its session's provider kept retrying past the item's deadline for
+     * that (provider-retries.ts): the item fails with `why`, and its parent
+     * hears it. Nothing for an item that is no longer live.
+     */
+    retryPassed(row: InstanceRow, why: string): void {
+      const item = itemOf(row);
+      if (!(item && LIVE.has(item.state))) {
+        return;
+      }
+      quiet.delete(item.id);
+      clearWait(item);
+      const ended = finish(item, { state: "failed", error: why });
+      report(row, `${why}${reportLine(ended)}`, ended.state === "failed");
+    },
+
     /** The reports of `report`, as {@link WorkItemDeps.report} hands them on: a stop's own report (tree-stops.ts). */
     reportStopped(row: InstanceRow, body: string, headline: string): void {
       report(row, body, false, false, headline);

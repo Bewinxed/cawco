@@ -816,6 +816,7 @@ import {
 import { createProjectStarters, starterRoutes } from "./project-starters";
 import { createProjectStops } from "./project-stops";
 import { readRemote } from "./projects";
+import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
 import {
   type ForecastRead,
@@ -22857,6 +22858,20 @@ export const createServer = (
     }
   }
   treeStops.resume();
+  // A work item's session in its provider's retry past its deadline for
+  // that: the item fails, its parent told, and its turn is halted, which
+  // stops the harness retrying too (provider-retries.ts).
+  const providerRetries = createProviderRetries({
+    db,
+    lifetime,
+    ended: (instanceId, why) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (row) {
+        workItems.retryPassed(row, why);
+      }
+      interruptTurn(instanceId, false);
+    },
+  });
   offBoot.push(() => {
     // Moves go on from their records: an approval is asked again, every
     // other step waits for its machine's register.
@@ -34174,6 +34189,22 @@ export const createServer = (
                   turnWaiters
                     .get(message.instanceId)
                     ?.reject(new Error(neutral.retry.message));
+                }
+                // A work item's session waits on its provider no longer than
+                // its deadline for that; anything its model says, or its
+                // turn's end, is the wait over (provider-retries.ts).
+                if (
+                  neutral.type === "system" &&
+                  neutral.subtype === PROVIDER_RETRY &&
+                  neutral.retry &&
+                  !neutral.retry.atLimit
+                ) {
+                  providerRetries.retry(message.instanceId, neutral.retry);
+                } else if (
+                  neutral.type === "assistant" ||
+                  neutral.type === "result"
+                ) {
+                  providerRetries.progress(message.instanceId);
                 }
               }
               // A turn's end, in this order: the standing instructions answer
