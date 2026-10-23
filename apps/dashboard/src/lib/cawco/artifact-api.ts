@@ -27,11 +27,23 @@ async function ok(response: Response): Promise<Response> {
   return response;
 }
 
-/** A session's artifacts, newest first (Projects spec §5.10): the panel's list. */
+/** Every artifact a session holds, newest first (Projects spec §5.10): the panel's menu. */
 export async function listArtifacts(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
   return (await ok(await fetch(artifactsPath(instanceId)))).json();
+}
+
+/**
+ * A session's artifacts that reached the person, newest first: Files'
+ * Artifacts. The hub keeps the rule (artifacts/service.ts `filesOf`): seen
+ * in their view, waiting on them or made by them; never a browser, nor a
+ * listed decision page's embedded media.
+ */
+export async function listFiles(
+  instanceId: string
+): Promise<ArtifactSummary[]> {
+  return (await ok(await fetch(artifactsPath(instanceId, "files")))).json();
 }
 
 /**
@@ -95,8 +107,8 @@ export async function keepThumbnail(
   );
 }
 
-/** The hub's refusal of a show, in its own words, with its status: a 404 is an artifact no longer there, which no retry brings back. */
-export class ShowRefused extends Error {
+/** The hub's refusal of a read or a show of an artifact, in its own words, with its status: a 404 is an artifact no longer there, which no retry brings back. */
+export class ArtifactRefused extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
     super(message);
@@ -116,7 +128,7 @@ export async function showArtifact(
     method: "POST",
   });
   if (!response.ok) {
-    throw new ShowRefused(
+    throw new ArtifactRefused(
       response.status,
       (await hubRefusal(response)).message
     );
@@ -272,9 +284,14 @@ export async function canvasSent(
 export async function findArtifact(
   id: string
 ): Promise<ArtifactSummary & { instanceId: string; shown: boolean }> {
-  return (
-    await ok(await fetch(`/api/artifacts/${encodeURIComponent(id)}`))
-  ).json();
+  const response = await fetch(`/api/artifacts/${encodeURIComponent(id)}`);
+  if (!response.ok) {
+    throw new ArtifactRefused(
+      response.status,
+      (await hubRefusal(response)).message
+    );
+  }
+  return response.json();
 }
 
 /** Closes the session's panel; each store marks its own copy closed once the hub took it. */

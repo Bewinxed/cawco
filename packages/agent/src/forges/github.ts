@@ -50,13 +50,19 @@ export const githubForge: ForgeAdapter = {
       Record<string, unknown> | undefined;
     const host =
       Object.keys(hosts ?? {}).find((each) => sameHost(each, asked)) ?? asked;
-    const read = Bun.spawnSync([gh, "auth", "token", "--hostname", host], {
+    // Not spawnSync: gh reads its token from the login keychain, and a
+    // spawnSync would wait on the keychain on the agent's JS thread.
+    const read = Bun.spawn([gh, "auth", "token", "--hostname", host], {
       env: hostEnvironment(),
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",
     });
-    const token = read.stdout.toString().trim();
+    const [out] = await Promise.all([
+      new Response(read.stdout).text(),
+      read.exited,
+    ]);
+    const token = out.trim();
     if (read.exitCode !== 0 || !token) {
       return;
     }

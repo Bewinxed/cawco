@@ -18,10 +18,15 @@
  * - {@link GATEWAY}: the same with `GatewayPorts yes`;
  * - {@link PASSWORD_PORT}: the scratch password target (ssh-target.ts),
  *   since a non-root sshd cannot check a password.
+ * The box also runs the machine's session keeper beside its agent, and
+ * reaches the model's mock (its one way out, as a VPS reaches its model
+ * provider) on the mock's port on its own loopback, bridged to this host.
  *
- * The box already has CawCo, so the hub's install script, downloaded through
- * the hub's port, takes its own rejoin branch: `cawco binary-rejoin --hub
- * <that port>`. The box has no systemd and no way to GitHub, so its `cawco`
+ * The box already has CawCo, on the build the hub offers its fleet (its
+ * update channel's newest, read from the hub before the box is furnished:
+ * the hub, on this host, finds it on GitHub), so the hub's install script,
+ * downloaded through the hub's port, takes its own rejoin branch: `cawco
+ * binary-rejoin --hub <that port>`. The box has no systemd and no way to GitHub, so its `cawco`
  * is a stand-in for the service manager ({@link standIn}): it does what
  * rejoin does with the agent's unit, with this checkout's agent under the
  * box's HOME (where the hub put the machine's key), and says `joined as`
@@ -70,6 +75,26 @@
  * (o) A new SSH add of the refused machine clears the refusal.
  * (p) Added by a public IP literal, the machine is recorded by that host,
  *     and the stream relay's candidates are as before the box joined.
+ * (u) A same-user sshd of the person's own holding the machine's port while
+ *     the hub's connection is down: the hub ends only the session its own
+ *     connection left (recorded by pid and start as it came up), so this
+ *     sshd lives on, the hub says the port is taken, and once it goes the
+ *     machine is back on the same port.
+ * (t) Removing a machine the fleet never listed (the refused knock of (k))
+ *     forgets what the hub held of it; a second removal finds nothing.
+ * (q) uwucloud, 2026-10-22: the hub still holds an admitted key for the
+ *     machine that its agent does not prove (refused at every register);
+ *     an SSH add replaces that key with its own, and the add is done,
+ *     online, with no Admit.
+ * (r) A machine on another build than the one the hub offers: the add moves
+ *     it to that build, its step naming both. The box cannot install a
+ *     build (no tar, no systemd, no way to a release host), so the add
+ *     fails there: the step it failed on named, its cause in the
+ *     installer's words, no line of a stack.
+ * (s) niftybot, 2026-10-22: the agent connects through the add's forward
+ *     and proves no key (here: it reads its key from a config dir the add
+ *     did not write). The add fails on the join's own step, its last line
+ *     the hub's words for why, no line of a stack.
  *
  * The stand-in runs the installer's own wait (`awaitJoined`); what it cannot
  * run is the service manager: a first install's restart of an agent already
@@ -84,6 +109,7 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -91,7 +117,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import {
   listedPid,
@@ -101,7 +129,9 @@ import {
   spawnedPid,
 } from "../../../packages/core/src/signal";
 import type { RelayAnswer } from "../../../packages/core/src/stream-relay";
-import { until } from "../../scratch-fleet";
+import { connectWords } from "../../../packages/core/src/words/connect";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
+import { ACCOUNT, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { machineBin } from "../ssh-target";
 
@@ -132,6 +162,11 @@ const REFUSED_QUIET_MS = 10_000;
  * records the machine by ({@link relayUnchanged}).
  */
 const PUBLIC_TARGET_HOST = "1.1.1.1";
+
+/** The box's way to the model's mock on this host: a socket in the box's dir. */
+const MOCK_SOCKET = "mock.sock";
+/** The session keeper's entry (scratch-fleet.ts `ENTRY`), which the box runs as its own. */
+const SESSIOND_ENTRY = "packages/sessiond/src/main.ts";
 
 const PROCESS_ID = /^\d+$/;
 /** The hub's connection to a machine: the master of its control socket (ssh-tunnels.ts `master`). */
@@ -189,20 +224,30 @@ const seen = (job: SshJoinJob) =>
 /**
  * The box's `cawco`: `binary-rejoin --hub <url>` does what rejoin does
  * (packages/cli/src/binary-install.ts `rejoinBinary`) with the agent's
- * unit, on a box with no service manager: the hub is recorded, the agent
- * (this checkout's, only its own pid ended) restarted against it, then the
- * installer's own wait (`awaitJoined`, run by `wait.ts`), and `joined as`
- * once it ends with the machine online. When it does not, its words and the
- * agent's last lines go to stderr, into the add's output.
+ * unit, on a box with no service manager: the hub is recorded in the
+ * installation, and as the hub the machine joined by rejoin's own
+ * `keepJoinedHub` (run by `keep-joined.ts`), the agent (this checkout's,
+ * only its own pid ended) restarted against it, then the installer's own
+ * wait (`awaitJoined`, run by `wait.ts`), and `joined as` once it ends with
+ * the machine online. When it does not, its words and the agent's last
+ * lines go to stderr, into the add's output. The build the box's
+ * installation names is kept as it is. With `keyless` beside it, the agent
+ * reads its config (its key among it) from a dir the add never wrote.
  */
-const standIn = (root: string, agentEnv: string, wait: string): string => {
+const standIn = (
+  root: string,
+  agentEnv: string,
+  wait: string,
+  keep: string
+): string => {
   const agent = join(root, "packages/agent/src/cli.ts");
   return `#!/bin/sh
 set -u
 [ "\${1:-}" = binary-rejoin ] && [ "\${2:-}" = --hub ] || { echo "cawco (ssh-reach stand-in): only binary-rejoin --hub <url>" >&2; exit 2; }
 hub=$3
 binary="$HOME/.local/share/cawco/binary"
-printf '{"role":"agent","hubUrl":"%s","installedVersion":"ssh-reach"}\\n' "$hub" > "$binary/installation.json"
+version=$(/usr/bin/sed -n 's/.*"installedVersion":"\\([^"]*\\)".*/\\1/p' "$binary/installation.json")
+printf '{"role":"agent","hubUrl":"%s","installedVersion":"%s"}\\n' "$hub" "$version" > "$binary/installation.json"
 old=$(/usr/bin/cat "$binary/agent.pid" 2>/dev/null || :)
 running=0
 case "$old" in
@@ -211,13 +256,16 @@ case "$old" in
 esac
 . ${quoted(agentEnv)}
 cd ${quoted(root)} || exit 1
+${quoted(process.execPath)} ${quoted(keep)} "$hub" || exit 1
 # With keep-running, an agent that runs is left be, as a first install's
 # \`systemctl --user enable --now\` leaves a unit that is already active.
 if [ "$running" = 1 ] && [ -e "$binary/keep-running" ]; then
   echo "cawco (ssh-reach stand-in): the running agent $old is left running" >&2
 else
   [ "$running" = 1 ] && /usr/bin/kill "$old"
-  CAWCO_HUB_URL="ws://\${hub#http://}/ws" /usr/bin/setsid ${quoted(process.execPath)} ${quoted(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
+  config="$XDG_CONFIG_HOME"
+  [ -e "$binary/keyless" ] && config="$binary/keyless-config"
+  XDG_CONFIG_HOME="$config" CAWCO_HUB_URL="ws://\${hub#http://}/ws" /usr/bin/setsid ${quoted(process.execPath)} ${quoted(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
   echo $! > "$binary/agent.pid"
 fi
 ${quoted(process.execPath)} ${quoted(wait)} "$hub" && { echo "cawco-install: joined as ${BOX}"; exit 0; }
@@ -246,6 +294,12 @@ interface Box {
   home: string;
   hubBlob: string;
   hubPort: number;
+  /** The machine's session keeper's socket, which the box's keeper listens on. */
+  keeperSocket: string;
+  /** The model's mock's port on this host, which the box's bridge listens on too. */
+  mockPort: string;
+  /** The build the hub offers its fleet, which the box's installation names. */
+  offered: string;
   root: string;
   /** The agent's environment sourced, as a shell's first command: its HOME, its runtime dir, its machine id. */
   sourced: string;
@@ -254,14 +308,30 @@ interface Box {
   wait: string;
 }
 
+/** The box's installation, as the install script reads it: its hub and the build it names. */
+const installation = (box: Box, version: string): void =>
+  writeFileSync(
+    join(box.binary, "installation.json"),
+    `{"role":"agent","hubUrl":"http://not-joined.invalid","installedVersion":"${version}"}\n`
+  );
+
 /** The box's files: the hub's key and `ssh`, the box's sshds, password target, CawCo stand-in, its machine's scripts and its own script. */
-async function furnish(fleet: KitFleet): Promise<Box> {
+async function furnish(fleet: KitFleet, offered: string): Promise<Box> {
   const root = resolve(import.meta.dir, "../../..");
   const dir = join(fleet.sandbox, "box");
   const home = join(dir, "home");
   const bin = join(dir, "hub-bin");
   const binary = join(home, ".local", "share", "cawco", "binary");
   mkdirSync(join(binary, "current"), { recursive: true });
+  // The probe's Claude account, signed in with the fleet's fake login, in
+  // the box's HOME as in every machine's of the fleet (scratch-fleet.ts
+  // `furnish`): the hub starts no Claude session on a machine with no CawCo
+  // account signed in (hub placement.ts `noAccountRefusal`), and (u) starts one.
+  cpSync(
+    join(fleet.home, ".cawco", "accounts", ACCOUNT),
+    join(home, ".cawco", "accounts", ACCOUNT),
+    { recursive: true }
+  );
   mkdirSync(join(home, ".ssh"), { recursive: true, mode: 0o700 });
   mkdirSync(bin, { recursive: true });
   const path = machineBin(join(dir, "machine-bin"));
@@ -342,6 +412,13 @@ async function furnish(fleet: KitFleet): Promise<Box> {
     wait,
     `setTimeout(() => {\n  console.error("cawco (ssh-reach): still waiting after ${WAIT_BOUND_MS / 1000} s");\n  process.exit(3);\n}, ${WAIT_BOUND_MS});\ntry {\n  const { awaitJoined } = await import(${JSON.stringify(join(root, "packages/cli/src/await-joined.ts"))});\n  await awaitJoined(process.argv[2] ?? "");\n} catch (error) {\n  console.error(\`cawco: \${error instanceof Error ? error.message : String(error)}\`);\n  process.exit(1);\n}\nprocess.exit(0);\n`
   );
+  // Rejoin's own record of the hub the machine joined (cli joined-hub.ts
+  // `keepJoinedHub`), which the stand-in runs as rejoin does.
+  const keep = join(dir, "keep-joined.ts");
+  writeFileSync(
+    keep,
+    `try {\n  const { keepJoinedHub } = await import(${JSON.stringify(join(root, "packages/cli/src/joined-hub.ts"))});\n  await keepJoinedHub(process.argv[2] ?? "");\n} catch (error) {\n  console.error(\`cawco: \${error instanceof Error ? error.message : String(error)}\`);\n  process.exit(1);\n}\nprocess.exit(0);\n`
+  );
   writeFileSync(
     join(dir, "ask-file.ts"),
     `import { createHash } from "node:crypto";\nimport { machineFetch } from ${JSON.stringify(join(root, "packages/core/src/machine-key.ts"))};\nconst answer = await machineFetch(process.env.ASK ?? "");\nconst bytes = new Uint8Array(await answer.arrayBuffer());\nconsole.log(answer.status, createHash("sha256").update(bytes).digest("hex"));\n`
@@ -376,13 +453,25 @@ socket.addEventListener("close", (event) => {
   const asMachine = `${sourced} ${quoted(process.execPath)}`;
   writeFileSync(
     join(binary, "installation.json"),
-    '{"role":"agent","hubUrl":"http://not-joined.invalid","installedVersion":"ssh-reach"}\n'
+    `{"role":"agent","hubUrl":"http://not-joined.invalid","installedVersion":"${offered}"}\n`
   );
   writeFileSync(
     join(binary, "current", "cawco"),
-    standIn(root, agentEnv, wait)
+    standIn(root, agentEnv, wait, keep)
   );
   chmodSync(join(binary, "current", "cawco"), 0o755);
+  // The machine's session keeper runs on the box beside its agent, as on any
+  // machine: a session it starts dials the agent's tool gateway on the box's
+  // loopback (`CAWCO_MCP_PORT`). One on this host's loopback was refused it
+  // (2026-10-23: "its connection to CawCo's tools didn't come up within 90
+  // seconds (… dialing http://127.0.0.1:23105 … ECONNREFUSED)").
+  const keeperTmp = join(dir, "t", "sessiond");
+  mkdirSync(keeperTmp, { recursive: true });
+  // The model's mock, reached from the box at the address its sessions are
+  // given (`ANTHROPIC_BASE_URL`), as a VPS reaches its model provider: a
+  // listener on the box's loopback bridged to {@link MOCK_SOCKET}, which
+  // `standUp` bridges to the mock on this host.
+  const mockPort = new URL(fleet.env.ANTHROPIC_BASE_URL ?? "").port;
   const boxScript = join(dir, "box.sh");
   writeFileSync(
     boxScript,
@@ -397,6 +486,9 @@ ${quoted(process.execPath)} ${quoted(join(root, "scripts/probe-kit/ssh-target.ts
 for port in ${OPEN} ${CLOSED} ${GATEWAY} ${PASSWORD_PORT}; do
   /usr/bin/socat UNIX-LISTEN:"$D/ssh-$port.sock",fork,unlink-early TCP:127.0.0.1:$port &
 done
+/usr/bin/socat TCP-LISTEN:${mockPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:"$D/${MOCK_SOCKET}" &
+( . ${quoted(agentEnv)}; cd "$D" && TMPDIR=${quoted(keeperTmp)} exec ${quoted(process.execPath)} ${quoted(join(root, SESSIOND_ENTRY))} ) > "$D/sessiond.log" 2> "$D/sessiond.err" &
+echo $! > "$D/sessiond.pid"
 echo up > "$D/box-up"
 wait
 `
@@ -441,6 +533,9 @@ wait
       .slice(0, 2)
       .join(" "),
     hubPort,
+    keeperSocket: fleet.sessiondSocket,
+    mockPort,
+    offered,
     root,
     user,
     wait,
@@ -453,6 +548,8 @@ const keepLogs = async (kit: Kit, fleet: KitFleet, box: Box): Promise<void> => {
     [join(box.binary, "agent.log"), "box-agent.log"],
     [join(box.dir, "box.err"), "box.err"],
     [join(box.dir, "target.log"), "box-target.log"],
+    [join(box.dir, "sessiond.log"), "box-sessiond.log"],
+    [join(box.dir, "sessiond.err"), "box-sessiond.err"],
     ...[OPEN, CLOSED, GATEWAY].map((port): [string, string] => [
       join(box.dir, `sshd-${port}.log`),
       `box-sshd-${port}.log`,
@@ -483,6 +580,16 @@ async function standUp(
   if (!bwrap) {
     return;
   }
+  // This host's end of the box's way to the model's mock; its argv names
+  // the box's dir, so `sweep` ends it with the rest.
+  Bun.spawn(
+    [
+      "/usr/bin/socat",
+      `UNIX-LISTEN:${join(box.dir, MOCK_SOCKET)},fork,unlink-early`,
+      `TCP:127.0.0.1:${box.mockPort}`,
+    ],
+    { stdout: "ignore", stderr: Bun.file(join(box.dir, "mock-bridge.err")) }
+  );
   const child = Bun.spawn(
     [
       bwrap,
@@ -509,21 +616,26 @@ async function standUp(
       ...[OPEN, CLOSED, GATEWAY, PASSWORD_PORT].map(
         (port) => `ssh-${port}.sock`
       ),
+      MOCK_SOCKET,
     ].every((name) => existsSync(join(box.dir, name))) &&
+    existsSync(box.keeperSocket) &&
     readFileSync(join(box.dir, "target.log"), "utf8").includes(
       "ssh-target listening"
     );
   const up = await until(
-    "the box's sshds, password target and SSH sockets up",
+    "the box's sshds, password target, session keeper and sockets up",
     () => (ready() ? true : undefined),
     Boolean,
     30_000
   ).catch(() => false);
-  const err = join(box.dir, "box.err");
+  const tail = (name: string) => {
+    const path = join(box.dir, name);
+    return existsSync(path) ? readFileSync(path, "utf8").slice(-800) : "none";
+  };
   kit.check(
-    "the box is up: its three sshds, its password target and the sockets the hub reaches them by",
+    "the box is up: its three sshds, its password target, its session keeper and the sockets the hub and the mock are reached by",
     up === true,
-    `box.err: ${existsSync(err) ? readFileSync(err, "utf8").slice(-800) : "none"}; files ${JSON.stringify(readdirSync(box.dir))}`
+    `box.err: ${tail("box.err")}; sessiond.err: ${tail("sessiond.err")}; mock-bridge.err: ${tail("mock-bridge.err")}; keeper socket ${existsSync(box.keeperSocket)}; files ${JSON.stringify(readdirSync(box.dir))}`
   );
   if (up !== true) {
     child.kill();
@@ -632,8 +744,9 @@ async function joins(
         `cawco-install: downloading the install script from ${first.hubUrl}`
       ) &&
       said(
-        `cawco-install: moving this machine from http://not-joined.invalid to the hub at ${first.hubUrl}`
+        `cawco-install: CawCo ${box.offered}, the build this hub offers, is installed; joining the hub at ${first.hubUrl} again`
       ) &&
+      said("cawco-install: waiting for the hub to list this machine online") &&
       (await status()) === "online",
     `${seen(first)}; key lines ${keyLines().length}; machine ${await status()}`
   );
@@ -658,6 +771,117 @@ async function joins(
     `${seen(second)}; records ${JSON.stringify(rows())}; connections ${JSON.stringify(held.map(({ pid }) => pid))}; waiting ${JSON.stringify(waitingRows)}; the hub held it: ${heldIn(log, BOX)}`
   );
   return port;
+}
+
+/**
+ * (u) niftybot and uwucloud, 2026-10-22: joined over SSH, they refused every
+ * session (`Not started: this machine has not had its first fleet sync …,
+ * and none came within 30s`), and the hub logged `[hub-auth] refused
+ * anonymous GET /api/binary-updates/settings` for them. Their installs
+ * named the hub outright and recorded it nowhere as the hub the machine
+ * joined, so their agent was not the machine's own and refused every fleet
+ * sync (agent machine-agent.ts), and its updater's first look, before its
+ * socket heard a challenge, proved itself to no hub (agent hub-proof.ts).
+ * Now, once (b) and (c) have joined the box: its config names the hub at
+ * its forward and that hub's id; its first fleet sync has landed, the
+ * sidecar holding the fleet's denials; once the probe's account (in the
+ * box's HOME since {@link furnish}) reads signed in there, a session
+ * started there runs (2026-10-23, before the box had an account: `[hub]
+ * refused spawn: No Claude account is signed in on …`); and
+ * the hub refused nothing anonymous through the box's forward, nor said a
+ * sync did not land there, since the hub started.
+ */
+async function sessionStarts(
+  fleet: KitFleet,
+  box: Box,
+  { check }: Readers,
+  port: number
+): Promise<void> {
+  const hubId = await fetch(`${fleet.base}/health`)
+    .then((r) => r.json() as Promise<{ hubId?: string }>)
+    .then((body) => body.hubId ?? "");
+  const configFile = join(box.home, ".config", "cawco", "config.json");
+  const config = existsSync(configFile)
+    ? (JSON.parse(readFileSync(configFile, "utf8")) as {
+        hubId?: string;
+        hubUrl?: string;
+      })
+    : {};
+  const sidecar = join(box.home, CLAUDE_DIR_NAME, "cawco-fleet.json");
+  const denials = await until(
+    "the box's first fleet sync, its sidecar holding the fleet's denials",
+    () =>
+      existsSync(sidecar)
+        ? (JSON.parse(readFileSync(sidecar, "utf8")) as {
+            deniedTools?: unknown;
+          })
+        : undefined,
+    (read) => Array.isArray(read?.deniedTools),
+    30_000
+  ).catch(() => undefined);
+  const agentLog = existsSync(join(box.binary, "agent.log"))
+    ? readFileSync(join(box.binary, "agent.log"), "utf8")
+    : "";
+  const synced = agentLog.includes("[fleet] sync from the hub: ");
+  const refusedHere = agentLog
+    .split("\n")
+    .filter(
+      (line) =>
+        line.includes("not this machine's agent") ||
+        line.includes("sync from the hub refused")
+    );
+  // The probe's account, which the box's HOME holds, read signed in there
+  // by the box's agent: what the hub places a Claude session on.
+  const signins = () =>
+    fleet.query<{ machine_id: string; state: string }>(
+      "SELECT machine_id, state FROM account_signins WHERE account_id = ?",
+      ACCOUNT
+    );
+  const signedIn = await until(
+    "the probe's Claude account signed in on the box",
+    () => signins(),
+    (rows) =>
+      rows.some((row) => row.machine_id === BOX && row.state === "signed-in"),
+    120_000
+  ).catch(() => undefined);
+  const spawnLines = await linesFrom(fleet);
+  const started = Date.now();
+  const session = await fleet
+    .spawn("claude", "ssh-reach u", box.home, {}, BOX)
+    .then(
+      (id) => ({ id, error: "" }),
+      (error: Error) => ({ id: "", error: error.message })
+    );
+  const tookMs = Date.now() - started;
+  const refusedSpawn = (await spawnLines()).filter((line) =>
+    line.includes(spawnWords.refused)
+  );
+  const onBox = fleet.query<{ last_error: string | null; status: string }>(
+    "SELECT status, last_error FROM instances WHERE machine_id = ? ORDER BY created_at DESC LIMIT 1",
+    BOX
+  );
+  const hubLines = await logLines(fleet);
+  const anonymous = hubLines.filter((line) =>
+    line.includes("[hub-auth] refused anonymous")
+  );
+  const unlanded = hubLines.filter(
+    (line) =>
+      line.includes("fleet sync was not applied there") ||
+      line.includes("could not send this machine its fleet sync")
+  );
+  await check(
+    "u: joined over SSH, the box's config names the hub at its forward and that hub's id; its first fleet sync landed (the sidecar holds the fleet's denials, its agent says the sync and no refusal of it); a claude session started there runs; and the hub refused nothing anonymous through the forward nor said a sync did not land",
+    config.hubUrl === `http://127.0.0.1:${port}` &&
+      hubId !== "" &&
+      config.hubId === hubId &&
+      denials !== undefined &&
+      synced &&
+      refusedHere.length === 0 &&
+      session.id !== "" &&
+      anonymous.length === 0 &&
+      unlanded.length === 0,
+    `config ${JSON.stringify(config)} (hub ${hubId}, forward port ${port}); sidecar ${denials ? `deniedTools ${JSON.stringify(denials.deniedTools)}` : "none within 30 s"}; agent synced: ${synced}, refused: ${JSON.stringify(refusedHere)}; account sign-ins ${JSON.stringify(signedIn ?? signins())}${signedIn ? "" : " (not signed in on the box within 120 s)"}; session ${session.id || session.error} after ${tookMs} ms, row ${JSON.stringify(onBox)}, spawns the hub refused ${JSON.stringify(refusedSpawn)}; anonymous refusals ${JSON.stringify(anonymous)}; syncs not landed ${JSON.stringify(unlanded)}`
+  );
 }
 
 /**
@@ -688,11 +912,11 @@ async function heldAgentAdd(
       heldRow.some((row) => row.machineId === BOX) &&
         job.state === "done" &&
         job.lines.some((line) =>
-          line.startsWith(
-            `cawco-install: joining the hub at ${job.hubUrl} again`
-          )
+          line.endsWith(`joining the hub at ${job.hubUrl} again`)
         ) &&
-        !job.lines.some((line) => line.includes("Nothing was changed")) &&
+        !job.lines.some((line) =>
+          line.includes(connectWords.alreadyInstalled)
+        ) &&
         job.lines.some((line) => line.includes("is left running")) &&
         (await status()) === "online" &&
         after.length === 0 &&
@@ -791,9 +1015,9 @@ async function refusalEnds(
       refused === 200 &&
       ended.code === 1 &&
       ended.out.includes("cawco-install: waiting to be admitted") &&
-      ended.err.includes("The person refused this machine.") &&
+      ended.err.includes(connectWords.machineRefused) &&
       ended.err.includes("Nothing joined.") &&
-      stored.includes("The person refused this machine."),
+      stored.includes(connectWords.machineRefused),
     `held ${JSON.stringify(held)}; the wait asked the hub: ${polling}; refuse answered ${refused}; the wait ${JSON.stringify(ended)}; kept ${JSON.stringify(stored)}`
   );
 
@@ -828,7 +1052,7 @@ async function refusalEnds(
           line.includes("waits to be admitted")
       ) &&
       agentLog.includes("connects again once it is given a key") &&
-      words[0] === "refused The person refused this machine." &&
+      words[0] === `refused ${connectWords.machineRefused}` &&
       words.at(-1) === "closed 4403" &&
       after.some((line) =>
         line.includes(`register refused: the person refused machine ${BOX}`)
@@ -963,7 +1187,7 @@ async function strangerHeld(
     row?.address === "ssh-reach-box" &&
       refused === 200 &&
       words[0]?.startsWith("waiting ") === true &&
-      words.includes("refused The person refused this machine.") &&
+      words.includes(`refused ${connectWords.machineRefused}`) &&
       words.at(-1) === "closed 4403" &&
       !(await waiting()).some((one) => one.machineId === STRANGER),
     `held ${JSON.stringify(held)}; refuse answered ${refused}; the knock heard ${JSON.stringify(heard)}`
@@ -1159,6 +1383,104 @@ async function silentDrop(
 }
 
 /**
+ * (u) A port held by something of the person's own: with the hub and its
+ * connections gone, a same-user `sshd` on the box listens on the machine's
+ * port. The hub, back, ends only the session its own connection left
+ * (ssh-tunnels.ts `endStale`, by the pid and start recorded as it came up):
+ * this sshd lives on, the hub says the port is taken, and once it goes the
+ * machine is online again on the same port.
+ */
+async function foreignHeld(
+  fleet: KitFleet,
+  box: Box,
+  { check, status, rows, tunnels }: Readers,
+  port: number
+): Promise<void> {
+  const name =
+    "u: a same-user sshd of the person's own holding the machine's port survives the hub connecting again: the hub ends nothing of it and says the port is taken, and the machine is back on that port once it goes";
+  // The hub and every connection of its gone, so the box lets the port go.
+  await fleet.stop("hub");
+  for (const { pid } of tunnels()) {
+    signalOwn(listedPid(pid), "SIGKILL");
+  }
+  const free = await until(
+    "the machine's port let go",
+    () => box.enter(OPEN, `ss -ltnH "sport = :${port}"`),
+    (heard) => heard.code === 0 && heard.out === "",
+    30_000
+  ).catch(() => undefined);
+  // The person's own sshd on that port, as this user, in the box.
+  const conf = join(box.dir, "foreign-sshd.conf");
+  const pidFile = join(box.dir, "foreign-sshd.pid");
+  writeFileSync(
+    conf,
+    `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(box.dir, "host_key")}\nPidFile ${pidFile}\nAuthorizedKeysFile none\nUsePAM no\nStrictModes no\n`
+  );
+  const started = await box.enter(
+    OPEN,
+    `/usr/sbin/sshd -f ${quoted(conf)} -E ${quoted(join(box.dir, "foreign-sshd.log"))}`
+  );
+  const foreign = await until(
+    "the person's sshd listening",
+    () =>
+      existsSync(pidFile)
+        ? Number(readFileSync(pidFile, "utf8").trim())
+        : undefined,
+    (pid) => Number.isInteger(pid) && (pid ?? 0) > 1,
+    10_000
+  ).catch(() => undefined);
+  fleet.launch("hub", [], { PATH: `${box.bin}:${fleet.env.PATH}` });
+  await fleet.hubUp();
+  const taken = `holds port ${port}`;
+  const hubLog = (): Promise<string> => fleet.logs("hub").catch(() => "");
+  const said = await until(
+    "the hub saying the port is taken",
+    hubLog,
+    (now) => now.includes(taken),
+    60_000
+  ).catch(() => undefined);
+  const survived = foreign !== undefined && existsSync(`/proc/${foreign}`);
+  const ended = (await hubLog())
+    .split("\n")
+    .filter(
+      (line) =>
+        line.includes(`ended the stale session holding port ${port}`) &&
+        line.includes(`pid ${foreign}`)
+    );
+  // It goes; the machine comes back on its port.
+  if (foreign !== undefined) {
+    signalOwn(listedPid(foreign), "SIGTERM");
+  }
+  const back = await until(
+    "the machine online again once the person's sshd is gone",
+    () => status(),
+    (now) => now === "online",
+    BACK_MS
+  ).catch(() => status());
+  await check(
+    name,
+    free !== undefined &&
+      started.code === 0 &&
+      foreign !== undefined &&
+      said !== undefined &&
+      survived &&
+      ended.length === 0 &&
+      back === "online" &&
+      rows().every((row) => row.box_port === port),
+    JSON.stringify({
+      free: free !== undefined,
+      started,
+      foreign,
+      said: said?.split("\n").filter((line) => line.includes(taken)),
+      survived,
+      ended,
+      back,
+      rows: rows(),
+    })
+  );
+}
+
+/**
  * (i) Through the forward, nothing without the machine's key: a box
  * process with none is refused an owner route and an attached file; with
  * the key the file comes, and a clone of a project on the hub's remote
@@ -1289,23 +1611,187 @@ async function refusals(
   );
 }
 
+/** A line of a stack trace in any runtime's print: Bun's source excerpt, a frame, the runtime line. */
+const STACK_TRACE = /^(?:\s*\d+ \| |\s+at \S.*:\d+:\d+\)?$|Bun v\d)/;
+
+/** No line of `job`'s output is one of a stack trace. */
+const stackless = (job: SshJoinJob): boolean =>
+  !job.lines.some((line) => STACK_TRACE.test(line));
+
 /**
- * The box's processes, its agent and the hub's connections, whatever the
- * run left: each one found running now by its own pid, whose argv names the
- * box's dir or the hub's control dir, or the box agent named by the pid it
- * wrote, while that pid still runs this checkout's agent.
+ * (t) A machine the fleet never listed (the knock of (k), refused) is
+ * removed all the same: what the hub held of it goes, and a second removal
+ * finds nothing.
  */
-const sweep = (box: Box): void => {
-  const pidFile = join(box.binary, "agent.pid");
-  const written = existsSync(pidFile)
-    ? Number(readFileSync(pidFile, "utf8").trim())
-    : Number.NaN;
+async function removeUnlisted(
+  fleet: KitFleet,
+  { check }: Readers
+): Promise<void> {
+  const remove = () =>
+    fetch(`${fleet.base}/api/agents/${STRANGER}`, { method: "DELETE" }).then(
+      async (r) => `${r.status} ${await r.text()}`
+    );
+  const first = await remove();
+  const second = await remove();
+  await check(
+    "t: removing a machine the fleet never listed (refused, so the hub held its refusal) answers 200 and forgets it; a second removal finds nothing (404)",
+    first.startsWith("200 ") && second.startsWith("404 "),
+    `first ${JSON.stringify(first)}; second ${JSON.stringify(second)}`
+  );
+}
+
+/**
+ * (q) The hub holds an admitted key for the machine that its agent does not
+ * prove: the box's key file holds another, so every register is refused as
+ * a forged one (uwucloud, 2026-10-22). An SSH add writes its own key, which
+ * the agent proves, and that key replaces the one the hub held: done,
+ * online, no Admit.
+ */
+async function staleKeyReAdd(
+  fleet: KitFleet,
+  box: Box,
+  { check, add, status, tunnels, waiting }: Readers
+): Promise<void> {
+  const name =
+    "q: the hub holds an admitted key the machine's agent does not prove (every register refused as forged); an SSH add replaces it with the add's key, which the agent proves: done, online, no Admit row";
+  const sinceStale = await linesFrom(fleet);
+  writeFileSync(
+    join(box.home, ".config", "cawco", "machine-key"),
+    `${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}\n`
+  );
+  const [master] = tunnels();
+  if (master) {
+    signalOwn(listedPid(master.pid), "SIGKILL");
+  }
+  const forged = `register refused: machine ${BOX} is admitted with a key, and this connection did not prove it`;
+  const refused = await until(
+    "the box's agent refused for a key the hub does not hold",
+    async () => (await sinceStale()).some((line) => line.includes(forged)),
+    Boolean,
+    BACK_MS
+  ).catch(() => false);
+  const sinceAdd = await linesFrom(fleet);
+  const job = await add(`${box.user}@ssh-reach-box`, OPEN);
+  const lines = await sinceAdd();
+  await check(
+    name,
+    refused === true &&
+      job.state === "done" &&
+      (await status()) === "online" &&
+      lines.some((line) =>
+        line.includes(
+          `machine ${BOX} proved the key its SSH add gave it: admitted`
+        )
+      ) &&
+      (await waiting()).length === 0,
+    `refused as forged first: ${refused}; ${seen(job)}; machine ${await status()}; hub ${lines
+      .filter((line) => line.includes(BOX))
+      .slice(-6)
+      .join(" | ")}`
+  );
+}
+
+/**
+ * (r) A machine on another build than the hub offers: the add moves it to
+ * the offered one, its step naming both builds and the channel. The box
+ * cannot install a build, so the add fails on that step, with the
+ * installer's own words for why and no line of a stack, and the machine
+ * stays as it was: online.
+ */
+async function olderBuild(
+  box: Box,
+  { check, add, status }: Readers
+): Promise<void> {
+  const older = "0.0.0-ssh-reach-older";
+  const step = `moving this machine from CawCo ${older} to the build this hub offers, CawCo ${box.offered} on its stable channel`;
+  installation(box, older);
+  try {
+    const job = await add(`${box.user}@ssh-reach-box`, OPEN);
+    await check(
+      "r: on an older build the add moves the machine to the build the hub offers (the step names both and the channel); where it cannot install, it fails on that step, the cause in the installer's words (`cawco: …`), no line of a stack, and the machine stays online",
+      job.state === "failed" &&
+        job.problem?.kind === "step" &&
+        job.problem.step === step &&
+        job.lines.some((line) => line.startsWith("cawco: ")) &&
+        !job.lines.some((line) => line.includes("joining the hub at")) &&
+        stackless(job) &&
+        (await status()) === "online",
+      `${seen(job)}; machine ${await status()}`
+    );
+  } finally {
+    installation(box, box.offered);
+  }
+}
+
+/**
+ * (s) The agent connects through the add's forward and proves no key
+ * (niftybot, 2026-10-22): here it reads its config from a dir the add did
+ * not write its key to. The installer's wait ends after its 90 s, and the
+ * add fails on the join's own step, its last line the hub's words for what
+ * it saw (`this hub: … proved no key …`), no line of a stack. The words name
+ * the agent by the hostname its register gives (agent daemon.ts
+ * `hostname()`), and the box's agent is this checkout's, run on this host:
+ * its name is this host's, not the box's machine id.
+ */
+async function keylessJoin(box: Box, { check, add }: Readers): Promise<void> {
+  const config = join(box.binary, "keyless-config");
+  mkdirSync(config, { recursive: true });
+  writeFileSync(join(box.binary, "keyless"), "");
+  try {
+    const job = await add(`${box.user}@ssh-reach-box`, OPEN);
+    const last = job.lines.at(-1) ?? "";
+    await check(
+      "s: an agent that proves no key through the add's forward fails the add on the join's own step, its last line the hub's words for why (no key proven, and the two fixes), with no line of a stack",
+      job.state === "failed" &&
+        job.problem?.kind === "step" &&
+        job.problem.step ===
+          "waiting for the hub to list this machine online" &&
+        last.startsWith(`this hub: ${hostname()}'s agent, CawCo `) &&
+        last.includes("proved no key") &&
+        last.includes(connectWords.updatesPlace) &&
+        stackless(job),
+      seen(job)
+    );
+  } finally {
+    rmSync(join(box.binary, "keyless"), { force: true });
+  }
+}
+
+/**
+ * The box's processes, its agent, its session keeper and the hub's
+ * connections, whatever the run left: each one found running now by its own
+ * pid, whose argv names the box's dir or the hub's control dir, or the box's
+ * agent or keeper named by the pid it wrote, while that pid still runs this
+ * checkout's agent or keeper. The keeper is asked to end first (SIGTERM, its
+ * drain), so the sessions it started end with it.
+ */
+const sweep = async (box: Box): Promise<void> => {
+  const writtenIn = (file: string) =>
+    existsSync(file) ? Number(readFileSync(file, "utf8").trim()) : Number.NaN;
+  const written = writtenIn(join(box.binary, "agent.pid"));
+  const keeper = writtenIn(join(box.dir, "sessiond.pid"));
   const agentEntry = join(box.root, "packages/agent/src/cli.ts");
+  const keeperEntry = join(box.root, SESSIOND_ENTRY);
+  const keeperRunning = () =>
+    processList().find(
+      ({ pid, argv }) => pid === keeper && argv.includes(keeperEntry)
+    );
+  const running = keeperRunning();
+  if (running) {
+    signalOwn(listedPid(running.pid), "SIGTERM");
+    await until(
+      "the box's session keeper drained",
+      () => !keeperRunning(),
+      Boolean,
+      15_000
+    ).catch(() => undefined);
+  }
   for (const { pid, argv } of processList()) {
     const ours =
       argv.includes(box.dir) ||
       argv.includes(box.controlDir) ||
-      (pid === written && argv.includes(agentEntry));
+      (pid === written && argv.includes(agentEntry)) ||
+      (pid === keeper && argv.includes(keeperEntry));
     if (ours) {
       signalOwn(listedPid(pid), "SIGKILL");
     }
@@ -1317,13 +1803,32 @@ async function run(kit: Kit): Promise<void> {
     everyMs: 5,
     words: ["ok"],
   }));
-  const box = await furnish(fleet);
+  // The hub first, for the build it offers, which the box is furnished on;
+  // its PATH's `ssh` is the box's wrapper, written by `furnish` before any
+  // add runs it.
+  const bin = join(fleet.sandbox, "box", "hub-bin");
+  fleet.launch("hub", [], { PATH: `${bin}:${fleet.env.PATH}` });
+  await fleet.hubUp();
+  // The probe's account, filed before the box's agent reports it signed in.
+  fleet.fileAccount();
+  const offer = await fleet
+    .api<{ manifest?: { version?: string } }>("/api/binary-updates/latest")
+    .then(
+      (answer) => ({ version: answer.manifest?.version ?? "", error: "" }),
+      (error: Error) => ({ version: "", error: error.message })
+    );
+  kit.check(
+    "the hub offers its fleet a build (its channel's newest, found on GitHub), which the box is furnished on",
+    offer.version !== "",
+    `GET /api/binary-updates/latest: ${JSON.stringify(offer)}`
+  );
+  if (offer.version === "") {
+    return;
+  }
+  const box = await furnish(fleet, offer.version);
   let child: ReturnType<typeof Bun.spawn> | undefined;
   try {
-    fleet.launch("hub", [], { PATH: `${box.bin}:${fleet.env.PATH}` });
-    await fleet.hubUp();
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
+    // The machine's session keeper is the box's own (box.sh), in its network.
     child = await standUp(kit, box);
     if (!child) {
       return;
@@ -1332,19 +1837,26 @@ async function run(kit: Kit): Promise<void> {
     // Before the box ever joins: what (p) compares the relay's choice with.
     const choiceBefore = await relayChoice(fleet);
     const port = await joins(fleet, box, read);
+    // Before any leg that knocks anonymously through the forward on purpose.
+    await sessionStarts(fleet, box, read, port);
     await reconnects(fleet, box, read, port);
     await silentDrop(fleet, box, read, port);
+    await foreignHeld(fleet, box, read, port);
     await credentials(fleet, box, read, port);
     await refusals(box, read);
     await heldAgentAdd(fleet, box, read);
     await refusalEnds(fleet, box, read, port);
     await refusedReAdd(fleet, box, read);
     await strangerHeld(fleet, box, read, port);
+    await removeUnlisted(fleet, read);
     await cliFailure(fleet, box, read);
     await relayUnchanged(fleet, box, read, choiceBefore);
+    await staleKeyReAdd(fleet, box, read);
+    await olderBuild(box, read);
+    await keylessJoin(box, read);
   } finally {
     await keepLogs(kit, fleet, box);
-    sweep(box);
+    await sweep(box);
     // The box's bwrap, which this spec started: its own pid.
     const bwrap = child ? spawnedPid(child) : undefined;
     if (bwrap) {

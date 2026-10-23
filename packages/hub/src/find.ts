@@ -24,6 +24,9 @@
  */
 import {
   type AgentRow,
+  type ArtifactNeedNoticePart,
+  type ArtifactNeedsRead,
+  artifactWords,
   FIND_KINDS,
   type FindAnswer,
   type FindConversation,
@@ -38,10 +41,13 @@ import {
   type MomentAuthor,
   machineLabel,
   type NeutralSessionInfo,
+  noticePartWords,
+  reasonLine,
   type StageKind,
   type ThreadSummary,
   type TranscriptAnswer,
   type TranscriptQuery,
+  unparked,
   type WaitingAnswer,
   type WaitingItem,
 } from "@cawco/core";
@@ -114,11 +120,33 @@ const PAGES_KEPT = 16;
 const THREAD_MOMENTS = 3;
 
 /**
- * How far back the waiting list looks: what was made, revised, reported or
- * moved to a stage of yours in this many days. Nothing recorded which
- * revision of an artifact you had on screen before `opened_revision` did,
- * so an older artifact can't be told apart from one you looked at; the
- * answer says the window.
+ * How many of one author's words a listing (no words, a `by`) reads, newest
+ * first: from each machine's index (agent search/index.ts, the same bound),
+ * and from the threads kept at the hub. Older words are the next listing's,
+ * asked `before` the last one read (find-tool.ts pages so).
+ */
+const LISTED_DOCS = 200;
+
+/** How many characters of a thread message a listing's moment carries; an agent's find cuts its own from the whole message. */
+const LISTED_CHARS = 240;
+
+const SPACES = /\s+/g;
+
+/** A conversation's or thread's moments; none for anything else. */
+const momentsOf = (result: FindResult): FindMoment[] =>
+  result.kind === "conversation" || result.kind === "thread"
+    ? result.moments
+    : [];
+
+/** A listed result's newest moment, ms epoch. */
+const newestOf = (result: FindResult): number =>
+  Math.max(0, ...momentsOf(result).map((moment) => moment.at ?? 0));
+
+/**
+ * How far back the waiting list looks for reports and tasks: what was
+ * reported or moved to a stage of yours in this many days; the answer says
+ * the window. Artifacts are Needs you's, whatever their age: they leave by
+ * its rules (artifacts/needs.ts).
  */
 export const WAITING_DAYS = 14;
 
@@ -232,6 +260,12 @@ export const cursorAt = (offset: number): string =>
   Buffer.from(String(offset), "utf8").toString("base64url");
 
 export interface FindDeps {
+  /**
+   * Needs you's artifacts and their notices (artifacts/needs.ts): what waits
+   * on the person's eyes among the artifacts, by the one rule Needs you
+   * lists them by.
+   */
+  artifactNeeds: () => ArtifactNeedsRead;
   /** One machine's transcript answer, or why it gave none. */
   askMachine: (
     machineId: string,
@@ -1089,28 +1123,56 @@ export const createFind = (deps: FindDeps) => {
     if (request.author === "caw") {
       return { asked: false, machines: [] };
     }
-    const { author, where } = request;
-    // Narrowed to a machine, only it is asked; to a project, each machine
-    // for that project's sessions on it, so its matches are never cut by
-    // other projects' ranking above them.
-    const machines = [...matched.held.machines.values()].filter(
+    const asked = await askMachines(
+      query.words.join(" "),
+      request.author,
+      request.where,
+      matched.held,
+      limit
+    );
+    if (!kinds || kinds.has("conversation")) {
+      foldTranscripts(found, asked, matched.held, matched.needsYou, now);
+    }
+    return { asked: true, machines: asked.map((each) => each.coverage) };
+  };
+
+  /**
+   * Every machine `request` reaches, asked for `words` (none: a listing of
+   * its author's words, newest first, `limit` documents). Narrowed to a
+   * machine, only it is asked; to a project, each machine for that project's
+   * sessions on it, so its matches are never cut by other projects' ranking
+   * above them.
+   */
+  const askMachines = (
+    words: string,
+    author: TranscriptQuery["author"],
+    where: FindWhere | undefined,
+    held: Names,
+    limit: number
+  ): Promise<Asked[]> => {
+    const machines = [...held.machines.values()].filter(
       (machine) => !where?.machineId || machine.machineId === where.machineId
     );
     const sessionsOn = (machineId: string): string[] =>
-      [...matched.held.conversations.values()].flatMap(({ row }) =>
+      [...held.conversations.values()].flatMap(({ row }) =>
         row.projectId === where?.projectId && row.machineId === machineId
           ? [row.sessionId, ...row.priorSessionIds].filter(
               (id): id is string => !!id
             )
           : []
       );
-    const asked = await Promise.all(
+    return Promise.all(
       machines.map((machine) =>
-        askOne(machine, query.words.join(" "), {
+        askOne(machine, words, {
           limit,
           ...(author ? { author } : {}),
           ...(where?.projectId
             ? { sessions: sessionsOn(machine.machineId) }
+            : {}),
+          // A listing reads its window from the index; a search keeps its
+          // own `since` at the hub, over what it ranked.
+          ...(words === "" && where?.since !== undefined
+            ? { since: new Date(where.since).toISOString() }
             : {}),
           ...(where?.before === undefined
             ? {}
@@ -1118,10 +1180,93 @@ export const createFind = (deps: FindDeps) => {
         })
       )
     );
-    if (!kinds || kinds.has("conversation")) {
-      foldTranscripts(found, asked, matched.held, matched.needsYou, now);
+  };
+
+  /** A listing's thread messages: `author`'s in `where`'s window, the newest {@link LISTED_DOCS}, each thread with its own, newest first. */
+  const listThreads = (
+    found: Map<string, FindResult>,
+    author: MomentAuthor,
+    where: FindWhere,
+    held: Names
+  ) => {
+    const lines = held.threadLines
+      .filter((line) => line.who === author && inWindow(line.at, where))
+      .toSorted((a, b) => b.at - a.at)
+      .slice(0, LISTED_DOCS);
+    for (const line of lines) {
+      const entry = held.threads.get(line.threadId);
+      if (entry?.result.kind !== "thread") {
+        continue;
+      }
+      const key = `thread:${line.threadId}`;
+      const before = found.get(key);
+      const moment: FindMoment = {
+        docId: line.id,
+        author: line.who,
+        at: line.at,
+        excerpt: line.body.replace(SPACES, " ").trim().slice(0, LISTED_CHARS),
+      };
+      found.set(
+        key,
+        before?.kind === "thread"
+          ? { ...before, moments: [...before.moments, moment] }
+          : {
+              ...entry.result,
+              moments: [moment],
+              matched: ["transcript"],
+              score: 0,
+            }
+      );
     }
-    return { asked: true, machines: asked.map((each) => each.coverage) };
+  };
+
+  /**
+   * A listing: no words, one author's (`by`). Their words newest first, the
+   * threads' kept at the hub and each machine's off its index's author and
+   * time ({@link LISTED_DOCS} of the window from each); each result holds its
+   * listed moments, and the results are ordered by their newest.
+   */
+  const listAll = async (
+    request: Omit<FindRequest, "cursor" | "limit" | "q"> & {
+      author: MomentAuthor;
+    },
+    kinds: ReadonlySet<FindKind> | null,
+    started: number
+  ) => {
+    const now = Date.now();
+    const held = namesNow(now);
+    const namesMs = Math.round((performance.now() - started) * 10) / 10;
+    const where = request.where ?? {};
+    const found = new Map<string, FindResult>();
+    if (!kinds || kinds.has("thread")) {
+      listThreads(found, request.author, where, held);
+    }
+    const askedAt = performance.now();
+    // Caw's words are his threads', kept at the hub: no machine is asked for them.
+    const { author } = request;
+    const transcripts =
+      request.transcripts &&
+      author !== "caw" &&
+      (!kinds || kinds.has("conversation"));
+    const asked = transcripts
+      ? await askMachines("", author, where, held, LISTED_DOCS)
+      : [];
+    foldTranscripts(found, asked, held, deps.needsYou(), now);
+    const purged = where.unpurged ? deps.purged() : new Set<string>();
+    const ranked = [...found.values()]
+      .flatMap((result) => within(result, where, purged) ?? [])
+      .filter((result) => momentsOf(result).length > 0)
+      .toSorted((a, b) => newestOf(b) - newestOf(a));
+    return {
+      ranked,
+      coverage: transcripts
+        ? { asked: true, machines: asked.map((each) => each.coverage) }
+        : { asked: false, machines: unasked(held.machines) },
+      namesMs,
+      transcriptsMs: transcripts
+        ? Math.round(performance.now() - askedAt)
+        : null,
+    };
   };
 
   /** Every result of a find, ranked: names, then transcripts when asked; kept for its next pages. */
@@ -1132,6 +1277,9 @@ export const createFind = (deps: FindDeps) => {
     limit: number,
     started: number
   ) => {
+    if (query.tokens.length === 0 && request.author !== undefined) {
+      return listAll({ ...request, author: request.author }, kinds, started);
+    }
     const now = Date.now();
     const matched = findNames(query, kinds, now);
     const namesMs = Math.round((performance.now() - started) * 10) / 10;
@@ -1144,10 +1292,14 @@ export const createFind = (deps: FindDeps) => {
         ? [...results].flatMap((result) => within(result, where, purged) ?? [])
         : [...results];
     if (!askTranscripts) {
+      // No words: what moved last, newest first.
+      const order =
+        query.tokens.length === 0
+          ? (a: FindResult, b: FindResult) =>
+              (b.lastActivity ?? 0) - (a.lastActivity ?? 0) || b.score - a.score
+          : (a: FindResult, b: FindResult) => b.score - a.score;
       return {
-        ranked: kept(matched.found.values()).toSorted(
-          (a, b) => b.score - a.score
-        ),
+        ranked: kept(matched.found.values()).toSorted(order),
         coverage: { asked: false, machines: unasked(matched.held.machines) },
         namesMs,
         transcriptsMs: null,
@@ -1281,6 +1433,22 @@ export const createFind = (deps: FindDeps) => {
     },
 
     /**
+     * A listing whole, unpaged: `request.author`'s words in its window,
+     * newest first ({@link listAll}), for an agent's find to page moment by
+     * moment (find-tool.ts).
+     */
+    async listing(
+      request: Omit<FindRequest, "cursor" | "limit" | "q"> & {
+        author: MomentAuthor;
+      }
+    ): Promise<{ coverage: FindCoverage; results: FindResult[] }> {
+      const named = request.kinds?.length ? new Set(request.kinds) : null;
+      const kinds = named ?? new Set<FindKind>(["conversation", "thread"]);
+      const listed = await listAll(request, kinds, performance.now());
+      return { results: listed.ranked, coverage: listed.coverage };
+    },
+
+    /**
      * What waits on the person's eyes, oldest first within the window
      * ({@link WAITING_DAYS}): artifacts not opened at their current
      * revision, decisions with picks to make, reports to their own sessions
@@ -1290,11 +1458,6 @@ export const createFind = (deps: FindDeps) => {
       const now = Date.now();
       const from = now - WAITING_DAYS * 24 * 3_600_000;
       const held = namesNow(now);
-      // What the person has seen is read as it stands, not as the names
-      // held it: a look or a `shown` ack a moment ago counts at once.
-      const artifactRows = new Map(
-        db.find.artifacts().map((row) => [row.id, row])
-      );
       const lookedAt = db.find.lookedAt();
       const titleOf = (id: string) => {
         const row = held.conversations.get(id)?.row;
@@ -1302,7 +1465,7 @@ export const createFind = (deps: FindDeps) => {
       };
       const waitingTasks = await deps.tasksWaiting();
       const items: WaitingItem[] = [
-        ...artifactsWaiting(held, artifactRows, from, titleOf),
+        ...artifactsWaiting(held, deps.artifactNeeds(), titleOf),
         ...reportsWaiting(db.find.workItems(), held, lookedAt, from, titleOf),
         ...waitingTasks.tasks
           .filter((task) => task.since >= from)
@@ -1337,44 +1500,73 @@ type TitleOf = (id: string) => { id: string; title: string } | null;
  * person looked (`artifacts.opened_revision`), or with picks to make, made or
  * revised since `from`.
  */
+/** A notice's part as Jump's row says it beside its name. */
+const partWhy = (part: ArtifactNeedNoticePart, name: string): string => {
+  switch (part.kind) {
+    case "changed":
+      return artifactWords.changedCount(part.count);
+    case "closed":
+      return artifactWords.newAnswers(part.count);
+    case "ended":
+      return noticePartWords(part, name);
+    default: {
+      const unhandled: never = part;
+      throw new Error(`unhandled notice: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
 const artifactsWaiting = (
   held: Names,
-  rows: Map<string, { openedRevision: number | null; revision: number }>,
-  from: number,
+  lane: ArtifactNeedsRead,
   titleOf: TitleOf
-): WaitingItem[] =>
-  held.entries.flatMap((entry): WaitingItem[] => {
-    const { result } = entry;
-    if (result.kind !== "artifact" && result.kind !== "decision") {
-      return [];
-    }
-    const row = rows.get(result.id);
-    if (!row || (result.lastActivity ?? 0) < from) {
-      return [];
-    }
-    const opened = row.openedRevision;
-    const unopened = opened === null || opened < row.revision;
-    if (!(unopened || result.picksToMake)) {
-      return [];
-    }
-    let why = "picks to make";
-    if (unopened) {
-      why = opened === null ? "unseen" : "new revision";
-    }
-    return [
-      {
-        kind: result.kind,
-        artifactKind: result.artifactKind,
-        id: result.id,
-        title: result.title,
-        project: result.project,
-        conversation: titleOf(result.conversation.id),
-        revision: row.revision,
-        since: result.lastActivity ?? Date.now(),
-        why,
-      },
-    ];
-  });
+): WaitingItem[] => {
+  const found = new Map(
+    held.entries.flatMap(({ result }) =>
+      result.kind === "artifact" || result.kind === "decision"
+        ? [[result.id, result] as const]
+        : []
+    )
+  );
+  /** One of them as Jump names it: the find engine's own result, else the lane's words. */
+  const named = (
+    id: string,
+    instanceId: string | null,
+    name: string
+  ): Omit<WaitingItem, "since" | "why"> => {
+    const result = found.get(id);
+    return result
+      ? {
+          kind: result.kind,
+          artifactKind: result.artifactKind,
+          id,
+          title: result.title,
+          project: result.project,
+          conversation: titleOf(result.conversation.id),
+        }
+      : {
+          kind: "artifact",
+          id,
+          title: name,
+          project: null,
+          conversation: instanceId ? titleOf(instanceId) : null,
+        };
+  };
+  return [
+    ...unparked(lane.needs).map((need): WaitingItem => ({
+      ...named(need.artifactId, need.instanceId, need.name),
+      artifactKind: need.artifactKind,
+      since: need.raisedAt,
+      why: reasonLine(need.pending),
+    })),
+    ...lane.notices.map((notice): WaitingItem => ({
+      ...named(notice.artifactId, notice.instanceId, notice.name),
+      artifactKind: notice.artifactKind,
+      since: notice.at,
+      why: notice.parts.map((part) => partWhy(part, notice.name)).join(" · "),
+    })),
+  ];
+};
 
 /**
  * Reports to one of the person's own sessions they have not looked at

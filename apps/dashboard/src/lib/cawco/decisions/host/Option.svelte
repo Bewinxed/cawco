@@ -1,7 +1,8 @@
 <!--
   One option: a cell of its card's options on the rows they share (a
   subgrid), so every chip, line, cost and media starts on one line across
-  the columns. Its first row is the pick, the kit's option (ui/option-group
+  the columns. A pictured option left alone on its card's last row spans it
+  (Decision.svelte `lone`), on the first column's edge. Its first row is the pick, the kit's option (ui/option-group
   item: the 30px option chip with its keycap, its place in its decision),
   then the Recommended and Current badges after it; then its line (what it
   gets), its cost (what it costs) and its media, each in its row. The
@@ -10,14 +11,16 @@
   their words picks too; the pick is named by its label alone, and its line,
   cost and badges are its description. Its media (its design, drawn live)
   stands in its own row, outside the pick, so a click, a hover or a scroll in
-  it is the embed's own and never picks.
+  it is the embed's own and never picks; it stands at its real size, and its
+  well tells the card its width, which lays the options out by it.
 -->
 <script lang="ts">
-  import { getContext } from "svelte";
+  import { getContext, setContext } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { OptionGroupItem } from "#lib/components/ui/option-group/index.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
+  import { MEDIA_WIDTHS, type MediaWidths } from "./page.svelte.js";
 
   let {
     props,
@@ -33,6 +36,12 @@
   }> = $props();
 
   const order = getContext<(() => string[]) | undefined>("decision-options");
+  // Its media's wells tell the card their real widths as an option's: the
+  // options' pitch is the widest of them (Decision.svelte).
+  setContext(
+    MEDIA_WIDTHS,
+    getContext<MediaWidths | undefined>("decision-option-widths")
+  );
   /** The rows the card's options share: each part's track, 0 where none has it. */
   const rows = getContext<
     | (() => { line: number; cost: number; media: number; span: number })
@@ -67,7 +76,7 @@
 
 <div
   class={[
-    "grid min-w-0 grid-rows-subgrid gap-y-space-2",
+    "grid min-w-0 grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full",
     SPAN[at.span as keyof typeof SPAN],
   ]}
   data-slot="option-cell"
@@ -100,7 +109,7 @@
   {#if props.line}
     <label
       class={[
-        "type-body min-w-0 text-pretty text-ink-strong wrap-anywhere",
+        "type-body min-w-0 max-w-c-measure text-pretty text-ink-strong wrap-anywhere",
         rowOf(at.line),
       ]}
       data-option-for={id}
@@ -111,7 +120,7 @@
   {#if props.cost}
     <label
       class={[
-        "type-meta min-w-0 text-pretty text-ink-muted wrap-anywhere",
+        "type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere",
         rowOf(at.cost),
       ]}
       data-option-for={id}

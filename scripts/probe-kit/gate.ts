@@ -24,14 +24,18 @@ bun run typecheck
 export const APPLE_GATE = `---
 bash apps/apple/scripts/build-both.sh ios --gate
   name: iOS build compiles
-  on: apps/apple, scripts/lib/heavy-run.sh
+  on: apps/apple, scripts/lib/disk-room.sh
   needs: apple
   timeout: 30m
 ---
 `;
 
-/** finish_item's refusal of an item whose iOS build step has no Mac online (hub gate-file.ts `capableRefusal`). */
+/** finish_item's refusal of an item whose iOS build step has no Mac online (hub gate-file.ts `capableRefusal`): the item waits for one. */
 export const NO_MAC = "passes on a Mac (apple), and none is online";
+
+/** The hub's wake of an item that waited for a Mac, once one is online (hub gate-file.ts `capableOnline`). */
+export const MAC_ONLINE =
+  "a Mac (apple), is online now: call finish_item again";
 
 /** Writes `content` as the project's gate.md; throws with the hub's words when it is refused. */
 export const declareGate = async (

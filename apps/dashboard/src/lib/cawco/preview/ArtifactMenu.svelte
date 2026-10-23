@@ -3,7 +3,9 @@
    * The artifact panel's title control (DESIGN.md Artifact panel, canvas and
    * ink): the shown artifact's name as a menu button listing the session's
    * artifacts, newest first, each promoted one tagged with its commit and
-   * each waiting on the person wearing the live dot; choosing one shows it.
+   * each waiting on the person (core artifact-needs.ts) wearing the
+   * needs-you dot, the status's own glyph ink (The Glyph, Word, Hue Rule);
+   * choosing one shows it.
    * Its line (the ask, or "Sent to <session>") stands under it in the head's
    * subtitle (SideSurface); where the head drops it, it is the menu's first
    * row, and always the control's title and description. Each row's Remove (its trailing glyph, or Delete
@@ -12,6 +14,12 @@
    * rows under it slide up (motion/rows), in every tab: the panel's frame
    * lists the session's artifacts (`held`), and the panel follows that frame
    * when the removed one was shown.
+   *
+   * A refusal is never a toast (DESIGN.md, The Work Outlives Its Surface
+   * Rule): a list the hub would not read is said at the top of the open
+   * menu, and a removal under its row, each with Try again; a show refused
+   * after the menu closed goes to `onrefused`, which the pane says on its
+   * own failure line.
    */
   import {
     type ArtifactKind,
@@ -34,9 +42,10 @@
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { listArtifacts, removeArtifact, showArtifact } from "../artifact-api";
+  import { failureClause } from "../hub-read";
   import { reflow } from "../motion/rows.svelte";
-  import { toast } from "../toasts.js";
-  import LiveDot from "./LiveDot.svelte";
+  import RowFault from "../RowFault.svelte";
+  import { refusals } from "../refusals.svelte";
 
   let {
     instanceId,
@@ -45,6 +54,7 @@
     lineId,
     lineDropped,
     shown,
+    onrefused,
   }: {
     instanceId: string;
     /** The head's line under the name (the ask, or "Sent to <session>"); empty: the name alone. */
@@ -61,6 +71,8 @@
     held: string[] | undefined;
     /** The artifact the panel shows. */
     shown: { id: string; kind: ArtifactKind; name: string };
+    /** A chosen artifact the hub would not show: the words, and which it was. */
+    onrefused: (reason: string, artifact: { id: string; name: string }) => void;
   } = $props();
 
   const GLYPHS: Record<ArtifactKind, Component> = {
@@ -92,12 +104,20 @@
       (held?.some((id) => !listed?.some((row) => row.id === id)) ?? false)
   );
 
-  function readList() {
-    listArtifacts(instanceId).then(
+  /** Where the list's refusal is said: the menu's top, kept through a reload. */
+  const listKey = $derived(`artifact-list:${instanceId}`);
+  function readList(): Promise<void> {
+    const key = listKey;
+    return listArtifacts(instanceId).then(
       (artifacts) => {
         listed = artifacts;
+        refusals.delete(key);
       },
-      (error: Error) => toast.error(error.message)
+      (error: unknown) => {
+        refusals.set(key, {
+          reason: `This session's artifacts were not read: ${failureClause(error)}. The one shown stays listed.`,
+        });
+      }
     );
   }
 
@@ -113,31 +133,41 @@
     }
   });
 
-  function choose(artifact: { id: string }) {
+  function choose(artifact: { id: string; name: string }): Promise<void> {
     if (artifact.id === shown.id) {
-      return;
+      return Promise.resolve();
     }
-    showArtifact(instanceId, artifact.id).catch((error: Error) =>
-      toast.error(error.message)
+    return showArtifact(instanceId, artifact.id).then(
+      () => undefined,
+      (error: unknown) =>
+        onrefused(
+          `${artifact.name} was not shown: ${failureClause(error)}. ${shown.name} stays in the panel.`,
+          artifact
+        )
     );
   }
 
   /** Rows whose removal the hub has not answered yet. */
   const removing = new SvelteSet<string>();
+  /** Where a row's refused removal is said: under it, kept through a reload. */
+  const removeKey = (id: string) => `artifact-remove:${instanceId}:${id}`;
 
-  function remove(artifact: { id: string; name: string }) {
+  function remove(artifact: { id: string; name: string }): Promise<void> {
     if (removing.has(artifact.id)) {
-      return;
+      return Promise.resolve();
     }
     removing.add(artifact.id);
-    removeArtifact(instanceId, artifact.id).then(
+    refusals.delete(removeKey(artifact.id));
+    return removeArtifact(instanceId, artifact.id).then(
       () => {
         removing.delete(artifact.id);
         listed = listed?.filter((row) => row.id !== artifact.id) ?? null;
       },
-      (error: Error) => {
+      (error: unknown) => {
         removing.delete(artifact.id);
-        toast.error(artifactWords.notRemoved(artifact.name, error.message));
+        refusals.set(removeKey(artifact.id), {
+          reason: `${artifactWords.notRemoved(artifact.name, failureClause(error))}. It stays in the list.`,
+        });
       }
     );
   }
@@ -210,7 +240,7 @@
       heir === undefined
         ? null
         : list?.querySelector<HTMLElement>(
-            `[data-artifact-row][data-artifact="${CSS.escape(heir)}"]:not([data-reflow-ghost])`
+            `[data-artifact-row][data-artifact="${CSS.escape(heir)}"]`
           );
     (next ?? list)?.focus();
   });
@@ -247,6 +277,13 @@
         >{line}</DropdownMenu.Label
       >
     {/if}
+    <RowFault
+      again={readList}
+      data-artifact-list-refused
+      indent="calc(var(--spacing) * 2.5)"
+      end="calc(var(--spacing) * 2.5)"
+      reason={refusals.reason(listKey)}
+    />
     <div {@attach reflow()} {@attach keepFocus}>
       {#each rows as artifact (artifact.id)}
         {@const Glyph = GLYPHS[artifact.kind]}
@@ -298,11 +335,16 @@
             {/if}
           </span>
           {#if artifact.waiting}
-            <LiveDot
+            <!-- The needs-you dot (DESIGN.md, Status dot), its words for the
+                 screen reader. -->
+            <span
+              data-slot="row-waiting"
+              aria-label={artifactWords.waitingOnYou}
+              class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
+              data-box
               id={part(artifact.id, "waiting")}
-              label={artifactWords.waitingOnYou}
-              kind="row-waiting"
-            />
+              role="img"
+            ></span>
           {/if}
           {#if artifact.createdAt}
             <span
@@ -329,6 +371,14 @@
             <IconTrash />
           </button>
         </DropdownMenu.Item>
+        <RowFault
+          again={() => remove(artifact)}
+          data-artifact-remove-refused={artifact.id}
+          data-flip
+          indent="calc(var(--spacing) * 2.5)"
+          end="calc(var(--spacing) * 2.5)"
+          reason={refusals.reason(removeKey(artifact.id))}
+        />
       {/each}
     </div>
   </DropdownMenu.Content>

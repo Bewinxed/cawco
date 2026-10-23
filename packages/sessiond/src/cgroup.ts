@@ -73,7 +73,14 @@
  * return;" comes before cgroup_delegate_xattr_apply, so the keeper's user unit
  * never carries it, delegated or not.
  */
-import { mkdir, readdir, readFile, rmdir, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rmdir,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { availableParallelism, totalmem } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import type { ChildLimit, SessionLimits } from "@cawco/core";
@@ -538,6 +545,54 @@ export async function readGroup(path: string): Promise<GroupReading> {
  * is room for what ended between the refusal and the reading.
  */
 export const OWN_LIMIT_SHARE = 0.9;
+
+/**
+ * Every process in the group at `path` and in each group below it, by pid,
+ * as their `cgroup.procs` list them now. Empty for a group gone.
+ */
+export async function groupMembers(path: string): Promise<number[]> {
+  const own = (
+    await readFile(join(path, "cgroup.procs"), "utf8").catch(() => "")
+  )
+    .split("\n")
+    .map(Number)
+    .filter((pid) => Number.isSafeInteger(pid) && pid > 1);
+  const below = await readdir(path, { withFileTypes: true }).catch(() => []);
+  const nested = await Promise.all(
+    below
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => groupMembers(join(path, entry.name)))
+  );
+  return [...own, ...nested.flat()];
+}
+
+/**
+ * Ends everything in a child's group at once, its own groups below it
+ * included, by the kernel: "Writing “1” to the file causes the cgroup and
+ * all descendant cgroups to be killed. This means that all processes
+ * located in the affected cgroup tree will be killed via SIGKILL. Killing a
+ * cgroup tree will deal with concurrent forks appropriately and is protected
+ * against migrations" (cgroup.kill, the kernel's cgroup v2 document, Linux
+ * 5.14 and later). What a process of the child put in a session or group of
+ * its own and its parent left behind (bwrap's `--new-session` sandbox, a
+ * daemonised server) is in the group still, and goes with it. A group gone
+ * (removed once it was empty, `removeGroup`) has nothing left to kill; any
+ * other failure of the write throws (a kernel before 5.14 has no file).
+ */
+export const killGroup = async (path: string): Promise<void> => {
+  try {
+    await writeFile(join(path, "cgroup.kill"), "1");
+  } catch (error) {
+    if (
+      await stat(path).then(
+        () => true,
+        () => false
+      )
+    ) {
+      throw error;
+    }
+  }
+};
 
 /** Removes a child's group; false while anything is still in it. */
 export const removeGroup = (path: string): Promise<boolean> =>

@@ -85,7 +85,7 @@
   import { cn } from "#lib/utils.js";
   import { page } from "$app/state";
   import AskHere from "./AskHere.svelte";
-  import { shownAccount } from "./accounts/switch.svelte";
+  import { shownAccount, stopWords } from "./accounts/switch.svelte";
   import { STOPPING_LABEL } from "./activity";
   import { Asker, type AskHereRequest } from "./ask-here.svelte";
   import type { BoardRow } from "./client.svelte";
@@ -180,6 +180,8 @@
   /** The row is a thread with the project's Caw (thread-tabs.ts), not a session. */
   const thread = $derived(instance ? isThreadTab(instance.id) : false);
   const status = $derived(sessionStatus(instance, done));
+  /** Stopped at its account's limit: the error its meta line says (switch.svelte.ts `stopWords`). */
+  const stopped = $derived(instance ? stopWords(instance) : undefined);
   /** Where it runs, for its mark's hue: the same seed in every list. */
   const place = $derived(
     instance?.cwd || info?.cwd || instance?.machineId || machineId
@@ -197,7 +199,7 @@
    * Archive) stands left of it, so a row with neither is not measured: a
    * tree in the rail wrote the width on every row it drew, and each write
    * restyled its row. Written from a size observer, after layout: read
-   * where the row renders (`bind:offsetWidth`), it laid the page out in the
+   * where the row renders (an offsetWidth binding), it laid the page out in the
    * middle of the update that opened a tree, once a row.
    */
   const trailWidth: Attachment<HTMLElement> | undefined = $derived(
@@ -362,10 +364,17 @@
       <!-- Both lines stand at the count's height with or without one (a
            context row says nothing on its second), so every row in a list is
            one height and the nesting lines meet each glyph alike. A context
-           row's title reads in muted ink. -->
+           row's title reads in muted ink; a session stopped at its
+           account's limit reads in the failure ink, whatever row it is. -->
       <span
         data-slot="title"
-        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label group-data-context/session-row:group-not-data-current/session-row:text-ink-muted"
+        data-stopped={stopped ? true : undefined}
+        class={[
+          "block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label",
+          stopped
+            ? "text-status-fail-ink"
+            : "group-data-context/session-row:group-not-data-current/session-row:text-ink-muted",
+        ]}
         ><span class="sr-only"
           >{pending ?? statusWord(instance, status)}:
         </span>
@@ -388,6 +397,12 @@
             class="mark-line inline-flex items-center gap-space-1"
             ><Spinner aria-hidden="true" box="small" />
             <span>{renaming === null ? pending : "Renaming…"}</span></span
+          >
+        {:else if stopped}
+          <!-- Stopped at its account's limit: the error and its way out, in
+               the meta line's place; the whole sentence on the pointer. -->
+          <span data-slot="stalled" class="text-status-fail-ink" title={stopped}
+            >{stopped}</span
           >
         {:else}
           <AccountDot
@@ -498,6 +513,7 @@
     {:else}
       <a
         data-session-row-row
+        title={stopped}
         {...trigger}
         aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}

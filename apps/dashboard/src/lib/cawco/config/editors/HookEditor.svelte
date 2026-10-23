@@ -53,7 +53,9 @@
   } from "../../hooks";
   import { failureWords as message } from "../../hub-read";
   import { newId } from "../../id";
+  import MachineAway from "../../MachineAway.svelte";
   import { machineOs } from "../../machine";
+  import { MachineWait } from "../../machine-wait.svelte";
   import RowFault from "../../RowFault.svelte";
   import { orderMachines } from "../../rail.svelte";
   import Choice from "../Choice.svelte";
@@ -364,6 +366,8 @@
   let settling = $state<Record<string, "adopt" | "push">>({});
   /** Per machine, why its last settle was refused: said under its row. */
   let settleFailed = $state<Record<string, string>>({});
+  /** Compares and settles whose machine went away: said in place, asked again once it is back. */
+  const waits = new MachineWait();
 
   /** Where a kept version came from: the fleet's own row, or a machine's edited copy. */
   function sourceLabel(source: string): string {
@@ -400,8 +404,13 @@
     peeking[machine.machineId] = true;
     delete unread[machine.machineId];
     try {
+      const hookId = id;
       copies[machine.machineId] =
-        (await peekHook(machine.machineId, id))?.content ?? null;
+        (
+          await waits.run(`peek:${machine.machineId}`, () =>
+            peekHook(machine.machineId, hookId)
+          )
+        )?.content ?? null;
     } catch (caught) {
       unread[machine.machineId] = message(caught);
     } finally {
@@ -416,7 +425,10 @@
     settling[machine.machineId] = "adopt";
     delete settleFailed[machine.machineId];
     try {
-      const landed = await adoptHook(machine.machineId, id);
+      const hookId = id;
+      const landed = await waits.run(`settle:${machine.machineId}`, () =>
+        adoptHook(machine.machineId, hookId)
+      );
       if (store.hooks.value) {
         upsert(store.hooks.value, landed, (row) => row.id === landed.id);
       }
@@ -441,7 +453,10 @@
     delete settleFailed[machine.machineId];
     try {
       // Its row turns "In sync" on the machine's next report.
-      await pushHook(machine.machineId, id);
+      const hookId = id;
+      await waits.run(`settle:${machine.machineId}`, () =>
+        pushHook(machine.machineId, hookId)
+      );
       comparing = null;
       delete copies[machine.machineId];
       loadVersions(id);
@@ -948,6 +963,7 @@
                 {/if}
               </div>
               <RowFault reason={settleFailed[machine.machineId]} />
+              <MachineAway away={waits.away(`settle:${machine.machineId}`)} />
               {#if refused && item?.detail}
                 <pre
                   class="max-h-c-detail-max overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
@@ -964,7 +980,11 @@
                   out:unfold
                 >
                   <div class="relative flex flex-col" {@attach morph()}>
-                    {#if peeking[machine.machineId]}
+                    {#if waits.away(`peek:${machine.machineId}`)}
+                      <MachineAway
+                        away={waits.away(`peek:${machine.machineId}`)}
+                      />
+                    {:else if peeking[machine.machineId]}
                       <p
                         data-slot="note"
                         class="mark-line flex items-center gap-space-2 type-meta max-w-c-measure text-ink-muted"

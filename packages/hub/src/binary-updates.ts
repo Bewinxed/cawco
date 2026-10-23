@@ -367,7 +367,12 @@ export function createBinaryUpdates(options: Options) {
     )
     .get(
       "/api/binary-updates/artifacts/:version/:archive",
-      async ({ params, status }) => {
+      async ({ params, request, server, status }) => {
+        // The first ask of a build waits on its download from the release
+        // host (`fetchArchive`, bounded there): silent that whole time, and
+        // never cut by the hub's idle timer, whose cut a machine's fetch
+        // answers by sending the request again with the proof already taken.
+        server?.timeout(request, 0);
         const candidates = [await runningRelease().catch(() => undefined)];
         if (current) {
           candidates.push(current.release);
@@ -388,5 +393,28 @@ export function createBinaryUpdates(options: Options) {
         return status(404, "This build is not one the hub offers");
       }
     );
-  return { routes };
+  /**
+   * The build the fleet is offered, by its channel and version: the one
+   * every join leaves its machine on, by any route (core install-script.ts
+   * `join`). None
+   * while the policy record is damaged, or while the release host does not
+   * answer, and the words that say why.
+   */
+  const offered = async (): Promise<
+    | { channel: BinaryUpdatePolicy["channel"]; version: string }
+    | { refused: string }
+  > => {
+    if ("damaged" in held) {
+      return { refused: refused() };
+    }
+    const { channel } = held.policy;
+    try {
+      return { channel, version: (await newest()).manifest.version };
+    } catch (error) {
+      return {
+        refused: `This hub could not find the newest ${channel} build to install: ${error instanceof Error ? error.message : String(error)}. Check that the hub reaches its release host, then Retry.`,
+      };
+    }
+  };
+  return { offered, routes };
 }

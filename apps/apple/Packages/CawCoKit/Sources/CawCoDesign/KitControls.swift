@@ -520,7 +520,7 @@ public final class KitSpinner: UIView {
 
 // MARK: Copy box
 
-/// One line of something to paste elsewhere (join/CopyBox.svelte): 36pt on
+/// One line of something to paste elsewhere (the web's CopyBox.svelte): 36pt on
 /// `--surface-hover` inside the control border at `--radius-md`, the text in
 /// mono meta, truncated, and a Copy button (26pt, raised, the documents
 /// glyph at 13pt) that says "Copied" or "Copy failed". What is copied is

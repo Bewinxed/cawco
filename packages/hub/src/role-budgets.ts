@@ -304,6 +304,12 @@ import type { Tasks } from "./tasks";
  * sentences and the artifact tools' one `id`, about 225 tokens for the
  * worker, the delegate and the lead (worker 27,776, delegate 10,215, lead
  * 18,580 measured beside `outputs`). Raised deliberately, by that, for each.
+ * 2026-10-22: delegate's and handoff's `inputs` show every kind they take
+ * (core handed-input.ts), 278 tokens each. They fit the same budgets: what
+ * delegate's description said its parameters say again, the `owns` and
+ * `group` words three tools share, and what find's and todo_write's schemas
+ * already list were cut (worker 27,743, delegate 10,102, lead 18,558
+ * measured; `--tools <role>` lists them per tool).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_805,
@@ -347,13 +353,36 @@ const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
 
 export interface RoleSize {
   budget: number;
+  /** Each listed tool's own tokens, by the same measure, largest first. */
+  byTool: { name: string; tokens: number }[];
   role: SessionRole;
   tokens: number;
   tools: number;
 }
 
+/** One role's tools, as a session of it is listed them on Claude Code: their definitions, as the model reads them. */
+export interface RoleTools {
+  role: SessionRole;
+  tools: { name: string; inputSchema: unknown }[];
+}
+
 /** Each role's listed tools, their count and size against its budget, on Claude Code. */
-export const measureRoles = (): RoleSize[] => {
+export const measureRoles = (): RoleSize[] =>
+  listRoleTools().map(({ role, tools }) => ({
+    role,
+    tools: tools.length,
+    tokens: estimateTokens(JSON.stringify(tools).length),
+    budget: ROLE_TOOL_BUDGET[role],
+    byTool: tools
+      .map((tool) => ({
+        name: tool.name,
+        tokens: estimateTokens(JSON.stringify(tool).length),
+      }))
+      .toSorted((a, b) => b.tokens - a.tokens),
+  }));
+
+/** Every role's tools as a session of it is listed them ({@link RoleTools}), from one stood-up delegation MCP whose tools are read, never called. */
+export const listRoleTools = (): RoleTools[] => {
   const rows = SESSION_ROLES.map((role): InstanceRow => ({
     id: role,
     machineId: "machine",
@@ -542,12 +571,9 @@ export const measureRoles = (): RoleSize[] => {
       }
       // What the model reads: a tool's `_meta` (its alwaysLoad mark) is
       // Claude Code's to act on, never part of the definition it sends.
-      const tools = listed.tools.map(({ _meta, ...tool }) => tool);
       return {
         role,
-        tools: tools.length,
-        tokens: estimateTokens(JSON.stringify(tools).length),
-        budget: ROLE_TOOL_BUDGET[role],
+        tools: listed.tools.map(({ _meta, ...tool }) => tool),
       };
     });
   } finally {

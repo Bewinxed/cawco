@@ -11,7 +11,11 @@ export interface BinaryUpdatePolicy {
  * waits for them to end (`heldChildren`), and `installedVersion` is still the
  * old one. A keeper of an earlier build that still holds sessions is no wait:
  * the keeper of the installed build runs beside it and takes every new
- * session at once (`retiringKeepers`).
+ * session at once (`retiringKeepers`). `waiting-for-hub`: a machine other
+ * than the hub's own was told to install a build (a command, or auto-update)
+ * whose wire protocol its hub does not speak yet, or its hub did not say
+ * which it speaks (`hubWait`); the install stands, and goes ahead by itself
+ * once the hub runs a build that overlaps it. Nothing failed.
  */
 export const BINARY_UPDATE_PHASES = [
   "none",
@@ -20,6 +24,7 @@ export const BINARY_UPDATE_PHASES = [
   "ready",
   "waiting-sessions",
   "waiting-for-channel",
+  "waiting-for-hub",
   "installing",
   "installed",
   "failed-rolled-back",
@@ -151,8 +156,9 @@ export const UPDATE_DRAIN_MS = 45_000;
 /**
  * How long a restart waits on the work in flight it would cut before it cuts
  * it: auto-update's restart of the machine's services, and an account move's
- * restart of a session's Claude Code process, whose background commands and
- * one-time wake-ups no resume brings back (hub server.ts `waitForLater`).
+ * restart of a running session's Claude Code process, whose background
+ * commands no resume brings back, nor a self-paced loop's wake-up (hub
+ * server.ts `waitForLater`; a session stopped at its limit doesn't wait).
  * Ours: past the long work a restart would cut (an image generation is given
  * 10 minutes, a delegate's workspace and a continuation's summary take
  * minutes, a landing gate step 10 minutes by default, a build or a probe chain run in
@@ -184,6 +190,13 @@ export const UPDATE_TRIAL_MS = 180_000;
 /** What a request refused by a raised fence answers: it was not started. */
 export const AGENT_RESTARTING =
   "The agent is restarting. This request was not started; retry it in a minute.";
+/**
+ * What a request the hub sends again answers when this agent's last process
+ * was running it as it ended (agent request-record.ts): not run again, its
+ * outcome unknown. The agent asked is back by then.
+ */
+export const AGENT_RESTARTED_MID_REQUEST =
+  "This machine's agent restarted while it was running this request, so it was not run again and whether it finished is not known; look at what it does before asking again.";
 export const HUB_RESTARTING =
   "The hub is restarting. This call was not started; call it again in a minute.";
 
@@ -302,6 +315,12 @@ export interface BinaryUpdateState {
   heldChildren?: number;
   /** True on the machine that runs the hub. */
   hostsHub: boolean;
+  /**
+   * What `waiting-for-hub` waits for: the hub to run a build whose wire
+   * protocol overlaps the offered one (`behind`), or the hub to answer for
+   * its protocol at all (`unanswered`, a hub mid-restart).
+   */
+  hubWait?: "behind" | "unanswered";
   installedVersion: string;
   /** The build whose session keeper could not start; the keeper is not handed to it again by itself. */
   keeperFailedVersion?: string;

@@ -1,40 +1,5 @@
-<script lang="ts" module>
-  import type { RunningSession } from "./client.svelte";
-  import { failureWords } from "./hub-read";
-
-  /** Where a tray stands. */
-  export type StopPhase =
-    "none" | "list" | "armed" | "stopping" | "fail" | "ending" | "done";
-
-  /** What a tray says in each state; its caller's words (WORDS.md). */
-  export interface StopWords {
-    /** The second press: "Stop 3 mid-turn and forget". */
-    armed: (n: number) => string;
-    /** The confirm's word once it has run. */
-    ended: string;
-    /** The confirm's word while the stops land and the tray's own end runs. */
-    ending: string;
-    /** The line under the title, in each state; `done` is what the stops did. */
-    line: (phase: StopPhase, n: number, done: string) => string;
-    /** The tray closed part-way: "Stopped 1 of 3; site kept." */
-    partway: (stopped: number, total: number) => string;
-    /** The plain question's confirm, with nothing running: "Forget". */
-    plain: string;
-    /** The first press: "Stop 3 and forget". */
-    stop: (n: number) => string;
-    title: string;
-  }
-
-  /** A listed session, and how its row reads: its title and where it opens. */
-  export interface StopRowView {
-    href?: string;
-    title?: string;
-  }
-
-  export type StopSession = RunningSession;
-</script>
-
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The running-sessions tray: one tray that changes shape as a stop goes,
    * never a second dialog (Family, benji.org/family-values: trays that
@@ -42,25 +7,31 @@
    * asked for it, unfolding there (DESIGN.md, The Open Page Rule): no scrim,
    * nothing held, the page live around it. Pressing something else while it
    * stands breaks nothing: each stop is the hub's to confirm, and the end
-   * the hub refuses while anything still runs is said here. Cancel or
-   * Escape puts it away.
+   * the hub refuses while anything still runs is said here.
    *
-   * With nothing running it is the plain question: the caller's end, its
+   * It draws a job of stop-work.svelte.ts, which holds the work (The Work
+   * Outlives Its Surface Rule): Cancel or Escape before the stop drops the
+   * ask; after it, Stop waiting, Close or Escape puts the tray away and the
+   * job parks on the project's row (StopParked), the stops still landing
+   * and the end still running once none is left. The tray travels into
+   * that line as it goes and comes back out of it on a press there. A
+   * reload brings it back as it stood.
+   *
+   * With nothing running it is the plain question: the kind's end, its
    * ended word held in place, then gone.
    *
    * With sessions running it lists them as the rail nests them (each lead
    * with its delegates), and asks twice on one button: "Stop 3 and …", then
    * "Stop 3 mid-turn and …", its words growing the warning in place. The
-   * second press stops them all in one request (`stop`). A row turns Stopped
-   * only when the hub says its machine confirmed the end (`project.stop`),
-   * never at the ask; then its tile leaves the row and flies into the
-   * button's icon slot, where a ring fills a share per landing while the row
-   * folds shut behind it (delegates before their lead). The last landing
-   * makes the ring whole, the caller's end runs (`end`, "Forgetting…"), and
-   * the ring becomes the check ("Forgotten"), held where it was asked before
-   * the caller goes on (`ended`). A failure keeps the state: the
-   * row says why, and Try again stops what is left (`reread` reads what
-   * still runs when no row failed but the end was refused).
+   * second press stops them all in one request. A row turns Stopped only
+   * when the hub says its machine confirmed the end (`project.stop`), never
+   * at the ask; then its tile leaves the row and flies into the button's
+   * icon slot, where a ring fills a share per landing while the row folds
+   * shut behind it (delegates before their lead). The last landing makes
+   * the ring whole, the kind's end runs ("Forgetting…"), and the ring
+   * becomes the check ("Forgotten"), held where it was asked before the
+   * page goes on. A failure keeps the state: the row says why, and Try
+   * again stops what is left.
    *
    * A session whose machine is away cannot be stopped now: its row says
    * "Stops when <machine> is back" from the start. The second press has the
@@ -68,27 +39,30 @@
    * it is recorded (`deferred`) the ring counts it, and it neither flies nor
    * folds. A lead that keeps such a delegate stays with it.
    *
-   * `other` is a second way out beside the stop (Caw off's "Let them
-   * finish"): it runs its own request, and the tray closes.
+   * Caw off has a second way out beside the stop, "Let them finish": its
+   * own request, and the tray closes.
    *
    * Each state has its own height (the body's morph): the list, one line
    * shorter armed, a row shorter per landing, the short "Stopped 3
    * sessions." at the end, a line taller for a failure.
    */
-  import type { Snippet } from "svelte";
+  import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import {
+    IconNeedsYou as Attention,
+    IconCloudCross as Away,
+    IconError as Failed,
+    IconPauseCircle as Pause,
+    IconRenew as Working,
+  } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import Failed from "~icons/solar/close-circle-bold-duotone";
-  import Away from "~icons/solar/cloud-cross-bold-duotone";
-  import Attention from "~icons/solar/hand-shake-bold-duotone";
-  import Pause from "~icons/solar/pause-circle-bold-duotone";
-  import Working from "~icons/solar/refresh-circle-bold-duotone";
   import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
-  import { cawco, onProjectStop } from "./client.svelte";
+  import { cawco } from "./client.svelte";
   import { frameObserver } from "./frame-observer";
+  import CawFace from "./home/CawFace.svelte";
   import { machineName, span } from "./home/home-state.svelte";
   import { resolveSessionTitle } from "./links";
   import { markHue, sessionSprite } from "./mark";
@@ -105,70 +79,26 @@
   import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import { sessionPlace } from "./session-names.svelte";
+  import {
+    type StopJob,
+    type StopRow,
+    stopShare,
+    stopWork,
+    wordsOf,
+  } from "./stop-work.svelte";
   import TreeMark from "./TreeMark.svelte";
-  import { toast } from "./toasts";
 
   let {
     class: className,
-    projectId,
-    sessions,
-    words,
-    stop: request,
-    end,
-    ended,
-    reread,
-    other,
-    view,
-    head,
-    onclose,
+    job,
   }: {
     /** The host's indent for the tray (`--ask-indent`, `--ask-end`). */
     class?: string;
-    projectId: string;
-    /** What runs, as the hub listed it as the tray opened; null while it is read. */
-    sessions: RunningSession[] | null;
-    words: StopWords;
-    /**
-     * Asks the hub to stop `ids`; each one's end arrives as `project.stop`.
-     * It may answer the ids the hub says had already ended: stopped now.
-     */
-    stop: (ids: string[]) => Promise<string[] | undefined>;
-    /** The caller's own end, once nothing it stops still runs; throws its refusal. */
-    end: () => Promise<void>;
-    /** After the end, while the check stands: what the caller does next. */
-    ended?: () => Promise<void>;
-    /** What still runs, when the end was refused with no row failed. */
-    reread?: () => Promise<RunningSession[]>;
-    /** A second way out: its button's words, and what it does before the tray closes. */
-    other?: { label: string; run: () => Promise<void> };
-    /** A row's title and link, where the caller names them. */
-    view?: (session: RunningSession) => StopRowView;
-    /** What leads the head, beside the title (Caw's slot). */
-    head?: Snippet;
-    /** The tray has left: the caller lets it go. */
-    onclose: () => void;
+    job: StopJob;
   } = $props();
 
   /** This tray's own: its rows' tiles fly under it into the button, and its title is named by it. */
   const uid = $props.id();
-
-  /** One listed session and how far its stop has got. */
-  interface Row {
-    /** Its tile has landed in the button: it counts toward the ring. */
-    arrived: boolean;
-    /** The hub confirmed its end (performance.now()), or null. */
-    at: number | null;
-    /** Its tile has left the row: the row is folding shut, or shut. */
-    departed: boolean;
-    error: string | null;
-    /** The row has folded shut and is drawn no more. */
-    gone: boolean;
-    /** Its machine is away and the hub has recorded its stop for when it is back. */
-    owed: boolean;
-    s: RunningSession;
-    /** `away`: its machine is not connected; it stops when it is back. */
-    state: "running" | "away" | "stopping" | "stopped" | "failed";
-  }
 
   /** A tile copy in the button's slot, flying in from its row. */
   interface Arrival {
@@ -176,22 +106,18 @@
     id: string;
   }
 
-  /** The tray is up: its sessions were read. */
-  let shown = $state(false);
-  let phase = $state<StopPhase>("list");
-  let rows = $state<Row[]>([]);
+  const words = $derived(wordsOf(job));
+  const rows = $derived(job.rows);
+  const phase = $derived(job.phase);
+  const total = $derived(job.total);
+  const share = $derived(stopShare(job));
   let arrivals = $state<Arrival[]>([]);
-  /** How many were listed when the stop was pressed: the ring's whole. */
-  let total = $state(0);
-  /** The end itself was refused: the hub's words. */
-  let refusal = $state<string | null>(null);
   /** The press that armed it is still settling: no press carries through. */
   let inert = false;
-  /** When the stop was pressed (Date.now()), for a slow row's seconds. */
-  let pressedAt = $state(0);
   let now = $state(Date.now());
   /** The other way out is on its way to the hub. */
   let otherPending = $state(false);
+  let tile = $state<HTMLElement | null>(null);
 
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const after = (ms: number, run: () => void) => {
@@ -201,8 +127,46 @@
     }, ms);
     timers.add(timer);
   };
-  let unhear: (() => void) | null = null;
-  let ticker: ReturnType<typeof setInterval> | undefined;
+  // Its place left the page (a page navigated away, a row dropped): nothing
+  // of this tray's own keeps running; the job goes on in the store.
+  $effect(() => () => {
+    for (const timer of timers) {
+      clearTimeout(timer);
+    }
+  });
+
+  // While the stops land, the slow rows' seconds count.
+  $effect(() => {
+    if (phase !== "stopping") {
+      return;
+    }
+    now = Date.now();
+    const ticker = setInterval(() => {
+      now = Date.now();
+    }, 1000);
+    return () => clearInterval(ticker);
+  });
+
+  // Taken off the page while its job still stands here (what holds it
+  // closed: Caw's settings put away, the page left): the tray is put away
+  // as Escape puts it, so stops under way park and are said where they
+  // are parked, never left standing in a place no one can see.
+  $effect(() => {
+    const place = untrack(() => job.at);
+    return () => {
+      if (job.open && job.at === place) {
+        stopWork.dismiss(job);
+      }
+    };
+  });
+
+  // Drawn and standing: its stopped rows fly into its button.
+  $effect(() => {
+    if (!job.open) {
+      return;
+    }
+    return stopWork.attach(job, { fly: leaveRow });
+  });
 
   /** Each row's element and its tile, for its fold and its flight. */
   const items = new Map<string, HTMLElement>();
@@ -229,72 +193,14 @@
   const plural = (n: number, one: string, many: string) =>
     n === 1 ? one : many;
 
-  /* ── Opening ─────────────────────────────────────────────────────── */
-
-  /**
-   * Which tray the work in flight belongs to: an end that returns after its
-   * tray was closed (and maybe another opened) touches nothing.
-   */
-  let generation = 0;
-
-  /** Everything still running for this tray stops: timers, the clock, the frames. */
-  function quiet(): void {
-    generation += 1;
-    for (const timer of timers) {
-      clearTimeout(timer);
-    }
-    timers.clear();
-    clearInterval(ticker);
-    ticker = undefined;
-    unhear?.();
-    unhear = null;
-  }
-
-  function reset(): void {
-    quiet();
-    rows = [];
-    arrivals = [];
-    total = 0;
-    refusal = null;
-    inert = false;
-  }
-
-  const asRows = (listedNow: RunningSession[]): Row[] =>
-    listedNow.map((s) => ({
-      s,
-      state: s.offline ? "away" : "running",
-      owed: false,
-      at: null,
-      departed: false,
-      arrived: false,
-      gone: false,
-      error: null,
-    }));
-
-  // What runs was read: the tray flies out of its opener.
-  $effect(() => {
-    const read = sessions;
-    if (!read) {
-      return;
-    }
-    reset();
-    rows = asRows(read);
-    phase = read.length > 0 ? "list" : "none";
-    shown = true;
-  });
-
-  // Its place left the page (a page navigated away, a row dropped): nothing
-  // of this tray keeps running.
-  $effect(() => () => quiet());
-
   /**
    * In view and in hand as it unfolds: the menu that asked hands focus back
    * to its trigger as it closes, so the focus moves here a frame later.
    * While it stands it keeps itself in view as its own size changes (it
-   * opens on what it is reading and grows to its list, then to each stop as
-   * its machine confirms it), so its foot never rests under what stands
-   * over the page's foot (the scroller's scroll padding). Escape inside it
-   * puts it away and goes no further (a popover it stands in stays open).
+   * opens on its list and grows to each stop as its machine confirms it),
+   * so its foot never rests under what stands over the page's foot (the
+   * scroller's scroll padding). Escape inside it puts it away and goes no
+   * further (a popover it stands in stays open).
    */
   function unfoldHere(node: HTMLElement) {
     const frame = requestAnimationFrame(() => {
@@ -306,7 +212,7 @@
     let measured = 0;
     const sized = frameObserver(
       () => {
-        if (measured !== height && shown) {
+        if (measured !== height && job.open) {
           height = measured;
           node.scrollIntoView({ block: "nearest" });
         }
@@ -332,176 +238,51 @@
     };
   }
 
-  /** Closes the tray; a sweep left part-way says what it left. */
+  /**
+   * Puts the tray away. Stops under way are parked and go on: the tray
+   * travels into the place they are parked (The One Object Rule).
+   */
   function leave(): void {
-    if (phase === "stopping" || phase === "fail") {
-      toast(words.partway(stopped, total));
+    if (
+      tile &&
+      (phase === "stopping" || phase === "fail" || phase === "ending")
+    ) {
+      departBox(share, tile, false);
     }
-    quiet();
-    // The tray folds away as it is (--dur-exit), then the caller lets it go.
-    shown = false;
-    setTimeout(onclose, dur("--dur-exit"));
+    arrivals = [];
+    stopWork.dismiss(job);
   }
 
-  /* ── The two presses ────────────────────────────────────────────── */
+  /* ── The presses ────────────────────────────────────────────────── */
 
   function press(): void {
     if (inert) {
       return;
     }
     if (phase === "list") {
-      phase = "armed";
       // A double-click never carries through the morph into the stop.
       inert = true;
       after(dur("--dur-panel"), () => {
         inert = false;
       });
-    } else if (phase === "armed") {
-      total = rows.length;
-      stop(rows.map((row) => row.s.id));
-    } else if (phase === "fail") {
-      retry();
-    } else if (phase === "none") {
-      finish();
     }
+    stopWork.press(job);
   }
 
   /** The other way out: its request, then the tray closes; a refusal stays to be read. */
   async function takeOther(): Promise<void> {
-    if (!other || otherPending) {
+    if (otherPending) {
       return;
     }
     otherPending = true;
     try {
-      await other.run();
-      leave();
-    } catch (error) {
-      refusal = failureWords(error);
+      await stopWork.other(job);
     } finally {
       otherPending = false;
     }
   }
 
-  /** Stops `ids` in one request; each row turns as the hub reports it. */
-  function stop(ids: string[]): void {
-    phase = "stopping";
-    refusal = null;
-    pressedAt = Date.now();
-    now = pressedAt;
-    clearInterval(ticker);
-    ticker = setInterval(() => {
-      now = Date.now();
-    }, 1000);
-    for (const row of rows) {
-      // A row whose machine is away keeps saying so; the hub records its stop.
-      if (ids.includes(row.s.id) && row.state !== "away") {
-        row.state = "stopping";
-        row.error = null;
-      }
-    }
-    unhear ??= onProjectStop((frame) => {
-      if (frame.projectId === projectId) {
-        heard(frame.instanceId, frame.outcome, frame.error ?? null);
-      }
-    });
-    request(ids).then(
-      (already) => {
-        for (const id of already ?? []) {
-          heard(id, "stopped", null);
-        }
-      },
-      (error: unknown) => {
-        const reason = failureWords(error);
-        for (const id of ids) {
-          heard(id, "failed", reason);
-        }
-      }
-    );
-  }
-
-  /** The failed rows again; a refused end reads what still runs and stops it. */
-  async function retry(): Promise<void> {
-    const failedIds = rows
-      .filter((row) => row.state === "failed")
-      .map((row) => row.s.id);
-    if (failedIds.length > 0) {
-      stop(failedIds);
-      return;
-    }
-    if (!reread) {
-      finish();
-      return;
-    }
-    const mine = generation;
-    let again: RunningSession[];
-    try {
-      again = await reread();
-    } catch (error) {
-      if (mine === generation) {
-        refusal = failureWords(error);
-      }
-      return;
-    }
-    if (mine !== generation) {
-      return;
-    }
-    const known = new Set(rows.map((row) => row.s.id));
-    rows = [
-      ...rows.filter((row) => !row.gone),
-      ...asRows(again.filter((s) => !known.has(s.id))),
-    ];
-    const fresh = again.map((s) => s.id);
-    if (fresh.length === 0) {
-      finish();
-      return;
-    }
-    total += fresh.filter((id) => !known.has(id)).length;
-    stop(fresh);
-  }
-
-  /* ── Each stop, as the hub reports it ───────────────────────────── */
-
-  function heard(
-    id: string,
-    outcome: "stopped" | "failed" | "deferred",
-    error: string | null
-  ): void {
-    const row = rows.find((each) => each.s.id === id);
-    if (!row || row.state === "stopped") {
-      return;
-    }
-    if (outcome === "deferred") {
-      // Its machine is away (or went away before it answered): the stop is
-      // recorded for its return. Counted now; it stays where it is.
-      row.state = "away";
-      row.owed = true;
-      row.error = null;
-      arrive(row);
-    } else if (outcome === "failed") {
-      if (row.state === "stopping") {
-        row.state = "failed";
-        row.error = error;
-      }
-    } else {
-      row.state = "stopped";
-      row.error = null;
-      row.at = performance.now();
-      // Its word and glyph turn first; its tile leaves after the fade.
-      after(dur("--dur-fade"), () => leaveRow(row));
-    }
-    settle();
-  }
-
-  /** Nothing is still stopping and something failed: offer Try again. */
-  function settle(): void {
-    if (
-      phase === "stopping" &&
-      !rows.some((row) => row.state === "stopping") &&
-      rows.some((row) => row.state === "failed")
-    ) {
-      phase = "fail";
-    }
-  }
+  /* ── A stopped row's flight ─────────────────────────────────────── */
 
   /** The last tile to leave a row, for the stagger between departures. */
   let lastLeft = Number.NEGATIVE_INFINITY;
@@ -511,8 +292,8 @@
    * A lead waits for its delegates' tiles to leave first; a tile leaving
    * within a flight of the one before goes --dur-stagger after it.
    */
-  function leaveRow(row: Row): void {
-    if (row.departed || row.state !== "stopped" || !shown) {
+  function leaveRow(row: StopRow): void {
+    if (row.departed || row.state !== "stopped" || !job.open) {
       return;
     }
     const kids = rows.filter((each) => each.s.parentId === row.s.id);
@@ -522,7 +303,7 @@
     if (kids.some((kid) => !kid.departed)) {
       // A delegate stays (its machine is away): its lead stays with it,
       // counted, so the tree under it is never folded away.
-      arrive(row);
+      stopWork.arrive(job, row);
       return;
     }
     const at = performance.now();
@@ -534,12 +315,12 @@
     lastLeft = at;
     row.departed = true;
     const node = items.get(row.s.id);
-    const tile = node?.querySelector<HTMLElement>(
+    const rowTile = node?.querySelector<HTMLElement>(
       ':scope > [data-slot="rin"] .tile'
     );
-    const moving = motionOk.current && node && tile;
+    const moving = motionOk.current && node && rowTile;
     if (moving) {
-      departBox(`${uid}-stop:${row.s.id}`, tile, false);
+      departBox(`${uid}-stop:${row.s.id}`, rowTile, false);
       arrivals.push({ id: row.s.id, fill: fillOf(row.s) });
       fold(node, false, {
         ms: dur("--dur-panel"),
@@ -574,70 +355,14 @@
     }
   }
 
-  function gone(row: Row): void {
+  function gone(row: StopRow): void {
     row.gone = true;
   }
 
   /** The tile has landed: it fades into the ring, which takes its share. */
-  function arrive(row: Row): void {
+  function arrive(row: StopRow): void {
     arrivals = arrivals.filter((each) => each.id !== row.s.id);
-    // Counted already: it was away, and its machine came back and stopped it.
-    if (row.arrived) {
-      return;
-    }
-    row.arrived = true;
-    const parent = rows.find((each) => each.s.id === row.s.parentId);
-    if (parent) {
-      after(dur("--dur-stagger"), () => leaveRow(parent));
-    }
-    if (rows.every((each) => each.arrived)) {
-      // The ring is whole; a beat, then the end.
-      after(dur("--dur-control"), finish);
-    }
-  }
-
-  /* ── The end ─────────────────────────────────────────────────────── */
-
-  async function finish(): Promise<void> {
-    if (phase === "ending" || phase === "done") {
-      return;
-    }
-    clearInterval(ticker);
-    phase = "ending";
-    const started = performance.now();
-    const mine = generation;
-    try {
-      await end();
-    } catch (error) {
-      if (mine !== generation) {
-        return;
-      }
-      refusal = failureWords(error);
-      phase = rows.length > 0 ? "fail" : "none";
-      return;
-    }
-    // The ending word is read before the ended one: an end quicker than the
-    // label's morph waits for the morph to land.
-    const morphing =
-      rows.length > 0 ? dur("--dur-morph") - (performance.now() - started) : 0;
-    if (morphing > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, morphing));
-    }
-    // The ended word ("Forgotten") is said where the question was asked and
-    // held there before the caller goes on (a forgotten project's page
-    // leaves for home), so the end is seen in place, not inferred from the
-    // page changing under the reader. A tray put away meanwhile still lets
-    // the caller go on: the end has happened.
-    if (mine === generation) {
-      phase = "done";
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, dur("--dur-hold"))
-      );
-    }
-    await ended?.();
-    if (mine === generation) {
-      leave();
-    }
+    stopWork.arrive(job, row);
   }
 
   /* ── What each part says ─────────────────────────────────────────── */
@@ -672,7 +397,7 @@
       case "armed":
         return words.armed(listed);
       case "fail":
-        return "Try again";
+        return commonWords.tryAgain;
       case "done":
         return words.ended;
       case "ending":
@@ -705,11 +430,11 @@
 
   /* ── A row ───────────────────────────────────────────────────────── */
 
-  const fillOf = (s: RunningSession) =>
+  const fillOf = (s: StopRow["s"]) =>
     `var(--mark-${markHue(sessionPlace(s.id))})`;
 
   /** What a row says it is doing, before and through its stop. */
-  function statusOf(row: Row) {
+  function statusOf(row: StopRow) {
     if (row.state === "stopping") {
       return { word: STOPPING_LABEL, icon: null, tone: "busy" } as const;
     }
@@ -737,7 +462,7 @@
   }
 
   /** The mark's own status: an echo or a dot while it runs, the fail dot after. */
-  function markOf(row: Row) {
+  function markOf(row: StopRow) {
     if (row.state === "failed") {
       return "fail" as const;
     }
@@ -752,8 +477,8 @@
   }
 
   /** Its trail: how long its turn has run, or, stopping past 5s, the seconds waited. */
-  function trailOf(row: Row): string {
-    const waited = Math.floor((now - pressedAt) / 1000);
+  function trailOf(row: StopRow): string {
+    const waited = Math.floor((now - job.pressedAt) / 1000);
     if (row.state === "stopping" && waited >= 5) {
       return `${waited}s`;
     }
@@ -794,7 +519,7 @@
       (each) => each.s.parentId === row.s.id && !each.gone
     )}
     {@const Sprite = sessionSprite(row.s.id)}
-    {@const shownAs = view?.(row.s) ?? {}}
+    {@const shownAs = row.view}
     {@const title =
       shownAs.title ??
       resolveSessionTitle({
@@ -882,7 +607,7 @@
           >
         </div>
         <RowFault
-          again={() => stop([row.s.id])}
+          again={() => stopWork.stopOne(job, row.s.id)}
           reason={row.state === "failed" ? row.error : null}
         />
       </div>
@@ -913,7 +638,7 @@
   {/each}
 {/snippet}
 
-{#if shown}
+{#if job.open}
   <!-- Unfolds under what asked for it, in the page's flow. -->
   <section
     aria-labelledby="{uid}-title"
@@ -921,13 +646,17 @@
       "@container/stop-tray min-w-0 py-space-1 ps-(--ask-indent) pe-(--ask-end)",
       className
     )}
-    data-stop-tray={projectId}
+    data-stop-tray={job.projectId}
+    data-stop-kind={job.kind}
+    data-phase={phase}
     transition:unfold
     {@attach unfoldHere}
   >
     <div
+      bind:this={tile}
       data-slot="tile"
       class="grid gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+      {@attach land(() => share)}
     >
       <div data-slot="head" class="flex min-w-0 gap-space-3">
         <!-- The caller's place in the tray's head: empty, it takes no room. -->
@@ -935,7 +664,9 @@
           aria-hidden="true"
           class="aspect-square flex-none self-stretch empty:hidden"
         >
-          {@render head?.()}
+          {#if job.kind === "caw-off"}
+            <CawFace size={36} status="ready" />
+          {/if}
         </div>
         <div data-slot="words" class="grid min-w-0 flex-auto gap-space-1">
           <p
@@ -955,7 +686,7 @@
           <!-- The end, or the other way out, refused: the hub's words, where
                the question is; the confirm (Try again) or the other button
                goes on from here. -->
-          <RowFault reason={refusal} />
+          <RowFault reason={job.refusal} />
         </div>
       </div>
       {#if rows.some((row) => !row.gone)}
@@ -976,10 +707,10 @@
           size="sm"
           variant="ghost"
         />
-        {#if other && (phase === "list" || phase === "armed")}
+        {#if words.other && (phase === "list" || phase === "armed")}
           <Button
             data-stop-other
-            label={other.label}
+            label={words.other(listed)}
             onclick={takeOther}
             pending={otherPending}
             size="sm"

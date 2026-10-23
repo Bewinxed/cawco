@@ -18,11 +18,12 @@
  *   updates reads each as the skill the row holds: no "repo has several
  *   skills", what the source holds is the row's own copy.
  * - Fetch again on apple-web-app: "Already on latest (…) · just now", the
- *   frame's outcome `unchanged`, no machine told (no `[fleet] sync →`).
+ *   frame's outcome `unchanged`, no machine told (the agent takes no sync:
+ *   no `[fleet] sync from the hub`).
  * - Its stored copy made older (its hash changed in the hub's database), then
  *   Check for updates: the badge "Update available · a → b" (a status, not a
- *   button) and its Fetch update; pressed, "Updated a → b · just now", the
- *   machines told.
+ *   button) and its Fetch update; pressed, "Updated a → b · just now", and
+ *   no delta sent: the machine already holds that copy.
  * - A plugin from a marketplace on the hub's disk (`plugin.json` 1.0.0): its
  *   version, its update to 1.1.0 found and fetched; its source broken, Fetch
  *   again keeps its last good hash and files, says "Couldn't update: …" and
@@ -30,6 +31,11 @@
  * - The plugin at a nightly-long version on a phone, at 390px and 320px: the
  *   badge, its action and the outcome note inside the row, nothing scrolling
  *   sideways, the name kept.
+ * - The loopback skill edited on the machine, then Overwrite pressed while
+ *   a slow converge runs (an npx row whose registry answers after 8 s) and
+ *   a sync asked at once behind it: the forced item stays forced on the
+ *   machine until a converge writes it (agent fleet-desired.ts), and the
+ *   machine's file ends equal to the fleet's. Main lost the Overwrite.
  *
  * Each row's rendered text is printed, and a capture of it kept in the run's
  * out dir. The GitHub legs read github.com, as the live check does.
@@ -40,7 +46,10 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import type { FleetPlugin, FleetSkillMeta } from "../../../packages/core/src";
-import type { Reply } from "../../scratch-fleet";
+import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { commonWords } from "../../../packages/core/src/words/common";
+import { skillsWords } from "../../../packages/core/src/words/skills";
+import { MACHINE, type Reply } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 /** Served on 127.0.0.1: a one-shot install source, never read for updates. */
@@ -54,7 +63,13 @@ const HAIRLINE_SOURCE = "skills:lucasmarkes/hairline";
 const MARKETPLACE = "version-plugins";
 const PLUGIN = "versioned-plugin";
 const PLUGIN_ID = `${PLUGIN}@${MARKETPLACE}`;
-const SYNC_LINE = "[fleet] sync →";
+/** The agent's word that it took a fleet sync (agent session.ts). */
+const SYNC_LINE = "[fleet] sync from the hub";
+/** How long a sync the hub sent takes to reach the agent's log, at most, here. */
+const TOLD_MS = 5000;
+/** An npx row whose registry (this spec's) answers every read after {@link SLOW_REGISTRY_MS}: a sync that converges slowly. */
+const SLOW_NPM = "probe-slow-npm";
+const SLOW_REGISTRY_MS = 8000;
 const UPDATE_CHIP = /^Update available/;
 const SEVERAL = "several skills";
 /** A version as long as a nightly's, to hold the row's edges against. */
@@ -163,19 +178,20 @@ const rowSays = (page: Page, name: string, words: string) =>
     );
 
 const openMenu = async (page: Page, name: string) => {
-  await page.getByRole("button", { name: `More for ${name}` }).click();
+  await page.getByRole("button", { name: commonWords.moreFor(name) }).click();
 };
 
 async function fetchAgain(page: Page, name: string) {
   await openMenu(page, name);
-  await page.getByRole("menuitem", { name: "Fetch again" }).click();
+  await page.getByRole("menuitem", { name: skillsWords.fetchAgain }).click();
 }
 
 /** Check for updates pressed; resolves once the hub says the check ended. */
 const checkNow = (fleet: KitFleet, page: Page) =>
   fleet.fetched(
     (frame) => frame.check,
-    () => page.getByRole("button", { name: "Check for updates" }).click()
+    () =>
+      page.getByRole("button", { name: skillsWords.checkForUpdates }).click()
   );
 
 /** A marketplace with one plugin at `version`, on the hub's disk. */
@@ -221,6 +237,7 @@ const probe = async (kit: Kit) => {
 
   await loopback(on, `${server.url.origin}/${LOCAL}/SKILL.md`);
   await server.stop(true);
+  await overwrite(on);
   await multiSkill(on);
   await plugin(on);
   await page.close();
@@ -280,10 +297,110 @@ async function loopback({ kit, fleet, page, base }: On, source: string) {
   const items = await page.getByRole("menuitem").allInnerTexts();
   kit.check(
     "loopback: its menu offers no Fetch again",
-    items.length > 0 && !items.some((item) => item.includes("Fetch again")),
+    items.length > 0 &&
+      !items.some((item) => item.includes(skillsWords.fetchAgain)),
     items.join(" / ")
   );
   await page.keyboard.press("Escape");
+}
+
+/**
+ * The agent's lines since `mark` once any sync the hub sent has had time to
+ * reach it ({@link TOLD_MS}).
+ */
+const agentSince = async (mark: { since: () => Promise<string> }) => {
+  await Bun.sleep(TOLD_MS);
+  return await mark.since();
+};
+
+/** Waits for the agent's word that it took a sync since `mark`; its lines. */
+const agentTook = async (mark: { since: () => Promise<string> }) =>
+  (
+    await until(
+      () => mark.since(),
+      (log) => log.includes(SYNC_LINE),
+      60_000
+    )
+  ).value;
+
+/**
+ * The loopback skill edited on the machine, then the fleet's copy forced
+ * over it while another delta's converge runs, and a sync asked at once
+ * behind it: the forced item goes as a delta item, the agent keeps it
+ * forced until a converge writes it, whatever comes meanwhile (agent
+ * fleet-desired.ts), and the machine's file ends equal to the fleet's.
+ */
+async function overwrite({ kit, fleet }: On) {
+  const file = projectClaudeDir(fleet.home, "skills", LOCAL, "SKILL.md");
+  const fleetCopy = skillMd("1.0.0");
+  const read = () =>
+    Bun.file(file)
+      .text()
+      .catch(() => "");
+  const held = await until(read, (text) => text === fleetCopy);
+  kit.check(
+    "overwrite: the machine holds the fleet's copy of the skill",
+    held.ok,
+    JSON.stringify(held.value)
+  );
+  await Bun.write(file, `${fleetCopy}\nEdited on the machine.\n`);
+
+  const registry = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: async () => {
+      await Bun.sleep(SLOW_REGISTRY_MS);
+      return Response.json({ error: "Not found" }, { status: 404 });
+    },
+  });
+  const hubMark = await fleet.logMark("hub");
+  const agentMark = await fleet.logMark("agent");
+  try {
+    // The row's PUT sends a sync whose converge waits on the registry.
+    await send(fleet, "PUT", `/api/fleet/mcp/${SLOW_NPM}`, {
+      config: {
+        command: "npx",
+        args: ["-y", `${SLOW_NPM}@latest`],
+        env: { npm_config_registry: registry.url.href },
+      },
+      enabled: true,
+    });
+    await until(
+      () => agentMark.since(),
+      (text) => text.includes(SYNC_LINE),
+      30_000
+    );
+    // Overwrite, then another sync behind it while the first still converges.
+    await send(fleet, "POST", `/api/fleet/skills/${LOCAL}/push`, {
+      machineId: MACHINE,
+    });
+    await send(fleet, "POST", "/api/fleet/sync", { machineId: MACHINE });
+    const after = await until(read, (text) => text === fleetCopy);
+    const log = await hubMark.since();
+    const syncs = log
+      .split("\n")
+      .filter((line) => line.includes("[fleet] "))
+      .join(" / ");
+    kit.check(
+      "overwrite: the Overwrite went to the machine as a delta while another converge ran",
+      log.includes(`an overwrite of skill ${LOCAL}`) &&
+        log.includes("[fleet] delta rev"),
+      syncs
+    );
+    kit.check(
+      "overwrite: an Overwrite followed at once by another sync leaves the machine's file equal to the fleet's",
+      after.ok,
+      `${JSON.stringify(after.value)} / ${syncs}`
+    );
+  } finally {
+    // Its removal is a sync too: taken before the next leg counts syncs.
+    const removed = await fleet.logMark("agent");
+    await fetch(`${fleet.base}/api/fleet/mcp/${SLOW_NPM}`, {
+      method: "DELETE",
+    });
+    await agentTook(removed);
+    await registry.stop(true);
+  }
 }
 
 /** The owner's two multi-skill repos, each row by its bare source. */
@@ -332,6 +449,7 @@ async function multiSkill({ kit, fleet, page }: On) {
 
   // Fetch again, nothing new.
   let mark = await fleet.logMark("hub");
+  let agentMark = await fleet.logMark("agent");
   const unchanged = await fleet.fetched(
     (frame) => (frame.skill?.name === MULTI ? frame.skill : undefined),
     () => fetchAgain(page, MULTI)
@@ -348,10 +466,11 @@ async function multiSkill({ kit, fleet, page }: On) {
   );
   await readRow(kit, page, MULTI, "multi-already-latest");
   let log = await mark.since();
+  let agentLog = await agentSince(agentMark);
   kit.check(
     "multi-skill: the unchanged fetch tells no machine",
-    log.includes(`skill ${MULTI}: unchanged`) && !log.includes(SYNC_LINE),
-    told(log, MULTI)
+    log.includes(`skill ${MULTI}: unchanged`) && !agentLog.includes(SYNC_LINE),
+    told(log, agentLog, MULTI)
   );
 
   // Its stored copy made older: the check finds the update.
@@ -371,6 +490,7 @@ async function multiSkill({ kit, fleet, page }: On) {
   );
   await readRow(kit, page, MULTI, "multi-update-available");
   mark = await fleet.logMark("hub");
+  agentMark = await fleet.logMark("agent");
   await updateButton(page, MULTI).click();
   const updated = `Updated ${OLDER.slice(0, 7)} → ${current.slice(0, 7)} · just now`;
   kit.check(
@@ -386,12 +506,17 @@ async function multiSkill({ kit, fleet, page }: On) {
     JSON.stringify(landed?.lastRefresh)
   );
   await readRow(kit, page, MULTI, "multi-updated");
+  agentLog = await agentSince(agentMark);
   log = await mark.since();
+  // The machine holds the source's copy already (the hub's stored hash was
+  // made older in its database alone): the hub builds the machine's items
+  // again and sends nothing, as nothing it holds moved (hub fleet-sync.ts).
   kit.check(
-    "multi-skill: the hub tells the machines of the changed copy",
+    "multi-skill: the hub weighs the changed copy against what the machine holds, and sends nothing it holds already",
     log.includes(`skill ${MULTI}: the fleet's copy changed`) &&
-      log.includes(SYNC_LINE),
-    told(log, MULTI)
+      log.includes("[fleet] no delta for") &&
+      !agentLog.includes(SYNC_LINE),
+    told(log, agentLog, MULTI)
   );
 }
 
@@ -442,7 +567,11 @@ async function plugin({ kit, fleet, page }: On) {
     )[0];
   const good = held();
   await rm(join(source, "plugins", PLUGIN), { recursive: true, force: true });
+  // The update's delta goes 250 ms after the hub's word (its debounce): let
+  // it land before the failed refresh is counted.
+  await Bun.sleep(TOLD_MS);
   const mark = await fleet.logMark("hub");
+  const agentMark = await fleet.logMark("agent");
   const failed = await fleet.fetched(
     (frame) => (frame.plugin?.id === PLUGIN_ID ? frame.plugin : undefined),
     () => fetchAgain(page, PLUGIN_ID)
@@ -463,10 +592,12 @@ async function plugin({ kit, fleet, page }: On) {
   );
   await readRow(kit, page, PLUGIN_ID, "plugin-update-failed");
   const log = await mark.since();
+  const agentLog = await agentSince(agentMark);
   kit.check(
     "plugin: the failed refresh tells no machine",
-    log.includes(`plugin ${PLUGIN_ID}: failed`) && !log.includes(SYNC_LINE),
-    told(log, PLUGIN_ID)
+    log.includes(`plugin ${PLUGIN_ID}: failed`) &&
+      !agentLog.includes(SYNC_LINE),
+    told(log, agentLog, PLUGIN_ID)
   );
 }
 
@@ -503,14 +634,14 @@ async function phone({ kit, fleet, base }: On) {
 
 /** The row's Fetch update, the update badge's action. */
 const updateButton = (page: Page, name: string) =>
-  rowOf(page, name).getByRole("button", { name: "Fetch update" });
+  rowOf(page, name).getByRole("button", { name: skillsWords.fetchUpdate });
 
-/** The hub's lines about `what` and its syncs, for a check's detail. */
-const told = (log: string, what: string) =>
-  log
-    .split("\n")
-    .filter((line) => line.includes(what) || line.includes(SYNC_LINE))
-    .join(" / ");
+/** The hub's lines about `what` and the syncs the agent took, for a check's detail. */
+const told = (log: string, agentLog: string, what: string) =>
+  [
+    ...log.split("\n").filter((line) => line.includes(what)),
+    ...agentLog.split("\n").filter((line) => line.includes(SYNC_LINE)),
+  ].join(" / ");
 
 /**
  * Every drawn part of the skill's row (its meta line, the update badge and

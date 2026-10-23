@@ -9,6 +9,7 @@
  * these in its own tool mechanism (claude's in-process MCP server, pi's
  * `customTools`), and this file is the body they share.
  */
+
 import type {
   DelegateType,
   Envelope,
@@ -20,7 +21,9 @@ import type {
   PermissionResult,
   SendPayload,
   SpawnPayload,
+  Workflow,
   WorkflowAction,
+  WorkflowListing,
 } from "@cawco/core";
 import {
   delegateTypeProblem,
@@ -28,10 +31,12 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   machineCalled,
   machineLabel,
+  machineLink,
   machinesCalled,
   pauseClock,
   QUESTION_DISMISSED,
   relaunchOf,
+  type SessionChosenMode,
   sessionLink,
   withInputsLine,
 } from "@cawco/core";
@@ -43,6 +48,7 @@ import type { DelegateList, DelegateListQuery } from "./delegation-tree";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
+import { handle as idHandle } from "./presenters/words";
 import { resolveSpawnType, type Unlanded } from "./work-items";
 
 // Every call this module makes is the hub calling its own routes, as itself
@@ -684,7 +690,10 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * its account is at its limit, where a turn would only be refused, and it
  * waits for the reset, a move, or its continuation from a summary (`limit`);
  * or Claude Code refused its account's credential and no other account can
- * take it, so it waits for a sign-in or a free account (`signin`); or the
+ * take it, so it waits for a sign-in or a free account (`signin`); or it
+ * moved accounts at its limit and files its open items and is compacted
+ * there first, so it waits for that to end, or for a stop of its turn
+ * (`compacting`); or the
  * owner paused its machine until a time (`paused`, machine-pause.ts); or its
  * work item is finishing (`finishing`: its landing gate runs, or the turn
  * that called `finish_item` is still ending, work-items.ts `finishingFor`),
@@ -698,6 +707,7 @@ export type SendHold =
   | "agent"
   | "behind"
   | "build"
+  | "compacting"
   | "finishing"
   | "held"
   | "hub"
@@ -746,6 +756,8 @@ const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
     "Its account is at its usage limit, so the message is kept at the hub and goes to the session as soon as it can run again: at the reset, on another account, or once it goes on from a summary.",
   signin:
     "Its account's sign-in was refused and no other account can take it, so the message is kept at the hub and goes to the session once its account is signed in again or another account comes free.",
+  compacting:
+    "It moved to another account at its limit and is filing its open items, then compacting, as its first turns there, so the message is kept at the hub and goes to the session as soon as that ends; stopping its turn ends the compaction and sends it now.",
 };
 
 /** What the hub did with a hand-off, as its sender is told. */
@@ -897,14 +909,14 @@ export interface HandoffActions {
     summarizer_model?: string;
     target_harness: "claude" | "opencode" | "pi";
     target_model: string;
-    target_permission_mode?: Exclude<PermissionMode, "fullSend">;
+    target_permission_mode?: SessionChosenMode;
     note?: string;
   }) => Promise<{
     summariserInstanceId: string | null;
     targetInstanceId: string;
     text: string;
   }>;
-  readonly createWorkflow: (name: string, program: string) => Promise<unknown>;
+  readonly createWorkflow: (name: string, program: string) => Promise<Workflow>;
   /**
    * Starts a work item: a fresh session or a fork of this one in a new workspace, or the follow-up
    * in an existing one, on the session that workspace's last item ran. The
@@ -942,8 +954,8 @@ export interface HandoffActions {
       from?: string;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
-      /** Files on this session's machine copied into its `$TMPDIR/inputs/` before its brief. */
-      inputs?: string[];
+      /** What it is handed (core handed-input.ts), written into its `$TMPDIR/inputs/` before its brief. */
+      inputs?: unknown[];
       /** Where its commits go once it passes the landing gate; `main` by default. */
       lands?: LandsMode;
       /** Files in its workspace the hub copies into the project's folder. */
@@ -986,18 +998,18 @@ export interface HandoffActions {
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
   /**
-   * Sends `message` to another session; `inputs`, files on this session's
-   * machine, are copied first into the `$TMPDIR/inputs/` of the target's
-   * work item, one this session delegated or leads.
+   * Sends `message` to another session; `inputs` (core handed-input.ts)
+   * are written first into the `$TMPDIR/inputs/` of the target's work item,
+   * one this session delegated or leads.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  handoff(target: string, message: string, inputs?: string[]): Promise<string>;
+  handoff(target: string, message: string, inputs?: unknown[]): Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   interruptDelegate(target: string): string;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   listSessions(): string;
-  readonly listWorkflows: () => Promise<unknown>;
+  readonly listWorkflows: () => Promise<{ workflows: WorkflowListing[] }>;
   /**
    * Pauses the machine `machine` names for `minutes` (machine-pause.ts), or
    * ends its pause (`resume`). Answers what the hub did, in a sentence.
@@ -1053,8 +1065,8 @@ export interface HandoffActions {
       model?: string;
       /** The account it runs on, by label or id; placed by the hub when omitted. */
       account?: string;
-      /** This session's own mode when omitted. */
-      permissionMode?: PermissionMode;
+      /** This session's own mode when omitted; never Full Send, which only the owner chooses. */
+      permissionMode?: SessionChosenMode;
       /** The machine it runs on, by hostname or machineId; the caller's by default. */
       machine?: string;
     }
@@ -1067,7 +1079,7 @@ export interface HandoffActions {
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   stopDelegate(target: string): Promise<string>;
   readonly submitResult: (result: unknown) => Promise<string>;
-  readonly updateWorkflow: (name: string, program: string) => Promise<unknown>;
+  readonly updateWorkflow: (name: string, program: string) => Promise<Workflow>;
   readonly waitItem: (minutes: number, reason: string) => Promise<string>;
   readonly writeWorkflowState: (
     name: string,
@@ -1083,20 +1095,29 @@ export interface HandoffResult {
 }
 
 /**
- * A delegation's result: its session, and the work item and workspace it
- * runs in; all three null while it waits, queued, for files a live item owns.
+ * A delegation's result (`POST /api/work-items`): started, its session and
+ * the work item and workspace it runs in; or queued, waiting for files a
+ * live item owns, with no session yet.
  */
-export interface DelegateResult {
-  id: string | null;
-  /** The queued request's id, while it waits for owned files. */
-  queued: string | null;
-  text: string;
-  title: string;
-  workItemId: string | null;
-  workspaceId: string | null;
-  /** The workspace's scratch dir on its machine, the delegate's `TMPDIR`: where inputs for it are copied. */
-  workspaceTmp: string | null;
-}
+export type DelegateResult =
+  | {
+      /** Its session. */
+      instanceId: string;
+      state: "started";
+      text: string;
+      title: string;
+      workItemId: string;
+      workspaceId: string;
+      /** The workspace's scratch dir on its machine, the delegate's `TMPDIR`: where inputs for it are copied; absent when the machine named none. */
+      workspaceTmp?: string;
+    }
+  | {
+      /** The queued request's id. */
+      queued: string;
+      state: "queued";
+      text: string;
+      title: string;
+    };
 
 /** A work item as the hub answers for it (`GET /api/work-items/:id`). */
 interface WorkItemView {
@@ -1129,7 +1150,7 @@ const forkOwner = (
 
 /** Why a fork may not act on its origin's delegate. */
 const forkOwnedWords = (peer: Peer, owner: ForkOrigin): string =>
-  `${peer.label} (“${peer.title}”) is a delegate of “${owner.title}” (${owner.id}), the session this one was forked from. It stays that session's: its reports and asks go there, and only that session hands it work, stops, interrupts or answers it. Nothing was done. Delegate the work yourself if this session needs it.`;
+  `${peer.label} (“${peer.title}”) is a delegate of “${owner.title}” (${idHandle(owner.id)}), the session this one was forked from. It stays that session's: its reports and asks go there, and only that session hands it work, stops, interrupts or answers it. Nothing was done. Delegate the work yourself if this session needs it.`;
 
 /**
  * Resolves a target among the caller's own delegates, and the work items of
@@ -1171,17 +1192,16 @@ function resolveDelegate(
 }
 
 /**
- * A handoff's inputs, through the hub (work-items.ts `handInputs`): admitted
- * on `from`'s machine, copied into the `$TMPDIR/inputs/` of `target`'s work
- * item (by that machine itself when the item's workspace is on it too).
- * Answers each one's name and where it was read; the hub's refusal is thrown
- * in its words.
+ * A handoff's inputs, through the hub (work-items.ts `handInputs`): paths
+ * admitted on `from`'s machine and what the hub holds by name, written into
+ * the `$TMPDIR/inputs/` of `target`'s work item. Answers each one's name and
+ * where it came from; the hub's refusal is thrown in its words.
  */
 async function handInputs(
   authorization: string | undefined,
   from: string,
   target: string,
-  inputs: string[]
+  inputs: unknown[]
 ): Promise<{ from: string; name: string }[]> {
   const response = await fetch(`${hubHttpUrl()}/api/work-items/inputs`, {
     method: "POST",
@@ -1205,7 +1225,7 @@ async function saveWorkflowProgram(
   method: string,
   path: string,
   body: { name?: string; program: string }
-): Promise<unknown> {
+): Promise<Workflow> {
   const response = await fetch(`${hubHttpUrl()}${path}`, {
     method,
     headers: { "content-type": "application/json" },
@@ -1223,7 +1243,7 @@ async function saveWorkflowProgram(
     }
     throw new Error(text);
   }
-  return response.json();
+  return (await response.json()) as Workflow;
 }
 
 const coldRefusals = new Map<string, string>();
@@ -1269,12 +1289,12 @@ function jevVerdict(
   const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
   if ("error" in jev) {
     throw new Error(
-      `Refused: "${title}" (${row.id}) is cold, and ${jev.error} Nothing was sent.`
+      `Refused: "${title}" (${idHandle(row.id)}) is cold, and ${jev.error} Nothing was sent.`
     );
   }
   if (!jev.attach) {
     throw new Error(
-      `Refused: "${title}" (${row.id}) is cold, and Jev judged that this message does not need its history (${jev.noul.toFixed(2)}): a fresh delegate with a tight brief fits. Nothing was sent. Start one with delegate and no workspace.`
+      `Refused: "${title}" (${idHandle(row.id)}) is cold, and Jev judged that this message does not need its history (${jev.noul.toFixed(2)}): a fresh delegate with a tight brief fits. Nothing was sent. Start one with delegate and no workspace.`
     );
   }
 }
@@ -1308,7 +1328,7 @@ export function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
   const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
   const commits = `${unlanded.ahead} commit${unlanded.ahead === 1 ? "" : "s"}`;
   const stop = unlanded.live ? "stop its item with stop_delegate, then " : "";
-  return `Refused: "${title}" (${row.id}) is cold, and its workspace ${unlanded.workspaceId} holds ${commits} on no remote with a clean tree. Waking it re-reads its whole transcript at full price; a fresh delegate cut from that workspace's branch starts with those commits for the price of a brief. Nothing was sent.\n\nTo finish that work, ${stop}delegate with from: "${unlanded.workspaceId}" and a brief that says what is left to do. If the work needs this session's own history, make the same call again and it will be delivered.`;
+  return `Refused: "${title}" (${idHandle(row.id)}) is cold, and its workspace ${idHandle(unlanded.workspaceId)} holds ${commits} on no remote with a clean tree. Waking it re-reads its whole transcript at full price; a fresh delegate cut from that workspace's branch starts with those commits for the price of a brief. Nothing was sent.\n\nTo finish that work, ${stop}delegate with from: "${idHandle(unlanded.workspaceId)}" and a brief that says what is left to do. If the work needs this session's own history, make the same call again and it will be delivered.`;
 }
 
 /**
@@ -1374,7 +1394,7 @@ function unlandedVerdict(
   if ("error" in unlanded) {
     const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
     throw new Error(
-      `Refused: "${title}" (${row.id}) is cold, and what its workspace holds on no remote could not be read: ${unlanded.error} Nothing was sent. Retry once its machine answers.`
+      `Refused: "${title}" (${idHandle(row.id)}) is cold, and what its workspace holds on no remote could not be read: ${unlanded.error} Nothing was sent. Retry once its machine answers.`
     );
   }
   if (unlanded.changed > 0) {
@@ -1494,7 +1514,7 @@ export function coldRefusalText(
     row.contextTokens === null
       ? "size not recorded"
       : `about ${(Math.round(row.contextTokens / 1000) * 1000).toLocaleString("en-US")} tokens as of its last request`;
-  return `Refused: "${title}" (${row.id}) is cold. ${age} and its prompt cache (${cache}) has expired, so the next message makes it re-read its whole transcript (${size}) at full price. Nothing was sent.\n\nCheck first:\n1. Does this task need context that session already holds, which a brief could not carry?\n2. Would a fresh delegate with a tight brief cost less than that transcript?\n3. Is the message still needed at all, or was it meant for a session that has moved on?\n\nThen: if a fresh delegate fits, start one with delegate and no workspace. If no message is needed, stop. If this session is the right one, make the same call again and it will be delivered.`;
+  return `Refused: "${title}" (${idHandle(row.id)}) is cold. ${age} and its prompt cache (${cache}) has expired, so the next message makes it re-read its whole transcript (${size}) at full price. Nothing was sent.\n\nCheck first:\n1. Does this task need context that session already holds, which a brief could not carry?\n2. Would a fresh delegate with a tight brief cost less than that transcript?\n3. Is the message still needed at all, or was it meant for a session that has moved on?\n\nThen: if a fresh delegate fits, start one with delegate and no workspace. If no message is needed, stop. If this session is the right one, make the same call again and it will be delivered.`;
 }
 
 type ContinueSessionInput = Parameters<HandoffActions["continueSession"]>[0];
@@ -1760,7 +1780,7 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    return response.json();
+    return (await response.json()) as { workflows: WorkflowListing[] };
   },
   async generateImage(request) {
     const read = await readWithin(
@@ -1853,8 +1873,14 @@ export const handoffActions = ({
         (machine) =>
           `${machineCalled(machine.machineId, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
       );
+    const online = machines.filter((machine) => machine.status === "online");
     const where = [
       `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`,
+      ...(online.length > 0
+        ? [
+            `To name one to the person: ${online.map((machine) => machineLink(machine.machineId, machineCalled(machine.machineId, machines))).join(", ")}.`,
+          ]
+        : []),
       ...paused,
     ].join(" ");
     if (peers.length === 0) {
@@ -1886,7 +1912,7 @@ export const handoffActions = ({
   async handoff(
     target: string,
     message: string,
-    inputs?: string[]
+    inputs?: unknown[]
   ): Promise<string> {
     const { peers, asleep, own, hosts, rows } = roster(fleet, instanceId);
     // A thread (`thread#1a2b3c4d`, or its id): Caw is handed it there.
@@ -2065,7 +2091,7 @@ export const handoffActions = ({
         `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
         `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
         "It is in the sidebar now, under this session, and the user can open its transcript. " +
-        `Hand it more work later with handoff("${id}", ...).`,
+        `Hand it more work later with handoff("${leafOf(settled)}#${id.slice(0, 8)}", ...).`,
     };
   },
 
@@ -2095,26 +2121,13 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    const started = (await response.json()) as {
-      instanceId: string | null;
-      queued: string | null;
-      text: string;
-      title: string;
-      workItemId: string | null;
-      workspaceId: string | null;
-      workspaceTmp: string | null;
-    };
-    return {
-      id: started.instanceId,
-      queued: started.queued,
-      title: started.title,
-      text: target
-        ? `${started.text} It runs on ${machineCalled(target.machineId, fleet.machines())}.`
-        : started.text,
-      workItemId: started.workItemId,
-      workspaceId: started.workspaceId,
-      workspaceTmp: started.workspaceTmp,
-    };
+    const started = (await response.json()) as DelegateResult;
+    return target
+      ? {
+          ...started,
+          text: `${started.text} It runs on ${machineCalled(target.machineId, fleet.machines())}.`,
+        }
+      : started;
   },
 
   async finishItem(request) {
@@ -2228,8 +2241,8 @@ export const handoffActions = ({
     return (
       `Stopped your delegate ${peer.label}${continuesWords(followed)}. Its work item ${item.id} ` +
       (live ? "is cancelled" : `was already ${item.state}`) +
-      `, and its workspace ${item.workspaceId} keeps the checkout. To carry the work on, handoff to it, ` +
-      `or delegate(..., workspace: "${item.workspaceId}"): either continues its own session.`
+      `, and its workspace ${idHandle(item.workspaceId)} keeps the checkout. To carry the work on, handoff to it, ` +
+      `or delegate(..., workspace: "${idHandle(item.workspaceId)}"): either continues its own session.`
     );
   },
 

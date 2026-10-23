@@ -4,22 +4,39 @@
    * no hub. The real SessionPane and the group's composer lent to it as
    * PaneLeaf lends it, over a conversation whose plan has eight steps and
    * which has twelve delegates working: running, starting, waiting on a
-   * heavy-run slot (a long state that has to truncate in its chip) and
+   * the Mac's build slot (a long state that has to truncate in its chip) and
    * queued behind files another item owns. Only the client's state is
    * seeded (dev's `__cawcoDebug`).
    *
-   * In the reader's theme; `?case=` (1r, 1f, 3r2f, 5f, 7r13f,
+   * In the reader's theme; `?case=` (4, 11, 1r, 1f, 3r2f, 5f, 7r13f,
    * 20r) seeds running and failed delegates instead of the twelve.
+   *
+   * `?details` stands the session's details card over the conversation, as
+   * its tab's hover hangs it (the real SessionDetails), the session on
+   * Bypass on a connected machine whose Claude takes every mode and three
+   * efforts: its mode chip opens the picker, Full Send's question in it,
+   * and its effort chip the sibling the picker's surface glides to.
+   *
+   * `?at=<message id>` opens the conversation at that record, as the
+   * finder's "Where it was said" link does (`askOpenAt`): scrolled to it,
+   * and its row marked.
    */
-  import type { SessionPulse, WorkItemSummary } from "@cawco/core";
+  import {
+    CAPABILITIES_NONE,
+    type InstanceRow,
+    type SessionPulse,
+    type WorkItemSummary,
+  } from "@cawco/core";
   import { onMount } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
+  import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
   import type { HeldPlan } from "#lib/cawco/plan.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import { askOpenAt } from "#lib/cawco/transcript/open-at.svelte.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
   import { composerBindings } from "#lib/cawco/workspace/composer-dock.svelte.js";
+  import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
   import { page } from "$app/state";
 
   const ID = "delegate-tray-bench";
@@ -69,7 +86,7 @@
   const SAID: [string, string][] = [
     [
       "Hand the tab and plan work out, one delegate each.",
-      "Twelve are out. Three wait for a heavy-run slot on the build machine and two are queued behind files another item owns; the rest are running.",
+      "Twelve are out. Three wait for the Mac's build slot and two are queued behind files another item owns; the rest are running.",
     ],
     [
       "Tell me when any of them needs me.",
@@ -103,15 +120,32 @@
     globalThis as unknown as {
       __cawcoDebug: {
         state: {
+          status: string;
           pulses: Record<string, SessionPulse>;
           sessions: Record<string, ReturnType<typeof blankSession>>;
           workItems: Record<string, WorkItemSummary>;
           plans: Record<string, HeldPlan>;
         };
+        adoptInstances: (rows: InstanceRow[]) => void;
       };
     }
   ).__cawcoDebug;
 
+  // Running, as the hub would list it: an ask parked on it is the
+  // conversation's own (its composer grows into it over its transcript),
+  // never an ask standing alone with no session behind it.
+  debug.adoptInstances([
+    {
+      id: ID,
+      cwd: "/bench",
+      harness: "claude",
+      kind: "mainline",
+      launchDir: "known",
+      machineId: "bench",
+      sessionId: null,
+      status: "running",
+    },
+  ]);
   debug.state.pulses[ID] = {
     activity: "working",
     at: now,
@@ -125,7 +159,61 @@
   session.cwd = "/bench";
   session.messages = history();
   session.initialized = true;
+  // What its `/` menu lists: a skill and two built-ins.
+  session.commands = {
+    names: ["clean-copy", "compact", "review"],
+    skills: ["clean-copy"],
+    detailed: null,
+    at: now,
+  };
   debug.state.sessions[ID] = session;
+  /** The details card stands over the conversation (`?details`). */
+  const details = page.url.searchParams.has("details");
+  const at = page.url.searchParams.get("at");
+  if (at) {
+    askOpenAt(ID, at);
+  }
+  if (details) {
+    session.harness = "claude";
+    session.permissionMode = "bypassPermissions";
+    session.model = "claude-opus-4-5";
+    session.effort = "medium";
+    cawco.machines.push({
+      auth: "unknown",
+      harnesses: [
+        {
+          auth: "authenticated",
+          capabilities: {
+            ...CAPABILITIES_NONE,
+            effort: true,
+            permissionModes: [
+              "default",
+              "plan",
+              "acceptEdits",
+              "bypassPermissions",
+              "fullSend",
+            ],
+          },
+          harness: "claude",
+          installed: true,
+          models: [
+            {
+              displayName: "Opus 4.5",
+              value: "claude-opus-4-5",
+              supportedEffortLevels: ["low", "medium", "high"],
+            },
+          ],
+        },
+      ],
+      hostname: "bench",
+      lastSeenAt: null,
+      machineId: "bench",
+      os: "linux",
+      pausedUntil: null,
+      pauseStopped: null,
+      status: "online",
+    });
+  }
   debug.state.plans[ID] = {
     rev: 1,
     plan: {
@@ -139,11 +227,14 @@
     },
   };
   /**
-   * `?case=` seeds the tray's cases instead (the shelf's spec,
-   * tray-shelf): running and failed delegates, in creation order, the
-   * failures spread among the running so each has later items.
+   * `?case=` seeds the tray's cases instead: running and failed delegates,
+   * in creation order, the failures spread among the running so each has
+   * later items. `4` and `11` are the composer-layers spec's (four
+   * delegates, one of them failed; eleven, three failed).
    */
   const CASES: Record<string, { running: number; failed: number }> = {
+    "4": { running: 3, failed: 1 },
+    "11": { running: 8, failed: 3 },
     "1r": { running: 1, failed: 0 },
     "1f": { running: 0, failed: 1 },
     "3r2f": { running: 3, failed: 2 },
@@ -215,6 +306,16 @@
     entered.set(item.instanceId, "none");
   });
 
+  // The card's live controls take changes while the machine is connected
+  // and the session runs on it. The page opens its socket to the bench's
+  // stand-in, which never sends a board (the page stays connecting): the
+  // bench says the hub is reached, after the page has said it is reaching.
+  $effect(() => {
+    if (details && cawco.status !== "connected") {
+      debug.state.status = "connected";
+    }
+  });
+
   /** The conversation's binding, lent to the group's composer as PaneLeaf lends it. */
   const lent = $derived(composerBindings.get(ID));
 
@@ -227,6 +328,13 @@
     delete debug.state.sessions[ID];
     delete debug.state.plans[ID];
     delete debug.state.pulses[ID];
+    debug.adoptInstances([]);
+    if (details) {
+      cawco.machines.splice(
+        cawco.machines.findIndex((one) => one.machineId === "bench"),
+        1
+      );
+    }
   });
 </script>
 
@@ -290,6 +398,24 @@
             { delegatesOf: lent.delegatesOf, id: ID, prompts: lent.prompts },
           ]}
         />
+      </div>
+    {/if}
+    {#if details}
+      <!-- As its tab's hover hangs it: Caw's lead card's width, on the
+           floating surface, over the conversation's top. -->
+      <div class="pointer-events-none absolute inset-x-space-3 top-space-3 z-2">
+        <div
+          data-slot="details-card"
+          class="pointer-events-auto w-c-lead-card-w max-w-full overflow-hidden rounded-lg border border-border-control bg-surface-raised shadow-overlay"
+        >
+          <SessionDetails
+            dir={1}
+            href="/motion/delegate-tray?details"
+            onclose={() => undefined}
+            sessionId={ID}
+            title="Delegate tray bench"
+          />
+        </div>
       </div>
     {/if}
   </div>

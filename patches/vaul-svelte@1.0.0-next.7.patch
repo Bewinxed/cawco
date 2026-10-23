@@ -16,3 +16,55 @@ index 16c10a769f5f3cb71c918cd035651f94c3dc1dc9..5469e0ff4b32e77fdd8c2b8d0fd58cbc
  
  	const styleProp = $derived(
  		snapPointsOffset && snapPointsOffset.length > 0
+diff --git a/dist/use-drawer-content.svelte.js b/dist/use-drawer-content.svelte.js
+index 854a49f0ee696573fc6a89d673c274a1da79f5f0..39d0ac43a1ca98ddcfc75dfbdc0563a548411c04 100644
+--- a/dist/use-drawer-content.svelte.js
++++ b/dist/use-drawer-content.svelte.js
+@@ -23,6 +23,8 @@ export function useDrawerContent(opts) {
+     let delayedSnapPoints = $state(false);
+     let pointerStart = null;
+     let lastKnownPointerEvent = null;
++    // CawCo's patch: the pointer that pressed the sheet, whose drag it is.
++    let pressedPointerId = null;
+     let wasBeyondThePoint = false;
+     const hasSnapPoints = $derived(ctx.snapPoints.current && ctx.snapPoints.current.length > 0);
+     useScaleBackground();
+@@ -64,6 +66,7 @@ export function useDrawerContent(opts) {
+         ctx.onRelease(e);
+     }
+     function onpointerdown(e) {
++        pressedPointerId = e.pointerId;
+         if (ctx.handleOnly.current)
+             return;
+         opts.onpointerdown.current?.(e);
+@@ -93,6 +96,11 @@ export function useDrawerContent(opts) {
+         }
+     }
+     function onpointermove(e) {
++        // CawCo's patch: while a drag runs, another pointer's move (a cursor
++        // over the sheet a finger drags) neither drives it nor stands as
++        // the event it is released with.
++        if (pointerStart && e.pointerId !== pressedPointerId)
++            return;
+         lastKnownPointerEvent = e;
+         if (ctx.handleOnly.current)
+             return;
+@@ -120,6 +128,18 @@ export function useDrawerContent(opts) {
+     }
+     function onpointerout(e) {
+         opts.onpointerout.current?.(e);
++        // CawCo's patch (patches/vaul-svelte@1.0.0-next.7.patch): a finger's
++        // pointerout mid-drag released it, and the sheet closed or snapped
++        // back under the finger (huntabyte/vaul-svelte#123). Upstream's own
++        // fix, open PR huntabyte/vaul-svelte#134, unreleased in 1.0.0-next.7;
++        // drop this line once a release carries it.
++        if (e.pointerType === "touch") return;
++        // CawCo's patch: only the pointer that pressed ends its drag by
++        // leaving. A resting cursor the sheet slid under (an iPad's trackpad,
++        // a touch laptop) fired a mouse pointerout mid-swipe that released
++        // the finger's drag (probe parked-start, the swipe leg's log); the
++        // same line stands in React vaul's onPointerOut, unfixed upstream.
++        if (e.pointerId !== pressedPointerId) return;
+         handleOnPointerUp(lastKnownPointerEvent);
+     }
+     function oncontextmenu(e) {

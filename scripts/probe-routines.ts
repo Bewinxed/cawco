@@ -100,7 +100,8 @@ const respond = (request: Seen): Reply => {
   }
   // The worker that makes a routine through its tool (6).
   if (request.all.includes("PROBE-AGENT-CREATE")) {
-    if (request.last.includes('"createdBy"')) {
+    // routine_create answers the routine's line (hub presenters/project.ts `routineWords`).
+    if (request.last.includes("- Agent nightly sweep ")) {
       return text("made");
     }
     return call(request, CREATE, {

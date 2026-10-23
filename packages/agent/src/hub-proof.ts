@@ -21,22 +21,21 @@ export const setConnectedHub = (hubId: string): void => {
 };
 
 /**
- * Records the id of the hub this machine joined, by its challenge, when
- * the agent reached it at the address `config.json` names and none is
- * recorded yet: what rediscovery holds a candidate to (discovery.ts), so
- * another hub on the network never takes this machine.
+ * Records the hub this machine's agent is connected to, as it connected
+ * (the address its environment or `--hub` named winning over the one
+ * written before) and by its challenge's id: what rediscovery holds a
+ * candidate to (discovery.ts), so another hub on the network never takes
+ * this machine, and what says this is the machine's agent
+ * (machine-agent.ts).
  */
 export const recordJoinedHub = async (
   url: string,
   hubId: string
 ): Promise<void> => {
   const config = await readConfig();
-  if (
-    config?.hubUrl &&
-    !config.hubId &&
-    toHttpBase(config.hubUrl) === toHttpBase(url)
-  ) {
-    await writeConfig({ hubId });
+  const hubUrl = toHttpBase(url);
+  if (hubUrl && (config?.hubUrl !== hubUrl || config.hubId !== hubId)) {
+    await writeConfig({ hubUrl, hubId });
   }
 };
 

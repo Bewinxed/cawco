@@ -1,13 +1,12 @@
 /**
- * A changed look, caught for review: a capture against the baseline the
- * owner approved, `baselines/web/<spec>/<name>.png`, with pixelmatch
- * (Playwright's visual comparison "uses the pixelmatch library":
- * `threshold`, default 0.2, and a count of pixels allowed to differ). A
- * capture that differs never fails the run: UI is judged by its look and
- * its correctness against DESIGN.md, never by sameness with older screens.
- * It writes the region that changed, cropped, beside the capture, says so in
- * a NOTE, and hands the change to the run for the owner's review page
- * (`--review`, review.ts). Nothing here asks anyone to look.
+ * Regressions by pixel diff: a capture against the baseline the owner
+ * approved, `baselines/web/<spec>/<name>.png`, with pixelmatch (Playwright's
+ * visual comparison "uses the pixelmatch library": `threshold`, default 0.2,
+ * and a count of pixels allowed to differ). Nothing here asks anyone to look:
+ * a failed diff writes the region that changed, cropped, beside the capture
+ * for a reviewer, and names its path, and hands the change to the run for
+ * the owner's review page (`--review`, review.ts): a capture that differs
+ * is a FAIL until the owner approves it or the code draws the baseline again.
  *
  * `--approve <spec>` writes the spec's captures as its baselines, and
  * `--approve <spec>:<name>,…` the captures named alone (`kit.approves`): the
@@ -30,21 +29,23 @@ export interface DiffOptions {
   mask?: Locator[];
   /** Pixels allowed to differ (pixelmatch's count). */
   maxDiffPixels?: number;
+  /** The catalogue surface the capture shows: its decision on the review page. */
+  surface: string;
   /** pixelmatch's per-pixel threshold, 0 to 1. */
   threshold?: number;
 }
 
 /**
- * Captures `name` and sets it beside its baseline: a NOTE where it differs
- * (the change kept for `--review`) or where none is approved yet. Captured
- * with the page's animations as they stand (a seeked frame stays seeked) and
- * the caret hidden. Says whether the capture differs from its baseline.
+ * Captures `name` and holds it to its baseline: a PASS or FAIL line, or a
+ * note where none is approved yet. Captured with the page's animations as
+ * they stand (a seeked frame stays seeked) and the caret hidden. Says
+ * whether the capture differs from its baseline.
  */
 export async function diff(
   kit: Kit,
   page: Page,
   name: string,
-  options: DiffOptions = {}
+  options: DiffOptions
 ): Promise<boolean> {
   const shot = await page.screenshot({
     clip: options.clip,
@@ -63,6 +64,15 @@ export async function diff(
     return false;
   }
   if (!existsSync(baseline)) {
+    kit.changed({
+      entry: name,
+      surface: options.surface,
+      baseline: null,
+      capture,
+      box: null,
+      diff: null,
+      pixels: null,
+    });
     kit.note(
       `${name}: no approved baseline; capture for the owner's review at ${capture}`
     );
@@ -71,9 +81,19 @@ export async function diff(
   const want = PNG.sync.read(await readFile(baseline));
   const got = PNG.sync.read(shot);
   if (want.width !== got.width || want.height !== got.height) {
-    kit.changed({ entry: name, baseline, capture, box: null });
-    kit.note(
-      `${name}: differs from its baseline, for review: size ${got.width}×${got.height}, baseline ${want.width}×${want.height}; capture ${capture}`
+    kit.changed({
+      entry: name,
+      surface: options.surface,
+      baseline,
+      capture,
+      box: null,
+      diff: null,
+      pixels: null,
+    });
+    kit.check(
+      `${name} matches its baseline`,
+      false,
+      `size ${got.width}×${got.height}, baseline ${want.width}×${want.height}; capture ${capture}`
     );
     return true;
   }
@@ -88,17 +108,28 @@ export async function diff(
   );
   const allowed = options.maxDiffPixels ?? 0;
   if (differing <= allowed) {
+    kit.check(`${name} matches its baseline`, true, `${differing} px differ`);
     return false;
   }
-  const box = changedBox(out, 8);
+  // One box for the crop and the review page's two pictures, so the three line up.
+  const box = changedBox(out, 48);
   const cut = new PNG({ width: box.width, height: box.height });
   PNG.bitblt(out, cut, box.x, box.y, box.width, box.height, 0, 0);
   const crop = join(kit.out, `${name}.diff.png`);
   await writeFile(crop, PNG.sync.write(cut));
-  // The owner's review page (`--review`) cuts both pictures wider than this.
-  kit.changed({ entry: name, baseline, capture, box: changedBox(out, 48) });
-  kit.note(
-    `${name}: differs from its baseline, for review: ${differing} px (allowed ${allowed}); the region that changed: ${crop}`
+  kit.changed({
+    entry: name,
+    surface: options.surface,
+    baseline,
+    capture,
+    box,
+    diff: crop,
+    pixels: differing,
+  });
+  kit.check(
+    `${name} matches its baseline`,
+    false,
+    `${differing} px differ (allowed ${allowed}); the region that changed: ${crop}`
   );
   return true;
 }

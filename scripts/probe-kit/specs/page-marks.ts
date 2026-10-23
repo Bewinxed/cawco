@@ -27,8 +27,11 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
+import { startsWith } from "../words";
 
 /** A replaced selector and the attribute that says the same, on one kind of element. */
 interface Pair {
@@ -46,7 +49,7 @@ const SCRIM =
   ':is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="drawer-overlay"], [data-slot="sheet-overlay"])';
 const NEW_SESSION = /^(New session|Start session)$/;
 const PROJECT_CHIP = /^Project:/;
-const PERMISSION_MODE = /^Permission mode:/;
+const PERMISSION_MODE = startsWith(spawnWords.permissionModeHead);
 const PAIRS: Pair[] = [
   {
     name: "bar floating",
@@ -347,7 +350,9 @@ const run = async (kit: Kit) => {
   await at(phone, "phone session");
   await keep(phone, "phone session");
   await at(phone, "phone sidebar");
-  await phone.getByRole("button", { name: "Open navigation" }).click();
+  await phone
+    .getByRole("button", { name: sidebarWords.openNavigation })
+    .click();
   await phone.waitForSelector('[data-rail-sheet][data-state="open"]');
   await keep(phone, "phone sidebar");
   await at(phone, "phone sidebar leaving");

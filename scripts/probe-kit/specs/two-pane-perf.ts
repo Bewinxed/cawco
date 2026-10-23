@@ -50,7 +50,7 @@
  *
  * A LEG COUNTS ONLY WHILE THE MACHINE IS QUIET (quiet.ts `quietLeg`): the
  * whole machine's CPU and memory pressure under its limit at the leg's
- * start, middle and end, the reading heavy-run admission reads; a leg over
+ * start, middle and end; a leg over
  * it is void and measured again, and each leg's note leads with its
  * readings, the box's load average beside them for reference only. The
  * pressure that cannot be read stops the spec: there is no other gate.

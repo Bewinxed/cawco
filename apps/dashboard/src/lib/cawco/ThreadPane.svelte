@@ -32,7 +32,12 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
-  import { crossIn, crossOut, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    reveal,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -51,6 +56,7 @@
     type BlockedRequest,
     blankSession,
     cawco,
+    commandFault,
     readThread,
     readTranscript,
     type SendExtras,
@@ -64,10 +70,11 @@
     watchDelegate,
     watchPlan,
   } from "./client.svelte";
+  import { frameSize } from "./frame-observer";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
-  import { planProgress, planShows } from "./plan/PlanPane.svelte";
+  import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
   import {
@@ -152,28 +159,17 @@
   );
   setTaskProject(() => projectId);
 
-  let paneWidth = $state(0);
   /**
-   * The pane's width as the layout below reads it. Its first width (none laid
-   * yet) is taken as the binding reports it, so the first frame painted is
-   * the split or the sheet the pane's width asks for. Every change after it
-   * is taken in the next frame's callbacks: the binding hears it in a
-   * ResizeObserver callback, and read there, a pane crossing 900px swapped
-   * the split for the sheet (and resized Caw's box) inside that delivery, at
-   * a depth the delivery had passed ("ResizeObserver loop completed with
-   * undelivered notifications").
+   * The pane's width as the layout below reads it: read as the pane mounts,
+   * so the first frame painted is the split or the sheet the pane's width
+   * asks for, and a change in the next frame (frameSize). Read inside a
+   * ResizeObserver delivery, a pane crossing 900px swapped the split for the
+   * sheet (and resized Caw's box) there, at a depth the delivery had passed
+   * ("ResizeObserver loop completed with undelivered notifications").
    */
   let laidWidth = $state(0);
-  $effect(() => {
-    const width = paneWidth;
-    if (untrack(() => laidWidth) === 0) {
-      laidWidth = width;
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      laidWidth = width;
-    });
-    return () => cancelAnimationFrame(frame);
+  const measurePane = frameSize<HTMLElement>((node) => {
+    laidWidth = node.clientWidth;
   });
   const coarse = new MediaQuery("(pointer: coarse)");
   /** Caw's still box on the composer: 56px at a desk, 48px on a phone. */
@@ -366,7 +362,14 @@
   const planProgressNow = $derived(
     leadPlan && planShows(leadPlan) ? planProgress(leadPlan) : null
   );
-  let side = $state<ReturnType<typeof SideSplit>>();
+  /** The lead's plan its ring opens over the composer's row (PlanPane). */
+  let planOpen = $state(false);
+  // A plan with nothing left to show takes its open plan with it.
+  $effect(() => {
+    if (!planProgressNow) {
+      planOpen = false;
+    }
+  });
   /** The side surface's share of the width, in percent. */
   let sideShare = $state(0);
   /** The side surface is the bottom drawer, a task its own page; null until the pane is measured (layoutPolicy.sideDrawer). */
@@ -712,6 +715,15 @@
     }
   }
 
+  /**
+   * A stop of the lead's turn that failed, said over this composer with Try
+   * again (client.svelte.ts `commandFault`), unless a send's failure stands
+   * there already.
+   */
+  const leadFault = $derived(lead ? commandFault(lead) : null);
+  const composerError = $derived(sendError || (leadFault?.words ?? ""));
+  const faultAgain = $derived(sendError ? undefined : leadFault?.again);
+
   /** Stop interrupts the lead's turn. */
   function onstop() {
     const row = lead ? cawco.instanceIndex.byId.get(lead) : undefined;
@@ -734,10 +746,13 @@
       return sending;
     },
     get sendError() {
-      return sendError;
+      return composerError;
     },
     get sendAgain() {
       return sendAgain;
+    },
+    get faultAgain() {
+      return faultAgain;
     },
     get paneVisible() {
       return visible;
@@ -786,7 +801,7 @@
   });
 
   /** What the composer stands over the foot: the fade and "Jump to latest" rest on it. */
-  let foot = $state<ComposerFoot>({ stack: 0, perch: 0, parked: 0, shelf: 0 });
+  let foot = $state<ComposerFoot>({ stack: 0, perch: 0, parked: 0 });
   /**
    * Scrolled away from the tail, the way back rests on the composer's stack,
    * beside Caw; the foot's fade is solid to the higher of his top and its
@@ -798,8 +813,14 @@
   const fadeSolid = $derived(
     `max(calc(var(--space-4) + ${foot.stack + foot.perch}px), calc(${latestFoot} + var(--c-btn-h-sm)))`
   );
-  /** The problem line's height, standing where the composer would: the foot clears it. */
+  /**
+   * The problem line's height, standing where the composer would: the foot
+   * clears it. Read as it mounts, and a change in the next frame (frameSize).
+   */
   let offHeight = $state(0);
+  const measureOff = frameSize<HTMLElement>((node) => {
+    offHeight = node.clientHeight;
+  });
   /**
    * Room at the transcript's foot for what stands over it: the composer and
    * Caw's rise above the pill (his slot over the ledge line, and the
@@ -822,14 +843,19 @@
    * Docked in Caw's panel, the composer has a place of its own at the foot
    * and the room ends over it (the owner's pins 17 and 22): nothing scrolls
    * under the composer or Caw on its pill, or under the line standing in its
-   * place when he can't start.
+   * place when he can't start. The place is the composer at rest, from its
+   * tokens (`composerRoom`), never its measured height: what grows out of
+   * it (an attachment's row, a longer draft, the ask it grows into, its
+   * tray's shelf, the plan) stands over the transcript's foot as it does
+   * undocked, and the transcript's box never changes for it (DESIGN.md,
+   * The Composer Layer Rule).
    */
   const reserved = $derived.by(() => {
     if (!docked) {
       return null;
     }
-    const over = writable ? foot.stack + foot.perch : offHeight;
-    return `calc(var(--space-4) + var(--safe-bottom) + ${over}px + var(--space-2))`;
+    const over = writable ? composerRoom : `${offHeight}px`;
+    return `calc(var(--space-4) + var(--safe-bottom) + ${over} + var(--space-2))`;
   });
   /**
    * Where "Jump to latest" rests, up from the transcript's foot: on the
@@ -965,10 +991,20 @@
   {#if planProgressNow}
     <PlanRing
       done={planProgressNow.done}
-      onopen={() => side?.openPlan()}
-      open={side?.planShowing() ?? false}
+      onopen={() => {
+        planOpen = !planOpen;
+      }}
+      open={planOpen}
       total={planProgressNow.total}
     />
+    {#if planOpen && lead}
+      <PlanPane
+        instanceId={lead}
+        onclose={() => {
+          planOpen = false;
+        }}
+      />
+    {/if}
   {/if}
 {/snippet}
 
@@ -1061,16 +1097,16 @@
             shown = drawn;
           }}
           parkedHeight={writable ? foot.parked : 0}
-          shelfHeight={writable ? foot.shelf : 0}
           {session}
           {visible}
         />
       </div>
       <HeadFade />
     {/if}
-    <!-- The skeleton stands in for rows still on their way and goes the
-         moment they are drawn: its rows are not where the real ones fall, so
-         fading it over them reads as a second, stale transcript. -->
+    <!-- The skeleton stands in for rows still on their way and hands its
+         place to them in its reveal (motion/curves `reveal`) once they are
+         drawn: its blur carries its rows into the real ones, which fall
+         elsewhere. -->
     {#if writable && !docked}
       <FootFade solid={foot.stack ? fadeSolid : undefined} />
     {/if}
@@ -1078,6 +1114,7 @@
       <div
         class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
         in:crossIn
+        out:reveal
       >
         <TranscriptSkeleton />
       </div>
@@ -1088,7 +1125,7 @@
 <div
   data-slot="pane"
   class="@container flex flex-col flex-auto min-w-0 min-h-0 bg-surface-recess"
-  bind:clientWidth={paneWidth}
+  {@attach measurePane}
 >
   <div
     data-slot="body"
@@ -1104,13 +1141,11 @@
       <SideSplit
         {active}
         {phone}
-        planOf={lead}
         previewOf={lead}
         task={stages ? taskSurface : undefined}
         taskOpen={openTask !== null}
         {viewId}
         {visible}
-        bind:this={side}
         bind:share={sideShare}
       >
         {@render slide()}
@@ -1141,8 +1176,9 @@
             perch={hero ? undefined : perch}
             placeholder={binding.placeholder}
             recallOf={viewId}
+            {faultAgain}
             {sendAgain}
-            {sendError}
+            sendError={composerError}
             {sending}
             suggest={binding.suggest}
           />
@@ -1162,7 +1198,7 @@
         class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) w-c-composer-w mx-auto"
         data-safe-bottom
         style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
-        bind:clientHeight={offHeight}
+        {@attach measureOff}
         in:crossIn
         out:crossOut
       >

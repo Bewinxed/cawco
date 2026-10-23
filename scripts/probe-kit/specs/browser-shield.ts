@@ -24,14 +24,15 @@
  *   module the daemon runs, on the browser's own DevTools port;
  * - `/handback`: control reset and the clipboard empty (container), the
  *   page loaded again by GET (a mark A left on it is gone, its navigation a
- *   `navigate`), the gate open to A again; A's tool answers
- *   `{"outcome":"handed_back","origin":"https://example.com"}`;
+ *   `navigate`), the gate open to A again; A's tool answers in the words
+ *   the hub's presenter gives a hand-back on https://example.com
+ *   (browser-tools.ts `browserAnsweredWords`), and nothing else;
  * - the agent restarted mid-take-over: its gate's first answer, as soon as
  *   it listens again, is 423 with the shield's sentence (browsers.ts
  *   `gateFor` makes it closed from the record's `takeover`), and the
  *   take-over still hands back as below;
  * - a second ask taken over with no view for two minutes is handed back by
- *   the daemon, and A's tool answers the same shape;
+ *   the daemon, and A's tool answers the same words;
  * - on the local leg (the agent's runtime hidden), the container leg's
  *   browser is still a container browser: not live, its why naming the
  *   runtime that isn't answering, its volume kept; with the runtime back it
@@ -51,6 +52,8 @@ import {
   type BrowserKey,
   SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
+import { browserAnsweredWords } from "../../../packages/hub/src/browser-tools";
+import { toolWords } from "../../lib/tool-call";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -59,7 +62,8 @@ const ORIGIN = "https://example.com";
 const REASON = "Sign in to Example so I can read the page behind it.";
 const SHIELD = SHIELD_WORDS;
 const ONLY_THE_PERSON = "Only the person takes over";
-const HANDED_BACK = JSON.stringify({
+/** What A reads once the person hands the browser back on {@link ORIGIN}. */
+const HANDED_BACK = browserAnsweredWords({
   outcome: "handed_back",
   origin: ORIGIN,
 });
@@ -227,22 +231,17 @@ const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
     .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
     ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
 
-/** `browser_ask` called through the hub's tool door as session `id`: its answer's text. */
+/** `browser_ask` called through the hub's tool door as session `id`: the words its agent reads, or the refusal's marked as one. */
 const ask = (fleet: KitFleet, id: string, credential: string) =>
-  readWithin(10 * 60_000, async (signal) => {
-    const response = await fetch(`${fleet.base}/api/delegation/call/${id}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${credential}`,
-      },
-      body: JSON.stringify({
-        name: "browser_ask",
-        arguments: { reason: REASON, origin: ORIGIN },
-      }),
-      signal,
-    });
-    return `${response.status} ${await response.text()}`;
+  readWithin(10 * 60_000, async () => {
+    // The client's own bound past this read's: the read answers first.
+    const said = await toolWords(
+      { base: fleet.base, id, credential },
+      "browser_ask",
+      { reason: REASON, origin: ORIGIN },
+      { timeoutMs: 11 * 60_000 }
+    );
+    return said.refused ? `refused: ${said.text}` : said.text;
   });
 
 /** The browser ask parked for session `id`, as `/api/pending` lists it. */
@@ -603,8 +602,8 @@ async function leg(
   }
   const said = await answered;
   kit.check(
-    `${host}: A's tool answered ${HANDED_BACK}`,
-    said.kind === "answered" && said.value.includes(HANDED_BACK),
+    `${host}: A's tool answered "${HANDED_BACK}"`,
+    said.kind === "answered" && said.value === HANDED_BACK,
     JSON.stringify(said)
   );
 
@@ -618,10 +617,10 @@ async function leg(
   const started = Date.now();
   const auto = await readWithin(UNWATCHED_MS + 60_000, () => again);
   kit.check(
-    `${host}: viewers 0 for 2 min → handed back by the daemon in ${Math.round((Date.now() - started) / 1000)} s, same answer shape`,
+    `${host}: viewers 0 for 2 min → handed back by the daemon in ${Math.round((Date.now() - started) / 1000)} s, the same words`,
     auto.kind === "answered" &&
       auto.value.kind === "answered" &&
-      auto.value.value.includes(HANDED_BACK),
+      auto.value.value === HANDED_BACK,
     JSON.stringify(auto)
   );
   rawA.socket.close();

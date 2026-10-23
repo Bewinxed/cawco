@@ -44,14 +44,31 @@
    * hub finds it taken; once HTTPS is on, the row's tick with the https
    * dashboard to open.
    *
-   * The hub's `.local` name typed in a browser is one of the same: its line,
-   * then its one step (the command that lets the hub answer on port 80),
-   * ticking once the hub holds the port.
+   * This browser's presence is one more: its notice as its line (what
+   * Chrome shares, and that what needs you shows here instead of on your
+   * phone), then Skip and Allow as peers. Allow asks the browser for Idle
+   * Detection and notifications on one press; a refusal says what the
+   * browser blocked and where to change it; once allowed, the row's tick.
+   *
+   * An artifact waiting on you (core artifact-needs.ts) is a session's row:
+   * its session's mark, its ask and its wait, then why it waits ("3 of 9
+   * picked · 2 unsent · 1 new answer"), then its project, its kind (Page,
+   * Canvas, Components) by its glyph, and its machine. The row opens its
+   * session with the artifact in its panel at its first pending stop. Send
+   * stands at the meta line's end while something is written and not sent,
+   * and the first line's ✕ is Not now: it leaves Needs you, stays in Files
+   * with its dot, and comes back when it is raised again.
    */
   import {
-    localNameWords,
+    type ArtifactKind,
+    artifactWords,
+    askWords,
+    causeLine,
+    connectWords,
     pairingWords,
+    presenceWords,
     questionsOf,
+    reasonLine,
     type TailnetHttps,
     type TailnetHttpsTodo,
     tailnetWords,
@@ -62,6 +79,7 @@
     type UpstreamPosts,
     upstreamPostsWords,
   } from "@cawco/core/upstream-guard";
+  import type { Component } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";
   import {
@@ -72,6 +90,9 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
+    IconArtifactCanvas,
+    IconArtifactPage,
+    IconArtifactSheet,
     IconCheck,
     IconClose,
     IconDollar,
@@ -82,6 +103,7 @@
     IconInteract,
     IconLock,
     IconMaximize,
+    IconMonitor,
     IconNeedsYou,
     IconSend,
     IconServer,
@@ -90,9 +112,11 @@
     IconTailnetHttps,
     IconTick,
     IconWarningTriangle,
+    IconWindow,
     IconWorkflow,
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
+  import CopyBox from "../CopyBox.svelte";
   import {
     answerFleetUpstream,
     answerFor,
@@ -105,10 +129,15 @@
   } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
-  import CopyBox from "../join/CopyBox.svelte";
   import { conversationHref } from "../links";
+  import { notices } from "../notices.svelte";
   import OriginText from "../OriginText.svelte";
   import OsMark from "../OsMark.svelte";
+  import { allowHere, person, skipHere } from "../person.svelte";
+  import { sendArtifact } from "../preview/artifact-doc";
+  import RowFault from "../RowFault.svelte";
+  import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
+  import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import { capLine } from "../usage";
@@ -138,13 +167,16 @@
     if (
       item.kind === "choice" ||
       item.kind === "tailnet" ||
-      item.kind === "local-name" ||
+      item.kind === "desk" ||
       item.kind === "relay"
     ) {
       return;
     }
     if (item.kind !== "ask") {
-      return item.href;
+      // An artifact's is its session's (or Caw's thread's) address; the
+      // press opens the artifact there itself (`chosen`), so a press on the
+      // address already in front opens it too.
+      return item.kind === "artifact" ? item.href.split("?")[0] : item.href;
     }
     // An ask opens where it was made (`askView`).
     return conversationHref(askView(item), cawco.instanceIndex);
@@ -167,20 +199,20 @@
         return item.done
           ? tailnetWords.done(item.tailnet.dashboard ?? "")
           : tailnetWords.lead;
-      case "local-name":
+      case "desk":
         return item.done
-          ? localNameWords.done(item.localName.name)
-          : localNameWords.lead(
-              item.localName.name,
-              item.localName.host,
-              item.localName.dashboardPort
-            );
+          ? presenceWords.done(item.idle)
+          : presenceWords.lead(item);
       case "relay":
         return "";
+      case "artifact":
+        return reasonLine(item.pending);
       case "pairing":
         return pairingWords.asks(item.request.userCode);
       case "admission":
         return "Waits to join your fleet. Admitted, it runs sessions like your other machines.";
+      case "install":
+        return causeLine(item.install);
       case "task":
         return item.reason === "review"
           ? `Review the draft: it waits on you in ${item.stage}`
@@ -295,8 +327,8 @@
         return "Onboarding · each project can change it";
       case "tailnet":
         return tailnetWords.meta(item.tailnet.host);
-      case "local-name":
-        return localNameWords.meta(item.localName.host);
+      case "desk":
+        return presenceWords.meta;
       case "relay":
         return "";
       case "pairing":
@@ -305,7 +337,12 @@
         return ["Machine", item.machine.platform, item.place]
           .filter(Boolean)
           .join(" · ");
+      case "install":
+        return item.install.route === "ssh"
+          ? connectWords.addMachineOver("over SSH")
+          : connectWords.addMachineOver("by a command");
       case "action":
+      case "artifact":
       case "ask":
       case "cap":
       case "task":
@@ -341,7 +378,56 @@
    * session's machine is offline. It keeps its place, dimmed, and its
    * answer waits; nothing is sent until it can land.
    */
-  const held = $derived(stale || (item.kind === "ask" && item.stale));
+  const held = $derived(
+    stale || ((item.kind === "ask" || item.kind === "artifact") && item.stale)
+  );
+
+  /** An artifact's kind, by its glyph (ArtifactMenu's). */
+  const ARTIFACT_GLYPHS: Record<ArtifactKind, Component> = {
+    page: IconArtifactPage,
+    canvas: IconArtifactCanvas,
+    preview: IconWindow,
+    component: IconArtifactSheet,
+    browser: IconGlobe,
+  };
+
+  /**
+   * An artifact's Send on its way, and the hub's refusal of it: the row
+   * leaves, or its unsent reason does, once the hub has it.
+   */
+  let sendingArtifact = $state(false);
+  let sendRefused = $state<string | null>(null);
+  async function sendItsMarks(): Promise<void> {
+    if (item.kind !== "artifact" || held || sendingArtifact) {
+      return;
+    }
+    sendingArtifact = true;
+    sendRefused = null;
+    try {
+      await sendArtifact(item.instanceId, item.artifactId);
+    } catch (error) {
+      sendRefused = failureWords(error);
+    } finally {
+      sendingArtifact = false;
+    }
+  }
+
+  /** The row was chosen: it opens, the panel closes; an artifact opens in its panel at its first pending stop. */
+  function chosen(): void {
+    onchoose();
+    if (item.kind === "artifact") {
+      // biome-ignore lint/complexity/noVoid: a refusal is kept where its row says it (artifactOpenKey)
+      void openArtifactIn(item.instanceId, item.artifactId, item.stop);
+    }
+  }
+
+  /** Not now: acknowledged for every device; it waits in Files until it is raised again. */
+  function notNow(): void {
+    if (item.kind !== "artifact") {
+      return;
+    }
+    notices.acknowledge([item.notNow]).catch(() => undefined);
+  }
   /**
    * A session's ask can be peeked, in the wide layout: a thread is opened,
    * not peeked (it is the conversation itself), and a run and a budget have
@@ -399,7 +485,7 @@
     request: { browserAsk?: unknown };
   }): string => {
     if (ask.request.browserAsk) {
-      return "Browser ask";
+      return askWords.browserAsk;
     }
     return ask.isQuestion ? "Question" : "Permission";
   };
@@ -493,42 +579,18 @@
     };
   }
 
-  /**
-   * Every step on an onboarding row's path, while one stands; none once it
-   * is done: HTTPS on the tailnet's, and port 80 for the `.local` name's one.
-   */
-  const todos = $derived.by(
-    (): {
-      step: string;
-      done: boolean;
-      label: string;
-      note: string;
-      href?: string;
-      link?: string;
-      command?: string;
-    }[] => {
-      if (item.kind === "local-name" && !item.done) {
-        return [
-          {
-            step: "low-ports",
-            done: false,
-            label: localNameWords.step,
-            note: localNameWords.note(item.localName.host),
-            command: item.localName.command,
-          },
-        ];
-      }
-      if (item.kind !== "tailnet" || item.done) {
-        return [];
-      }
-      const { tailnet } = item;
-      return (tailnet.steps ?? []).map((todo) => ({
-        step: todo.step,
-        done: todo.done,
-        ...tailnetTodo(tailnet, todo),
-      }));
+  /** Every step on the tailnet's path, while one stands; none once HTTPS is on. */
+  const todos = $derived.by(() => {
+    if (item.kind !== "tailnet" || item.done) {
+      return [];
     }
-  );
+    const { tailnet } = item;
+    return (tailnet.steps ?? []).map((todo) => ({
+      step: todo.step,
+      done: todo.done,
+      ...tailnetTodo(tailnet, todo),
+    }));
+  });
   /** An approved action waiting for your approval: Deny and Approve stand. */
   const approvable = $derived(
     item.kind === "action" && item.action.state === "proposed"
@@ -606,12 +668,17 @@
     data-slot="row"
     class="group/row relative grid min-h-c-row-h grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2 data-stale:opacity-55"
     data-flip
+    data-artifact={item.kind === "artifact" ? item.artifactId : undefined}
     data-kind={item.kind}
-    data-peek={peeks || undefined}
+    data-peek={peeks || item.kind === "artifact" || undefined}
     data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
     data-stale={held || undefined}
-    style:--peek-glyph="var(--c-peek-glyph)"
-    style:--peek-ink={"calc((var(--c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"}
+    style:--peek-glyph={item.kind === "artifact"
+      ? "var(--icon-sm)"
+      : "var(--c-peek-glyph)"}
+    style:--peek-ink={item.kind === "artifact"
+      ? "calc((var(--c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 5.25 / 24)"
+      : "calc((var(--c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"}
     style:--peek-room={"calc(var(--c-btn-h-xs) - var(--peek-ink) + var(--space-2))"}
     style:--row-cols="auto minmax(0, 1fr) auto"
   >
@@ -625,7 +692,7 @@
         aria-label="Open {item.title}"
         class="press-tint focus-inset absolute inset-0 rounded-inherit hover:bg-surface-hover"
         {href}
-        onclick={onchoose}
+        onclick={chosen}
         {onkeydown}><span class="sr-only">Open {item.title}</span></a
       >
     {/if}
@@ -636,7 +703,7 @@
       data-slot="lead"
       class="pointer-events-none relative col-1 row-1 grid h-c-row-mark w-c-row-lead place-items-center self-center text-ink-muted"
     >
-      {#if item.kind === "ask" || item.kind === "watch"}
+      {#if item.kind === "ask" || item.kind === "watch" || item.kind === "artifact"}
         <SessionMark
           caw={cawOf(item.instanceId)}
           id={item.instanceId}
@@ -647,14 +714,21 @@
         <IconWorkflow aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "choice"}
         <IconShield aria-hidden="true" class="size-icon-md" />
-      {:else if item.kind === "tailnet" || item.kind === "local-name"}
+      {:else if item.kind === "desk"}
         {#if item.done}
           <IconSuccess
             aria-hidden="true"
             class="size-icon-md text-status-done-ink"
           />
-        {:else if item.kind === "local-name"}
-          <IconGlobe aria-hidden="true" class="size-icon-md" />
+        {:else}
+          <IconMonitor aria-hidden="true" class="size-icon-md" />
+        {/if}
+      {:else if item.kind === "tailnet"}
+        {#if item.done}
+          <IconSuccess
+            aria-hidden="true"
+            class="size-icon-md text-status-done-ink"
+          />
         {:else}
           <IconTailnetHttps aria-hidden="true" class="size-icon-md" />
         {/if}
@@ -662,6 +736,8 @@
         <IconLock aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "admission"}
         <IconServer aria-hidden="true" class="size-icon-md" />
+      {:else if item.kind === "install"}
+        <IconError aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "task"}
         {#if item.reason === "failed"}
           <IconError aria-hidden="true" class="size-icon-md" />
@@ -734,10 +810,39 @@
           {/snippet}
         </Tip>
       </span>
+    {:else if item.kind === "artifact"}
+      <!-- Not now: the first line's trailing cell, a notice's ✕ (NoticeRow),
+           its ink on the panel's one trailing edge; always shown, to a mouse
+           as to a finger, which gets the house's 44px area moved back
+           inboard by `--peek-ink`. -->
+      <span
+        data-slot="end"
+        class="absolute end-(--end-x) top-(--end-top) flex type-label"
+        style:--end-top="calc(var(--space-2) + (1lh - var(--c-btn-h-xs)) / 2)"
+        style:--end-x="calc(var(--space-3) - var(--peek-ink))"
+      >
+        <Tip disabled={peekTipOff()} label={artifactWords.notNow}>
+          {#snippet children(tip)}
+            <button
+              data-needs-card-not-now
+              {...tip}
+              aria-label={artifactWords.notNowNamed(item.title)}
+              class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
+              onclick={notNow}
+              style:--x-hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"}
+              style:--x-hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--peek-ink))"}
+              style:--x-press="scale(var(--press-scale))"
+              type="button"
+            >
+              <IconClose aria-hidden="true" class="size-(--peek-glyph)" />
+            </button>
+          {/snippet}
+        </Tip>
+      </span>
     {/if}
     <span
       data-slot="want"
-      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-local-name/row:block group-kind-local-name/row:line-clamp-undo"
+      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo"
       >{want}</span
     >
     {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
@@ -835,6 +940,121 @@
           <span class="flex-none">machine offline</span>
         {/if}
       </span>
+    {:else if item.kind === "artifact"}
+      {@const Kind = ARTIFACT_GLYPHS[item.artifactKind]}
+      <!-- Where it came from, as an ask's: its project first, then its kind
+           by its glyph where an ask says "Question", then its machine. Send
+           ends the line while something is written and not sent. -->
+      <span
+        data-where
+        data-slot="meta"
+        class={[
+          "mark-line pointer-events-none relative col-start-2 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
+          item.unsent > 0 ? "col-end-3" : "col-end-4",
+        ]}
+      >
+        {#if item.project}
+          <span
+            data-slot="project"
+            class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+            data-box
+          >
+            <IconFolder
+              data-needs-card-mark
+              aria-hidden="true"
+              class="size-icon-md flex-none"
+              style="color: var(--mark-{item.project.hue})"
+            />
+            <span data-slot="project-name" class="type-label text-ink-strong"
+              >{item.project.name}</span
+            >
+          </span>
+          <span
+            data-slot="dot"
+            aria-hidden="true"
+            class="flex-none text-ink-muted">·</span
+          >
+        {/if}
+        <span
+          data-slot="artifact-kind"
+          class="mark-line inline-flex flex-none items-center gap-space-1"
+          data-box
+        >
+          <Kind aria-hidden="true" class="size-icon-md flex-none" data-box />
+          <span>{artifactWords.kindWord[item.artifactKind]}</span>
+        </span>
+        <span
+          data-slot="dot"
+          aria-hidden="true"
+          class="flex-none text-ink-muted">·</span
+        >
+        <span
+          data-slot="machine"
+          class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
+          data-box
+        >
+          <OsMark class="size-icon-md flex-none" os={item.machine.os} />
+          <span class="min-w-0 overflow-clip text-ellipsis"
+            >{item.machine.name}</span
+          >
+        </span>
+        {#if item.stale}
+          <span
+            data-slot="dot"
+            aria-hidden="true"
+            class="flex-none text-ink-muted">·</span
+          >
+          <span class="flex-none">machine offline</span>
+        {/if}
+      </span>
+      {#if item.unsent > 0}
+        <!-- Send: the kit's sm ghost over the row's cover, its last figure's
+             ink on the trailing edge: it hangs past by what stands between
+             its box and that ink (the kit's 1px transparent border, its
+             padding, `space-2` a side so it never hangs past the row's own
+             `space-3`, and the figure's side bearing, 0.07em). -->
+        <span
+          data-slot="send"
+          class="relative col-3 row-3 flex items-center self-center justify-self-end"
+          style:--send-hang="calc(-1 * (1px + var(--space-2) + 0.07em))"
+        >
+          <Button
+            data-needs-card-send
+            class="me-(--send-hang)"
+            pad="more"
+            style="--more-px: var(--space-2);"
+            aria-label={artifactWords.sendNamed(item.unsent, item.title)}
+            disabled={held}
+            failed={sendRefused !== null}
+            icon={IconSend}
+            label={artifactWords.sendCount(item.unsent)}
+            onclick={sendItsMarks}
+            pending={sendingArtifact}
+            pendingLabel={artifactWords.sending}
+            size="sm"
+            variant="ghost"
+          />
+        </span>
+      {/if}
+      {#if sendRefused}
+        <div
+          data-slot="peers"
+          class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end"
+        >
+          <ErrorText
+            message={artifactWords.notSent(sendRefused)}
+            title="The hub refused that Send"
+          />
+        </div>
+      {/if}
+      <!-- A press (or its address) the hub refused: said on the row, over
+           its cover, with Try again, kept through a reload. -->
+      <RowFault
+        again={chosen}
+        class="relative col-start-2 col-end-4 row-5 mt-space-2"
+        data-needs-card-refused
+        reason={refusals.reason(artifactOpenKey(item.artifactId))}
+      />
     {:else if item.kind === "action" && call}
       <!-- The exact call: when, through which account, the tool, the arguments. -->
       <!-- An approved action: its reason, then the call (when, through, tool)
@@ -903,7 +1123,7 @@
           <span class="flex-none num">{item.action.taskId}</span>
         {/if}
       </span>
-    {:else if item.kind === "tailnet" || item.kind === "local-name"}
+    {:else if item.kind === "tailnet"}
       <!-- Where it comes from, under what it wants, as every row's meta
            stands; its steps follow. -->
       <span
@@ -1090,11 +1310,13 @@
           disabled={held || (answering && pressed !== "allow")}
           failed={answerRefused !== null && pressed === "allow"}
           icon={item.request.browserAsk ? IconInteract : IconTick}
-          label={item.request.browserAsk ? "Take over" : "Approve"}
+          label={item.request.browserAsk ? askWords.takeOver : "Approve"}
           onclick={() => answer("allow")}
           {onkeydown}
           pending={answering && pressed === "allow"}
-          pendingLabel={item.request.browserAsk ? "Taking over…" : "Approving…"}
+          pendingLabel={item.request.browserAsk
+            ? askWords.takingOver
+            : "Approving…"}
           size="sm"
           variant="secondary"
         />
@@ -1129,6 +1351,45 @@
             variant="secondary"
           />
         {/each}
+      </div>
+    {:else if item.kind === "desk" && !item.done}
+      <!-- Skip and Allow as peers (The Peer Rule): Skip puts the row away in
+           this browser, the presence menu still offers it; Allow calls the
+           browser's own prompts on the press. A refusal stands over them,
+           naming each blocked setting and where to turn it on. -->
+      <div
+        data-slot="peers"
+        class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-wrap justify-end gap-space-2 coarse:gap-space-4"
+      >
+        {#if person.refusal}
+          <!-- Wrapped, never cut to one line: the setting's name and where
+               to turn it on are the whole point of it. -->
+          <p
+            data-slot="desk-refusal"
+            class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail-ink"
+            role="alert"
+          >
+            {person.refusal.title}. {person.refusal.message}
+          </p>
+        {/if}
+        <Button
+          data-skip
+          disabled={person.pending === "allow"}
+          label={presenceWords.skip}
+          onclick={skipHere}
+          size="sm"
+          variant="secondary"
+        />
+        <Button
+          data-allow
+          disabled={person.pending === "allow"}
+          label={presenceWords.allow}
+          onclick={() => allowHere()}
+          pending={person.pending === "allow"}
+          pendingLabel={presenceWords.allowing}
+          size="sm"
+          variant="secondary"
+        />
       </div>
     {:else if item.kind === "tailnet" && item.done}
       <!-- Ticked: the https dashboard to open. -->

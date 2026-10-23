@@ -37,8 +37,10 @@
  *     the pause and its end.
  * p5. The hub restarted mid-pause, with a minute of it left, keeps the
  *     pause, and the landing gate waits on B again, still saying why. (B's
- *     register reports Linux, so the probe marks it a Mac again, and the
- *     delegate calls finish_item again if its resumed landing found no Mac.)
+ *     register reports Linux, so the probe marks it a Mac again. If its
+ *     resumed landing found no Mac, the item waits for one: the delegate ends
+ *     its turn, and calls finish_item again when the hub wakes it with B
+ *     online as a Mac.)
  * p1–p4 are read while the pause lasts; p6 once it has ended.
  * p6. At the end everything proceeds: the interrupted delegate carries on
  *     and reads the handoff, the queued delegate starts on B, the iOS build
@@ -60,7 +62,7 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { APPLE_GATE, declareGate, NO_MAC } from "../gate";
+import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const B = "probe-b";
@@ -117,8 +119,8 @@ const commands = new Map<string, "searched" | "called" | "done">();
 let paused = false;
 let finishSearched = false;
 let finishCalled = false;
-/** finish_item refusals C has called again after: one per refusal it read. */
-let cRetried = 0;
+/** The hub's wakes with a Mac online that C has called finish_item again after: one per wake it read. */
+let cWoken = 0;
 let dSearched = false;
 let dCalled = false;
 
@@ -214,18 +216,21 @@ const answerC = (request: Seen): Reply => {
     finishCalled = true;
     return finishCall();
   }
-  // A landing resumed after p5's restart before B was a Mac again: as the
-  // refusal says, call finish_item again.
-  const refusals = request.all.split(NO_MAC).length - 1;
-  if (finishCalled && refusals > cRetried) {
-    cRetried = refusals;
+  // A landing resumed after p5's restart before B was a Mac again is refused
+  // for want of a Mac, and the hub has the item wait for one: as the refusal
+  // says, C ends its turn, and calls finish_item again once the hub wakes it
+  // with a Mac online.
+  const wakes = request.all.split(MAC_ONLINE).length - 1;
+  if (finishCalled && wakes > cWoken) {
+    cWoken = wakes;
     return finishCall();
   }
   if (!(finishCalled || finishSearched)) {
     finishSearched = true;
     return finishSearch();
   }
-  return text("done C");
+  const refusals = request.all.split(NO_MAC).length - 1;
+  return text(refusals > cWoken ? "Waiting for a Mac." : "done C");
 };
 
 const delegateAnswer = (tag: string, request: Seen): Reply => {

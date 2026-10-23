@@ -139,6 +139,15 @@
     };
   });
 
+  /**
+   * The panel has come in: from here a change to what it holds tweens its
+   * size (morph). While it is still coming in, what settles in it (a tail
+   * drawn the frame after the panel mounts) is part of its entrance, and
+   * the panel takes that size as it rises: its open is one motion, never
+   * the rise and a size tween a frame behind it.
+   */
+  let entered = $state(false);
+
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {
       return { duration: dur("--dur-menu"), css: (t) => `opacity: ${t}` };
@@ -204,9 +213,15 @@
     style:--panel-origin-right="0 calc(var(--y) + var(--origin) - var(--top))"
     style:--panel-x="max(0px, min(var(--x), calc(var(--span) - 100%)))"
     style:--top={"clamp(var(--hover-panel-inset), var(--y), calc(100dvh - 100% - var(--hover-panel-inset)))"}
+    onintroend={() => {
+      entered = true;
+    }}
+    onintrostart={() => {
+      entered = false;
+    }}
     in:panelIn
     out:panelOut
-    {@attach morph({ width: true })}
+    {@attach entered ? morph({ width: true }) : undefined}
   >
     <!-- The content's own width, capped at 440px or the room (less the
          border): never the panel's, so the panel's size tween (morph, which

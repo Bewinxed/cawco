@@ -4,8 +4,8 @@
    * full size. The library draws nothing until its highlighter has loaded
    * (the first diff of a page waits for it), so the box stands a skeleton at
    * the height the rows will take (the hunks' rows at the library's 20px
-   * line, under the cap) and the rows cross-fade in over it once they have
-   * drawn; any difference in height tweens. A diff that fails to draw says
+   * line, under the cap) and hands its place to the rows in its reveal once
+   * they have drawn; any difference in height tweens. A diff that fails to draw says
    * why in the box, with a retry.
    */
   import {
@@ -14,14 +14,13 @@
     isHighlighterLoaded,
     parseDiffFromFile,
   } from "@pierre/diffs";
-  import { fade } from "svelte/transition";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
     crossOut,
-    dur,
-    easeOut,
+    reveal,
+    revealHere,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -54,6 +53,8 @@
    * to stand in for.
    */
   let drawn = $state(isHighlighterLoaded());
+  /** The rows stood veiled under the skeleton, so their unveiling is its reveal. */
+  let underSkeleton = false;
   let failure = $state<string | null>(null);
   /** Bumped by Retry: the box is drawn again from scratch. */
   let attempt = $state(0);
@@ -135,7 +136,8 @@
   </div>
 
   <!-- The skeleton and the rows share one cell: the rows lay out under it
-       unseen and fade in where it stood. -->
+       unseen, and it hands its place to them in its reveal (motion/curves
+       `reveal`) where it stood. -->
   <div data-slot="body" class="relative grid" {@attach morph()}>
     {#if failure}
       <div
@@ -153,10 +155,18 @@
     {:else}
       {#key attempt}
         <div
-          class="row-start-1 col-start-1 min-w-0 overflow-auto motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-veiled:invisible data-veiled:opacity-0"
+          class="row-start-1 col-start-1 min-w-0 overflow-auto data-veiled:invisible data-veiled:opacity-0"
           style:max-block-size={cap}
           data-veiled={!drawn || undefined}
           {@attach draw(attempt)}
+          {@attach (node) => {
+            if (!drawn) {
+              underSkeleton = true;
+            } else if (underSkeleton) {
+              underSkeleton = false;
+              revealHere(node);
+            }
+          }}
         ></div>
       {/key}
       {#if !drawn}
@@ -164,7 +174,7 @@
           class="row-start-1 col-start-1 min-w-0"
           aria-label="Loading diff"
           role="status"
-          out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
+          out:reveal
         >
           <Skeleton
             class="w-full"

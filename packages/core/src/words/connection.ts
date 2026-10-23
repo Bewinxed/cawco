@@ -1,5 +1,3 @@
-import { timeLeft } from "./helpers";
-
 /**
  * What the hub's connection says while an announced update restarts the hub
  * (`hub.restart`), for the dashboard's connection band (HubBand) and the
@@ -13,9 +11,11 @@ import { timeLeft } from "./helpers";
  * here or nowhere.
  */
 export const connectionWords = {
-  /** The hub restarts for the update to `version` (null when unnamed), back within `seconds`. */
-  updating: (version: string | null, seconds: number) =>
-    `CawCo is updating${(version ?? "").length > 0 ? ` to ${version ?? ""}` : ""} — the hub is back within ${timeLeft(seconds)}.`,
+  /** The hub isn't answering: the band's, the home's quiet line, the status line's lead. */
+  unreachable: "Hub unreachable",
+  /** The hub restarts for the update to `version` (null when unnamed), named when it is. */
+  updating: (version: string | null) =>
+    `CawCo is updating${(version ?? "").length > 0 ? ` to ${version ?? ""}` : ""}.`,
   /** The hub answered again after the update it announced. */
   updated: (version: string | null) =>
     `CawCo updated${(version ?? "").length > 0 ? ` to ${version ?? ""}` : ""}.`,

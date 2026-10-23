@@ -61,6 +61,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { blocksWords } from "../../../packages/core/src/words/blocks";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
+import { viewsWords } from "../../../packages/core/src/words/views";
 import { seedDecisions } from "../../decisions-preview/seed";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
@@ -909,7 +912,7 @@ async function blocksLeg(
   since = device.heard.length;
   if (boardMore) {
     await device.tap(boardMore);
-    await device.choose("Move down");
+    await device.choose(blocksWords.moveDown);
   }
   const moved = await pageBlocks(
     device,
@@ -931,7 +934,7 @@ async function blocksLeg(
   }
   since = device.heard.length;
   await device.tap(viewMore);
-  await device.choose("Show as a tab");
+  await device.choose(blocksWords.showAsTab);
   const back = await stripSince(
     device,
     since,
@@ -1039,7 +1042,7 @@ async function askViewLeg(
     await device.tap(strip.ask);
   } else if (strip?.more) {
     await device.tap(strip.more);
-    await device.choose("Ask Caw for a view");
+    await device.choose(viewsWords.ask);
   }
   const opened = await device
     .next("the ask's popover", since, (line) =>
@@ -1058,7 +1061,7 @@ async function askViewLeg(
   // The popover opens with Caw's field taking the keyboard: the words go straight in.
   await device.type(words);
   since = device.heard.length;
-  await device.choose("Send message", true);
+  await device.choose(transcriptWords.sendMessage, true);
   const thread = await device
     .next(
       "the hub's thread for the ask",

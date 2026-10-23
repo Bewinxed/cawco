@@ -7,17 +7,19 @@
   import { accountsWords, HARNESSES, type HarnessKind } from "@cawco/core";
   import { untrack } from "svelte";
   import { crossfade } from "svelte/transition";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { autowidth } from "#lib/cawco/motion/autosize.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { pressVariants } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import Clear from "~icons/solar/close-square-bold-duotone";
-  import Code from "~icons/solar/code-square-bold-duotone";
-  import Cpu from "~icons/solar/cpu-bolt-bold-duotone";
-  import Search from "~icons/solar/magnifer-bold-duotone";
+  import {
+    IconCloseTab as Clear,
+    IconTerminal as Code,
+    IconCpuBolt as Cpu,
+    IconSearch as Search,
+  } from "#lib/icons.js";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { models, providerOf, rememberModel } from "../models.svelte";
   import {
@@ -127,17 +129,11 @@
    * whole of it.
    */
   let chosenHeight = $state(44);
-  const chosen = (node: HTMLElement) => {
-    // Read now, and a change in the next frame (frameObserver): the fill
-    // stands on it.
-    const read = () => {
-      chosenHeight = node.offsetHeight;
-    };
-    read();
-    const sized = frameObserver(read);
-    sized.observe(node);
-    return () => sized.disconnect();
-  };
+  // Read now, and a change in the next frame (frameSize): the fill stands
+  // on it.
+  const chosen = frameSize<HTMLElement>((node) => {
+    chosenHeight = node.offsetHeight;
+  });
 
   /**
    * The chosen model's run settings glide from the row it leaves to the one

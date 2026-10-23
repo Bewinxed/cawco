@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The home's first line: whether the first read of the fleet is in. Live
    * and read is the quiet default, and says nothing: the line is not drawn
@@ -18,6 +19,6 @@
     role="status"
     out:crossOut
   >
-    Reading the fleet…
+    {commonWords.readingTheFleet}
   </div>
 {/if}

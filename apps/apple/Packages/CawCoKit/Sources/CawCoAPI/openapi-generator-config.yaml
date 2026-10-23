@@ -11,6 +11,7 @@ typeOverrides:
   schemas:
     AccountHue: OpenEnums.AccountHue
     AccountKind: OpenEnums.AccountKind
+    AccountSetupStep: OpenEnums.AccountSetupStep
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
     ArtifactDoes: OpenEnums.ArtifactDoes
@@ -23,6 +24,7 @@ typeOverrides:
     BinaryUpdateLandingOutcome: OpenEnums.BinaryUpdateLandingOutcome
     BinaryUpdatePhase: OpenEnums.BinaryUpdatePhase
     BinaryUpdatePolicyChannel: OpenEnums.BinaryUpdatePolicyChannel
+    BinaryUpdateStateHubWait: OpenEnums.BinaryUpdateStateHubWait
     BlockMetadataAction: OpenEnums.BlockMetadataAction
     BlockMetadataCompact: OpenEnums.BlockMetadataCompact
     BlockMetadataCompactResult: OpenEnums.BlockMetadataCompactResult
@@ -73,6 +75,7 @@ typeOverrides:
     FindField: OpenEnums.FindField
     FindLiveState: OpenEnums.FindLiveState
     FleetChoicesUpstream: OpenEnums.FleetChoicesUpstream
+    FleetConvergeState: OpenEnums.FleetConvergeState
     FleetFaultCause: OpenEnums.FleetFaultCause
     FleetMcpServerMode: OpenEnums.FleetMcpServerMode
     FleetMcpServerState: OpenEnums.FleetMcpServerState
@@ -87,12 +90,19 @@ typeOverrides:
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
     HarnessKind: OpenEnums.HarnessKind
     HarnessNoteKind: OpenEnums.HarnessNoteKind
+    HarnessReportRefused: OpenEnums.HarnessReportRefused
+    HeldReasonBy: OpenEnums.HeldReasonBy
     HomeCredentialKind: OpenEnums.HomeCredentialKind
     HomeStore: OpenEnums.HomeStore
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
     HookEvent: OpenEnums.HookEvent
     HubAuthMode: OpenEnums.HubAuthMode
     InboundVia: OpenEnums.InboundVia
+    InstallCheck: OpenEnums.InstallCheck
+    InstallRoute: OpenEnums.InstallRoute
+    InstallSignIn: OpenEnums.InstallSignIn
+    InstallState: OpenEnums.InstallState
+    InstallStep: OpenEnums.InstallStep
     InstanceRowEffort: OpenEnums.InstanceRowEffort
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
@@ -122,15 +132,18 @@ typeOverrides:
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
     PermissionUpdateDestination: OpenEnums.PermissionUpdateDestination
+    PersonReadState: OpenEnums.PersonReadState
     PhoneDoneAction: OpenEnums.PhoneDoneAction
     PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy
     PinKind: OpenEnums.PinKind
+    PinResolvedBy: OpenEnums.PinResolvedBy
     PlaceKind: OpenEnums.PlaceKind
     PlacementStrategy: OpenEnums.PlacementStrategy
     PlanEditKind: OpenEnums.PlanEditKind
     PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
+    PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown
     PreviewFrameState: OpenEnums.PreviewFrameState
     ProjectOfferReason: OpenEnums.ProjectOfferReason
@@ -140,11 +153,9 @@ typeOverrides:
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
     RelayPortName: OpenEnums.RelayPortName
     RelayProvider: OpenEnums.RelayProvider
-    RelayRuntimeNeedKind: OpenEnums.RelayRuntimeNeedKind
     RelayState: OpenEnums.RelayState
     RelayStepFinding: OpenEnums.RelayStepFinding
     RelayStepHow: OpenEnums.RelayStepHow
-    RelayStepNetwork: OpenEnums.RelayStepNetwork
     RestartHoldReason: OpenEnums.RestartHoldReason
     RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy
     RoutineRunState: OpenEnums.RoutineRunState
@@ -155,7 +166,6 @@ typeOverrides:
     RuleWatch: OpenEnums.RuleWatch
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
-    SessionAttachmentWho: OpenEnums.SessionAttachmentWho
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState
@@ -200,3 +210,4 @@ typeOverrides:
     WorkflowStepStatus: OpenEnums.WorkflowStepStatus
     WorkflowWhenOp: OpenEnums.WorkflowWhenOp
     WorkspaceState: OpenEnums.WorkspaceState
+    WorkspaceToolNeed: OpenEnums.WorkspaceToolNeed

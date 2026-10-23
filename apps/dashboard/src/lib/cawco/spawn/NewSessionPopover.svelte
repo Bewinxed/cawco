@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The New Session form on a desk: a popover hanging from the trigger
    * pressed (the rail's Start session, the session strip's "+", a project's
@@ -14,11 +15,19 @@
    * press outside closes it and the focus goes back to whatever held it;
    * the prompt takes the keys as it opens. Under 640px it is the bottom
    * sheet (NewSessionDialog).
+   *
+   * Dismissed on a start still running, it closes into the row that start
+   * is parked as (spawn/parked, StartingRows), shrinking onto the row's box
+   * as it fades (motion/share `closeInto`, The One Object Rule); bits-ui
+   * holds it mounted until that has played. Reopened from the row, it hangs
+   * from it, and opens out of it.
    */
+  import { tick } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { popoverRoom } from "#lib/components/ui/glide-popover/index.js";
   import { Popover, PopoverContent } from "#lib/components/ui/popover/index.js";
-  import type { ContinueSource, SessionDraft } from "../continue.svelte";
+  import type { ContinueSource } from "../continue.svelte";
+  import { closeInto } from "../motion/share.svelte";
   import NewSessionDialog from "./NewSessionDialog.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
   import { FORM_SIZES, type SpawnPrefill } from "./new-session.svelte";
@@ -28,7 +37,6 @@
     anchor = null,
     prefill,
     continueFrom,
-    restore,
     onclose,
     onexitcontinue,
   }: {
@@ -41,14 +49,33 @@
      * of this one. Mutually exclusive with `prefill`: the source says where.
      */
     continueFrom?: ContinueSource;
-    /** Continue mode: the form a failed continuation was submitted with, opened as it was. */
-    restore?: SessionDraft;
     onclose: () => void;
     /** The operator deleted the source chip: the form stays open as a plain New Session. */
     onexitcontinue?: () => void;
   } = $props();
 
   const mobile = new MediaQuery("(max-width: 640px)");
+  /** The form travels into the row its start is parked as, once that row is drawn. */
+  async function travel(id: string): Promise<void> {
+    const surface = card;
+    await tick();
+    const row = document.querySelector<HTMLElement>(
+      `[data-parked="${CSS.escape(id)}"]`
+    );
+    if (!(surface && row && row.getClientRects().length > 0)) {
+      return;
+    }
+    const flight = closeInto(surface, row);
+    if (!flight) {
+      return;
+    }
+    // One object: the row is drawn once the form has landed in it.
+    row.style.visibility = "hidden";
+    const landed = () => {
+      row.style.visibility = "";
+    };
+    flight.finished.then(landed, landed);
+  }
   let card = $state<HTMLElement | null>(null);
   let form = $state<NewSessionForm>();
   /** The rail's Start session, marked where it stands (Sidebar). */
@@ -105,7 +132,6 @@
     {onexitcontinue}
     {open}
     {prefill}
-    {restore}
   />
 {:else}
   <Popover
@@ -124,7 +150,7 @@
          bits-ui's popover content carries no role of its own. -->
     <PopoverContent
       align="start"
-      aria-label="New session"
+      aria-label={commonWords.newSession}
       aria-modal="false"
       customAnchor={hangsFrom}
       data-ns-popover
@@ -156,9 +182,9 @@
         {continueFrom}
         {onclose}
         {onexitcontinue}
+        onparked={travel}
         {open}
         {prefill}
-        {restore}
         bind:this={form}
       />
     </PopoverContent>

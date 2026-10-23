@@ -21,7 +21,7 @@
    * less motion they move at once and only the label's fade runs).
    */
   import type { Snippet } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
 
   let {
     items,
@@ -63,6 +63,8 @@
 
   let root = $state<HTMLDivElement>();
   let boxes = $state<Box[]>([]);
+  /** The rail's own width: an across rail's label never stands past its trailing edge. */
+  let railWidth = $state(0);
   /** The thumb glides only once it has been placed: never in from 0,0. */
   let placed = $state(false);
 
@@ -70,6 +72,7 @@
     if (!root) {
       return;
     }
+    railWidth = root.clientWidth;
     boxes = [...root.querySelectorAll<HTMLElement>("[data-rail-item]")].map(
       (node) => ({
         x: node.offsetLeft,
@@ -109,13 +112,27 @@
       one so the label fades out where it was instead of jumping. */
   let tip = $state(-1);
   let shownTip = $state(0);
+  /** The label's width, which the tip glides to: read as it mounts, and a change in the next frame (frameSize). */
   let tipWidth = $state(0);
+  const measureTip = frameSize<HTMLElement>((node) => {
+    tipWidth = node.offsetWidth;
+  });
   $effect(() => {
     if (tip >= 0) {
       shownTip = tip;
     }
   });
-  const tipBox = $derived(boxes[shownTip]);
+  /**
+   * Where the label stands: under its item, held inside the rail's trailing
+   * edge, so a rail at the end of a head (Files' Thumbnails | List) keeps
+   * its label over the panel it heads rather than past its edge.
+   */
+  const tipBox = $derived.by(() => {
+    const box = boxes[shownTip];
+    return box && axis === "x"
+      ? { ...box, x: Math.min(box.x, railWidth - tipWidth) }
+      : box;
+  });
 
   /** Which item the pointer is over, gaps counting toward the one before. */
   function railMove(event: MouseEvent) {
@@ -243,7 +260,7 @@
         <span
           data-slot="tip-text"
           class="inline-flex items-center gap-space-2 px-space-3 font-body text-size-meta leading-none font-normal whitespace-nowrap motion-safe:animate-rail-label-in"
-          bind:offsetWidth={tipWidth}
+          {@attach measureTip}
           >{items[shownTip]?.label}
           {#if tipExtra && items[shownTip]}
             {@render tipExtra(items[shownTip])}

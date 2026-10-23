@@ -11,8 +11,33 @@
  * session, so the form is the one they copy.
  */
 
-/** The kinds a reference can name. A new kind is added here and to the dashboard's registry. */
-export const REFERENCE_KINDS = ["session"] as const;
+/**
+ * The kinds a reference can name. A new kind is added here and to the
+ * dashboard's registry. A pin is named by its artifact and its number
+ * (`<artifact>/<number>`: the number its pill shows, never reused), a
+ * decision card by its artifact and its id (`<artifact>/<card>`), an
+ * artifact by its id. A task by its project and its id
+ * (`<project>/<task>`: a task's id is its project's own number, `tsk-12`),
+ * a task's to-do by those and its id (`<project>/<task>/<td-3>`), a
+ * session's plan by the session (`<session>`), one of its steps by the
+ * session and the step's id (`<session>/<step>`); a routine, a workflow
+ * (or one run of it, by the run's id), a project and a machine each by its
+ * own id.
+ */
+export const REFERENCE_KINDS = [
+  "session",
+  "pin",
+  "decision",
+  "artifact",
+  "task",
+  "todo",
+  "plan",
+  "step",
+  "routine",
+  "workflow",
+  "project",
+  "machine",
+] as const;
 export type ReferenceKind = (typeof REFERENCE_KINDS)[number];
 
 const SCHEME = "cawco:";
@@ -39,6 +64,105 @@ export const referenceLink = (
 export const sessionLink = (id: string, title: string): string =>
   referenceLink("session", id, title);
 
+/** Pin `number` of artifact `artifact`, labelled by what it stands on: its chip opens the artifact at that pin's thread. */
+export const pinLink = (
+  artifact: string,
+  number: number,
+  label: string
+): string => referenceLink("pin", `${artifact}/${number}`, label);
+
+/** Decision card `card` of artifact `artifact`, labelled by its question: its chip opens the page at that card. */
+export const decisionLink = (
+  artifact: string,
+  card: string,
+  label: string
+): string => referenceLink("decision", `${artifact}/${card}`, label);
+
+/** Artifact `id`, labelled by its name: its chip brings it to the front of the panel. */
+export const artifactLink = (id: string, name: string): string =>
+  referenceLink("artifact", id, name);
+
+/** Task `task` of project `project`, labelled by its title: its chip opens the task. */
+export const taskLink = (
+  project: string,
+  task: string,
+  title: string
+): string => referenceLink("task", `${project}/${task}`, title);
+
+/** To-do `todo` of task `task` in project `project`, labelled by its words: its chip opens the task at it. */
+export const todoLink = (
+  project: string,
+  task: string,
+  todo: string,
+  words: string
+): string => referenceLink("todo", `${project}/${task}/${todo}`, words);
+
+/** Session `session`'s plan, labelled by its name or its first step: its chip opens the plan. */
+export const planLink = (session: string, label: string): string =>
+  referenceLink("plan", session, label);
+
+/** Step `step` of session `session`'s plan, labelled by its words: its chip opens the plan at it. */
+export const stepLink = (
+  session: string,
+  step: string,
+  words: string
+): string => referenceLink("step", `${session}/${step}`, words);
+
+/** Routine `id`, labelled by its name: its chip opens it. */
+export const routineLink = (id: string, name: string): string =>
+  referenceLink("routine", id, name);
+
+/** Workflow `id`, or one run of a workflow by the run's id, labelled by its name: its chip opens its page. */
+export const workflowLink = (id: string, name: string): string =>
+  referenceLink("workflow", id, name);
+
+/** Project `id`, labelled by its name: its chip opens the project. */
+export const projectLink = (id: string, name: string): string =>
+  referenceLink("project", id, name);
+
+/** Machine `id`, labelled by its name: its chip opens the machines. */
+export const machineLink = (id: string, name: string): string =>
+  referenceLink("machine", id, name);
+
+/**
+ * A reference's id read as its `count` parts, each up to the next slash and
+ * the last the rest; null when it has fewer or any is empty.
+ */
+export function referenceParts(id: string, count: number): string[] | null {
+  const parts: string[] = [];
+  let rest = id;
+  for (let i = 1; i < count; i += 1) {
+    const slash = rest.indexOf("/");
+    if (slash <= 0) {
+      return null;
+    }
+    parts.push(rest.slice(0, slash));
+    rest = rest.slice(slash + 1);
+  }
+  return rest ? [...parts, rest] : null;
+}
+
+/** A pin reference's id, `<artifact>/<number>`, read; null when it is not one. */
+export function pinReference(
+  id: string
+): { artifact: string; number: number } | null {
+  const slash = id.lastIndexOf("/");
+  const number = Number(id.slice(slash + 1));
+  return slash > 0 && Number.isInteger(number) && number > 0
+    ? { artifact: id.slice(0, slash), number }
+    : null;
+}
+
+/** A decision reference's id, `<artifact>/<card>`, read; null when it is not one. */
+export function decisionReference(
+  id: string
+): { artifact: string; card: string } | null {
+  const slash = id.indexOf("/");
+  return slash > 0 && slash < id.length - 1
+    ? { artifact: id.slice(0, slash), card: id.slice(slash + 1) }
+    : null;
+}
+
 /**
  * The kind and id a link's destination names, when it is a `cawco:` URL;
  * null for any other destination. The kind is returned as written: whether
@@ -63,4 +187,5 @@ export function parseReference(
  * what it writes, so the person sees the session itself and not its id.
  */
 export const REFERENCE_GUIDANCE =
-  "To mention a session, delegate or Caw thread in anything you write, link it by its full id: `[its title](cawco:session/<id>)`. CawCo shows the link as that session's chip; a bare id or handle stays plain text. CawCo's own tool results and reports name sessions this way.";
+  "To mention a session, delegate or Caw thread in anything you write, link it by the handle CawCo's tools name it by, or its id: `[its title](cawco:session/cockpit#5a167bde)`. CawCo shows the link as that session's chip; a bare id or handle stays plain text. CawCo's own tool results and reports name sessions this way. " +
+  'To point at a pin, a decision card, an artifact, a task or its to-do, a plan or its step, a routine, a workflow or its run, a project or a machine, write the link CawCo\'s tool results and deliveries give you for it (`[When](cawco:pin/<artifact>/12)`, `[Fix the tray](cawco:task/<project>/tsk-12)`). CawCo draws each as a chip that opens it where it lives; a bare id or number ("tsk-12", "pin 12") stays plain text.';

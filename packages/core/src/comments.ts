@@ -7,11 +7,14 @@
  * a thread the person and the agent both write. A comment is written whole,
  * its pin and its first entry in one transaction ({@link commentOn}): a
  * press on the page writes nothing until there are words or attachments to
- * keep. It reaches the session when the person presses Send: the hub
- * delivers everything the session hasn't heard as one message carrying the
- * pins themselves ({@link pinSection}, {@link inkSection}) and the person's
- * note, then stamps each pin `sentAt` and `heard` ({@link pinSaid}), each
- * entry and stroke group `sentAt`. An entry's pictures, texts and files are
+ * keep. It reaches the session by itself a few seconds after it is written
+ * (the owner's pick, "Go by themselves", 2026-10-23): the hub delivers
+ * everything the session hasn't heard as one message carrying the pins
+ * themselves ({@link pinSection}, {@link inkSection}), then stamps each pin
+ * `sentAt` and `heard` ({@link pinSaid}), each entry and stroke group
+ * `sentAt`. A delivery no one took marks each pin it carried `notSent`, with
+ * why, until a delivery carries it; the person's Try again sends one alone
+ * ({@link SendBody} `pins`). An entry's pictures, texts and files are
  * stored on the hub by reference ({@link CommentAttachment}).
  *
  * A pin is placed again after every revision of the page by its anchor, in
@@ -20,9 +23,10 @@
  * still reads its text, else the one that reads it), then its selector (one
  * by identity as it is, one of places only while its element still reads
  * its text, or its text and more as it streams on), then the first element
- * holding its text; none of them,
- * and it waits in the moved tray (`movedAt`) until the person places it
- * again. A mark on the page as a whole stands on its body ({@link wholePage}),
+ * holding its text; none of them for a while (a page drawing a part of
+ * itself again has it back within it), and it waits in the moved tray
+ * (`movedAt`) until its anchor finds its element again or the person places
+ * it again. A mark on the page as a whole stands on its body ({@link wholePage}),
  * which every revision has: it never waits there.
  *
  * Every entry is a plain JSON value in its map.
@@ -32,6 +36,16 @@
  * {@link deletePin}): the web pane on the doc it joins, the page's overlay on
  * its own for a host that holds no doc (the app, by `cawco:reply`,
  * `cawco:resolve` and `cawco:delete`).
+ *
+ * A delete is a tombstone, not an absence: the pin's id goes into the doc's
+ * `gone` map ({@link buryPin}) as it leaves `pins`. A Yjs map's delete
+ * removes only the writes it has seen, so a write made where the delete
+ * hadn't arrived yet (a page placing its pins on a stale load, the hub
+ * stamping a delivery, an agent's reply, another device) would stand the pin
+ * up again when the two meet. Every doc that holds pins (the page's, the
+ * pane's, the hub's) lets go of a pin its `gone` names whenever either map
+ * changes ({@link honourDeletions}), so a deletion made anywhere, while any
+ * link is down, wins every merge, and every copy converges on "deleted".
  */
 import type { Doc, Map as YMap } from "yjs";
 import { humanSize } from "./attachments";
@@ -68,6 +82,8 @@ export const pinFirstLine = (pin: Pin): string | null => {
 export const COMMENT_LIMITS = {
   /** Pins an artifact keeps. */
   pins: 200,
+  /** Deleted pins' tombstones an artifact keeps (the doc's `gone`). Our call: five artifacts' worth of pins. */
+  gone: 1000,
   /** Entries one pin's thread keeps. Our call. */
   entries: 100,
   /** Characters one thread entry holds: comment_reply's bound. */
@@ -109,8 +125,15 @@ export interface MarkPictures {
   url?: string;
 }
 
-/** What the page's `cawco.send(text)` carries beside the doc: its words. */
+/**
+ * What a Send carries beside the doc: the person's note (the page's
+ * `cawco.send(text)`, the Decisions tab's composer) with their picks; or,
+ * for a comment's Try again after a delivery no one took, that comment
+ * alone by its pin's id. The person's comments are never a Send's: they go
+ * by themselves.
+ */
 export interface SendBody {
+  pins?: string[];
   text?: string;
 }
 
@@ -130,7 +153,19 @@ export interface PageAnchor {
    * a stamped component root's call site), then the story that mounts them.
    */
   chain?: ChainLink[];
-  /** The frames it stands in, outermost first, each by its selector in its parent's document; none at the top. */
+  /**
+   * The artifact whose frame holds it, when that frame shows one (a decision
+   * page's Preview, dashboard decisions host Preview.svelte
+   * `data-cawco-artifact`): a component canvas, a dev server's preview, a page.
+   */
+  embed?: { artifact: string };
+  /**
+   * The frames it stands in, outermost first, each by its selector in its
+   * parent's document; none at the top. A frame of another origin is read
+   * through its own overlay (agent preview-overlay embeds.ts), and the
+   * selector, source, text, chain and sheet are read in the innermost frame's
+   * document either way.
+   */
   frames?: string[];
   selector: string;
   /**
@@ -239,15 +274,138 @@ export interface Pin {
   kind: "annotation" | "comment";
   /** Its element is gone from the page since then; it waits in the moved tray. */
   movedAt?: string;
+  /**
+   * The last delivery that carried it reached no one: when, and why in words
+   * (the hub's reason). The hub writes it; the next delivery that carries
+   * the pin clears it ({@link pinHeard}).
+   */
+  notSent?: { at: string; why: string };
   /** In order of creation, per artifact, from 1. */
   number: number;
   /** Where on its element a tapped pin stands: fractions of the element's box. */
   point?: { x: number; y: number };
   resolvedAt?: string;
+  /** Who resolved it: the person, or the agent (comment_resolve), whose resolve is an answer. */
+  resolvedBy?: "person" | "agent";
+  /**
+   * When the person last looked at it: its thread opened (a press, a chip,
+   * a step) or a Send of the page. An agent's entry or resolve newer than it
+   * is a new answer ({@link newAnswer}). Kept in the doc, so it holds on
+   * every device he opens the page on.
+   */
+  seenAt?: string;
   /** When it was first delivered to the session. */
   sentAt?: string;
   /** Oldest first. */
   thread: ThreadEntry[];
+}
+
+/**
+ * Whether pin `pin` holds an answer the person hasn't looked at: an agent's
+ * entry in its thread, or the agent's resolve, newer than his last look
+ * (`seenAt`).
+ */
+export const newAnswer = (pin: Pin): boolean => {
+  const seen = pin.seenAt ?? "";
+  const answered = pin.thread.findLast((entry) => entry.by === "agent")?.at;
+  const resolved =
+    pin.resolvedBy === "agent" && pin.resolvedAt ? pin.resolvedAt : undefined;
+  return (!!answered && answered > seen) || (!!resolved && resolved > seen);
+};
+
+/** Pin `pin` as looked at, at `at`: what {@link newAnswer} reads it by. */
+export function seePin(doc: Doc, pin: string, at: string): void {
+  const held = pinsOf(doc).get(pin);
+  if (held && (held.seenAt ?? "") < at) {
+    doc.transact(() => pinsOf(doc).set(pin, { ...held, seenAt: at }));
+  }
+}
+
+/**
+ * What one revision of an artifact changed, as the hub reads it at that
+ * revision (the doc's `meta.changes`): a page's elements, a decision page's
+ * cards, a canvas's elements. Each is a stop the panel marks until the
+ * person has looked at it.
+ */
+export interface ArtifactChanges {
+  at: string;
+  items: ChangedItem[];
+  /**
+   * What the person's looks at them are kept by (the doc's `seen`): a page's
+   * revision; a canvas's scene version (`meta.sceneVersion`), which each of
+   * the agent's updates moves while the canvas stays the one live scene.
+   */
+  revision: number;
+}
+
+/**
+ * One thing a revision changed: `element`, a page's element by its
+ * selector, washed where it stands; `card`, a decision card, by its
+ * selector (`#decision-<id>`); `canvas`, a canvas's element by its id;
+ * `removed`, something gone, with no box to wash, stood in the tag by its
+ * label alone. The anchor is what the person's look is kept by.
+ */
+export interface ChangedItem {
+  anchor: string;
+  kind: "element" | "card" | "canvas" | "removed";
+  /** Its first words, or what it is. */
+  label: string;
+}
+
+/** Items one revision's changes keep. Our call: past it, the page changed whole. */
+export const CHANGES_LIMIT = 100;
+
+/**
+ * The person's looks at what revisions changed (the doc's `seen` map): per
+ * revision, the anchors he has stepped onto or pressed, his Send marking
+ * all of them. Written by the person, so it holds on every device.
+ */
+export const seenOf = (doc: Doc) => doc.getMap("seen") as YMap<string[]>;
+
+/** The anchors of revision `revision`'s changes the person has looked at, written as seen. */
+export function seeChanges(
+  doc: Doc,
+  revision: number,
+  anchors: string[]
+): void {
+  const seen = seenOf(doc);
+  const key = String(revision);
+  const was = seen.get(key) ?? [];
+  const next = [...new Set([...was, ...anchors])].slice(0, CHANGES_LIMIT);
+  if (next.length > was.length) {
+    doc.transact(() => {
+      // Only the latest revision's looks are worth keeping: the next replaces the set.
+      for (const old of [...seen.keys()]) {
+        if (old !== key) {
+          seen.delete(old);
+        }
+      }
+      seen.set(key, next);
+    });
+  }
+}
+
+/** A revision's key in the `seen` map: its number. */
+const REVISION_KEY = /^\d{1,9}$/;
+
+/** Why a person's `seen` map may not be kept; null when it may. */
+export function seenProblem(seen: Map<string, unknown>): string | null {
+  if (seen.size > 2) {
+    return "The page keeps the looks of its latest revision only.";
+  }
+  for (const [revision, anchors] of seen) {
+    if (!(
+      REVISION_KEY.test(revision) &&
+      Array.isArray(anchors) &&
+      anchors.length <= CHANGES_LIMIT &&
+      anchors.every(
+        (anchor) => typeof anchor === "string" && anchor.length <= 500
+      )
+    )) {
+      return "A look is a revision's list of the anchors seen.";
+    }
+  }
+  return null;
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -354,16 +512,20 @@ export function pinProblem(value: unknown): string | null {
  * Why a person's change from `before` to `after` (the doc's pins, by id) may
  * not be kept; null when it may. The person writes pins and their own
  * entries; the agent's entries are the agent's (comment_reply), so a person's
- * change keeps every one of them as it was.
+ * change keeps every one of them as it was. A pin `gone` names is deleted,
+ * whatever the change wrote of it: the doc lets it go ({@link honourDeletions}),
+ * so it is not read.
  */
 export function pinsProblem(
   before: Map<string, unknown>,
-  after: Map<string, unknown>
+  after: Map<string, unknown>,
+  gone: ReadonlyMap<string, unknown>
 ): string | null {
-  if (after.size > COMMENT_LIMITS.pins) {
+  const standing = [...after].filter(([id]) => !gone.has(id));
+  if (standing.length > COMMENT_LIMITS.pins) {
     return `An artifact keeps at most ${COMMENT_LIMITS.pins} pins.`;
   }
-  for (const [id, pin] of after) {
+  for (const [id, pin] of standing) {
     const problem = pinProblem(pin);
     if (problem) {
       return problem;
@@ -381,6 +543,39 @@ export function pinsProblem(
     }
     if ([...was].some((entry) => !now.has(entry))) {
       return "The agent's replies stay in their thread.";
+    }
+  }
+  return null;
+}
+
+/** The longest pin id a tombstone names, and its time's length. Our call: a UUID and an ISO time fit well inside. */
+const GONE_KEY_MAX = 100;
+const GONE_AT_MAX = 40;
+
+/**
+ * Why a person's change from `before` to `after` (the doc's `gone`, by pin
+ * id) may not be kept; null when it may. A tombstone is written once, by a
+ * delete, and stays as it was: a deletion is never undone.
+ */
+export function goneProblem(
+  before: Map<string, unknown>,
+  after: Map<string, unknown>
+): string | null {
+  for (const [id, at] of before) {
+    if (after.get(id) !== at) {
+      return "A deleted comment stays deleted.";
+    }
+  }
+  if (after.size > COMMENT_LIMITS.gone) {
+    return `An artifact keeps at most ${COMMENT_LIMITS.gone} deleted comments.`;
+  }
+  for (const [id, at] of after) {
+    if (!(
+      id.length <= GONE_KEY_MAX &&
+      typeof at === "string" &&
+      at.length <= GONE_AT_MAX
+    )) {
+      return "A deleted comment is its pin's id and when it was deleted.";
     }
   }
   return null;
@@ -449,8 +644,10 @@ export const pinHeard = (current: Pin, sent: Pin, at: string): Pin => {
       .filter((entry) => entry.by === "person")
       .map((entry) => [entry.id, entry.text])
   );
+  // Heard: a failed Send's reason goes with it.
+  const { notSent: _failed, ...standing } = current;
   return {
-    ...current,
+    ...standing,
     sentAt: current.sentAt ?? at,
     heard: pinSaid(sent),
     thread: current.thread.map((entry) =>
@@ -483,6 +680,54 @@ const entryId = (): string => {
 };
 
 const pinsOf = (doc: Doc) => doc.getMap("pins") as YMap<Pin>;
+
+/** The doc's tombstones: each deleted pin's id, and when it was deleted. */
+export const goneOf = (doc: Doc) => doc.getMap("gone") as YMap<string>;
+
+/**
+ * Pin `id` deleted from `doc`: its tombstone written ({@link goneOf}) and
+ * the pin let go, in the caller's transaction when there is one.
+ */
+export function buryPin(doc: Doc, id: string, at: string): void {
+  doc.transact(() => {
+    const gone = goneOf(doc);
+    if (!gone.has(id)) {
+      gone.set(id, at);
+    }
+    pinsOf(doc).delete(id);
+  });
+}
+
+/** The origin of the writes {@link honourDeletions} makes. */
+export const HONOUR_ORIGIN = "gone";
+
+/**
+ * From now on, `doc` lets go of every pin its tombstones name, whenever
+ * `pins` or `gone` changes (a merge from the device, the hub or another
+ * view), and of any it holds now: a write that stood a deleted pin up again
+ * is undone in the next transaction. Returns the watch's end.
+ */
+export function honourDeletions(doc: Doc): () => void {
+  const pins = pinsOf(doc);
+  const gone = goneOf(doc);
+  const sweep = () => {
+    const buried = [...pins.keys()].filter((id) => gone.has(id));
+    if (buried.length > 0) {
+      doc.transact(() => {
+        for (const id of buried) {
+          pins.delete(id);
+        }
+      }, HONOUR_ORIGIN);
+    }
+  };
+  pins.observe(sweep);
+  gone.observe(sweep);
+  sweep();
+  return () => {
+    pins.unobserve(sweep);
+    gone.unobserve(sweep);
+  };
+}
 
 /** What the person said in one entry: their words, and what they attached. */
 export interface Said {
@@ -606,11 +851,15 @@ export function resolvePin(
   if (!held) {
     return `This pin is gone from the page, so it wasn't ${resolved ? "resolved" : "reopened"}.`;
   }
-  const { resolvedAt: _was, ...rest } = held;
+  const { resolvedAt: _was, resolvedBy: _by, ...rest } = held;
+  const at = new Date().toISOString();
+  // His own resolve or reopen is a look: whatever the agent answered there is seen.
   doc.transact(() =>
     pinsOf(doc).set(
       pin,
-      resolved ? { ...rest, resolvedAt: new Date().toISOString() } : rest
+      resolved
+        ? { ...rest, resolvedAt: at, resolvedBy: "person", seenAt: at }
+        : { ...rest, seenAt: at }
     )
   );
   return null;
@@ -620,6 +869,8 @@ export function resolvePin(
  * The person deletes pin `pin`, and the ink group it stands on when it
  * stands on one that no other pin stands on; the refusal's sentence when the
  * pin is gone, and nothing was written. The other pins keep their numbers.
+ * The pin's tombstone stays in the doc ({@link buryPin}): no later write of
+ * it, from any device, stands it up again.
  */
 export function deletePin(doc: Doc, pin: string): string | null {
   const pins = pinsOf(doc);
@@ -627,11 +878,14 @@ export function deletePin(doc: Doc, pin: string): string | null {
   if (!held) {
     return "This pin is gone from the page already, so there was nothing to delete.";
   }
+  if (goneOf(doc).size >= COMMENT_LIMITS.gone) {
+    return `A page keeps track of ${COMMENT_LIMITS.gone.toLocaleString()} deleted comments, so this one wasn't deleted. Resolve it instead.`;
+  }
   const shared = [...pins.values()].some(
     (other) => other.id !== pin && !!held.ink && other.ink === held.ink
   );
   doc.transact(() => {
-    pins.delete(pin);
+    buryPin(doc, pin, new Date().toISOString());
     if (held.ink && !shared) {
       doc.getMap("ink").delete(held.ink);
       doc.getMap("moved").delete(held.ink);
@@ -808,7 +1062,14 @@ function amongWritten<E, D>(
 }
 
 /** A section's head and what its pin stands on: the element by selector, source, page and text, or a canvas's element. */
-const standsOn = (pin: Pin, url: string): string[] => {
+/**
+ * What a pin stands on, one line per fact, under its heading: the element by
+ * its selector (or a canvas's element), the frames and artifact it stands
+ * in, its source's file:line, the components it is inside, its state, its
+ * text, the elements under its ink. `url`, when given, is the page's address
+ * as its own line; `comment_read` says it once for the artifact instead.
+ */
+export const pinStandsOn = (pin: Pin, url?: string): string[] => {
   const { anchor } = pin;
   if (!("selector" in anchor)) {
     const named = (pin.elements as string[]).join(", ");
@@ -825,6 +1086,9 @@ const standsOn = (pin: Pin, url: string): string[] => {
   const chain = chainWords(anchor);
   return [
     `## ${pin.number}. ${pin.kind} on ${wholePage(anchor) ? "the whole page" : anchor.selector}`,
+    ...(anchor.embed
+      ? [`- Inside the artifact ${anchor.embed.artifact}, shown in this page`]
+      : []),
     ...(anchor.frames?.length
       ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
       : []),
@@ -839,7 +1103,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
           `- State: ${anchor.sheet.story} · ${anchor.sheet.state.interaction} · ${anchor.sheet.state.scheme} · ${anchor.sheet.state.width === null ? "fit" : `${anchor.sheet.state.width}px`}`,
         ]
       : []),
-    `- Page: ${url}`,
+    ...(url === undefined ? [] : [`- Page: ${url}`]),
     ...(anchor.text?.trim()
       ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]
       : []),
@@ -855,6 +1119,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
 export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
   was.selector !== now.selector ||
   (was.frames ?? []).join("\u0000") !== (now.frames ?? []).join("\u0000") ||
+  was.embed?.artifact !== now.embed?.artifact ||
   (was.text ?? "") !== (now.text ?? "") ||
   JSON.stringify(was.source) !== JSON.stringify(now.source) ||
   JSON.stringify(was.chain ?? []) !== JSON.stringify(now.chain ?? []) ||
@@ -863,18 +1128,21 @@ export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
 /**
  * One pin's part of a delivery: a pin the session already has, where only
  * its resolve moved, is one line; else its section ({@link pinSection}),
- * with its id for `comment_reply`, and its resolve when it stands resolved.
+ * with its id for `comment_reply`, its link for naming it to the person
+ * (`[label](cawco:pin/<artifact>/<number>)`, core references.ts), and its
+ * resolve when it stands resolved.
  */
 export function pinDelivery(
   pin: Pin,
-  context: Parameters<typeof pinSection>[1]
+  context: Parameters<typeof pinSection>[1] & { link: string }
 ): string {
   if (pinKnown(pin) && unheardEntries(pin).length === 0) {
-    return `## ${pin.number}. ${pin.resolvedAt ? "Resolved" : "Reopened"} by the person (pin ${pin.id})`;
+    return `## ${pin.number}. ${pin.resolvedAt ? "Resolved" : "Reopened"} by the person (pin ${pin.id}), its link ${context.link}`;
   }
   return [
     pinSection(pin, context),
     `- Pin: ${pin.id}`,
+    `- Link: ${context.link}`,
     ...(pin.resolvedAt ? ["- Resolved by the person."] : []),
   ].join("\n");
 }
@@ -923,10 +1191,6 @@ export function inkSection(
   return lines.join("\n");
 }
 
-/** The person's note with their Send: the first section of its delivery. */
-export const sendNoteSection = (note: string): string =>
-  `## The person's note on this Send\n${note}`;
-
 /**
  * How a delivery carries one attachment: a picture as the message's
  * `picture`th image block; a text folded into the message; anything else
@@ -954,6 +1218,10 @@ export const attachedLine = (
   return `- I attached: ${attachment.name} (${size}, ${attachment.mediaType}), its "Attached file" line below`;
 };
 
+/** A delivery's line for the person's words in a pin's thread: what a probe reads them by. */
+export const wroteLine = (text: string): string =>
+  `- I wrote: ${JSON.stringify(text)}`;
+
 /** One pin's section: what it stands on, where, and what the session has not heard of its thread. */
 export function pinSection(
   pin: Pin,
@@ -966,7 +1234,7 @@ export function pinSection(
     url: string;
   }
 ): string {
-  const lines = standsOn(pin, context.url);
+  const lines = pinStandsOn(pin, context.url);
   if (context.ink) {
     const { w, h, x, y } = context.ink;
     lines.push(`- Ink: ${w} × ${h} px at ${x}, ${y} in the page`);
@@ -976,7 +1244,7 @@ export function pinSection(
   }
   for (const entry of unheardEntries(pin)) {
     if (entry.text.trim()) {
-      lines.push(`- I wrote: ${JSON.stringify(entry.text)}`);
+      lines.push(wroteLine(entry.text));
     }
     for (const attachment of entry.attachments ?? []) {
       lines.push(

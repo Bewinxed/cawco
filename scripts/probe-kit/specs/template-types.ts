@@ -52,6 +52,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { projectWords } from "../../../packages/core/src/words/project";
 import { TEMPLATES, templateText } from "../../../packages/hub/src/stages";
 import { templateTypes } from "../../../packages/hub/src/template-types";
 import { MACHINE, until } from "../../scratch-fleet";
@@ -144,7 +145,7 @@ async function noAccount(leg: Leg): Promise<void> {
   leg.kit.check(
     "3: a hook move whose lead cannot start says why on the task and its card (Can't start, the lead's reason)",
     NO_ACCOUNT.test(read.startProblem ?? "") &&
-      shown?.text === "Can't start" &&
+      shown?.text === projectWords.cantStart &&
       shown.title === read.startProblem,
     `startProblem ${read.startProblem}; card ${JSON.stringify(shown)}`
   );
@@ -352,7 +353,7 @@ async function ghost(leg: Leg): Promise<void> {
   const shown = await leg.card(projectId, id);
   leg.kit.check(
     "c: a stage running a type the project lacks says so on the task's card (Can't start, the hub's reason as its title)",
-    shown?.text === "Can't start" &&
+    shown?.text === projectWords.cantStart &&
       shown.title === read.startProblem &&
       (shown.title ?? "").startsWith(NO_GHOST),
     `card ${JSON.stringify(shown)}; startProblem ${read.startProblem}`

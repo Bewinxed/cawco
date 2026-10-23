@@ -65,6 +65,12 @@
  *    390, each at ½ of the fold's held clock, then played on: the scroll
  *    stays where the reader put it on every frame, and the fold and the
  *    flight still land (L489, L491-492).
+ * 9. In WebKit at 1440, with motion and with less: Continue's foot comes in
+ *    by one animation on itself (motion/curves `appearOnMount`); Change and
+ *    the decided chips' line by one run of their own opacity transition from
+ *    their `data-entering` mark (`enterByStyle`), so a turn caught mid-way
+ *    still fades back from where they stand. Never a @starting-style
+ *    transition, which WebKit sometimes skips for an element just added.
  *
  *   bun scripts/probe-kit/run.ts web decision-pick
  */
@@ -77,6 +83,7 @@ import {
   pageReach,
   startDecisionStage,
 } from "../../decision-embeds";
+import { durOf, oneEntrance, recordRuns, runsOn } from "../../entrances";
 import { traceMain } from "../../frames";
 import { type Kit, type Spec, settle } from "../../kit";
 
@@ -182,7 +189,11 @@ const foldOf = (page: Page, id: string) =>
       body: Math.round((body?.getBoundingClientRect().height ?? 0) * 10) / 10,
       opacity: body ? Number(getComputedStyle(body).opacity) : -1,
       padding: root ? getComputedStyle(root).paddingBlockStart : "",
-      scroll: Math.round(scrollY * 10) / 10,
+      scroll:
+        Math.round(
+          (document.querySelector("[data-slot=page-scroll]")?.scrollTop ?? 0) *
+            10
+        ) / 10,
       progress: run?.effect?.getComputedTiming().progress ?? null,
       keyframes: run
         ? [
@@ -630,7 +641,9 @@ async function liveFold(
     // animation callbacks and layout (the ride's scroll written, the fold's
     // height laid out), every frame the card changes size, and once as it
     // starts watching (the page at rest).
-    const scroller = document.scrollingElement as Element;
+    const scroller = document.querySelector(
+      "[data-slot=page-scroll]"
+    ) as Element;
     const sized = new ResizeObserver(() => {
       const body = root?.querySelector<HTMLElement>(
         "[data-slot=decision-body]"
@@ -746,10 +759,13 @@ const nextFrameOf = (page: Page, id: string) =>
       }>((done) =>
         requestAnimationFrame(() => {
           const root = document.getElementById(`decision-${card}`);
-          const scroller = document.scrollingElement as Element;
+          const scroller = document.querySelector(
+            "[data-slot=page-scroll]"
+          ) as Element;
           const chip = root?.querySelector<HTMLElement>("[data-cawco-picked]");
           const top =
-            (root?.getBoundingClientRect().top ?? 0) +
+            (root?.getBoundingClientRect().top ?? 0) -
+            scroller.getBoundingClientRect().top +
             scroller.scrollTop -
             (root
               ? Number.parseFloat(getComputedStyle(root).scrollMarginTop) || 0
@@ -1699,14 +1715,17 @@ async function readerLeg(
     // (the strip past the page's client width; its length and place the
     // view's share of the page).
     const bar = await page.evaluate(() => {
-      const root = document.scrollingElement as Element;
-      const strip = innerWidth - root.clientWidth;
+      const root = document.querySelector(
+        "[data-slot=page-scroll]"
+      ) as HTMLElement;
+      const box = root.getBoundingClientRect();
+      const strip = root.offsetWidth - root.clientWidth;
       const length =
         (root.clientHeight * root.clientHeight) / root.scrollHeight;
       const top = (root.scrollTop / root.scrollHeight) * root.clientHeight;
       return {
-        x: root.clientWidth + strip / 2,
-        y: top + length / 2,
+        x: box.left + root.clientWidth + strip / 2,
+        y: box.top + top + length / 2,
         strip,
         per: root.clientHeight / root.scrollHeight,
       };
@@ -1764,7 +1783,9 @@ async function readerLeg(
           "#decision-path [data-slot=decision-body]"
         );
         const step = () => {
-          seen.push(scrollY);
+          seen.push(
+            document.querySelector("[data-slot=page-scroll]")?.scrollTop ?? 0
+          );
           if ((body?.getAnimations().length ?? 0) === 0 && seen.length > 2) {
             done(seen);
             return;
@@ -1813,7 +1834,9 @@ const footFrames = (page: Page, count: number) =>
     (n) =>
       new Promise<{ most: number; scroll: number }[]>((done) => {
         const seen: { most: number; scroll: number }[] = [];
-        const root = document.scrollingElement as Element;
+        const root = document.querySelector(
+          "[data-slot=page-scroll]"
+        ) as Element;
         const step = () => {
           seen.push({
             scroll: root.scrollTop,
@@ -1873,9 +1896,12 @@ async function clampLeg(
   await page.keyboard.press("Enter");
   await settle(page, 400);
   const toFoot = async () => {
-    await page.evaluate(() =>
-      window.scrollTo(0, (document.scrollingElement as Element).scrollHeight)
-    );
+    await page.evaluate(() => {
+      const scroller = document.querySelector(
+        "[data-slot=page-scroll]"
+      ) as Element;
+      scroller.scrollTop = scroller.scrollHeight;
+    });
     await settle(page, 300);
   };
   await toFoot();
@@ -1920,12 +1946,16 @@ async function clampLeg(
   // The root scrollbar's thumb, read before the press: the strip past the
   // page's client width, its length and place the view's share of the page.
   const thumb = await page.evaluate(() => {
-    const root = document.scrollingElement as Element;
+    const root = document.querySelector(
+      "[data-slot=page-scroll]"
+    ) as HTMLElement;
+    const box = root.getBoundingClientRect();
     const length = (root.clientHeight * root.clientHeight) / root.scrollHeight;
     const top = (root.scrollTop / root.scrollHeight) * root.clientHeight;
     return {
-      x: root.clientWidth + (innerWidth - root.clientWidth) / 2,
-      y: top + length / 2,
+      x:
+        box.left + root.clientWidth + (root.offsetWidth - root.clientWidth) / 2,
+      y: box.top + top + length / 2,
     };
   });
   const watched = footFrames(page, 40);
@@ -1961,7 +1991,9 @@ async function clampLeg(
     () =>
       new Promise<{ most: number; scroll: number }[]>((done) => {
         const frames: { most: number; scroll: number }[] = [];
-        const root = document.scrollingElement as Element;
+        const root = document.querySelector(
+          "[data-slot=page-scroll]"
+        ) as Element;
         const body = document.querySelector(
           "#decision-radius [data-slot=decision-body]"
         );
@@ -2039,13 +2071,13 @@ async function stillLeg(
   await settle(still, 400);
   const picked = await pickedIn(still, "path");
   const fade = await tokenMs(still, "--dur-fade");
-  const footFade = pickRuns.find(
-    (run) => run.type === "CSSTransition" && run.name === "opacity"
-  );
+  // Continue's fade is its foot's own entrance (motion/curves
+  // `appearOnMount`), the one Web Animation: no height tween runs beside it.
+  const webs = pickRuns.filter((run) => run.type === "WebAnimation");
+  const footFade = webs.length === 1 ? webs[0] : undefined;
   kit.check(
     `${label} reduced motion: a pick's colour changes and Continue fades in where it stands over --dur-fade, with no height tween, and the card stays open`,
-    pickRuns.every((run) => run.type !== "WebAnimation") &&
-      !!footFade &&
+    !!footFade &&
       Math.abs(footFade.end - fade) < 1 &&
       footHalf.shown === 1 &&
       footHalf.opacity > 0 &&
@@ -2194,7 +2226,15 @@ const coralOf = (page: Page) =>
             .cawcoChoice ?? "";
         return {
           what: one.hasAttribute("data-send") ? "send" : `${card} continue`,
-          inView: at.bottom > 0 && at.top < innerHeight && at.height > 0,
+          // In view where it is seen: a card's in the cards' scroller, Send in the foot.
+          inView: (() => {
+            const seen = one
+              .closest("[data-slot=page-scroll]")
+              ?.getBoundingClientRect() ?? { top: 0, bottom: innerHeight };
+            return (
+              at.bottom > seen.top && at.top < seen.bottom && at.height > 0
+            );
+          })(),
           // Its keycaps as drawn on the coral: their fill and ink.
           keys: [...one.querySelectorAll<HTMLElement>("[data-slot=kbd]")]
             .filter((key) => key.checkVisibility())
@@ -2529,6 +2569,97 @@ async function costLeg(
   await page.close();
 }
 
+/**
+ * 9. In WebKit, at the desk, with motion and with less: what a pick and its
+ * Continue bring onto the card comes in by one run on itself, never a
+ * @starting-style transition, which WebKit sometimes skips for an element
+ * just added (bugs.webkit.org 275184). Continue's foot by its own animation
+ * (motion/curves `appearOnMount`) over --dur-morph (--dur-fade with less
+ * motion); Change, as the card moves to its decided line, by its own
+ * opacity transition from its `data-entering` mark (`enterByStyle`) over
+ * --dur-settle (--dur-fade); the decided chips' line, whose chips fly home
+ * with motion, runs nothing of its own then and fades the same way over
+ * --dur-fade with less motion.
+ */
+async function entranceLeg(kit: Kit, url: string, reduced: boolean) {
+  const label = `WebKit 1440 ${reduced ? "reduced motion" : "with motion"}`;
+  const page = await kit.page("desk", {
+    engine: "webkit",
+    theme: "light",
+    init: [CAWCO_BRIDGE],
+  });
+  await page.emulateMedia({
+    reducedMotion: reduced ? "reduce" : "no-preference",
+  });
+  await page.addInitScript(recordRuns);
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(page, 600);
+  await toOption(page, "path", "direct");
+  await pressOn(page.locator('#decision-path [data-option="direct"]'), "desk");
+  await page.waitForSelector("#decision-path [data-slot=decision-foot]");
+  await settle(page, 600);
+  const foot = await page.evaluate(runsOn, {
+    selector: "#decision-path [data-slot=decision-foot]",
+    pseudo: null,
+  });
+  await pressOn(page.locator("#decision-path [data-continue]"), "desk");
+  await page.waitForSelector("#decision-path [data-slot=decided]");
+  await settle(page, 900);
+  const change = await page.evaluate(runsOn, {
+    selector:
+      "#decision-path [data-slot=decision-head] span:has(> [data-change])",
+    pseudo: null,
+  });
+  const decided = await page.evaluate(runsOn, {
+    selector: "#decision-path [data-slot=decided]",
+    pseudo: null,
+  });
+  const [morph, settleMs, fade] = await Promise.all(
+    ["--dur-morph", "--dur-settle", "--dur-fade"].map((token) =>
+      page.evaluate(durOf, token)
+    )
+  );
+  const footMs = reduced ? fade : morph;
+  const changeMs = reduced ? fade : settleMs;
+  kit.check(
+    `9 ${label}: Continue's foot comes in by one animation on itself over ${reduced ? "--dur-fade" : "--dur-morph"} (${footMs}ms), never @starting-style`,
+    foot.length === 1 && oneEntrance(foot[0]?.runs ?? [], footMs),
+    JSON.stringify(foot)
+  );
+  // Change and the decided chips' line come in by their own opacity
+  // transitions, which also carry them out (motion/curves `enterByStyle`):
+  // one run on each, from its `data-entering` mark, which is gone.
+  const byStyle = (seen: typeof change, ms: number) =>
+    seen.length === 1 &&
+    seen[0]?.runs.length === 1 &&
+    seen[0]?.runs[0]?.kind === "CSSTransition" &&
+    seen[0]?.runs[0]?.name === "opacity" &&
+    Math.abs((seen[0]?.runs[0]?.duration ?? 0) - ms) < 1;
+  const marked = await page.evaluate(
+    () => document.querySelectorAll("#decision-path [data-entering]").length
+  );
+  kit.check(
+    `9 ${label}: Change comes in by one run on itself as the card moves, its own opacity transition over ${reduced ? "--dur-fade" : "--dur-settle"} (${changeMs}ms) from its data-entering mark, never @starting-style`,
+    byStyle(change, changeMs) && marked === 0,
+    JSON.stringify({ change, marked })
+  );
+  kit.check(
+    reduced
+      ? `9 ${label}: the decided chips' line comes in by one run on itself, its own opacity transition over --dur-fade (${fade}ms) from its data-entering mark, never @starting-style`
+      : `9 ${label}: the decided chips' line runs nothing of its own (its chips fly home), and no @starting-style`,
+    reduced
+      ? byStyle(decided, fade)
+      : decided.length === 1 && (decided[0]?.runs.length ?? 1) === 0,
+    JSON.stringify(decided)
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "decision-pick",
   run: async (kit: Kit) => {
@@ -2553,6 +2684,9 @@ const spec: Spec = {
       {}
     );
     try {
+      for (const reduced of [false, true]) {
+        await entranceLeg(kit, stage.pageUrl(NAME, "light"), reduced);
+      }
       for (const { view, theme, label } of LEGS) {
         const url = stage.pageUrl(NAME, theme);
         await leg(kit, url, view, theme, label);

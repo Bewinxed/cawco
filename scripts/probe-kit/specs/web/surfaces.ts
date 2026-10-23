@@ -1,20 +1,12 @@
 /**
- * The surfaces' pictures, the style snapshot's backstop: every surface and
- * open state the snapshot reads (surfaces/catalogue.ts), at desk 1440,
- * tablet 820 and phone 390, light and dark, opened and captured, and each
- * set beside the approved picture (diff.ts, pixelmatch). A state's capture
- * is its root: the viewport for a page, the open layer's box for a menu,
- * sheet or card.
- *
- * It FAILs only where a state does not open (walk.ts `walkTapes`). A
- * capture that differs from its baseline is a changed look caught for a
- * reviewer, never a failure: UI is judged by its look and its correctness
- * against DESIGN.md, not by sameness with older screens. Each is a NOTE,
- * their count is one more, and `--review <dir>` writes them all, beside
- * their baselines with what changed, into the owner's review page.
+ * The surfaces' pixel baseline, the style snapshot's backstop: every
+ * surface and open state the snapshot reads (surfaces/catalogue.ts), at
+ * desk 1440, tablet 820 and phone 390, light and dark, captured and held to
+ * the approved picture (diff.ts, pixelmatch). A state's capture is its root:
+ * the viewport for a page, the open layer's box for a menu, sheet or card.
  *
  *   bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b]
- *   bun scripts/probe-kit/run.ts web surfaces --approve surfaces[:<entry>,…] [--review <dir>]
+ *   bun scripts/probe-kit/run.ts web surfaces --approve surfaces[:<entry>,…] [--review]
  *
  * An entry is `<surface>-<state>-<width>-<theme>`. The fleet is the style
  * snapshot's hub tapes, each hub state on its own section (walk.ts
@@ -46,6 +38,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { CDPSession, Page } from "playwright-core";
 import { diff } from "../../diff";
 import { entrySlug, type Spec } from "../../kit";
 import { chosen } from "../../surfaces/catalogue";
@@ -88,11 +81,35 @@ async function atRest(): Promise<number> {
   return held.length;
 }
 
+/**
+ * Every layer painted again from the document as it stands: DevTools'
+ * LayerTree domain switched on for two of the browser's frames and off for
+ * two more. Switching it on has Chromium paint every layer afresh for the
+ * layer tree it reports, and the fresh drawing stays once it is off; no
+ * element, style or emulated metric is touched. Chromium otherwise kept a
+ * stale drawing of some text: artifact comments-beside, desk dark, drew its
+ * pin's "1" one of two ways over runs whose every element read the same to
+ * full precision (ancestors, transforms, its text's box at 1140.5,
+ * 276.640625), 29px apart; light, the same. Four walks, each read as taken
+ * and after this step: as taken dark gave cb59… three times and 52fa… once,
+ * light b97d… and 03c1… twice each; after it, dark 0c8b… and light c0a0…
+ * all four times, from either picture, and five walks more with the step
+ * gave the same two. The page's scale set to 2 and back re-rastered at a
+ * new scale and kept whichever of the two pictures it had.
+ */
+async function repaint(page: Page, cdp: CDPSession): Promise<void> {
+  await cdp.send("LayerTree.enable");
+  await page.evaluate(() => window.__ssReader?.frames(2));
+  await cdp.send("LayerTree.disable");
+  await page.evaluate(() => window.__ssReader?.frames(2));
+}
+
+/** Each page's DevTools session, opened at its first capture. */
+const sessions = new WeakMap<Page, Promise<CDPSession>>();
+
 const spec: Spec = {
   name: "surfaces",
   async run(kit) {
-    let captured = 0;
-    let changed = 0;
     const { misses, seconds } = await walkTapes(
       kit,
       chosen(surfacesArg),
@@ -129,14 +146,19 @@ const spec: Spec = {
             })()
           : undefined;
         await page.evaluate(atRest);
+        let cdp = sessions.get(page);
+        if (!cdp) {
+          cdp = page.context().newCDPSession(page);
+          sessions.set(page, cdp);
+        }
+        await repaint(page, await cdp);
         // Read before the capture's comparison, as the picture was taken.
         const dump = await page.evaluate(pageDump);
         const differs = await diff(kit, page, entry, {
+          surface: surface.name,
           clip,
           ...(state.mask ? { mask: state.mask(page) } : {}),
         });
-        captured += 1;
-        changed += differs ? 1 : 0;
         if (differs || dumpAll) {
           await writeFile(
             join(kit.out, `${entry}.dump.json`),
@@ -144,13 +166,6 @@ const spec: Spec = {
           );
         }
       }
-    );
-    kit.check(
-      `every state the walk lists opened and was captured (${captured})`,
-      captured > 0
-    );
-    kit.note(
-      `${changed} of ${captured} capture(s) differ from their approved baselines, for review (--review <dir> writes them beside their baselines)`
     );
     if (misses.length > 0) {
       kit.note(

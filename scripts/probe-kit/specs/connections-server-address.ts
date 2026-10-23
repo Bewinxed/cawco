@@ -17,6 +17,7 @@
  *   bun scripts/probe-kit/run.ts connections-server-address
  */
 import type { Request as PageRequest } from "playwright-core";
+import { connectionsWords } from "../../../packages/core/src/words/connections";
 import { open, type Spec } from "../kit";
 
 const LONG =
@@ -95,9 +96,7 @@ const spec: Spec = {
       .catch(() => null);
     kit.check(
       "(c) an address that is no http(s) URL is refused under the field, and nothing is sent",
-      refusal ===
-        "A server address starts with https:// or http://, like the example." &&
-        posts.length === 0,
+      refusal === connectionsWords.serverAddressProblem && posts.length === 0,
       `refusal ${JSON.stringify(refusal)}; posts ${posts.length}`
     );
 

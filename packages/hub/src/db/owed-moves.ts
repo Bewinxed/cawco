@@ -13,8 +13,12 @@ export interface OwedMove {
   byHand?: true;
   move: AccountMove | null;
   to?: string;
-  /** What it waits on: the session's turn's end, or its machine connected again. */
-  waits: "turn" | "machine";
+  /**
+   * What it waits on: the session's turn's end; the work its process holds
+   * for later (a background task) ending, or the restart bound; or its
+   * machine connected again.
+   */
+  waits: "turn" | "work" | "machine";
 }
 
 /**

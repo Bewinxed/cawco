@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * What Configure › Delegate types says (routes/config/delegate-types and
  * its editor, DelegateTypeEditor.svelte), and the refusals a type's fields
@@ -33,7 +35,7 @@ export const delegateTypesWords = {
   /** The editor. */
   what: "delegate type",
   create: "Create delegate type",
-  save: "Save changes",
+  save: commonWords.saveChanges,
   newTitle: "New delegate type",
   nameLabel: "Delegate type name",
   namePlaceholder: "explore",

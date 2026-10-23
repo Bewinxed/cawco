@@ -13,6 +13,7 @@ import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
   CAWCO_MDNS_TYPE,
+  configurePage,
   pinnedTools,
   readEnv,
 } from "@cawco/core";
@@ -56,9 +57,11 @@ Usage
                                             run cawco as per-user services
   cawco binary-install <hub|agent> ...    setup step of the install script; not run by hand
   cawco tools [--session <id>]            list the cawco tools that session's role has
-  cawco tool <name> [json|-] [--session <id>]
+  cawco tool <name> [json|-] [--record] [--session <id>]
                                           call one, under the same role checks as MCP;
-                                          - reads the JSON from stdin, for large arguments
+                                          - reads the JSON from stdin, for large arguments;
+                                          --record prints the hub's record as JSON, not
+                                          the words, and fails when the tool has none
                                           (session: --session or CAWCO_INSTANCE_ID;
                                           credential: CAWCO_SESSION_CREDENTIAL)
   cawco connections set-key <name> [--hub <url>]
@@ -82,10 +85,6 @@ Usage
   cawco git-credential <get|store|erase>  git's credential helper for the hub's git
                                           remote, as this session; set up for every
                                           session, not run by hand
-  cawco heavy-run <command>               run a shell command as one of this machine's
-                                          heavy runs: it starts once a slot is free and
-                                          the machine has room; the agent runs host
-                                          checks through it
 
 Services
   ${SERVICE_IDS.join(", ")} — each its own per-user service, started by systemd or
@@ -137,7 +136,7 @@ Options
 
 Signing in
   Claude sessions run on CawCo's own accounts: add one in the dashboard's
-  Configure → Accounts and sign it in there on each machine. Each keeps its
+  ${configurePage("accounts")} and sign it in there on each machine. Each keeps its
   login in its own folder on the machine (~/.cawco/accounts/<id>/claude); the
   login Claude Code keeps on the machine itself is not used.
 
@@ -190,6 +189,8 @@ interface Args {
   keeperOnly: boolean;
   /** `relay on`: the provider, its connection, and a generic relay's headers and id path. */
   provider?: string;
+  /** `tool --record`: the hub's record as JSON, a program's read, not the words. */
+  record: boolean;
   releaseHost?: string;
   /** Everything after the verb — the services `service` acts on. */
   rest: string[];
@@ -216,6 +217,7 @@ const parseArgs = (argv: string[]): Args => {
     rest: [],
     ask: false,
     keeperOnly: false,
+    record: false,
     resume: false,
     services: false,
     autoUpdate: false,
@@ -316,6 +318,9 @@ const parseArgs = (argv: string[]): Args => {
       case "--verbose":
       case "-v":
         args.verbose = true;
+        break;
+      case "--record":
+        args.record = true;
         break;
       case "--help":
       case "-h":
@@ -574,18 +579,36 @@ const runBinaryApply = async (args: Args): Promise<number> => {
 /**
  * `cawco binary-units`: this build's units, as it writes them. `services`:
  * the hub's, the dashboard's and the agent's and the dashboard's socket
- * (service.ts `refreshServices`); else its keeper's own unit.
+ * (service.ts `refreshServices`), and the install's record of where the
+ * dashboard answers, which the update's verification probes (core
+ * binary-health.ts), as the socket now names it; else its keeper's own unit.
  */
 const writeBinaryUnits = async (services: boolean): Promise<void> => {
   const { binaryLayout } = await import("./binary-install");
   const { refreshServices, refreshUnits } = await import("./service");
   const say = (line: string) => console.log(`units: ${line}`);
   if (services) {
-    await refreshServices(
+    const { dashboardUrl } = await refreshServices(
       ["hub", "dashboard", "agent"],
       binaryLayout(CLI_VERSION),
       say
     );
+    const { installationPath, readInstallation, writeJsonAtomic } =
+      await import("@cawco/core/binary-installation");
+    const installation = await readInstallation();
+    if (
+      dashboardUrl &&
+      installation?.role === "hub" &&
+      installation.dashboardUrl !== dashboardUrl
+    ) {
+      await writeJsonAtomic(installationPath(), {
+        ...installation,
+        dashboardUrl,
+      });
+      say(
+        `the dashboard answers at ${dashboardUrl} (was ${installation.dashboardUrl ?? "not recorded"})`
+      );
+    }
   } else {
     await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), say);
   }
@@ -754,7 +777,15 @@ const runTool = async (args: Args): Promise<number> => {
   // `-` reads the arguments from stdin: one argv string stops at 128 KiB
   // (Linux's MAX_ARG_STRLEN), well under what a tool's arguments may weigh.
   const json = args.rest[0] === "-" ? await Bun.stdin.text() : args.rest[0];
-  console.log(await callTool(at, instanceId, args.action, json));
+  console.log(
+    await callTool(
+      at,
+      instanceId,
+      args.action,
+      json,
+      args.record ? "record" : "words"
+    )
+  );
   return 0;
 };
 
@@ -765,16 +796,6 @@ const runBrowserCommand = async (args: Args): Promise<number> => {
     console.log(line);
   }
   return 0;
-};
-
-/** `cawco heavy-run <command>`: its one argument is a shell command, whatever it starts with. */
-const runHeavy = async (argv: string[]): Promise<number> => {
-  const [command] = argv;
-  if (argv.length !== 1 || !command?.trim()) {
-    throw new UsageError("heavy-run takes one argument: the shell command");
-  }
-  const { heavyRun } = await import("./heavy-run");
-  return heavyRun(command);
 };
 
 /**
@@ -931,10 +952,7 @@ const failure = (error: unknown): string => {
 };
 
 const cliArgs = Bun.argv.slice(2);
-// `heavy-run`'s argument is a shell command, never parsed as flags.
-const code = await (
-  cliArgs[0] === "heavy-run" ? runHeavy(cliArgs.slice(1)) : run(cliArgs)
-).catch((error: unknown) => {
+const code = await run(cliArgs).catch((error: unknown) => {
   if (error instanceof UsageError) {
     console.error(`cawco: ${error.message}\n\nRun \`cawco --help\`.`);
     return 2;

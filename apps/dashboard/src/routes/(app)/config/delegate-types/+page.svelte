@@ -1,6 +1,6 @@
 <script lang="ts">
   import { delegateTypesWords as words } from "@cawco/core";
-  import { deleteDelegateType } from "#lib/cawco/config/deletes.js";
+  import { deleteDelegateType, notDeleted } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
@@ -16,10 +16,9 @@
     sessionCanStart,
   } from "#lib/cawco/empty-asks.js";
   import HarnessLogo from "#lib/cawco/HarnessLogo.svelte";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { folderFileHref } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { toast } from "#lib/cawco/toasts.js";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -42,6 +41,8 @@
   const types = $derived(store.types.value ?? []);
   const projects = $derived(store.projectTypes.value ?? []);
   let busy = $state<Record<string, boolean>>({});
+  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
+  const deleteKey = (id: string) => `delete:/config/delegate-types:${id}`;
 
   /** Harness, model, effort, and every narrowing, as one short line. */
   function runsOn(row: DelegateType): string {
@@ -64,10 +65,13 @@
   /** Delete: at once, with Undo in the toast (deletes.ts). */
   async function remove(row: DelegateType) {
     busy[row.name] = true;
+    refusals.delete(deleteKey(row.name));
     try {
       await deleteDelegateType(store, row.name);
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(deleteKey(row.name), {
+        reason: notDeleted(row.name, error),
+      });
     } finally {
       delete busy[row.name];
     }
@@ -142,6 +146,13 @@
           >
             {#snippet tile()}
               <HarnessLogo harness={row.harness} />
+            {/snippet}
+            {#snippet below()}
+              <RowFault
+                again={() => remove(row)}
+                data-delete-refusal={row.name}
+                reason={refusals.reason(deleteKey(row.name))}
+              />
             {/snippet}
           </SectionRow>
         {/each}

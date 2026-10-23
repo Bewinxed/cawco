@@ -4,7 +4,7 @@
  * the credential the hub minted (`BrowserRelay`, its `reach` naming the
  * relay's machine and that machine's own addresses):
  *
- * - on the relay's own machine: `turn:<coturn's media address>:443` over UDP
+ * - on the relay's own machine: `turn:<coturn's media address>:3478` over UDP
  *   alone. The browser and coturn share the media network (media-network.ts),
  *   so the allocation needs no forwarder and no hairpin through the router.
  * - on another machine: the relay at its tailnet address when both machines
@@ -33,7 +33,7 @@ export interface RelayHere {
   relayMedia: string;
 }
 
-/** `turn:<address>:443` over `transport`. */
+/** `turn:<address>:3478` over `transport`. */
 const turnUrl = (address: string, transport: "udp" | "tcp"): string =>
   `turn:${address}:${STREAM_RELAY_PORT}?transport=${transport}`;
 

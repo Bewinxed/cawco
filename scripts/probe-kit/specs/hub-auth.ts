@@ -52,6 +52,7 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/index";
 import { httpProof } from "../../../packages/core/src/machine-key";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec } from "../kit";
 
@@ -163,19 +164,21 @@ const json = (body: unknown, headers: Record<string, string> = {}) => ({
   body: JSON.stringify(body),
 });
 
-/** A tool call through the REST door, as the session the credential is. */
+/** A tool call through the REST door, as the session the credential is: its words. */
 const callTool = async (
   fleet: Fleet,
   instanceId: string,
   credential: string,
   name: string,
-  args: object
+  args: Record<string, unknown>
 ) => {
-  const answer = await ask(
-    `${fleet.base}/api/delegation/call/${instanceId}`,
-    json({ name, arguments: args }, { authorization: `Bearer ${credential}` })
+  const answer = await toolWords(
+    { base: fleet.base, id: instanceId, credential },
+    name,
+    args,
+    { timeoutMs: 60_000 }
   );
-  return { ...answer, said: answer.text };
+  return { status: answer.status, said: answer.text };
 };
 
 /**

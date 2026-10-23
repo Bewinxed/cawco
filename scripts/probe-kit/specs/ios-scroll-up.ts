@@ -71,6 +71,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { freshApp } from "../../lib/apple-app";
 import { macSim } from "../../lib/mac-sim";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -338,7 +339,7 @@ async function flingLine(
   udid: string
 ): Promise<{ from: number; to: number; x: number }> {
   const nodes = await uiNodes(udid);
-  const list = nodes.find((n) => n.label === "Session transcript")?.frame;
+  const list = nodes.find((n) => n.label === transcriptWords.transcript)?.frame;
   const composer = nodes.find((n) => n.id === "steer-message")?.frame;
   const screen = nodes[0]?.frame ?? { x: 0, y: 0, width: 402, height: 874 };
   const top = list?.y ?? 110;

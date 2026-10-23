@@ -1,4 +1,8 @@
-import type { ArtifactKind, PreviewSource } from "@cawco/core";
+import {
+  type ArtifactKind,
+  type PreviewSource,
+  parseReference,
+} from "@cawco/core";
 import { pathLeaf, resultField } from "@cawco/core/tool-presentation";
 
 /** A short name for where a preview's page is, for the panel's head. */
@@ -17,10 +21,24 @@ export interface CalledArtifact {
 }
 
 const UUID = /^[0-9a-f-]{36}$/;
+/** An artifact's link in a tool's words, `[name](cawco:artifact/<id>)` (core references.ts). */
+const ARTIFACT_LINK = /\[((?:[^\]\\]|\\.)*)\]\((cawco:artifact\/[^)\s]+)\)/;
+const ESCAPED = /\\(.)/g;
+
+/** The artifact a tool's words name by its link; undefined when they name none (a refusal). */
+const linkedArtifact = (text: string): CalledArtifact | undefined => {
+  const link = ARTIFACT_LINK.exec(text);
+  const reference = link?.[2] ? parseReference(link[2]) : null;
+  return reference && UUID.test(reference.id)
+    ? { id: reference.id, name: (link?.[1] ?? "").replace(ESCAPED, "$1") }
+    : undefined;
+};
 
 /**
- * The artifact a call names: `artifact_show`'s or `artifact_browse`'s `id`, or the one
- * `artifact_create` answered with; undefined until the call has one.
+ * The artifact a call names: `artifact_show`'s or `artifact_browse`'s whole
+ * `id`, or the one its answer names: by its link in the words the agent
+ * reads, or (`response_format: "detailed"`) the hub's record; undefined
+ * until the call has one.
  */
 export const calledArtifact = (
   input: Record<string, unknown> | undefined,
@@ -43,6 +61,7 @@ export const calledArtifact = (
         }
       : undefined;
   } catch {
-    // A result that is not the hub's JSON (a refusal's sentence) names no artifact.
+    // The words the agent reads: the artifact by its link, or a refusal naming none.
+    return linkedArtifact(text);
   }
 };

@@ -5,7 +5,12 @@
  * transcript files or queries the database for text. The words, kinds and
  * `by` are the engine's own; `project`, `machine`, `since` and `before`
  * narrow the same ranking (find.ts `FindWhere`) before it pages; `before` is
- * past.dev's `queryTimestamp`, evidence at or before that day. `around` reads a hit's neighbouring turns
+ * past.dev's `queryTimestamp`, evidence at or before that day. With no words,
+ * a filter lists: `by` lists that author's words, one hit per thing said,
+ * newest first (find.ts `listing`), paged by a cursor that names the last one
+ * read, so the next page is asked from before it; any other filter lists what
+ * matches it, newest moved first. A query is needed only when nothing narrows
+ * the set. `around` reads a hit's neighbouring turns
  * from its session's stored transcript or its thread, so reading a hit needs
  * no second tool.
  *
@@ -46,7 +51,10 @@ import {
   type FindPage,
   FindRefusal,
 } from "./find";
+import { HANDLE_MIN } from "./handles";
 import { boardTitle } from "./labels";
+import { tool } from "./mcp-tool";
+import { findWords } from "./presenters/find";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
 import type { HistoryRead } from "./transcripts";
@@ -101,6 +109,41 @@ const SPACES = /\s+/g;
 const REF_MARK = "#";
 
 const EXAMPLE = '{"query": "caching the bun install"}';
+/** A listing that works, as a refusal gives it. */
+export const LISTING_EXAMPLE = '{"by": "person", "since": "2026-10-20"}';
+
+/** Where a listing's next page starts: the last thing said that it showed. */
+interface ListedAt {
+  at: number;
+  doc: string;
+}
+
+const listedCursor = (last: ListedAt): string =>
+  Buffer.from(JSON.stringify(last), "utf8").toString("base64url");
+
+/** A listing's cursor read back, or the refusal; none for its first page. */
+const listedFrom = (cursor: string | undefined): ListedAt | undefined => {
+  if (!cursor) {
+    return;
+  }
+  try {
+    const read = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8")
+    ) as Partial<ListedAt>;
+    if (typeof read.at === "number" && typeof read.doc === "string") {
+      return { at: read.at, doc: read.doc };
+    }
+  } catch {
+    // Not a listing's cursor: refused below.
+  }
+  throw new FindToolRefusal(
+    `"${cursor}" is not a cursor a listing gave: pass the next_cursor of the same listing (same by and filters), or none for its newest page. Example: ${LISTING_EXAMPLE}`
+  );
+};
+
+/** Newest first; the same instant by record id, highest first: a listing's one order, which its cursor pages through. */
+const newerFirst = (a: ListedAt, b: ListedAt): number =>
+  b.at - a.at || b.doc.localeCompare(a.doc);
 
 const INPUT = {
   query: z.string().optional().describe("Plain words."),
@@ -118,20 +161,20 @@ const INPUT = {
     .optional()
     .describe(`Default ${DEFAULT_LIMIT}, max ${MAX_LIMIT}.`),
   cursor: z.string().optional().describe("next_cursor."),
-  response_format: z
-    .enum(["concise", "detailed"])
-    .optional()
-    .describe("detailed adds every moment, neighbouring turns, state."),
   around: z
     .string()
     .optional()
     .describe("A hit's ref or id: its neighbouring turns, not a search."),
 };
+/** `find`'s input; `response_format` is the tool's (mcp-tool.ts), its detailed form adding every moment, neighbouring turns and state. */
+export const FIND_INPUT = INPUT;
 const SCHEMA = z.object(INPUT);
-export type FindInput = z.infer<typeof SCHEMA>;
+export type FindInput = z.infer<typeof SCHEMA> & {
+  response_format?: "concise" | "detailed";
+};
 
 const DESCRIPTION =
-  "Find anything said or made across the fleet, as the dashboard's Find does: session names, what any transcript says, Caw threads, tasks, routines, artifacts, decisions, commits, files; best first, each hit dated with an excerpt and id. Use it before reading transcripts, files or the database for what was said or made, or known by a date (before). A delegate searches its own project unless project says otherwise.";
+  "Find anything said or made across the fleet, as the dashboard's Find does, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
 
 /** A refusal: what was wrong, and one call that works. */
 export class FindToolRefusal extends Error {}
@@ -140,6 +183,8 @@ export interface FindToolDeps {
   find: Find;
   /** A session the hub holds, by id. */
   instance: (id: string) => InstanceRow | undefined;
+  /** The sessions whose id begins with `prefix`: a handle `around` was given. */
+  instancesByPrefix: (prefix: string) => InstanceRow[];
   /** The machines, by id and name. */
   machines: () => { id: string; name: string }[];
   /** The projects, by id and name. */
@@ -156,6 +201,8 @@ export interface FindToolDeps {
     id: string;
     noteTitle: string | null;
   }[];
+  /** The ids of the threads whose id begins with `prefix`. */
+  threadsByPrefix: (prefix: string) => string[];
 }
 
 /** One turn of a conversation or thread, as an answer shows it. */
@@ -381,10 +428,14 @@ const entryWho = (
 };
 
 /** Whether a stored entry is the record `docId`. */
+/** Whether `id` is `docId`, or begins with it when `docId` is a handle (six or more characters). */
+const names = (id: string | undefined, docId: string): boolean =>
+  id === docId || (docId.length >= HANDLE_MIN && !!id?.startsWith(docId));
+
 const isRecord = (entry: SessionMessage, docId: string): boolean =>
-  entry.uuid === docId ||
-  entry.sourceUuid === docId ||
-  (entry.sends ?? []).includes(docId);
+  names(entry.uuid, docId) ||
+  names(entry.sourceUuid, docId) ||
+  (entry.sends ?? []).some((send) => names(send, docId));
 
 /** A stored transcript as `around` reads it. */
 interface Stored {
@@ -498,7 +549,7 @@ const threadTurnsOf = (
   side: number
 ): TurnsRead | NoTurns => {
   const centre = messageId
-    ? messages.findIndex((message) => message.id === messageId)
+    ? messages.findIndex((message) => names(message.id, messageId))
     : messages.length - 1;
   if (centre < 0) {
     return {
@@ -711,7 +762,7 @@ const detailedHitOf = (result: FindResult) => {
 };
 
 /** The hits that fit {@link ANSWER_MAX_CHARS}: past it, a hit goes to the next page. */
-const bounded = (hits: Record<string, unknown>[]) => {
+const bounded = <T>(hits: T[]): T[] => {
   const kept = [...hits];
   while (
     kept.length > 1 &&
@@ -738,12 +789,39 @@ const noteOf = (
     : "Nothing matched: fewer or other words, or fewer filters.";
 };
 
+/** Whether the call names a filter that narrows the set: what lets it list with no words. */
+const narrowed = (input: FindInput): boolean =>
+  input.by !== undefined ||
+  input.since !== undefined ||
+  input.before !== undefined ||
+  (input.kinds?.length ?? 0) > 0 ||
+  input.project !== undefined ||
+  input.machine !== undefined;
+
+/** What a listing answers past its hits: how to page on, or why nothing came. */
+const listedNote = (
+  by: By,
+  hasMore: boolean,
+  shown: number,
+  scoped: { name: string } | undefined
+): string | undefined => {
+  if (hasMore) {
+    return "Newest first: pass next_cursor for what was said before these.";
+  }
+  if (shown > 0) {
+    return;
+  }
+  return scoped
+    ? `Nothing said by the ${by} in project ${scoped.name}, this session's own, in that window: project "all" lists every project.`
+    : `Nothing said by the ${by} in that window: widen since or before, or drop a filter.`;
+};
+
 /** A search's words and page size, or the refusal with one call that works. */
 const checked = (input: FindInput): { limit: number; query: string } => {
   const query = input.query?.trim() ?? "";
-  if (!query) {
+  if (!(query || narrowed(input))) {
     throw new FindToolRefusal(
-      `query is empty: give the words to look for, as typed into the dashboard's Find, or around with a hit's ref. Example: ${EXAMPLE}`
+      `query is empty and nothing narrows it: give the words to look for, as typed into the dashboard's Find; or a filter (by, since, before, kinds, project, machine) to list what matches it, newest first; or around with a hit's ref. Example: ${EXAMPLE} or ${LISTING_EXAMPLE}`
     );
   }
   const limit = Math.trunc(input.limit ?? DEFAULT_LIMIT);
@@ -920,11 +998,27 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
+  /** The full id a hit's id or handle names: a session's or a thread's; as given when none or several begin with it. */
+  const wholeId = (asked: string): string => {
+    if (
+      asked.length >= 36 ||
+      asked.length < HANDLE_MIN ||
+      deps.instance(asked)
+    ) {
+      return asked;
+    }
+    const ids = [
+      ...deps.instancesByPrefix(asked).map((row) => row.id),
+      ...deps.threadsByPrefix(asked),
+    ];
+    return ids.length === 1 && ids[0] ? ids[0] : asked;
+  };
+
   /** `around`: a hit's ref or id, read as turns. */
   const around = async (ref: string, format: "concise" | "detailed") => {
     const { side, chars } = AROUND[format];
     const mark = ref.indexOf(REF_MARK);
-    const id = (mark < 0 ? ref : ref.slice(0, mark)).trim();
+    const id = wholeId((mark < 0 ? ref : ref.slice(0, mark)).trim());
     const docId = mark < 0 ? undefined : ref.slice(mark + 1);
     const target = targetOf(id);
     if (!target) {
@@ -1111,6 +1205,10 @@ export const createFindTool = (deps: FindToolDeps) => {
 
   const search = async (actor: InstanceRow, input: FindInput) => {
     const { query, limit } = checked(input);
+    const { by } = input;
+    if (!query && by !== undefined) {
+      return await listed(actor, { ...input, by }, limit);
+    }
     const { where, scoped } = scopeOf(actor, input);
     const offset = decodeCursor(input.cursor);
     const page = await deps.find.find({
@@ -1151,16 +1249,81 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
-  /** One `find` call: a search, or `around` a hit. */
-  const call = async (actor: InstanceRow, raw: unknown): Promise<unknown> => {
-    const parsed = SCHEMA.safeParse(raw);
-    if (!parsed.success) {
-      const [issue] = parsed.error.issues;
-      throw new FindToolRefusal(
-        `${issue?.path.join(".") || "input"}: ${issue?.message ?? "not valid"}. Kinds: ${FIND_KINDS.join(", ")}. Example: ${EXAMPLE}`
-      );
-    }
-    const input = parsed.data;
+  /**
+   * A listing: no words, `by` an author. Each thing they said in the window
+   * is a hit of its own, newest first, from the engine's whole listing
+   * (find.ts `listing`); a page is the next `limit` older than its cursor,
+   * and only those are read for their words and filtered for secrets.
+   */
+  const listed = async (
+    actor: InstanceRow,
+    input: FindInput & { by: By },
+    limit: number
+  ) => {
+    const { where, scoped } = scopeOf(actor, input);
+    const from = listedFrom(input.cursor);
+    // The next page is asked from before the last one read, so it reaches
+    // past what one listing reads from each machine.
+    const before =
+      from === undefined
+        ? where.before
+        : Math.min(where.before ?? from.at, from.at);
+    const { results, coverage } = await deps.find.listing({
+      author: AUTHOR[input.by],
+      transcripts: true,
+      where: { ...where, ...(before === undefined ? {} : { before }) },
+      ...(input.kinds?.length ? { kinds: input.kinds as FindKind[] } : {}),
+    });
+    const said = results
+      .flatMap((result) =>
+        momentsOf(result).flatMap((moment) =>
+          moment.at === null
+            ? []
+            : [{ at: moment.at, doc: moment.docId, result, moment }]
+        )
+      )
+      .filter((one) => from === undefined || newerFirst(from, one) < 0)
+      .toSorted(newerFirst);
+    const page = said.slice(0, limit);
+    const reads = new Map<string, ReturnType<typeof storedOf>>();
+    const read: typeof storedOf = (id, key) => {
+      const known = reads.get(key) ?? storedOf(id, key);
+      reads.set(key, known);
+      return known;
+    };
+    const shown = await Promise.all(
+      page.map(({ result, moment }) =>
+        redactedResult({ ...result, moments: [moment] } as FindResult, read)
+      )
+    );
+    const hits = bounded(
+      input.response_format === "detailed"
+        ? await withNeighbours(shown, read, where.before)
+        : shown.map(hitOf)
+    );
+    const last = page[hits.length - 1];
+    const hasMore = said.length > hits.length && last !== undefined;
+    const unsearched = unsearchedOf(coverage);
+    const note = listedNote(input.by, hasMore, hits.length, scoped);
+    return {
+      hits,
+      newest_first: true as const,
+      has_more: hasMore,
+      next_cursor: hasMore
+        ? listedCursor({ at: last.at, doc: last.doc })
+        : null,
+      ...(note ? { note } : {}),
+      ...(unsearched.length > 0 ? { unsearched } : {}),
+    };
+  };
+
+  /** One `find` call, its input parsed: a search, or `around` a hit; `format` the form asked. */
+  const call = async (
+    actor: InstanceRow,
+    asked: z.infer<typeof SCHEMA>,
+    format: "concise" | "detailed"
+  ) => {
+    const input: FindInput = { ...asked, response_format: format };
     try {
       if (input.around?.trim()) {
         return await around(input.around, input.response_format ?? "concise");
@@ -1181,18 +1344,22 @@ export const createFindTool = (deps: FindToolDeps) => {
 
 export type FindTool = ReturnType<typeof createFindTool>;
 
+/** What a malformed `find` is told, after what it got wrong. */
+const INPUT_HELP = `Kinds: ${FIND_KINDS.join(", ")}. Example: ${EXAMPLE}`;
+
 /** `find`'s definition, as a session is listed it; `call` runs it for the calling session. */
 export const findToolDefinition = (
-  call: (raw: unknown) => Promise<unknown>
-) => ({
-  name: FIND_TOOL,
-  description: DESCRIPTION,
-  inputSchema: z.toJSONSchema(SCHEMA, { target: "draft-07", io: "input" }),
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-  handler: call,
-});
+  call: (
+    input: z.infer<typeof SCHEMA>,
+    format: "concise" | "detailed"
+  ) => Promise<Parameters<typeof findWords>[0]>
+) =>
+  tool(FIND_TOOL, DESCRIPTION, INPUT, call, findWords, {
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputHelp: INPUT_HELP,
+  });

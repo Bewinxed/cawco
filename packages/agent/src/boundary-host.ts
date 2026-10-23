@@ -4,14 +4,17 @@
  * @anthropic-ai/sandbox-runtime (srt) in library mode: `SandboxManager` is a
  * module-level singleton, one config and one proxy per process, so each
  * workspace has its own process. It starts srt's proxy with the workspace's
- * settings and the ask callback below, wraps the workspace's runner (the
+ * settings and the ask callback below, and the relay in front of it that
+ * presents srt's token for every client (proxy-relay.ts), wraps the workspace's runner (the
  * script RUNNER names, handed to bash inline) and runs it: every command of
  * the workspace then runs inside that one sandbox, handed in over FIFO.
  *
  * The wrapped command is a plain bwrap invocation, which this process `exec`s
  * through `sh`, so bwrap is this process's own child: bwrap's
- * `--die-with-parent` then ends the sandbox with everything in it whenever
- * this process goes. Closing a boundary kills that outer bwrap; srt then sees
+ * `--die-with-parent` ends the sandbox with everything in it should this
+ * process go unasked. Every sandbox this process ends itself (a guard's
+ * restart, its close) it ends for certain, its init before its outer bwrap
+ * (sandbox-end.ts `endSandbox`). Closing a boundary kills the same two; srt then sees
  * its child exit, and this process removes srt's proxy, its socat bridges and
  * its mount points before it exits with the sandbox's status (REPORT.md §5e).
  * The one sandbox it ends itself, when the host detaches one of its
@@ -33,8 +36,11 @@
  *
  * A plain Bun script, never a module of cawco, importing nothing of it but
  * core's dependency-free dir names (`claude-dirs.ts`), mount table
- * (`mount-table.ts`) and nested-boundary words (`boundary-nesting.ts`),
- * with safe git and state files: a binary install runs
+ * (`mount-table.ts`), nested-boundary words (`boundary-nesting.ts`), socat
+ * backlog (`socat.ts`) and hub preview origins (`hub-previews.ts`),
+ * with safe git and state files, the signal wall's sending half
+ * (`signal-wall.ts`, through sandbox-end.ts), and the agent's own
+ * dependency-free proxy relay (`proxy-relay.ts`): a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
  * runs it on bun.
  */
@@ -64,10 +70,17 @@ import {
 } from "@cawco/core/boundary-nesting";
 import { projectClaudeRelative, TREE_STORE_DIR } from "@cawco/core/claude-dirs";
 import { isGitDirSync } from "@cawco/core/git-dir";
+import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
+import {
+  RELAY_SOCKET_ENV,
+  RELAY_SOCKET_NAME,
+  startProxyRelay,
+} from "./proxy-relay";
+import { endSandbox, parentOf } from "./sandbox-end";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
@@ -199,7 +212,7 @@ if (!(settingsFile && runnerFile && fifo && clone && readyLine && deniesFile)) {
  * runtime dir (the workspace's door dir, srt's own temp dir). srt restores a
  * read carve-out of a denied dir only if it exists as it wraps ("Not
  * restoring … nothing there resolves (absent, dangling or unreadable)",
- * `pushReadDenyDirMounts` in linux-sandbox-utils.js at 0.0.79), and this
+ * `pushReadDenyDirMounts` in linux-sandbox-utils.js at 0.0.81), and this
  * sandbox lives as long as the workspace, so a dir made after the wrap never
  * shows inside: the door's sockets, made in it later, would be out of reach.
  * A bound dir shows every entry made in it afterwards.
@@ -278,15 +291,45 @@ process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
 await SandboxManager.initialize(settings, ask);
 
 /**
- * A mount point an earlier sandbox left on the host, by srt's own test
- * (`isStaleBwrapMountPoint`, linux-sandbox-utils.ts at 0.0.79): bwrap makes
- * one for an absent path with ensure_file(dest, 0444), an empty regular file
- * with no write bits and one link, which no checkout or writer makes.
+ * The relay in front of srt's proxy (proxy-relay.ts): it presents srt's
+ * token for every request, so a client that drops the URL's credential
+ * (Chromium) gets out as every other does. Its socket is in srt's own temp
+ * dir (this process's `TMPDIR`), which the sandbox binds back as it binds
+ * srt's bridge sockets there. With no proxy of srt's to relay to, no sandbox
+ * starts: its commands would have no way out.
+ */
+const relaySocket = join(process.env.TMPDIR ?? "", RELAY_SOCKET_NAME);
+const srtPort = SandboxManager.getProxyPort();
+const srtToken = SandboxManager.getProxyAuthToken();
+if (!(process.env.TMPDIR && srtPort && srtToken)) {
+  console.log(
+    `cawco: srt started no proxy of its own to relay to (TMPDIR ${process.env.TMPDIR ?? "unset"}, port ${srtPort ?? "none"}, ${srtToken ? "a" : "no"} token), so the workspace's sandbox has no way out and its boundary closes`
+  );
+  await SandboxManager.reset();
+  process.exit(1);
+}
+const relay = await startProxyRelay({
+  socket: relaySocket,
+  upstream: { host: "127.0.0.1", port: srtPort },
+  credential: `srt:${srtToken}`,
+  // The hub's own preview origins, dialed from here (proxy-relay.ts).
+  previews: process.env[HUB_PREVIEWS_ENV],
+});
+
+/**
+ * A mount point an earlier sandbox left on the host: bwrap makes one for an
+ * absent path with ensure_file(dest, 0444), and srt where it makes it itself
+ * (`makeableMountPoint`, `openSync(entry, 'wx', 0o444)` at 0.0.81), an empty
+ * regular file with no write bits and one link, which no checkout or writer
+ * makes. srt no longer tells one apart (0.0.81 has no
+ * `isStaleBwrapMountPoint`): one left at a deny path is an existing file to
+ * it, bound onto itself read-only and never removed, so at a stand-in's path
+ * this host replaces it ({@link makeStandIn}).
  */
 const leftMountPoint = (stat: Stats): boolean =>
   stat.isFile() &&
   stat.size === 0 &&
-  // biome-ignore lint/suspicious/noBitwiseOperators: a file mode's write bits, tested as srt tests them
+  // biome-ignore lint/suspicious/noBitwiseOperators: a file mode's write bits, none on a mount point bwrap left
   (stat.mode & 0o222) === 0 &&
   stat.nlink === 1;
 
@@ -348,8 +391,8 @@ const makeStandIn = (
     }
   } else {
     // Writable whatever the umask: an empty file with no write bits is what
-    // srt takes for a mount point an earlier sandbox left (leftMountPoint),
-    // and would cover with /dev/null and remove.
+    // this host takes for a mount point an earlier sandbox left
+    // (leftMountPoint), and would replace at the next start.
     // In place: its folder is the clone's own, made above or there already,
     // and a clone deleted since is never made again by this write.
     writeStateFileSync(path, empty.text, {
@@ -420,10 +463,9 @@ const markLfs = (): void => {
  * under a directory that is not the clone's own (a symlink, a file): srt
  * then stands in for the path as it always has. The workspace's
  * `info/exclude` keeps every one out of git's status, each by its own line
- * (`listStandIns` in stand-ins.ts). A file's stand-in is readable (0644): one
- * with no write bits is what srt takes for a mount point an earlier sandbox
- * left, and covers with `/dev/null`, which a sandbox cannot even read (the
- * clone's mounts are `nodev`).
+ * (`listStandIns` in stand-ins.ts). A file's stand-in is 0644: one with no
+ * write bits is what this host takes for a mount point an earlier sandbox
+ * left ({@link leftMountPoint}), and makes again at every start.
  */
 const standIn = (): void => {
   markLfs();
@@ -471,7 +513,7 @@ const PROTECTED = [
   ".opencode",
   ".mcp.json",
   // srt's own mandatory names at the clone's root (`DANGEROUS_FILES`,
-  // `getDangerousDirectories()` in sandbox-utils.js at 0.0.79).
+  // `getDangerousDirectories()` in sandbox-utils.js at 0.0.81).
   ".gitconfig",
   ".gitmodules",
   ".bashrc",
@@ -522,17 +564,6 @@ const mountinfoSpelling = (path: string): string =>
 /** A process's entry in `/proc`. */
 const PID = /^\d+$/;
 
-/** A process's parent, from `/proc/<pid>/stat` (after its name, which may hold `)`); undefined once it is gone. */
-const parentOf = (pid: string): number | undefined => {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
-  } catch {
-    // Gone.
-    return undefined;
-  }
-};
-
 /**
  * `inner` and every process that descends from it, by each one's parent:
  * the sandbox, in its own pid namespace and any nested in it. The agent
@@ -541,7 +572,7 @@ const parentOf = (pid: string): number | undefined => {
 const treeOf = (inner: number): number[] => {
   const children = new Map<number, number[]>();
   for (const pid of readdirSync("/proc").filter((name) => PID.test(name))) {
-    const parent = parentOf(pid);
+    const parent = parentOf(Number(pid));
     if (parent === undefined) {
       continue;
     }
@@ -597,6 +628,8 @@ const inherited = [
 ];
 const runnerEnv = {
   PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
+  // The relay's socket, which the runner bridges into the sandbox (proxy-relay.ts `RELAY_STEP`).
+  [RELAY_SOCKET_ENV]: relaySocket,
   ...Object.fromEntries(
     inherited.flatMap((name) => {
       const value = process.env[name];
@@ -723,6 +756,18 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
 let current: Sandbox | undefined;
 let stopping = false;
 
+/**
+ * Kills `sandbox` with everything in it, for certain: its init, the pid
+ * namespace's process 1, then its outer bwrap (sandbox-end.ts), never the
+ * outer alone, whose death ends the namespace only through bwrap's
+ * `--die-with-parent`. Its exit then ends the sandbox's run below.
+ */
+const kill = (sandbox: Sandbox): void => {
+  endSandbox({ inner: sandbox.inner, outer: sandbox.proc.pid }, () =>
+    sandbox.proc.kill("SIGKILL")
+  );
+};
+
 /** Kills the sandbox, with everything in it, when one of its protected binds is gone. */
 const guard = (): void => {
   const sandbox = current;
@@ -733,7 +778,7 @@ const guard = (): void => {
   const lost = mounted && sandbox.guarded.find((path) => !mounted.has(path));
   if (lost) {
     sandbox.detached = lost;
-    sandbox.proc.kill("SIGKILL");
+    kill(sandbox);
   }
 };
 
@@ -776,7 +821,9 @@ process.on("SIGUSR1", guard);
 for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
   process.on(signal, () => {
     stopping = true;
-    current?.proc.kill("SIGKILL");
+    if (current) {
+      kill(current);
+    }
   });
 }
 
@@ -791,9 +838,13 @@ let finishing: Promise<never> | undefined;
 const finish = (end: { status: number } | { gone: string }): Promise<never> => {
   finishing ??= (async () => {
     stopping = true;
-    current?.proc.kill("SIGKILL");
+    if (current) {
+      kill(current);
+    }
     rmSync(placeFile, { force: true });
     rmSync(guardedFile, { force: true });
+    relay.close();
+    rmSync(relaySocket, { force: true });
     await SandboxManager.reset();
     if ("gone" in end) {
       refuseGone(end.gone);

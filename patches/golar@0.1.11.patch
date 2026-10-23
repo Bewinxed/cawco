@@ -1,0 +1,56 @@
+diff --git a/dist/cli.js b/dist/cli.js
+index 04100bb02b3dbaa61de267ba7358dcf48c248a5e..1b18de0819d8edea89195ca90578b9d291983a22 100644
+--- a/dist/cli.js
++++ b/dist/cli.js
+@@ -126,7 +126,11 @@ if (argv[0] === "tsc") {
+ 		await Promise.all(promises);
+ 	}
+ 	if (!lintOnly) process.exit(await ws.typecheck(typecheckFiles));
+-	process.exit(0);
++	// cawco: `golar lint` exits 1 when a rule reported, where it exited 0
++	// whatever it found. It counts the JS rules' reports on the main thread,
++	// which is all of them on one thread (config.js). Drop this when Golar
++	// exits by its findings.
++	process.exit(ws.reports > 0 ? 1 : 0);
+ }
+ //#endregion
+ export {};
+diff --git a/dist/config.js b/dist/config.js
+index db90938e22eb75b0641fd790c815eb698990196f..43c9254b7ed9da99b51750cacd80427e6c4ae3b8 100644
+--- a/dist/config.js
++++ b/dist/config.js
+@@ -36,7 +36,12 @@ function resolveConfig(cwd, config) {
+ 	}
+ 	const builtinRulesByFile = new Map(builtinEffectiveRulesByFile.entries().map(([file, rulesById]) => [file, Array.from(rulesById.values())]));
+ 	const jsFiles = Array.from(jsEffectiveRulesByFile.keys());
+-	const jsWorkersCount = Math.min(jsFiles.length, 4);
++	// cawco: JS rules run on one thread. Each thread's getTypeAtLocation
++	// calls the one checker Golar keeps per program with no lock
++	// (internal/workspace/workspace.go:80, 136-138), so four threads race
++	// it: "fatal error: concurrent map read and map write" in 13 of 50 runs,
++	// 0 of 50 on one thread. Drop this when Golar guards that checker.
++	const jsWorkersCount = Math.min(jsFiles.length, 1);
+ 	const jsFilesPerThread = Math.ceil(jsFiles.length / jsWorkersCount);
+ 	const jsEffectiveRulesIter = jsEffectiveRulesByFile.keys();
+ 	const jsFilesByWorker = Array(jsWorkersCount).fill(null).map(() => Array.from(jsEffectiveRulesIter.take(jsFilesPerThread)));
+diff --git a/dist/workspace.js b/dist/workspace.js
+index 0bb85bc5e697ea3027df7b2c34f1130b334b07d5..cf0c3061533780ea3f9b2ad10d3446edad0d5608 100644
+--- a/dist/workspace.js
++++ b/dist/workspace.js
+@@ -50,6 +50,8 @@ var Workspace = class Workspace {
+ 	pointerLo;
+ 	requestedFiles = /* @__PURE__ */ new Map();
+ 	filenameToIndex = /* @__PURE__ */ new Map();
++	// cawco: the JS rules' reports on this thread, which cli.js exits by.
++	reports = 0;
+ 	programs;
+ 	sourceFileById;
+ 	static async create(cwd, filenames) {
+@@ -228,6 +230,7 @@ var Workspace = class Workspace {
+ 				program: file.program,
+ 				sourceFile: file.file,
+ 				report(report) {
++					workspace.reports += 1;
+ 					let offset = 0;
+ 					offset = workspace.writePointer(offset);
+ 					syncView.setUint32(offset, fileIdx, true);

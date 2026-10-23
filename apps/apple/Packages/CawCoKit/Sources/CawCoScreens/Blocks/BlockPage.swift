@@ -632,7 +632,7 @@ final class BlockFrameView: UIView {
             action?.removeFromSuperview()
             if let next = item.action { tools.insertArrangedSubview(next, at: 0) }
         }
-        moreButton.accessibilityLabel = Words.Blocks.more(title: item.title)
+        moreButton.accessibilityLabel = Words.Common.moreFor(label: item.title)
         shown = (item, place, columns, first, last)
         // Its content, again when it was taken elsewhere in between (the board, back on its own pane).
         if content !== item.content || item.content.superview !== scroller {

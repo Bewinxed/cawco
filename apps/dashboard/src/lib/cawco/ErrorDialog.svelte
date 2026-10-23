@@ -10,8 +10,10 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { IconAlert, IconCheck, IconCopy } from "#lib/icons.js";
-  import { copyToClipboard } from "./copy";
+  import { copyRefused, copyToClipboard } from "./copy";
   import { dur } from "./motion/curves.svelte";
+  import RowFault from "./RowFault.svelte";
+  import { refusals } from "./refusals.svelte";
 
   let {
     title,
@@ -20,12 +22,25 @@
   }: { title: string; message: string; open?: boolean } = $props();
 
   let copied = $state(false);
+  /**
+   * Where a refused copy of this error is said: over the footer, with Try
+   * again, kept (refusals.svelte.ts), so the dialog opened again says it.
+   */
+  const key = $derived(`copy:error:${title}:${message}`);
   let timer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => () => clearTimeout(timer));
 
   async function copy() {
     clearTimeout(timer);
+    const at = key;
     copied = await copyToClipboard("Error", message);
+    if (copied) {
+      refusals.delete(at);
+    } else {
+      refusals.set(at, {
+        reason: copyRefused("Error", "from the text above"),
+      });
+    }
     timer = setTimeout(() => {
       copied = false;
     }, dur("--dur-hold"));
@@ -45,6 +60,8 @@
       <pre
         class="m-0 max-h-c-report-text-max min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
         data-error-text>{message}</pre>
+
+      <RowFault again={copy} data-copy-refused reason={refusals.reason(key)} />
 
       <Dialog.Footer>
         <Button onclick={copy} type="button" variant="outline">

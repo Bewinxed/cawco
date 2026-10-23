@@ -28,6 +28,15 @@
  *   fails: it was in the tree read at `stdin_end`.
  * - (b) kept in is gone: the sweep still ends what stays in the child's
  *   cgroup.
+ * - (c) escaped is gone, and the child's cgroup lists no process: a process
+ *   the child started that put itself in a session of its own and whose
+ *   parent then exited, so it was reparented before any reading, as bwrap's
+ *   sandbox does (`--new-session` calls setsid(), bubblewrap.c) under a
+ *   workspace boundary's srt host. Neither the child's process group nor its
+ *   parentage finds it; only its cgroup does. Main fails: on uwucloud
+ *   (2026-10-23) three failed delegates' boundary processes stayed alive
+ *   after their hosts exited. The keeper now ends the child's cgroup whole
+ *   (sessiond cgroup.ts `killGroup`, `cgroup.kill`).
  *
  * Cleanup stops the moved process's scope and the keeper's unit, each by
  * its own name. It signals no process itself.
@@ -85,6 +94,7 @@ const spec: Spec = {
     const movedPid = join(marks, "moved.pid");
     const termFile = join(marks, "moved.term");
     const keptPid = join(marks, "kept.pid");
+    const escapedPid = join(marks, "escaped.pid");
     try {
       const startRefused = await startKeeperUnit(kit, keeper);
       if (startRefused) {
@@ -97,11 +107,14 @@ const spec: Spec = {
       }
       const moved = `trap 'echo TERM >> "$1"' TERM; echo $$ > "$0"; while :; do sleep 1; done`;
       const kept = `echo $$ > "$0"; while :; do sleep 1; done`;
+      // A session of its own, then its parent (the subshell) exits at once.
+      const escaped = `( setsid /bin/sh -c ${quoted(kept)} ${quoted(escapedPid)} & )`;
       const script = [
         // systemd-run expands `$` in its arguments by default ("Use \"$$\" to pass a literal dollar
         // sign", systemd.service(5)): the shell's `$$` would reach it as `$`.
         `systemd-run --user --scope --quiet --collect --expand-environment=no --unit=${quoted(scope)} -- /bin/sh -c ${quoted(moved)} ${quoted(movedPid)} ${quoted(termFile)} &`,
         `/bin/sh -c ${quoted(kept)} ${quoted(keptPid)} &`,
+        escaped,
         "read line",
         "exit 0",
       ].join("\n");
@@ -113,11 +126,14 @@ const spec: Spec = {
       const both = await until(
         "both background processes running",
         async () => {
-          const [moving, staying] = await Promise.all([
+          const [moving, staying, away] = await Promise.all([
             pidIn(movedPid),
             pidIn(keptPid),
+            pidIn(escapedPid),
           ]);
-          return moving && staying ? ([moving, staying] as const) : undefined;
+          return moving && staying && away
+            ? ([moving, staying, away] as const)
+            : undefined;
         },
         Boolean,
         30_000
@@ -126,15 +142,18 @@ const spec: Spec = {
         kit.check(
           "the child starts both processes",
           false,
-          `moved.pid holds ${JSON.stringify(await textOf(movedPid))}; kept.pid holds ${JSON.stringify(await textOf(keptPid))}; the child said: ${started.lines.join(" | ").slice(-1500) || "nothing"}`
+          `moved.pid holds ${JSON.stringify(await textOf(movedPid))}; kept.pid holds ${JSON.stringify(await textOf(keptPid))}; escaped.pid holds ${JSON.stringify(await textOf(escapedPid))}; the child said: ${started.lines.join(" | ").slice(-1500) || "nothing"}`
         );
         return;
       }
-      const [movedAt, keptAt] = both;
+      const [movedAt, keptAt, escapedAt] = both;
       const movedBefore = await startedAt(movedAt);
       const keptBefore = await startedAt(keptAt);
+      const escapedBefore = await startedAt(escapedAt);
       const movedGroup = await cgroupOf(movedAt);
       const keptGroup = await cgroupOf(keptAt);
+      const escapedGroup = await cgroupOf(escapedAt);
+      const escapedStat = await textOf(`/proc/${escapedAt}/stat`);
       // The keeper reads the child's tree, then ends its stdin: the child exits and is swept.
       await started.client.stdinEnd(started.procId);
       const ended = await readWithin(30_000, () => started.exited);
@@ -155,6 +174,21 @@ const spec: Spec = {
         "(b) a process the child left in its cgroup is ended by the sweep",
         keptBefore !== undefined && keptAfter !== keptBefore,
         `kept in ${keptAt} was in ${keptGroup}, now ${fateOf(keptBefore, keptAfter)}`
+      );
+      const escapedAfter = await startedAt(escapedAt);
+      // cgroupOf names it from the cgroup v2 mount.
+      const groupDir = join("/sys/fs/cgroup", escapedGroup.trim());
+      const left = (await textOf(join(groupDir, "cgroup.procs"))).trim();
+      // pid (comm) state ppid pgrp session …, after the name.
+      const [, , ppid, pgrp, session] = escapedStat
+        .slice(escapedStat.lastIndexOf(")") + 2)
+        .split(" ");
+      kit.check(
+        "(c) a process the child started that put itself in a session of its own and was reparented is ended with the child's cgroup, which then lists no process",
+        escapedBefore !== undefined &&
+          escapedAfter !== escapedBefore &&
+          left === "",
+        `escaped ${escapedAt} (parent ${ppid}, group ${pgrp}, session ${session}; the child is ${started.procId}) was in ${escapedGroup.trim()}, now ${fateOf(escapedBefore, escapedAfter)}; ${groupDir}/cgroup.procs lists ${JSON.stringify(left)}`
       );
     } finally {
       await run(["systemctl", "--user", "stop", scope]);

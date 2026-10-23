@@ -43,7 +43,6 @@ import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
-import { HEAVY_ADMITTED_ENV } from "../packages/core/src/heavy-run";
 import {
   darwinUserDirs,
   socketPathProblem,
@@ -57,8 +56,9 @@ import {
   signal as signalPid,
   spawnedPid,
 } from "../packages/core/src/signal";
-import { ensureDeps } from "./lib/deps";
-import { type HeavySlot, heavySlot } from "./lib/heavy-run";
+import { installDeps } from "./lib/deps";
+import { requireDiskRoom } from "./lib/disk-room";
+import { holdAwake } from "./lib/hold-awake";
 import { welcomed } from "./lib/keeper-dial";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 import { STAND_INS_ENV, type StandIns } from "./stand-ins/index";
@@ -136,6 +136,12 @@ export interface Seen {
   auth: string;
   /** The request's body as sent: where a catalog tool (OpenCode's Code Mode) is named. */
   body: string;
+  /**
+   * The newest message's whole text: a tool's result with the words read
+   * mid-turn beside it, where {@link last} keeps only those words. What a
+   * tool answered, when a delivery joined at its boundary.
+   */
+  final: string;
   /**
    * What started this request: the last user message's text, or, when the
    * newest message carries words read mid-turn, those words from
@@ -350,7 +356,7 @@ function ephemeralPorts(): { first: number; last: number } {
 /** Every lease covers one block of this many ports: blocks never overlap, so leases never do. */
 const LEASE_BLOCK = 16;
 
-/** Where port leases are held: the workspaces' shared cache, the one tree every workspace's boundary and the host's shells all write (core heavy-run.ts keeps its slots there too). */
+/** Where port leases are held: the workspaces' shared cache, the one tree every workspace's boundary and the host's shells all write. */
 const LEASES_DIR = join(workspaceCacheDir(), "port-leases");
 
 /** A run's hold on a block of ports: its first `count` as `first-last`, and its release. */
@@ -543,6 +549,18 @@ const textOf = (content: unknown): string => {
       typeof part.text === "string" ? part.text : textOf(part.content)
     )
     .join(" ");
+};
+
+/** What a request's newest message says: its words from `MID_TURN` on when it carries any ({@link Seen.last}), and whole ({@link Seen.final}). */
+const newestOf = (
+  words: { midTurn: boolean; said: string; text: string }[]
+): Pick<Seen, "final" | "last" | "lastMidTurn"> => {
+  const newest = words.at(-1);
+  return {
+    last: newest?.said ?? "",
+    final: newest?.text ?? "",
+    lastMidTurn: newest?.midTurn === true,
+  };
 };
 
 const encoder = new TextEncoder();
@@ -1536,12 +1554,7 @@ export interface SendSnapshot {
  * returns what drives it. Nothing runs until the probe launches it. A setup
  * that fails takes what it made and started with it.
  *
- * A fleet is a heavy run for its whole life: it holds one of the machine's
- * slots (lib/heavy-run.ts `heavySlot`) from its setup until `close`, since
- * its hub, agent, keeper and sessions weigh on the machine for as long as
- * they run. It waits for the slot as any heavy run does, while none is free
- * or the machine has no room. Under a run that holds one already (the probe
- * kit's), it counts once.
+ * It starts at once, with room on the disk (lib/disk-room.ts).
  */
 /**
  * Where a fleet's hub listens (`bind`, its `HOST`) and the address its
@@ -1561,7 +1574,8 @@ export async function scratchFleet(options: {
   /** A promise holds the request until it settles: a spec paces a session's turns. */
   respond: (request: Seen) => Reply | Promise<Reply>;
 }) {
-  const heavy = await heavySlot();
+  requireDiskRoom(`The scratch fleet ${options.name}`);
+  holdAwake(`The scratch fleet ${options.name}`);
   const dirs = new FleetDirs();
   // Its hub's preview ports, held from every other run on the machine until it closes.
   const previews = await leasePortRange(PREVIEW_PORTS);
@@ -1569,12 +1583,11 @@ export async function scratchFleet(options: {
   // Its services' own ports, held the same way.
   const ports = new PortPool();
   try {
-    return await standUp(options, dirs, heavy, { previews, ports });
+    return await standUp(options, dirs, { previews, ports });
   } catch (error) {
     await dirs.remove();
     ports.release();
     previews.release();
-    heavy.release();
     throw error;
   }
 }
@@ -1586,7 +1599,6 @@ async function standUp(
     respond: (request: Seen) => Reply | Promise<Reply>;
   },
   dirs: FleetDirs,
-  heavy: HeavySlot,
   { previews, ports }: { ports: PortPool; previews: PortLease }
 ) {
   const hub = options.hub ?? { bind: "127.0.0.1", at: "127.0.0.1" };
@@ -1607,7 +1619,8 @@ async function standUp(
   // hub that imports a package a rebase added, run on the dependencies from
   // before it, dies at start ("Cannot find package 'yjs'"). The entry that
   // loaded this module awaited it before importing it; this is that same run.
-  await ensureDeps();
+  // The hub resolves in a process of its own, so nothing here runs again.
+  await installDeps();
   // The services' HOME and the agent's XDG_RUNTIME_DIR, apart from the
   // sandbox, two hex under their roots (`fleetRoots`): the runtime dir under
   // the shortest. Mode 700, as a runtime dir is. The agent keeps a
@@ -1716,8 +1729,7 @@ async function standUp(
         toolFailed: toolFailed(final?.content),
         all: words.map((said) => said.text).join("\n"),
         body: JSON.stringify(body),
-        last: words.at(-1)?.said ?? "",
-        lastMidTurn: words.at(-1)?.midTurn === true,
+        ...newestOf(words),
         tools: (body.tools?.length ?? 0) > 0,
         // Anthropic names a tool at its top; chat completions, in `function`.
         toolNames: (body.tools ?? []).flatMap((tool) => {
@@ -1770,6 +1782,9 @@ async function standUp(
   // signed in as the probe's identity and sends the fake token to the mock.
   // Every machine of the fleet gets the same, in its own HOME (`furnish`).
   const accountDir = join(home, ".cawco", "accounts", ACCOUNT, "claude");
+  const { resolveClaudeExecutable } =
+    await import("../packages/agent/src/auth");
+  const hostClaude = resolveClaudeExecutable();
   const furnish = async (dir: string) => {
     const account = join(dir, ".cawco", "accounts", ACCOUNT, "claude");
     await mkdir(account, { recursive: true });
@@ -1785,6 +1800,17 @@ async function standUp(
     if (existsSync(hostBrowsers)) {
       await mkdir(join(dir, browsers), { recursive: true });
       await symlink(hostBrowsers, join(dir, browsers, "ms-playwright"));
+    }
+    // The host's Claude Code, where its installer puts it and the agent's own
+    // lookup reads it (tools.ts `toolPath`: PATH, then `~/.local/bin`): the
+    // one this process finds, which is the one the failure words ask
+    // ({@link accountSignedIn}). The fleet's HOME is its own, so a host
+    // whose Claude Code is found only in its `~/.local/bin` (a shell whose
+    // PATH lacks it) had an agent that reported Claude not installed and
+    // read no account at all.
+    if (hostClaude) {
+      await mkdir(join(dir, ".local", "bin"), { recursive: true });
+      await symlink(hostClaude, join(dir, ".local", "bin", "claude"));
     }
     await writeFile(
       join(account, ".credentials.json"),
@@ -1933,13 +1959,6 @@ async function standUp(
     CAWCO_DEBUG: "1",
     CAWCO_MACHINE_ID: MACHINE,
     CAWCO_SESSIOND_ENDPOINT: sessiondSocket,
-    // Its machines run inside the fleet's own heavy-run admission (core
-    // heavy-run.ts `HEAVY_ADMITTED_ENV`, as stage 2's rig machines do): a
-    // session start there waits on no reading of the host's memory, which
-    // the host's other work moves. On 2026-10-19 limit-stall's delegates
-    // sat 3 to 9 minutes each on obelisk's 13 to 63% memory stall (another
-    // workspace's boundary, 106 GB available) and never started.
-    [HEAVY_ADMITTED_ENV]: options.name,
     ANTHROPIC_BASE_URL: mockBase,
     CLAUDE_CODE_TMPDIR: claudeTmp,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
@@ -2519,7 +2538,15 @@ async function standUp(
   interface AgentRow {
     auth?: string;
     custody?: { state: string };
-    harnesses?: { auth?: string; harness: string }[];
+    harnesses?: {
+      accounts?: { account: string; loggedIn: boolean }[];
+      auth?: string;
+      authReason?: string;
+      harness: string;
+      installed?: boolean;
+      unreadAccounts?: string[];
+      version?: string;
+    }[];
     machineCapabilities?: unknown;
     machineId: string;
     status: string;
@@ -2656,7 +2683,7 @@ async function standUp(
    * port, the one listener two agents on one host would otherwise both bind
    * ("MCP gateway port 127.0.0.1:<port> is held by pid …"). Answers once the
    * hub holds it online with custody. Every machine runs on this host, so
-   * the hub names them all by its hostname. It runs under the fleet's slot.
+   * the hub names them all by its hostname.
    */
   const launchMachine = async (
     machineId: string,
@@ -2742,14 +2769,31 @@ async function standUp(
       ACCOUNT,
       Date.now()
     );
+  /** The Claude report the hub holds from the first machine's agent, as its failure words say it. */
+  const claudeReportWords = async (): Promise<string> => {
+    const report = (await api<AgentRow[]>("/api/agents").catch(() => []))
+      .find((row) => row.machineId === MACHINE)
+      ?.harnesses?.find((one) => one.harness === "claude");
+    return report
+      ? JSON.stringify({
+          installed: report.installed,
+          version: report.version,
+          auth: report.auth,
+          authReason: report.authReason,
+          accounts: report.accounts,
+          unreadAccounts: report.unreadAccounts,
+        })
+      : "none filed";
+  };
   /**
    * The probe's own Claude account (its fake login in this fleet's HOME,
    * never one of the host's) reported signed in by the scratch agent. When
    * it is not within the wait, the failure says what there was to see: the
-   * account it waited for, every sign-in row the hub holds, what Claude Code
-   * itself answers for that account's dir (`claude auth status --json`, the
-   * agent's own question, accounts.ts `authStatusIn`), and the agent's lines
-   * about accounts.
+   * account it waited for, every sign-in row the hub holds, the Claude report
+   * the agent filed (installed or not, its accounts and the dirs it could not
+   * read), what Claude Code itself answers for that account's dir (`claude
+   * auth status --json`, the agent's own question, accounts.ts
+   * `authStatusIn`), and the agent's lines about accounts.
    */
   const accountSignedIn = async () => {
     try {
@@ -2797,6 +2841,7 @@ async function standUp(
         [
           `${error instanceof Error ? error.message : String(error)}: waited for account ${ACCOUNT} (its dir ${accountDir}) on machine ${MACHINE}.`,
           `Sign-in rows the hub holds: ${rows.length > 0 ? rows.map((row) => `${row.account_id} on ${row.machine_id}: ${row.state} (checked ${new Date(row.checked_at).toISOString()})`).join("; ") : "none"}.`,
+          `The agent's Claude report: ${await claudeReportWords()}.`,
           `Claude Code (${executable ?? started.refused}) says for that dir: exit ${status?.exitCode ?? "-"}, ${status ? status.stdout.toString().trim() || status.stderr.toString().trim() || "(nothing)" : "(not run)"}.`,
           `The agent's account lines:\n${agentLines.join("\n") || "(none)"}`,
         ].join("\n"),
@@ -2894,7 +2939,7 @@ async function standUp(
       payload: { instanceId },
     });
 
-  /** Stops everything this fleet started and its mock, then lets its heavy-run slot go. */
+  /** Stops everything this fleet started and its mock. */
   const close = async () => {
     socket?.close();
     // The added machines', agents first: a frozen one is thawed to hear it,
@@ -2921,7 +2966,6 @@ async function standUp(
     await mock.stop(true);
     ports.release();
     previews.release();
-    heavy.release();
   };
   /** Deletes the sandbox, the HOME and the runtime dir beside it (and every added machine's), unless `keep`. */
   const clean = async (keep: boolean) => {

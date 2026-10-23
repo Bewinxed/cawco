@@ -4,8 +4,9 @@
  * namespace of their own, so a pid read from a file names nobody, or
  * someone else, in another workspace or on the host; a file's lock is the
  * same lock wherever it is opened, and the kernel frees it when its holder
- * ends, a SIGKILL included. Users: the heavy-run slots (heavy-run.ts) and a
- * scratch fleet's folders (scripts/scratch-fleet.ts `FleetDirs`).
+ * ends, a SIGKILL included. Users: a scratch fleet's folders
+ * (scripts/scratch-fleet.ts `FleetDirs`), the fleet's browsers (agent
+ * browser/), and a workspace's lock (agent workspace.ts).
  */
 import { dlopen, FFIType } from "bun:ffi";
 import { closeSync, constants, openSync } from "node:fs";
@@ -24,7 +25,6 @@ const CLOEXEC = process.platform === "darwin" ? 0x1_00_00_00 : 0o200_0000;
 
 interface Libc {
   flock: (fd: number, operation: number) => number;
-  getppid: () => number;
 }
 let libc: Libc | undefined;
 const loadLibc = (): Libc => {
@@ -32,7 +32,6 @@ const loadLibc = (): Libc => {
     process.platform === "darwin" ? "libSystem.B.dylib" : "libc.so.6",
     {
       flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
-      getppid: { args: [], returns: FFIType.i32 },
     }
   ).symbols as unknown as Libc;
   return libc;
@@ -101,6 +100,3 @@ export const unlock = (fd: number): void => {
   loadLibc().flock(fd, LOCK_UN);
   closeSync(fd);
 };
-
-/** This process's parent's pid, read live: it changes once the parent is gone. */
-export const parentPid = (): number => loadLibc().getppid();

@@ -9,6 +9,10 @@
    * tints in and its words morph as the problem changes (the board state
    * pill's recipe). Opening it, the name flies into the account page's title
    * (motion/share).
+   *
+   * An account whose setup was left unfinished is where that setup is
+   * parked (The Work Outlives Its Surface Rule): its second line says the
+   * step it stands at, and the row opens the setup there again.
    */
   import { type Account, accountsWords as words } from "@cawco/core";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -17,11 +21,19 @@
 
   let { account }: { account: Account } = $props();
 
-  const href = $derived(`/config/accounts/${account.id}`);
+  const href = $derived(
+    account.setupStep
+      ? `/config/accounts/new?account=${encodeURIComponent(account.id)}`
+      : `/config/accounts/${account.id}`
+  );
   const name = $derived(
     account.label || account.email ? nameOf(account) : words.notSignedInYet
   );
-  const problem = $derived(problemOf(account));
+  const problem = $derived(
+    account.setupStep
+      ? words.setup.unfinished(words.setup.steps[account.setupStep])
+      : problemOf(account)
+  );
 </script>
 
 <li
@@ -29,6 +41,7 @@
   data-flip
 >
   <a
+    data-setup={account.setupStep}
     data-slot="account-list-row-link"
     class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-fill data-two:grid-areas-(--link-areas-two)"
     data-two={Boolean(problem) || undefined}

@@ -54,6 +54,47 @@ export function deadlineIn(ms: number | null): number | null {
 }
 
 /**
+ * A read refused because the machine it reads off is away: the hub's 503
+ * naming it ({@link machineAway}; hub server.ts `awayStatus`). Every reader of
+ * a route that reads off a machine throws it, so the surface that asked says
+ * so in place and asks again once the machine is back (machine-wait.svelte.ts
+ * `MachineWait`), never as a refusal.
+ */
+export class MachineAwayError extends Error {
+  readonly machineId: string;
+  /** Until when (epoch ms, this clock) the hub reads the machine as on its way back; null when it is offline. */
+  readonly reconnectingUntil: number | null;
+  constructor(
+    machineId: string,
+    reconnectingUntil: number | null,
+    words: string
+  ) {
+    super(words);
+    this.name = "MachineAwayError";
+    this.machineId = machineId;
+    this.reconnectingUntil = reconnectingUntil;
+  }
+}
+
+/**
+ * A refused `response` as the {@link MachineAwayError} it is when the hub
+ * says its machine is away; null otherwise, its body unread for the caller's
+ * own refusal.
+ */
+export async function awayOf(
+  response: Response
+): Promise<MachineAwayError | null> {
+  const { away, reconnectingMs } = machineAway(response);
+  return away
+    ? new MachineAwayError(
+        away,
+        deadlineIn(reconnectingMs),
+        `${(await hubFailure(response)).detail}.`
+      )
+    : null;
+}
+
+/**
  * THE ONE READER of a refused response, everywhere the dashboard asks the
  * hub: what it said, its reason as the hub wrote it without its closing
  * stop, and never the body as it came. The hub's problem (`type`, `title`, `status`,

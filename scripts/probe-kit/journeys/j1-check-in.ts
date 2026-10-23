@@ -12,8 +12,11 @@
  */
 import { existsSync } from "node:fs";
 import type { Page } from "playwright-core";
+import { askWords } from "../../../packages/core/src/words/asks";
 import { MACHINE, type Seen } from "../../scratch-fleet";
+import { caw, cawSays, needsCount, ZERO } from "../caw-head";
 import type { KitFleet } from "../kit";
+import { startsWith } from "../words";
 import {
   asking,
   commandFor,
@@ -33,24 +36,12 @@ import {
   shows,
 } from "./suite";
 
-/** Every word Caw's head says of what needs you (NeedsCaw.svelte's label). */
-export const CAW_SAYS =
-  /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)/;
-export const ZERO = "All caught up";
 /** Caw's head saying one thing needs you. */
-export const ONE_NEEDS = /^Needs you, 1(\D|$)/;
+export const ONE_NEEDS = needsCount(1);
 /** Caw's head counting zero as a number: a zero by another name. */
-const ZERO_NEEDS = /^Needs you, 0(\D|$)/;
+const ZERO_NEEDS = needsCount(0);
 /** A session's ask, by its card's name (Prompt.svelte). */
-const ASK_CARD = /^Permission request from/;
-
-/** Caw's head: the needs-you count. */
-export const caw = (page: Page) =>
-  page.getByRole("button", { name: CAW_SAYS }).first();
-
-/** What Caw's head says now. */
-export const cawSays = async (page: Page): Promise<string> =>
-  (await caw(page).getAttribute("aria-label", { timeout: 5000 })) ?? "";
+const ASK_CARD = startsWith(askWords.permissionFrom(""));
 
 /** A session's ask, as its pane draws it over the composer. */
 export const askCard = (page: Page) =>
@@ -164,8 +155,13 @@ async function walk(leg: Leg): Promise<void> {
       await fleet.stop("hub");
       const stopped = Date.now();
       while (Date.now() - stopped < WATCH_MS) {
+        // A reading that failed says why: what the head said instead, or
+        // that there was none.
         // biome-ignore lint/performance/noAwaitInLoops: one reading every 200ms, in order
-        const said = await cawSays(page).catch(() => "(no needs-you count)");
+        const said = await cawSays(page).catch(
+          (refused: unknown) =>
+            `(${refused instanceof Error ? refused.message : String(refused)})`
+        );
         heard.push({ at: Date.now() - stopped, said });
         await Bun.sleep(200);
       }
@@ -177,6 +173,11 @@ async function walk(leg: Leg): Promise<void> {
         (one) => one.said.startsWith(ZERO) || ZERO_NEEDS.test(one.said)
       );
       const timeline = [...new Set(heard.map((one) => one.said))].join(" → ");
+      // When the head first changed, on a pass as on a failure: the run's
+      // own reading of how soon the page knew the hub was gone.
+      console.log(
+        `  j1-check-in ${leg.id}: the hub stopped; Caw's head first changed at ${noticed === -1 ? "never" : `${heard[noticed]?.at}ms`}; said ${timeline}`
+      );
       expect(
         `within ${NOTICE_MS / 1000}s of the hub stopping, Caw's head stops claiming zero, and never claims it again while the hub is down`,
         noticed !== -1 &&

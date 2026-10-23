@@ -3,10 +3,23 @@ import {
   LANDS_MODES,
   type LandsMode,
   REFERENCE_GUIDANCE,
+  SESSION_CHOSEN_MODES,
 } from "@cawco/core";
+import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
+import type { DesignMap } from "@cawco/core/stage";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
-import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import type {
+  ArtifactRead,
+  ArtifactStatus,
+  Browsed,
+  CommentRead,
+  Created,
+  Promoted,
+  Removed,
+  Revised,
+  Shown,
+} from "./artifacts/service";
 import {
   artifactBrowse,
   artifactCreate,
@@ -27,6 +40,40 @@ import {
   handoffActions,
   SPAWNING_TOOLS,
 } from "./delegation-actions";
+import { sentence, tool } from "./mcp-tool";
+import {
+  type AskChanged,
+  artifactBrowsedWords,
+  artifactCreatedDetailed,
+  artifactCreatedWords,
+  artifactListWords,
+  artifactPromotedWords,
+  artifactReadDetailed,
+  artifactReadWords,
+  artifactRemovedWords,
+  artifactShownWords,
+  artifactUpdatedDetailed,
+  artifactUpdatedWords,
+  type CommentReplied,
+  type CommentResolved,
+  type ComponentChanged,
+  commentReadWords,
+  commentRepliedWords,
+  commentResolvedWords,
+  designMapWords,
+  type Updated,
+} from "./presenters/artifacts";
+import {
+  delegateListWords,
+  delegateTypesWords,
+  delegateWords,
+  imageWords,
+  runStartedWords,
+  startedWords,
+  stateSlotWords,
+  workflowSavedWords,
+  workflowsWords,
+} from "./presenters/sessions";
 import { budgetParameter, groupParameter, ownsParameter } from "./task-tools";
 import {
   SESSION_TITLE_DESCRIPTION,
@@ -98,50 +145,22 @@ const forgeWriteOf = (asked: {
   );
 };
 
-function tool<T extends z.ZodRawShape>(
-  name: string,
-  description: string,
-  input: T,
-  handler: (args: z.infer<z.ZodObject<T>>) => Promise<unknown>,
-  annotations?: ToolAnnotations,
-  inputError?: string
-) {
-  // A tool with its own input error refuses unknown keys itself, as it
-  // parses. What a harness is shown never says `additionalProperties: false`:
-  // OpenCode 2.0.29's own `opencode.tool.input.repair` hook deletes every key
-  // such a schema does not name, so a call would reach the hub without the
-  // `__cawco` credential the CawCo plugin stamps into it, and be refused.
-  const schema = inputError
-    ? z.strictObject(input, { error: inputError })
-    : z.object(input);
-  return {
-    name,
-    description,
-    inputSchema: z.toJSONSchema(z.object(input), {
-      target: "draft-07",
-      io: "input",
-    }),
-    ...(annotations ? { annotations } : {}),
-    handler: (args: unknown) => handler(schema.parse(args)),
-  };
-}
-
 /**
- * What `finish_item` says: the report is the proof, and what the hub does
+ * What `finish_item` says: the report is all the parent reads, carrying the
+ * deliverable and its proof, and what the hub does
  * with the work: the session's own work item's landing (`lands`), so a
  * delegate is never told the hub pushes to the base branch when it does not.
  */
 const finishItemDescription = (lands: LandsMode = "main"): string => {
   const proof =
-    ' Your `summary` is the proof: quote the real output of each command that proves the work, then a "Not run:" list of what your boundary could not run.';
-  const gate =
-    "the hub's landing gate (install, lint, typecheck, the iOS build when the app changed)";
+    " Your parent reads this report alone; chat messages reach no one. `summary` carries the deliverable whole, or names the file (in the repository or your outputs) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.";
+  const gate = "the landing gate (install, lint, typecheck, the iOS build)";
   const back =
-    " A failing gate, a conflict or uncommitted work comes back with its output: fix, commit, call again.";
+    " A failing gate or a conflict comes back with its output: fix, commit, call again.";
   const outputs =
-    " The item's outputs must be files in your workspace; the hub copies them into the project's folder.";
+    " Outputs are files in your workspace, copied to the project's folder.";
   const close =
-    " Pass `blocked` with the exact command and error only when something outside your control stops the work. What you noticed outside your brief goes in `findings`. For a task attempt, the first call lists its open to-dos once: tick the finished ones with todo_write, explain the rest in your summary, and call again.";
+    " `blocked` only when something outside your control stops the work. A task attempt's first call lists its open to-dos once: tick the done ones with todo_write, explain the rest, call again.";
   switch (lands) {
     case "branch":
       return `Finish your work item. Commit and do not push.${proof} Then ${gate} runs on your commits and the hub pushes your branch to origin, not the base branch.${back}${outputs}${close}`;
@@ -155,12 +174,10 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
 };
 
 const HANDOFF_DESCRIPTION =
-  "Send a message to another session on the fleet: guide one of your delegates while its work item runs, or brief a session that already owns the work. " +
-  "An idle target starts on it at once; a busy one reads it at its next step, a command it is running moved to the background and kept going. " +
-  "For new standalone work, delegate instead. " +
-  "A message to your own delegate after it reports (done, failed or cancelled) reopens its work item in the same session, on its cached transcript; prefer a fresh delegate unless that session is warm and holds context the task needs. " +
-  "A cold target (cache expired; never your parent) whose workspace has uncommitted changes gets it; " +
-  "one with only unpushed commits is refused once, naming delegate's `from`; otherwise Jev decides when the hub has it, and that is final. " +
+  "Message another session: guide your delegate while it works, or brief a session that already owns the work; for new standalone work, delegate. " +
+  "An idle target starts on it at once; a busy one reads it at its next step, its running command kept going. " +
+  "To your delegate after it reported, it reopens its item in the same session; prefer a fresh delegate unless that session is warm. " +
+  "A cold target (cache expired; never your parent) with uncommitted changes gets it; one with only unpushed commits is refused once, naming delegate's `from`; otherwise Jev decides when the hub has it, and that is final. " +
   "Repeat a call any other cold refusal answered to deliver it.";
 
 /** `handoff`'s target and message, every session's. */
@@ -168,34 +185,50 @@ const handoffShape = () => ({
   target: z
     .string()
     .describe(
-      'The session or thread: a mention copied whole ("@Title <cockpit#5a167bde>"), an id, a directory or a title. A name reaches your parent when theirs; one several sessions answer to is refused.'
+      "A handle (cockpit#5a167bde), a mention, an id, a directory or a title."
     ),
   message: z
     .string()
     .describe(
-      "The brief, for an engineer who cannot see your conversation: what you found, where (file and line), and the ask."
+      "For an engineer who cannot see your conversation: what you found, where, and the ask."
     ),
 });
+
+/**
+ * `inputs` of delegate and handoff (core handed-input.ts): a path, or what
+ * the hub holds by name, each landing as a file in the receiver's
+ * `$TMPDIR/inputs/`. Shown open; the hub checks each entry strictly
+ * (work-items.ts `readInputs`).
+ */
+const inputsParameter = () =>
+  z
+    .array(handedInputSchema(false))
+    .optional()
+    .describe(
+      'Files for its $TMPDIR/inputs/: a path, or by id what the hub holds (an artifact as its files and picture, a preview with a pass). attachment: an id or a name like "Picture 2"; blob: base64.'
+    );
 
 /** `handoff`'s call: the message, with the inputs of a session that may delegate. */
 const handed =
   (actions: ReturnType<typeof handoffActions>) =>
-  async ({
+  ({
     target,
     message,
     inputs,
   }: {
-    inputs?: string[];
+    inputs?: HandedInput[];
     message: string;
     target: string;
-  }) => ({
-    content: [
-      {
-        type: "text" as const,
-        text: await actions.handoff(target, message, inputs),
-      },
-    ],
-  });
+  }) =>
+    actions.handoff(target, message, inputs);
+
+/** A read the harness may run without asking: it changes nothing. */
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
 
 /** Only a workflow step session gets these; they need its step and run. */
 const STEP_TOOLS: ReadonlySet<string> = new Set([
@@ -214,86 +247,48 @@ export type { HandoffDeps } from "./delegation-actions";
  */
 export const MCP_SERVER_NAME = "cawco";
 
-/**
- * Called when a tool handler returns structured data the Claude SDK would
- * otherwise drop. The harness intercepts the result text and injects the
- * structured payload onto the `tool_result` content block it can match.
- */
-
 /** The tools themselves, separated from the server so they can be exercised directly. */
-/** A tool's answer: the hub's JSON, as text. */
-const json = (answer: unknown) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(answer) }],
-});
-
 export function handoffTools(deps: HandoffDeps) {
   const actions = handoffActions(deps);
   const all = [
     tool(
       "workflow_create",
-      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. `w.ask({ question, options, answer: z.object({…}) })` takes a typed answer: the answer\'s `value` is validated against that schema, which is how a supervisor fills in a decision. A `w.run`/`w.spawn` step that runs out of attempts in a supervised run is held for the supervisor to retry or fail; give it `onExhausted: "fail"` when the program handles its StepError itself. A step prompt or Jev state may name an earlier call\'s result as `{{ref:N.path}}` (N is the call\'s effect number); the hub fills it in when the step starts. Every call is a durable workflow-engine step and a run replays its program after a restart or resume, so zod is the only import allowed and the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
+      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. `w.ask({ question, options, answer: z.object({…}) })` takes a typed answer: the answer\'s `value` is validated against that schema, which is how a supervisor fills in a decision. A `w.run`/`w.spawn` step that runs out of attempts in a supervised run is held for the supervisor to retry or fail; give it `onExhausted: "fail"` when the program handles its StepError itself. A step prompt or Jev state may name an earlier call\'s result as `{{ref:N.path}}` (N is the call\'s effect number); the hub fills it in when the step starts. A run replays its program after a restart, so zod is the only import and the program must be deterministic.',
       { name: z.string(), program: z.string() },
-      async ({ name, program }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(await actions.createWorkflow(name, program)),
-          },
-        ],
-      })
+      ({ name, program }) => actions.createWorkflow(name, program),
+      workflowSavedWords
     ),
     tool(
       "workflow_update",
-      "Replace a saved workflow by name, slug or id with a complete TypeScript program. Returns the saved workflow, or line-numbered typecheck problems verbatim.",
+      "Replace a saved workflow, by name, slug or id, with a whole TypeScript program.",
       { name: z.string(), program: z.string() },
-      async ({ name, program }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(await actions.updateWorkflow(name, program)),
-          },
-        ],
-      })
+      ({ name, program }) => actions.updateWorkflow(name, program),
+      workflowSavedWords
     ),
     tool(
       "workflow_state_read",
       "Read a named slot of this workflow run's shared state. Only slots the run's program declared with w.state(name, schema) exist.",
       { name: z.string() },
-      async ({ name }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(await actions.readWorkflowState(name)),
-          },
-        ],
-      })
+      ({ name }) => actions.readWorkflowState(name),
+      stateSlotWords
     ),
     tool(
       "workflow_state_write",
       "Write a named slot of this workflow run's shared state. The value is validated against the schema the run's program declared with w.state(name, schema); the validator's message comes back verbatim on failure.",
       { name: z.string(), value: z.unknown() },
-      async ({ name, value }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.writeWorkflowState(name, value),
-          },
-        ],
-      })
+      ({ name, value }) => actions.writeWorkflowState(name, value),
+      sentence
     ),
     tool(
       "submit_result",
       "Call exactly once with an object matching the schema in your instructions, then end your turn. The hub's validation message is returned verbatim on failure.",
       { result: z.record(z.string(), z.unknown()) },
-      async ({ result }) => ({
-        content: [
-          { type: "text" as const, text: await actions.submitResult(result) },
-        ],
-      })
+      ({ result }) => actions.submitResult(result),
+      sentence
     ),
     tool(
       "workflow_run",
-      "Run a saved workflow by name or slug. You become its supervisor and receive a receipt, as a queued peer message, for each step, checkpoint and the run's end: status, attempt, time, a `ref`, the result's size and the names of its top-level keys, or the whole result when it is 1,000 characters or less. Read more of a result with workflow_read only when you need it. A step that runs out of attempts is held for your decision (workflow_steer retry or fail); a receipt sent while your session is not live is kept and sent when it next is.",
+      "Run a saved workflow by name or slug. You supervise it: a receipt reaches you for each step, checkpoint and its end, with a `ref` workflow_read takes. A step out of attempts is held for your workflow_steer.",
       {
         name: z.string(),
         inputs: z.record(z.string(), z.unknown()),
@@ -301,62 +296,40 @@ export function handoffTools(deps: HandoffDeps) {
           .object({ path: z.string(), machineId: z.string() })
           .optional(),
       },
-      async ({ name, inputs, workspace }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(
-              await actions.runWorkflow(name, inputs, { workspace })
-            ),
-          },
-        ],
-      })
+      ({ name, inputs, workspace }) =>
+        actions.runWorkflow(name, inputs, { workspace }),
+      runStartedWords
     ),
     tool(
       "workflow_read",
-      "Read part of a result from a workflow run you supervise, by the `ref` its receipt named (or `result` for the run's own result). `path` narrows it to one field, e.g. `results[0].url`. Returns up to `limit` characters from `offset` and where the next window starts. To hand a result to a later step without reading it, put `{{ref:N.path}}` in what you give the program instead.",
+      "Read part of a result of a run you supervise, by the `ref` its receipt named. To hand a result to a later step unread, put `{{ref:N.path}}` in what you give the program.",
       {
         runId: z.string(),
         ref: z
           .union([z.number().int().min(0), z.literal("result")])
-          .describe(
-            "The effect number a receipt named, or `result` for the run's own result."
-          ),
-        path: z
-          .string()
-          .optional()
-          .describe("A path into the result, e.g. `queries[2].query`."),
-        offset: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .describe("Character to start at. Default 0."),
+          .describe("A receipt's ref, or `result`."),
+        path: z.string().optional().describe("Like `queries[2].query`."),
+        offset: z.number().int().min(0).optional().describe("Default 0."),
         limit: z
           .number()
           .int()
           .min(1)
           .max(20_000)
           .optional()
-          .describe("Characters to return. Default 4,000, at most 20,000."),
+          .describe("Default 4,000."),
       },
-      async ({ runId, ref, path, offset, limit }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.readWorkflow(runId, {
-              ref,
-              path,
-              offset,
-              limit,
-            }),
-          },
-        ],
-      })
+      ({ runId, ref, path, offset, limit }) =>
+        actions.readWorkflow(runId, {
+          ref,
+          path,
+          offset,
+          limit,
+        }),
+      sentence
     ),
     tool(
       "workflow_steer",
-      "Steer a workflow you supervise: note for the next step, decide on a held step, answer a question routed to you, or cancel. A step that runs out of attempts is held for you, up to an hour, and its receipt says so: `retry` runs another attempt on the same step and session, `fail` hands the program its StepError now; left undecided, it fails when the hold runs out. A step is held twice at most. An answer names the option label as `choice`; a question that declared a typed answer takes `value`, validated against the schema its question notice shows. The program controls routing. Answers one line saying what was done.",
+      "Steer a run you supervise: a note for the next step, `retry` or `fail` a held step (held up to an hour), answer a question routed to you (`choice` its option label, or a typed `value`), or cancel.",
       {
         runId: z.string(),
         action: z.discriminatedUnion("type", [
@@ -384,27 +357,15 @@ export function handoffTools(deps: HandoffDeps) {
           z.object({ type: z.literal("cancel") }),
         ]),
       },
-      async ({ runId, action }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.steerWorkflow(runId, action),
-          },
-        ],
-      })
+      ({ runId, action }) => actions.steerWorkflow(runId, action),
+      sentence
     ),
     tool(
       "workflow_list",
-      "List the fleet's saved workflows, their input definitions, and graphs before choosing one to run.",
+      "The fleet's saved workflows and their inputs.",
       {},
-      async () => ({
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(await actions.listWorkflows()),
-          },
-        ],
-      })
+      () => actions.listWorkflows(),
+      workflowsWords
     ),
     tool(
       "generate_image",
@@ -415,52 +376,44 @@ export function handoffTools(deps: HandoffDeps) {
           .trim()
           .min(1)
           .describe(
-            "Intended use, subject, framing, style, lighting, materials and exclusions; exact text quoted, with its placement and typography. A complex brief as Scene/Subject/Details/Constraints. An edit: 'Change only X; preserve Y', naming the identity, geometry, lighting and labels to keep. One change per iteration, the previous output as its input."
+            "Use, subject, framing, style, lighting and exclusions; exact text quoted with its placement. An edit: 'Change only X; preserve Y'."
           ),
         output_path: z
           .string()
           .min(1)
-          .describe(
-            "New .png path on the calling session's machine. Relative paths resolve from its working directory; existing files are not overwritten."
-          ),
+          .describe("A new .png path; relative to your directory."),
         reference_images: z
           .array(z.string().min(1))
           .max(5)
           .optional()
           .describe(
-            "Ordered local PNG/JPEG/WebP/GIF paths, each given its role in the prompt ('Image 1: person to preserve; Image 2: clothing to apply'); for a follow-up edit, the previous output, with what to preserve restated. 50 MiB each, 100 MiB in all."
+            "Local image paths, each given its role in the prompt ('Image 1: person to preserve')."
           ),
         size: z
           .string()
           .optional()
           .describe(
-            "Requested auto or WIDTHxHEIGHT (e.g. 1024x1536): multiples of 16, max edge 3840, max aspect 3:1, 655360–8294400 pixels. Actual dimensions may differ."
+            "auto or WIDTHxHEIGHT, multiples of 16, edge at most 3840."
           ),
         quality: z
           .enum(["auto", "low", "medium", "high"])
           .optional()
-          .describe(
-            "Defaults to auto. low for drafts; high for dense text, diagrams or fine detail, raised only when a result falls short: higher is not always better."
-          ),
+          .describe("low for drafts; high for dense text or fine detail."),
       },
-      async (request) => {
-        const image = await actions.generateImage(request);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(image) }],
-          structuredContent: image,
-        };
-      },
+      (request) => actions.generateImage(request),
+      imageWords,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
       }
     ),
     tool(
       "forge_post",
-      "Open an issue, a pull/merge request or a comment on a repository's forge (GitHub, GitLab, Gitea, Forgejo), with your machine's own sign-in there. " +
-        "Defaults to this project's repository; one elsewhere may be refused or held for the owner (you are told; never repeat it). Push the head branch first.",
+      "Open an issue, a pull/merge request or a comment on a repository's forge, with your machine's own sign-in. Default: this project's repository. Push the head branch first.",
       {
         kind: z
           .enum(["issue", "pull_request", "comment"])
@@ -483,7 +436,7 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("What number names; default issue."),
       },
-      async ({ kind, repo, title, body, head, base, number, on }) => {
+      ({ kind, repo, title, body, head, base, number, on }) => {
         const write = forgeWriteOf({
           kind,
           body: body ?? "",
@@ -493,144 +446,93 @@ export function handoffTools(deps: HandoffDeps) {
           ...(number ? { number } : {}),
           ...(on ? { on } : {}),
         });
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: await actions.forgePost({
-                write,
-                ...(repo ? { repo } : {}),
-              }),
-            },
-          ],
-        };
+        return actions.forgePost({
+          write,
+          ...(repo ? { repo } : {}),
+        });
       },
+      sentence,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
       }
     ),
     tool(
       "list_delegate_types",
-      "The live delegate catalog, the one a named delegate's dispatch reads: each type's task description, harness, model, effort, skills, denied tools and whether it may delegate. " +
-        "In a project its own types (source 'project') come first and replace fleet types of the same name. " +
-        "Read it before choosing a type or answering what a type runs; it spawns nothing, and a setting is configuration, not proof of the model served.",
+      "The live delegate types: what each is for and what it runs. Read it before choosing a type; a project's own types replace the fleet's of the same name.",
       {},
-      async () => {
-        const catalog = await actions.listDelegateTypes();
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(catalog) }],
-          structuredContent: catalog,
-        };
-      }
+      () => actions.listDelegateTypes(),
+      delegateTypesWords
     ),
     tool(
       "list_sessions",
-      "The other sessions on the fleet, each with the directory and machine it works in, then the machines online now by the names `machine` takes on delegate and start_session. " +
-        "It shows where each session works, not what it is doing, how busy it is or whether it will take a handoff, and recency is not ownership. " +
-        "Use it to find a session that already owns the work, or to name a delegate; delegate types are list_delegate_types'. " +
-        "A finished delegate still takes a handoff from its parent or the user, in its own session.",
+      "The other sessions on the fleet, each with its directory and machine, then the machines online now. Use it to find a session that already owns the work; it says where each works, not what it does.",
       {},
-      async () => ({
-        content: [{ type: "text" as const, text: actions.listSessions() }],
-      })
+      () => Promise.resolve(actions.listSessions()),
+      sentence
     ),
     // A leaf has no delegate of its own to hand inputs to: only a session
     // that may delegate is listed `inputs`.
     deps.canDelegate === false
-      ? tool("handoff", HANDOFF_DESCRIPTION, handoffShape(), handed(actions))
+      ? tool(
+          "handoff",
+          HANDOFF_DESCRIPTION,
+          handoffShape(),
+          handed(actions),
+          sentence
+        )
       : tool(
           "handoff",
           HANDOFF_DESCRIPTION,
-          {
-            ...handoffShape(),
-            inputs: z
-              .array(z.string())
-              .optional()
-              .describe(
-                "For your delegate: files on your machine, by absolute path, copied to its $TMPDIR/inputs/ first."
-              ),
-          },
-          handed(actions)
+          { ...handoffShape(), inputs: inputsParameter() },
+          handed(actions),
+          sentence
         ),
     tool(
       "start_session",
-      "Start a NEW session on the fleet and give it work. Unlike a subagent, this " +
-        "is a full session of its own: its own row in the sidebar, nested under this session, " +
-        "its own transcript the user can open, and it survives after this turn ends. " +
-        "Unlike a delegate it is no work item: nothing waits on it or reports back. " +
-        "It runs on the harness, model and effort of a delegate type — `type`, the same catalog delegate uses, " +
-        "'medium' when omitted; a named type's denied tools apply too — and answers tool permissions in `permissionMode`, this session's own mode when omitted, " +
-        "where its harness has permission modes (pi has none, and refuses one). " +
-        "A session with no mode of its own (a pi session) must name `permissionMode` for a harness that has modes: with neither, nothing starts, and the refusal says a mode must be chosen. " +
-        "Nothing is left to the machine's defaults. " +
-        "It runs on this session's machine unless `machine` names another one of the fleet. " +
-        "Use it when the user asks you to spin something off, or when work " +
-        "belongs in a different directory or on a different machine and no session is running there yet. Prefer " +
-        "`handoff` when a session is ALREADY running in that directory. " +
-        "Returns once the machine has the session in place; a spawn that fails there (a missing directory, a harness error, the machine gone) is returned as this tool's error, in the machine's words.",
+      "Start a NEW session of its own and give it work: its own sidebar row under this session and its own transcript, outliving this turn. " +
+        "Unlike a delegate it reports nothing back. Use it when the user asks to spin something off, or for work in another directory or machine where no session runs yet; " +
+        "prefer handoff to a session already running there. It runs on a delegate type ('medium' by default).",
       {
         cwd: z
           .string()
           .describe(
-            "Absolute directory the new session works in, as a path on the machine it runs on " +
-              "(e.g. /Users/<name>/... on a Mac, /home/<name>/... on Linux). Often a DIFFERENT project from this " +
-              "one — if the user named another repository or folder, use that. Defaults to " +
-              "this session's directory only when they did not."
+            "An absolute path on its machine: the repository or folder the user named, else this session's."
           ),
         machine: z
           .string()
           .optional()
           .describe(
-            'The machine the session runs on: its hostname as the fleet shows it (e.g. "Omars-MacBook-Pro", ' +
-              '"obelisk-of-light"; list_sessions ends with the machines online now) or its machineId. ' +
-              "Omit to run it on this session's machine. An unknown or offline machine is refused."
+            "A hostname (list_sessions names those online) or machineId; default this session's."
           ),
         prompt: z
           .string()
-          .describe(
-            "The opening instruction. Write it as a full brief: the new session cannot see this conversation."
-          ),
+          .describe("A full brief: it cannot see this conversation."),
         title: sessionTitle(),
         spinOff: z
           .boolean()
           .optional()
-          .describe(
-            "A spin-off: throwaway work, its transcript deleted when the session is discarded. " +
-              "Default false: kept."
-          ),
+          .describe("Throwaway: its transcript goes when it is discarded."),
         type: z
           .string()
           .optional()
-          .describe(
-            "A named delegate type (see list_delegate_types): sets harness, model, effort and denied tools. Omitted: 'medium' sets harness, model and effort, and no tools are denied. Match the type to the work, as with delegate."
-          ),
-        model: z
-          .string()
-          .optional()
-          .describe(
-            "Overrides the type's model. Omit to run the type's own model."
-          ),
+          .describe("From list_delegate_types; default 'medium'."),
+        model: z.string().optional().describe("Overrides the type's model."),
         account: accountParameter(),
         // Never `fullSend`: only the owner puts a session in Full Send. A
         // session that is in it passes it on by leaving this out.
         permissionMode: z
-          .enum([
-            "default",
-            "acceptEdits",
-            "bypassPermissions",
-            "plan",
-            "dontAsk",
-            "auto",
-          ])
+          .enum(SESSION_CHOSEN_MODES)
           .optional()
           .describe(
-            "How the new session answers tool permissions. Default: this session's own mode; when this session has none (pi), it must be named for a harness with modes, or nothing starts. Omit it for a harness without permission modes (pi)."
+            "Default this session's; a pi session must name one for a harness that has modes. Omit for pi."
           ),
       },
-      async ({
+      ({
         cwd,
         prompt,
         title,
@@ -640,149 +542,104 @@ export function handoffTools(deps: HandoffDeps) {
         account,
         permissionMode,
         machine,
-      }) => {
-        const result = await actions.startSession(cwd, prompt, title, {
+      }) =>
+        actions.startSession(cwd, prompt, title, {
           spinOff,
           type,
           model,
           account,
           permissionMode,
           machine,
-        });
-        // The sentence rides in the structured result: Claude Code hands the
-        // model `structuredContent` when a tool returns one, not `content`.
-        const sc = {
-          instanceId: result.id,
-          title: result.title,
-          text: result.text,
-        };
-        return {
-          content: [{ type: "text" as const, text: result.text }],
-          structuredContent: sc,
-        };
-      }
+        }),
+      startedWords
     ),
     tool(
       "delegate",
-      "Run a task as a SUB-AGENT: a new temporary fleet session with its own fresh context (or, with `fork`, a copy of this one), which reports back once its work clears the hub's landing gate: its report quotes the output of the commands that prove the work.\n\n" +
-        "Use this for SUBSTANTIAL bounded work that must report back: multi-file implementation, a sweep that would take dozens of reads across a codebase, builds or deploys with verification loops, browser audits, evidence you must interpret across many files or logs. A delegate answers those in its own fresh context and hands back conclusions.\n\n" +
-        "Run menial work yourself: git status/log/diff, ls/grep/find, reading a file or a handful of files, port and process checks, tailing a log, a dev-server restart, and the reads needed to write a brief. Ten read-only commands in a row is normal prep; a delegate for that costs more than the task and its report costs more to read than the output.\n\n" +
-        "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
-        "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, the commands whose output proves the work, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
-        "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
-        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, every shell command of the delegate inside its boundary. It writes only its clone, its scratch folder and the workspaces' own cache (host caches are read-only), reads no credential store, SSH key or key agent, has no service manager, and reaches another machine only through a delegate there; it signals only its own processes, and on Linux sees only them. The workspace is cut on this session's machine unless `machine` names another. Without `workspace` the item gets a new one; with it, the item is the follow-up there: under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
-        "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A follow-up whose session is cold is checked as handoff checks a cold target. " +
-        "To finish an ended delegate's committed work in a fresh session, delegate with `from`: a new workspace cut at that workspace's branch head, its commits included.\n\n" +
-        "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own.",
+      "Run bounded work as a delegate: a new session with fresh context (with `fork`, a copy of this one) in a workspace of its own, a clone on its own branch. It reports back once its work clears the hub's landing gate, quoting the output of the commands that prove it.\n\n" +
+        "Delegate SUBSTANTIAL work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs. " +
+        "Do menial work yourself: git status/log/diff, grep, reading a few files, port checks, a log tail, a restart, the reads a brief needs. " +
+        "Never delegate a single command whose exact output you need, edits to files you are changing, or what the user wants to watch.\n\n" +
+        "Unless forked it cannot see this conversation: `prompt` stands alone with intent, constraints, acceptance criteria, the commands whose output proves the work, and what not to do. Ask for evidence and conclusions, not file dumps.\n\n" +
+        "Prefer `type` (list_delegate_types) over harness and model. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
+        "Its commands run in a boundary: they write only its clone, its scratch dir and the workspaces' cache; no credential store, SSH key, key agent or service manager; another machine only through a delegate there. " +
+        "To follow up, handoff to the delegate or delegate with its `workspace`; to finish an ended delegate's commits in a fresh session, delegate with `from`. Prefer a fresh delegate unless the old session is warm and holds context the task needs.",
       {
         prompt: z
           .string()
-          .describe(
-            "The full brief. Unless it is a fork, the delegate cannot see this conversation."
-          ),
+          .describe("The full brief; unless forked, all the delegate sees."),
         title: sessionTitle(),
         type: z
           .string()
           .optional()
           .describe(
-            "A named delegate type, from list_delegate_types (the live catalog the call uses). Sets harness/model/effort/skills " +
-              "for you; an explicit harness/model/skills below still overrides what the type says. " +
-              "Default: Jev's pick when the hub has Jev, else 'medium'; with a harness other than medium's and no type, `model` is required."
+            "From list_delegate_types: sets harness, model, effort and skills. Default: Jev's pick, else 'medium'."
           ),
         harness: z
           .enum(["claude", "opencode", "pi"])
           .optional()
           .describe(
-            "Which runtime runs the delegate. 'opencode' with model 'opencode-go/deepseek-v4-pro' " +
-              "delegates to DeepSeek. Default: the type's harness. Overrides `type`'s harness when both are set."
+            "Overrides the type's. opencode with model opencode-go/deepseek-v4-pro runs DeepSeek."
           ),
-        model: z
-          .string()
-          .optional()
-          .describe(
-            "Model id for the harness, e.g. opencode-go/deepseek-v4.1-flash. Omit for the type's " +
-              "own model. Overrides `type`'s model when both are set."
-          ),
+        model: z.string().optional().describe("Overrides the type's model."),
         account: accountParameter(),
         cwd: z
           .string()
           .optional()
           .describe(
-            "The repository a new workspace is cut from, on branch ws/<id> off its default branch as fetched then. " +
-              "With `machine`, an absolute path there, required when not this session's machine. " +
-              "Default: this session's directory; unused with `workspace` or `from`."
+            "The repository a new workspace is cut from, an absolute path on `machine`. Default: this session's."
           ),
         machine: z
           .string()
           .optional()
           .describe(
-            "The machine the work item runs on: its hostname as the fleet shows it (list_sessions ends with those online) or machineId; " +
-              "this session's when omitted. An unknown or offline machine is refused."
+            "A hostname (list_sessions names those online) or machineId; default this session's."
           ),
         skills: z
           .array(z.string())
           .optional()
-          .describe(
-            "Skills the delegate loads before the prompt, as if /skill-name were typed there, on any harness. Overrides `type`'s skills."
-          ),
+          .describe("Loaded before the prompt; overrides the type's."),
         workspace: z
           .string()
           .optional()
           .describe(
-            "A workspace id from an earlier delegate's result or report: the item is its follow-up, the brief " +
-              "going to that workspace's last session on its cached transcript. Refused while an item there runs, " +
-              "and with type, model, harness, skills, fork or machine, which are that session's own."
+            "An earlier delegate's workspace: the brief goes to its last session as a follow-up. Not with type, model, harness, skills, fork or machine."
           ),
         from: z
           .string()
           .optional()
           .describe(
-            "A workspace id one of your delegates worked in, its item ended: the new workspace's branch is cut at that workspace's head, carrying its commits (uncommitted changes stay there). " +
-              "It is cut on that workspace's machine from its repository, so cwd, machine and workspace go unset. Refused while an item there runs, or once its clone is archived."
+            "An ended delegate's workspace: the new one is cut at its branch head, its commits included."
           ),
         fork: z
           .boolean()
           .optional()
           .describe(
-            "Start the delegate as a fork of this conversation: every turn so far, then the brief, on this " +
-              "session's harness and model so the prompt cache carries over (another is refused); `type` still " +
-              "sets effort, skills and denied tools. Always a new workspace, never with `workspace`."
+            "Start as a copy of this conversation, on this session's harness and model."
           ),
         can_delegate: z
           .boolean()
           .optional()
           .describe(
-            "Let the delegate spawn delegates and sessions of its own. Default false, a leaf that does the work itself and reports here, " +
-              'unless its type is marked "may delegate by default"; a value here wins. Set true only for an orchestrator that must fan out.'
+            "Let it start delegates of its own; default its type's, else false. Only for an orchestrator that fans out."
           ),
-        inputs: z
-          .array(z.string())
-          .optional()
-          .describe(
-            "Files on this machine its sandbox can't read (a log excerpt), by absolute path: copied to its $TMPDIR/inputs/ before its first turn. No secrets; 64 MiB in all."
-          ),
+        inputs: inputsParameter(),
         lands: z
           .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
           .optional()
           .describe(
-            "Where the work goes once the delegate finishes. 'main' (default): the hub rebases the delegate's commits onto the repository's default branch, runs its landing gate (install, lint, typecheck, the iOS build when the app changed) and pushes. " +
-              "'branch': the hub pushes them, as they are, to cawco/<task or item> on origin. " +
-              "'pr': that, then a pull request against the default branch (or the one already open for that branch); the report carries its link. " +
-              "'none': nothing is pushed, for work that is not commits (a report, a draft); name its files or folders in `outputs`."
+            "main (default): rebased onto the default branch after its gate. branch: pushed to cawco/<item>. pr: that, with a pull request. none: nothing pushed; name its deliverables in outputs."
           ),
         outputs: z
           .array(z.string())
           .optional()
           .describe(
-            "Deliverable files or folders that are not commits, as paths from the repository's root, e.g. ['report.md', '.decisions/pick/']. " +
-              "When the delegate finishes, the hub copies each, a folder whole, into the project's folder under assets/<task or item>/ and the report lists them; " +
-              "a missing one goes back to the delegate. Needs this session to be in a project."
+            "Deliverables that are not commits, from the repository's root; copied into the project's folder under assets/<item>/."
           ),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
         budget: budgetParameter().optional(),
       },
-      async ({
+      ({
         prompt,
         title,
         type,
@@ -802,8 +659,8 @@ export function handoffTools(deps: HandoffDeps) {
         group,
         owns,
         budget,
-      }) => {
-        const result = await actions.delegate(prompt, {
+      }) =>
+        actions.delegate(prompt, {
           title,
           cwd,
           harness,
@@ -822,61 +679,38 @@ export function handoffTools(deps: HandoffDeps) {
           group,
           owns,
           budget,
-        });
-        const sc = {
-          delegateInstanceId: result.id,
-          title: result.title,
-          workItemId: result.workItemId,
-          workspaceId: result.workspaceId,
-          ...(result.workspaceTmp ? { workspaceTmp: result.workspaceTmp } : {}),
-          ...(result.queued ? { queued: result.queued } : {}),
-          text: result.text,
-        };
-        return {
-          content: [{ type: "text" as const, text: result.text }],
-          structuredContent: sc,
-        };
-      }
+        }),
+      delegateWords
     ),
     tool(
       "delegate_list",
-      "Your delegation tree in start order, theirs nested, with each delegate's state (stalled: at its account's limit, resumes itself) and cache warmth; queued: delegates waiting for owned files; held: its workspaces with unlanded work. Read before handing off, calling one stuck, or recapping a time span.",
+      "Your delegates, newest first, theirs nested: each one's state, cache warmth and report; then those queued for owned files and the workspaces held with unlanded work. Read it before handing off, calling one stuck, or recapping a span.",
       {
         include: z
           .enum(["live", "all"])
           .optional()
           .describe(
-            "live: not dismissed, not ended over an hour ago. all: every item. Default live; all with since or before."
+            "live (default): not ended over an hour ago. all: every one, the default with since or before."
           ),
         since: isoTime().describe(
           "ISO time: only items ended after it, or live."
         ),
         before: isoTime().describe("ISO time: only items started before it."),
       },
-      async ({ include, since, before }) => {
+      ({ include, since, before }) => {
         const windowed = since !== undefined || before !== undefined;
-        const tree = await actions.delegateList({
+        return actions.delegateList({
           include: include ?? (windowed ? "all" : "live"),
           ...(since === undefined ? {} : { since: new Date(since) }),
           ...(before === undefined ? {} : { before: new Date(before) }),
         });
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(tree) }],
-          structuredContent: tree,
-        };
       },
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      delegateListWords,
+      { annotations: READ_ONLY }
     ),
     tool(
       "wait_item",
-      "Declare a bounded wait on a command you started, then end your turn. The hub keeps your item running without reminders, shows your parent what you wait for, and wakes you when it ends. " +
-        "Messages meanwhile leave it on: read them, end your turn. " +
-        "Your tool calls other than CawCo reads end it, as do finish_item and stopping or interrupting the item; call again to replace it.",
+      "Declare a bounded wait on a command you started, then end your turn: the hub shows your parent what you wait for and wakes you when it ends. Any tool call but a CawCo read ends it.",
       {
         minutes: z
           .number({ error: WAIT_ITEM_LIMIT })
@@ -890,16 +724,9 @@ export function handoffTools(deps: HandoffDeps) {
           .min(1, { error: WAIT_ITEM_LIMIT })
           .describe("What you are waiting for from a command you started."),
       },
-      async ({ minutes, reason }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.waitItem(minutes, reason),
-          },
-        ],
-      }),
-      undefined,
-      WAIT_ITEM_LIMIT
+      ({ minutes, reason }) => actions.waitItem(minutes, reason),
+      sentence,
+      { inputError: WAIT_ITEM_LIMIT }
     ),
     tool(
       "finish_item",
@@ -910,36 +737,34 @@ export function handoffTools(deps: HandoffDeps) {
           .trim()
           .min(1)
           .describe(
-            "The outcome in one or two plain sentences that stand alone, shown whole at a glance: what changed and whether it passed. No ids or file names."
+            "One or two plain sentences: what changed and whether it passed. No ids or file names."
           ),
         summary: z
           .string()
           .describe(
-            'The full report: what was done, the real output of every command that proves it, and a "Not run:" list of what could not run inside your boundary.'
+            "All your parent reads: the deliverable or its file's path, then the proof."
           ),
         findings: z
           .array(z.object({ title: z.string(), detail: z.string() }))
           .optional()
-          .describe("Things noticed outside the brief."),
+          .describe("Noticed outside the brief."),
         blocked: z
           .object({ command: z.string(), error: z.string() })
           .optional()
+          .describe("The exact command and error."),
+        ship: z
+          .object({ notes: z.string().trim().min(1) })
+          .optional()
           .describe(
-            "The exact command and error text of what stops the work, when it is outside your control."
+            "Release it once it lands on main, with end-user notes: the project's gate.md Ship: command runs it. Your call."
           ),
       },
-      async (request) => ({
-        content: [
-          { type: "text" as const, text: await actions.finishItem(request) },
-        ],
-      })
+      (request) => actions.finishItem(request),
+      sentence
     ),
     tool(
       "continue_session",
-      "Continue another session (a stuck delegate) in a fresh conversation, summarised by a model you pick; " +
-        "it stays one session under a new id. Never this session: if your context is too big, say so. " +
-        "The new session answers tool permissions in `target_permission_mode`, this session's own mode when omitted; " +
-        "when this session has none (pi) and the target harness has modes, it must be named, or nothing starts.",
+      "Continue another session (a stuck delegate) in a fresh conversation, summarised by a model you pick; it stays one session. Never this session.",
       {
         session: z
           .string()
@@ -949,7 +774,7 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(["summary", "asks"])
           .optional()
           .describe(
-            '"asks": open on the person\'s own messages alone, verbatim, in order; nothing is summarised.'
+            '"asks": the person\'s own messages alone, nothing summarised.'
           ),
         summarizer_harness: z
           .enum(["claude", "opencode", "pi"])
@@ -959,9 +784,7 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .min(1)
           .optional()
-          .describe(
-            "The model that writes the summary, e.g. opencode-go/deepseek-v4.1-flash."
-          ),
+          .describe("Like opencode-go/deepseek-v4.1-flash."),
         target_harness: z
           .enum(["claude", "opencode", "pi"])
           .describe("The harness the new session runs on."),
@@ -971,55 +794,29 @@ export function handoffTools(deps: HandoffDeps) {
           .describe("The model the new session runs on."),
         // Never `fullSend`: only the owner puts a session in Full Send.
         target_permission_mode: z
-          .enum([
-            "default",
-            "acceptEdits",
-            "bypassPermissions",
-            "plan",
-            "dontAsk",
-            "auto",
-          ])
+          .enum(SESSION_CHOSEN_MODES)
           .optional()
           .describe(
-            "How the new session answers tool permissions. Default: this session's own mode; when this session has none (pi), it must be named for a target harness with modes, or nothing starts. Omit it for a target without permission modes (pi)."
+            "Default this session's; a pi session must name one for a harness that has modes."
           ),
         note: z
           .string()
           .optional()
-          .describe(
-            "What to focus the summary on. Also added to the new session's opening message as its next step."
-          ),
+          .describe("What the summary focuses on, and its next step."),
       },
-      async (input) => {
-        const result = await actions.continueSession(input);
-        return {
-          content: [{ type: "text" as const, text: result.text }],
-          structuredContent: {
-            targetInstanceId: result.targetInstanceId,
-            summariserInstanceId: result.summariserInstanceId,
-            text: result.text,
-          },
-        };
-      }
+      (input) => actions.continueSession(input),
+      startedWords
     ),
     tool(
       "stop_delegate",
-      "Stop one of YOUR delegates (a session you spawned with delegate). Only your own delegates " +
-        "can be stopped. Its work item is cancelled; a later handoff to it reopens the item in the same session. " +
-        "Given a queued delegate's id (one delegate queued behind owned files, listed under queued by delegate_list), " +
-        "it withdraws it from the queue: it never started, so it has no session or workspace.",
+      "Stop one of YOUR delegates: its item is cancelled; a later handoff reopens it. A queued delegate's id withdraws it from the queue.",
       {
         target: z
           .string()
-          .describe(
-            'The delegate to stop: its directory name, e.g. "keeboard", or its id; for a queued delegate, its queued id or its first 8 characters.'
-          ),
+          .describe("Its handle, directory or id; or a queued delegate's id."),
       },
-      async ({ target }) => ({
-        content: [
-          { type: "text" as const, text: await actions.stopDelegate(target) },
-        ],
-      })
+      ({ target }) => actions.stopDelegate(target),
+      sentence
     ),
     tool(
       "discard_workspace",
@@ -1027,34 +824,18 @@ export function handoffTools(deps: HandoffDeps) {
       {
         workspace: z.string().describe("Its id, as the hub's notice names it."),
       },
-      async ({ workspace }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.discardWorkspace(workspace),
-          },
-        ],
-      })
+      ({ workspace }) => actions.discardWorkspace(workspace),
+      sentence
     ),
     tool(
       "interrupt_delegate",
       "Interrupt one of YOUR delegates mid-turn without ending it. It keeps its state and stays idle: " +
         "nothing automatic wakes it, only your handoff or the person's message.",
       {
-        target: z
-          .string()
-          .describe(
-            'The delegate to interrupt: its directory name, e.g. "keeboard", or its id.'
-          ),
+        target: z.string().describe("Its handle, directory or id."),
       },
-      async ({ target }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: actions.interruptDelegate(target),
-          },
-        ],
-      })
+      ({ target }) => Promise.resolve(actions.interruptDelegate(target)),
+      sentence
     ),
     tool(
       "machine_pause",
@@ -1064,55 +845,28 @@ export function handoffTools(deps: HandoffDeps) {
         minutes: z.number().int().min(1).max(1440).optional(),
         resume: z.boolean().optional(),
       },
-      async ({ machine, minutes, resume }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.machinePause(machine, minutes, resume),
-          },
-        ],
-      })
+      ({ machine, minutes, resume }) =>
+        actions.machinePause(machine, minutes, resume),
+      sentence
     ),
     tool(
       "answer_delegate",
-      "Answer an ask your delegate parked and routed to you. Answers are keyed by the EXACT " +
-        "question text and the value is the chosen option label — copy them from the " +
-        '"[delegate-ask ...]" message the delegate sent you. Pass deny=true to refuse the ask ' +
-        "instead. Leave answers empty and deny false to allow the ask unchanged.",
+      'Answer an ask your delegate routed to you: answers keyed by the EXACT question text, each the chosen option label, copied from its "[delegate-ask ...]" message; deny refuses it; neither allows it as asked.',
       {
-        target: z
-          .string()
-          .describe(
-            'The delegate to answer: its directory name, e.g. "keeboard", or its id.'
-          ),
-        requestId: z
-          .string()
-          .describe(
-            'The requestId from the delegate\'s "[delegate-ask ...]" line.'
-          ),
-        answers: z
-          .record(z.string(), z.string())
-          .optional()
-          .describe(
-            "Exact question text → chosen option label, for each question asked."
-          ),
-        deny: z
-          .boolean()
-          .optional()
-          .describe("Refuse the ask instead of answering it. Default false."),
+        target: z.string().describe("Its handle, directory or id."),
+        requestId: z.string(),
+        answers: z.record(z.string(), z.string()).optional(),
+        deny: z.boolean().optional(),
       },
-      async ({ target, requestId, answers, deny }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: actions.answerDelegate(target, requestId, answers, deny),
-          },
-        ],
-      })
+      ({ target, requestId, answers, deny }) =>
+        Promise.resolve(
+          actions.answerDelegate(target, requestId, answers, deny)
+        ),
+      sentence
     ),
     tool(
       "send_to_user",
-      "Show the user a message in this session's transcript, pushed to their phone: progress, partial results, or content they must see exactly as written before the task finishes.",
+      "Show the user a message in this session's transcript, pushed to their phone: what they must see as written before the task finishes.",
       {
         message: z
           .string()
@@ -1121,31 +875,23 @@ export function handoffTools(deps: HandoffDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Absolute paths of image or video files on this machine (png, jpg, gif, webp, avif, bmp, mp4, mov, webm; up to 50 MB each), shown under the message: you need not read them yourself."
+            "Absolute paths of images or videos (50 MB each), shown under it."
           ),
       },
-      async ({ message, attachments }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.sendToUser(message, attachments),
-          },
-        ],
-      })
+      ({ message, attachments }) => actions.sendToUser(message, attachments),
+      sentence
     ),
     tool(
       "open_items",
       "Your open items, word for word, as every compaction lists them.",
       {},
-      async () => ({
-        content: [{ type: "text" as const, text: await actions.openItems() }],
-      }),
-      { readOnlyHint: true }
+      () => actions.openItems(),
+      sentence,
+      { annotations: { readOnlyHint: true } }
     ),
     tool(
       "set_title",
-      "Name this session in 3 to 6 plain words, verb first if it is a task (e.g. 'Fix tray chip overflow'). " +
-        "Call it once the task is clear, and again only when the task changes.",
+      "Name this session once its task is clear, and again only when the task changes.",
       {
         title: z
           .string()
@@ -1153,58 +899,44 @@ export function handoffTools(deps: HandoffDeps) {
           .min(1)
           .max(SESSION_TITLE_MAX)
           .describe(
-            `The session's name, at most ${SESSION_TITLE_MAX} characters, e.g. 'Fix tray chip overflow'.`
+            "3–6 plain words, verb first, like 'Fix tray chip overflow'."
           ),
       },
-      async ({ title }) => ({
-        content: [
-          { type: "text" as const, text: await actions.setTitle(title) },
-        ],
-      }),
+      ({ title }) => actions.setTitle(title),
+      sentence,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       }
     ),
     tool(
       "show_image",
-      "Show an image file to the user inline in this session's transcript, by path. The " +
-        "dashboard renders it from disk when the user looks; you do not read the image and " +
-        "spend no tokens on its pixels. Use this for screenshots, renders, plots and diagrams " +
-        "you produced or found — whenever the user should SEE the file rather than hear about it.",
+      "Show an image file to the user in this session's transcript, by path, without reading its pixels: whenever they should SEE a screenshot, render or diagram.",
       {
-        path: z
-          .string()
-          .describe("Absolute path of the image file on this machine."),
+        path: z.string().describe("Absolute."),
         caption: z
           .string()
           .optional()
           .describe("One line under the image saying what it shows."),
       },
-      ({ path }) =>
-        Promise.resolve({
-          content: [{ type: "text" as const, text: actions.showImage(path) }],
-        })
+      ({ path }) => Promise.resolve(actions.showImage(path)),
+      sentence
     ),
     tool(
       artifactList.name,
       artifactList.description,
       artifactList.input,
-      async ({ waiting }) =>
-        json(
-          await actions.artifactCall(
-            "GET",
-            `/status${waiting ? "?waiting=true" : ""}`
-          )
-        ),
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      ({ waiting }) =>
+        actions.artifactCall(
+          "GET",
+          `/status${waiting ? "?waiting=true" : ""}`
+        ) as Promise<ArtifactStatus[]>,
+      artifactListWords,
+      { annotations: READ_ONLY }
     ),
     // A delegate may hand it to its parent instead (`to`), unopened.
     deps.hasParent
@@ -1212,19 +944,25 @@ export function handoffTools(deps: HandoffDeps) {
           artifactCreate.name,
           artifactCreate.description + artifactCreateToParent.description,
           { ...artifactCreate.input, ...artifactCreateToParent.input },
-          async (input) => json(await actions.artifactCall("POST", "", input))
+          (input) =>
+            actions.artifactCall("POST", "", input) as Promise<Created>,
+          artifactCreatedWords,
+          { detailed: artifactCreatedDetailed }
         )
       : tool(
           artifactCreate.name,
           artifactCreate.description,
           artifactCreate.input,
-          async (input) => json(await actions.artifactCall("POST", "", input))
+          (input) =>
+            actions.artifactCall("POST", "", input) as Promise<Created>,
+          artifactCreatedWords,
+          { detailed: artifactCreatedDetailed }
         ),
     tool(
       artifactUpdate.name,
       artifactUpdate.description,
       artifactUpdate.input,
-      async ({ id, statements, ask, ...change }) => {
+      async ({ id, statements, ask, ...change }): Promise<Updated> => {
         const at = `/${encodeURIComponent(id)}`;
         const changes = Object.values(change).some(
           (value) => value !== undefined
@@ -1238,33 +976,50 @@ export function handoffTools(deps: HandoffDeps) {
         const asked =
           ask === undefined
             ? undefined
-            : await actions.artifactCall("POST", `${at}/ask`, { ask });
-        if (statements === undefined) {
-          if (!changes && asked !== undefined) {
-            return json(asked);
-          }
-          // A component canvas's states file and its own spec have their own route.
-          const component = (
-            ["args", "story", "edges", "group", "dials"] as const
-          ).some((key) => change[key] !== undefined);
-          return json(
-            await actions.artifactCall(
-              "PATCH",
-              `${at}${component ? "/component" : ""}`,
-              change
-            )
-          );
+            : ((await actions.artifactCall("POST", `${at}/ask`, {
+                ask,
+              })) as AskChanged);
+        if (statements !== undefined) {
+          return {
+            change: "statements",
+            answer: (await actions.artifactCall("POST", `${at}/statements`, {
+              statements,
+            })) as Revised,
+          };
         }
-        return json(
-          await actions.artifactCall("POST", `${at}/statements`, { statements })
-        );
-      }
+        if (!changes && asked !== undefined) {
+          return { change: "ask", answer: asked };
+        }
+        // A component canvas's states file and its own spec have their own route.
+        const component = (
+          ["args", "story", "edges", "group", "dials"] as const
+        ).some((key) => change[key] !== undefined);
+        return component
+          ? {
+              change: "component",
+              answer: (await actions.artifactCall(
+                "PATCH",
+                `${at}/component`,
+                change
+              )) as ComponentChanged,
+            }
+          : {
+              change: "page",
+              answer: (await actions.artifactCall(
+                "PATCH",
+                at,
+                change
+              )) as ArtifactRead,
+            };
+      },
+      artifactUpdatedWords,
+      { detailed: artifactUpdatedDetailed }
     ),
     tool(
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and a picture into an image block
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and the newest artifact when none is named
       async ({ id, since, png, detail, story, state, render, verify }) => {
         const query = new URLSearchParams({
           ...(since === undefined ? {} : { since: String(since) }),
@@ -1285,121 +1040,98 @@ export function handoffTools(deps: HandoffDeps) {
           }
           target = newest.id;
         }
-        const answer = (await actions.artifactCall(
+        return (await actions.artifactCall(
           "GET",
           `/${encodeURIComponent(target)}${query ? `?${query}` : ""}`
-        )) as { png?: string | null };
-        // A canvas's picture is an image the model sees, beside the outline.
-        const { png: picture, ...rest } = answer;
-        return picture
-          ? {
-              content: [
-                { type: "text" as const, text: JSON.stringify(rest) },
-                {
-                  type: "image" as const,
-                  data: picture,
-                  mimeType: "image/png",
-                },
-              ],
-            }
-          : json(png ? { ...rest, png: null } : rest);
+        )) as ArtifactRead;
       },
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      artifactReadWords,
+      { annotations: READ_ONLY, detailed: artifactReadDetailed }
     ),
     tool(
       designMap.name,
       designMap.description,
       designMap.input,
-      async (ask) => {
-        const query = new URLSearchParams(
-          Object.entries(ask)
+      (ask, format) => {
+        const query = new URLSearchParams([
+          ...Object.entries(ask)
             .filter(([, value]) => value !== undefined)
-            .map(([key, value]): [string, string] => [key, String(value)])
-        ).toString();
-        return json(
-          await actions.artifactCall(
-            "GET",
-            `/design-map${query ? `?${query}` : ""}`
-          )
-        );
+            .map(([key, value]): [string, string] => [key, String(value)]),
+          ["response_format", format],
+        ]).toString();
+        return actions.artifactCall(
+          "GET",
+          `/design-map${query ? `?${query}` : ""}`
+        ) as Promise<DesignMap>;
       },
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      designMapWords,
+      { annotations: READ_ONLY }
     ),
     tool(
       artifactShow.name,
       artifactShow.description,
       artifactShow.input,
-      async ({ id }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/${encodeURIComponent(id)}/show?by=agent`
-          )
-        )
+      ({ id }) =>
+        actions.artifactCall(
+          "POST",
+          `/${encodeURIComponent(id)}/show?by=agent`
+        ) as Promise<Shown>,
+      artifactShownWords
     ),
     tool(
       artifactBrowse.name,
       artifactBrowse.description,
       artifactBrowse.input,
-      async ({ id }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/${encodeURIComponent(id)}/browse`
-          )
-        ),
+      ({ id }) =>
+        actions.artifactCall(
+          "POST",
+          `/${encodeURIComponent(id)}/browse`
+        ) as Promise<Browsed & { link: string }>,
+      artifactBrowsedWords,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
       }
     ),
     tool(
       artifactPromote.name,
       artifactPromote.description,
       artifactPromote.input,
-      async ({ id }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/${encodeURIComponent(id)}/promote`
-          )
-        ),
+      ({ id }) =>
+        actions.artifactCall(
+          "POST",
+          `/${encodeURIComponent(id)}/promote`
+        ) as Promise<Promoted>,
+      artifactPromotedWords,
       {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
       }
     ),
     tool(
       artifactDelete.name,
       artifactDelete.description,
       artifactDelete.input,
-      async ({ id }) =>
-        json(
-          await actions.artifactCall(
-            "DELETE",
-            `/${encodeURIComponent(id)}?by=agent`
-          )
-        )
+      ({ id }) =>
+        actions.artifactCall(
+          "DELETE",
+          `/${encodeURIComponent(id)}?by=agent`
+        ) as Promise<Removed>,
+      artifactRemovedWords
     ),
     tool(
       commentRead.name,
       commentRead.description,
       commentRead.input,
-      async ({ artifact, filter, since }) => {
+      ({ artifact, filter, since }) => {
         // The session reads them itself: what it reads counts as heard.
         const query = new URLSearchParams({
           filter,
@@ -1407,40 +1139,37 @@ export function handoffTools(deps: HandoffDeps) {
           ...(artifact ? { artifact } : {}),
           ...(since ? { since } : {}),
         }).toString();
-        return json(await actions.artifactCall("GET", `/comments?${query}`));
+        return actions.artifactCall(
+          "GET",
+          `/comments?${query}`
+        ) as Promise<CommentRead>;
       },
-      {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      }
+      commentReadWords,
+      { annotations: READ_ONLY }
     ),
     tool(
       commentReply.name,
       commentReply.description,
       commentReply.input,
-      async ({ pin, ...reply }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/comments/${encodeURIComponent(pin)}/reply`,
-            reply
-          )
-        )
+      ({ pin, ...reply }) =>
+        actions.artifactCall(
+          "POST",
+          `/comments/${encodeURIComponent(pin)}/reply`,
+          reply
+        ) as Promise<CommentReplied>,
+      commentRepliedWords
     ),
     tool(
       commentResolve.name,
       commentResolve.description,
       commentResolve.input,
-      async ({ pin, ...resolve }) =>
-        json(
-          await actions.artifactCall(
-            "POST",
-            `/comments/${encodeURIComponent(pin)}/resolve`,
-            resolve
-          )
-        )
+      ({ pin, ...resolve }) =>
+        actions.artifactCall(
+          "POST",
+          `/comments/${encodeURIComponent(pin)}/resolve`,
+          resolve
+        ) as Promise<CommentResolved>,
+      commentResolvedWords
     ),
   ];
   return all.filter(
@@ -1580,6 +1309,10 @@ const loadingLine = (listable: Listable): string => {
   return `On Claude, ${upfront.join(", ")} load upfront; every other CawCo tool is deferred: load it with ToolSearch by its name (select:mcp__cawco__<name>) or its group's prefix before saying it is unavailable. ${[...groups, ...(rest.length > 0 ? [`also ${rest.join(", ")}`] : [])].join("; ")}.`;
 };
 
+/** How CawCo's tools answer (mcp-tool.ts), said once for every tool's `response_format`. */
+const ANSWERS =
+  "CawCo's tools answer in words, each thing by the name or handle they take back. response_format: \"detailed\" answers the hub's whole record as JSON instead, every id and time: ask for it only when the words leave out what you need.";
+
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
   deps: HandoffDeps,
@@ -1588,7 +1321,7 @@ export function handoffInstructions(
   const { names } = listable;
   // How a session names another in its words (core references.ts): the
   // dashboard draws the link as that session's chip.
-  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${REFERENCE_GUIDANCE}`;
+  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")

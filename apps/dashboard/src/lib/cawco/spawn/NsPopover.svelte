@@ -238,7 +238,7 @@
               style:pointer-events={pressable(open)}
               {@attach roomed}
               {@attach rows ? highlight({ rows }) : undefined}
-              {@attach morph()}
+              {@attach morph({ followUnfolds: true })}
             >
               {@render children()}
             </div>

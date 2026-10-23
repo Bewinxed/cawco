@@ -14,9 +14,9 @@
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Seen } from "../../scratch-fleet";
+import { caw, cawSays, needsCount, ZERO } from "../caw-head";
 import type { KitFleet } from "../kit";
 import { pendingAsks } from "./asks";
-import { caw, cawSays, ZERO } from "./j1-check-in";
 import { say } from "./mock";
 import { eventually, type Journey, type Leg, shows } from "./suite";
 
@@ -26,7 +26,7 @@ const VOICE = "Which voice for the launch post?";
 const TONE = "Which tone for the replies?";
 const PLAIN = "Plain";
 const WARM = "Warm";
-const TWO_NEED = /^Needs you, 2(\D|$)/;
+const TWO_NEED = needsCount(2);
 const QUESTION = /^Question from Caw/;
 const FIRST_OF_TWO = /1 of 2/;
 const SECOND_OF_TWO = /2 of 2/;
@@ -47,7 +47,11 @@ const question = (text: string) => ({
   ],
 });
 
-/** How Claude Code hands an answered question back (its tool result). */
+/**
+ * How Claude Code hands an answered question back (its tool result), read in
+ * the request's words (`Seen.all`, a tool result's text among them): its
+ * `body` is the request as JSON, where these quotes are escaped.
+ */
 const answered = (text: string, label: string) => `"${text}"="${label}"`;
 
 /**
@@ -76,7 +80,7 @@ const made: string[] = [];
 async function stopAll(fleet: KitFleet, projectId: string): Promise<void> {
   const running = () =>
     fleet
-      .api<{ sessions: { id: string }[] }>(`/api/projects/${projectId}/stop`)
+      .api<{ sessions: { id: string }[] }>(`/api/projects/${projectId}/running`)
       .then((read) => read.sessions);
   const sessions = await running();
   if (sessions.length > 0) {
@@ -209,8 +213,8 @@ async function walk(leg: Leg): Promise<void> {
             (one) =>
               one.afterTool &&
               one.all.includes(token) &&
-              one.body.includes(answered(VOICE, PLAIN)) &&
-              one.body.includes(answered(TONE, WARM))
+              one.all.includes(answered(VOICE, PLAIN)) &&
+              one.all.includes(answered(TONE, WARM))
           ),
         Boolean,
         60_000
@@ -227,6 +231,7 @@ async function walk(leg: Leg): Promise<void> {
 const journey: Journey = {
   name: "j4-caw-asks",
   flow: "Caw asks and the person answers: by click, then by number key",
+  host: "the project's Caw runs in a place, a boundary of its own",
   respond: (seen: Seen) => {
     if (!seen.tools) {
       return say("Launch post");

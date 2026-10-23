@@ -251,6 +251,8 @@ export function createDelegationMcp(options: {
   ) => Promise<AttemptStart>;
   /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
+  /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`). */
+  artifactNamed?: (instanceId: string, asked: string) => string;
   /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
   writePlan?: TaskToolContext["writePlan"];
   /** `delegate_list`: the calling session's own delegation tree (delegation-tree.ts). */
@@ -286,7 +288,7 @@ export function createDelegationMcp(options: {
     toolUseId?: string
   ) => MemoryTool[];
   /** Caw's `project_settings` (project-settings.ts): his own project's settings, applied or asked about. */
-  projectSettings?: Pick<ProjectSettings, "call" | "definition">;
+  projectSettings?: Pick<ProjectSettings, "tool" | "definition">;
   /** Fleet watch's `triage_decide` (fleet-watch.ts), for a triage run. */
   triageTools?: (actor: InstanceRow | undefined) => TriageTool[];
   /**
@@ -307,7 +309,8 @@ export function createDelegationMcp(options: {
   connections?: Pick<Connections, "callAs" | "sessionTools">;
   /**
    * Parks an admin write as the person's ask and waits: resolves when they
-   * approve it, rejects with the refusal when they deny it (admin-asks.ts).
+   * approve it, rejects with the refusal when they deny it; a session in
+   * Full Send is approved at once (admin-asks.ts).
    */
   askPerson: (
     actor: InstanceRow,
@@ -546,7 +549,8 @@ export function createDelegationMcp(options: {
   /**
    * An `admin_*` call, its role already checked. A write, from any door,
    * waits for the person to approve it (admin-asks.ts) and then runs once,
-   * with the arguments they were shown; a refusal is the caller's error.
+   * with the arguments they were shown; a refusal is the caller's error. A
+   * session in Full Send is approved at once.
    */
   const administer = async (
     actor: InstanceRow,
@@ -567,7 +571,7 @@ export function createDelegationMcp(options: {
     if (isAdminWrite(name)) {
       await options.askPerson(actor, name, input, toolUseId);
     }
-    return (await entry.handler(input)) as CallToolResult;
+    return await entry.call(input);
   };
 
   /** A task tool, for its caller's project, its role already checked. */
@@ -588,6 +592,9 @@ export function createDelegationMcp(options: {
         duplicates: options.duplicates,
         projectRunsOn: options.projectRunsOn,
         startAttempt: options.startAttempt,
+        artifactNamed: options.artifactNamed
+          ? (asked) => options.artifactNamed?.(actor.id, asked) ?? asked
+          : undefined,
         retryAttempt: options.retryAttempt,
         tasks: options.tasks,
         writePlan: options.writePlan,
@@ -598,7 +605,7 @@ export function createDelegationMcp(options: {
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
     }
-    return (await entry.handler(input)) as CallToolResult;
+    return await entry.call(input);
   };
 
   /**
@@ -644,7 +651,7 @@ export function createDelegationMcp(options: {
       if (!entry) {
         throw new Error(`Unknown tool ${name}`);
       }
-      return (await entry.handler(input)) as CallToolResult;
+      return await entry.call(input);
     }
     return undefined;
   };
@@ -661,9 +668,7 @@ export function createDelegationMcp(options: {
         `${name} isn't available here: only a session you started, in no project yet, can be made a project.`
       );
     }
-    return (await projectFromSessionTool(() => make(actor)).handler(
-      input
-    )) as CallToolResult;
+    return await projectFromSessionTool(() => make(actor)).call(input);
   };
 
   /** One of Caw's own tools (threads, views, his folder, the decision graph), its role already checked. */
@@ -679,7 +684,7 @@ export function createDelegationMcp(options: {
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
     }
-    return (await entry.handler(input)) as CallToolResult;
+    return await entry.call(input);
   };
 
   const CAWS: ReadonlySet<string> = new Set(CAW_TOOLS);
@@ -718,7 +723,7 @@ export function createDelegationMcp(options: {
       return await administer(actor, name, input, toolUseId);
     }
     if (name === PROJECT_SETTINGS && options.projectSettings) {
-      return await options.projectSettings.call(actor, input, toolUseId);
+      return await options.projectSettings.tool(actor, toolUseId).call(input);
     }
     if (name === PROJECT_FROM_SESSION && options.projectFromSession) {
       return await projectCall(actor, name, input);
@@ -736,7 +741,7 @@ export function createDelegationMcp(options: {
       if (!entry) {
         throw new Error(`Unknown tool ${name}`);
       }
-      return (await entry.handler(input)) as CallToolResult;
+      return await entry.call(input);
     }
     return await projectToolCall(actor, name, input, toolUseId);
   };
@@ -774,7 +779,7 @@ export function createDelegationMcp(options: {
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
     }
-    return (await entry.handler(input)) as CallToolResult;
+    return await entry.call(input);
   };
 
   const answer = async (
@@ -876,20 +881,10 @@ export function createDelegationMcp(options: {
     if (!entry) {
       throw new Error(`Tool ${name} is unavailable to this session`);
     }
-    const result = (await entry.handler(input)) as CallToolResult;
+    const result = await entry.call(input);
     for (const envelope of emitted) {
       // biome-ignore lint/performance/noAwaitInLoops: spawn must finish before its first send is relayed
       await options.forward(envelope, actor);
-    }
-    // Keep routing metadata recoverable in stored transcripts even when a
-    // harness drops structuredContent (OpenCode's carries transport metadata
-    // only; core transcript-rules reads the JSON). A tool that answers with a
-    // sentence keeps it in its structured result as `text`, which is what
-    // Claude Code hands the model; this is that same result, serialised.
-    if (result.structuredContent) {
-      result.content = [
-        { type: "text", text: JSON.stringify(result.structuredContent) },
-      ];
     }
     return result;
   };

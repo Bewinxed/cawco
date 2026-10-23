@@ -400,6 +400,30 @@ export const setSessionLimits = (
 };
 
 /**
+ * Every live child of every keeper this agent has a connection open to, each
+ * once by pid, as each keeper lists it now: the current keeper's and those of
+ * keepers still retiring. A keeper that does not answer its listing is left
+ * out of this reading.
+ */
+export const keeperChildren = async (): Promise<SessiondProcInfo[]> => {
+  const listed = await Promise.all(
+    [...openClients].map((client) =>
+      client.list().then(
+        (welcome) => welcome.procs,
+        () => [] as SessiondProcInfo[]
+      )
+    )
+  );
+  const byPid = new Map<number, SessiondProcInfo>();
+  for (const proc of listed.flat()) {
+    if (proc.alive) {
+      byPid.set(proc.pid, proc);
+    }
+  }
+  return [...byPid.values()];
+};
+
+/**
  * Every keeper's word that one of its children reached a limit
  * (`proc.limit`), once however many connections heard it: the supervisor
  * says it on the sessions it touches (session.ts).
@@ -425,6 +449,8 @@ const hearLimit = (message: SessiondLimit): void => {
 /** What the agent learns the moment it attaches (design §7's epoch and heads). */
 export interface SessiondWelcomeInfo {
   capabilities: readonly string[];
+  /** Where the keeper starts its children ({@link SessiondWelcome.cgroup}). */
+  cgroup?: string;
   epoch: string;
   procs: SessiondProcInfo[];
 }
@@ -445,7 +471,9 @@ interface ProcListener {
     exitCode: number | null,
     signal: NodeJS.Signals | null,
     /** The process that exited, when its keeper says (what {@link SessiondClient.release} names). */
-    pid: number | undefined
+    pid: number | undefined,
+    /** The last of what it wrote on stderr, when it wrote any and its keeper kept it (core sessiond.ts `SessiondExit.stderr`). */
+    stderr?: string
   ) => void;
   /**
    * The keeper holds no child under the id: the listing that answers this
@@ -631,6 +659,11 @@ export class SessiondClient {
     return this.#welcome?.epoch;
   }
 
+  /** The cgroup the keeper this client attached to starts its children under, as its welcome names it. */
+  get cgroup(): string | undefined {
+    return this.#welcome?.cgroup;
+  }
+
   /** What the keeper this client attached to says it speaks. */
   get capabilities(): readonly string[] {
     return this.#welcome?.capabilities ?? [];
@@ -674,6 +707,7 @@ export class SessiondClient {
           epoch: message.epoch,
           capabilities: message.capabilities,
           procs: message.procs,
+          ...(message.cgroup ? { cgroup: message.cgroup } : {}),
         };
         // A child that died before its listener subscribed had its `proc.exit`
         // broadcast to nobody, and sessiond answers a subscribe to a dead
@@ -685,7 +719,8 @@ export class SessiondClient {
               proc.procId,
               proc.exitCode ?? null,
               proc.signal ?? null,
-              proc.pid
+              proc.pid,
+              proc.stderr
             );
           }
         }
@@ -723,7 +758,8 @@ export class SessiondClient {
           message.procId,
           message.exitCode,
           message.signal,
-          message.pid
+          message.pid,
+          message.stderr
         );
         return;
       case "proc.limit":
@@ -752,10 +788,11 @@ export class SessiondClient {
     procId: string,
     exitCode: number | null,
     signal: NodeJS.Signals | null,
-    pid: number | undefined
+    pid: number | undefined,
+    stderr: string | undefined
   ): void {
     for (const { listener } of this.#subscriptions.get(procId) ?? []) {
-      this.#exit(listener, exitCode, signal, pid);
+      this.#exit(listener, exitCode, signal, pid, stderr);
     }
   }
 
@@ -781,13 +818,14 @@ export class SessiondClient {
     listener: ProcListener,
     exitCode: number | null,
     signal: NodeJS.Signals | null,
-    pid: number | undefined
+    pid: number | undefined,
+    stderr: string | undefined
   ): void {
     if (this.#toldExit.has(listener)) {
       return;
     }
     this.#toldExit.add(listener);
-    listener.exit?.(exitCode, signal, pid);
+    listener.exit?.(exitCode, signal, pid, stderr);
   }
 
   #send(message: SessiondClientMessage): void {
@@ -1146,6 +1184,8 @@ export interface BridgeRing {
 export interface ProcessExit {
   code: number | null;
   signal: NodeJS.Signals | null;
+  /** The last of what it said on stderr, as its keeper kept it; absent when it said nothing there. */
+  stderr?: string;
 }
 
 /** The previous host's control traffic, which an attach does not replay. */
@@ -1343,11 +1383,15 @@ export const sessiondBridge = (
       }
       stdout.push(`${event.data}\n`);
     },
-    exit: (code, sig, pid) => {
+    exit: (code, sig, pid, stderr) => {
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
-      end(code === null && sig === null ? undefined : { code, signal: sig });
+      end(
+        code === null && sig === null
+          ? undefined
+          : { code, signal: sig, ...(stderr ? { stderr } : {}) }
+      );
       // This transport is what follows its child: its end is read now.
       client.release(procId, pid);
       // An `exit` with neither a code nor a signal is not one a process can

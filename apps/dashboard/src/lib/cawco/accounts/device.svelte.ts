@@ -5,10 +5,15 @@
  * for the machine to say who it signed in as. A code is only ever minted by
  * a press: nothing starts on open. The setup's machine rows and the account
  * page's popover both draw this (DevicePanel).
+ *
+ * The wait belongs to the flow, not to whatever draws it: a popover put
+ * away leaves it waiting (flows.svelte.ts keeps it), and a reload takes up
+ * the code the hub kept (`resume`) and waits on it again.
  */
 import {
   type AccountJoined,
   accountsWords,
+  type PendingAccountSignin,
   type ProviderSigninChallenge,
 } from "@cawco/core";
 import { failureWords } from "#lib/cawco/hub-read.js";
@@ -46,6 +51,46 @@ export class DeviceFlow {
   constructor(account: () => Promise<string>, machineId: string) {
     this.#account = account;
     this.#machineId = machineId;
+  }
+
+  /** A code is shown and waited on, or being asked for. */
+  get live(): boolean {
+    return this.phase === "starting" || this.phase === "waiting";
+  }
+
+  /**
+   * Takes up the code the hub kept for this sign-in (a reload, or a screen
+   * opened after it started) and waits on it again: the same code, never a
+   * new one.
+   */
+  resume(pending: PendingAccountSignin | undefined): void {
+    if (
+      this.phase !== "idle" ||
+      !pending ||
+      !("userCode" in pending.challenge) ||
+      pending.expiresAt <= Date.now()
+    ) {
+      return;
+    }
+    this.#round += 1;
+    const round = this.#round;
+    this.code = pending.challenge.userCode;
+    this.url = pending.challenge.verificationUrl;
+    this.expiresAt = pending.challenge.expiresAt;
+    this.phase = "waiting";
+    this.problem = null;
+    this.#clock(true);
+    // biome-ignore lint/complexity/noVoid: the wait reports through the flow's own state
+    void this.#account()
+      .then((id) => this.#wait(id, round))
+      .catch((error: unknown) => {
+        if (round === this.#round) {
+          this.#clock(false);
+          this.code = null;
+          this.phase = "idle";
+          this.problem = failureWords(error);
+        }
+      });
   }
 
   /** Mints a code on the machine and waits for it to be entered. */
@@ -129,7 +174,7 @@ export class DeviceFlow {
     }
   }
 
-  /** Stops waiting (the row or popover went away); the code lapses on its own. */
+  /** Stops waiting (its account went away); the code lapses on its own. */
   dispose(): void {
     this.#round += 1;
     this.#clock(false);

@@ -1,7 +1,7 @@
 # Sourced (or eval'd, as build-both.sh's Mac side does): defines
 #   disk_room <dir> <what>
-# the precondition every heavy run (scripts/lib/heavy-run.ts) and every Apple
-# build (apps/apple/scripts/build-both.sh) checks before it starts: the
+# the precondition a run that writes a build or a fleet (scripts/lib/disk-room.ts)
+# and every Apple build (apps/apple/scripts/build-both.sh) checks before it starts: the
 # filesystem holding <dir> has at least CAWCO_MIN_FREE_GB GB free (10 unless
 # set). Below that it prints one sentence on stderr, naming the free space
 # and the biggest folders under CawCo's workspace roots on this machine, and
@@ -16,7 +16,7 @@
 disk_room() {
   local dir=$1 what=$2 min=${CAWCO_MIN_FREE_GB:-10} free_kb mount free biggest
   if ! [[ $min =~ ^[0-9]+$ ]]; then
-    echo "CAWCO_MIN_FREE_GB is the free space in GB a heavy run needs to start, a whole number; it is \"$min\"" >&2
+    echo "CAWCO_MIN_FREE_GB is the free space in GB a run needs to start, a whole number; it is \"$min\"" >&2
     return 2
   fi
   free_kb=$(df -Pk "$dir" | awk 'NR == 2 { print $4 }')
@@ -34,6 +34,6 @@ disk_room() {
     "$HOME"/.cawco/workspace-cache/DerivedData.noindex/* "$HOME"/.cawco/tmp/* "$HOME"/build/cawco-apple.noindex/* 2>/dev/null |
     sort -rn | head -5 |
     awk -v home="$HOME" '{ path = $2; if (index(path, home) == 1) path = "~" substr(path, length(home) + 1); printf "%s%s (%.1f GB)", (NR > 1 ? ", " : ""), path, $1 * 1024 / 1e9 }') || true
-  echo "$what did not start: $mount has $free GB free, under the $min GB a heavy run or Apple build needs to start (CAWCO_MIN_FREE_GB); the biggest folders under CawCo's workspace roots here are ${biggest:-none this shell can read}." >&2
+  echo "$what did not start: $mount has $free GB free, under the $min GB a run or Apple build needs to start (CAWCO_MIN_FREE_GB); the biggest folders under CawCo's workspace roots here are ${biggest:-none this shell can read}." >&2
   return 3
 }

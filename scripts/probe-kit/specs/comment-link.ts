@@ -36,7 +36,7 @@
  *    (cut and refused for 3 s, under the overlay's 5 s before it refuses
  *    the pen): its composer opens and Comment writes it, words and all, in
  *    the page's doc alone; once the link is back its words reach the hub
- *    within the backoff, and on Send the session hears them once.
+ *    within the backoff, and the session hears them once, by itself.
  * 6. A tab really hidden behind another (hidden-tab.ts: Chromium headed on
  *    a headless Wayland session, through the same proxy), under Chromium's
  *    intensive wake-up throttling (developer.chrome.com/blog/
@@ -57,8 +57,8 @@
  *    the comments aren't reaching the agent within 30 s, from the hub's
  *    missed beats (core doc-link.ts `watchSilence`), not after
  *    y-websocket's 30 s check and the 15 s grace; forwarding again, it
- *    clears within 30 s, the words reach the hub, and on Send the session
- *    hears them once.
+ *    clears within 30 s, the words reach the hub, and the session hears
+ *    them once, by itself.
  *
  *   bun scripts/probe-kit/run.ts comment-link
  */
@@ -72,6 +72,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   type Spec,
   settle,
 } from "../kit";
@@ -569,7 +570,7 @@ const writeComment = async (
   const x = b.x + b.w * across;
   const y = b.y + b.h / 2;
   await page.mouse.move(x, y, { steps: 4 });
-  await page.mouse.click(x, y);
+  await pressAt(frame, { x, y });
   const composer = page.locator('[data-slot="pin-composer"]');
   await composer.waitFor({ timeout: 15_000 });
   const composerAt = Date.now();
@@ -629,8 +630,7 @@ const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
       onHub.length === 1,
     `link while down ${linkWhileDown}; comments made in the page ${inPage}, on the hub ${onHubWhileDown}; on the hub ${reachedIn} ms after the link was let through; ${failed.slice(0, 400)}; words on the hub ${onHub.length}`
   );
-  // Nothing goes until the person's Send.
-  await page.locator(`${PANE} [data-slot="send"]`).click();
+  // No Send: once on the hub, it goes by itself.
   await until(
     "the delivery",
     () => heard.slice(heardBefore).filter((one) => NOTICE.test(one.last)),
@@ -642,7 +642,7 @@ const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
     .slice(heardBefore)
     .filter((one) => NOTICE.test(one.last) && !one.afterTool);
   at.kit.check(
-    "5: on Send the session hears the comment once",
+    "5: once on the hub, the session hears the comment once, by itself",
     deliveries.length === 1 && deliveries[0]?.last.includes(PIN_WORDS) === true,
     `${deliveries.length} deliveries; ${deliveries.map((one) => one.last.slice(0, 300)).join(" | ")}`
   );
@@ -732,8 +732,7 @@ const silentDrop = async (at: At, proxy: Proxy, page: Page) => {
       onHub.length === 1,
     `cleared ${clearedMs ?? "never"} ms after forwarding again; overlay ${linkNow}; words on the hub ${onHub.length}`
   );
-  // Nothing goes until the person's Send.
-  await page.locator(`${PANE} [data-slot="send"]`).click();
+  // No Send: once on the hub, it goes by itself.
   await until(
     "the delivery",
     () => heard.slice(heardBefore).filter((one) => NOTICE.test(one.last)),
@@ -745,7 +744,7 @@ const silentDrop = async (at: At, proxy: Proxy, page: Page) => {
     .slice(heardBefore)
     .filter((one) => NOTICE.test(one.last) && !one.afterTool);
   at.kit.check(
-    "7: on Send the session hears the comment written in the silence once",
+    "7: once on the hub, the session hears the comment written in the silence once, by itself",
     deliveries.length === 1 &&
       deliveries[0]?.last.includes(SILENT_WORDS) === true,
     `${deliveries.length} deliveries; ${deliveries.map((one) => one.last.slice(0, 300)).join(" | ")}`

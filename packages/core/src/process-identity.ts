@@ -64,6 +64,8 @@ const KERN_PROC_PID = 1;
 /** `proc_pidinfo`'s `PROC_PIDTASKINFO` and its `struct proc_taskinfo` (<sys/proc_info.h>), 96 bytes. */
 const PROC_PIDTASKINFO = 4;
 const TASKINFO_SIZE = 96;
+/** `pti_resident_size`, in bytes (after `pti_virtual_size`). */
+const TASKINFO_RESIDENT = 8;
 /** `pti_total_user` and `pti_total_system`, in Mach absolute time units. */
 const TASKINFO_USER = 16;
 const TASKINFO_SYSTEM = 24;
@@ -1102,6 +1104,51 @@ const SOCKET_LINK = /^socket:\[(\d+)\]$/;
 
 /** A `lsof -Fn` line naming a listening TCP address: `n127.0.0.1:43663`. */
 const LSOF_LISTEN = /^n.*:(\d+)$/;
+
+/** `/proc/<pid>/status`'s resident set, in kB. */
+const VM_RSS = /^VmRSS:\s+(\d+) kB$/m;
+
+/**
+ * The memory `pid` holds resident now, in bytes: Linux's `VmRSS` in
+ * `/proc/<pid>/status`, the Mac's `pti_resident_size` (`proc_pidinfo`
+ * `PROC_PIDTASKINFO`). Undefined when it is gone, has none (a kernel thread,
+ * a zombie), or is not ours to read.
+ */
+export async function residentBytes(pid: number): Promise<number | undefined> {
+  if (process.platform !== "linux") {
+    const info = new Uint8Array(TASKINFO_SIZE);
+    const filled = lib().symbols.proc_pidinfo(
+      pid,
+      PROC_PIDTASKINFO,
+      0,
+      info,
+      TASKINFO_SIZE
+    );
+    return filled === TASKINFO_SIZE
+      ? Number(new DataView(info.buffer).getBigUint64(TASKINFO_RESIDENT, true))
+      : undefined;
+  }
+  const status = await readFile(`/proc/${pid}/status`, "utf8").catch(() => "");
+  const kb = VM_RSS.exec(status)?.[1];
+  return kb === undefined ? undefined : Number(kb) * 1024;
+}
+
+/**
+ * The CPU time `pid` has used, user and system, in microseconds: Linux's
+ * `utime` + `stime` in `/proc/<pid>/stat`, the Mac's task info, as
+ * {@link processTable} reads them. Undefined when it is gone or not ours to
+ * read.
+ */
+export async function cpuTimeUsed(pid: number): Promise<number | undefined> {
+  if (process.platform !== "linux") {
+    return darwinCpuMicroseconds(pid);
+  }
+  const fields = (await linuxStat(pid))?.fields;
+  return fields?.[12] === undefined
+    ? undefined
+    : ((Number(fields[11]) + Number(fields[12])) * 1_000_000) /
+        LINUX_TICKS_PER_SECOND;
+}
 
 /** The whitespace between a `/proc/net/tcp` row's fields. */
 const PROC_NET_FIELDS = /\s+/;

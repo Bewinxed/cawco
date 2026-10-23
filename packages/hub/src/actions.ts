@@ -40,12 +40,18 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { ActionRow } from "./db/actions";
 import type { ActionState } from "./db/schema";
+import { byHandle } from "./handles";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { tool } from "./mcp-tool";
+import {
+  actionListWords,
+  actionProposedWords,
+  actionWords,
+} from "./presenters/project";
 import type { Push } from "./push";
 import { roleOf } from "./roles";
 import { stageNamed } from "./stages";
@@ -786,13 +792,9 @@ export const createActions = ({
 
   // --- tools ---------------------------------------------------------------------
 
-  const ok = (data: unknown) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(data) }],
-  });
-
-  const run = async (work: () => unknown) => {
+  const run = async <T>(work: () => T | Promise<T>): Promise<T> => {
     try {
-      return ok(await work());
+      return await work();
     } catch (error) {
       if (error instanceof ActionRefusal) {
         throw new Error(error.message, { cause: error });
@@ -812,7 +814,7 @@ export const createActions = ({
     return [
       tool(
         "action_propose",
-        "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve. The hub makes the call once, at run_at or as soon as it is approved, with exactly these arguments; you get its id now and go on working. Check how it went with action_list.",
+        "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve; the hub makes it once, at run_at or once approved. Go on working; action_list says how it went.",
         {
           connection: z
             .string()
@@ -863,7 +865,8 @@ export const createActions = ({
               state: filed.state,
               said: "Waiting for the owner's approval.",
             };
-          })
+          }),
+        actionProposedWords
       ),
       tool(
         "action_list",
@@ -888,13 +891,33 @@ export const createActions = ({
               me().projectId ?? refuse(403, "This session is in no project."),
               state
             )
-          )
+          ),
+        actionListWords
       ),
       tool(
         "action_cancel",
         "Cancel an approved action of your project before it runs.",
         { id: z.string().trim().min(1).describe("Its id.") },
-        ({ id }) => run(() => cancel(id, me()))
+        ({ id }) =>
+          run(() =>
+            cancel(
+              byHandle(
+                id,
+                list(
+                  me().projectId ??
+                    refuse(403, "This session is in no project.")
+                ),
+                {
+                  id: (action) => action.id,
+                  said: (action) =>
+                    `${action.connection}:${action.tool} ${action.id.slice(0, 8)}`,
+                },
+                "action"
+              ).id,
+              me()
+            )
+          ),
+        actionWords
       ),
     ];
   };

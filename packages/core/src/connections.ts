@@ -94,6 +94,12 @@ export interface ConnectionView {
   reason?: string;
   /** Free text: github, x, linear… */
   service: string;
+  /**
+   * The sign-in under way, while it can still finish: the page it was sent
+   * to and when it lapses, epoch ms. A press on the row opens that same
+   * page again rather than starting another.
+   */
+  signIn?: { expiresAt: number; url: string };
   state: ConnectionState;
   /** Its tools' names, as the hub last listed them; absent before a first listing. */
   tools?: string[];

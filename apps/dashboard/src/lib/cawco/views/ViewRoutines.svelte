@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { CAW_NO_MACHINE, routinesWords as words } from "@cawco/core";
+  import {
+    CAW_NO_MACHINE,
+    connectWords,
+    routinesWords as words,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
   import BlockPage, {
@@ -8,6 +12,7 @@
   import CantStart from "#lib/cawco/CantStart.svelte";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
+  import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
@@ -16,7 +21,6 @@
     unreachable,
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
-  import { addMachine } from "#lib/cawco/join/join.svelte.js";
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -59,12 +63,17 @@
     type ProjectStarter,
     tellStarterOutcome,
   } from "#lib/cawco/project-tasks.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import ActionsTable, {
     waitsOnYou,
   } from "#lib/cawco/routines/ActionsTable.svelte";
   import RoutineDetail from "#lib/cawco/routines/RoutineDetail.svelte";
   import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
   import RunStatus, { type Status } from "#lib/cawco/routines/RunStatus.svelte";
+  import {
+    type RoutineAct,
+    routineRefusals,
+  } from "#lib/cawco/routines/refusals.svelte.js";
   import {
     deleteRoutine,
     type Poll,
@@ -80,7 +89,6 @@
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
@@ -503,29 +511,64 @@
     return { text: whenOf(routine.nextSlot), title: exactOf(routine.nextSlot) };
   }
 
+  /** What a refused act says under its row, by the act. */
+  const REFUSED: Record<RoutineAct, (name: string, why: string) => string> = {
+    run: words.refusedRun,
+    pause: words.refusedPause,
+    resume: words.refusedResume,
+    keep: words.refusedKeep,
+    remove: words.refusedRemove,
+  };
   /**
    * A row action, as the hub answers it: the page is read again after, and
-   * a refusal is said in the hub's own sentence.
+   * a refusal is said under the routine's row in the hub's own sentence,
+   * kept until the reader acts on it (routines/refusals.svelte.ts), never a
+   * toast. An act that goes clears what the last one left.
    */
-  async function act(work: () => Promise<unknown>) {
+  async function act(
+    routine: Routine,
+    kind: RoutineAct,
+    work: () => Promise<unknown>
+  ) {
     try {
       await work();
+      routineRefusals.clear(routine.id);
     } catch (error) {
-      toast.error(message(error));
+      routineRefusals.set(routine.id, {
+        act: kind,
+        reason: REFUSED[kind](routine.name, message(error)),
+      });
     } finally {
       await read();
     }
   }
   const pause = (routine: Routine) =>
-    act(() => updateRoutine(routine.id, { enabled: !routine.enabled }));
+    act(routine, routine.enabled ? "pause" : "resume", () =>
+      updateRoutine(routine.id, { enabled: !routine.enabled })
+    );
   const keep = (routine: Routine) =>
-    act(() => updateRoutine(routine.id, { keep: true }));
-  const runNow = (routine: Routine) => act(() => runRoutineNow(routine.id));
+    act(routine, "keep", () => updateRoutine(routine.id, { keep: true }));
+  const runNow = (routine: Routine) =>
+    act(routine, "run", () => runRoutineNow(routine.id));
   async function remove(routine: Routine) {
     deletePending = true;
-    await act(() => deleteRoutine(routine.id));
+    await act(routine, "remove", () => deleteRoutine(routine.id));
     deletePending = false;
     deleting = null;
+  }
+  /** The refused act again, as it was asked. */
+  function again(routine: Routine, kind: RoutineAct): Promise<void> {
+    switch (kind) {
+      case "run":
+        return runNow(routine);
+      case "keep":
+        return keep(routine);
+      case "remove":
+        return remove(routine);
+      case "pause":
+      case "resume":
+        return pause(routine);
+    }
   }
   function menuOf(routine: Routine): RowAction[] {
     return [
@@ -907,6 +950,20 @@
             >
           </Table.Cell>
         </Table.Row>
+        {@const refusal = routineRefusals.of(routine.id)}
+        {#if refusal}
+          <!-- What the hub refused of an act on it, under it, until acted on. -->
+          <tr data-routine-refusal>
+            <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
+              <RowFault
+                again={() => again(routine, refusal.act)}
+                end="var(--space-3)"
+                indent="var(--space-3)"
+                reason={refusal.reason}
+              />
+            </td>
+          </tr>
+        {/if}
         {#if deleting === routine.id}
           <tr>
             <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
@@ -1095,8 +1152,8 @@
 {#snippet addMachineByHand()}
   <Button
     aria-haspopup="dialog"
-    label="Add machine"
-    onclick={() => addMachine.show()}
+    label={connectWords.addMachine}
+    onclick={(event) => connect.openNew(event.currentTarget)}
     variant="outline"
   />
 {/snippet}

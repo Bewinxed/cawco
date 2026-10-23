@@ -11,6 +11,7 @@ import type {
   FilesystemPathEntry,
   SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
+import { DENIED_RESOLVED_ADDRESSES } from "@cawco/core/boundary-reach";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import type { Policy } from "@cawco/core/workspace-judge";
 
@@ -36,23 +37,6 @@ const within = (path: string, root: string): boolean =>
 /** Each path as a name srt never reads as a glob (its README, "All platforms"). */
 const literal = (paths: readonly string[]): FilesystemPathEntry[] =>
   [...new Set(paths)].map((path) => ({ path, literal: true as const }));
-
-/**
- * The address space no workspace dials by a name that resolves into it: the
- * private ranges, the tailnet's CGNAT range (every one of the owner's
- * machines, the hub among them: "The tailnet is the perimeter", PRODUCT.md)
- * and IPv6 unique-local. srt's own guard refuses loopback, link-local,
- * multicast, cloud metadata and this host's own addresses besides
- * (src/sandbox/resolved-address-guard.ts in 0.0.79); IPv4 and IPv6 listed
- * apart, as its README asks.
- */
-export const DENIED_RESOLVED_ADDRESSES = [
-  "10.0.0.0/8",
-  "172.16.0.0/12",
-  "192.168.0.0/16",
-  "100.64.0.0/10",
-  "fc00::/7",
-];
 
 /** Where srt runs for one Linux workspace: what its settings name besides the policy. */
 export interface SrtPlace {
@@ -202,7 +186,7 @@ const bashWord = (text: string): string => `'${text.replaceAll("'", "'\\''")}'`;
  * ("absolute path to the bwrap (bubblewrap) binary", sandbox-config.js): the
  * host's bwrap `real`, with `--remount-ro` on each tmpfs srt mounts. srt
  * mounts a tmpfs only over a read-denied dir (`--tmpfs`, linux-sandbox-utils.js
- * `pushReadDenyDirMounts` at 0.0.79), and a tmpfs is writable: "inside the
+ * `pushReadDenyDirMounts` at 0.0.81), and a tmpfs is writable: "inside the
  * sandbox it is an EMPTY WRITABLE directory" (srt's README; srt #149). Each
  * remount goes after all of srt's mounts, just before the command, which srt
  * always ends its words with (`-- SHELL -c COMMAND`), so every mount point

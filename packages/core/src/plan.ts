@@ -46,16 +46,21 @@ export interface PlanComment {
 }
 
 /**
- * A step waiting on the person's choice: the card it asked on a decision
- * page, set by the session as it asks (`todo_write`'s `waitsOn`). The plan
- * draws it "Waiting on you" with a link to the card; it stops waiting when
- * the page's Send carries a pick for that card.
+ * A step waiting on the person: the card it asked on a decision page, set
+ * by the session as it asks (`todo_write`'s `waitsOn`), or the whole
+ * artifact, set by the hub on the session's current step when its
+ * `artifact_create` or `artifact_update` with `does: pick` or `judge`
+ * returns (hub plans.ts `waitOn`). The plan draws it "Waiting on you" with a
+ * link to the card or the artifact; it stops waiting when the page's Send
+ * carries a pick for that card, or once nothing on the artifact waits on
+ * the person (core artifact-needs.ts). While it waits, the artifact's
+ * Needs-you item stands; once the step is ticked or removed, it goes.
  */
 export interface PlanWait {
-  /** The page's artifact id. */
+  /** The artifact's id. */
   artifactId: string;
-  /** The decision's id on the page (`data-cawco-choice`, an OpenUI `Decision`'s id). */
-  card: string;
+  /** The decision's id on the page (`data-cawco-choice`, an OpenUI `Decision`'s id); absent, the whole artifact. */
+  card?: string;
 }
 
 /** One step of a session's plan: an ACP plan entry, with an id and a nesting depth. */

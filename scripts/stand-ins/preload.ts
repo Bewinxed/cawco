@@ -13,6 +13,7 @@ import { plugin } from "bun";
 const IN_PLACE: [RegExp, string][] = [
   [/packages\/hub\/src\/upstreams\.ts$/, "hub-upstreams.ts"],
   [/packages\/core\/src\/canvas-host-plugins\.ts$/, "canvas-host-plugins.ts"],
+  [/packages\/core\/src\/workflow-lib\.ts$/, "workflow-lib.ts"],
 ];
 
 plugin({

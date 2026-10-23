@@ -652,7 +652,7 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         let toggle = UIButton(type: .system)
         toggle.setImage(Glyph.chevronDown.image.resized(to: 16), for: .normal)
         toggle.tintColor = Palette.inkMuted
-        toggle.accessibilityLabel = "Show the whole command"
+        toggle.accessibilityLabel = Words.Asks.wholeCommand
         toggle.accessibilityIdentifier = "prompt-command-toggle"
         NSLayoutConstraint.activate([
             toggle.widthAnchor.constraint(equalToConstant: 24),
@@ -671,7 +671,7 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
             text.numberOfLines = open ? 0 : 1
             text.ink = open ? Palette.inkStrong : Palette.inkMuted
             text.text = open ? command : first
-            toggle.accessibilityLabel = open ? "Show the command on one line" : "Show the whole command"
+            toggle.accessibilityLabel = open ? Words.Asks.commandOnOneLine : Words.Asks.wholeCommand
             toggle.transform = open ? CGAffineTransform(rotationAngle: .pi) : .identity
             self?.setNeedsLayout()
         }, for: .touchUpInside)

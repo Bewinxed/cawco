@@ -34,6 +34,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one case, one step at a time, as a hand makes them
 import type { Page } from "playwright-core";
 import { readWithin } from "../../../../packages/core/src/bounded";
+import { machineWords } from "../../../../packages/core/src/words/machine";
 import { seedDecisions } from "../../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
@@ -511,7 +512,7 @@ async function unlockMark(kit: Kit, base: string) {
       clientY: (box?.y ?? 0) + 10,
     });
     await page
-      .getByRole("menuitem", { name: "Unlock keychain…" })
+      .getByRole("menuitem", { name: machineWords.unlockKeychain })
       .tap({ timeout: 10_000 });
     const field = page.locator("input[type='password']");
     await field.fill("probe");

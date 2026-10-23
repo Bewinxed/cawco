@@ -44,10 +44,11 @@ const PLACEMENT = [
   ...["w", "min-w", "max-w", "inline-size", "min-inline-size"],
   "max-inline-size",
   // Markers that style nothing themselves: a group or peer named for a
-  // descendant or sibling to read (`peer` is no class group, so shadcn/lint
-  // warns once that it matches by name: `peer` and `peer/<name>`), and the
-  // hit areas, a transparent box round the part that draws nothing
-  // (DESIGN.md, The 44 Touch Rule, The 24 Pointer Rule).
+  // descendant or sibling to read (each entry matches the marker and its
+  // `/<name>`; patches/@shadcn%2Flint@0.2.3.patch lets `peer` pass the
+  // entry check as the marker it is), and the hit areas, a transparent box
+  // round the part that draws nothing (DESIGN.md, The 44 Touch Rule, The 24
+  // Pointer Rule).
   ...["group", "peer", "touch-hit", "pointer-hit"],
 ];
 const rules = {
@@ -127,6 +128,16 @@ export default defineConfig([
     "src/lib/cawco/HoverPanel.svelte": ["block-size", "inline-size"],
     "src/lib/cawco/MachinesEmpty.svelte": ["animation"],
     "src/lib/cawco/MachinesList.svelte": ["color"],
+    // Add machine's window stands where its anchor and its height put it,
+    // read every frame its height tweens and as the keyboard rises.
+    "src/lib/cawco/connect/ConnectWindow.svelte": [
+      "bottom",
+      "left",
+      "max-height",
+      "top",
+      "transform-origin",
+    ],
+    "src/lib/cawco/connect/InstallRow.svelte": ["color"],
     "src/lib/cawco/OlderRows.svelte": ["animation", "inline-size"],
     "src/lib/cawco/Shell.svelte": ["height"],
     "src/lib/cawco/UnlockKeychain.svelte": ["min-height"],
@@ -293,6 +304,19 @@ export default defineConfig([
             "CallExpression[callee.property.name='getPropertyValue'][arguments.0.value=/^--dur-/]",
           message:
             "Read a duration token with dur() (lib/cawco/motion/curves.svelte.ts): the built stylesheet writes `1000ms` as `1s`, so its bare number isn't milliseconds.",
+        },
+        // A Svelte dimension binding is a ResizeObserver that writes its
+        // state inside the delivery: what that state lays out resizes boxes
+        // the delivery has passed ("ResizeObserver loop completed with
+        // undelivered notifications", PaneTabs on WebKit, c4313c3d8). The
+        // markup half of biome.jsonc's ResizeObserver ban (aca304eaf), which
+        // reads no Svelte markup. A site that must write inside the delivery
+        // says why in its eslint-disable.
+        {
+          selector:
+            "SvelteDirective[kind='Binding'][key.name.name=/^(offsetHeight|offsetWidth|clientHeight|clientWidth|contentRect|contentBoxSize|borderBoxSize|devicePixelContentBoxSize)$/]",
+          message:
+            "A dimension binding writes inside its ResizeObserver's delivery. Measure with frameObserver ($lib/cawco/frame-observer): `{@attach frameSize((node) => { … })}` reads the size as it mounts and a change in the next frame, as PaneTabs' details height and ModelSection's chosen row do.",
         },
       ],
     },

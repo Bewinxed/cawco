@@ -58,7 +58,7 @@ export const runtimeInstallCommand = (): string =>
 const UNIX = "unix://";
 
 /** The endpoint the current Docker context names, when one other than `default` is set: its name and host. */
-const contextEndpoint = async (): Promise<
+export const contextEndpoint = async (): Promise<
   { name: string; host: string } | undefined
 > => {
   const configDir = process.env.DOCKER_CONFIG ?? join(homedir(), ".docker");

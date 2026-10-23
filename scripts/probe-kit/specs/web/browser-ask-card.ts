@@ -37,7 +37,7 @@
  * Every state at every width is swept for overflow and overlap: each text
  * element inside its container and the viewport, and no two text elements
  * overlapping; the sweep's total must be zero. A capture of each goes to
- * `.probe/browser-ask-card/`, once every finite animation on the page has
+ * the run's output folder (`kit.out`), once every finite animation on the page has
  * landed.
  *
  *   bun scripts/probe-kit/run.ts web browser-ask-card
@@ -46,15 +46,16 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { askWords } from "../../../../packages/core/src/words/asks";
 import { MACHINE, type Reply } from "../../../scratch-fleet";
 import {
   buttonNames,
   COMPOSER,
   type Kit,
   open,
-  ROOT,
   type Spec,
   settle,
+  specOut,
   type Theme,
   type View,
 } from "../../kit";
@@ -75,7 +76,7 @@ const ORIGIN =
 const CONSEQUENCE =
   "No agent can see or use this browser until you hand it back.";
 const REFUSAL = "The browser did not start.";
-const CAPTURES = join(ROOT, ".probe", "browser-ask-card");
+const CAPTURES = specOut("browser-ask-card");
 const CARD = '[data-slot="ask"]';
 const KEY = "machine:scratch-fleet";
 
@@ -529,7 +530,7 @@ async function rest(
   }
   kit.check(
     `${label}: titled "${card.title}", the reason whole, the origin alone on its line`,
-    card.title.startsWith("Browser ask from ") &&
+    card.title.startsWith(askWords.browserAskFrom("")) &&
       card.reason === reason &&
       card.origin === ORIGIN &&
       card.meta === ORIGIN,
@@ -557,7 +558,7 @@ async function rest(
     `${label}: Take over and Deny apart, ${card.gap}px between them (≥ 44 and ≥ --space-8 ${card.space8}px)`,
     card.gap >= 44 &&
       card.gap >= card.space8 &&
-      card.labels[0]?.startsWith("Take over") === true &&
+      card.labels[0]?.startsWith(askWords.takeOver) === true &&
       card.labels[1]?.startsWith("Deny") === true,
     JSON.stringify({ take: card.take, deny: card.deny, labels: card.labels })
   );
@@ -595,8 +596,8 @@ async function rest(
     `${label}: "Other" opens the line beside it ("${named.placeholder}", named "${named.name}"), the card keeps its height and the peers do not move`,
     !!after &&
       named.chip === "Other" &&
-      named.placeholder === "Your answer…" &&
-      named.name === `Your answer to: ${reason}` &&
+      named.placeholder === askWords.yourAnswer &&
+      named.name === askWords.yourAnswerTo(reason) &&
       same(before.take, after.take) &&
       same(before.deny, after.deny) &&
       Math.abs(
@@ -656,7 +657,7 @@ async function taking(
           requestId: `probe-browser-ask-${name}-held`,
           machineId: MACHINE,
         }) &&
-      !!pending?.labels[0]?.includes("Taking over…"),
+      !!pending?.labels[0]?.includes(askWords.takingOver),
     JSON.stringify({ posted: held.posted, labels: pending?.labels })
   );
   await sweepCheck(kit, held.page, `${name} pending`, CARD);
@@ -717,8 +718,7 @@ async function taking(
   const words = (await line.textContent())?.trim() ?? "";
   kit.check(
     `${name}: a refused take-over reads "${words}" and the peers do not move`,
-    words ===
-      `Couldn't take over. ${REFUSAL} The agent is still waiting; try Take over again.` &&
+    words === `${askWords.cantTakeOver} ${REFUSAL} ${askWords.stillWaiting}` &&
       !!before &&
       !!after &&
       same(before.take, after.take) &&
@@ -866,9 +866,9 @@ async function needs(
   kit.check(
     `${name} Needs you: a browser ask, Deny then Take over at the row's trailing edge (${row?.trailing}px in), filled and each tinted (${row?.fills.join(" / ")}), ${row?.gap}px apart (${row?.coarse ? "--space-4 on a coarse pointer" : "--space-2"})`,
     !!row &&
-      row.meta.includes("Browser ask") &&
+      row.meta.includes(askWords.browserAsk) &&
       row.deny.startsWith("Deny") &&
-      row.take.startsWith("Take over") &&
+      row.take.startsWith(askWords.takeOver) &&
       row.order &&
       Math.abs(row.gap - (want ?? -1)) < 1 &&
       row.fills.every(

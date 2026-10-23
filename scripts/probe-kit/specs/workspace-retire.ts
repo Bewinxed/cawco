@@ -35,7 +35,7 @@
  *     the same session goes on there (same work item, same transcript): the
  *     handoff it is handed opens with the hub's line that the folder is a
  *     new clone cut again at that commit on main (core injected.ts
- *     `recutLine`; on 2026-10-20 X8 went on in a clone cut again believing
+ *     `movedLine`; on 2026-10-20 X8 went on in a clone cut again believing
  *     its install there, and its `tsc` failed with ENOENT), its shell reads
  *     that path and M's landed file. While that handoff, released after the
  *     cut under a new hand-off, is still pending, its record keeps it whole
@@ -79,7 +79,7 @@
  *     git clone", its file standing. A sweep then changes nothing, and the
  *     hub's log holds no "not retired" line for any of the three and one
  *     "held" line for S.
- * (d) A heavy run, and build-both.sh, refuse to start below the free-space
+ * (d) `bun run typecheck`, and build-both.sh, refuse to start below the free-space
  *     threshold (here forced up with CAWCO_MIN_FREE_GB), exit 3, with one
  *     sentence naming the free space and the biggest folders. build-both.sh
  *     builds on the Mac: from a CawCo workspace on Linux it cannot reach it,
@@ -91,7 +91,10 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { movedLine } from "../../../packages/core/src/injected";
 import { signal as signalPid } from "../../../packages/core/src/signal";
+import { workWords } from "../../../packages/core/src/words/work";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -134,9 +137,22 @@ const RECUT = "PROBE-RECUT-M";
 const RECUT_PWD = /RECUT-PWD=([^\s\\"]+)/;
 const RECUT_FILE = /RECUT-FILE:([^\n\\"]*)/;
 const RECUT_RAN = "RECUT-42";
-/** The hub's line that a folder is a clone cut again (core injected.ts `recutLine`), with the commit and branch it names. */
-const RECUT_LINE =
-  /Your workspace retired while this session slept, so this folder is a new clone, cut again at ([0-9a-f]{9}) on ([^\s]+?)\. Nothing git doesn't track came with it/;
+/** Stand-ins for the commit (9 characters, as the line cuts it) and the branch in {@link RECUT_LINE}'s template. */
+const AT_COMMIT = "COMMIT___";
+const ON_BRANCH = "BRANCH___";
+const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
+/**
+ * The hub's line that a folder is a clone cut again, with the commit and
+ * branch it names: core injected.ts `movedLine` itself, its words never
+ * copied here (a copy went stale when the line came to name the install to
+ * run, 1054b853b).
+ */
+const RECUT_LINE = new RegExp(
+  movedLine({ kind: "recut", commit: AT_COMMIT, branch: ON_BRANCH })
+    .replaceAll(REGEX_SPECIAL, "\\$&")
+    .replace(AT_COMMIT, "([0-9a-f]{9})")
+    .replace(ON_BRANCH, "([^\\s:]+?)")
+);
 /** The parent's handoff to Q once its stopped landing's workspace retired, and what Q's shell prints there. */
 const RECUT_Q = "PROBE-RECUT-Q";
 const Q_PWD = /Q-PWD=([^\s\\"]+)/;
@@ -402,13 +418,11 @@ interface Sweep {
   retired: { workspaceId: string }[];
 }
 
-/** A command's exit code and stderr, run with no heavy-run slot of this process's. */
+/** A command's exit code and stderr, run with the free-space threshold out of reach. */
 const refused = async (
   command: string
 ): Promise<{ code: number; stderr: string }> => {
-  // This spec holds a slot; a child that inherits the mark takes none and checks nothing.
-  const { CAWCO_HEAVY_RUN_HELD: _held, ...inherited } = process.env;
-  const env = { ...inherited, CAWCO_MIN_FREE_GB: UNREACHABLE_GB };
+  const env = { ...process.env, CAWCO_MIN_FREE_GB: UNREACHABLE_GB };
   const ran = await Bun.$`bash -c ${command}`
     .cwd(ROOT)
     .env(env)
@@ -417,18 +431,16 @@ const refused = async (
   return { code: ran.exitCode, stderr: ran.stderr.toString().trim() };
 };
 
-/** (d) Heavy runs and Apple builds refuse to start without room on the disk. */
+/** (d) A typecheck and Apple builds refuse to start without room on the disk. */
 const diskPhase = async (kit: Kit): Promise<void> => {
-  const heavy = await refused(
-    "source scripts/lib/heavy-run.sh && heavy_run probe-heavy-run && echo STARTED"
-  );
+  const typecheck = await refused("bun scripts/typecheck.ts");
   kit.check(
-    "(d) a heavy run refuses below the threshold: exit 3, one sentence, nothing started",
-    heavy.code === 3 &&
-      REFUSAL.test(heavy.stderr) &&
-      heavy.stderr.split("\n").length === 1 &&
-      heavy.stderr.startsWith("probe-heavy-run did not start:"),
-    `exit ${heavy.code}: ${heavy.stderr}`
+    "(d) bun run typecheck refuses below the threshold: exit 3, one sentence, nothing started",
+    typecheck.code === 3 &&
+      REFUSAL.test(typecheck.stderr) &&
+      typecheck.stderr.split("\n").length === 1 &&
+      typecheck.stderr.startsWith("bun run typecheck did not start:"),
+    `exit ${typecheck.code}: ${typecheck.stderr}`
   );
   const build = await refused(
     "bash apps/apple/scripts/build-both.sh ios --compile-only"
@@ -971,7 +983,7 @@ const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(q) with its gate sped up on top of Q's commit there, Q's reopened item lands on main and is done",
     ended?.state === "done" &&
       (ended.result ?? "").includes("Q gate passes") &&
-      (ended.result ?? "").includes("Landed on main"),
+      (ended.result ?? "").includes(workWords.landedOn("main")),
     `${ended?.state} ${ended?.error ?? ""} ${(ended?.result ?? "").slice(0, 1200)}`
   );
 };
@@ -1004,7 +1016,7 @@ const followUpPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(o) its follow-up commit, made after the item was done, lands on a second finish_item: the item ran again and its report lists the second commit",
     landed?.state === "done" &&
       (landed.result ?? "").includes("Delegate commit O2") &&
-      (landed.result ?? "").includes("Landed on main") &&
+      (landed.result ?? "").includes(workWords.landedOn("main")) &&
       reran.length === 1,
     `${landed?.state} ${landed?.error ?? ""}; ${reran.join(" | ") || "no rerun line"}; ${(landed?.result ?? "").slice(0, 1200)}`
   );
@@ -1361,7 +1373,7 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
   check(
     "(c) the parent's delegate_list lists K under held",
     said.status === 200 &&
-      said.text.includes(wk.id) &&
+      said.text.includes(`workspace ${wk.id.slice(0, 8)} on`) &&
       said.text.includes("1 commit on no remote"),
     `${said.status} ${said.text.slice(0, 1500)}`
   );
@@ -1511,20 +1523,14 @@ const spec: Spec = {
         );
         return { status: archived.status, text: archived.text };
       },
+      // Its words, as the parent's agent reads them (scripts/lib/tool-call.ts).
       callAsParent: async (name, args) => {
-        const called = await requestWithin(
-          300_000,
-          `${fleet.base}/api/delegation/call/${parent}`,
-          {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              Authorization: `Bearer ${credential}`,
-            },
-            body: JSON.stringify({ name, arguments: args }),
-          }
+        const said = await toolWords(
+          { base: fleet.base, id: parent, credential },
+          name,
+          args as Record<string, unknown>
         );
-        return { status: called.status, text: called.text };
+        return { status: said.status, text: said.text };
       },
     };
 

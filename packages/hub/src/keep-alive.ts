@@ -103,10 +103,19 @@ export const keepAliveState = (
 /** Usage counts include uncached input plus cache reads and writes, as Claude reports them. */
 export const keepAliveUsage = promptCacheUsage;
 
+/**
+ * What a turn's result says of a session's cache. `context`: the tokens its
+ * last request sent, the session's context as it stood (uncached input plus
+ * cache reads and writes of that one request); undefined leaves the context
+ * as it was. Never the result's own usage for a real turn: Claude Code's
+ * result sums every request of the turn, so a turn of 30 tool calls reads 30
+ * contexts there (2026-10-22: "re-reading 242,373k tokens" for one session).
+ */
 export const keepAliveResult = (
   row: KeepAliveRow,
   result: NeutralResultMessage,
-  ping: boolean
+  ping: boolean,
+  context: number | undefined
 ) => {
   const { cache = { read: 0, write: 0 } } = result;
   const usage = keepAliveUsage(result);
@@ -149,9 +158,9 @@ export const keepAliveResult = (
   }
   return {
     cacheTtl: ttl,
-    ...(result.cache
-      ? { contextTokens: input, contextReadAt: new Date() }
-      : {}),
+    ...(context === undefined
+      ? {}
+      : { contextTokens: context, contextReadAt: new Date() }),
     ...(result.lastRequestAt === undefined
       ? {}
       : { lastRequestAt: new Date(result.lastRequestAt) }),

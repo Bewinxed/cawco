@@ -13,10 +13,12 @@
  *   reminder reached it: those turns count toward no quiet-turn failure. A
  *   fourth report it answers with a tool call of its own (Bash): that ends
  *   the wait, the quiet-turn reminder reaches it again, and it finishes.
- * - (b) A delegate leaves an uncommitted file and fails its item; made cold
- *   by the hub's own cache-expiry reading (its last request two hours back
- *   on a 5-minute cache), it takes its parent's hand-off, and Jev is not
- *   asked.
+ * - (b) A delegate leaves an uncommitted file and calls finish_item blocked:
+ *   the hub refuses to end an item while its clone holds work in no commit
+ *   (work-items.ts `leftoversIn`), the delegate leaves the file standing, and
+ *   its third quiet turn fails its item. Made cold by the hub's own
+ *   cache-expiry reading (its last request two hours back on a 5-minute
+ *   cache), it takes its parent's hand-off, and Jev is not asked.
  * - (c) A delegate commits and fails its item with a clean tree; made cold
  *   the same way, its parent's hand-off is refused naming delegate with
  *   `from` and its workspace, Jev not asked. delegate with that `from` gets
@@ -31,6 +33,7 @@ import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
 } from "../../../packages/core/src/safe-git";
+import { toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { jevMock, jevOn } from "../jev-mock";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -56,6 +59,10 @@ const STILL_OPEN = "Your work item is still open.";
 const WAITING = " is waiting until ";
 /** What finish_item answers a blocked finish (work-items.ts `finishItem`). */
 const BLOCKED = "The item failed as blocked";
+/** How finish_item refuses to end an item whose clone holds work in no commit (work-items.ts `leftoversIn`). */
+const LEFTOVERS = "Not finished: your clone holds work that is in no commit";
+/** How the hub fails an item after its third quiet turn (work-items.ts `QUIET_ERROR`). */
+const QUIET_ERROR = "ended three turns in a row without finish_item";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -109,7 +116,11 @@ const waiter = (request: Seen): Reply => {
   return bash(`echo ${WORKED}`);
 };
 
-/** A leaf that changes its clone with `make`, then fails its item as blocked. */
+/**
+ * A leaf that changes its clone with `make`, then fails its item as blocked;
+ * refused for what its clone holds outside its commits, it leaves that
+ * standing and answers in words, so its quiet turns fail the item.
+ */
 const leaf =
   (make: string, made: string) =>
   (request: Seen): Reply => {
@@ -118,6 +129,9 @@ const leaf =
     }
     if (request.all.includes(BLOCKED)) {
       return text("Stopped.");
+    }
+    if (request.all.includes(LEFTOVERS)) {
+      return text("Leaving the file where it is.");
     }
     return request.all.includes(made) ? blocked() : bash(make);
   };
@@ -171,42 +185,31 @@ const credentialOf = async (fleet: KitFleet, parent: string): Promise<string> =>
     .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
     ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
 
-/** A CawCo tool called as the parent, through the door its MCP server and the CLI share. */
+/** A CawCo tool called as the parent, through the door its MCP server and the CLI share: its words, or with `record` the hub's record. */
 const callAs = async (
   fleet: KitFleet,
   parent: string,
   name: string,
-  args: object
+  args: Record<string, unknown>,
+  form: "words" | "record" = "words"
 ): Promise<{
   isError: boolean;
   structured: Record<string, unknown>;
   text: string;
 }> => {
-  const response = await fetch(`${fleet.base}/api/delegation/call/${parent}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${await credentialOf(fleet, parent)}`,
-    },
-    body: JSON.stringify({ name, arguments: args }),
-  });
-  if (!response.ok) {
-    return {
-      isError: true,
-      structured: {},
-      text: `${response.status} ${await response.text()}`,
-    };
+  const session = {
+    base: fleet.base,
+    id: parent,
+    credential: await credentialOf(fleet, parent),
+  };
+  if (form === "words") {
+    const said = await toolWords(session, name, args);
+    return { isError: said.refused, structured: {}, text: said.text };
   }
-  const result = (await response.json()) as {
-    content?: { text?: string }[];
-    isError?: boolean;
-    structuredContent?: Record<string, unknown>;
-  };
-  return {
-    isError: !!result.isError,
-    structured: result.structuredContent ?? {},
-    text: (result.content ?? []).map((block) => block.text ?? "").join("\n"),
-  };
+  const said = await toolRecord<Record<string, unknown>>(session, name, args);
+  return said.refused
+    ? { isError: true, structured: {}, text: said.text }
+    : { isError: false, structured: said.record, text: said.text };
 };
 
 const itemOf = (fleet: KitFleet, id: string): ItemRow | undefined =>
@@ -339,7 +342,7 @@ const waitOutlivesReports = async (
   );
 };
 
-/** A leaf delegated, left as `made` says, its item failed as blocked, at rest, then cold. */
+/** A leaf delegated, left as `made` says, its item failed (blocked, or by its quiet turns), at rest, then cold. */
 const coldLeaf = async (
   fleet: KitFleet,
   parent: string,
@@ -366,10 +369,10 @@ const coldLeaf = async (
     180_000
   );
   await until(
-    `${tag}'s item failed as blocked`,
+    `${tag}'s item failed`,
     () => itemOf(fleet, started.workItemId)?.state,
     (state) => state === "failed",
-    120_000
+    180_000
   );
   await atRest(fleet, started.instanceId);
   makeCold(fleet, started.instanceId);
@@ -389,6 +392,18 @@ const dirtyTakesHandoff = async (
   src: string
 ): Promise<void> => {
   const dirty = await coldLeaf(fleet, parent, src, DIRTY, DIRTY_MADE);
+  const [ended] = fleet.query<{ error: string | null }>(
+    "SELECT error FROM work_items WHERE id = ?",
+    dirty.workItemId
+  );
+  const refused = fleet.seen.some(
+    (one) => one.all.includes(DIRTY) && one.all.includes(LEFTOVERS)
+  );
+  check(
+    "(b) finish_item refuses a blocked end while the file stands in no commit, and the third quiet turn fails the item",
+    refused && ended?.error?.includes(QUIET_ERROR) === true,
+    `refused: ${refused}; error: ${ended?.error}`
+  );
   const asked = attachCalls(jev);
   const handed = await callAs(fleet, parent, "handoff", {
     target: dirty.instanceId,
@@ -430,19 +445,27 @@ const aheadGoesFrom = async (
   check(
     "(c) a hand-off to a cold delegate with a commit and a clean tree is refused naming delegate with from, Jev not asked",
     refused.isError &&
-      refused.text.includes(`delegate with from: "${ahead.workspaceId}"`) &&
+      refused.text.includes(
+        `delegate with from: "${ahead.workspaceId.slice(0, 8)}"`
+      ) &&
       refused.text.includes("1 commit on no remote") &&
       attachCalls(jev) === asked,
     `${refused.text.slice(0, 1500)}; Jev asked ${attachCalls(jev) - asked} time(s)`
   );
-  const cut = await callAs(fleet, parent, "delegate", {
-    prompt: `${FROM}: finish the commit you start from.`,
-    title: "From probe",
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    from: ahead.workspaceId,
-    lands: "none",
-  });
+  const cut = await callAs(
+    fleet,
+    parent,
+    "delegate",
+    {
+      prompt: `${FROM}: finish the commit you start from.`,
+      title: "From probe",
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      from: ahead.workspaceId,
+      lands: "none",
+    },
+    "record"
+  );
   const workspaceId = String(cut.structured.workspaceId ?? "");
   const [clone] = fleet.query<{ branch: string; path: string }>(
     "SELECT branch, path FROM workspaces WHERE id = ?",

@@ -7,7 +7,13 @@
     RuleTiming,
     RuleWatch,
   } from "@cawco/core";
-  import { HARNESSES, ruleProblem, ruleSentence } from "@cawco/core";
+  import {
+    commonWords,
+    HARNESSES,
+    ruleProblem,
+    ruleSentence,
+    rulesWords,
+  } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import {
     appear,
@@ -45,6 +51,7 @@
   import PickerChip from "../PickerChip.svelte";
   import ReadingWell from "../ReadingWell.svelte";
   import SwitchField from "../SwitchField.svelte";
+  import { sectionOf } from "../sections";
   import { configStore, upsert, withStats } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
 
@@ -274,14 +281,14 @@
   oncancel={cancel}
   ondelete={id ? remove : undefined}
   onsubmit={save}
-  saveLabel={id ? "Save changes" : "Create rule"}
+  saveLabel={id ? commonWords.saveChanges : "Create rule"}
   saving={busy}
   title={id ? draft.name || "Rule" : "New rule"}
 >
   {#snippet header()}
     <TitleInput
       invalid={Boolean(shown("name") || duplicate)}
-      label="Rule name"
+      label={rulesWords.ruleName}
       onblur={() => {
         touched.name = true;
       }}
@@ -329,7 +336,8 @@
       {#snippet needsJev()}
         Meaning rules need Jev —
         <a class="underline underline-offset-2" href="/config/models"
-          >set a TypeSafe key or connect OpenRouter in Models CawCo uses</a
+          >set a TypeSafe key or connect OpenRouter in {sectionOf("models")
+            .label}</a
         >
       {/snippet}
       <Field

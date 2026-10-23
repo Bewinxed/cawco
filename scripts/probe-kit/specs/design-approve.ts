@@ -75,7 +75,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { type Kit, open, pressAt, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
 
 const WAIT = "mcp__cawco__wait_item";
@@ -86,6 +86,13 @@ const DESIGN_WRITE = "mcp__cawco__design_write";
 const ARTIFACT = "mcp__cawco__artifact_create";
 const RESULT = "mcp__cawco__task_result";
 const FINISH = "mcp__cawco__finish_item";
+/**
+ * The tools whose answers this spec reads as their records (design_write's
+ * `written` and `proposal`, design_verdict's `recorded`): asked for them
+ * whole, since CawCo's tools answer agents in words by default (mcp-tool.ts
+ * `response_format`).
+ */
+const DETAILED = new Set([DESIGN_WRITE, VERDICT]);
 const BASH = "Bash";
 /** Only an attempt's brief opens this way. */
 const BRIEF = "Your work item is an attempt at";
@@ -579,7 +586,10 @@ const next = (request: Seen, key: string | undefined): Reply => {
     typeof call.input === "function"
       ? call.input(toolResultOf(request.body))
       : call.input;
-  return useTool(call.name, input);
+  return useTool(
+    call.name,
+    DETAILED.has(call.name) ? { ...input, response_format: "detailed" } : input
+  );
 };
 
 /** A verifier's turn: its session's round, keyed by the commit its brief names. */
@@ -660,8 +670,8 @@ interface TaskRead {
 
 /**
  * Comment mode on in the pane, a tap on `selector` in the page, the
- * person's words in its composer and Comment (pin 1 written with them),
- * then the head's Send: comments reach the session on Send alone.
+ * person's words in its composer and Comment (pin 1 written with them):
+ * it reaches the session by itself, with no Send.
  */
 const pinWith = async (
   on: On,
@@ -675,7 +685,7 @@ const pinWith = async (
   await on.page.keyboard.press("c");
   await settle(on.page, 400);
   const b = await screenBox(on, frame, selector);
-  await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
+  await pressAt(frame, { x: b.x + b.w * 0.3, y: b.y + b.h / 2 });
   const composer = on.page.locator('[data-slot="pin-composer"]');
   await composer.waitFor({ timeout: 10_000 });
   await composer.getByRole("combobox").fill(words);
@@ -690,9 +700,6 @@ const pinWith = async (
     10_000
   );
   await on.page.keyboard.press("Escape");
-  await on.page
-    .locator("[data-side-card='preview'] [data-slot=\"send\"]")
-    .click({ timeout: 10_000 });
 };
 
 /** What the send-back legs read and call, from {@link run}. */

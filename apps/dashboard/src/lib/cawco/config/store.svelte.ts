@@ -3,6 +3,7 @@ import type {
   FleetConfig,
   FleetFetchFrame,
   FleetSkillMeta,
+  MarketplaceLink,
   RuleRow,
   ToolPolicy,
   ToolSpec,
@@ -63,6 +64,8 @@ export class Slot<T> {
 export interface FleetState {
   agents: FleetAgent[];
   config: FleetConfig;
+  /** Marketplace links with no row yet: under way, or refused (fleet.ts `FleetSnapshot`). */
+  links: MarketplaceLink[];
   memory: FleetMemoryRow | null;
   memoryDocs: FleetMemoryDocRow[];
   skills: FleetSkillMeta[];
@@ -130,6 +133,7 @@ export class ConfigStore {
       const snapshot = await read<FleetSnapshot>("/api/fleet");
       return {
         config: snapshot.config,
+        links: snapshot.links,
         skills: snapshot.skills,
         agents: snapshot.agents,
         memory: snapshot.memory ?? null,
@@ -184,13 +188,8 @@ export class ConfigStore {
     if (check) {
       this.checkingUpdates = check.fetching;
     }
-    if (link?.marketplace && fleet) {
-      const linked = link.marketplace;
-      upsert(
-        fleet.config.marketplaces,
-        linked,
-        (row) => row.name === linked.name
-      );
+    if (link && fleet) {
+      heardLink(fleet, link, removed === true);
     }
     if (skill) {
       if (!skill.fetching) {
@@ -263,6 +262,32 @@ export const withStats = (
 });
 
 /** Replaces the row with the same key, or adds it at the top. */
+/**
+ * A marketplace link's frame into the fleet: under way or refused, it
+ * stands in `links`; landed, its row joins the marketplaces and it leaves;
+ * let go (`removed`), it leaves.
+ */
+function heardLink(
+  fleet: FleetState,
+  link: MarketplaceLink,
+  removed: boolean
+): void {
+  const { source } = link;
+  const linked = link.marketplace;
+  if (linked) {
+    upsert(
+      fleet.config.marketplaces,
+      linked,
+      (row) => row.name === linked.name
+    );
+  }
+  if (linked || removed) {
+    fleet.links = fleet.links.filter((row) => row.source !== source);
+  } else {
+    upsert(fleet.links, link, (row) => row.source === source);
+  }
+}
+
 export function upsert<T>(rows: T[], row: T, same: (a: T) => boolean): void {
   const at = rows.findIndex(same);
   if (at === -1) {

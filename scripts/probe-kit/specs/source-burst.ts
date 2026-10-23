@@ -137,6 +137,7 @@ const once = (request: Seen): Reply => {
       : text(`${HANDOFF} is not offered`);
   }
   leg3.calledAt = Date.now();
+  // tool-answer-check: observer (it breaks a recorded call's answer, calls nothing)
   between?.breakAnswer(
     ({ method, path, body }) =>
       method === "POST" &&

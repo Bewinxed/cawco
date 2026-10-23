@@ -20,7 +20,15 @@
  *   (`cawco tool open_items`); a person's Continue opens the new session on
  *   it.
  */
-import type { InstanceRow, PlanStep, SessionPlan, TaskTodo } from "@cawco/core";
+import {
+  type InstanceRow,
+  type PlanStep,
+  type SessionPlan,
+  stepLink,
+  type TaskTodo,
+  taskLink,
+  todoLink,
+} from "@cawco/core";
 import type { DecisionCard, DecisionPageRead } from "@cawco/core/decisions";
 import type { DbShape } from "./db";
 import type { Decisions } from "./decisions";
@@ -63,6 +71,10 @@ export interface OpenItemRows {
   notes: Note[];
   /** Its plan: steps, spec, and an attempt's task with its to-dos. */
   plan: SessionPlan | null;
+  /** The project its records live in; null for a session in none. */
+  projectId: string | null;
+  /** The session whose records these are: its steps' links name it. */
+  session: string;
   /** The open tasks it filed, each with its description and open to-dos. */
   tasks: {
     description: string;
@@ -73,11 +85,22 @@ export interface OpenItemRows {
   }[];
 }
 
-const stepLine = (step: PlanStep): string =>
-  `${"  ".repeat(step.depth)}- [${step.status}] ${step.content}`;
+/** A step's line, its words as its link (`cawco:step/<session>/<id>`): what the session names it by. */
+const stepLine =
+  (session: string) =>
+  (step: PlanStep): string =>
+    `${"  ".repeat(step.depth)}- [${step.status}] ${stepLink(session, step.id, step.content)}`;
 
-const todoLine = (todo: TaskTodo): string =>
-  `${"  ".repeat(todo.depth)}- ${todo.id ? `${todo.id} ` : ""}(${todo.path}) ${todo.text}`;
+/** A to-do's line, its words as its link when it has an id and a task in a project. */
+const todoLine =
+  (projectId: string | null, task: string | undefined) =>
+  (todo: TaskTodo): string => {
+    const words =
+      projectId && task && todo.id
+        ? todoLink(projectId, task, todo.id, todo.text)
+        : todo.text;
+    return `${"  ".repeat(todo.depth)}- ${todo.id ? `${todo.id} ` : ""}(${todo.path}) ${words}`;
+  };
 
 /** Text under a list line, indented so it stays that line's. */
 const under = (text: string): string[] =>
@@ -97,7 +120,10 @@ export function openItemsSection(rows: OpenItemRows): string {
     (step) => step.status !== "completed"
   );
   if (steps.length > 0) {
-    parts.push("### Your plan's open steps", ...steps.map(stepLine));
+    parts.push(
+      "### Your plan's open steps",
+      ...steps.map(stepLine(rows.session))
+    );
   }
   if (rows.plan?.spec?.markdown.trim()) {
     parts.push(
@@ -109,18 +135,18 @@ export function openItemsSection(rows: OpenItemRows): string {
   if (rows.plan?.taskId && todos.length > 0) {
     parts.push(
       `### Your task ${rows.plan.taskId}'s open to-dos`,
-      ...todos.map(todoLine)
+      ...todos.map(todoLine(rows.projectId, rows.plan.taskId))
     );
   }
   if (rows.tasks.length > 0) {
     parts.push(
       "### Open tasks you filed",
       ...rows.tasks.flatMap((task) => [
-        `- ${task.id} (${task.stage}): ${task.title}`,
+        `- ${task.id} (${task.stage}): ${rows.projectId ? taskLink(rows.projectId, task.id, task.title) : task.title}`,
         ...(task.description.trim() ? under(task.description) : []),
         ...task.todos
           .filter((todo) => !todo.done)
-          .map((todo) => `  ${todoLine(todo)}`),
+          .map((todo) => `  ${todoLine(rows.projectId, task.id)(todo)}`),
       ])
     );
   }
@@ -209,7 +235,14 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     const projectId = projectOf(deps, row);
     const plan = await deps.plan(instanceId);
     if (!projectId) {
-      return { plan, tasks: [], decisions: [], notes: [] };
+      return {
+        session: instanceId,
+        projectId: null,
+        plan,
+        tasks: [],
+        decisions: [],
+        notes: [],
+      };
     }
     const [tasks, decisions, notes] = await Promise.all([
       filedTasks(deps, projectId, instanceId),
@@ -217,6 +250,8 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
       deps.inbox(projectId),
     ]);
     return {
+      session: instanceId,
+      projectId,
       plan,
       tasks,
       decisions,

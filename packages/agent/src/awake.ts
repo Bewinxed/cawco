@@ -7,7 +7,9 @@
  *    them (workflow-command.ts `commandsRunning`);
  *  - a command in a workspace's boundary (boundary.ts
  *    `workspacesWithCommands`, its executors' marks);
- *  - a heavy run holding a slot here (core heavy-run.ts `heldHeavyRuns`).
+ *  - a run a session's processes are working on past its turn (a probe kit
+ *    run, a typecheck or a release left running in its shell), as the leak
+ *    watch reads the sessions' processes (leak-watch.ts `runsWorking`).
  *
  * Once none is left the hold goes, and the OS's own sleep settings apply
  * again. Only idle sleep is held: the person can still sleep the machine or
@@ -46,9 +48,9 @@
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { heldHeavyRuns } from "@cawco/core/heavy-run";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import { workspacesWithCommands } from "./boundary";
+import { runsWorking } from "./leak-watch";
 import { resolveBin, toolEnv } from "./tools";
 import { commandsRunning } from "./workflow-command";
 
@@ -135,8 +137,6 @@ export const keepAwakeWhileWorking = (
   let hold: Hold | undefined;
   /** Why this machine has no hold, once said: nothing is tried again. */
   let refused: string | undefined;
-  /** The heavy runs as last read: a look that finds the gate's lock held keeps them. */
-  let heavy: string[] = [];
   /** The last look's failure, said once until it changes. */
   let failed: string | undefined;
 
@@ -145,8 +145,8 @@ export const keepAwakeWhileWorking = (
       turns(),
       workspacesWithCommands(),
     ]);
-    heavy = heldHeavyRuns() ?? heavy;
     const commands = commandsRunning();
+    const runs = runsWorking();
     return [
       ...(running.length > 0
         ? [
@@ -160,7 +160,7 @@ export const keepAwakeWhileWorking = (
             `a command in workspace ${named(workspaces.map((id) => id.slice(0, 8)))}`,
           ]
         : []),
-      ...heavy.map((run) => `the heavy run ${run}`),
+      ...runs.map((run) => `the run ${run}`),
     ];
   };
 

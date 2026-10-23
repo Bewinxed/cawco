@@ -29,6 +29,7 @@
  */
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -309,25 +310,23 @@ const handsOn = async (
 ): Promise<void> => {
   const path = join(dir, HANDED);
   await writeFile(path, `${HANDED_TOKEN}\n`);
-  const response = await fetch(`${fleet.base}/api/delegation/call/${parent}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${await credentialOf(fleet, parent)}`,
+  const handed = await toolWords(
+    {
+      base: fleet.base,
+      id: parent,
+      credential: await credentialOf(fleet, parent),
     },
-    body: JSON.stringify({
-      name: "handoff",
-      arguments: {
-        target: started.instanceId,
-        message: `${TAG}: one more input for you.`,
-        inputs: [path],
-      },
-    }),
-  });
+    "handoff",
+    {
+      target: started.instanceId,
+      message: `${TAG}: one more input for you.`,
+      inputs: [path],
+    }
+  );
   check(
     "a handoff with an input is taken",
-    response.ok,
-    `${response.status} ${(await response.text()).slice(0, 300)}`
+    !handed.refused,
+    `${handed.status} ${handed.text.slice(0, 300)}`
   );
   const landed = await readFile(
     join(started.workspaceTmp, "inputs", HANDED),

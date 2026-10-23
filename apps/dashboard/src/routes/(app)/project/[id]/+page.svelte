@@ -32,6 +32,7 @@
     BLOCK_PAGES,
     type BlockPage as BlockPageId,
     blocksWords,
+    commonWords,
     madeWords,
     type ProjectView,
     viewOfBlock,
@@ -56,6 +57,7 @@
   } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import {
+    failureClause,
     failureSentence,
     type HubRead,
     failureWords as message,
@@ -97,6 +99,8 @@
     updateTask,
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
@@ -121,7 +125,6 @@
     pickTask,
     selection,
   } from "#lib/cawco/tasks/task-select.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
@@ -334,12 +337,14 @@
   /**
    * Arrived on the project, its board and its row read: his panel opens as
    * the person last left it here, else while the board is empty, so a
-   * project just made opens on Caw (PRD §5.6; CawLead.arrive).
+   * project just made opens on Caw (PRD §5.6; CawLead.arrive). Arriving on
+   * a decision page on a phone, where his sheet would stand over it, his
+   * panel stays put away.
    */
   $effect(() => {
     if (list !== null && lead.project !== null) {
       const blank = empty;
-      untrack(() => lead.arrive(blank));
+      untrack(() => lead.arrive(blank, sheetCovers()));
     }
   });
   /**
@@ -538,6 +543,26 @@
   /** The decision page open in the tab, and how the tab shows the rest. */
   let decisionPage = $derived<string | null>(data.decisionPage);
   let decisionMode = $derived<DecisionsMode>(data.decisionMode);
+  /** The decision page the person has open, in the Decisions tab. */
+  const openPage = $derived(current === "decisions" ? decisionPage : null);
+  /** On a phone Caw's panel is a sheet over the page's foot: an open decision page stands under it. */
+  const sheetCovers = () => openPage !== null && pageScrollsQuery.current;
+  /**
+   * A decision page opened on a phone puts Caw's sheet away, as his Close
+   * does (DESIGN.md, The Work Outlives Its Surface Rule): the sheet leaves
+   * by its own exit, his thread keeps its place, and his seat brings it
+   * back over the page when the person asks. Only an opening moves it: his
+   * panel reopened over the page stays.
+   */
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: read so each page opened runs the effect
+    void openPage;
+    untrack(() => {
+      if (lead.open && sheetCovers()) {
+        lead.open = false;
+      }
+    });
+  });
   /** The card a link names (`#<card>`): the page opens scrolled to it. */
   let decisionCard = $derived<string | null>(
     page.url.hash ? decodeURIComponent(page.url.hash.slice(1)) : null
@@ -1056,15 +1081,48 @@
 
   let keeping = $state<string | null>(null);
   let discarding = $state<string | null>(null);
+  /**
+   * What the hub refused of a view (Keep, Discard, Place on a page), said
+   * under the view's own bar or head, in words, with Try again, until a try
+   * goes or another view's act replaces it; never a toast (DESIGN.md, The
+   * Work Outlives Its Surface Rule).
+   */
+  /** A refusal's closing stop, dropped so it sits inside the sentence. */
+  const REASON_STOP = /\.$/;
+  type ViewAct =
+    { act: "keep" | "discard" } | { act: "place"; on: BlockPageId };
+  /** Where a view's refused act is said: kept through a reload (refusals.svelte.ts). */
+  const viewKey = (name: string) => `view:${projectId}:${name}`;
+  /** The refused act's words and its Try again, for the view `name`. */
+  function viewFaultOf(
+    name: string
+  ): { reason: string; again: () => Promise<void> } | null {
+    const said = refusals.get(viewKey(name));
+    if (!said) {
+      return null;
+    }
+    const asked = said.asked as ViewAct;
+    const again = (): Promise<void> => {
+      if (asked.act === "place") {
+        return placeView(name, asked.on);
+      }
+      return asked.act === "keep" ? keep(name) : discard(name);
+    };
+    return { reason: said.reason, again };
+  }
 
   /** Keep: the draft becomes a kept view where its tab stands. */
   async function keep(name: string) {
     keeping = name;
+    refusals.delete(viewKey(name));
     try {
       const kept = await keepView(projectId, name);
       views = views.map((view) => (view.name === name ? kept : view));
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(viewKey(name), {
+        reason: `The ${viewLabel(name)} view was not kept: ${failureClause(error)}. It stays a draft.`,
+        asked: { act: "keep" } satisfies ViewAct,
+      });
     } finally {
       keeping = null;
     }
@@ -1073,12 +1131,16 @@
   /** Discard: the draft goes, and the board comes back. */
   async function discard(name: string) {
     discarding = name;
+    refusals.delete(viewKey(name));
     try {
       await discardView(projectId, name);
       choose("board");
       views = views.filter((view) => view.name !== name);
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(viewKey(name), {
+        reason: `The ${viewLabel(name)} view was not discarded: ${failureClause(error)}. It stays a draft.`,
+        asked: { act: "discard" } satisfies ViewAct,
+      });
     } finally {
       discarding = null;
     }
@@ -1156,6 +1218,7 @@
 
   /** A kept view placed on a page: it leaves the strip, and the page shows it. */
   async function placeView(name: string, on: BlockPageId) {
+    refusals.delete(viewKey(name));
     if (await blocks.place(name, on)) {
       if (current !== on) {
         choose(on);
@@ -1163,8 +1226,15 @@
       tab = on;
       remember();
     } else {
-      // Refused, the view stays where it is: its tab, which says why.
-      toast.error(blocks.refused[on] ?? blocksWords.notPlaced);
+      // Refused, the view stays where it is: under its head, which says why.
+      const why = (blocks.refused[on] ?? blocksWords.notPlaced).replace(
+        REASON_STOP,
+        ""
+      );
+      refusals.set(viewKey(name), {
+        reason: `The ${viewLabel(name)} view was not placed on ${BLOCK_PAGE_TITLES[on]}: ${why}. It stays a tab of its own.`,
+        asked: { act: "place", on } satisfies ViewAct,
+      });
     }
   }
 
@@ -1468,6 +1538,10 @@
    * the phone's comes after the view's in Tailwind's order at equal weight,
    * where `view-board:pb-0` (0,2,0) outweighed
    * `max-phone:in-data-caw-open:…` (0,1,0) and the sheet covered the foot.
+   * A view that fills its pane on a phone stands at `--pane-min`, a
+   * border-box height the sheet's room counts toward, so that room is added
+   * to it: without it the room alone met the minimum and a decision page's
+   * frame stood 0px tall.
    */
   const paneFoot = $derived([
     PANE_FOOT[reading ? "board" : paneView] ?? "pb-space-6",
@@ -1755,6 +1829,15 @@
               />
             </div>
           </div>
+          {@const fault = viewFaultOf(view.name)}
+          <!-- In the bar's own inset, under its words. -->
+          <RowFault
+            again={fault?.again}
+            data-view-refusal={view.name}
+            end="var(--space-3)"
+            indent="var(--space-3)"
+            reason={fault?.reason}
+          />
         {:else}
           <!-- A kept view's head: its ⋯ places it on a page, as a block. -->
           <div
@@ -1774,7 +1857,7 @@
             <span data-box>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger
-                  aria-label="More for {viewLabel(view.name)}"
+                  aria-label={commonWords.moreFor(viewLabel(view.name))}
                   class="touch-hit"
                   size="icon-sm"
                   variant="ghost"
@@ -1800,6 +1883,15 @@
               </DropdownMenu.Root>
             </span>
           </div>
+          {@const fault = viewFaultOf(view.name)}
+          <!-- In the head's own inset, under its name. -->
+          <RowFault
+            again={fault?.again}
+            data-view-refusal={view.name}
+            end="var(--space-1)"
+            indent="var(--space-1)"
+            reason={fault?.reason}
+          />
         {/if}
         <ViewOpenUi
           hrefOf={(id) => hrefOf(id)}
@@ -2044,13 +2136,19 @@
           <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
             <!-- A phone: the page is the one scroller, so iOS never chains two. The
            foot's edge fade ends at the bar's top edge, a step of air under
-           the reach. -->
+           the reach. What it reveals (a scrollIntoView here, or one in a
+           decision page's frame, which carries up into it) lands in the part
+           nothing stands over: above the bar, or above Caw's sheet while it
+           stands (--reveal-foot, its scroll padding). -->
             <div
               data-slot="project-page"
               class={[
-                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)",
+                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
                 fadeOn === "page" && "kit-edge-fade-block",
               ]}
+              style:--reveal-foot={docked
+                ? "var(--c-sheet-max-h)"
+                : "var(--bar-reach)"}
               style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
               style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
             >
@@ -2221,7 +2319,7 @@
       paneFoot,
     ]}
     data-view={reading ? "board" : paneView}
-    style:--pane-min="50cqb"
+    style:--pane-min={docked ? "calc(50cqb + var(--c-sheet-max-h))" : "50cqb"}
   >
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the

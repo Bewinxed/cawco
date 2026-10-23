@@ -26,9 +26,10 @@
 
   /**
    * The session, as the instance index holds it or the hub's names answered
-   * it (references.ts `find`, session-names.svelte.ts).
+   * it (references.ts `find`, session-names.svelte.ts). The written label
+   * goes unused: a session is drawn by its title as it stands now.
    */
-  let { id }: { id: string } = $props();
+  let { id }: { id: string; label?: string } = $props();
 
   const panelId = $props.id();
   const row = $derived(cawco.instanceIndex.byId.get(id));

@@ -50,6 +50,7 @@
  * held back.
  *
  *   bun scripts/probe-kit/run.ts artifact-resize-loop
+ *   bun scripts/probe-kit/run.ts artifact-resize-loop --phone-sheet 20
  */
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -58,6 +59,8 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
+  readMotion,
   type Spec,
   settle,
   type Theme,
@@ -391,19 +394,35 @@ const moreStands = (page: Page) =>
       )
   );
 
-/** Whether the open pin's card is squeezed: its thread keeps its height and the card scrolls (PinCard `squeezed`). */
 /**
  * The open pin's card: squeezed (PinCard `squeezed`, its room `data-whole`),
- * and the width its own scrollbar takes from what it holds (its box less its
- * client width and its two 1px edges).
+ * whether it scrolls, and the width its own scrollbar takes from what it
+ * holds (its box less its client width and its two 1px edges).
  */
 const cardState = (page: Page) =>
   page.evaluate(() => {
     const card = document.querySelector<HTMLElement>('[data-slot="pin-card"]');
     return {
       squeezed: !!card?.querySelector("[data-whole]"),
+      scrolls: !!card && card.scrollHeight > card.clientHeight,
       scrollbar: card ? card.offsetWidth - card.clientWidth - 2 : null,
     };
+  });
+
+/**
+ * Whether the engine draws its scrollbars beside what a box holds, taking
+ * their width (a desk's Chromium, kit.ts `scrollbars`), or lays them over
+ * it, taking none (WebKit, as a Mac's Safari does by default).
+ */
+const drawsScrollbars = (page: Page) =>
+  page.evaluate(() => {
+    const box = document.createElement("div");
+    box.style.cssText =
+      "position:absolute;visibility:hidden;overflow:scroll;inline-size:100px;block-size:100px";
+    document.body.append(box);
+    const taken = box.offsetWidth - box.clientWidth;
+    box.remove();
+    return taken > 0;
   });
 
 /** The pane's Comment control, in the head or in More. */
@@ -447,7 +466,10 @@ const dropPin = async (page: Page): Promise<void> => {
     .locator('svg[data-cawco-pins] g[data-pin="1"]')
     .count();
   if (written === 0) {
-    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+    await pressAt(frame, {
+      x: box.x + box.width * 0.3,
+      y: box.y + box.height / 2,
+    });
     // The press opens the comment's composer; Comment writes the pin, and its pill opens its thread.
     const composer = page.locator('[data-slot="pin-composer"]');
     await composer.waitFor({ timeout: 5000 });
@@ -460,19 +482,55 @@ const dropPin = async (page: Page): Promise<void> => {
       .getByRole("button", { name: "Comment", exact: true })
       .click();
     await composer.waitFor({ state: "detached", timeout: 8000 });
-    // Sent, as the person sends it: the head's Send goes, and the legs after
-    // this one see the head they saw before the comment.
-    const send = page.locator('[data-slot="side-head"] [data-slot="send"]');
-    await send.click({ timeout: 5000 });
-    await send.waitFor({ state: "detached", timeout: 15_000 });
+    // It goes by itself: wait for the delivery to stamp it, so the legs
+    // after this one see its pill as it stands once sent.
+    await until(
+      "the comment delivered by itself",
+      () =>
+        frame.evaluate(() =>
+          Object.values(
+            (
+              window as unknown as {
+                cawcoArtifact: {
+                  doc: {
+                    getMap: (n: string) => { toJSON: () => object };
+                  };
+                };
+              }
+            ).cawcoArtifact.doc
+              .getMap("pins")
+              .toJSON() as Record<string, { sentAt?: string }>
+          ).every((pin) => !!pin.sentAt)
+        ),
+      Boolean,
+      20_000
+    ).catch(() => false);
   }
-  const pill = await frame
-    .locator('svg[data-cawco-pins] g[data-pin="1"] [data-face]')
-    .boundingBox({ timeout: 5000 });
+  // Drawn, not only made: a pill attached but not yet drawn has no box, and
+  // `boundingBox` answers null for it at once, whatever its timeout. Each
+  // draw of the pins removes every pill and makes it again (pins.ts
+  // `draw`), and the pin's state turning once it is sent draws them again: the
+  // face the locator found can be gone by the time it is measured, and
+  // WebKit's quads for a node no longer in the page are none (its rect 0×0,
+  // no `<svg>` round it, the face drawn anew at 20×20 a moment later). The
+  // box is read until it is read off a drawn pill.
+  const face = frame.locator(
+    'svg[data-cawco-pins] g[data-pin="1"] [data-face]'
+  );
+  await face.waitFor({ state: "visible", timeout: 5000 });
+  const pill = await until(
+    "the new pin's pill measured where it is drawn",
+    () => face.boundingBox(),
+    (measured) => measured !== null && measured.width > 0,
+    5000
+  ).catch(() => null);
   if (!pill) {
     throw new Error("the new pin's pill has no box to press");
   }
-  await page.mouse.click(pill.x + pill.width / 2, pill.y + pill.height / 2);
+  await pressAt(frame, {
+    x: pill.x + pill.width / 2,
+    y: pill.y + pill.height / 2,
+  });
   await page
     .locator('[data-slot="pin-card"] [data-slot="entry"]')
     .first()
@@ -572,6 +630,49 @@ const checkQuiet = async (
   );
 };
 
+/** A step's size, `1280×800`. */
+const size = (step: Step) => `${step.width}×${step.height}`;
+
+/**
+ * The open pin's card over a sweep: squeezed at some sizes and let go, and
+ * squeezed, it scrolls, its scrollbar taking width where the engine draws
+ * one beside what a box holds.
+ */
+const checkSqueezed = async (
+  kit: Kit,
+  page: Page,
+  leg: Leg,
+  cards: ({ step: Step } & Awaited<ReturnType<typeof cardState>>)[]
+) => {
+  const [first] = leg.steps;
+  const last = leg.steps.at(-1) ?? first;
+  const squeezedAt = cards.filter((card) => card.squeezed).map((c) => c.step);
+  const scrollbarAt = cards
+    .filter((card) => card.scrollbar)
+    .map((card) => `${size(card.step)}:${card.scrollbar}px`);
+  const scrolledAt = cards
+    .filter((card) => card.squeezed && card.scrolls)
+    .map((card) => size(card.step));
+  const drawn = await drawsScrollbars(page);
+  kit.check(
+    `${leg.name}: the sweep squeezed the open pin's card and let it go (squeezed at some sizes, at neither end)`,
+    squeezedAt.length > 0 &&
+      !squeezedAt.includes(first) &&
+      !squeezedAt.includes(last),
+    JSON.stringify({ squeezedAt: squeezedAt.map(size) })
+  );
+  // Where the engine lays its scrollbars over what a box holds, none
+  // takes width: the card scrolls with nothing narrowed.
+  kit.check(
+    drawn
+      ? `${leg.name}: squeezed, the card scrolls and its scrollbar takes width from its head and foot (a desk's scrollbars drawn)`
+      : `${leg.name}: squeezed, the card scrolls, its scrollbar laid over what it holds (this engine's scrollbars take no width)`,
+    scrolledAt.length > 0 &&
+      (drawn ? scrollbarAt.length > 0 : scrollbarAt.length === 0),
+    JSON.stringify({ drawn, scrolledAt, scrollbarAt })
+  );
+};
+
 export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
   // A desk draws its scrollbars and a phone overlays them: a box that starts
   // or stops scrolling at desk narrows or widens what it holds.
@@ -621,11 +722,6 @@ export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
   await settle(page);
   await frames(page);
   const swept = await mark(page, said);
-  const size = (step: Step) => `${step.width}×${step.height}`;
-  const squeezedAt = cards.filter((card) => card.squeezed).map((c) => c.step);
-  const scrollbarAt = cards
-    .filter((card) => card.scrollbar)
-    .map((card) => `${size(card.step)}:${card.scrollbar}px`);
   const least = leg.steps.reduce((a, b) =>
     b.width * b.height < a.width * a.height ? b : a
   );
@@ -647,18 +743,7 @@ export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
     { postedAt: postedAt.map(size) }
   );
   if (leg.squeezes) {
-    kit.check(
-      `${leg.name}: the sweep squeezed the open pin's card and let it go (squeezed at some sizes, at neither end)`,
-      squeezedAt.length > 0 &&
-        !squeezedAt.includes(first) &&
-        !squeezedAt.includes(last),
-      JSON.stringify({ squeezedAt: squeezedAt.map(size) })
-    );
-    kit.check(
-      `${leg.name}: squeezed, the card scrolls and its scrollbar takes width from its head and foot (a desk's scrollbars drawn)`,
-      scrollbarAt.length > 0,
-      JSON.stringify({ scrollbarAt })
-    );
+    await checkSqueezed(kit, page, leg, cards);
   }
   if (!leg.crosses) {
     if (!leg.squeezes) {
@@ -808,83 +893,103 @@ const SCRUB = [0, 0.5, 1];
 
 /** One animation on the sheet's host (its clip) or on the sheet (vaul's move), as the engine runs it. */
 interface Run {
-  duration: number | string | null;
-  /** The effect's easing and its first keyframe's: a CSS transition carries its curve on one of them. */
-  easing: string | null;
-  keyframeEasing: string | null;
+  duration: number;
+  /** The curve it moves on (kit.ts `MotionRun.easing`: a CSS transition carries it on its timing or its first keyframe). */
+  easing: string;
   kind: string;
   on: "clip" | "sheet";
+  /** Where its clock stood as it was held: 0, no frame of the move played. */
+  playedFirst: number | null;
   start: number | null;
 }
 
+/** How long the scrub waits for the move's two runs to start, in wall-clock ms. */
+const START_WITHIN_MS = 10_000;
+
+/** The two elements the move runs on: the host (SideSheet's clip) and vaul's sheet in it. */
+const MOVERS = '[data-slot="preview-sheet-host"], [data-preview-sheet]';
+
 /**
  * Moves the sheet between its stops (`focus`: the composer's field takes
- * the focus; `grab`: a tap on the grabber), lets the move start, pauses
- * every animation on the sheet and its host, and seeks them together to
+ * the focus; `grab`: a tap on the grabber), holds every animation the move
+ * starts on the sheet and its host at its start, and seeks them together to
  * each fraction of their duration (SCRUB), reading the floor and the
- * sheet's top at each. WebKit has no DevTools Animation domain, so the
- * clock is seeked through the Web Animations API, in the page. Then it lets
- * them run on to their end.
+ * sheet's top at each. Then it lets them run on to their end.
+ *
+ * Read as the kit reads motion (kit.ts `readMotion`): WebKit has no
+ * DevTools Animation domain, so the page holds the clock itself, each run
+ * at its start before a frame can play it (vaul's CSS transition from a
+ * MutationObserver a microtask after its write, SideSheet's clip as
+ * `animate()` returns it), at a playback rate of 0, so SideSheet reads the
+ * move it clips to and sets the clip's start from it unchanged. Waiting
+ * frames for the move to begin instead, a loaded machine (330-446ms a
+ * frame, one busy loop per core) let the whole 500ms move finish before the
+ * read, and it found nothing to scrub.
  */
-const scrub = (page: Page, act: "focus" | "grab") =>
-  page.evaluate(
-    async ({ does, fractions, field }) => {
-      const host = document.querySelector('[data-slot="preview-sheet-host"]');
-      const sheet = document.querySelector("[data-preview-sheet]");
-      if (does === "focus") {
-        document.querySelector<HTMLElement>(field)?.focus();
-      } else {
-        document.querySelector<HTMLElement>("[data-preview-grab]")?.click();
-      }
-      await new Promise<void>((done) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => done()))
-      );
-      const runs = document.getAnimations().filter((each) => {
-        const target = (each.effect as KeyframeEffect | null)?.target;
-        return (
-          (target === host || target === sheet) && each.playState === "running"
-        );
-      });
-      for (const each of runs) {
-        each.pause();
-      }
-      const described = runs.map((each) => {
-        const effect = each.effect as KeyframeEffect | null;
-        const timing = effect?.getTiming();
-        return {
-          on: (effect?.target === host ? "clip" : "sheet") as "clip" | "sheet",
-          kind: each.constructor.name,
-          start: each.startTime === null ? null : Number(each.startTime),
-          duration:
-            timing?.duration === undefined ? null : String(timing.duration),
-          easing: timing?.easing ?? null,
-          keyframeEasing: effect?.getKeyframes()[0]?.easing ?? null,
-        };
-      });
-      const at: { fraction: number; floor: number; top: number }[] = [];
-      for (const fraction of fractions) {
-        for (const each of runs) {
-          const duration = Number(each.effect?.getTiming().duration ?? 0);
-          each.currentTime = duration * fraction;
-        }
-        const now = window.__sheetNow?.();
-        at.push({
-          fraction,
-          floor: now?.floor ?? Number.NaN,
-          top: now?.top ?? Number.NaN,
-        });
-      }
-      for (const each of runs) {
-        each.play();
-      }
-      return { runs: described, at };
-    },
-    { does: act, fractions: SCRUB, field: COMPOSER }
+const scrub = async (page: Page, act: "focus" | "grab") => {
+  const moved = await readMotion(
+    page,
+    () =>
+      page.evaluate(
+        ({ does, field }) => {
+          if (does === "focus") {
+            document.querySelector<HTMLElement>(field)?.focus();
+          } else {
+            document.querySelector<HTMLElement>("[data-preview-grab]")?.click();
+          }
+        },
+        { does: act, field: COMPOSER }
+      ),
+    MOVERS,
+    {
+      // Their own runs alone, as the scrub held them before the kit did:
+      // held at 0, the card's padding inside the sheet changed how
+      // SideSheet made its clip (two of them, the move read at its end).
+      own: true,
+      fractions: SCRUB,
+      read: () =>
+        page.evaluate(() => {
+          const now = window.__sheetNow?.();
+          return {
+            floor: now?.floor ?? Number.NaN,
+            top: now?.top ?? Number.NaN,
+          };
+        }),
+      ms: START_WITHIN_MS,
+    }
   );
+  const on = (target: string): Run["on"] | null => {
+    if (target === "div[preview-sheet-host]") {
+      return "clip";
+    }
+    return target === "div[drawer-content]" ? "sheet" : null;
+  };
+  const runs: Run[] = moved.runs.flatMap((one) => {
+    const where = on(one.target);
+    return where
+      ? [
+          {
+            on: where,
+            kind: one.type,
+            start: one.start,
+            playedFirst: one.heldAt,
+            duration: one.end - one.delay,
+            easing: one.easing,
+          },
+        ]
+      : [];
+  });
+  return {
+    by: moved.by,
+    runs,
+    at: moved.at.map(({ fraction, value }) => ({ fraction, ...value })),
+  };
+};
 
 /**
  * The scrub's verdict: the sheet's move and the clip run on one clock (the
- * same start, duration and easing, one each), the floor and the sheet's top
+ * same start, duration and easing, one each), held at its start before a
+ * frame of it played, the floor and the sheet's top
  * at the stops' places at 0 and 1, and at 0.5 both the same share of their
  * way along.
  */
@@ -906,7 +1011,8 @@ const oneClock = (
     a.start === b.start &&
     a.duration === b.duration &&
     a.easing === b.easing &&
-    a.keyframeEasing === b.keyframeEasing;
+    a.playedFirst === 0 &&
+    b.playedFirst === 0;
   const [start, middle, end] = scrubbed.at;
   const near = (x: number, y: number) => Math.abs(x - y) <= 1;
   const placed =
@@ -1342,6 +1448,8 @@ export const made = async (
   asks.set(marker, {
     name: CREATE,
     input: {
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      response_format: "detailed",
       kind: "page",
       does: "judge",
       ask: "Judge the chip wraps: pin anything that reads wrong on a narrow pane",
@@ -1393,6 +1501,17 @@ const TALL_SWEEP = [...sweep(900, 240, 20), ...sweep(260, 900, 20)].map(
   (height) => ({ width: 1440, height })
 );
 
+/**
+ * `--phone-sheet <n>`: the phone sheet at 390×844 alone, n times on one
+ * fleet ({@link runPhoneSheet}), and nothing else: how often a leg of it
+ * fails, counted.
+ */
+const phoneSheetRuns = (): number => {
+  const at = process.argv.indexOf("--phone-sheet");
+  const runs = at === -1 ? 0 : Number(process.argv[at + 1]);
+  return Number.isInteger(runs) && runs > 0 ? runs : 0;
+};
+
 const run = async (kit: Kit) => {
   const fleet = await fleetUp(kit);
   // The session runs in a project's checkout, so the navigation lists it
@@ -1411,6 +1530,14 @@ const run = async (kit: Kit) => {
     return;
   }
   const base = await fleet.dashboard();
+  const repeat = phoneSheetRuns();
+  if (repeat > 0) {
+    for (let at = 0; at < repeat; at += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
+      await runPhoneSheet(kit, base, { session, view: "phone" });
+    }
+    return;
+  }
   for (const view of ["phone", "phoneWide"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
     await runPhoneSheet(kit, base, { session, view });

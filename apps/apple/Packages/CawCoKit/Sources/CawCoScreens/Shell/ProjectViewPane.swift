@@ -199,7 +199,7 @@ final class ProjectViewPane: UIView {
         let label = TaskWords.stage(next.name)
         barLine.text = Words.Views.drafted(view: label)
         viewTitle.text = label
-        viewMore.accessibilityLabel = Words.Blocks.more(title: label)
+        viewMore.accessibilityLabel = Words.Common.moreFor(label: label)
         if arriving {
             refusal.isHidden = true
             keeping = false

@@ -1064,6 +1064,71 @@
     minmax(min(100%, --value(--spacing-*)), 1fr)
   );
 }
+/* A decision page's insets (decisions/host Decisions.svelte's root): the page's own and a card's
+   (21px and 18px at a desk, 14px each under a finger), a picture's well,
+   what a well reaches past to the screen's edges on a phone (`--bleed`),
+   and the column's width, 920px until a pictured page sets its own. */
+@utility decision-page-insets {
+  --page-in: var(--space-6);
+  --card-in: var(--space-5);
+  --well-in: calc(var(--space-3) + 1px);
+  --bleed: calc(var(--page-in) + var(--card-in));
+  --page-w: var(--c-decision-page-w);
+
+  @media (pointer: coarse) {
+    --page-in: var(--space-4);
+    --card-in: var(--space-4);
+  }
+}
+/* The page the window's height: its cards scrolling in the first row, its
+   foot standing in the second at its own height. */
+@utility grid-rows-page-foot {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+/* Options with pictures: as many abreast as fit, each track exactly its
+   widest picture's own width in its well (`--story-w`, decisions/host
+   Decision.svelte), each at 1:1, packed from the row's start as the words
+   are and the house gap between them, never stretched apart; a track never
+   wider than the row, so a picture wider than it stands one to a row at the
+   row's full width and scrolls sideways in its well. */
+@utility grid-cols-fit-story {
+  grid-template-columns: repeat(
+    auto-fill,
+    min(100%, calc(var(--story-w) + 2 * var(--well-in)))
+  );
+}
+/* A picture's well hugging its picture (`--picture-w`, its real width,
+   decisions/host Well.svelte): the picture at 1:1 and the well's own
+   insets, never wider than what holds it, where a picture too wide for it
+   scrolls sideways in it; never narrower than its caption and action need
+   (its stage, `contain-inline-size`, asks no width of its own). No empty
+   well stands beside a picture. */
+@utility well-hug {
+  inline-size: calc(var(--picture-w) + 2 * var(--well-in));
+  min-inline-size: min-content;
+  max-inline-size: 100%;
+}
+/* The same well on a phone, standing alone in its card: no inset, edge or
+   corner of its own, as wide as its story or the screen, whichever is less,
+   centred over what holds it, so a story as wide as the screen reaches both
+   its edges (the page's column is the screen's width under the phone's
+   line). */
+@utility well-bleed {
+  inline-size: min(var(--picture-w), 100vi);
+  max-inline-size: none;
+  margin-inline-start: min(0px, (100% - min(var(--picture-w), 100vi)) / 2);
+  padding-inline: 0;
+  border-inline-width: 0;
+  border-radius: 0;
+}
+/* A bled well's words on the page's text edge (`--bleed` from the screen's),
+   however far its picture reaches past them. */
+@utility well-bleed-words {
+  padding-inline: max(
+    0px,
+    var(--bleed) - (100vi - min(var(--picture-w), 100vi)) / 2
+  );
+}
 /* A well's surface easing its edge and radius as it lands, its opacity on
    the drawer's curve. */
 @utility transition-well-surface {

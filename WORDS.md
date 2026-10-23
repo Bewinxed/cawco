@@ -171,6 +171,7 @@ it actually means.
 | An artifact that is a dev server or folder shown live | **preview** | The preview beside the transcript. | "canvas" (that is a drawing) |
 | A numbered mark on an artifact's element: an annotation, or a comment's anchor | **pin** | "Send 3" sends the unsent pins and comments. | "marker", "selection" |
 | A note pinned to an element in an artifact, with its replies | **comment** | Pins on an artifact and the comment list beside it. | "thread" (a thread is a conversation with Caw), "annotation" |
+| Putting an artifact waiting on you out of Needs you until it is raised again (a revision, a new answer); it stays in Files with its dot | **Not now** | The ✕ on an artifact's Needs-you row ("Not now: Pick the head for the phone project page"). | "Dismiss", "Snooze", "Ignore", "Done" (nothing was answered) |
 | A conversation with Caw in a project | **thread** | The project's threads. | "chat", "comment" |
 | Whether a project's Caw also acts on his own: **on**, events wake him (an attempt's report, a task waiting for you, a routine for the lead, GitHub and connector events, check results) and he leads dispatch; **off**, he acts only when you write to him, and nothing else wakes him or spends. Either way you can always talk to him: start a thread, write in one, ask for a view, set the project up. Off is never "can't be messaged". Work that began with your words is yours, whoever carries it out, and its reports reach him on or off; work an event began is his own, and off stops only that. Turning him off while what he started still runs asks first: one line under the switch for his own turn alone ("Let him finish" / "Stop now"), else a tray naming each one ("Let them finish" / "Stop 3 and turn Caw off") | **Caw on** / **Caw off** | The Caw lead switch; his panel's "Off · answers when you write" and "Off · 2 of his still finishing"; a routine's skip reason "Caw is off, so only your words wake him". | "asleep", "disabled", "turn it on to message Caw" |
 | A page of decisions Caw writes with you, where you pick, note and comment | **decision page** | The Decisions tab; "Make tasks". | "plan" (that is the harness's list), "proposal" (that is the memory curator's) |
@@ -232,6 +233,9 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   operator's anxiety ("the run is paused and holds its place").
 - **Inline, near the problem**: an error on a field sits at that field; a machine error sits at that
   machine's rows; a fleet error sits in the connection band that already carries the retry countdown.
+- **Kept until acted on**: a failure of work that outlives its surface (an install, a spawn, an upload,
+  a sign-in) is said where that work is parked and stands, its details kept, until the operator acts
+  on it; never in a toast that leaves on a timer (DESIGN.md, The Work Outlives Its Surface Rule).
 
 **Examples that satisfy it:**
 
@@ -247,9 +251,8 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   on the machine, then Reconnect."**
 - Hub unreachable (connection band): **"Hub unreachable — retrying in 12s. Reconnect now."** (the
   countdown makes it determinate; the board holds its last good rows, so the false zero never renders)
-- Hub updating (connection band, the waiting tone): **"CawCo is updating to 1.4.2 — the hub is back
-  within 40s."** (the same shape as the outage's line; the deadline the hub gave makes it determinate,
-  nothing is pressed while it runs, and only past the deadline does the band say "Hub unreachable");
+- Hub updating (connection band, the waiting tone): **"CawCo is updating to 1.4.2."** (nothing is
+  pressed while it runs, and only past the deadline the hub gave does the band say "Hub unreachable");
   once it answers, **"CawCo updated to 1.4.2."** The app's status line says the same: both read core
   `words/connection.ts`
 - A project the hub didn't give (an error empty, where its board would be): **"The tasks, stages and

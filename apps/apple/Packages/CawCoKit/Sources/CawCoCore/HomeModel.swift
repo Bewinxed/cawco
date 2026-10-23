@@ -105,7 +105,7 @@ public final class HomeModel {
         case .connecting, .updating:
             "Connecting…"
         case .unreachable:
-            "Hub unreachable"
+            Words.Connection.unreachable
         }
     }
 

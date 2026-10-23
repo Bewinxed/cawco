@@ -28,14 +28,27 @@
  * Then the trash itself, through the hub: an entry outlives a hub restart;
  * one whose name was taken again answers 409 and the new item stays; one
  * whose window ran out answers 404, in words.
+ *
+ * And in WebKit at the desk: an edit left unsaved in a new hook puts the
+ * rail's unsaved dot on its row, which comes in by one animation on itself
+ * over --dur-control (ConfigRail, motion/curves `appearOnMount`), never a
+ * @starting-style transition, which WebKit sometimes skips for an element
+ * just added.
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { userLayerLabel } from "../../../packages/core/src/claude-dirs";
 import { HOOK_TEMPLATES } from "../../../packages/core/src/hooks";
 import { RULE_TEMPLATES } from "../../../packages/core/src/rules";
+import { commonWords } from "../../../packages/core/src/words/common";
+import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
+import { mcpWords } from "../../../packages/core/src/words/mcp";
+import { memoryWords } from "../../../packages/core/src/words/memory";
+import { rulesWords } from "../../../packages/core/src/words/rules";
+import { skillsWords } from "../../../packages/core/src/words/skills";
 import type { Reply } from "../../scratch-fleet";
 import { Clock } from "../anim";
+import { durOf, oneEntrance, recordRuns, runsOn } from "../entrances";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const SKILL = "probe-undo";
@@ -139,7 +152,7 @@ async function deleteFromMenu(
 ) {
   await page
     .getByRole("button", {
-      name: typeof name === "string" ? `More for ${name}` : name,
+      name: typeof name === "string" ? commonWords.moreFor(name) : name,
     })
     .first()
     .click();
@@ -248,10 +261,37 @@ const probe = async (kit: Kit) => {
   await rulesWaiting(on);
   await connection(on);
   await toastFade(on);
+  await unsavedEntrance(on);
   await page.close();
   await trash(on);
   await served.stop(true);
 };
+
+/**
+ * In WebKit at the desk: a new hook's first field typed into and left
+ * unsaved; the rail's dot on its row comes in by one animation on itself
+ * over --dur-control, never @starting-style.
+ */
+async function unsavedEntrance({ kit, base }: On) {
+  const page = await kit.page("desk", { engine: "webkit" });
+  await page.addInitScript(recordRuns);
+  await open(page, `${base}/config/hooks/new`, "main :is(input, textarea)");
+  await page
+    .locator("main :is(input:not([type=hidden]), textarea)")
+    .first()
+    .fill("Left unsaved");
+  const dot = 'a[data-slot="row"][href="/config/hooks"] [data-slot="unsaved"]';
+  await page.locator(dot).waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(500);
+  const ms = await page.evaluate(durOf, "--dur-control");
+  const seen = await page.evaluate(runsOn, { selector: dot, pseudo: null });
+  kit.check(
+    `unsaved dot, WebKit desk: it comes in by one animation on itself over --dur-control (${ms}ms), never @starting-style`,
+    seen.length === 1 && oneEntrance(seen[0]?.runs ?? [], ms),
+    JSON.stringify(seen)
+  );
+  await page.close();
+}
 
 /** What each part of the spec works on. */
 interface On {
@@ -366,7 +406,7 @@ async function skill({ kit, fleet, page, base }: On, origin: string) {
   const skillDelete = await deleteFromMenu(
     page,
     SKILL,
-    "Remove everywhere",
+    skillsWords.removeEverywhere,
     skillHeld
   );
   kit.check(
@@ -414,7 +454,7 @@ async function pluginAndMarketplace({ kit, fleet, page }: On) {
   const pluginDelete = await deleteFromMenu(
     page,
     PLUGIN_ID,
-    "Remove everywhere",
+    skillsWords.removeEverywhere,
     pluginHeld
   );
   kit.check(
@@ -484,7 +524,7 @@ async function delegateType({ kit, fleet, page, base }: On) {
   const typeDelete = await deleteFromMenu(
     page,
     seeded.name,
-    "Delete delegate type",
+    delegateTypesWords.remove,
     typeHeld
   );
   kit.check(
@@ -574,12 +614,7 @@ async function mcpServer({ kit, fleet, page, base }: On) {
       MCP
     );
   await open(page, `${base}/config/mcp`, `text=${MCP}`);
-  const mcpDelete = await deleteFromMenu(
-    page,
-    MCP,
-    "Remove everywhere",
-    mcpHeld
-  );
+  const mcpDelete = await deleteFromMenu(page, MCP, mcpWords.remove, mcpHeld);
   kit.check(
     "mcp: one pick of Remove everywhere asks nothing and the hub lets it go, sign-in too",
     mcpDelete.asked === 0 && mcpDelete.gone && signIn().length === 0,
@@ -628,7 +663,7 @@ async function memory({ kit, fleet, page, base }: On) {
   const scopedDelete = await deleteFromMenu(
     page,
     SCOPED,
-    "Delete everywhere",
+    memoryWords.deleteEverywhere,
     docHeld(SCOPED)
   );
   kit.check(
@@ -651,7 +686,7 @@ async function memory({ kit, fleet, page, base }: On) {
   const mainDelete = await deleteFromMenu(
     page,
     MAIN_ROW,
-    "Delete everywhere",
+    memoryWords.deleteEverywhere,
     mainHeld
   );
   const emptied = await memoryOf();
@@ -698,7 +733,7 @@ async function rule({ kit, fleet, page, base }: On) {
   const ruleDelete = await deleteFromMenu(
     page,
     made.name,
-    "Delete rule",
+    rulesWords.deleteRule,
     ruleHeld
   );
   kit.check(
@@ -750,28 +785,28 @@ async function rulesWaiting({ kit, fleet, page, base }: On) {
   await open(page, `${base}/config/rules`, CHIP);
   await page.locator(CHIP).click();
   const read = () =>
-    page.evaluate((chip) => {
-      const button = document.querySelector(chip);
-      const names = [...document.querySelectorAll("[data-row-name]")].map(
-        (row) => row.getAttribute("data-row-name") ?? ""
-      );
-      return {
-        chip: button !== null,
-        pressed: button?.getAttribute("aria-pressed") ?? null,
-        waiting: names.includes("probe-waiting"),
-        quiet: names.includes("probe-quiet"),
-        stranded:
-          document.body.textContent?.includes(
-            "No rule is waiting on an answer"
-          ) ?? false,
-      };
-    }, CHIP);
+    page.evaluate(
+      ([chip, noneWaiting]) => {
+        const button = document.querySelector(chip);
+        const names = [...document.querySelectorAll("[data-row-name]")].map(
+          (row) => row.getAttribute("data-row-name") ?? ""
+        );
+        return {
+          chip: button !== null,
+          pressed: button?.getAttribute("aria-pressed") ?? null,
+          waiting: names.includes("probe-waiting"),
+          quiet: names.includes("probe-quiet"),
+          stranded: document.body.textContent?.includes(noneWaiting) ?? false,
+        };
+      },
+      [CHIP, rulesWords.noneWaiting] as const
+    );
   const filtered = await read();
   const held = async () =>
     (await fleet.api<{ rules: { id: string }[] }>("/api/rules")).rules.some(
       (one) => one.id === waiting
     );
-  await deleteFromMenu(page, "probe-waiting", "Delete rule", held);
+  await deleteFromMenu(page, "probe-waiting", rulesWords.deleteRule, held);
   await rowGone(page, "probe-waiting");
   // The other rule shows only once the filter is off; a filter left on
   // never shows it, and the wait runs out.

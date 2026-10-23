@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["unplugin-icons/types/svelte"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}

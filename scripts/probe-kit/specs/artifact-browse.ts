@@ -851,7 +851,11 @@ const legs = async (
 
   /** The session `who` calls artifact_browse on `id` under marker `n`: its result. */
   const browse = async (who: string, n: string, id: string) => {
-    asks.set(n, { name: BROWSE, input: { id } });
+    asks.set(n, {
+      name: BROWSE,
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      input: { id, response_format: "detailed" },
+    });
     await fleet.send(who, `PROBE-CALL:${n}`);
     return await until(
       `artifact_browse ${n} answered`,

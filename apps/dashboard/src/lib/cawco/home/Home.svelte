@@ -18,6 +18,7 @@
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { newSession } from "../spawn/new-session.svelte";
+  import StartingRows from "../spawn/StartingRows.svelte";
   import UsageMeter from "../UsageMeter.svelte";
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
@@ -169,6 +170,9 @@
       variant === "rail" && "gap-space-3 px-space-2 pt-space-1 pb-space-2",
     ]}
   >
+    <!-- The starts the New Session form left running, each its own row
+         until the reader has seen how it ended (spawn/parked). -->
+    <StartingRows />
     {#if !noFleet}
       <WorkTabs
         {markedElsewhere}

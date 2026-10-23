@@ -16,21 +16,34 @@
  * - `{{DIALS}}`: DialKit (vendored, MIT) and dials.js.
  * - `{{MK:<id>}}`: `mockups/<id>.html` beside page.html, one mockup fragment.
  * - `src="caw/…"`: a Caw still from the kit; any other relative `src`, an
- *   image beside page.html; both as data: URIs.
+ *   image beside page.html; both as data: URIs, each distinct one once per
+ *   page however many `<img>` show it.
  *
  * A built page stops at {@link PAGE_LIMIT}.
  */
 import { bundledSkills } from "./bundled-skills";
-import { FACES_SHEET } from "./decision-program";
+import { FACES_SHEET, PAGE_ICON } from "./decision-program";
 
 /** The largest page the hub publishes. */
 export const PAGE_LIMIT = 512 * 1024;
 
 const PLACEHOLDER = /\{\{([^}]+)\}\}/g;
+/** A page's own icon, named in its head. */
+const NAMES_ICON = /<link\b[^>]*\brel=["']?(?:shortcut )?icon\b/i;
 const MOCKUP = /\{\{MK:([a-z0-9-]+)\}\}/g;
 const MOCKUP_NAME = /^MK:[a-z0-9-]+$/;
 const SOURCE = /(\bsrc=)"([^"]+)"/g;
 const KEPT_SOURCE = /^(data:|https?:|\/\/|#)/;
+const IMAGE_TAG = /<img\b[^>]*>/gi;
+/** The attribute an inlined `<img>` names its image by, in place of `src`. */
+const DRAWN = "data-dp-img";
+/**
+ * A 1×1 transparent GIF, an inlined `<img>`'s own source: an `<img>` with
+ * no source and an `alt` is laid out as its alt text in Chromium, which
+ * drops its `width` and `height` and draws the image at its natural size.
+ */
+const BLANK =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const KNOWN = new Set(["KIT_CSS", "KIT_JS", "DIALS"]);
 
 const MEDIA: Record<string, string> = {
@@ -135,6 +148,12 @@ export const buildDecisionPage = async (
         .filter((src) => !KEPT_SOURCE.test(src))
     ),
   ];
+  if (paths.length > 0 && !page.includes("</head>")) {
+    return {
+      problem:
+        "page.html shows images but has no </head>, where the build places them once each. Start it from the kit's page.html.",
+    };
+  }
   /** Each image as a data: URI: a Caw still from the kit, else one beside page.html; undefined when it is neither. */
   const imageOf = async (path: string): Promise<string | undefined> => {
     if (path.startsWith("caw/")) {
@@ -153,10 +172,42 @@ export const buildDecisionPage = async (
     };
   }
   const images = new Map(paths.map((path, index) => [path, read[index]]));
+  // Each distinct image is inlined once: an `<img>` names it by its index,
+  // keeps {@link BLANK} as its source, and one rule in the head draws it (`content: url()` replaces an
+  // `<img>`'s own source in every engine), so eleven uses of one Caw still
+  // cost one data: URI. Any other `src` (a `<source>`, a `<video>`) takes
+  // its data: URI in place.
+  const used = new Set<string>();
+  page = page.replace(IMAGE_TAG, (tag) =>
+    tag.replace(SOURCE, (whole, _attribute: string, src: string) => {
+      if (!images.has(src)) {
+        return whole;
+      }
+      used.add(src);
+      return `${DRAWN}="${paths.indexOf(src)}" src="${BLANK}"`;
+    })
+  );
   page = page.replace(SOURCE, (whole, attribute: string, src: string) =>
     images.has(src) ? `${attribute}"${images.get(src)}"` : whole
   );
+  if (used.size > 0) {
+    const rules = [...used]
+      .map(
+        (src) =>
+          `img[${DRAWN}="${paths.indexOf(src)}"]{content:url("${images.get(src)}")}`
+      )
+      .join("\n");
+    page = page.replace("</head>", () => `<style>${rules}</style>\n</head>`);
+  }
 
+  // The house icon where the page names none: in a tab of its own it asks
+  // its origin for no `/favicon.ico`, which the origin doesn't serve.
+  if (!NAMES_ICON.test(page)) {
+    page = page.replace(
+      "</head>",
+      () => `<link rel="icon" type="image/png" href="${PAGE_ICON}">\n</head>`
+    );
+  }
   const size = Buffer.byteLength(page);
   if (size > PAGE_LIMIT) {
     return {

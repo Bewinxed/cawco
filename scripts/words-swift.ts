@@ -66,6 +66,28 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     ],
   },
   {
+    // Words many places say alike: a retry, a copy, a send again.
+    swift: "Common",
+    members: [{ file: "words/common.ts", export: "commonWords", as: "" }],
+  },
+  {
+    // A session's transcript and its composer.
+    swift: "Transcript",
+    members: [
+      { file: "words/transcript.ts", export: "transcriptWords", as: "" },
+    ],
+  },
+  {
+    // An ask's card, row and peek.
+    swift: "Asks",
+    members: [{ file: "words/asks.ts", export: "askWords", as: "" }],
+  },
+  {
+    // A machine's menu and its keychain unlock.
+    swift: "Machine",
+    members: [{ file: "words/machine.ts", export: "machineWords", as: "" }],
+  },
+  {
     swift: "Sidebar",
     members: [{ file: "words/sidebar.ts", export: "sidebarWords", as: "" }],
   },
@@ -122,6 +144,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/sheet.ts", export: "sheetWords", as: "" }],
   },
   {
+    // Configure › Updates and its notice: a ready build, refusals, a machine waiting on its hub.
+    swift: "Updates",
+    members: [{ file: "words/updates.ts", export: "updatesWords", as: "" }],
+  },
+  {
     // The hub's connection while an announced update restarts it: the band, the app's status line.
     swift: "Connection",
     members: [
@@ -137,6 +164,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     // A project's Routines page: its blocks, its ledgers, a schedule in words.
     swift: "Routines",
     members: [{ file: "words/routines.ts", export: "routinesWords", as: "" }],
+  },
+  {
+    // Caw's head in the top bar: what it says of what needs you.
+    swift: "CawHead",
+    members: [{ file: "words/caw-head.ts", export: "cawHeadWords", as: "" }],
   },
   {
     // A project's own views: asking Caw for one.
@@ -238,12 +270,6 @@ const HELPERS: Record<string, string> = {
     '    /// A whole number in two figures: 5 → "05".',
     "    public static func pad2(_ n: Int) -> String {",
     '        n < 10 && n >= 0 ? "0\\(n)" : "\\(n)"',
-    "    }",
-  ].join("\n"),
-  timeLeft: [
-    '    /// A wait in the unit a person reads it in: "45s" up to a minute, then "3 min", rounded up.',
-    "    public static func timeLeft(_ seconds: Int) -> String {",
-    '        seconds > 60 ? "\\((seconds + 59) / 60) min" : "\\(seconds)s"',
     "    }",
   ].join("\n"),
 };

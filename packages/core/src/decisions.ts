@@ -198,6 +198,34 @@ export const pickOf = (
   return { picked: chosen.length > 0 && gone.length === 0, gone };
 };
 
+/**
+ * Whether the person picked on one choice a page asks: an option chosen that
+ * its card still offers (a plain page's choice has no card: any option). A
+ * note alone is a note, never a pick. The one rule every "picked" count reads:
+ * artifact_list, artifact_read, Needs you, the graph and the page's own bar.
+ */
+export const pickMade = (
+  card: { options: Pick<DecisionOption, "id">[] } | undefined,
+  entry: { options?: string[] } | undefined
+): boolean =>
+  card ? pickOf(card, entry).picked : (entry?.options?.length ?? 0) > 0;
+
+/** A page's choices counted by {@link pickMade}: how many it asks, how many are picked, and its first one not picked. */
+export const picksMade = (
+  asked: readonly {
+    card?: { options: Pick<DecisionOption, "id">[] };
+    id: string;
+  }[],
+  state: Readonly<Record<string, { options?: string[] } | undefined>>
+): { asked: number; firstUnpicked: string | null; made: number } => {
+  const unpicked = asked.filter(({ card, id }) => !pickMade(card, state[id]));
+  return {
+    asked: asked.length,
+    made: asked.length - unpicked.length,
+    firstUnpicked: unpicked[0]?.id ?? null,
+  };
+};
+
 /** One card's place on the graph, as the person dragged it. */
 export interface GraphPlace {
   x: number;
@@ -236,8 +264,12 @@ export const graphId = (page: string, card: string): string =>
 
 /** What a program says of itself: its title and intro, its cards and Sections, and the media it names. */
 export interface ProgramRead {
-  /** The artifacts its Canvas and Preview pieces show, by id. */
-  artifacts: { component: "Canvas" | "Preview"; id: string }[];
+  /** The artifacts its Canvas and Preview pieces show, by id; a Preview's `width` its stories' own, px, when it says it. */
+  artifacts: {
+    component: "Canvas" | "Preview";
+    id: string;
+    width?: number;
+  }[];
   cards: DecisionCard[];
   /** The files its Image pieces show, as written. */
   images: string[];
@@ -287,6 +319,17 @@ const cardOf = (
   after: strings(props.after),
   section,
 });
+
+/** A Canvas or Preview as the artifact it shows; a Preview's `width` its stories' own, px, when it says one. */
+const artifactOf = (
+  component: "Canvas" | "Preview",
+  props: Record<string, unknown>
+): ProgramRead["artifacts"][number] => {
+  const { width } = props;
+  return component === "Preview" && typeof width === "number" && width > 0
+    ? { component, id: text(props.artifact), width }
+    : { component, id: text(props.artifact) };
+};
 
 /** A Section's id: its title as a slug, made its own on the page with `-2`, `-3`… */
 const sectionId = (title: string, taken: Set<string>): string => {
@@ -355,7 +398,7 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     } else if (typeName === "Decision") {
       decision(props, section);
     } else if (typeName === "Canvas" || typeName === "Preview") {
-      read.artifacts.push({ component: typeName, id: text(props.artifact) });
+      read.artifacts.push(artifactOf(typeName, props));
     } else if (typeName === "Image") {
       read.images.push(text(props.file));
     } else {

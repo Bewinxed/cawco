@@ -4,7 +4,9 @@
  * reads no fleet: a page without the fleet store (an artifact's own tab,
  * whose pin card asks in place) draws marks too.
  */
+
 import type { ThreadStatus } from "@cawco/core";
+import { commonWords } from "@cawco/core";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
 import { type BoardRow, cawco, isFailed, isStale } from "./client.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
@@ -12,7 +14,7 @@ import { isThreadTab } from "./thread-tabs";
 
 const STATUS_WORD: Record<MarkStatus, string> = {
   live: "Working",
-  attn: "Needs you",
+  attn: commonWords.needsYou,
   done: "Finished",
   fail: "Failed",
   idle: "Idle",
@@ -31,8 +33,14 @@ export function statusWord(
   if (instance?.status === "stopping") {
     return STOPPING_LABEL;
   }
+  if (instance?.stalled) {
+    return STALLED_LABEL;
+  }
   return instance?.status === "stopped" ? STOPPED_LABEL : STATUS_WORD[status];
 }
+
+/** A session stopped at its account's limit, in one status word. */
+export const STALLED_LABEL = "Stopped at its limit";
 
 /**
  * A session's status, one rule for every row that draws its mark. `done`:
@@ -46,7 +54,9 @@ export function sessionStatus(
   if (!instance) {
     return "idle";
   }
-  if (isFailed(instance)) {
+  // Stopped at its account's limit: an error until it moves or its account
+  // resets, whatever its process is doing.
+  if (isFailed(instance) || instance.stalled) {
     return "fail";
   }
   if (isStale(instance)) {

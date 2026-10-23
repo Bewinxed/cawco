@@ -4,7 +4,12 @@
 
 <script lang="ts">
   import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
-  import { accountsWords, EFFORT_NONE, isEffortLevel } from "@cawco/core";
+  import {
+    accountsWords,
+    commonWords,
+    EFFORT_NONE,
+    isEffortLevel,
+  } from "@cawco/core";
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -12,24 +17,29 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconCheck } from "#lib/icons.js";
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Link from "~icons/solar/link-bold-duotone";
+  import {
+    IconChevronDown as Down,
+    IconCheck,
+    IconRefresh,
+    IconConnection as Link,
+  } from "#lib/icons.js";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
-  import { movingTo, movingWords } from "../accounts/switch.svelte";
+  import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
   import {
     answeredOr,
     cawco,
+    holdDetails,
     latestCommandFor,
     machineConnected,
     refreshContext,
     relaunchSession,
+    settingFault,
     showContext,
     submitCommand,
   } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
-  import { copyToClipboard } from "../copy";
+  import { copyRefused, copyToClipboard } from "../copy";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { describingRow } from "../models.svelte";
   import {
@@ -42,6 +52,8 @@
   import { standsOpen } from "../motion/hang";
   import { morph } from "../motion/morph.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
+  import RowFault from "../RowFault.svelte";
+  import { refusals } from "../refusals.svelte";
   import ModelSection from "../spawn/ModelSection.svelte";
   import { modelName } from "../spawn/model-entries";
   import NsPopover from "../spawn/NsPopover.svelte";
@@ -181,7 +193,7 @@
   });
   const modes = $derived(
     harness
-      ? permissionModesFor(harness, session?.permissionMode).filter((mode) =>
+      ? permissionModesFor(harness).filter((mode) =>
           report?.capabilities.permissionModes.includes(mode.value)
         )
       : []
@@ -270,6 +282,26 @@
   // The card draws this session's reading while it is mounted: its turns'
   // ends read it again only while one does (client.svelte.ts `showContext`).
   $effect(() => showContext(sessionId));
+  /**
+   * A copy the browser refused (the link, the working directory): said
+   * under the head where it was pressed, with Try again and the text under
+   * Show details; never a toast.
+   */
+  const copyKey = $derived(`copy:details:${sessionId}`);
+  const copyFault = $derived(
+    refusals.get(copyKey)?.asked as { what: string; text: string } | undefined
+  );
+  async function copy(what: string, text: string): Promise<void> {
+    const key = copyKey;
+    if (await copyToClipboard(what, text)) {
+      refusals.delete(key);
+    } else {
+      refusals.set(key, { reason: copyRefused(what), asked: { what, text } });
+    }
+  }
+  // While this card stands, its settings' failures are said on its lines,
+  // under the control that asked, and nowhere else (client.svelte.ts).
+  $effect(() => holdDetails(sessionId));
   const reading = $derived(
     (askPending || !!session?.contextPending) && stats.totalTokens === null
   );
@@ -397,9 +429,10 @@
   }
   function failure(slot: Slot) {
     // A refused move is moveTo's toast, the one place the menu and the card
-    // both say it.
+    // both say it. Stopped at its account's limit, the account line is the
+    // error and its way out: the picker right above it.
     if (slot === "account") {
-      return null;
+      return row ? (stopWords(row) ?? null) : null;
     }
     if (slot === "permission" && relaunchFailure) {
       return relaunchFailure;
@@ -407,10 +440,19 @@
     if (slot === "model" && kept) {
       return kept.refused;
     }
-    const record = latestCommandFor(sessionId, kinds[slot]);
-    return record?.stage === "failed"
-      ? record.reason || "Change refused. Try again."
-      : null;
+    // Kept for the session (client.svelte.ts `settingFault`), so a reload
+    // says it again here.
+    return settingFault(sessionId, kinds[slot])?.words ?? null;
+  }
+  /** A failed change's Try again: the same change asked again. */
+  function failureAgain(slot: Slot): (() => void) | undefined {
+    if (slot === "account" || (slot === "model" && kept)) {
+      return;
+    }
+    if (slot === "permission" && relaunchFailure) {
+      return;
+    }
+    return settingFault(sessionId, kinds[slot])?.again;
   }
   /*
    * A change that lands says so where it was made: a check on its line for
@@ -577,15 +619,33 @@
      flow so the card only ever holds the one arriving. -->
 {#snippet feedback(slot: Slot)}
   {#if failure(slot)}
-    <p
+    {@const again = failureAgain(slot)}
+    <!-- What did not change, why and what stands, with the change asked
+         again beside it where a try can go. -->
+    <div
       data-slot="failure"
-      class="mt-space-2 text-size-body font-normal leading-body wrap-anywhere text-status-fail-ink"
+      class="mt-space-2 flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
       role="alert"
       in:crossIn
       out:crossOut
     >
-      {failure(slot)}
-    </p>
+      <p
+        class="m-0 min-w-0 flex-initial text-size-body font-normal leading-body wrap-anywhere text-status-fail-ink"
+      >
+        {failure(slot)}
+      </p>
+      {#if again}
+        <Button
+          data-again
+          class="flex-none"
+          icon={IconRefresh}
+          label={commonWords.tryAgain}
+          onclick={again}
+          size="xs"
+          variant="ghost"
+        />
+      {/if}
+    </div>
   {:else if pending(slot)}
     <p
       data-slot="feedback"
@@ -648,10 +708,9 @@
           </h2>
           <Button
             data-slot="icon-action"
-            aria-label="Copy link"
+            aria-label={commonWords.copyLink}
             class="flex-none"
-            onclick={() =>
-              copyToClipboard("Link", new URL(href, location.origin).href)}
+            onclick={() => copy("Link", new URL(href, location.origin).href)}
             size="icon-sm"
             tone="muted"
             variant="ghost"
@@ -694,7 +753,7 @@
             data-slot="cwd"
             aria-label={`Copy working directory ${cwd}`}
             class="select-none min-w-0 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-start wrap-anywhere text-inherit hover:text-ink-strong active:opacity-72"
-            onclick={() => copyToClipboard("Working directory", cwd)}
+            onclick={() => copy("Working directory", cwd)}
             title={cwd}
             type="button"
           >
@@ -702,6 +761,16 @@
           </button>
         {/if}
       </p>
+      <!-- A copy pressed in the head that the browser refused, under it. -->
+      <RowFault
+        again={() => (copyFault ? copy(copyFault.what, copyFault.text) : null)}
+        class="pb-space-2"
+        data-copy-refused
+        details={copyFault?.text}
+        end="var(--space-5)"
+        indent="var(--space-5)"
+        reason={copyFault ? copyRefused(copyFault.what) : null}
+      />
     </div>
 
     {#if harness}

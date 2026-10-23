@@ -9,8 +9,7 @@
    * its combobox roles, its keys) is the caller's.
    */
   import type { HTMLInputAttributes } from "svelte/elements";
-  import { IconClose } from "#lib/icons.js";
-  import SearchIcon from "~icons/solar/magnifer-bold-duotone";
+  import { IconClose, IconSearch as SearchIcon } from "#lib/icons.js";
 
   let {
     value,

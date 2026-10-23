@@ -6,7 +6,7 @@
    * there in one glide.
    */
   import { rise } from "#lib/cawco/motion/curves.svelte.js";
-  import IconArrowDown from "~icons/solar/arrow-down-bold-duotone";
+  import { IconArrowDownDuotone as IconArrowDown } from "#lib/icons.js";
 
   let { onjump }: { onjump: () => void } = $props();
 </script>

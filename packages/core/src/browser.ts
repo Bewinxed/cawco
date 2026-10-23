@@ -181,6 +181,17 @@ export const BROWSER_STOP = "browser.stop";
 export const BROWSER_REMOVE = "browser.remove";
 
 /**
+ * Hub → daemon: a work item ended, so on every browser of the machine the
+ * door `id` names (its workspace's, else its session's own: agent door.ts)
+ * has its connections cut and its pages closed. The browsers themselves,
+ * shared by the project's sessions, run on. Answers `true`.
+ */
+export const BROWSER_CLOSE_PAGES = "browser.closePages";
+export interface BrowserClosePagesArgs {
+  id: string;
+}
+
+/**
  * Hub → daemon: the person takes over the browser of `key`, privately (the
  * shield, agent `browser/shield.ts`): every agent connection cut and new
  * ones refused, the asking workspace's page brought to the front, control

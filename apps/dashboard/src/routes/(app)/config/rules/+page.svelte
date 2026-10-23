@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { type RuleRow, ruleSentence } from "@cawco/core";
-  import { deleteRule } from "#lib/cawco/config/deletes.js";
+  import { type RuleRow, ruleSentence, rulesWords } from "@cawco/core";
+  import { deleteRule, notDeleted } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
@@ -17,6 +17,7 @@
   } from "#lib/cawco/empty-asks.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import {
     createRule,
     draftOf,
@@ -25,7 +26,6 @@
     since,
     times,
   } from "#lib/cawco/rules.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -63,6 +63,8 @@
   let seedFailed = $state<{ title: string; reason: string } | null>(null);
   /** Why a rule's switch did not take, by rule: said under its row. */
   let toggleFailed = $state<Record<string, string>>({});
+  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
+  const deleteKey = (id: string) => `delete:/config/rules:${id}`;
 
   const fired = (row: RuleRow) =>
     row.stats.totalFires === 0
@@ -82,13 +84,14 @@
     }
   }
 
-  /** Delete: at once, with Undo in the toast (deletes.ts). */
+  /** Delete: at once, with Undo in the toast (deletes.ts); a refusal is said under its row. */
   async function remove(row: RuleRow) {
     busy[row.id] = true;
+    refusals.delete(deleteKey(row.id));
     try {
       await deleteRule(store, row);
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(deleteKey(row.id), { reason: notDeleted(row.name, error) });
     } finally {
       delete busy[row.id];
     }
@@ -153,7 +156,7 @@
     <EmptyState
       icon={section.icon}
       line={EMPTY_LINES.starters("rules", sessionCanStart())}
-      title="Nothing is watching yet"
+      title={rulesWords.nothingWatching}
     >
       {#snippet action()}
         <EmptyAsk
@@ -164,7 +167,7 @@
         />
       {/snippet}
     </EmptyState>
-    <RowList label="Starter rules">
+    <RowList label={rulesWords.starterRules}>
       {#each RULE_TEMPLATES as template (template.title)}
         <SectionRow
           hue={HUE}
@@ -207,7 +210,7 @@
     <EmptyState
       icon={section.icon}
       line={EMPTY_LINES.rulesNoneWaiting}
-      title="No rule is waiting on an answer"
+      title={rulesWords.noneWaiting}
     >
       {#snippet action()}
         <Button
@@ -225,7 +228,7 @@
         <SectionRow
           actions={[
             {
-              label: "Delete rule",
+              label: rulesWords.deleteRule,
               icon: IconTrash,
               destructive: true,
               onselect: () => remove(row),
@@ -252,6 +255,11 @@
             <RowFault
               again={() => toggle(row, !row.enabled)}
               reason={toggleFailed[row.id]}
+            />
+            <RowFault
+              again={() => remove(row)}
+              data-delete-refusal={row.id}
+              reason={refusals.reason(deleteKey(row.id))}
             />
           {/snippet}
         </SectionRow>

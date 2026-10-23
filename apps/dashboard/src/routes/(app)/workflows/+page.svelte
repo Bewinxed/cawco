@@ -1,15 +1,16 @@
 <script lang="ts">
-  import type { WorkflowListing } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { workflowLaunches } from "#lib/cawco/workflow-launch.svelte.js";
   import {
     refreshWorkflows,
     workflowState,
   } from "#lib/cawco/workflow-state.svelte.js";
   import { createWorkflow } from "#lib/cawco/workflows.js";
   import WorkflowLaunch from "#lib/components/features/workflows/WorkflowLaunch.svelte";
+  import WorkflowLaunchParked from "#lib/components/features/workflows/WorkflowLaunchParked.svelte";
   import WorkflowStatus from "#lib/components/features/workflows/WorkflowStatus.svelte";
   import {
     newNode,
@@ -29,8 +30,12 @@
 
   let busy = $state(false);
   let errorMessage = $state("");
-  /** The workflow being launched, and the Run button its dialog grows from. */
-  let launch = $state<{ workflow: WorkflowListing; from: HTMLElement }>();
+  /** The workflow whose launch form stands open (workflow-launch.svelte.ts), once its row is drawn. */
+  const launching = $derived(
+    workflowState.workflows.find(
+      (workflow) => workflow.id === workflowLaunches.open
+    )
+  );
   /** Until the first read is in, rows standing where the list will be. */
   const loading = $derived(!workflowState.loaded);
   const live = $derived(cawco.hub === "connected");
@@ -178,15 +183,16 @@
     <Alert variant="destructive">{errorMessage || workflowState.error}</Alert>
   {/if}
   <!-- Until the first read is in, rows at the height the list's rows take
-       stand where it will be; then the two cross-fade (the skeleton leaves
-       the flow as it goes), so nothing below them moves. -->
+       stand where it will be; then the skeleton hands its place to what the
+       read brought in its reveal (it leaves the flow as it goes), so nothing
+       below them moves. -->
   {#if loading}
     <div
       aria-label="Loading workflows"
       class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
       role="status"
       style:--card-cols={CARD_COLS}
-      out:crossOut
+      out:revealOut
     >
       <Table.Root layout="ledger" stacks="phone">
         {@render head()}
@@ -230,7 +236,7 @@
     </div>
   {:else if !rows.length}
     {#if !workflowState.error}
-      <div in:crossIn>
+      <div in:reveal>
         <EmptyState
           icon={IconWorkflow}
           line="A workflow is a graph of steps that run one after another across your fleet."
@@ -246,7 +252,7 @@
     <div
       class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
       style:--card-cols={CARD_COLS}
-      in:crossIn
+      in:reveal
     >
       <Table.Root aria-label="Workflows" layout="ledger" stacks="phone">
         {@render head()}
@@ -264,6 +270,7 @@
                       >{workflow.description}</span
                     >{/if}</a
                 >
+                <WorkflowLaunchParked workflowId={workflow.id} />
               </Table.Cell>
               <Table.Cell variant="ledger-stacks">
                 {#if last}
@@ -283,9 +290,14 @@
               >
               <Table.Cell class={RUN_CELL} edge="end" variant="ledger-stacks">
                 <Button
+                  data-run-workflow={workflow.id}
                   disabled={!live}
                   onclick={(event) => {
-                    launch = { workflow, from: event.currentTarget };
+                    workflowLaunches.openFor(
+                      workflow.id,
+                      workflow.name,
+                      event.currentTarget
+                    );
                   }}
                   title={live
                     ? undefined
@@ -303,12 +315,8 @@
     </div>
   {/if}
 </div>
-{#if launch}
-  <WorkflowLaunch
-    from={launch.from}
-    onclose={() => {
-      launch = undefined;
-    }}
-    workflow={launch.workflow}
-  />
+{#if launching}
+  {#key launching.id}
+    <WorkflowLaunch workflow={launching} />
+  {/key}
 {/if}

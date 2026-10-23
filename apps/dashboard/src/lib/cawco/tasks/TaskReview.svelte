@@ -26,6 +26,7 @@
    */
   import {
     artifactName,
+    commonWords,
     deliverableKind,
     type ResultArtifact,
   } from "@cawco/core";
@@ -122,7 +123,7 @@
     from ? cawco.instanceIndex.byId.get(from.instanceId) : undefined
   );
   const fromName = $derived(
-    from ? (sessionTitle(from.instanceId) ?? "Its session") : ""
+    from ? (sessionTitle(from.instanceId) ?? commonWords.itsSession) : ""
   );
   const markStatus = $derived(
     ended && newest?.state === "failed" ? "fail" : sessionStatus(row, true)
@@ -498,7 +499,7 @@
         <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
           {#if ended}
             <Button
-              label="Try again"
+              label={commonWords.tryAgain}
               onclick={tryAgain}
               pending={retrying}
               pendingLabel="Starting…"

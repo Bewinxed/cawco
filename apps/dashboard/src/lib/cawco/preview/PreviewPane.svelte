@@ -1,10 +1,11 @@
 <script lang="ts">
   import {
     artifactWords,
+    commentWords,
+    commonWords,
     hostModeDomain,
     machineLabel,
     PREVIEW_LOCKED_MESSAGE,
-    PREVIEW_PING_PATH,
     type PreviewDown,
     type PreviewSettings,
     previewRoute,
@@ -12,15 +13,24 @@
     projectPagePlace,
     type ShownFailure,
     sheetWords,
+    shellWords,
   } from "@cawco/core";
-  import { readWithin } from "@cawco/core/bounded";
   import {
+    type ChangedItem,
+    newAnswer,
     type Pin,
     type PreviewMode,
     pinProblem,
-    pinUnsent,
     previewMode,
   } from "@cawco/core/comments";
+  import { pinName } from "@cawco/core/pin-name";
+  import {
+    askHubReach,
+    PREVIEW_REACH_API,
+    previewsNeedWords,
+    previewUnreachedWords,
+    probePreview,
+  } from "@cawco/core/preview-reach";
   import {
     STAGE_CLONE_MS,
     STAGE_READY_MS,
@@ -47,6 +57,8 @@
   import {
     IconAlert,
     IconChat,
+    IconChevronLeft,
+    IconChevronRight,
     IconComment,
     IconExternal,
     IconEyeClosed,
@@ -73,6 +85,13 @@
     verifyArtifact,
     writeSheet,
   } from "../artifact-api";
+  import {
+    holdArtifact,
+    noteArtifact,
+    openAsked,
+    releaseArtifact,
+    takeOpen,
+  } from "../artifact-names.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import {
     handBack,
@@ -80,7 +99,8 @@
     letGo,
     type Stage,
   } from "../canvas/stage.svelte";
-  import { frameObserver } from "../frame-observer";
+  import { artifactReached } from "../files/reached";
+  import { frameObserver, frameSize } from "../frame-observer";
   import { resolveSessionTitle } from "../links";
   import {
     appear,
@@ -88,9 +108,11 @@
     easeDrawer,
     easeOut,
     motionOk,
+    rise,
   } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
+  import { refusals } from "../refusals.svelte";
   import { watchInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
   import { sideExpand } from "../side/expand";
@@ -109,6 +131,7 @@
     LINK_DOWN_MS,
     type ListHold,
     NOT_REACHING,
+    retryComment,
     sendArtifact,
   } from "./artifact-doc";
   import CanvasView from "./CanvasView.svelte";
@@ -120,7 +143,6 @@
     NEXT_COMMENT,
     type RailSort,
   } from "./comment-rows";
-  import { commentWords } from "./comment-words";
   import { loadedPanes } from "./loaded.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import PinFloat from "./PinFloat.svelte";
@@ -128,7 +150,6 @@
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
   import { enterPreviews } from "./pass";
-  import { pinName } from "./pin-name";
   import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
@@ -136,6 +157,7 @@
     type ComposeTarget,
     type PaneKey,
     type PreviewPinAt,
+    pageMessage,
     previewBox,
     previewCompose,
     previewError,
@@ -270,6 +292,40 @@
     message: string;
     again: "reload" | "close" | null;
   } | null>(null);
+  /**
+   * An act of the pane's own the hub refused (Verify, a show from the
+   * title's menu): said on the same line, with Try again, kept through a
+   * reload (refusals.svelte.ts), until a try goes.
+   */
+  type PaneAct = { act: "verify" } | { act: "show"; id: string; name: string };
+  const actKey = $derived(`pane:${instanceId}`);
+  const paneRefused = $derived(refusals.get(actKey));
+  /** The refused act's Try again is running. */
+  let rerunning = $state(false);
+  async function rerun(): Promise<void> {
+    const asked = paneRefused?.asked as PaneAct | undefined;
+    if (!asked) {
+      return;
+    }
+    rerunning = true;
+    try {
+      if (asked.act === "verify") {
+        await verify();
+        return;
+      }
+      try {
+        await showArtifact(instanceId, asked.id);
+        refusals.delete(actKey);
+      } catch (error) {
+        refusals.set(actKey, {
+          reason: `${asked.name} was not shown: ${failureClause(error)}.`,
+          asked,
+        });
+      }
+    } finally {
+      rerunning = false;
+    }
+  }
   let well = $state<HTMLDivElement>();
   /** The session's panel, row and machines, from whichever store this tree set (pane-fleet.ts). */
   const fleet = paneFleet();
@@ -350,23 +406,22 @@
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
    * which answers any page with no credentials, and answers 502 with the
    * hub's words when the session's machine listener doesn't answer the hub),
-   * before the frame loads. Unreached, the pane says what failed, what
-   * previews need and where to switch how they are reached, and probes again
-   * by itself (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once
-   * when its tab is back in view) until one answers: never a fallback. Once
-   * reached, the frame loads, once.
+   * before the frame loads. Unreached, the pane says what failed by its own
+   * cause (core preview-reach.ts: offline, refused at once, no answer in
+   * time, answered without its CORS header, a status, and whether the hub
+   * itself reaches the origin), the fix, and probes again by itself
+   * (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once when its tab
+   * is back in view) until one answers: never a fallback. Once reached, the
+   * frame loads, once.
    */
   let reached = $state<
     | { origin: string; ok: true }
-    | { origin: string; ok: false; said: string; hub: boolean; tries: number }
+    | { origin: string; ok: false; said: string; tries: number }
     | null
   >(null);
   /** Each one probes the origin again: Try again's press, the backoff's timer, the tab back in view. */
   let probe = $state(0);
   let probing = $state(false);
-  let previewsNeedFor = $state({ origin: "", said: "" });
-  /** Our call: a probe that hasn't answered in 10 s is a failed one, and the next goes on the backoff. */
-  const PROBE_ANSWER_MS = 10_000;
   /** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
   const PROBE_FIRST_MS = 2000;
   const PROBE_MOST_MS = 30_000;
@@ -379,15 +434,18 @@
     }
     let live = true;
     probing = true;
-    pingOrigin(origin).then(async (failed) => {
+    probePreview(origin, (asked) =>
+      askHubReach(`${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`)
+    ).then(async (failed) => {
+      const said = failed
+        ? previewUnreachedWords(
+            new URL(origin).host,
+            failed,
+            await previewsNeed(origin)
+          )
+        : "";
       if (!live) {
         return;
-      }
-      if (failed && !failed.hub && previewsNeedFor.origin !== origin) {
-        previewsNeedFor = { origin, said: await previewsNeed(origin) };
-        if (!live) {
-          return;
-        }
       }
       probing = false;
       const was = untrack(() => reached);
@@ -395,7 +453,7 @@
         ? {
             origin,
             ok: false,
-            ...failed,
+            said,
             tries: was?.origin === origin && !was.ok ? was.tries + 1 : 1,
           }
         : { origin, ok: true };
@@ -432,62 +490,24 @@
     reached && !reached.ok && reached.origin === paneOrigin ? reached : null
   );
   const unreached = $derived(!!paneOrigin && !!unreachedBy);
-  /**
-   * What `origin`'s probe failed on, after its host: no answer, a status,
-   * or the hub's own words (`hub`, so the origin itself was reached); null
-   * when it answered ok.
-   */
-  async function pingOrigin(
-    origin: string
-  ): Promise<{ said: string; hub: boolean } | null> {
-    const { host } = new URL(origin);
-    const read = await readWithin(PROBE_ANSWER_MS, (signal) =>
-      fetch(`${origin}${PREVIEW_PING_PATH}`, {
-        mode: "cors",
-        credentials: "omit",
-        cache: "no-store",
-        signal,
-      })
-    ).catch(() => null);
-    if (read?.kind !== "answered") {
-      return {
-        said: read
-          ? `${host} didn't answer within ${PROBE_ANSWER_MS / 1000} s`
-          : `${host} didn't answer`,
-        hub: false,
-      };
-    }
-    const answer = read.value;
-    if (answer.ok) {
-      return null;
-    }
-    const why = await answer
-      .json()
-      .then((body: { why?: unknown }) =>
-        typeof body?.why === "string"
-          ? body.why.replace(TRAILING_STOP, "")
-          : null
-      )
-      .catch(() => null);
-    return why
-      ? { said: `${host} answered ${answer.status}: ${why}`, hub: true }
-      : { said: `${host} answered ${answer.status}`, hub: false };
-  }
-  const TRAILING_STOP = /\.$/;
-  /** What previews need to be reached from this tab, by the route it took. */
+  /** What previews need to be reached from this tab, by the route it took (core `previewsNeedWords`); the hub's port range read once. */
+  let portsRead: Promise<PreviewSettings | null> | null = null;
   async function previewsNeed(origin: string): Promise<string> {
     if (byHost) {
-      return `Previews need ${new URL(origin).host} to reach the hub, or switch previews to ports`;
+      return previewsNeedWords({ byHost: true, host: new URL(origin).host });
     }
-    const settings = await fetch("/api/preview-settings")
+    portsRead ??= fetch("/api/preview-settings")
       .then((answer) =>
         answer.ok ? (answer.json() as Promise<PreviewSettings>) : null
       )
       .catch(() => null);
-    const ports = `Previews need ports ${settings?.ports ?? "of the hub's range"} reachable on ${location.hostname}`;
-    return settings?.mode === "host"
-      ? ports
-      : `${ports}, or switch previews to a hostname pattern`;
+    const settings = await portsRead;
+    return previewsNeedWords({
+      byHost: false,
+      hostname: location.hostname,
+      ports: settings?.ports ?? null,
+      hostMode: settings?.mode === "host",
+    });
   }
   const artifact = $derived(preview?.artifact);
   const frameKey = $derived(`${preview?.revision}:${reload}`);
@@ -685,7 +705,7 @@
       case null:
         break;
     }
-    return `${ownerMachine} isn't answering`;
+    return previewWords.machineNotAnswering(ownerMachine);
   });
   /** Open its session, beside Try again, wherever this pane is not that session's own. */
   const offerSession = $derived(!!owner && (linkSession || ownTab));
@@ -762,10 +782,19 @@
       return;
     }
     saidFor = revision;
-    artifactShown(instanceId, id, { revision, ...word }).catch(() => {
-      // Unheard: the next change of state says it again.
-      saidFor = null;
-    });
+    const sawIt = word.ok;
+    artifactShown(instanceId, id, { revision, ...word }).then(
+      () => {
+        // On screen and heard: it reached the person, and Files lists it.
+        if (sawIt) {
+          artifactReached(instanceId, id);
+        }
+      },
+      () => {
+        // Unheard: the next change of state says it again.
+        saidFor = null;
+      }
+    );
   });
 
   /**
@@ -1171,18 +1200,15 @@
       : 0
   );
   /**
-   * What Send sends (DESIGN.md, Sending comments): everything of the page
-   * the session hasn't heard, picks and comments alike: each pick since the
-   * last Send, each comment with something unsent (itself, a reply, a
-   * resolve), each stroke group no comment stands on. Drawn only above 0.
+   * What Send sends (DESIGN.md, How comments reach the session): each pick
+   * since the last Send. The person's comments go by themselves. Drawn only
+   * above 0.
    */
   const unsentCount = $derived(
     view
       ? Object.values(view.choices).filter(
           (entry) => !view?.sentAt || entry.at > view.sentAt
-        ).length +
-          pins.filter(pinUnsent).length +
-          view.looseInk
+        ).length
       : 0
   );
   /** The pane's own width, px: the rail's room is the pane's, not the window's. */
@@ -1234,6 +1260,8 @@
       id,
       (next) => {
         view = next;
+        // A chip naming this artifact, a pin or a card of it reads it live from here.
+        holdArtifact(id, { pins: next.pins, choices: next.choices });
         // A pin the pane's doc holds now is its own from here on: the page's
         // copy goes, so a later delete or take-back there never brings it back.
         const held = new Set(next.pins.map((pin) => pin.id));
@@ -1255,8 +1283,20 @@
     view = null;
     return () => {
       joined.destroy();
+      releaseArtifact(id);
       doc = null;
     };
+  });
+  // What this pane holds names itself to the chips that name it: no chip asks the hub for it.
+  $effect(() => {
+    const shown = artifact;
+    if (shown) {
+      noteArtifact(shown.id, {
+        instanceId,
+        kind: shown.kind,
+        name: shown.name,
+      });
+    }
   });
 
   /*
@@ -1265,32 +1305,10 @@
    * stands over the thread, where Caw answers with the files and "Open the
    * board". The `sentAt` it opened with is not a send.
    */
-  /** The note for the agent the next Send carries first (the rail's Send bar). */
-  let note = $state("");
-  /** Waiting for the page to say its pictures reached the hub, before a Send. */
-  let picturesWaiter: (() => void) | null = null;
-  /** The page's pictures of what is unheard, to the hub before the Send that carries them; at most a while. Our call: 3 s. */
-  function picturesFirst(): Promise<void> {
-    if (!(connected && iframe)) {
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      const done = () => {
-        clearTimeout(cap);
-        picturesWaiter = null;
-        resolve();
-      };
-      const cap = setTimeout(done, 3000);
-      picturesWaiter = done;
-      post({ type: "cawco:pictures-now" });
-    });
-  }
   /**
    * Send: the hub's send, which applies a setup page's fleet choices and
-   * place first, delivers every comment, reply, resolve and stroke the
-   * session hasn't heard as one message with the note first, and tells the
-   * session of the page's picks. A refusal is said in the band over the
-   * page, and what it carried stays unsent.
+   * place first and tells the session of the page's picks. A refusal is
+   * said in the band over the page, and the picks stay unsent.
    */
   async function sendAll() {
     if (!artifact || sending) {
@@ -1298,13 +1316,71 @@
     }
     sending = true;
     try {
-      await picturesFirst();
-      await sendArtifact(instanceId, artifact.id, note);
-      note = "";
+      await sendArtifact(instanceId, artifact.id);
     } catch (error) {
       failure = { message: failureWords(error), again: null };
     } finally {
       sending = false;
+    }
+  }
+  /** The comments whose Try again is on its way. */
+  let pinsRetrying = $state.raw<ReadonlySet<string>>(new Set());
+  /**
+   * Why comment `id` hasn't reached the session, in words, when it is
+   * owed for a reason: a delivery of it no one took (the hub's `notSent`),
+   * or it stands only in the page's doc, which hasn't reached the hub (what
+   * closed its link, else that it hasn't yet), kept on the device meanwhile.
+   */
+  const notSentWhy = (pin: Pin): string | null =>
+    pin.notSent?.why ??
+    (onlyOnPage(pin.id) ? (linkDown ?? commentWords.notOnHub) : null);
+  /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
+  const REACH_HUB_MS = 10_000;
+  /** A reason's own full stop, which the sentence that quotes it puts back. */
+  const REASON_STOP = /\.$/;
+  /** Resolves once the pane's doc holds comment `id` (the page's link carried it to the hub); rejects, saying why, when it doesn't within {@link REACH_HUB_MS}. */
+  const reachedHub = (id: string) =>
+    new Promise<void>((resolve, reject) => {
+      const started = Date.now();
+      const look = setInterval(() => {
+        if (view?.pins.some((pin) => pin.id === id)) {
+          clearInterval(look);
+          resolve();
+        } else if (Date.now() - started > REACH_HUB_MS) {
+          clearInterval(look);
+          reject(
+            new Error(
+              `This comment hasn't reached the hub: ${(linkDown ?? commentWords.notOnHub).replace(REASON_STOP, "")}. It's kept on this device, and goes once its link is back.`
+            )
+          );
+        }
+      }, 200);
+    });
+  /**
+   * A comment's Try again (its row's, its thread's), for one not sent. One
+   * only the page holds yet has its link opened again, and goes by itself
+   * once it is on the hub. One whose delivery no one took goes now. A Try
+   * again no one took says why on the pin itself (the hub's `notSent`,
+   * which the doc brings back) as well as in the band over the page.
+   */
+  async function retryPin(id: string) {
+    if (!artifact || pinsRetrying.has(id)) {
+      return;
+    }
+    pinsRetrying = new Set([...pinsRetrying, id]);
+    try {
+      if (onlyOnPage(id)) {
+        // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
+        post({ type: "cawco:resend-pin", id });
+        relink();
+        await reachedHub(id);
+      } else {
+        await retryComment(instanceId, artifact.id, id);
+      }
+    } catch (error) {
+      failure = { message: failureWords(error), again: null };
+    } finally {
+      pinsRetrying = new Set([...pinsRetrying].filter((one) => one !== id));
     }
   }
   let sentSeen: string | null | undefined;
@@ -1414,8 +1490,16 @@
   let cardError = $state<string | null>(null);
   /** The open thread's reply is on its way. */
   let replying = $state(false);
+  /**
+   * The room over the page a pin's card stands in: read as it mounts, and a
+   * change in the next frame (frameSize).
+   */
   let roomW = $state(0);
   let roomH = $state(0);
+  const measureRoom = frameSize<HTMLElement>((node) => {
+    roomW = node.clientWidth;
+    roomH = node.clientHeight;
+  });
   const cardPin = $derived(pins.find((pin) => pin.id === openPin) ?? null);
   /** The open thread's element's nearest parent, as the page names its chain (`cawco:pin-chain`). */
   let cardParent = $state<{ id: string; name: string | null } | null>(null);
@@ -1508,49 +1592,25 @@
     );
   });
   /**
-   * The agent's answer the person has read, per pin: its newest agent entry
-   * as it stood when its thread was last open, kept on this device per
-   * artifact. A pin whose newest agent entry is another is unread.
+   * The pins with an answer the person hasn't looked at (core `newAnswer`:
+   * an agent's entry or resolve newer than his last look, the pin's
+   * `seenAt` in the doc, so it holds on every device). The open thread is
+   * being looked at.
    */
-  let readUpTo = $state<Record<string, string>>({});
-  const readKey = $derived(
-    artifactId ? `cawco-comments-read:${artifactId}` : null
-  );
-  $effect.pre(() => {
-    const key = readKey;
-    untrack(() => {
-      readUpTo = key ? readJson<Record<string, string>>(key, {}) : {};
-    });
-  });
-  const lastAgent = (pin: Pin) =>
-    pin.thread.findLast((entry) => entry.by === "agent") ?? null;
   const unread = $derived(
     new Set(
       pins
-        .filter((pin) => {
-          const answer = lastAgent(pin);
-          return (
-            !!answer &&
-            !pin.resolvedAt &&
-            pin.id !== openPin &&
-            readUpTo[pin.id] !== answer.id
-          );
-        })
+        .filter((pin) => pin.id !== openPin && newAnswer(pin))
         .map((pin) => pin.id)
     )
   );
-  // The open thread is read: its newest answer stops being unread.
+  // The open thread is looked at: what the agent answered there is seen, on every device.
   $effect(() => {
     const pin = cardPin;
-    const key = readKey;
-    const answer = pin ? lastAgent(pin) : null;
-    if (!(pin && key && answer) || readUpTo[pin.id] === answer.id) {
+    if (!(pin && doc && newAnswer(pin)) || onlyOnPage(pin.id)) {
       return;
     }
-    untrack(() => {
-      readUpTo = { ...readUpTo, [pin.id]: answer.id };
-      writeJson(key, readUpTo);
-    });
+    untrack(() => doc?.see(pin.id));
   });
   // Each pill's dot on the page: the agent at work on it, or an answer unread.
   $effect(() => {
@@ -1562,6 +1622,143 @@
       );
     }
   });
+  /*
+   * Changed since you looked (PRD §5.7, "Pointing and what changed"): what
+   * the latest revision changed (the hub's `meta.changes`) less what the
+   * person has looked at (the doc's `seen`), each washed on the page in the
+   * done wash; and the pins with an answer he hasn't looked at. The tag at
+   * the well's top steps through them in page order, a pin and its changed
+   * element one stop: a step brings it out and chooses it, and opens a
+   * pin's thread; each is seen as it is stepped onto, and all of them on
+   * his Send (the hub's).
+   */
+  const unseenChanges = $derived.by((): ChangedItem[] => {
+    const changes = view?.changes;
+    const seen = view?.seen;
+    return changes && seen
+      ? changes.items.filter((item) => !seen.has(item.anchor))
+      : [];
+  });
+  /** The stops as the page orders them (`cawco:change-stops`): each change's anchors and the pin standing with it. */
+  let pageStops = $state.raw<{ anchors: string[]; pin: string | null }[]>([]);
+  $effect(() => {
+    const anchors = unseenChanges
+      .filter((item) => item.kind === "element" || item.kind === "card")
+      .map((item) => item.anchor);
+    const answered = [...unread];
+    if (connected) {
+      untrack(() => post({ type: "cawco:changes", anchors, pins: answered }));
+    }
+  });
+  /** One stop of the tag: what changed there, the pin standing with it, and its words. */
+  interface ChangeStop {
+    anchors: string[];
+    label: string;
+    pin: string | null;
+  }
+  /** The stops not looked at yet, in page order, then what was taken out (no box to wash). */
+  const changeStops = $derived.by((): ChangeStop[] => {
+    const labels = new Map(
+      unseenChanges.map((item) => [item.anchor, item.label])
+    );
+    const pinLabel = (id: string) => {
+      const pin = pins.find((one) => one.id === id);
+      return pin ? `Pin ${pin.number} · ${pinName(pin)}` : "";
+    };
+    const told = new Set<string>();
+    const stops: ChangeStop[] = [];
+    for (const stop of pageStops) {
+      const anchors = stop.anchors.filter((anchor) => labels.has(anchor));
+      const pin = stop.pin && unread.has(stop.pin) ? stop.pin : null;
+      for (const anchor of anchors) {
+        told.add(anchor);
+      }
+      if (anchors.length > 0 || pin) {
+        stops.push({
+          anchors,
+          pin,
+          label: anchors[0]
+            ? (labels.get(anchors[0]) ?? "")
+            : pinLabel(pin ?? ""),
+        });
+      }
+    }
+    for (const item of unseenChanges) {
+      if (!told.has(item.anchor)) {
+        stops.push({ anchors: [item.anchor], pin: null, label: item.label });
+      }
+    }
+    return stops;
+  });
+  /** The stops as they stood at the first step: "k of N" counts them while he steps. */
+  let tour = $state.raw<ChangeStop[] | null>(null);
+  let tourAt = $state(0);
+  // Every stop looked at: the tag leaves, and the next revision starts afresh.
+  $effect(() => {
+    if (changeStops.length === 0 && tour) {
+      tour = null;
+    }
+  });
+  /** The page's stops as it said them, each a list of anchors and a pin or none; anything else left out. */
+  const changeStopsOf = (value: unknown): typeof pageStops =>
+    Array.isArray(value)
+      ? value.flatMap((one: unknown) => {
+          const stop = one as { anchors?: unknown; pin?: unknown } | null;
+          return stop &&
+            Array.isArray(stop.anchors) &&
+            stop.anchors.every((anchor) => typeof anchor === "string") &&
+            (stop.pin === null || typeof stop.pin === "string")
+            ? [{ anchors: stop.anchors as string[], pin: stop.pin }]
+            : [];
+        })
+      : [];
+  /** A step of the tag: by one stop each way, or the first when it starts; brought out, chosen and seen. */
+  function stepChange(by: 1 | -1 | 0) {
+    const stops = tour ?? changeStops;
+    if (stops.length === 0) {
+      return;
+    }
+    if (tour) {
+      tourAt = (tourAt + by + stops.length) % stops.length;
+    } else {
+      tour = stops;
+      tourAt = by === -1 ? stops.length - 1 : 0;
+    }
+    const stop = stops[tourAt];
+    if (!stop) {
+      return;
+    }
+    const [anchor] = stop.anchors;
+    if (anchor && !anchor.startsWith("removed:")) {
+      post({ type: "cawco:show-element", selector: anchor, outline: "chosen" });
+    }
+    const revision = view?.changes?.revision;
+    if (revision !== undefined && stop.anchors.length > 0) {
+      doc?.seeChanges(revision, stop.anchors);
+    }
+    if (stop.pin) {
+      openCard(stop.pin, "key");
+    }
+  }
+  /** The person pressed a washed element in Interact mode: he has looked at it. */
+  function changePressed(anchor: unknown) {
+    const revision = view?.changes?.revision;
+    if (typeof anchor === "string" && revision !== undefined) {
+      doc?.seeChanges(revision, [anchor]);
+    }
+  }
+  /** J and K step the tag while it holds the focus; elsewhere they step the pins. */
+  function tagKey(event: KeyboardEvent) {
+    const key = event.key.toLowerCase();
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
+    if (key === "j" || key === "k") {
+      event.preventDefault();
+      stepChange(key === "j" ? 1 : -1);
+    }
+  }
+
   /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
   const stepping = $derived(
     pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
@@ -1665,16 +1862,83 @@
   }
   /**
    * The composer closes with nothing written (Esc, a press outside it, a
-   * mode switch): its hollow pill goes from the page. Its words and chips
-   * stay as the next comment's draft, an upload in flight going on.
+   * mode switch, a thread opened). Holding words or chips, it is parked
+   * (The Work Outlives Its Surface Rule): its hollow pill stays at its
+   * target saying it holds a draft, and one press on it opens the composer
+   * again with them; its words and chips stay as the next comment's draft,
+   * an upload in flight going on. Empty, its pill goes.
    */
   function cancelComposer() {
     if (!composing) {
       return;
     }
     composing = null;
-    post({ type: "cawco:compose-cancel" });
+    if (nextDraft?.hasContent) {
+      post({ type: "cawco:compose-park" });
+      keepDraftAt(keptDraft ? { ...keptDraft, parked: true } : null);
+    } else {
+      post({ type: "cawco:compose-cancel" });
+      keepDraftAt(null);
+    }
     post({ type: "cawco:composer-ring", on: false });
+  }
+  /**
+   * Where the next comment's draft stands, kept on this device per artifact
+   * beside its words (the draft store): its target as the page named it,
+   * the point on it, and whether its composer is open or parked. A reload
+   * brings it back at its target as it was.
+   */
+  interface KeptDraft {
+    inkId?: string;
+    parked: boolean;
+    point?: { x: number; y: number };
+    target: ComposeTarget;
+  }
+  let keptDraft: KeptDraft | null = null;
+  const draftKey = $derived(
+    artifactId ? `cawco-comment-draft:${artifactId}` : null
+  );
+  function keepDraftAt(next: KeptDraft | null) {
+    keptDraft = next;
+    if (draftKey) {
+      writeJson(draftKey, next);
+    }
+  }
+  /** What the page said of a draft it opened (`cawco:compose`): kept, open. */
+  function keepComposed(
+    said: { chain: ComposeTarget[]; chosen: number },
+    message: Record<string, unknown>
+  ) {
+    const target = said.chain[said.chosen];
+    if (!target) {
+      return;
+    }
+    const point = message.point as { x?: unknown; y?: unknown } | undefined;
+    keepDraftAt({
+      target,
+      parked: false,
+      ...(typeof point?.x === "number" && typeof point.y === "number"
+        ? { point: { x: point.x, y: point.y } }
+        : {}),
+      ...(typeof message.inkId === "string" ? { inkId: message.inkId } : {}),
+    });
+  }
+  /** A page loaded again: the draft kept for it comes back at its target, parked or open, once per load. */
+  function restoreDraft() {
+    const key = draftKey;
+    const kept = key ? readJson<KeptDraft | null>(key, null) : null;
+    keptDraft = kept;
+    if (!kept?.target?.anchor || composing) {
+      return;
+    }
+    if (!kept.parked) {
+      loadKit();
+    }
+    post({
+      type: "cawco:compose-restore",
+      target: { ...kept.target, point: kept.point, inkId: kept.inkId },
+      parked: kept.parked,
+    });
   }
   /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once. */
   function comment(text: string) {
@@ -1698,6 +1962,7 @@
         pageSays((pin as Pin).id, pin);
       }
       composing = null;
+      keepDraftAt(null);
       // The newest comment is the one J and K step from.
       if (written) {
         focusedPin = (pin as Pin).id;
@@ -1755,23 +2020,75 @@
     artifactId
       ? `${location.origin}/artifact/${encodeURIComponent(artifactId)}?pin=${number}`
       : location.href;
-  /** The pin the address names (`?pin=N`), opened once its page is ready and its pins are read. */
+  /**
+   * The place the address names, opened once its page is ready and its pins
+   * are read: a pin's thread (`?pin=N`), or a decision card (`?card=<id>`).
+   */
   let linkedFor: string | null = null;
   function openLinkedPin() {
-    const number = Number(new URL(location.href).searchParams.get("pin"));
-    const pin = Number.isInteger(number)
-      ? pins.find((one) => one.number === number && !one.movedAt)
-      : undefined;
-    if (!(pin && artifactId) || linkedFor === artifactId) {
+    const asked = new URL(location.href).searchParams;
+    if (!artifactId || linkedFor === artifactId) {
       return;
     }
-    linkedFor = artifactId;
-    openCard(pin.id);
+    const card = asked.get("card");
+    if (card) {
+      linkedFor = artifactId;
+      showCard(card);
+      return;
+    }
+    const number = Number(asked.get("pin"));
+    if (openPinNumbered(number)) {
+      linkedFor = artifactId;
+    }
   }
   $effect(() => {
     if (connected && view) {
       untrack(openLinkedPin);
     }
+  });
+  /** Pin `number`'s thread opened, when the page holds it; whether it did. */
+  function openPinNumbered(number: number): boolean {
+    const pin = Number.isInteger(number)
+      ? pins.find((one) => one.number === number)
+      : undefined;
+    if (!pin) {
+      return false;
+    }
+    if (pin.resolvedAt || pin.movedAt) {
+      // Off the page: its thread opens from its row, in Resolved or Open.
+      listFilter = pin.resolvedAt ? "resolved" : "open";
+      showList(true);
+    }
+    openCard(pin.id);
+    return true;
+  }
+  /** Decision card `card` brought into view and outlined for a moment. */
+  function showCard(card: string) {
+    post({
+      type: "cawco:show-element",
+      selector: `#decision-${CSS.escape(card)}`,
+      outline: "flash",
+    });
+  }
+  /*
+   * A chip's press (artifact-names.svelte.ts `askOpen`): once the page is
+   * up and its pins are read, the place it names opens, once: a pin's
+   * thread, a decision card, or the artifact as it is.
+   */
+  $effect(() => {
+    const id = artifactId;
+    const at = id ? openAsked(id) : null;
+    if (!(id && at && connected && view)) {
+      return;
+    }
+    untrack(() => {
+      takeOpen(id);
+      if ("pin" in at) {
+        openPinNumbered(at.pin);
+      } else if ("card" in at) {
+        showCard(at.card);
+      }
+    });
   });
   /**
    * The open thread's Pin it somewhere else: Comment mode, its thread still
@@ -2032,8 +2349,11 @@
       picking = { id: ask };
       return;
     }
-    const message = event.data;
-    switch (message?.type) {
+    const message = pageMessage(event.data);
+    if (!message) {
+      return;
+    }
+    switch (message.type) {
       case "cawco:ready":
       case "cawco:navigated": {
         const at = previewUrl(message.url, paneOrigin);
@@ -2065,6 +2385,7 @@
             showPins(false);
           }
           openLinkedPin();
+          restoreDraft();
           if (openPin) {
             post({ type: "cawco:track-pin", id: openPin });
           }
@@ -2153,6 +2474,7 @@
           error: "",
           sending: false,
         };
+        keepComposed(said, message);
         break;
       }
       case "cawco:compose-at":
@@ -2183,14 +2505,40 @@
       case "cawco:peek":
         heardPeek(message);
         break;
-      case "cawco:pictures-sent":
-        picturesWaiter?.();
+      case "cawco:change-stops":
+        pageStops = changeStopsOf(message.stops);
+        break;
+      case "cawco:change-pressed":
+        changePressed(message.anchor);
         break;
       // What the page said of a write the pane sent it for a pin it holds alone.
       case "cawco:reply-result":
       case "cawco:resolve-result":
       case "cawco:delete-result":
         heardPageWrite(message.type, message);
+        break;
+      case "cawco:page-pins":
+        // The pins the page holds while its link isn't synced (a reload's, given back by the device among them): those the pane's doc lacks stand as the page's.
+        for (const pin of Array.isArray(message.pins) ? message.pins : []) {
+          const one = pin as Partial<Pin> | null;
+          const id = one?.id;
+          if (
+            !(typeof id === "string" && one) ||
+            view?.pins.some((held) => held.id === id)
+          ) {
+            continue;
+          }
+          // One the hub refused breaks a bound by its nature (the hub's reason says which): it is listed whole, so its words stay in reach.
+          if (
+            one.notSent &&
+            typeof one.number === "number" &&
+            Array.isArray(one.thread)
+          ) {
+            pagePins = { ...pagePins, [id]: one as Pin };
+          } else {
+            pageSays(id, pin);
+          }
+        }
         break;
       case "cawco:sync":
         // The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood, or at once when lost to silence.
@@ -2253,8 +2601,6 @@
         }
         break;
       }
-      default:
-        break;
     }
   }
   /**
@@ -2439,10 +2785,19 @@
       return;
     }
     verifying = true;
+    const key = actKey;
     try {
       toast.info(await verifyArtifact(instanceId, artifact.id));
+      if ((refusals.get(key)?.asked as PaneAct | undefined)?.act === "verify") {
+        refusals.delete(key);
+      }
     } catch (error) {
-      toast.error(failureWords(error));
+      // Said on the pane's own line, with Try again, never a toast
+      // (DESIGN.md, The Work Outlives Its Surface Rule).
+      refusals.set(key, {
+        reason: `${artifact.name} was not verified: ${failureClause(error)}. The canvas stays as it is.`,
+        asked: { act: "verify" } satisfies PaneAct,
+      });
     } finally {
       verifying = false;
     }
@@ -2700,7 +3055,7 @@
       value={mode}
       values={["interact", "comment", "draw"]}
     >
-      <TabsList aria-label="Preview mode">
+      <TabsList aria-label={previewWords.previewMode}>
         <TabItem
           aria-keyshortcuts="V"
           glyphOnly
@@ -2842,6 +3197,16 @@
       line={headLine}
       lineDropped={!lineStands}
       lineId={`${paneId}-line`}
+      onrefused={(reason, chosen) => {
+        refusals.set(actKey, {
+          reason,
+          asked: {
+            act: "show",
+            id: chosen.id,
+            name: chosen.name,
+          } satisfies PaneAct,
+        });
+      }}
       shown={artifact}
     />
   {/if}
@@ -2866,14 +3231,13 @@
     }}
     onresolve={(id, resolved) => resolvePin(resolved, id)}
     onretry={relink}
-    onsend={sendAll}
+    onretrypin={retryPin}
     open={openPin}
+    whyNotSent={notSentWhy}
     {pins}
-    {sending}
+    retrying={pinsRetrying}
     {unread}
-    unsent={unsentCount}
     bind:filter={listFilter}
-    bind:note
     bind:scroll={listScroll}
     bind:sort={railSort}
   />
@@ -2906,6 +3270,7 @@
     class="@container flex flex-col flex-1 min-h-0"
     bind:this={section}
   >
+    {@render changesBar()}
     <div
       class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-well rounded-sm bg-surface-well"
       bind:this={well}
@@ -2926,6 +3291,7 @@
     subtitleId={`${paneId}-line`}
     {switcher}
     titleControl={artifact ? artifactTitle : undefined}
+    above={changesBar}
     beside={railBeside}
     bind:section
     bind:subtitleStands={lineStands}
@@ -2934,6 +3300,65 @@
     {@render framed()}
   </SideSurface>
 {/if}
+
+<!-- Changed since you looked, in its own room above the well (DESIGN.md, Changed since you looked). -->
+{#snippet changesBar()}
+  {#if changeStops.length > 0 && !isCanvas}
+    {@const total = tour?.length ?? changeStops.length}
+    <!-- Changed since you looked: its own bar between the head and the
+           well, so it never stands over the page (the page starts under
+           it), stepping through the stops (‹ ›; J and K while it holds the
+           focus). -->
+    <div
+      data-slot="changes-bar"
+      class="flex flex-none justify-center min-w-0 pb-space-2"
+      in:rise={"--dur-panel"}
+      out:rise={"--dur-exit"}
+    >
+      <fieldset
+        data-slot="changes-tag"
+        aria-label={commentWords.changedSince(total)}
+        class="mark-line w-fit max-w-full p-0 m-0 min-w-0 flex items-center h-c-btn-h-sm coarse:h-c-btn-h-lg border border-border-hairline rounded-md bg-surface-raised text-size-label font-medium text-ink-strong"
+      >
+        <button
+          aria-label={commentWords.previousChange}
+          class="touch-hit grid place-items-center h-full px-space-2 rounded-s-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+          data-box
+          data-slot="change-previous"
+          onkeydown={tagKey}
+          onclick={() => stepChange(-1)}
+          title={commentWords.previousChange}
+          type="button"
+        >
+          <IconChevronLeft class="size-icon-md" />
+        </button>
+        <button
+          class="touch-hit min-w-0 h-full px-space-1 overflow-clip text-ellipsis whitespace-nowrap num can-hover:hover:bg-surface-hover"
+          data-slot="change-count"
+          onkeydown={tagKey}
+          onclick={() => stepChange(tour ? 0 : 1)}
+          type="button"
+        >
+          {tour
+            ? commentWords.changeOf(tourAt + 1, total)
+            : commentWords.changedSince(total)}
+        </button>
+        <button
+          aria-label={commentWords.nextChange}
+          class="touch-hit grid place-items-center h-full px-space-2 rounded-e-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+          data-box
+          data-slot="change-next"
+          onkeydown={tagKey}
+          onclick={() => stepChange(1)}
+          title={commentWords.nextChange}
+          type="button"
+        >
+          <IconChevronRight class="size-icon-md" />
+        </button>
+      </fieldset>
+    </div>
+  {/if}
+{/snippet}
 
 <!-- The page in the well, and what stands over it: the panel's and an
      inset's alike. -->
@@ -2947,26 +3372,24 @@
       bind:this={canvasSlot}
     ></div>
   {:else if unreached}
-    <!-- This tab can't reach the preview's own origin: what failed, what
-         previews need unless the hub itself answered, and where to switch
-         how they are reached. -->
+    <!-- This tab can't reach the preview's own origin: what failed, by its
+         own cause, its fix, and where to switch how previews are reached. -->
     <div
       data-slot="down"
       class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
       role="alert"
       transition:appear
     >
-      <EmptyState icon={IconAlert} title="This preview can't be reached">
+      <EmptyState icon={IconAlert} title={previewWords.cantBeReached}>
         {#snippet line()}
-          {unreachedBy?.said}.
-          {#if !unreachedBy?.hub && previewsNeedFor.origin === paneOrigin}{previewsNeedFor.said}.{/if}
-          Trying again on its own.
+          {unreachedBy?.said}
+          {previewWords.tryingAgain}
         {/snippet}
         {#snippet action()}
           <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
-              label="Try again"
+              label={commonWords.tryAgain}
               onclick={() => {
                 probe += 1;
               }}
@@ -3036,13 +3459,21 @@
       class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
       role={stageWaiting ? "status" : undefined}
     >
-      <Skeleton
-        class="w-2/5"
-        data-slot="block"
-        line="body"
-        radius="text"
-        reveal="wait-grace"
-      />
+      <!-- Unseen until the wait has lasted --dur-wait-grace, then fading up
+           (The Real Wait Rule); held still, pulse and all, once the cover is
+           ready and fading out. The wrapper carries the wait, so the
+           skeleton's own opacity is its pulse's. -->
+      <div
+        class="animate-wait-grace-in group-data-ready/cover:animation-paused"
+      >
+        <Skeleton
+          class="w-2/5"
+          data-slot="block"
+          hold="cover"
+          line="body"
+          radius="text"
+        />
+      </div>
       {#if stageWaiting}
         <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
         <p
@@ -3133,7 +3564,9 @@
                 data-details
                 aria-controls={stageDetailsId}
                 aria-expanded={stageDetails}
-                label={stageDetails ? "Hide details" : "Show details"}
+                label={stageDetails
+                  ? shellWords.hideDetails
+                  : shellWords.showDetails}
                 onclick={() => {
                   stageDetails = !stageDetails;
                 }}
@@ -3194,7 +3627,9 @@
                 data-details
                 aria-controls={stageDetailsId}
                 aria-expanded={stageDetails}
-                label={stageDetails ? "Hide details" : "Show details"}
+                label={stageDetails
+                  ? shellWords.hideDetails
+                  : shellWords.showDetails}
                 onclick={() => {
                   stageDetails = !stageDetails;
                 }}
@@ -3232,12 +3667,12 @@
             session there is back, try again.
           {:else if shownDown === "server"}
             {downPort
-              ? `Nothing is running on port ${downPort} on ${ownerMachine}, so the page can't load.`
+              ? `${previewWords.nothingOnPort(downPort)} on ${ownerMachine}, so the page can't load.`
               : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}
             {#if served}
               CawCo starts it again by itself; try again in a moment.
             {:else if offerSession}
-              Start it again from its session, then try again.
+              {previewWords.startFromSession}
             {:else}
               Start it again, then try again.
             {/if}
@@ -3268,7 +3703,7 @@
           <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
-              label="Try again"
+              label={commonWords.tryAgain}
               onclick={retry}
               pending={retrying}
               pendingLabel="Reloading…"
@@ -3319,8 +3754,7 @@
     class="absolute inset-0 pointer-events-none"
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     bind:this={pinRoom}
-    bind:clientHeight={roomH}
-    bind:clientWidth={roomW}
+    {@attach measureRoom}
   >
     {#if composing && kit && nextDraft}
       {@const Composer = kit.CommentComposer}
@@ -3387,11 +3821,18 @@
           onreply={(text) => reply(text)}
           onresolve={(resolved) => resolvePin(resolved)}
           onring={(on) => post({ type: "cawco:composer-ring", on })}
+          onretry={() => {
+            if (cardPin) {
+              retryPin(cardPin.id);
+            }
+          }}
           parent={cardParent?.id === cardPin.id ? cardParent.name : null}
           pin={cardPin}
           placing={placing === cardPin.id}
           problem={cardError}
           sending={replying}
+          retrying={pinsRetrying.has(cardPin.id)}
+          whyNotSent={notSentWhy(cardPin)}
         />
       </PinFloat>
     {/if}
@@ -3399,31 +3840,46 @@
       <PinPeek mark={peekAt.mark} pin={peekPin} room={{ w: roomW, h: roomH }} />
     {/if}
   </div>
-  {#if failure}
+  {#if failure || paneRefused}
+    <!-- The pane's own line: a frame's failure, or an act of the pane's the
+         hub refused, kept through a reload. -->
     <div
       data-slot="failure"
-      class="absolute inset-x-0 bottom-0 flex items-center gap-space-3 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
+      data-pane-failure
+      class="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
       role="alert"
       transition:appear
     >
-      <p class="flex-1 min-w-0 m-0 text-data-bad text-size-body font-normal">
-        {failure.message}
+      <p
+        class="flex-1 basis-c-draft-line min-w-0 m-0 text-data-bad text-size-body font-normal text-pretty wrap-anywhere"
+      >
+        {failure ? failure.message : paneRefused?.reason}
       </p>
-      {#if failure.again === "reload"}
+      {#if failure?.again === "reload"}
         <Button
-          label="Try again"
+          label={commonWords.tryAgain}
           onclick={retry}
           pending={retrying}
           pendingLabel="Reloading…"
           size="sm"
           variant="outline"
         />
-      {:else if failure.again === "close"}
+      {:else if failure?.again === "close"}
         <Button
-          label="Try again"
+          label={commonWords.tryAgain}
           onclick={close}
           pending={closing}
           pendingLabel="Closing…"
+          size="sm"
+          variant="outline"
+        />
+      {:else if !failure && paneRefused}
+        <Button
+          data-again
+          label={commonWords.tryAgain}
+          onclick={rerun}
+          pending={rerunning}
+          pendingLabel="Trying again…"
           size="sm"
           variant="outline"
         />

@@ -103,6 +103,7 @@ public final class FleetConfig {
             case let .ok(read): return try read.body.json.error != nil
             case let .badRequest(refused): throw await Self.refusal(try? refused.body.plainText, status: 400)
             case let .notFound(refused): throw await Self.refusal(try? refused.body.plainText, status: 404)
+            case let .serviceUnavailable(refused): throw await Self.refusal(try? refused.body.plainText, status: 503)
             case let .gatewayTimeout(refused): throw await Self.refusal(try? refused.body.plainText, status: 504)
             case let .undocumented(status, payload): throw await Self.refusal(payload.body, status: status)
             }
@@ -124,6 +125,7 @@ public final class FleetConfig {
         case let .badRequest(refused): throw await Self.refusal(try? refused.body.plainText, status: 400)
         case let .notFound(refused): throw await Self.refusal(try? refused.body.plainText, status: 404)
         case .unprocessableContent: throw await Self.refusal(nil, status: 422)
+        case let .serviceUnavailable(refused): throw await Self.refusal(try? refused.body.plainText, status: 503)
         case let .gatewayTimeout(refused): throw await Self.refusal(try? refused.body.plainText, status: 504)
         case let .undocumented(status, payload): throw await Self.refusal(payload.body, status: status)
         }
@@ -136,6 +138,7 @@ public final class FleetConfig {
         case let .notFound(refused): throw await Self.refusal(try? refused.body.plainText, status: 404)
         case .unprocessableContent: throw await Self.refusal(nil, status: 422)
         case let .internalServerError(refused): throw await Self.refusal(try? refused.body.plainText, status: 500)
+        case let .serviceUnavailable(refused): throw await Self.refusal(try? refused.body.plainText, status: 503)
         case let .gatewayTimeout(refused): throw await Self.refusal(try? refused.body.plainText, status: 504)
         case let .undocumented(status, payload): throw await Self.refusal(payload.body, status: status)
         }

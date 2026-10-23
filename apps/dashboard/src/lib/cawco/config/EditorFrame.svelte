@@ -12,17 +12,18 @@
    *
    * Every editor's sections also stand veiled under the skeleton for the
    * frame after they mount: a textarea fits its text in that frame, and a
-   * section drawn before it would move down once it has. They cross-fade in
-   * over --dur-control from their final places.
+   * section drawn before it would move down once it has. The skeleton hands
+   * its place to them in its reveal (motion/curves `reveal`), in their final
+   * places.
    */
   import { configureWords } from "@cawco/core";
   import { onMount, type Snippet, untrack } from "svelte";
-  import { fade } from "svelte/transition";
   import {
     CURVE,
     dur,
-    easeOut,
     motionOk,
+    reveal,
+    revealHere,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -220,8 +221,13 @@
       >
         <div
           data-slot="slot"
-          class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 data-veiled:invisible data-veiled:opacity-0 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+          class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 data-veiled:invisible data-veiled:opacity-0"
           data-veiled={veiled || undefined}
+          {@attach (node) => {
+            if (!veiled) {
+              revealHere(node);
+            }
+          }}
         >
           {@render children()}
         </div>
@@ -229,8 +235,8 @@
           <div
             data-slot="slot"
             aria-hidden="true"
-            class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
-            out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
+            class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0"
+            out:reveal
           >
             <SkeletonRows fill={card !== null} />
           </div>

@@ -89,6 +89,12 @@ export interface ToolSpec {
   id: string;
   /** Ordered by preference. Empty for a platform = unsupported there. */
   install: ToolInstallMethod[];
+  /**
+   * The oldest version CawCo runs, for a tool whose own updates CawCo rides
+   * (Claude Code updates itself): a copy older than it is reported `failed`
+   * with why, and an install brings it to this version or newer.
+   */
+  minVersion?: string;
   /** What the dashboard calls it. */
   name: string;
   /** Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is. */
@@ -144,14 +150,102 @@ export interface ToolPolicy {
 export const OPENCODE_VERSION = "2.0.29";
 
 /**
+ * The oldest Claude Code CawCo runs at all (agent claude-version.ts
+ * `claudeToStart`), and the floor of its catalog entry ({@link
+ * ToolSpec.minVersion}). Its reason, Claude Code's CHANGELOG under 2.1.301:
+ * "Fixed sign-in refresh timeouts and unexpected sign-outs after a short
+ * command such as `claude auth status` or `claude plugin list` exited in the
+ * middle of a token refresh". Below it, a refresh cut short can leave an
+ * account dir's stored login blank (anthropics/claude-code#88583: the lock
+ * "protect[s] the save, not the network call"), and every process on that
+ * dir is signed out after.
+ */
+export const CLAUDE_VERSION_FLOOR = "2.1.301";
+
+/**
+ * The oldest pi CLI CawCo runs a pi session beside (agent tools.ts
+ * `toolGate`), and the floor of its catalog entry. CawCo's pi sessions run on
+ * the pi library the agent embeds (`@earendil-works/pi-coding-agent` 1.3.0,
+ * packages/agent/package.json), which reads the same `~/.pi/agent/` files
+ * (`auth.json`, `settings.json`, `models.json`) the person's `pi` writes.
+ * Two releases changed what those files mean, pi's CHANGELOG: 1.0.3
+ * "Renamed the Azure provider from `azure-openai-responses` to `azure`.
+ * Rename the provider key in `auth.json` …, in `models.json`, and in
+ * `settings.json`", and 1.3.0 "`models.json` overrides of the `kimi-coding`
+ * base URL must now include `/v1`". A pi older than 1.3.0 reads and writes
+ * them by other rules than CawCo's sessions do.
+ */
+export const PI_VERSION_FLOOR = "1.3.0";
+
+const VERSION_PARTS = /^(\d+)\.(\d+)\.(\d+)/;
+
+/** Whether `version` (`x.y.z`, anything after it ignored) is older than `than`. */
+export const olderThan = (version: string, than: string): boolean => {
+  const a = VERSION_PARTS.exec(version)?.slice(1).map(Number) ?? [0, 0, 0];
+  const b = VERSION_PARTS.exec(than)?.slice(1).map(Number) ?? [0, 0, 0];
+  for (const [at, part] of a.entries()) {
+    const other = b[at] ?? 0;
+    if (part !== other) {
+      return part < other;
+    }
+  }
+  return false;
+};
+
+/**
  * The catalog. Order is display order. Verified against each tool's official
  * docs on 2026-08-06 — when an entry drifts from what an installer really
  * does, fix the entry and note the drift in NEW.md.
  */
+// Each method's command runs through the Bun shell in a folder of its own
+// (agent tools.ts `runMethod`). An installer script is downloaded to a file
+// there and then run, never piped from `curl` into a shell: the Bun shell
+// has no `pipefail` (`set` is not one of its builtins), so a pipe whose
+// download failed exits 0 from the empty script, and curl's words were the
+// only sign of it (a fresh machine with no route to claude.ai, stage 2 of
+// the nightly at cf911c631).
 export const TOOL_CATALOG: ToolSpec[] = [
   {
+    id: "claude",
+    name: "Claude Code",
+    homepage: "https://code.claude.com",
+    bin: "claude",
+    versionCommand: "claude --version",
+    minVersion: CLAUDE_VERSION_FLOOR,
+    // The native installer's link (code.claude.com/docs/en/setup), for a
+    // daemon whose PATH lacks it.
+    wellKnownPaths: ["~/.local/bin/claude"],
+    // No footprints: whatever put Claude Code here, its own updater is asked
+    // first, as the machine's user and with no sudo ("To apply an update
+    // immediately without waiting for the next background check, run:
+    // claude update", code.claude.com/docs/en/setup, read 2026-10-22). The
+    // same page: "Installs managed by Homebrew, WinGet, or apk report `Claude
+    // is up to date!` instead", so the version is read again after it and a
+    // copy still below the floor fails with what the updater said. A machine
+    // without one gets the official installer, which puts the newest build in
+    // ~/.local/bin, or the build a pin names ("curl -fsSL
+    // https://claude.ai/install.sh | bash -s 2.1.89", the same page).
+    install: [
+      {
+        label: "claude update",
+        platforms: ["linux", "darwin", "win32"],
+        needs: "claude",
+        command: "claude update",
+      },
+      {
+        label: "curl script",
+        platforms: ["linux", "darwin"],
+        needs: "curl",
+        command:
+          "curl -fsSL https://claude.ai/install.sh -o claude-install.sh && bash claude-install.sh",
+        pinnedCommand:
+          "curl -fsSL https://claude.ai/install.sh -o claude-install.sh && bash claude-install.sh {version}",
+      },
+    ],
+  },
+  {
     id: "opencode",
-    name: "opencode",
+    name: "OpenCode",
     homepage: "https://opencode.ai",
     // OpenCode 2.0's package (`@opencode/cli`) has two bins, `opencode` and
     // `opencode2` (npm view @opencode/cli@2.0.28 bin); 1.x never had
@@ -222,9 +316,43 @@ export const TOOL_CATALOG: ToolSpec[] = [
         needs: "curl",
         footprint: { kind: "dir", path: "~/.opencode/bin" },
         command:
-          "curl -fsSL https://opencode.ai/v2/install | bash -s -- --version {version} --no-modify-path",
+          "curl -fsSL https://opencode.ai/v2/install -o opencode-install.sh && bash opencode-install.sh --version {version} --no-modify-path",
         pinnedCommand:
-          "curl -fsSL https://opencode.ai/v2/install | bash -s -- --version {version} --no-modify-path",
+          "curl -fsSL https://opencode.ai/v2/install -o opencode-install.sh && bash opencode-install.sh --version {version} --no-modify-path",
+      },
+    ],
+  },
+  {
+    id: "pi",
+    name: "pi",
+    homepage: "https://pi.dev",
+    bin: "pi",
+    versionCommand: "pi --version",
+    minVersion: PI_VERSION_FLOOR,
+    // Where pi's installer links `pi` (pi.dev/install.sh read 2026-10-22,
+    // `select_managed_path_bin_dir`: "$managed_agent_dir/bin"|"$HOME/.local/bin"
+    // …), for a daemon whose PATH lacks it.
+    wellKnownPaths: ["~/.local/bin/pi", "~/.pi/agent/bin/pi"],
+    // As Claude Code's: pi's own updater first, then its installer. pi's
+    // docs/quickstart.md (1.3.0): "curl -fsSL https://pi.dev/install.sh |
+    // sh … The installer pins all dependencies and updates Pi with `pi
+    // update`", and "`pi update` cannot update a Nix installation", so the
+    // version is read again after it. With no terminal the installer goes on
+    // unasked ("No terminal detected; continuing without confirmation.", its
+    // `choose_pi_action`), as the daemon runs it.
+    install: [
+      {
+        label: "pi update",
+        platforms: ["linux", "darwin", "win32"],
+        needs: "pi",
+        command: "pi update",
+      },
+      {
+        label: "curl script",
+        platforms: ["linux", "darwin"],
+        needs: "curl",
+        command:
+          "curl -fsSL https://pi.dev/install.sh -o pi-install.sh && sh pi-install.sh",
       },
     ],
   },
@@ -247,7 +375,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
       {
         label: "curl script",
         platforms: ["linux", "darwin"],
-        command: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+        command:
+          "curl -fsSL https://antigravity.google/cli/install.sh -o agy-install.sh && bash agy-install.sh",
       },
       {
         label: "winget",
@@ -271,6 +400,26 @@ export const TOOL_CATALOG: ToolSpec[] = [
 
 export const toolSpec = (id: string): ToolSpec | undefined =>
   TOOL_CATALOG.find((spec) => spec.id === id);
+
+/**
+ * Whether `version` is one CawCo runs of `spec`: its one version
+ * ({@link ToolSpec.exactVersion}), else its floor or newer
+ * ({@link ToolSpec.minVersion}); no version said is none it runs. The one
+ * rule the agent's version gate (tools.ts `toolGate`) and the dashboard's
+ * blocks (harness-block.svelte.ts) judge a version by.
+ */
+export const toolRuns = (
+  spec: ToolSpec,
+  version: string | undefined
+): boolean => {
+  if (!version) {
+    return false;
+  }
+  if (spec.exactVersion) {
+    return version === spec.exactVersion;
+  }
+  return !(spec.minVersion && olderThan(version, spec.minVersion));
+};
 
 /**
  * Each catalog tool this build runs at one version only, that version by id:

@@ -14,6 +14,7 @@
  * `.length`, `.join(…)` and the helpers in ./helpers.
  */
 import { userLayerLabel } from "../claude-dirs";
+import { commonWords } from "./common";
 
 /** The rail's groups, in its order. */
 export const CONFIG_GROUPS = [
@@ -256,6 +257,12 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
 export const configureWords = {
   /** The place, as the sidebar and a page's title name it. */
   title: "Configure",
+  /**
+   * A Configure page named in a sentence ("Configure › Accounts"), with
+   * WORDS.md's arrow: everything that points the person at a page names it
+   * through here (configurePage, by its slug, on the web and the machines).
+   */
+  page: (label: string) => `Configure › ${label}`,
   /** A page's document title: "Accounts · Configure · CawCo". */
   documentTitle: (title: string) => `${title} · Configure · CawCo`,
   /** A rail row whose editor holds edits not saved yet. */
@@ -276,9 +283,8 @@ export const configureWords = {
   saved: "Saved",
   saving: "Saving…",
   deleting: "Deleting…",
-  /** The editor header's ⋯ (Delete, on a narrow page), and a row's. */
+  /** The editor header's ⋯ (Delete, on a narrow page), and a row's (commonWords.moreFor names it). */
   more: "More",
-  moreFor: (label: string) => `More for ${label}`,
   /** An editor whose row is not in the list. */
   gone: (what: string) => `That ${what} is gone`,
   goneLine: "It was deleted, or the link is from another hub.",
@@ -286,8 +292,14 @@ export const configureWords = {
   /** The toast after a delete, which goes through at once: Undo for as long as the hub keeps it. */
   undo: "Undo",
   /** A row's refused action, said under it, offers it again. */
-  tryAgain: "Try again",
+  tryAgain: commonWords.tryAgain,
   deleted: (what: string) => `Deleted ${what}`,
   removed: (what: string) => `Removed ${what}`,
   unlinked: (what: string) => `Unlinked ${what}`,
 };
+
+/** A Configure page as a sentence names it, by its slug: `configurePage("accounts")` is "Configure › Accounts". */
+export const configurePage = (slug: ConfigSlug): string =>
+  configureWords.page(
+    CONFIG_SECTIONS.find((section) => section.slug === slug)?.label ?? slug
+  );

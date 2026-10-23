@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AuthState } from "@cawco/core";
+  import { configurePage, machineWords } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -55,15 +56,15 @@
 
   const SAID: Record<AuthState, { title: string; body: string }> = $derived({
     authenticated: {
-      title: `${machine.hostname} is unlocked`,
+      title: machineWords.unlocked(machine.hostname),
       body: `New sessions on ${machine.hostname} can read its accounts' logins again.`,
     },
     unauthenticated: {
       title: `No account is signed in on ${machine.hostname}`,
-      body: `${machine.hostname} unlocked, but no Claude account is signed in there. Add one in Configure → Accounts and sign it in there.`,
+      body: `${machine.hostname} unlocked, but no Claude account is signed in there. Add one in ${configurePage("accounts")} and sign it in there.`,
     },
     "unreadable-credentials": {
-      title: `${machine.hostname} cannot read its logins`,
+      title: machineWords.cantReadLogins(machine.hostname),
       body: `${machine.hostname} unlocked, but its accounts' logins still cannot be read.`,
     },
   });
@@ -218,9 +219,9 @@
                   ? `${id}-error`
                   : `${id}-note`}
                 aria-invalid={phase.kind === "error" ? "true" : undefined}
-                aria-label="Login password for {machine.hostname}"
+                aria-label={machineWords.loginPasswordFor(machine.hostname)}
                 autocomplete="current-password"
-                placeholder="Login password for {machine.hostname}"
+                placeholder={machineWords.loginPasswordFor(machine.hostname)}
                 type="password"
                 bind:value={password}
                 {@attach (node) => {

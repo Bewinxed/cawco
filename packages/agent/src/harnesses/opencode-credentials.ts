@@ -20,6 +20,12 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "../delegation";
 
 export interface HeldCredential {
+  /**
+   * What the session's shells name the machine's container runtimes by: its
+   * own doors (agent `HarnessContext.containerEnv`), which the plugin sets
+   * in each of its shells, as one server runs every session.
+   */
+  containerEnv: Readonly<Record<string, string>>;
   credential: string;
   instanceId: string;
   /**

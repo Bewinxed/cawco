@@ -1,5 +1,6 @@
 import {
   CAWCO_OAUTH_URL,
+  configurePage,
   type FleetMcpServer,
   type MachineFleetConfig,
 } from "@cawco/core";
@@ -126,7 +127,7 @@ const reachHead = (
  */
 const signedOut = () =>
   new Response(
-    "Sign in to this server from Configure → MCP servers. Its tools then arrive in sessions already running, within seconds; no new session is needed.",
+    `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`,
     { status: 503 }
   );
 
@@ -618,7 +619,7 @@ export class FleetMcp {
       }
       // biome-ignore lint/style/useErrorCause: upstream OAuth exceptions may contain token responses; they must stay out of logs
       throw new Error(
-        "This server is signed out. Sign in again from Configure → MCP servers."
+        `This server is signed out. Sign in again from ${configurePage("mcp")}.`
       );
     }
   }

@@ -5,12 +5,14 @@ import {
   type AccountSignin,
   accountNameAmong,
   clockWords,
+  configurePage,
   keepsGoingOnExtraUsage,
   type LimitWindow,
   modelScope,
   type PlacementExplain,
   type PlacementStrategy,
   type ProviderRouting,
+  type StrategyChoice,
   spanWords,
 } from "@cawco/core";
 import type { AccountPaces } from "./forecast";
@@ -45,13 +47,6 @@ export interface PlacementInput {
    * it, and stays when none does.
    */
   current?: string;
-  /**
-   * The account a running session leaves at its limit. Placement then looks
-   * for another to carry it: never this one, only one whose reading shows
-   * headroom, and none at all ({@link Placement}'s `accountId` null) rather
-   * than one anyway.
-   */
-  exclude?: string;
   /** The account the spawn named (id, nickname or email); must be allowed, and ignores bench and reserve. */
   explicit?: string;
   /** A fork runs on the account of the session it forks, whatever else holds. */
@@ -87,7 +82,7 @@ export type Placement =
  * signed in: it never runs on the machine's own Claude Code login.
  */
 export const noAccountRefusal = (machine: string): string =>
-  `No Claude account is signed in on ${machine}. Add one in Configure → Accounts and sign it in there.`;
+  `No Claude account is signed in on ${machine}. Add one in ${configurePage("accounts")} and sign it in there.`;
 
 /** Each harness as a sentence names it. */
 const HARNESS_NAMES: Record<string, string> = {
@@ -231,6 +226,33 @@ export const runsOutWith = (
   return soonest;
 };
 
+/** A window as the run-out test reads it, and what one percent of it costs in weighted tokens (null when unmeasured). */
+export interface PacedWindow extends CarryWindow {
+  tokensPerPct: number | null;
+}
+
+/**
+ * When account `id` runs out before a window of it resets ({@link
+ * runsOutWith}): at each window's pace, with `burn` (weighted tokens an
+ * hour) and the burn arriving there ({@link arrivingBurn}) added over what a
+ * percent of that window costs. Null when it lasts to every reset.
+ */
+export const runsOutBy = (
+  windows: readonly PacedWindow[],
+  burn: number,
+  arrivals: readonly Arrival[],
+  id: string,
+  now: number
+): number | null =>
+  runsOutWith(
+    windows,
+    (window: CarryWindow & { tokensPerPct?: number | null }) =>
+      window.tokensPerPct
+        ? (burn + arrivingBurn(arrivals, id, window, now)) / window.tokensPerPct
+        : 0,
+    now
+  );
+
 /** An explicit pick: the account it names by id, nickname or email. */
 const picked = (accounts: Account[], asked: string): Account | undefined => {
   const lower = asked.toLowerCase();
@@ -244,8 +266,55 @@ const picked = (accounts: Account[], asked: string): Account | undefined => {
   );
 };
 
-const byOrder = (list: Account[]): Account[] =>
-  [...list].sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
+/** What the four strategies order accounts by: fill-first order, binding use, and when the 5-hour window resets. */
+export interface Ranked {
+  /** The higher of its 5-hour and weekly use, percent ({@link Usage.binding}). */
+  binding: number;
+  createdAt: number;
+  id: string;
+  order: number;
+  /** When its 5-hour window resets; one not open yet counts as resetting 5 hours from now ({@link Usage.resetOf}). */
+  sessionReset: number;
+}
+
+/** Fill-first: lowest in order first, older first among equals. */
+const byFillFirst = (
+  a: Pick<Ranked, "createdAt" | "order">,
+  b: Pick<Ranked, "createdAt" | "order">
+): number => a.order - b.order || a.createdAt - b.createdAt;
+
+/**
+ * The kind's strategy as an ordering, best first: the one each strategy below
+ * picks from, and the order at-limit's decision (at-limit.ts `decideStop`)
+ * weighs the accounts that fit in. Pinned puts the pin first, then fill-first
+ * over the rest; fill-first goes by order; spread by lowest binding use, then
+ * order; soonest-reset by the earliest 5-hour reset, then lowest binding use.
+ */
+export const strategyOrder =
+  (strategy: PlacementStrategy, pinnedId: string | undefined) =>
+  (a: Ranked, b: Ranked): number => {
+    switch (strategy) {
+      case "pinned":
+        return (
+          Number(b.id === pinnedId) - Number(a.id === pinnedId) ||
+          byFillFirst(a, b)
+        );
+      case "spread":
+        return a.binding - b.binding || a.order - b.order;
+      case "soonest-reset":
+        return a.sessionReset - b.sessionReset || a.binding - b.binding;
+      case "fill-first":
+        return byFillFirst(a, b);
+    }
+  };
+
+const byOrder = (list: Account[]): Account[] => [...list].sort(byFillFirst);
+
+/** The account the pinned strategy pins: the one its choice names, else the first in fill-first order. */
+export const pinnedOf = (
+  choice: StrategyChoice,
+  accounts: Account[]
+): string | undefined => choice.pinnedAccountId ?? byOrder(accounts)[0]?.id;
 
 /** What placement reads of each account's windows, for one model scope at one moment. */
 class Usage {
@@ -296,14 +365,12 @@ class Usage {
 
   /**
    * Whether its plan limits stop nothing for this session: extra usage
-   * counts here ({@link choose} says when), it keeps going on extra usage at
-   * its plan limit (core `keepsGoingOnExtraUsage`), and the session is placed
-   * fresh. A session carried off its account at a limit
-   * ({@link PlacementInput.exclude}) goes only to plan room.
+   * counts here ({@link choose} says when), and it keeps going on extra usage
+   * at its plan limit (core `keepsGoingOnExtraUsage`). A session carried off
+   * its account at a limit goes only to plan room (at-limit.ts `decideStop`).
    */
   onExtraUsage = (account: Account): boolean =>
     this.#credits !== undefined &&
-    this.#input.exclude === undefined &&
     keepsGoingOnExtraUsage(
       account,
       this.#input.readings.find((one) => one.accountId === account.id)
@@ -311,11 +378,10 @@ class Usage {
 
   /**
    * Whether its extra usage would take this session past its plan, here where
-   * only plan room counts: a fresh session, an account that keeps going.
+   * only plan room counts: an account that keeps going.
    */
   creditsWait = (account: Account): boolean =>
     this.#credits === undefined &&
-    this.#input.exclude === undefined &&
     this.binding(account.id) >= 100 &&
     keepsGoingOnExtraUsage(
       account,
@@ -351,6 +417,45 @@ class Usage {
       : this.#input.now + SESSION_WINDOW_MS;
   }
 
+  /** What the strategies order it by ({@link strategyOrder}). */
+  ranked = (account: Account): Ranked => ({
+    id: account.id,
+    order: account.order,
+    createdAt: account.createdAt,
+    binding: this.binding(account.id),
+    sessionReset: this.resetOf(account.id),
+  });
+
+  /**
+   * The windows that limit this session on account `id` (its 5-hour, its
+   * week, its model's week), as the run-out test reads them: each one's use
+   * as read, its pace, and what a percent of it costs in weighted tokens
+   * (null when unmeasured, or with no paces given).
+   */
+  carryWindows(id: string): PacedWindow[] {
+    const kinds: [string, string | null][] = [
+      ["session", null],
+      ["weekly_all", null],
+      ...(this.#scope
+        ? [["weekly_scoped", this.#scope] as [string, string | null]]
+        : []),
+    ];
+    return kinds.map(([kind, scopeLabel]) => {
+      const window = this.#window(id, kind);
+      const pace = this.#input.paces
+        ?.get(id)
+        ?.find((one) => one.kind === kind && one.scopeLabel === scopeLabel);
+      return {
+        kind,
+        scopeLabel,
+        resetsAt: window?.resetsAt ?? null,
+        utilization: window?.percent ?? 0,
+        pace: pace?.pace ?? null,
+        tokensPerPct: pace?.tokensPerPct ?? null,
+      };
+    });
+  }
+
   /**
    * When the account runs out before a window of it resets ({@link
    * runsOutWith}), at its pace with the session's burn and the burn arriving
@@ -362,38 +467,7 @@ class Usage {
     if (!paces) {
       return null;
     }
-    const kinds: [string, string | null][] = [
-      ["session", null],
-      ["weekly_all", null],
-      ...(this.#scope
-        ? [["weekly_scoped", this.#scope] as [string, string | null]]
-        : []),
-    ];
-    const paceOf = (kind: string, scopeLabel: string | null) =>
-      paces
-        .get(id)
-        ?.find((one) => one.kind === kind && one.scopeLabel === scopeLabel);
-    const windows: CarryWindow[] = kinds.map(([kind, scopeLabel]) => {
-      const window = this.#window(id, kind);
-      return {
-        kind,
-        scopeLabel,
-        resetsAt: window?.resetsAt ?? null,
-        utilization: window?.percent ?? 0,
-        pace: paceOf(kind, scopeLabel)?.pace ?? null,
-      };
-    });
-    return runsOutWith(
-      windows,
-      (window) => {
-        const perPct = paceOf(window.kind, window.scopeLabel)?.tokensPerPct;
-        return perPct
-          ? ((burn ?? 0) + arrivingBurn(arrivals ?? [], id, window, now)) /
-              perPct
-          : 0;
-      },
-      now
-    );
+    return runsOutBy(this.carryWindows(id), burn ?? 0, arrivals ?? [], id, now);
   }
 
   benched(id: string): boolean {
@@ -506,8 +580,9 @@ const fillFirst = (candidates: Account[], usage: Usage): Choice => {
 
 /** Spread: the lowest binding use. */
 const spread = (candidates: Account[], usage: Usage): Choice => {
-  const [account] = [...candidates].sort(
-    (a, b) => usage.binding(a.id) - usage.binding(b.id) || a.order - b.order
+  const order = strategyOrder("spread", undefined);
+  const [account] = [...candidates].sort((a, b) =>
+    order(usage.ranked(a), usage.ranked(b))
   );
   return account
     ? {
@@ -530,13 +605,10 @@ const soonestReset = (
   usage: Usage,
   current: string | undefined
 ): Choice => {
+  const order = strategyOrder("soonest-reset", undefined);
   const ranked = candidates
     .filter(usage.headroom)
-    .sort(
-      (a, b) =>
-        usage.resetOf(a.id) - usage.resetOf(b.id) ||
-        usage.binding(a.id) - usage.binding(b.id)
-    );
+    .sort((a, b) => order(usage.ranked(a), usage.ranked(b)));
   const carrier = ranked.find((one) => usage.runsOut(one.id) === null);
   const stays = carrier ? undefined : ranked.find((one) => one.id === current);
   const lastOut = (a: Account, b: Account) =>
@@ -664,20 +736,16 @@ const eligible = (
  * first: a keep-going account's extra usage (core `AtPlanLimit`) is room for
  * a new session only when no account it may run on has plan room, or when
  * Pinned pins that account, since the pin and its setting together say to
- * stay there. A session leaving its account at the limit goes only where a
- * reading shows room.
+ * stay there.
  */
 const roomFor = (
   input: PlacementInput,
   allowed: Account[],
   pinnedId: string | undefined
 ): { candidates: Account[]; usage: Usage } => {
-  const carry = input.exclude !== undefined;
   const among = (usage: Usage) => ({
     usage,
-    candidates: allowed.filter(
-      (account) => usage.room(account) && (!carry || usage.read(account))
-    ),
+    candidates: allowed.filter((account) => usage.room(account)),
   });
   const plan = among(new Usage(input));
   const onPin = among(
@@ -712,7 +780,7 @@ const choose = (
   name: (id: string) => string
 ): Placement => {
   const choice = input.routing[input.kind];
-  const pinnedId = choice.pinnedAccountId ?? byOrder(input.accounts)[0]?.id;
+  const pinnedId = pinnedOf(choice, input.accounts);
   const { usage, candidates } = roomFor(input, allowed, pinnedId);
   const outNote = allowed
     .filter((account) => !candidates.includes(account))
@@ -756,14 +824,6 @@ const choose = (
       accountId: decided.account.id,
       strategy: choice.strategy,
       why: `${decided.why}${out}`,
-    };
-  }
-  if (input.exclude !== undefined) {
-    return {
-      ok: true,
-      accountId: null,
-      strategy: "none",
-      why: `No other account this session may run on has room for it now${out}.`,
     };
   }
   return {
@@ -832,55 +892,79 @@ const noRoomRefusal = (full: Account[], usage: Usage, now: number): string => {
 };
 
 /**
- * The account other than `input.exclude` that takes the session again
- * soonest, and when: among those it may run on on its machine (signed in,
- * allowed by its project and task, not past its reserve), each at its limit
- * now, at the latest of its bench and its spent windows' resets. One whose
- * limits are unread names no moment and is left out; so is one with room
- * now, which a carry takes instead. Undefined when none names a moment.
+ * One other account of a session's provider as a carry off its limit reads
+ * it (at-limit.ts `decideStop`): what placement knows of it for the
+ * session's model on its machine, by the rules {@link place} applies.
  */
-export const nextFree = (
-  input: PlacementInput & { exclude: string }
-): { accountId: string; at: number } | undefined => {
+export interface AccountRow {
+  /** The burn already arriving there that its pace does not count yet ({@link arrivingBurn}). */
+  arrivals: Arrival[];
+  /** When it takes sessions again once benched, spent or past its reserve ({@link Usage.backAt}); null when nothing read names it. */
+  backAt: number | null;
+  /** Until when it is benched for the session's model; null when it isn't. */
+  benchedUntil: number | null;
+  createdAt: number;
+  id: string;
+  neverBackup: boolean;
+  /** The list that keeps it out: the session's project's, or its task's; null when both allow it. */
+  notAllowedBy: "project" | "task" | null;
+  order: number;
+  organization: string | null;
+  /** Its reserve, percent of its week, when its week is past it; null otherwise. */
+  pastReserve: number | null;
+  /** Whether its limits have been read at all. */
+  read: boolean;
+  /** Whether it is signed in on the session's machine. */
+  signedIn: boolean;
+  /** The windows that limit the session on it, with their paces ({@link Usage.carryWindows}). */
+  windows: PacedWindow[];
+}
+
+/** Every account of `input.accounts` but `leaving`, as a carry off `leaving`'s limit reads it ({@link AccountRow}). */
+export const accountRows = (
+  input: PlacementInput,
+  leaving: string
+): AccountRow[] => {
   const usage = new Usage(input);
   const scope = modelScope(input.model);
-  let soonest: { accountId: string; at: number } | undefined;
-  for (const account of eligible(input).allowed) {
-    if (
-      account.id === input.exclude ||
-      usage.pastReserve(account) ||
-      !usage.read(account)
-    ) {
-      continue;
-    }
-    const benched = input.bench
-      .filter(
-        (one) =>
-          one.accountId === account.id &&
-          one.until > input.now &&
-          (one.scope === null || one.scope === scope)
-      )
-      .map((one) => one.until);
-    const spent = (
-      input.readings.find((one) => one.accountId === account.id)?.windows ?? []
-    )
-      .filter(
-        (window) =>
-          window.percent >= 100 &&
-          window.resetsAt &&
-          Date.parse(window.resetsAt) > input.now &&
-          (window.kind !== "weekly_scoped" || window.scopeLabel === scope)
-      )
-      .map((window) => Date.parse(window.resetsAt as string));
-    if (benched.length === 0 && spent.length === 0) {
-      continue;
-    }
-    const at = Math.max(...benched, ...spent);
-    if (!soonest || at < soonest.at) {
-      soonest = { accountId: account.id, at };
-    }
-  }
-  return soonest;
+  const { signedIn, allowed } = eligible(input);
+  const listed = (list: string[] | null | undefined, id: string) =>
+    !list || list.includes(id);
+  return input.accounts
+    .filter((account) => account.id !== leaving)
+    .map((account) => {
+      const benched = input.bench
+        .filter(
+          (one) =>
+            one.accountId === account.id &&
+            one.until > input.now &&
+            (one.scope === null || one.scope === scope)
+        )
+        .map((one) => one.until);
+      let notAllowedBy: AccountRow["notAllowedBy"] = null;
+      if (!listed(input.projectAccounts, account.id)) {
+        notAllowedBy = "project";
+      } else if (!listed(input.taskAccounts, account.id)) {
+        notAllowedBy = "task";
+      }
+      return {
+        id: account.id,
+        organization: account.identity?.organization || null,
+        order: account.order,
+        createdAt: account.createdAt,
+        neverBackup: account.neverBackup,
+        signedIn: signedIn.includes(account),
+        notAllowedBy: allowed.includes(account) ? null : notAllowedBy,
+        read: usage.read(account),
+        benchedUntil: benched.length > 0 ? Math.max(...benched) : null,
+        pastReserve: usage.pastReserve(account) ? account.reservePct : null,
+        backAt: usage.backAt(account) ?? null,
+        windows: usage.carryWindows(account.id),
+        arrivals: (input.arrivals ?? []).filter(
+          (one) => one.accountId === account.id
+        ),
+      };
+    });
 };
 
 export const place = (input: PlacementInput): Placement => {
@@ -907,14 +991,7 @@ export const place = (input: PlacementInput): Placement => {
         };
   }
 
-  const eligibleHere = eligible(input);
-  const { signedIn } = eligibleHere;
-  const allowed = eligibleHere.allowed.filter(
-    (account) => account.id !== input.exclude
-  );
-  if (input.exclude !== undefined) {
-    return choose(input, allowed, name);
-  }
+  const { signedIn, allowed } = eligible(input);
   if (input.explicit) {
     return explicitPick(input, input.explicit, signedIn, name);
   }

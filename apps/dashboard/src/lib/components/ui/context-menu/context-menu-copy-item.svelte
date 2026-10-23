@@ -6,11 +6,17 @@
    * the menu close, so the check shows on the item that did it. The first
    * select keeps the menu open (preventDefault); closing is a second select
    * of the same item, which bits-ui handles as any other: it closes the menu
-   * and returns focus. A failed copy closes it at once, the toast saying why.
+   * and returns focus. A copy the browser refused keeps the menu open and
+   * says so under the item (RowFault, cawco/copy.ts `copyRefused`), with Try
+   * again and the text under Show details to copy by hand; never a toast.
+   * It is kept (cawco/refusals.svelte.ts): the same item says it again
+   * whenever its menu opens, after a reload too, until a copy goes.
    */
   import type { Snippet } from "svelte";
-  import { copyToClipboard } from "#lib/cawco/copy.js";
+  import { copyRefused, copyToClipboard } from "#lib/cawco/copy.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { IconCheck, IconCopy } from "#lib/icons.js";
   import ContextMenuItem from "./context-menu-item.svelte";
 
@@ -29,6 +35,8 @@
 
   let ref = $state<HTMLElement | null>(null);
   let copied = $state(false);
+  /** Where a refused copy of this text is said: under this item, kept. */
+  const key = $derived(`copy:item:${what}:${text}`);
   let closing = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => () => clearTimeout(timer));
@@ -43,8 +51,18 @@
       return;
     }
     event.preventDefault();
+    await copy();
+  }
+
+  async function copy() {
+    const at = key;
     copied = await copyToClipboard(what, text);
-    timer = setTimeout(close, copied ? dur("--dur-hold") : 0);
+    if (copied) {
+      refusals.delete(at);
+      timer = setTimeout(close, dur("--dur-hold"));
+    } else {
+      refusals.set(at, { reason: copyRefused(what) });
+    }
   }
 </script>
 
@@ -55,3 +73,11 @@
   </span>
   <span class="mark-text">{@render children()}</span>
 </ContextMenuItem>
+<RowFault
+  again={copy}
+  data-copy-refused
+  details={text}
+  end="calc(var(--spacing) * 2.5)"
+  indent="calc(var(--spacing) * 2.5)"
+  reason={refusals.reason(key)}
+/>

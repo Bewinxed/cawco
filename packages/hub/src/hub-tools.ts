@@ -22,10 +22,28 @@
  */
 import type { InstanceRow } from "@cawco/core";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import type { DesignFinding, DesignPick } from "./db/schema";
-import { DESIGN_WRITE_FILES, type DesignFileIn } from "./design-system";
-import { FIND_TOOL, findToolDefinition } from "./find-tool";
+import {
+  DESIGN_WRITE_FILES,
+  type DesignFileIn,
+  type DesignWritten,
+} from "./design-system";
+import { FIND_TOOL, type FindTool, findToolDefinition } from "./find-tool";
+import { tool } from "./mcp-tool";
+import {
+  designVerdictWords,
+  designWrittenWords,
+  machinesUpdatedWords,
+} from "./presenters/hub";
+
+/** One `find` for a session: its input, and the form it asked. */
+type FindCall = (
+  actor: InstanceRow,
+  ...asked: Parameters<FindTool["call"]> extends [InstanceRow, ...infer Rest]
+    ? Rest
+    : never
+) => ReturnType<FindTool["call"]>;
+
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
 
@@ -58,16 +76,18 @@ export interface HubToolsDeps {
   designVerdict: (
     actor: InstanceRow,
     verdict: DesignVerdict
-  ) => Promise<unknown>;
+  ) => Promise<{ finished: string; recorded: string }>;
   /** Writes the caller's project's design system, or proposes the change (design-system.ts `write`). */
   designWrite: (
     actor: InstanceRow,
     files: DesignFileIn[],
     why: string | undefined,
     toolUseId: string | undefined
-  ) => Promise<unknown>;
+  ) => Promise<
+    DesignWritten | { files: string[]; proposal: string; waiting: string }
+  >;
   /** One `find` call for the calling session (find-tool.ts `call`). */
-  find: (actor: InstanceRow, input: unknown) => Promise<unknown>;
+  find: FindCall;
   /** The machines registered now: an install naming none goes to each. */
   machineIds: () => string[];
   /** Whether the hub requires paired devices (hub-auth.ts): an install asks the person first. */
@@ -84,10 +104,6 @@ export const createHubTools =
       }
       return actor;
     };
-    const ok = (data: unknown) => ({
-      content: [{ type: "text" as const, text: JSON.stringify(data) }],
-      structuredContent: data,
-    });
     const said = async (response: Response): Promise<unknown> => {
       const text = await response.text();
       if (!response.ok) {
@@ -128,7 +144,7 @@ export const createHubTools =
             })
           )) as { version: string };
           if (input.check_only) {
-            return ok({ found });
+            return { found };
           }
           const updates = await Promise.all(
             machines.map(async (id) => {
@@ -158,8 +174,9 @@ export const createHubTools =
               }
             })
           );
-          return ok({ found, updates });
-        }
+          return { found, updates };
+        },
+        machinesUpdatedWords
       ),
       tool(
         "design_write",
@@ -178,8 +195,8 @@ export const createHubTools =
             .max(DESIGN_WRITE_FILES),
           why: z.string().max(500).optional(),
         },
-        async ({ files, why }) =>
-          ok(await deps.designWrite(me(), files, why, toolUseId))
+        ({ files, why }) => deps.designWrite(me(), files, why, toolUseId),
+        designWrittenWords
       ),
       tool(
         DESIGN_VERDICT,
@@ -206,8 +223,9 @@ export const createHubTools =
             ),
           summary: z.string().min(1).max(2000),
         },
-        async (verdict) => ok(await deps.designVerdict(me(), verdict))
+        (verdict) => deps.designVerdict(me(), verdict),
+        designVerdictWords
       ),
-      findToolDefinition(async (input) => ok(await deps.find(me(), input))),
+      findToolDefinition((input, format) => deps.find(me(), input, format)),
     ];
   };

@@ -19,12 +19,18 @@
    * flush on the screen's foot, its grabber, then the panel. It holds
    * nothing: no scrim, and the page above it stays live, since nothing he
    * asks goes wrong while the reader acts elsewhere (DESIGN.md, The Open
-   * Page Rule). Escape, his seat or a drag down puts it away.
+   * Page Rule). Escape, his seat or a drag down puts it away. Being part of
+   * the page, it stands at the page's sheet layer (`--layer-sheet`), under
+   * the floating surfaces: a menu opened from the page (the project's ⋯)
+   * and his settings sheet stand over it, never under its composer.
    */
+  import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { appearOnMount } from "../motion/curves.svelte";
+  import { stopWork } from "../stop-work.svelte";
   import CawThread from "./CawThread.svelte";
   import type { CawLead } from "./caw-lead.svelte";
 
@@ -38,6 +44,31 @@
   const phone = new MediaQuery("(max-width: 639px)");
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
   const open = $derived(lead.open && lead.anchor !== null);
+  /**
+   * The project's stops stand (a forget's or Caw off's tray, or their line
+   * parked under the head): on a phone, where his sheet covers the page
+   * under the head, it gives way once so the tray and then its line stay
+   * one press away (The Work Outlives Its Surface Rule). His seat brings
+   * it back whenever the reader wants it.
+   */
+  const stopsStand = $derived(
+    stopWork
+      .on(projectId)
+      .some(
+        (job) =>
+          job.open ||
+          job.phase === "stopping" ||
+          job.phase === "fail" ||
+          job.phase === "ending"
+      )
+  );
+  $effect(() => {
+    if (phone.current && stopsStand) {
+      untrack(() => {
+        lead.open = false;
+      });
+    }
+  });
   const setOpen = (next: boolean) => {
     lead.open = next;
   };
@@ -74,6 +105,7 @@
          (ThreadPane's docked composer). His head is the sheet's one header,
          his name right under the grabber and Close at its trailing edge. -->
     <Drawer.Content
+      class="z-(--layer-sheet)"
       data-caw-float-sheet
       height="cap"
       modal={false}
@@ -92,12 +124,17 @@
   <!-- The card recipe, its content edge to edge and clipped by its radius; it
        fills the place the page's grid gives it. It comes in as a sheet does,
        from its own side by --pop-rise as it fades, over --dur-panel on the
-       drawer curve; with less motion it only fades. -->
+       drawer curve; with less motion it only fades (`appearOnMount`, never
+       `@starting-style`, which WebKit sometimes skips). -->
   <aside
     aria-label="Caw, lead of {projectName}"
-    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile transition-[opacity,translate] duration-(--dur-panel) ease-drawer starting:opacity-0 motion-safe:starting:translate-x-(--pop-rise)"
+    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
     data-caw-dock
     {@attach dock}
+    {@attach appearOnMount({
+      motion: { over: "--dur-panel", easing: "--ease-drawer", rise: "x" },
+      reduced: { over: "--dur-panel", easing: "--ease-drawer" },
+    })}
   >
     {#key projectId}
       <CawThread {lead} {projectId} {projectName} />

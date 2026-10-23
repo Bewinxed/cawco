@@ -20,6 +20,7 @@
 </script>
 
 <script lang="ts">
+  import { commonWords, transcriptWords } from "@cawco/core";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
@@ -86,6 +87,7 @@
   } from "../activity";
   import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
+  import { frameSize } from "../frame-observer";
   import CawFace from "../home/CawFace.svelte";
   import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
@@ -283,7 +285,18 @@
   let morphing = $state(false);
   /** Which way the card moved between tabs: 1 rightward, -1 leftward. */
   let detailDir = $state<1 | -1>(1);
+  /**
+   * The card's content height, which the morph box glides to: read as it
+   * mounts, and a change in the next frame (frameSize). Written inside
+   * the delivery (an offsetHeight binding), the morph's height resized the card,
+   * its layer and its tab, boxes the delivery had passed, and WebKit reported
+   * "ResizeObserver loop completed with undelivered notifications" as a mode
+   * switch changed the card's content.
+   */
   let detailsHeight = $state(0);
+  const measureDetails = frameSize<HTMLElement>((node) => {
+    detailsHeight = node.offsetHeight;
+  });
   let restoreFocus = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   /**
@@ -1356,7 +1369,7 @@
   variant="folder"
 >
   <TabsList
-    aria-label="Open sessions in this group"
+    aria-label={transcriptWords.openSessions}
     onscroll={scrolledUnderCard}
     scrollable
   >
@@ -1496,7 +1509,7 @@
               }}
             >
               <IconInfo />
-              <span>Session details</span>
+              <span>{transcriptWords.sessionDetails}</span>
             </ContextMenu.Item>
             <ContextMenu.Item
               onSelect={() =>
@@ -1559,7 +1572,7 @@
             text={new URL(tab.href, location.origin).href}
             what="Link"
           >
-            Copy link
+            {commonWords.copyLink}
           </ContextMenu.CopyItem>
         {/snippet}
         <ContextMenu.Root
@@ -1776,7 +1789,7 @@
           <Button
             {...props}
             aria-haspopup="dialog"
-            aria-label="New session"
+            aria-label={commonWords.newSession}
             data-tnew
             onclick={(event) => startHere(event.currentTarget)}
             size="icon-xs"
@@ -1789,7 +1802,7 @@
       </Tooltip.Trigger>
       <!-- 8px clear of the viewport's edges, as every tooltip (Tip). -->
       <Tooltip.Content collisionPadding={8} side="bottom">
-        New session
+        {commonWords.newSession}
       </Tooltip.Content>
     </Tooltip.Root>
   </div>
@@ -1811,7 +1824,7 @@
       align="start"
       alignOffset={cardPlace ? cardPlace.offset : 0}
       anchor={detailAnchor}
-      aria-label="Session details"
+      aria-label={transcriptWords.sessionDetails}
       as={Popover.Content}
       collisionPadding={12}
       customAnchor={detailAnchor}
@@ -1867,7 +1880,7 @@
         <div
           data-slot="details-measure"
           class="flex max-h-inherit w-full flex-col"
-          bind:offsetHeight={detailsHeight}
+          {@attach measureDetails}
         >
           {#if detailTab}
             <SessionDetails

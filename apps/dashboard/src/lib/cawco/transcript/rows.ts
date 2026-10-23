@@ -648,8 +648,8 @@ const settledOf = (messages: Message[]): Message[] => {
  * the ask does, and drawing it there meant a "needs you" card flashed in the
  * transcript and the tail jumped twice as it came and went. So an unanswered
  * question is left out in every mode: no mode answers a question for the
- * reader. Bypass and Full Send included — Full Send answers Claude Code's
- * safety checks, never a question — so its ask always comes to the composer.
+ * reader. Bypass and Full Send included — Full Send approves every approval,
+ * never a question — so its ask always comes to the composer.
  */
 const drawnOf = (session: SessionState): Message[] => {
   const settled = settledOf(session.messages);

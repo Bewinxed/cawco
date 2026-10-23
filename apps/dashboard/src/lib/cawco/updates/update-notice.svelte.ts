@@ -35,6 +35,7 @@ class UpdateNotice {
         machines: cawco.machines,
         newerBuild: newerBuild(),
         policy,
+        refused: new Map(updates.refused),
         seen: new Set(notices.seen),
       },
       (hostname) => machineLabel(hostname)
@@ -54,12 +55,19 @@ export async function reloadAcknowledging(acks: string[]): Promise<void> {
   leaveThePage(() => location.reload());
 }
 
-/** The notice's ✕: acknowledged everywhere; "running on N machines" also forgets this tab's installs. */
+/**
+ * The notice's ✕: acknowledged everywhere; "running on N machines" also
+ * forgets this tab's installs, and a refusal, this tab's own, is forgotten here.
+ */
 export function dismissUpdate(notice: Notice): void {
+  if (notice.kind === 9) {
+    updates.forgetRefusal(notice.machineIds);
+    return;
+  }
   // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
   void notices.acknowledge(notice.acks);
   if (notice.kind === 3) {
-    updates.commanded.clear();
+    updates.forgetCommanded();
   }
 }
 
@@ -81,6 +89,17 @@ export function actOnUpdate(
   if (action === "install-all" && policy) {
     // biome-ignore lint/complexity/noVoid: each machine reports its own outcome
     void updates.installAll(cawco.machines, policy);
+    return;
+  }
+  if (notice.kind === 9) {
+    // Each refused ask again, as it was asked: an install, or its cancel.
+    for (const id of notice.machineIds) {
+      const machine = cawco.machines.find((row) => row.machineId === id);
+      if (machine) {
+        // biome-ignore lint/complexity/noVoid: the machine reports its own outcome
+        void updates.again(machine);
+      }
+    }
     return;
   }
   const machine = cawco.machines.find(
@@ -126,7 +145,7 @@ export function startUpdateWatch(): () => void {
       const timer = setTimeout(() => {
         // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
         void notices.acknowledge(acks);
-        updates.commanded.clear();
+        updates.forgetCommanded();
       }, DONE_MS);
       return () => clearTimeout(timer);
     });

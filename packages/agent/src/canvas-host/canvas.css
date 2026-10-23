@@ -538,3 +538,144 @@ body {
     }
   }
 }
+
+/* ---- Changed since you looked (changes.tsx; DESIGN.md, Changed since you
+   looked): the agent's changes the person hasn't looked at, washed in the
+   scene's coordinates over the drawing, never taking a press; and the tag
+   that steps through them, the floating tag recipe, where the refusal band
+   stands. */
+.canvas-changes {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-change {
+  fill: var(--c-change-wash);
+
+  &[data-leaving] {
+    animation: canvas-change-out var(--dur-fade) var(--ease-out) forwards;
+  }
+}
+
+@keyframes canvas-change-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.canvas-changes-tag {
+  --changes-top: calc(
+    var(--canvas-inset-top) + var(--space-2) + var(--rail-tools-row) +
+      var(--space-2)
+  );
+  position: absolute;
+  z-index: 5;
+  top: var(--changes-top);
+  left: 50%;
+  display: flex;
+  min-width: 0;
+  max-width: calc(100% - 2 * var(--space-3));
+  height: var(--c-btn-h-sm);
+  margin: 0;
+  padding: 0;
+  align-items: stretch;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-overlay);
+  color: var(--ink-strong);
+  font: var(--type-label);
+  translate: -50% 0;
+  animation: canvas-changes-in var(--dur-panel) var(--ease-out);
+
+  @media (pointer: coarse) {
+    height: var(--c-btn-h-lg);
+  }
+}
+
+/* Under the two groups where they stack, as the refusal band. */
+@media (max-width: 559px), (max-width: 639px) and (pointer: coarse) {
+  .canvas-changes-tag {
+    --changes-top: calc(
+      var(--canvas-inset-top) + var(--space-2) + var(--rail-tools-row) +
+        var(--space-2) + var(--rail-h) + var(--space-2)
+    );
+  }
+}
+
+/* A phone, the canvas over the field: the groups stand at the foot, so the
+   tag stands at the top. */
+@media (max-width: 639px) and (pointer: coarse) {
+  .canvas-host:not([data-docked]) .canvas-changes-tag {
+    --changes-top: calc(var(--canvas-inset-top) + var(--space-3));
+  }
+}
+
+.canvas-changes-step,
+.canvas-changes-count {
+  min-width: 0;
+  margin: 0;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--dur-control) var(--ease-out);
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.canvas-changes-step {
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted);
+
+  &:first-child {
+    border-start-start-radius: inherit;
+    border-end-start-radius: inherit;
+  }
+
+  &:last-child {
+    border-start-end-radius: inherit;
+    border-end-end-radius: inherit;
+  }
+}
+
+.canvas-changes-count {
+  padding: 0 var(--space-1);
+  overflow: clip;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Solar's chevron points down: turned to point back and on. */
+.canvas-changes-back svg {
+  rotate: 90deg;
+}
+
+.canvas-changes-on svg {
+  rotate: -90deg;
+}
+
+@keyframes canvas-changes-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+    translate: -50% 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-changes-tag {
+    animation-name: canvas-refusal-in;
+  }
+}

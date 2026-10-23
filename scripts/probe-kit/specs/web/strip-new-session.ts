@@ -43,8 +43,11 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person takes them
 import type { Locator, Page } from "playwright-core";
+import { commonWords } from "../../../../packages/core/src/words/common";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
+import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
-import { Clock } from "../../anim";
+import { bezierAt, Clock } from "../../anim";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 
 const PLUS = '[data-slot="strip-new"] [data-tnew]';
@@ -56,6 +59,8 @@ const START = "#session-start";
 const MODE = "acceptEdits";
 /** The kit popover's gap from its trigger (popover-content `sideOffset`). */
 const SIDE_OFFSET = 4;
+/** A `translate` that moves nothing, as a keyframe leaves it ("0px", "0px 0px"). */
+const NO_OFFSET = /^0px( 0px)?$/;
 
 const LEGS = [
   { view: "desk", label: "1440 (fine)", form: POPOVER },
@@ -221,7 +226,7 @@ async function runLeg(
     kit.check(
       `${leg.label}: the sheet's one header is the kit's, titled with the form's own name through MorphText (DESIGN.md L515), the form drawing none of its own`,
       opened.heads.kit === 1 &&
-        opened.heads.title === "New session" &&
+        opened.heads.title === commonWords.newSession &&
         opened.heads.morphs &&
         opened.heads.form === 0,
       JSON.stringify(opened.heads)
@@ -229,7 +234,7 @@ async function runLeg(
   }
   kit.check(
     `${leg.label}: Start is disabled, the mode chip saying "Choose a mode", until a mode is picked`,
-    opened.startDisabled === true && opened.chip === "Choose a mode",
+    opened.startDisabled === true && opened.chip === spawnWords.unchosenMode,
     JSON.stringify({
       startDisabled: opened.startDisabled,
       chip: opened.chip,
@@ -270,7 +275,7 @@ async function runLeg(
   const picked = await readForm(page, leg.form);
   kit.check(
     `${leg.label}: a mode picked, Start is live`,
-    picked.startDisabled === false && picked.chip !== "Choose a mode",
+    picked.startDisabled === false && picked.chip !== spawnWords.unchosenMode,
     JSON.stringify({ startDisabled: picked.startDisabled, chip: picked.chip })
   );
   await press(form.locator(START), leg);
@@ -361,7 +366,7 @@ async function railLeg(kit: Kit, base: string) {
   );
   kit.check(
     "1440 (fine), the rail's Start session: Esc closes the popover, the focus back on Start session",
-    gone === "detached" && back === "Start session",
+    gone === "detached" && back === spawnWords.startSession,
     `${gone}; focus on ${back}`
   );
   await page.close();
@@ -700,8 +705,8 @@ async function motionLeg(kit: Kit, base: string, source: string) {
       : Number.parseFloat(value) * 1000;
   const numbers = (value: string) =>
     (value.match(/-?[\d.]+/g) ?? []).map(Number).join(",");
-  const lengths = (read: MotionRead, want: number) =>
-    read.runs.length === 3 &&
+  const lengths = (read: MotionRead, count: number, want: number) =>
+    read.runs.length === count &&
     read.runs.every(
       (run) => Math.abs(Number.parseFloat(run.split(" ")[1] ?? "") - want) < 1
     );
@@ -714,23 +719,33 @@ async function motionLeg(kit: Kit, base: string, source: string) {
   const rise = `0px -${expected.rise}`;
   const small = (value: string | undefined) =>
     Number(value) === Number(expected.scale);
+  /* Whole: no scale and no offset left, as either engine writes it ("none",
+     or the keyframe's own "1" and "0px"). */
+  const whole = (at: MotionRead["at"][string] | undefined) =>
+    at?.opacity === "1" &&
+    (at.scale === "none" || Number(at.scale) === 1) &&
+    (at.translate === "none" || NO_OFFSET.test(at.translate));
+  /* The open is popIn (motion/pop): one Web Animation whose keyframes Svelte
+     samples off the drawer curve, so its own timing is linear and the curve
+     is read in what it draws: at ½ of its clock the opacity stands where
+     the curve does at ½ (the keyframes are sampled a frame apart, so to
+     within 0.02). */
+  const halfway = bezierAt(expected.curve, 0.5);
+  const openRun = opened.runs[0] ?? "";
   kit.check(
-    `1440 (fine): the popover opens over ${expected.open} on the drawer curve (${expected.curve}), from the "+"'s side ${expected.rise} off and ${expected.scale} small at 0, on its way at ½, whole at 1`,
-    lengths(opened, ms(expected.open)) &&
-      curved(opened) &&
+    `1440 (fine): the popover opens by one animation (popIn) over ${expected.open} on the drawer curve (${expected.curve}, ${halfway.toFixed(3)} at ½), from the "+"'s side ${expected.rise} off and ${expected.scale} small at 0, whole at 1`,
+    lengths(opened, 1, ms(expected.open)) &&
+      openRun.endsWith(" linear") &&
       opened.at["0"].opacity === "0" &&
       opened.at["0"].translate === rise &&
       small(opened.at["0"].scale) &&
-      Number(opened.at["0.5"].opacity) > 0 &&
-      Number(opened.at["0.5"].opacity) < 1 &&
-      opened.at["1"].opacity === "1" &&
-      opened.at["1"].scale === "none" &&
-      opened.at["1"].translate === "none",
+      Math.abs(Number(opened.at["0.5"].opacity) - halfway) <= 0.02 &&
+      whole(opened.at["1"]),
     JSON.stringify({ expected, opened })
   );
   kit.check(
     `1440 (fine): the popover leaves the same way over ${expected.close}: whole at 0, toward the "+" at 1`,
-    lengths(closed, ms(expected.close)) &&
+    lengths(closed, 3, ms(expected.close)) &&
       curved(closed) &&
       closed.at["0"].opacity === "1" &&
       Number(closed.at["0.5"].opacity) < 1 &&
@@ -903,10 +918,10 @@ async function forkLeg(
   kit.check(
     "1440 (fine): a fork of a row with no mode, from its menu, opens the New Session form on the fork, Start waiting for a mode, never the hub's refusal",
     shown === "" &&
-      form.title === "Fork session" &&
+      form.title === spawnWords.forkSession &&
       form.start?.startsWith("Fork") === true &&
       form.disabled === true &&
-      form.chip === "Choose a mode" &&
+      form.chip === spawnWords.unchosenMode &&
       !form.refusal,
     JSON.stringify({ shown, ...form })
   );
@@ -1028,7 +1043,7 @@ const turnActions = (page: Page) =>
 async function forkHereLeg(kit: Kit, base: string, source: string) {
   const page = await popoverPage(kit, base, source, "light");
   const fork = page
-    .getByRole("button", { name: "Fork from here" })
+    .getByRole("button", { name: transcriptWords.forkFromHere })
     .filter({ visible: true })
     .last();
   const offered = await fork
@@ -1083,9 +1098,9 @@ async function forkHereLeg(kit: Kit, base: string, source: string) {
   kit.check(
     "1440 (fine): Fork from here on that stopped session opens the New Session form at the button, a popover on the fork, Start waiting for a mode",
     shown === "" &&
-      form.title === "Fork session" &&
+      form.title === spawnWords.forkSession &&
       form.disabled === true &&
-      form.chip === "Choose a mode" &&
+      form.chip === spawnWords.unchosenMode &&
       form.side === "bottom" &&
       form.gap !== null &&
       Math.abs(form.gap - SIDE_OFFSET) <= 1 &&
@@ -1099,7 +1114,7 @@ async function forkHereLeg(kit: Kit, base: string, source: string) {
   );
   kit.check(
     "1440 (fine): Esc closes it, the focus back on Fork from here",
-    back === "Fork from here",
+    back === transcriptWords.forkFromHere,
     `focus on ${back}`
   );
   await page.close();
@@ -1137,7 +1152,7 @@ async function reviveLeg(
   await field.click();
   await page.keyboard.type(revive.words);
   await page
-    .getByRole("button", { name: "Send message" })
+    .getByRole("button", { name: transcriptWords.sendMessage })
     .filter({ visible: true })
     .first()
     .click();
@@ -1152,12 +1167,12 @@ async function reviveLeg(
   // holds its pending words too ("Choose a modeStarting it…").
   const chooser = await page
     .locator('[data-slot="turn"][data-you]', { hasText: revive.words })
-    .getByRole("button", { name: "Choose a mode", exact: true })
+    .getByRole("button", { name: spawnWords.unchosenMode, exact: true })
     .first()
     .boundingBox()
     .catch(() => null);
   const asked = await page.evaluate(
-    ({ pick, sent, line, at }) => {
+    ({ pick, sent, line, at, notSent }) => {
       const pop = document.querySelector(pick);
       // The message's own row: its words, and what it says under them.
       const row = [
@@ -1182,13 +1197,19 @@ async function reviveLeg(
         refusal:
           words.includes("A permission mode must be chosen") ||
           words.includes("Nothing was started"),
-        failure: words.includes("Couldn't send that message"),
+        failure: words.includes(notSent),
         said: (
           row?.querySelector("[data-slot='reason']")?.textContent ?? ""
         ).trim(),
       };
     },
-    { pick: MODE_PICK, sent: revive.words, line: revive.line, at: chooser }
+    {
+      pick: MODE_PICK,
+      sent: revive.words,
+      line: revive.line,
+      at: chooser,
+      notSent: transcriptWords.notSent,
+    }
   );
   // What the hub hands every screen for the session (its board row).
   const listed = (await (
@@ -1403,7 +1424,7 @@ async function keyStartLeg(kit: Kit, base: string, source: string) {
   kit.check(
     "1440 (fine): Ctrl+Enter with no mode picked sends no spawn (the key waits as Start does); with one picked it sends one on it",
     unpicked.startDisabled === true &&
-      unpicked.chip === "Choose a mode" &&
+      unpicked.chip === spawnWords.unchosenMode &&
       unpicked.spawns === 0 &&
       unpicked.open &&
       picked?.mode === MODE,

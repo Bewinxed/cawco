@@ -10,11 +10,18 @@
   import { MediaQuery } from "svelte/reactivity";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes } from "#lib/cawco/delegate-types.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
-  import { crossIn, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    crossIn,
+    dur,
+    reveal,
+    revealOut,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { sessionTitle } from "#lib/cawco/session-names.svelte.js";
+  import { workflowLaunches } from "#lib/cawco/workflow-launch.svelte.js";
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import {
     refreshWorkflows,
@@ -48,6 +55,7 @@
   import WorkflowCanvas from "./WorkflowCanvas.svelte";
   import WorkflowInspector from "./WorkflowInspector.svelte";
   import WorkflowLaunch from "./WorkflowLaunch.svelte";
+  import WorkflowLaunchParked from "./WorkflowLaunchParked.svelte";
   import WorkflowProgram from "./WorkflowProgram.svelte";
   import WorkflowStatus from "./WorkflowStatus.svelte";
   import { duration, inspectorTitle, kinds, newNode } from "./workflow-ui";
@@ -72,7 +80,11 @@
   let paletteOpen = $state(false);
   let inspectorOpen = $state(false);
   let paletteCollapsed = $state(false);
+  /** The editor's width, which the panes' shares are of: read as it mounts, and a change in the next frame (frameSize). */
   let panelWidth = $state(940);
+  const measurePanel = frameSize<HTMLElement>((editor) => {
+    panelWidth = editor.clientWidth;
+  });
   let palettePane = $state<{ collapse: () => void; expand: () => void }>();
   /**
    * The palette folded to its 48px rail, as a share of the editor. paneforge
@@ -85,9 +97,6 @@
     Number.parseFloat(((48 / panelWidth) * 100).toFixed(10))
   );
 
-  let launch = $state(false);
-  /** The button the launch dialog grows from. */
-  let launchFrom = $state<HTMLElement>();
   let program = $state("");
   /**
    * What the hub said about a payload: the compiler's and the typechecker's
@@ -345,12 +354,14 @@
       !saving &&
       problems.length === 0
   );
-  /** Opens the launch form under the button that asked for it. */
+  /** Opens the launch form under the button that asked for it (workflow-launch.svelte.ts). */
   function openLaunch(from: HTMLElement) {
+    if (!workflow) {
+      return;
+    }
     inspectorOpen = false;
     paletteOpen = false;
-    launchFrom = from;
-    launch = true;
+    workflowLaunches.openFor(workflow.id, workflow.name, from);
   }
   function openInspector() {
     inspectorOpen = true;
@@ -407,7 +418,7 @@
     ) {
       return;
     }
-    if (tab !== "editor" || launch) {
+    if (tab !== "editor" || workflowLaunches.open === workflow?.id) {
       return;
     }
     const command = event.metaKey || event.ctrlKey;
@@ -590,7 +601,7 @@
 <div
   data-slot="editor"
   class="flex h-full min-h-0 min-w-0 flex-1 flex-col type-body text-ink-strong"
-  bind:clientWidth={panelWidth}
+  {@attach measurePanel}
 >
   <header
     class="flex min-w-0 flex-col gap-space-4 border-b border-b-border-hairline bg-surface-raised px-space-5 py-space-3 max-wide:p-space-3"
@@ -622,6 +633,7 @@
           type="button"
           variant="outline"
         /><Button
+          data-run-workflow={workflow?.id}
           disabled={!runnable}
           onclick={(event) => openLaunch(event.currentTarget)}
           title={live ? undefined : "Can't run while the hub is unreachable"}
@@ -631,6 +643,9 @@
         </Button>
       </div>
     </div>
+    {#if workflow}
+      <WorkflowLaunchParked workflowId={workflow.id} />
+    {/if}
     <div class="flex flex-wrap items-center justify-between gap-space-2">
       <div class="flex flex-wrap items-center gap-space-2">
         <Tabs.Root onValueChange={show} value={tab}>
@@ -690,14 +705,18 @@
     </Alert>
   {/if}
   {#if !workflow}
-    <div class="flex min-w-0 flex-col gap-space-4 p-space-6">
+    <!-- It hands its place to the editor in its reveal (motion/curves). -->
+    <div class="flex min-w-0 flex-col gap-space-4 p-space-6" out:revealOut>
       <Skeleton class="w-full" height="block" />
       <Skeleton class="w-full" height="block" />
     </div>
   {:else}
     <!-- One tab's pane gives way to the next in one cell, sliding across in
          tab order (pane-slide). -->
-    <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden">
+    <div
+      class="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden"
+      in:reveal
+    >
       {#key tab}
         <div
           data-slot="pane"
@@ -847,14 +866,8 @@
     </div>
   {/if}
 </div>
-{#if workflow && launch && launchFrom}
-  <WorkflowLaunch
-    from={launchFrom}
-    onclose={() => {
-      launch = false;
-    }}
-    {workflow}
-  />
+{#if workflow && workflowLaunches.open === workflow.id}
+  <WorkflowLaunch {workflow} />
 {/if}
 {#if narrow.current}
   <Dialog.Root bind:open={paletteOpen}

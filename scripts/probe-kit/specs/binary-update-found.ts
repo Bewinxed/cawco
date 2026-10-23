@@ -29,101 +29,21 @@
  *
  *   bun scripts/probe-kit/run.ts binary-update-found
  */
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { RELEASE_REPOSITORY } from "../../../packages/core/src/binary-distribution";
-import type { ReleaseManifest } from "../../../packages/core/src/release-manifest";
 import { MACHINE } from "../../scratch-fleet";
-import { ROOT, type Spec } from "../kit";
-
-interface Signed {
-  manifest: ReleaseManifest;
-  signature: string;
-}
-
-interface GithubRelease {
-  assets: { browser_download_url: string; name: string }[];
-  draft: boolean;
-  tag_name: string;
-}
+import {
+  checkoutSchema,
+  installedOn,
+  newestNightlies,
+  nightlyMirror,
+  until,
+} from "../binary-install";
+import type { Spec } from "../kit";
 
 interface UpdateReport {
   installed: boolean;
   pulled: string;
   skipped?: string;
   to?: string;
-}
-
-const NIGHTLY = /^nightly-(\d+)-/;
-
-/** The two newest published nightlies with a signed manifest, older first. */
-async function newestNightlies(): Promise<[Signed, Signed]> {
-  const response = await fetch(
-    `https://api.github.com/repos/${RELEASE_REPOSITORY}/releases?per_page=30`,
-    { headers: { accept: "application/vnd.github+json" } }
-  );
-  if (!response.ok) {
-    throw new Error(
-      `GitHub's release list answered ${response.status}: ${await response.text()}`
-    );
-  }
-  const signed = ((await response.json()) as GithubRelease[])
-    .filter((release) => !release.draft && NIGHTLY.test(release.tag_name))
-    .map((release) => ({
-      sequence: Number(NIGHTLY.exec(release.tag_name)?.[1]),
-      manifest: release.assets.find((a) => a.name === "release.json"),
-      signature: release.assets.find((a) => a.name === "release.json.sig"),
-    }))
-    .filter((row) => row.manifest && row.signature)
-    .sort((a, b) => b.sequence - a.sequence)
-    .slice(0, 2)
-    .reverse();
-  if (signed.length < 2) {
-    throw new Error("GitHub lists fewer than two signed nightlies");
-  }
-  const read = async (url: string | undefined): Promise<string> => {
-    const answer = await fetch(url ?? "");
-    if (!answer.ok) {
-      throw new Error(`${url} answered ${answer.status}`);
-    }
-    return answer.text();
-  };
-  const [older, newer] = await Promise.all(
-    signed.map(async (row) => ({
-      manifest: JSON.parse(
-        await read(row.manifest?.browser_download_url)
-      ) as ReleaseManifest,
-      signature: (await read(row.signature?.browser_download_url)).trim(),
-    }))
-  );
-  return [older as Signed, newer as Signed];
-}
-
-/** This checkout's migrations: what the scratch hub's database holds. */
-const checkoutSchema = async (): Promise<number> =>
-  (
-    JSON.parse(
-      await readFile(
-        join(ROOT, "packages/hub/drizzle/meta/_journal.json"),
-        "utf8"
-      )
-    ) as { entries: unknown[] }
-  ).entries.length;
-
-/** Polls `read` every 500 ms until `done` holds of it, or `ms` passes; its last reading. */
-async function until<T>(
-  read: () => Promise<T>,
-  done: (value: T) => boolean,
-  ms: number
-): Promise<T> {
-  const end = Date.now() + ms;
-  let value = await read();
-  while (!done(value) && Date.now() < end) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll, one look at a time
-    await Bun.sleep(500);
-    value = await read();
-  }
-  return value;
 }
 
 const spec: Spec = {
@@ -146,65 +66,14 @@ const spec: Spec = {
     }
 
     // The mirror: what it publishes, and every archive it is asked for.
-    let published: Signed = n;
-    const asked: string[] = [];
-    const mirror = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch(request) {
-        const { pathname } = new URL(request.url);
-        if (pathname === "/nightly/release.json") {
-          return Response.json(published.manifest);
-        }
-        if (pathname === "/nightly/release.json.sig") {
-          return new Response(published.signature);
-        }
-        asked.push(pathname);
-        return new Response("not served by this mirror", { status: 404 });
-      },
-    });
+    const mirror = nightlyMirror(n);
+    const { asked } = mirror;
     try {
       const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
-      const dataHome = fleet.env.XDG_DATA_HOME;
-      const dbPath = fleet.env.CAWCO_DB_PATH;
-      if (!(dataHome && dbPath)) {
-        throw new Error("the scratch fleet names no XDG_DATA_HOME or database");
-      }
-      const root = join(dataHome, "cawco", "binary");
-      // Both run N: its manifest as the running build's (this checkout runs
-      // as 0.0.0-dev), and its signature beside it, which the hub reads.
-      for (const version of ["0.0.0-dev", n.manifest.version]) {
-        const dir = join(root, "versions", version);
-        // biome-ignore lint/performance/noAwaitInLoops: two folders, written in order
-        await mkdir(dir, { recursive: true });
-        await writeFile(
-          join(dir, "release.json"),
-          `${JSON.stringify(n.manifest)}\n`
-        );
-        await writeFile(
-          join(dir, "release.signature.json"),
-          `${JSON.stringify({ signature: n.signature })}\n`
-        );
-      }
-      await symlink(
-        join(root, "versions", n.manifest.version),
-        join(root, "current")
-      );
-      await writeFile(
-        join(root, "installation.json"),
-        `${JSON.stringify({
-          hubUrl: fleet.base,
-          installedVersion: n.manifest.version,
-          releaseHost: `http://127.0.0.1:${mirror.port}`,
-          role: "agent",
-          root,
-        })}\n`
-      );
-      await mkdir(dirname(dbPath), { recursive: true });
-      await writeFile(
-        join(dirname(dbPath), "update-policy.json"),
-        `${JSON.stringify({ channel: "nightly", autoUpdate: false })}\n`
-      );
+      await installedOn(fleet, n, {
+        hubUrl: fleet.base,
+        releaseHost: mirror.url,
+      });
 
       fleet.launch("sessiond");
       await fleet.sessiondUp();
@@ -246,7 +115,7 @@ const spec: Spec = {
       );
 
       // 2. N+1 published: the check finds it.
-      published = next;
+      mirror.publish(next);
       const foundNext = await fleet.api<{ version: string }>(
         "/api/binary-updates/check",
         {}
@@ -286,7 +155,7 @@ const spec: Spec = {
         report.skipped ?? "no reason given"
       );
     } finally {
-      await mirror.stop(true);
+      await mirror.stop();
     }
   },
 };

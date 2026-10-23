@@ -1,24 +1,20 @@
 <script lang="ts">
-  import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { MachineRow } from "#lib/components/ui/machine-row/index.js";
   /**
    * Machines chip + popover (§1.4, §2.5): multi-select rows, then "Connect a
-   * machine…", which swaps the list in place for the pairing panel — the
-   * install command and a live wait for the machine to check in. The command
-   * box and the watcher are the Connect a machine dialog's own (join/), so the
-   * two surfaces cannot drift. Closing the popover, or opening another,
-   * cancels pairing (design L237); a machine checking in ends it, and its row
-   * is then in the list.
+   * machine…", which closes the popover and opens Add machine (connect/),
+   * the one way a machine is added; focus comes back to the chip as it
+   * closes. A machine it adds has its row in this list once it checks in.
    */
-  import Add from "~icons/solar/add-circle-linear";
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Check from "~icons/solar/check-circle-bold-duotone";
-  import Server from "~icons/solar/server-square-bold-duotone";
-  import CheckInStatus from "../join/CheckInStatus.svelte";
-  import CopyBox from "../join/CopyBox.svelte";
-  import { CheckIn, installCommand, joinInfo } from "../join/join.svelte";
+  import {
+    IconAddCircleLine as Add,
+    IconSuccess as Check,
+    IconChevronDown as Down,
+    IconServerSquare as Server,
+  } from "#lib/icons.js";
+  import { connect } from "../connect/installs.svelte";
   import { machineRowRadius } from "./machine-rows";
   import NsPopover from "./NsPopover.svelte";
   import type { MachineItem } from "./ns-types";
@@ -43,20 +39,15 @@
     }
     return picked.length === 1 ? picked[0].name : `${picked.length} machines`;
   });
-  /** The watcher while pairing, null while the list shows. */
-  let pairing = $state<CheckIn | null>(null);
-  $effect(() => {
-    if (!open || pairing?.joined) {
-      pairing = null;
-    }
-  });
-  function startPairing() {
-    pairing = new CheckIn();
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the command renders from joinInfo when it lands
-    void joinInfo.refresh();
+  /** Add machine, its focus coming back to this chip as it closes. */
+  function addMachine() {
+    onchange(false);
+    connect.openNew(
+      document.querySelector<HTMLElement>(
+        '[aria-controls="session-machines-popover"]'
+      )
+    );
   }
-  /** Tailscale first: the address that works from wherever the machine is. */
-  const pairUrl = $derived(joinInfo.value?.addresses[0]?.url);
   const presenceOf = (row: MachineItem) => {
     if (!row.online) {
       return "off";
@@ -89,88 +80,57 @@
     <span data-slot="chip-label">{label}</span>
     <Down data-slot="chevron" />
   {/snippet}
-  {#if pairing}
-    <div class="ns-panel grid gap-space-3 p-space-1">
-      <p class="type-meta text-ink-muted">
-        Run this on the machine. It appears here as soon as the agent checks in.
-      </p>
-      {#if pairUrl}
-        <!-- Read before it is run: it wraps between its words, never cut
-             mid-URL (CopyBox `wrap`). -->
-        <CopyBox label="Install command" text={installCommand(pairUrl)} wrap />
-      {:else if joinInfo.error}
-        <p class="type-meta text-status-fail-ink" role="alert">
-          {joinInfo.error}
-        </p>
-      {:else}
-        <p class="type-meta text-ink-muted">Reading this hub's addresses…</p>
-      {/if}
-      <CheckInStatus>
-        {#snippet trail()}
-          <Button
-            onclick={() => {
-              pairing = null;
-            }}
-            size="sm"
-            variant="outline"
-          >
-            Back
-          </Button>
-        {/snippet}
-      </CheckInStatus>
-    </div>
-  {:else}
-    {#each machines as row, index (row.id)}
-      {@const on = selected.includes(row.id)}
-      <button
-        data-slot="row"
-        aria-pressed={on}
-        class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
-        data-fh="1"
-        disabled={!row.online}
-        onclick={() => ontoggle(row.id)}
-        style={`--delay:${80 + index * 45}ms`}
-        style:border-radius={radius(index, on)}
-        type="button"
-      >
-        <MachineRow
-          hue={row.hue}
-          icon={row.icon}
-          ink={on}
-          meta={`${row.os ? `${row.os} · ` : ""}${row.load}${row.place ? ` · ${row.place}` : ""}`}
-          name={row.name}
-          presence={presenceOf(row)}
-        />
-        <Check
-          class="size-icon-md flex-none text-ink-strong in-aria-pressed:text-selected-icon transition-[opacity] duration-(--dur-toggle) ease-out motion-safe:transition-[opacity,transform]"
-          style={`opacity:${on ? 1 : 0};transform:scale(${on ? 1 : 0.94})`}
-        />
-      </button>
-    {/each}
-    {#if machines.length === 0}
-      <div
-        class="ns-in px-space-2 py-space-4 text-center type-meta text-ink-subtle"
-      >
-        No machines have checked in.
-      </div>
-    {/if}
-    <div
-      data-slot="divider"
-      class="mx-space-row my-space-1 border-t border-border-hairline"
-    ></div>
+  {#each machines as row, index (row.id)}
+    {@const on = selected.includes(row.id)}
     <button
       data-slot="row"
-      data-add
-      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+      aria-pressed={on}
+      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
-      onclick={startPairing}
-      style="--delay:140ms"
+      data-machine-id={row.id}
+      disabled={!row.online}
+      onclick={() => ontoggle(row.id)}
+      style={`--delay:${80 + index * 45}ms`}
+      style:border-radius={radius(index, on)}
       type="button"
     >
-      <span data-slot="tile" class={iconTileVariants({ empty: true })}
-        ><Add class="size-icon-md" /></span
-      >
-      <span class="type-label">Connect a machine…</span>
+      <MachineRow
+        hue={row.hue}
+        icon={row.icon}
+        ink={on}
+        meta={`${row.os ? `${row.os} · ` : ""}${row.load}${row.place ? ` · ${row.place}` : ""}`}
+        name={row.name}
+        presence={presenceOf(row)}
+      />
+      <Check
+        class="size-icon-md flex-none text-ink-strong in-aria-pressed:text-selected-icon transition-[opacity] duration-(--dur-toggle) ease-out motion-safe:transition-[opacity,transform]"
+        style={`opacity:${on ? 1 : 0};transform:scale(${on ? 1 : 0.94})`}
+      />
     </button>
+  {/each}
+  {#if machines.length === 0}
+    <div
+      class="ns-in px-space-2 py-space-4 text-center type-meta text-ink-subtle"
+    >
+      No machines have checked in.
+    </div>
   {/if}
+  <div
+    data-slot="divider"
+    class="mx-space-row my-space-1 border-t border-border-hairline"
+  ></div>
+  <button
+    data-slot="row"
+    data-add
+    class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+    data-fh="1"
+    onclick={addMachine}
+    style="--delay:140ms"
+    type="button"
+  >
+    <span data-slot="tile" class={iconTileVariants({ empty: true })}
+      ><Add class="size-icon-md" /></span
+    >
+    <span class="type-label">Connect a machine…</span>
+  </button>
 </NsPopover>

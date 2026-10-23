@@ -13,10 +13,13 @@ import type {
   AccountKind,
   AccountProvider,
   AccountReading,
+  AccountSetupStep,
   AccountSignin,
   AccountSigninResult,
   AgentRow,
   ApprovedActionView,
+  ArtifactNeed,
+  ArtifactNeedNotice,
   AvailableCommand,
   BrowserAskFrame,
   BuildInfo,
@@ -43,7 +46,6 @@ import type {
   LandsMode,
   LawBroken,
   LfsOfferState,
-  LocalName,
   MachineHarnessReport,
   McpServerStatus,
   ModeAsk,
@@ -53,6 +55,7 @@ import type {
   NeutralStatus,
   OnCap,
   OpenCodeGoLimits,
+  PendingAccountSignin,
   PermissionMode,
   PermissionPresentation,
   PermissionResult,
@@ -108,6 +111,8 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  accountsWords,
+  askWords,
   CAWCO_SCRATCH_TAG,
   CONTROL_SUPPORTED_COMMANDS,
   capHolds,
@@ -146,6 +151,7 @@ import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { currentClientId } from "./client-id";
+import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { devDebug } from "./dev-debug";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
@@ -167,10 +173,12 @@ import {
 } from "./links";
 import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
+import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { type HeldPlan, handlePlanMessage } from "./plan";
 import { presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
+import { type Refusal, refusals } from "./refusals.svelte";
 import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
 import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
 import { checkServedBuild } from "./served-build.svelte";
@@ -200,7 +208,6 @@ import {
   sweepCommands,
 } from "./stream";
 import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
-import { toast } from "./toasts";
 import { warmCompactionMark } from "./transcript/compaction-mark";
 import {
   answeredNote,
@@ -1178,6 +1185,13 @@ const state = $state({
    */
   watchNotices: [] as FleetWatchNotice[],
   /**
+   * The artifacts waiting on the person, and their notices (core
+   * artifact-needs.ts): read as the dashboard connects, in `/api/pending`'s
+   * `artifact.needs` envelope, then kept whole by the hub's frames.
+   */
+  artifactNeeds: [] as ArtifactNeed[],
+  artifactNotices: [] as ArtifactNeedNotice[],
+  /**
    * Every system law the hub caught broken since it started (core
    * invariant.ts), whole on each `laws.broken` frame; none until one breaks.
    */
@@ -1203,14 +1217,6 @@ const state = $state({
   tailnetHttps: undefined as TailnetHttps | undefined,
   /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
   tailnetTicked: false,
-  /**
-   * The hub's `.local` name typed in a browser (`GET /api/local-name`, then
-   * each `local.name` frame): Needs you shows its step while port 80 needs
-   * the person; undefined until read.
-   */
-  localName: undefined as LocalName | undefined,
-  /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
-  localNameTicked: false,
   /**
    * The stream relay's journey (`GET /api/stream-relay`, then each
    * `stream_relay.journey` frame): Needs you shows its row while it asks,
@@ -1297,9 +1303,11 @@ const pageReads = new Map<
   { read: Promise<TranscriptOutcome>; cancel: () => void }
 >();
 
-// Lets the store be asserted from the console while developing.
+// Lets the store be asserted from the console while developing, and a
+// bench stand its conversation in as one the hub holds running
+// (`adoptInstances`, as a snapshot does).
 if (import.meta.env.DEV) {
-  devDebug({ state, inflight });
+  devDebug({ state, inflight, adoptInstances });
 }
 
 // HMR-persistent socket references, so a module reload never leaves an orphan.
@@ -2469,6 +2477,8 @@ export interface AccountsView {
   /** Why accounts with no catalog have none: their last probe's fault. */
   catalogFaults: AccountCatalogFault[];
   catalogs: AccountCatalog[];
+  /** Sign-ins started on a machine and not finished: the link or code each showed. */
+  pending: PendingAccountSignin[];
   /** Each account's freshest reading: its windows, plan and extra usage. */
   readings: AccountReading[];
   /** What adding an account (or one back from its bench) set moving, newest first. */
@@ -2493,6 +2503,18 @@ export function followAccounts(follower: () => void): void {
   accountsFollower = follower;
 }
 
+/** Who takes each new accounts read as it lands (see {@link takeAccounts}). */
+let accountsTaker: ((view: AccountsView) => void) | null = null;
+
+/**
+ * Calls `taker` with each accounts read that changed what the hub said, as
+ * it is kept: the sign-ins under way in this tab take up the link or code
+ * the hub kept for them (accounts/flows.svelte.ts). One taker.
+ */
+export function takeAccounts(taker: (view: AccountsView) => void): void {
+  accountsTaker = taker;
+}
+
 /**
  * Reads the hub's accounts of every provider, their sign-ins and catalogs,
  * and the providers the fleet's machines know; a failed read keeps what was
@@ -2513,6 +2535,7 @@ export async function readAccounts(): Promise<void> {
   }
   if (view && !equal(state.accounts, view)) {
     state.accounts = view;
+    accountsTaker?.(view);
   }
   if (providers && !equal(state.accountProviders, providers)) {
     state.accountProviders = providers;
@@ -2552,6 +2575,8 @@ export const createAccount = (body: {
   provider: AccountProvider;
   hue?: AccountHue;
   label?: string;
+  /** Made by the setup: the step it stands at, until it is done. */
+  setupStep?: AccountSetupStep;
 }): Promise<Account> => accountsWrite("/api/accounts", "POST", body);
 
 /** Changes an account's nickname (null: its email), colour, order or limits. */
@@ -2563,6 +2588,8 @@ export const patchAccount = (
     neverBackup?: boolean;
     order?: number;
     reservePct?: number | null;
+    /** Where its setup stands; null once the setup is done. */
+    setupStep?: AccountSetupStep | null;
   }
 ): Promise<Account> =>
   accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "PATCH", patch);
@@ -2678,8 +2705,9 @@ let continuationFollower: ((table: ContinuationJob[]) => void) | null = null;
 
 /**
  * Hands `follower` the continuation table every time the hub's word on it
- * lands — a publish, or the read on connect. One follower: the Continue
- * flow's (continue.svelte.ts).
+ * lands — a publish, or the read on connect. One follower: the parked
+ * starts' (spawn/parked.svelte.ts), which follow every continuation this tab
+ * started.
  */
 export function followContinuations(
   follower: (table: ContinuationJob[]) => void
@@ -2807,10 +2835,10 @@ async function refresh(): Promise<boolean> {
   readWatchNotices();
   // The fleet's upstream answer: Needs you asks it while nobody has.
   readFleetUpstream();
+  // The person's presence: the rail's dot, and Needs you's row for this browser.
+  readPerson().catch(() => undefined);
   // HTTPS on the tailnet name: Needs you shows its step while one stands.
   readTailnetHttps();
-  // The hub's `.local` name typed in a browser: its step while one stands.
-  readLocalName();
   // The stream relay's journey: Needs you's row and Settings › Browsers.
   readRelayJourney().catch(() => undefined);
   // Every project's threads, for the rail; frames keep them from here.
@@ -3289,9 +3317,20 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "installs") {
+    takeInstallsFrame(frame);
+    return;
+  }
+
   if (frame.kind === "fleet_watch.notices") {
     heardFrame("fleet_watch.notices");
     state.watchNotices = frame.notices;
+    return;
+  }
+
+  if (frame.kind === "artifact.needs") {
+    state.artifactNeeds = frame.needs;
+    state.artifactNotices = frame.notices;
     return;
   }
 
@@ -3319,6 +3358,18 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "projects.changed") {
     rereadProjects();
+    return;
+  }
+
+  // The person's presence, and the machines that count toward it.
+  if (frame.kind === "person") {
+    takePerson(frame.person);
+    return;
+  }
+
+  // Something that needs the person, shown on the desk tab they use.
+  if (frame.kind === "desk_alert") {
+    showDeskAlert(frame, instanceIndex);
     return;
   }
 
@@ -3352,21 +3403,6 @@ function handleFrame(frame: FramePayload): void {
     if (ticked) {
       setTimeout(() => {
         state.tailnetTicked = false;
-      }, TAILNET_TICK_MS);
-    }
-    return;
-  }
-
-  // Port 80 for the `.local` name changed: Needs you's step stands, or ticks.
-  if (frame.kind === "local.name") {
-    heardFrame("local.name");
-    const ticked =
-      state.localName?.state === "needs" && frame.localName.state === "serving";
-    state.localName = frame.localName;
-    state.localNameTicked = ticked;
-    if (ticked) {
-      setTimeout(() => {
-        state.localNameTicked = false;
       }, TAILNET_TICK_MS);
     }
     return;
@@ -3532,8 +3568,9 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "stage-clone") {
     return;
   }
-  // A machine's fleet report travels machine → hub only; screens read the hub's row.
-  if (frame.kind === "fleet_report") {
+  // A machine's fleet report and its items' converge travel machine → hub
+  // only; screens read the hub's row.
+  if (frame.kind === "fleet_report" || frame.kind === "fleet_converge") {
     return;
   }
 
@@ -3655,12 +3692,14 @@ const streamHost: StreamHost = {
    * The client half of the ledger's failure port: every command that ever
    * reaches `failed`, on either dialect, is heard exactly once here.
    *
-   * The rule is not "toast everything" — it is "nothing goes unsaid TWICE".
-   * A kind whose own surface renders the failure inline claims it; everything
-   * else, and every claim whose surface has since vanished, is spoken by a
-   * toast. That way a command kind added next year is loud by default rather
-   * than silent by default, which is the failure mode this whole port exists
-   * to close.
+   * The rule is "nothing goes unsaid, and nothing is said TWICE", and never
+   * in a toast (DESIGN.md, The Work Outlives Its Surface Rule). A kind whose
+   * own surface renders the failure inline claims it; everything else, and
+   * every claim whose surface has since vanished, is said over the session's
+   * composer ({@link commandFault}), in the error formula, with Try again
+   * where a try can go. That way a command kind added next year is loud by
+   * default rather than silent by default, which is the failure mode this
+   * whole port exists to close.
    */
   noteFailure: (record) => {
     if (record.kind === "send") {
@@ -3682,29 +3721,229 @@ const streamHost: StreamHost = {
     // answer.`) against the very command id it holds. It only does so while it
     // is still on screen: answering removes the request from `pending`, so an
     // answer that fails after the card has gone has no inline surface at all
-    // and falls through to the toast.
+    // and is said over the session's composer.
     if (record.kind === "permission.answer" && answerCardStillParked(record)) {
       return;
     }
-    toast.error(failureNotice(record));
+    // Kept for its session (refusals.svelte.ts): a model, effort or mode
+    // change is said on the details card's own line for it while that card
+    // stands, and over the composer otherwise; anything else over the
+    // composer. A reload says it again in the same place.
+    sayCommandFault(record);
   },
 };
 
-/** What to say about a failed command, in the operator's terms, never the wire's. */
-const FAILURE_LEAD: Record<CommandKind, string> = {
-  "send.withdraw": "Couldn't take back that message.",
-  send: "Couldn't send that message.",
-  "permission.answer": "Couldn't send that answer.",
-  interrupt: "Couldn't stop the turn.",
-  "set-model": "Couldn't change the model.",
-  "set-permission-mode": "Couldn't change the permission mode.",
-  "set-effort": "Couldn't change the effort.",
+/** The kinds the session's details card asks for, and says the failure of. */
+const SETTINGS_KINDS: ReadonlySet<CommandKind> = new Set([
+  "set-model",
+  "set-effort",
+  "set-permission-mode",
+]);
+
+/** Sessions whose details card stands now, by how many: their settings' failures are its to say. */
+const detailsOpen = new SvelteMap<string, number>();
+
+/** Marks `sessionId`'s details card as standing, until the returned release. */
+export function holdDetails(sessionId: string): () => void {
+  // Called from the card's effect: the count is written, never tracked there.
+  untrack(() => {
+    detailsOpen.set(sessionId, (detailsOpen.get(sessionId) ?? 0) + 1);
+  });
+  return () =>
+    untrack(() => {
+      const left = (detailsOpen.get(sessionId) ?? 1) - 1;
+      if (left > 0) {
+        detailsOpen.set(sessionId, left);
+      } else {
+        detailsOpen.delete(sessionId);
+      }
+    });
+}
+
+/** A reason's closing stop, dropped so it sits inside the sentence. */
+const REASON_STOP = /\.$/;
+
+/**
+ * A failed command in the error formula (WORDS.md): what did not happen, the
+ * hub's why, what stands meanwhile; the way on (Try again, or the control
+ * itself) stands beside it. The operator's terms, never the wire's.
+ */
+export function failureNotice(record: CommandRecord): string {
+  const why = (record.reason ?? "the hub didn't say why").replace(
+    REASON_STOP,
+    ""
+  );
+  switch (record.kind) {
+    case "interrupt":
+      return `The turn was not stopped: ${why}. It goes on.`;
+    case "set-model":
+      return `The model was not changed: ${why}. The session keeps the one it runs.`;
+    case "set-effort":
+      return `The effort was not changed: ${why}. The session keeps the one it runs.`;
+    case "set-permission-mode":
+      return `The permission mode was not changed: ${why}. The session keeps the one it runs.`;
+    case "permission.answer":
+      return `Your answer was not sent: ${why}. The ask has since closed, so nothing waits on it.`;
+    case "send.withdraw":
+      return `The message was not taken back: ${why}. It stays queued.`;
+    case "send":
+      return `Your message was not sent: ${why}.`;
+    default: {
+      const unhandled: never = record.kind;
+      return `That didn't go through: ${why}. (${String(unhandled)})`;
+    }
+  }
+}
+
+/** What a refused command asked, kept with its words, so Try again asks again after a reload. */
+interface CommandAsked {
+  /** The control's argument: the model, the effort, the mode. */
+  arg?: unknown;
+  /** When it was refused: the composer says the latest. */
+  at: number;
+  kind: CommandKind;
+  machineId?: string;
+}
+
+/** Where a session's refused command of `kind` is kept. */
+const commandKey = (sessionId: string, kind: CommandKind | "") =>
+  `command:${sessionId}:${kind}`;
+
+/**
+ * The same command again, as it went: its kind, its machine and what it
+ * asked. None for an answer, whose ask has gone, or for a command that
+ * never got an envelope.
+ */
+function againOf(
+  sessionId: string,
+  asked: CommandAsked
+): (() => void) | undefined {
+  const { machineId, arg } = asked;
+  if (!machineId) {
+    return;
+  }
+  switch (asked.kind) {
+    case "interrupt":
+      return () => {
+        submitCommand(sessionId, machineId, "interrupt", {});
+      };
+    case "set-model":
+      return () => {
+        submitCommand(sessionId, machineId, "set-model", {
+          model: arg as string,
+        });
+      };
+    case "set-effort":
+      return () => {
+        submitCommand(sessionId, machineId, "set-effort", {
+          effort: arg as EffortLevel,
+        });
+      };
+    case "set-permission-mode":
+      return () => {
+        submitCommand(sessionId, machineId, "set-permission-mode", {
+          mode: arg as PermissionMode,
+        });
+      };
+    // An answer's ask has gone; a send says itself on its row and composer.
+    case "permission.answer":
+    case "send.withdraw":
+    case "send":
+      return;
+    default: {
+      const unhandled: never = asked.kind;
+      throw new Error(`No Try again for command kind ${String(unhandled)}.`);
+    }
+  }
+}
+
+/** A refused command's words and its Try again, where its session says it. */
+export interface CommandFault {
+  again?: () => void;
+  kind: CommandKind;
+  words: string;
+}
+
+const faultOf = (sessionId: string, said: Refusal): CommandFault => {
+  const asked = said.asked as CommandAsked;
+  return {
+    kind: asked.kind,
+    words: said.reason,
+    again: againOf(sessionId, asked),
+  };
 };
 
-const failureNotice = (record: CommandRecord): string => {
-  const lead = FAILURE_LEAD[record.kind] ?? "That didn't go through.";
-  return record.reason ? `${lead} ${record.reason}` : lead;
-};
+/**
+ * What `instanceId`'s composer says of a refused command: the latest one
+ * no details card is saying, over the field, with Try again, until the
+ * next command of that session goes. Kept through a reload.
+ */
+export function commandFault(instanceId: string): CommandFault | null {
+  const shown = detailsOpen.has(instanceId);
+  const [latest] = refusals
+    .under(commandKey(instanceId, ""))
+    .filter(
+      ([, said]) =>
+        !(shown && SETTINGS_KINDS.has((said.asked as CommandAsked).kind))
+    )
+    .toSorted(
+      ([, a], [, b]) =>
+        (b.asked as CommandAsked).at - (a.asked as CommandAsked).at
+    );
+  return latest ? faultOf(instanceId, latest[1]) : null;
+}
+
+/** What a session's details card says of its refused `kind` change, under that control. */
+export function settingFault(
+  instanceId: string,
+  kind: CommandKind
+): CommandFault | null {
+  const said = refusals.get(commandKey(instanceId, kind));
+  return said ? faultOf(instanceId, said) : null;
+}
+
+/**
+ * What each control command asked, by command id, from its submit: the
+ * ledger lets a record's envelope go once it settles, before its failure
+ * is noted, and Try again needs the machine and the argument.
+ */
+const controlAsks = new Map<string, { arg?: unknown; machineId: string }>();
+
+/** Keeps what a control command asked, dropping what settled long ago. */
+function rememberControlAsk(
+  commandId: string,
+  machineId: string,
+  arg?: unknown
+): void {
+  for (const known of [...controlAsks.keys()]) {
+    if (!streamState.commands[known]) {
+      controlAsks.delete(known);
+    }
+  }
+  controlAsks.set(commandId, { arg, machineId });
+}
+
+function sayCommandFault(record: CommandRecord): void {
+  const asked = controlAsks.get(record.commandId);
+  controlAsks.delete(record.commandId);
+  refusals.set(commandKey(record.sessionId, record.kind), {
+    reason: failureNotice(record),
+    asked: {
+      at: Date.now(),
+      arg: asked?.arg,
+      kind: record.kind,
+      machineId:
+        asked?.machineId ?? instanceIndex.byId.get(record.sessionId)?.machineId,
+    } satisfies CommandAsked,
+  });
+}
+
+/** A new command of the session answers what was said of its last ones. */
+function clearCommandFaults(instanceId: string): void {
+  for (const [key] of refusals.under(commandKey(instanceId, ""))) {
+    refusals.delete(key);
+  }
+}
 
 /**
  * A send whose command the hub never took — the socket was down, went down,
@@ -3774,7 +4013,7 @@ function rememberAnswerSurface(
  * - LEGACY. The control dialect puts the answer on the wire and clears
  *   `pending` only afterwards, so a socket that throws leaves the card exactly
  *   where it was. The card renders "Couldn't send that answer." off the very
- *   record that failed — so this returns true and the toast stands down. That
+ *   record that failed — so this returns true and the composer stays quiet. That
  *   is the double report this rule exists to prevent, and it only works
  *   because the surface is now registered BEFORE the submit that can fail
  *   inside it; registered afterwards there was nothing here to find.
@@ -3782,7 +4021,7 @@ function rememberAnswerSurface(
  *   it, so a refused answer leaves the ask parked: the session's card and the
  *   Needs row (`answerFor`) both read the refusal off the record, and this
  *   returns true. It returns false only when the ask has gone some other way
- *   meanwhile, and then the toast is the report.
+ *   meanwhile, and then the composer's line is the report.
  */
 function answerCardStillParked(record: CommandRecord): boolean {
   const surface = answerSurfaces.get(record.commandId);
@@ -3990,6 +4229,16 @@ export function submitCommand<K extends CommandKind>(
   // Everything below either reaches the ledger or becomes a record in it;
   // nothing reaches the caller as an exception.
   const settlesAt = SETTLES_AT[kind];
+  // A new command answers what was said of the last ones.
+  clearCommandFaults(instanceId);
+  if (SETTINGS_KINDS.has(kind) || kind === "interrupt") {
+    const { model, effort, mode } = intent as Partial<
+      CommandIntents["set-model"] &
+        CommandIntents["set-effort"] &
+        CommandIntents["set-permission-mode"]
+    >;
+    rememberControlAsk(commandId, machineId, model ?? effort ?? mode);
+  }
 
   // REGISTERED BEFORE ANYTHING THAT CAN FAIL, and that ordering is the whole
   // point of these two lines being here rather than after the submit.
@@ -5072,6 +5321,8 @@ function hubReached(): void {
   state.restart = null;
   globalThis.__cawcoReconnectAttempts = 0;
   readFleet();
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the band and Add machine's window draw what lands
+  void readInstalls();
   rereadFollowed();
   lastPlanFollowKey = "";
   syncPlanFollows();
@@ -5477,11 +5728,13 @@ async function explicit(
  */
 async function start({
   machineId,
+  instanceId = newId(),
   ...spawn
 }: Omit<NamedSpawn, "instanceId"> & {
   machineId: string;
+  /** The id it is asked under; one is minted when none is named. */
+  instanceId?: string;
 }): Promise<Bounded<SessionState>> {
-  const instanceId = newId();
   const requestId = newId();
   const payload = await explicit(machineId, { instanceId, ...spawn });
   let taken: Bounded<void>;
@@ -5521,6 +5774,7 @@ async function start({
  * the hub's reason, and its first prompt is never sent.
  */
 export async function spawnSession({
+  instanceId,
   machineId,
   cwd,
   prompt,
@@ -5534,6 +5788,12 @@ export async function spawnSession({
   account,
   extras = {},
 }: {
+  /**
+   * The id the session is asked for under, minted by the caller before it
+   * asks, so a page reloaded while the hub answers finds it on the board
+   * (spawn/parked); one is minted here when none is named.
+   */
+  instanceId?: string;
   machineId: string;
   cwd: string;
   prompt?: string;
@@ -5550,6 +5810,7 @@ export async function spawnSession({
   account?: string;
 }): Promise<Bounded<string>> {
   const started = await start({
+    ...(instanceId ? { instanceId } : {}),
     machineId,
     cwd,
     harness,
@@ -5572,14 +5833,18 @@ export async function spawnSession({
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
-  sendFirst(started.value.instanceId, machineId, prompt, extras);
+  sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return { kind: "answered", value: started.value.instanceId };
 }
 
-/** A new session's first message, when it has words or files: sent once the hub has taken the start. */
-function sendFirst(
+/**
+ * A new session's first message, when it has words or files: sent once the
+ * hub has taken the start, or once a page reloaded while it answered finds
+ * the session on the board (spawn/parked).
+ */
+export function sendFirstPrompt(
   instanceId: string,
   machineId: string,
   prompt: string | undefined,
@@ -5673,7 +5938,7 @@ export async function forkSession({
     case "unanswered":
       return started;
     case "answered":
-      sendFirst(started.value.instanceId, machineId, prompt, extras);
+      sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
       // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
       void refresh();
       return { kind: "answered", value: started.value.instanceId };
@@ -6146,20 +6411,6 @@ export async function projectAtFolder(project: {
 }
 
 /**
- * A session's plan, read now (`GET /api/instances/:id/plan`); its followers
- * hear the same plan live through {@link cawco.planOf}.
- */
-export async function planOf(instanceId: string): Promise<SessionPlan> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/plan`
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, "so the plan is not known.");
-  }
-  return (await response.json()) as SessionPlan;
-}
-
-/**
  * The standing "make this a project" offers, as the hub holds them now: each
  * session's as the read answered it, or as a `project_offer` frame since left it.
  */
@@ -6190,15 +6441,6 @@ async function readTailnetHttps(): Promise<void> {
   const read = await load<TailnetHttps>("/api/tailnet-https");
   if (read && !heardSince("tailnet.https", mark)) {
     state.tailnetHttps = read;
-  }
-}
-
-/** Port 80 for the hub's `.local` name, as the hub has it now. */
-async function readLocalName(): Promise<void> {
-  const mark = readLeaves();
-  const read = await load<LocalName>("/api/local-name");
-  if (read && !heardSince("local.name", mark)) {
-    state.localName = read;
   }
 }
 
@@ -7145,7 +7387,7 @@ export function harnessDidntAnswer(
   { harness, after }: HarnessUnanswered
 ): string {
   return catalogWords.harnessDidntAnswer(
-    harness,
+    accountsWords.harnesses[harness] ?? harness,
     machineName(machineId),
     Math.round(after / 1000)
   );
@@ -7160,7 +7402,7 @@ export function harnessCouldntList(
   { harness, error }: HarnessFailed
 ): string {
   return catalogWords.harnessCouldntList(
-    harness,
+    accountsWords.harnesses[harness] ?? harness,
     machineName(machineId),
     error
   );
@@ -7176,8 +7418,9 @@ interface LeftOut {
  * The machine's stored sessions, newest first. A harness that did not list
  * in time, or whose listing threw, keeps the sessions it listed last; it is
  * kept on {@link catalogLeftOut} in {@link harnessDidntAnswer}'s and
- * {@link harnessCouldntList}'s words, and said in one toast per machine,
- * changed in place by each load and dismissed once none is left out.
+ * {@link harnessCouldntList}'s words, and said over Recent's stored
+ * sessions (HomeRecent), with Try again, until a load leaves none out;
+ * never a toast (DESIGN.md, The Work Outlives Its Surface Rule).
  */
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
@@ -7223,12 +7466,6 @@ export async function loadCatalog(machineId: string): Promise<void> {
         }
         catalog = { ...catalog, [machineId]: [...sessions, ...kept] };
         catalogLeftOut = { ...catalogLeftOut, [machineId]: said };
-        const toastId = `catalog-unread-${machineId}`;
-        if (said.length > 0) {
-          toast.warning(said.join(" "), { id: toastId });
-        } else {
-          toast.dismiss(toastId);
-        }
         break;
       }
       default: {
@@ -7597,10 +7834,10 @@ async function readBackToHeld(
 
 /**
  * Why a read failed, where the view says it: over rows held, they stay where
- * the reader has them and the view is behind ({@link SessionState.behind}),
- * the dock saying "Not caught up" and a toast saying why, once for each
- * fault ({@link toastBehind}); with nothing held, the pane says why in their
- * place. A read the hub failed is read again on {@link READ_AGAIN_MS}; one
+ * the reader has them and the view is behind ({@link SessionState.behind}):
+ * the line over them says why, with its way back (transcript/Behind.svelte),
+ * never a toast (DESIGN.md, The Work Outlives Its Surface Rule); with nothing
+ * held, the pane says why in their place. A read the hub failed is read again on {@link READ_AGAIN_MS}; one
  * that found the machine offline waits for it ({@link readBehind}), unless
  * the hub already lists that machine online: then the machine list has
  * nothing more to say, and its every change would read again at once, so it
@@ -7612,11 +7849,6 @@ async function readBackToHeld(
 function readFailed(target: SessionState, fault: ReadFault): void {
   if (target.blocks.length > 0) {
     target.behind = fault;
-    // A machine on its way back is a wait the line over the rows says; the
-    // toast is for a read that failed.
-    if (!reconnectingNow(fault)) {
-      toastBehind(target.instanceId, fault);
-    }
   } else {
     target.readFault = fault;
   }
@@ -7698,42 +7930,12 @@ function readAgainLater(viewId: string): void {
   failedReads.set(viewId, failed);
 }
 
-/** A read landed: the next failure waits the first delay again, and its fault toasts again. */
+/** A read landed: the next failure waits the first delay again. */
 function readLanded(viewId: string): void {
   clearTimeout(failedReads.get(viewId)?.timer);
   failedReads.delete(viewId);
   clearTimeout(deadlineReads.get(viewId));
   deadlineReads.delete(viewId);
-  toasted.delete(viewId);
-}
-
-/** The fault each view last toasted, until a read lands: the same one again says nothing. */
-const toasted = new Map<string, string>();
-
-/**
- * The error formula for a transcript that could not be caught up, as a
- * toast: what happened (its name isn't caught up), why (the read's one
- * sentence), how to fix it and what happens next. Once per distinct fault.
- */
-function toastBehind(viewId: string, fault: ReadFault): void {
-  const key = `${fault.reason}|${fault.reason === "offline" ? fault.machineId : ""}|${fault.message}`;
-  if (toasted.get(viewId) === key) {
-    return;
-  }
-  toasted.set(viewId, key);
-  const row = instanceIndex.byId.get(viewId);
-  const name = resolveSessionTitle({
-    title: row?.title,
-    cwd: row?.cwd,
-    id: viewId,
-  });
-  const title = `${name} isn't caught up`;
-  const description =
-    fault.reason === "offline"
-      ? `${fault.message}. The rest comes in once it's back.`
-      : `${fault.message}. Try again reads it now; otherwise it's read again in 2 seconds, then less often, up to once a minute.`;
-  console.info(`[cawco] toast: ${title}. ${description} ${viewId.slice(0, 8)}`);
-  toast.error(title, { id: `behind:${viewId}`, description });
 }
 
 /**
@@ -8551,7 +8753,7 @@ export async function takeOverBrowser(
     }
     return null;
   } catch (error) {
-    return `Couldn't take over. ${error instanceof Error ? error.message : String(error)} The agent is still waiting; try Take over again.`;
+    return `${askWords.cantTakeOver} ${error instanceof Error ? error.message : String(error)} ${askWords.stillWaiting}`;
   }
 }
 
@@ -8879,7 +9081,7 @@ export const cawco = {
   /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),
-  /** The harnesses on `machineId` its last listing left out (not in time, or failed), each as a sentence; said in a toast, no view shows them. */
+  /** The harnesses on `machineId` its last listing left out (not in time, or failed), each as a sentence; said over Recent's stored sessions (HomeRecent). */
   catalogLeftOutOf: (machineId: string): string[] =>
     catalogLeftOut[machineId] ?? [],
   /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
@@ -8993,6 +9195,14 @@ export const cawco = {
   get watchNotices(): FleetWatchNotice[] {
     return state.watchNotices;
   },
+  /** The artifacts waiting on the person, longest wait first. */
+  get artifactNeeds(): ArtifactNeed[] {
+    return state.artifactNeeds;
+  },
+  /** The artifacts' notices, newest first. */
+  get artifactNotices(): ArtifactNeedNotice[] {
+    return state.artifactNotices;
+  },
   /** Every system law the hub caught broken since it started. */
   get lawsBroken(): LawBroken[] {
     return state.lawsBroken;
@@ -9012,14 +9222,6 @@ export const cawco = {
   /** Its step was taken while this page stood, a moment ago: the row ticks. */
   get tailnetTicked(): boolean {
     return state.tailnetTicked;
-  },
-  /** Port 80 for the hub's `.local` name; undefined until read. */
-  get localName(): LocalName | undefined {
-    return state.localName;
-  },
-  /** Its step was taken while this page stood, a moment ago: the row ticks. */
-  get localNameTicked(): boolean {
-    return state.localNameTicked;
   },
   /** The stream relay's journey, as the hub has it; undefined until read. */
   get relayJourney(): RelayJourneyView | undefined {

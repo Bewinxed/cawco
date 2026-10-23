@@ -50,12 +50,15 @@ const ARIA_STATIC = [
 /**
  * State pairs a component reads only through a variant's name: written after
  * the source rule that named the selector was converted away (main's
- * NeedsCard `.row[data-kind="tailnet"] > .want`, read as `group-kind-tailnet/row:`,
- * and the `.local` name's row of steps beside it, `group-kind-local-name/row:`).
+ * NeedsCard `.row[data-kind="tailnet"] > .want`, read as `group-kind-tailnet/row:`).
  */
 const DATA_STATIC: { attr: string; value: string }[] = [
   { attr: "kind", value: "tailnet" },
-  { attr: "kind", value: "local-name" },
+  // Files' list of artifacts, its floor one row or two (FilesList
+  // `data-artifacts-floor`, read as `artifacts-floor-one:`), as the
+  // attachments' floors are.
+  { attr: "artifacts-floor", value: "one" },
+  { attr: "artifacts-floor", value: "two" },
 ];
 
 const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that hovers.

@@ -17,13 +17,15 @@
  * is open. `workingSet` only remembers what a conversation is called and
  * where a stored one lives.
  */
-import { type HarnessKind, harnessNamed } from "@cawco/core";
+import { artifactStopOf, type HarnessKind, harnessNamed } from "@cawco/core";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
 import { conversationHref, isSessionRow } from "../links";
 import { asPref, keepPrefs } from "../prefs";
+import { openArtifactIn } from "../reference-open.svelte";
 import { store, stored as storedIn } from "../storage";
+import { threadIdOf } from "../thread-tabs";
 import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -677,6 +679,25 @@ export const workspace = {
     const at = url.searchParams.get("at");
     if (urlId && at) {
       askOpenAt(urlId, at);
+    }
+    // An artifact to open in its panel at its first pending stop
+    // (`?artifact=`, a Needs-you row's address), asked whether or not the
+    // conversation is in front.
+    const artifact = url.searchParams.get("artifact");
+    // A thread's panel is its project's lead's (ThreadPane `previewOf`).
+    const holder =
+      urlId && threadIdOf(urlId)
+        ? cawco.projects.find(
+            (one) => one.id === cawco.threadOf(urlId)?.projectId
+          )?.leadInstanceId
+        : urlId;
+    if (browser && holder && artifact) {
+      // biome-ignore lint/complexity/noVoid: a refusal is kept where its row says it (artifactOpenKey)
+      void openArtifactIn(
+        holder,
+        artifact,
+        artifactStopOf(url.searchParams.get("stop"))
+      );
     }
     if (urlId === this.activeSessionId) {
       return;

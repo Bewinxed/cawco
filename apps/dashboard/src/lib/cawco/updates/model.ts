@@ -3,6 +3,7 @@
  * the Update cell of a machine, the Running cell, the rail's count and the
  * one notice. Nothing here knows Svelte.
  */
+import { updatesWords } from "@cawco/core";
 import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
@@ -226,7 +227,7 @@ const keptCell = (kept: readonly KeptProcess[]): Cell => ({
   text: `No session can start on this machine: the process that keeps its sessions running stopped answering. CawCo can't restart it while ${heldBy(kept)} ${kept.length === 1 ? "runs" : "run"} inside it. Handoff: end ${kept.length === 1 ? "that process" : "them"}. The restart follows, and sessions start again.`,
 });
 
-/** Rows 3 to 12: the cell by the update's phase. */
+/** Rows 3 to 12 and 14: the cell by the update's phase. */
 function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
   const v = u.availableVersion ? displayVersion(u.availableVersion) : "";
   const cur = displayVersion(u.installedVersion);
@@ -285,6 +286,13 @@ function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
         ...EMPTY(10),
         icon: "clock",
         text: `Stays on ${cur} until ${channelName(policy.channel)} has a newer build`,
+      };
+    case "waiting-for-hub":
+      return {
+        ...EMPTY(14),
+        icon: "clock",
+        text: updatesWords.waitsForHub(v, u.hubWait !== "unanswered"),
+        buttons: policy.autoUpdate ? [] : ["cancel"],
       };
     case "available":
       return {
@@ -348,7 +356,14 @@ export const installable = (
 
 // ── the notice ───────────────────────────────────────────────────────────
 
-export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+/** What the hub refused of an install this tab asked for, or of its cancel. */
+export interface Refusal {
+  act: "install" | "cancel";
+  /** The refusal in the error formula's words. */
+  reason: string;
+}
 export type LineState = "plain" | "done" | "busy" | "wait";
 
 export interface NoticeLine {
@@ -393,6 +408,8 @@ export interface NoticeInput {
    */
   newerBuild: string | null;
   policy: BinaryUpdatePolicy;
+  /** What the hub refused of this tab's asks, by machine id, until acted on. */
+  refused: ReadonlyMap<string, Refusal>;
   /** The notice ids acknowledged on any tab or device (notices.svelte.ts). */
   seen: ReadonlySet<string>;
 }
@@ -529,10 +546,47 @@ function keeperRestarted({ input, machines, name }: Ctx): Notice | null {
   };
 }
 
+/**
+ * 9. The hub refused an install (or its cancel) this tab asked for: said in
+ * Caw's panel, where the update is parked, as it is under the machine's row
+ * where it was asked, until Retry or its ✕ (The Work Outlives Its Surface
+ * Rule). It is this tab's, so it is acknowledged here, not on the hub.
+ */
+function refusedHere({ input, name }: Ctx): Notice | null {
+  const asked = input.machines
+    .filter((m) => input.refused.has(m.machineId))
+    .sort(byName);
+  const [lead] = asked;
+  const refusal = lead && input.refused.get(lead.machineId);
+  if (!(lead && refusal)) {
+    return null;
+  }
+  const v = shownVersion(lead.binaryUpdate?.availableVersion);
+  return {
+    acks: [],
+    kind: 9,
+    title:
+      refusal.act === "cancel"
+        ? `The install on ${name(lead)} was not called off`
+        : updatesWords.notInstalled(v, name(lead)),
+    failed: true,
+    lines: asked.map((m) => ({
+      state: "plain",
+      text: input.refused.get(m.machineId)?.reason ?? "",
+    })),
+    configure: true,
+    action: "retry",
+    caw: { status: "needs-you", moves: true },
+    machineIds: asked.map((m) => m.machineId),
+    version: v,
+  };
+}
+
 const COMMANDED_PHASES: readonly string[] = [
   "available",
   "downloading",
   "ready",
+  "waiting-for-hub",
   "installing",
 ];
 
@@ -547,6 +601,9 @@ function installLine(machine: UpdateMachine, name: string): NoticeLine {
   }
   if (state.phase === "downloading") {
     return { state: "busy", text: `${name} · downloading` };
+  }
+  if (state.phase === "waiting-for-hub") {
+    return { state: "wait", text: updatesWords.installLineWaitsForHub(name) };
   }
   const waiting = waitsOn(state);
   if (waiting.length > 0) {
@@ -654,7 +711,7 @@ function waitsForYou({ input, machines }: Ctx): Notice | null {
   return {
     acks: [readyId(waiting.length, v)],
     kind: 4,
-    title: `CawCo ${v} is ready`,
+    title: updatesWords.ready(v),
     failed: false,
     lines: [],
     notes: releaseNotes(state.notes),
@@ -681,7 +738,7 @@ function heldBack({ input, machines }: Ctx): Notice | null {
   return {
     acks: [readyId(held.length, v)],
     kind: 5,
-    title: `CawCo ${v} is ready`,
+    title: updatesWords.ready(v),
     failed: false,
     lines: [],
     notes: releaseNotes(state.notes),
@@ -787,6 +844,7 @@ export function noticeFor(
   return (
     rolledBack(ctx) ??
     keeperRestarted(ctx) ??
+    refusedHere(ctx) ??
     installing(ctx) ??
     landedAll(ctx) ??
     unlessSeen(waitsForYou(ctx), input) ??

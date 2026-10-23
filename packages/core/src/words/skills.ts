@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * What Configure › Skills says (routes/config/skills, its Fetch skill and
  * Link marketplace popovers, MachineInventory.svelte), and the refusals a
@@ -25,7 +27,7 @@ export const skillsWords = {
     "Disabling a plugin uninstalls it from the machines and keeps its row here.",
   /** A row's actions and state. */
   fetching: "Fetching…",
-  fetchAgain: "Fetch again",
+  fetchAgain: commonWords.fetchAgain,
   fetchAllAgain: (count: number) => `Fetch all ${count} again`,
   previousVersions: "Previous versions",
   hidePreviousVersions: "Hide previous versions",
@@ -36,7 +38,7 @@ export const skillsWords = {
   unlink: "Unlink",
   noBytes: "No bytes resolved yet",
   /** A row's version against what its source holds now. */
-  checkForUpdates: "Check for updates",
+  checkForUpdates: commonWords.checkForUpdates,
   checking: "Checking…",
   updateAvailable: (from: string, to: string) =>
     `Update available · ${from} → ${to}`,
@@ -75,6 +77,11 @@ export const skillsWords = {
   scope: "Scope",
   everyMachine: "Every machine in the fleet",
   severalSkills: "That repo holds several skills. Pick the one to fetch.",
+  /** The row a fetch went on in, once its popover is put away: one press brings it back. */
+  openFetch: "Open fetch",
+  /** A fetch the hub could not make, said in the popover in the error formula. */
+  fetchRefused: (name: string, why: string) =>
+    `${name} was not fetched: ${why}. Change the source and fetch it again; its row says this until then.`,
 
   /** Link marketplace. */
   linkMarketplace: "Link marketplace",
@@ -90,12 +97,18 @@ export const skillsWords = {
   callsItself: (name: string) =>
     `This marketplace calls itself \`${name}\`, and links as \`${name}\`: its plugins install as \`plugin@${name}\`.`,
   alreadyLinked: (name: string) => `"${name}" is already linked.`,
+  /** A link with no row yet, in the marketplace list: one press brings its popover back. */
+  openLink: "Open link",
+  removeLink: "Remove link",
+  /** A link the hub refused, said on its row and in the popover in the error formula. */
+  linkRefused: (source: string, why: string) =>
+    `${source} was not linked: ${why}. Change the source and link it again, or remove this row.`,
 
   /** On each machine. */
   onEachMachine: "On each machine",
   inventoryNote:
     "What each machine really has, whoever put it there — read live, never stored. Anything the fleet does not manage can be adopted into it.",
-  noMachines: "No machines yet",
+  noMachines: commonWords.noMachines,
   noMachinesAfter: " — each one reports what it has once it registers.",
   showWhatItHas: "Show what it has",
   offline: "Offline",

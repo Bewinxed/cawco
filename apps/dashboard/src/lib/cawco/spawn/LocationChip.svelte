@@ -7,9 +7,11 @@
    * The popover is the same Location form the dialog used to show as its own
    * section, so browsing, override and clone behave exactly as they did.
    */
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import FolderGit from "~icons/solar/folder-git-bold-duotone";
-  import FolderOpen from "~icons/solar/folder-open-bold-duotone";
+  import {
+    IconChevronDown as Down,
+    IconFolderGit as FolderGit,
+    IconFolderOpen as FolderOpen,
+  } from "#lib/icons.js";
   import LocationSection from "./LocationSection.svelte";
   import NsPopover from "./NsPopover.svelte";
 

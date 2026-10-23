@@ -14,16 +14,19 @@
 </script>
 
 <script lang="ts">
-  import { artifactWords as words } from "@cawco/core";
+  import { commentWords as said, artifactWords as words } from "@cawco/core";
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; DESIGN.md,
    * A thread beside its pin). Its head: the pin's pill, what it stands on
    * (a press scrolls the page to it and lights its element), Resolve or
-   * Reopen, ⋯ (Copy link; Pin it somewhere else while its element is gone;
-   * Delete comment) and Close, each the `sm` ghost. Under it, in meta, the
+   * Reopen, Delete comment, ⋯ (Copy link; Pin it somewhere else while its
+   * element is gone) and Close, each the `sm` ghost. Under it, in meta, the
    * element's nearest parent ("on Routine form"; none for the whole page);
    * then the line saying its element is gone, or that it stands resolved,
-   * each with its way back. Then the thread, the one part that scrolls: the
+   * each with its way back; then, when its delivery reached no one or it
+   * stands only on the page, "Not sent: why" with Try again (a comment goes
+   * to the session by itself once written). Then the thread, the one part
+   * that scrolls: the
    * transcript's own turns (turn/: Turn, Well, Who), the person's words in
    * the reader's well and the agent's bare under its mark and the session's
    * name, each speaker line ending in its turn's age at rest, a later
@@ -55,7 +58,9 @@
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import type { SendExtras } from "../client.svelte";
   import RowMenu from "../config/RowMenu.svelte";
-  import { copyToClipboard } from "../copy";
+  import { copyRefused, copyToClipboard } from "../copy";
+  import RowFault from "../RowFault.svelte";
+  import { refusals } from "../refusals.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import DocThumb from "../transcript/DocThumb.svelte";
   import Shot from "../transcript/Shot.svelte";
@@ -63,7 +68,6 @@
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
   import CommentComposer from "./CommentComposer.svelte";
-  import { commentWords as said } from "./comment-words";
   import PinMark, { markState } from "./PinMark.svelte";
 
   let {
@@ -77,7 +81,10 @@
     problem,
     draft,
     sending = false,
+    retrying = false,
+    whyNotSent = null,
     onreply,
+    onretry,
     onresolve,
     ondelete,
     onplace,
@@ -87,7 +94,7 @@
     ondraft,
   }: {
     pin: Pin;
-    /** What it stands on, in words (pin-name.ts). */
+    /** What it stands on, in words (core pin-name.ts). */
     name: string;
     /** Its element's nearest parent, in words; none for the whole page. */
     parent: string | null;
@@ -105,7 +112,13 @@
     draft: ComposerDraft;
     /** The reply is on its way: the glyph is the spinner. */
     sending?: boolean;
+    /** Its Try again is on its way. */
+    retrying?: boolean;
+    /** Why it hasn't reached the session, in words, when its delivery reached no one or it stands only on the page; null while it is on its way. */
+    whyNotSent?: string | null;
     onreply: (text: string, extras: SendExtras) => void;
+    /** Try again: it goes to the session once more. */
+    onretry: () => void;
     onresolve: (resolved: boolean) => void;
     /** Deletes the pin once the person confirmed; rejects with the refusal's sentence. */
     ondelete: () => Promise<void>;
@@ -275,6 +288,18 @@
     (attachments ?? []).filter((one) => one.kind === "image");
   const documents = (attachments: CommentAttachment[] | undefined) =>
     (attachments ?? []).filter((one) => one.kind !== "image");
+
+  /** The browser refused the last Copy link: said over the reply, kept through a reload. */
+  const linkKey = $derived(`copy:pin:${link}`);
+  const linkRefused = $derived(refusals.get(linkKey) !== undefined);
+  async function copyLink(): Promise<void> {
+    const key = linkKey;
+    if (await copyToClipboard("Link", link)) {
+      refusals.delete(key);
+    } else {
+      refusals.set(key, { reason: copyRefused("Link") });
+    }
+  }
 </script>
 
 {#snippet gallery(attachments: CommentAttachment[] | undefined)}
@@ -344,15 +369,24 @@
       variant="ghost"
     />
   {/if}
+  <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
+  <Button
+    data-box
+    aria-label={said.deleteComment}
+    data-slot="delete"
+    icon={IconTrash}
+    onclick={askDelete}
+    size="icon-sm"
+    title={said.deleteComment}
+    variant="ghost"
+  />
   <span class="flex flex-none" data-box>
     <RowMenu
       actions={[
         {
           icon: IconLink,
           label: said.copyLink,
-          onselect: () => {
-            copyToClipboard("Link", link);
-          },
+          onselect: copyLink,
         },
         ...(pin.movedAt
           ? [
@@ -363,12 +397,6 @@
               },
             ]
           : []),
-        {
-          destructive: true,
-          icon: IconTrash,
-          label: said.deleteComment,
-          onselect: askDelete,
-        },
       ]}
       label={`comment ${pin.number}`}
     />
@@ -421,6 +449,31 @@
       label={said.reopen}
       onclick={() => onresolve(false)}
       pad="none"
+      size="sm"
+      variant="link"
+    />
+  </div>
+{/if}
+{#if whyNotSent && markState(pin) === "unsent"}
+  <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
+  <div
+    data-slot="not-sent"
+    data-not-sent=""
+    class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+  >
+    <p
+      class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"
+      role="status"
+    >
+      {said.notSent(whyNotSent)}
+    </p>
+    <Button
+      aria-label={said.retryComment(pin.number)}
+      data-slot="pin-retry"
+      label={said.tryAgain}
+      onclick={onretry}
+      pad="none"
+      pending={retrying}
       size="sm"
       variant="link"
     />
@@ -514,6 +567,16 @@
   data-slot="foot"
   class="flex shrink-0 flex-col gap-space-2"
 >
+  <!-- A Copy link the browser refused, over the reply, with Try again and
+       the link under Show details: the menu that asked has closed. -->
+  <RowFault
+    again={copyLink}
+    data-copy-refused
+    details={link}
+    end="var(--space-3)"
+    indent="var(--space-3)"
+    reason={linkRefused ? copyRefused("Link") : null}
+  />
   <!-- The reply takes the keyboard as the thread opens: ringed when a key opened it, quiet after a press (The One Target Rule). -->
   <CommentComposer
     action="Reply"

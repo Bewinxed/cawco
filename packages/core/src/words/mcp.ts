@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * What Configure › MCP says (routes/config/mcp, its editor McpEditor.svelte,
  * a row's sign-in McpSignIn.svelte), and the refusals a server's name meets
@@ -29,7 +31,7 @@ export const mcpWords = {
 
   /** The editor. */
   what: "MCP server",
-  save: "Save changes",
+  save: commonWords.saveChanges,
   newTitle: "New MCP server",
   nameLabel: "Server name",
   namePlaceholder: "Name this server",

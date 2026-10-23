@@ -115,7 +115,8 @@
  *     scale 0.97 while held and lets both go on release; its menu opens on
  *     the press and stays open.
  * 21. The panel, its head included, at the desk and at 390 in light and
- *     dark, captured to `$TMPDIR/caps/` for a reviewer; the spec reads none.
+ *     dark, captured to the run's output folder (`kit.out`) for a reviewer;
+ *     the spec reads none.
  * 22. Once the panel has opened (its page resized a frame at a time), the
  *     first frame stands in the middle of the canvas, at the desk and at 390:
  *     each centring measured where the world stands, never mid-move.
@@ -164,8 +165,11 @@ import {
   STAGE_ENSURE,
   STAGE_READY_MS,
 } from "../../../packages/core/src/stage";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
+import { sheetWords } from "../../../packages/core/src/words/sheet";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
+import { buttonNames, type Kit, open, ROOT, type Spec, specOut } from "../kit";
 
 const STORY = "src/Card.stories.js";
 /** Legs 5b and 5c: a states file a canvas is made on, then taken away and written again. */
@@ -313,6 +317,16 @@ const STATUS = /"status":"(\w+)"/;
 const ERRORS = /"errors":(\[[^\]]*\])/;
 const ID = /"id":"([0-9a-f-]{36})"/;
 const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 500);
+
+/** The files of a detailed design_map record's components, or undefined when the answer is not that record. */
+const componentFiles = (said: string): string[] | undefined => {
+  try {
+    const record = JSON.parse(said) as { components?: { file: string }[] };
+    return record.components?.map((one) => one.file);
+  } catch {
+    return undefined;
+  }
+};
 
 /** A place id no session names: what a dashboard's raw stage control could invent. */
 const FORGED_PLACE = "0badc0de-caw";
@@ -495,9 +509,7 @@ const componentLegs = async (
   });
   kit.check(
     "2c: artifact_create(kind: component) whose ask names a file is refused in the person's words",
-    bare.includes(
-      "The ask is in the person's words: no file, path or id in it. Name the thing as they call it."
-    ),
+    bare.includes(artifactToolWords.askInTheirWords),
     short(bare)
   );
 
@@ -629,7 +641,7 @@ const HEAD_ORDER = [
   "expand",
 ];
 /** Where the panel's pictures go for a reviewer, as component-canvas's do. */
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
+const CAPS = specOut("session-sheet");
 const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/;
 
 /** The head as drawn: its width (what the words key on), its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, whether its word is drawn, its name; then whether More and Close stand, More before Close. */
@@ -892,7 +904,10 @@ async function panelLegs(
   await desk.evaluate(() => {
     (window as unknown as { __stayed: boolean }).__stayed = true;
   });
-  await desk.getByRole("button", { name: "Light mode" }).first().click();
+  await desk
+    .getByRole("button", { name: shellWords.lightMode })
+    .first()
+    .click();
   await desk.waitForFunction(() =>
     document.documentElement.classList.contains("dark")
   );
@@ -1142,11 +1157,11 @@ async function neverDrawnLeg(
     "25: a canvas whose page never comes leaves the cover inside its stage's time and says it couldn't be drawn, why, with Try again and Remove",
     covered === "Compiling…" &&
       !!stuck &&
-      stuck.text.includes("The canvas couldn't be drawn") &&
+      stuck.text.includes(sheetWords.neverDrawnTitle) &&
       stuck.text.includes(
         `The stage never answered within ${STAGE_READY_MS / 1000}s.`
       ) &&
-      stuck.buttons.includes("Try again") &&
+      stuck.buttons.includes(sheetWords.tryAgain) &&
       stuck.buttons.includes("Remove") &&
       took <= STAGE_READY_MS + 20_000,
     `cover first said ${JSON.stringify(covered)}; ${took} ms: ${JSON.stringify(stuck)}`
@@ -1167,7 +1182,9 @@ async function neverDrawnLeg(
     .then(([title, buttons]) => ({ title, buttons }))
     .catch(() => null);
   const stillThere = (await panelArtifacts()).includes("never-drawn");
-  await ask.getByRole("button", { name: "Remove canvas", exact: true }).click();
+  await ask
+    .getByRole("button", { name: sheetWords.removeConfirm, exact: true })
+    .click();
   const gone = await until(
     "the canvas out of the session's artifacts",
     panelArtifacts,
@@ -1182,7 +1199,7 @@ async function neverDrawnLeg(
     before.includes("never-drawn") &&
       asked?.title === "Remove never-drawn?" &&
       asked.buttons.includes("Cancel") &&
-      asked.buttons.includes("Remove canvas") &&
+      asked.buttons.includes(sheetWords.removeConfirm) &&
       stillThere &&
       gone,
     `asked ${JSON.stringify(asked)}; before the confirm ${stillThere ? "kept" : "gone"}; after ${gone ? "gone" : "kept"}`
@@ -1217,7 +1234,13 @@ const run = async (kit: Kit) => {
     input: object,
     who: string = session
   ) => {
-    asks.set(n, { name, input });
+    asks.set(n, {
+      name,
+      // A CawCo tool answers the hub's record, which this spec reads, only when asked for detailed (mcp-tool.ts); the harness's own tools take no such argument.
+      input: name.startsWith("mcp__cawco__")
+        ? { response_format: "detailed", ...input }
+        : input,
+    });
     await fleet.send(who, `PROBE-CALL:${n}`);
     return (await until(
       `${name}'s answer`,
@@ -1228,9 +1251,7 @@ const run = async (kit: Kit) => {
   };
 
   // 1. The components of the session's folder.
-  const listed = await call("1", "mcp__cawco__design_map", {
-    response_format: "detailed",
-  });
+  const listed = await call("1", "mcp__cawco__design_map", {});
   kit.check(
     "1: design_map answers the folder's components, Card.svelte with its states file",
     !listed.includes(REFUSAL) &&
@@ -1292,12 +1313,7 @@ const run = async (kit: Kit) => {
       .text();
   const untouched = await status();
   const kitSession = await fleet.spawn("claude", "Kit", kitDir);
-  const kitListed = await call(
-    "6",
-    "mcp__cawco__design_map",
-    { response_format: "detailed" },
-    kitSession
-  );
+  const kitListed = await call("6", "mcp__cawco__design_map", {}, kitSession);
   kit.check(
     "6: design_map in a checkout read-only to its boundary answers src/lib/Card.svelte with its states file",
     kitListed.includes('"src/lib/Card.svelte"') &&
@@ -1419,12 +1435,14 @@ const run = async (kit: Kit) => {
       { dir: "src/lib" },
       kitSession
     );
+    // The record names each component's stories too, so the components are read from its list, not counted by "name".
+    const files = componentFiles(scoped);
     kit.check(
       "13: design_map with dir src/lib answers src/lib/Card.svelte alone, not src/other/Other.svelte",
-      scoped.includes('"src/lib/Card.svelte"') &&
-        !scoped.includes("Other.svelte") &&
-        (scoped.match(/"name":/g)?.length ?? 0) === 1,
-      short(scoped)
+      files?.length === 1 &&
+        files[0] === "src/lib/Card.svelte" &&
+        !scoped.includes("Other.svelte"),
+      `components ${JSON.stringify(files)}; ${short(scoped)}`
     );
 
     // 14. A dir outside the session's folder is refused in words.

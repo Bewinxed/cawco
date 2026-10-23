@@ -137,7 +137,7 @@ const OPENCODE_DIR = { kind: "dir", readOnly: true } as const;
 /**
  * srt's own mandatory deny names at its working directory, the clone, that
  * the policy does not name already (`DANGEROUS_FILES` and
- * `getDangerousDirectories()` in sandbox-utils.js at 0.0.79; `.mcp.json`,
+ * `getDangerousDirectories()` in sandbox-utils.js at 0.0.81; `.mcp.json`,
  * `.claude/commands` and `.claude/agents` are the policy's too). An empty
  * file is what each of these files' readers takes as nothing set (git an
  * empty `.gitmodules` as no submodules).
@@ -931,7 +931,7 @@ const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
  * written under the dir's real path: srt binds what the name resolves to
  * back at the name, and refuses one that resolves into anything else the
  * policy denies (a link planted at `skills` to `~/.ssh` opens nothing,
- * `restorePlacementOf` in srt 0.0.79); Seatbelt and the judge follow the
+ * `restorePlacementOf` in srt 0.0.81); Seatbelt and the judge follow the
  * link to its target, which the user layer's own entries allow. The
  * account's credential, `.claude.json`, transcripts and the rest stay denied.
  */

@@ -16,6 +16,8 @@
  */
 
 import type { CarrySessionRequest } from "./harness";
+import type { HubPreviewOrigins } from "./hub-previews";
+import type { TailnetServing } from "./tailnet-https";
 
 /**
  * The dashboard wire's version, raised only when the wire breaks: when a
@@ -100,12 +102,41 @@ import type { CarrySessionRequest } from "./harness";
  *    `CheckoutMove`: cut again, or rebased as it landed) where it said
  *    `recutUntold`, the move its session's next message names. No page
  *    reads it; a page built for 19 reloads first all the same.
+ * 21: a plan step's wait (`PlanWait`) may leave out `card`: the hub sets a
+ *    wait on the whole artifact a session's create or update asks the
+ *    person on (Needs you, core artifact-needs.ts). No page reads it; a
+ *    page built for 20 reloads first all the same.
+ * 22: the hub's `.local` name (`GET /api/local-name`) is `held` with its
+ *    `url` (the name with the dashboard's port) or `absent`: no `needs` state,
+ *    no `command`, and no `local.name` frame, since the hub binds no port of
+ *    its own for the name. A page built for 21 reloads first.
+ * 23: an install's problem may be `penalized` (core install.ts
+ *    `InstallProblem`): the machine's sshd turns the hub away for now. A
+ *    page built for 22 has no words for it, so it reloads first.
+ * 24: the stream relay listens on TURN's own ports, 3478 and 5349, and its
+ *    certificate comes only by DNS at Cloudflare: its frame's `ports` says
+ *    `udp`, `tcp` and `tls`; its chips are `udp 3478`, `tcp 3478` and
+ *    `tls 5349`; the runtime step carries no `lowest` nor `network` and its
+ *    need no `kind`; the router step no `http`; the certificate step may be
+ *    `needs` with `tokenWhy`, answered by the `token` act. A page built for
+ *    23 would draw the 443 chips and the low ports, so it reloads first.
+ * 25: an account line's wait at a limit names every other account and why
+ *    it didn't take the session, or that it could (`AccountMove` waiting
+ *    `accounts`, core `HeldReason`), where it named the one with room
+ *    admission kept it off (`room`); a wait may be `free` (its cache
+ *    outlasts the reset); a move line may say what it ended (`ended`). A
+ *    page built for 24 would read the reason from `room`, gone, so it
+ *    reloads first.
+ * 26: a machine's row says its fleet as `fleetSync` (the last delta's
+ *    answer: sent, acked, nacked in the machine's words, unacked) and
+ *    `fleetItems` (each item's converge), where it said `fleetSyncFault`.
+ *    A page built for 25 reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 20;
+export const WIRE_PROTOCOL = 26;
 
 /**
  * What a session's stream carries: the changes each frame made to its
@@ -377,6 +408,13 @@ export interface RegisterAckPayload {
    */
   machineCredential: string;
   ok: true;
+  /**
+   * The hub's own preview origins (core hub-previews.ts): what a workspace's
+   * relay on this machine dials from the host, past the boundary's refusal of
+   * the owner's network. Absent from a hub from before it: no workspace then
+   * reaches one.
+   */
+  previewOrigins?: HubPreviewOrigins;
   /** The ports the hub's preview listeners take (hub config.ts `PREVIEW_PORTS`), served on the agent's loopback beside {@link dashboardPorts}. */
   previewPorts: { first: number; last: number };
   /**
@@ -402,6 +440,12 @@ export interface RegisterAckPayload {
    * every start of the machine's agent.
    */
   sessions?: CarrySessionRequest[];
+  /**
+   * The tailnet name and addresses the hub serves HTTPS on, while it does
+   * ({@link TailnetServing}); every beat's ack carries it again, so the
+   * agent's loopback follows HTTPS starting, stopping and moving.
+   */
+  tailnetHttps?: TailnetServing;
   /**
    * Of the account stores the machine named at register (`accountStores`),
    * the ids of accounts this hub removed: removed while the machine was

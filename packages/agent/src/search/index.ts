@@ -52,6 +52,8 @@ const SEARCH_FRESH_MS = 10_000;
 const SYNC_WAIT_MS = 1000;
 const MAX_SEARCH_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
+/** How many documents a listing (an author's words, no query) answers with at most. */
+const MAX_LISTED_DOCS = 200;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {
@@ -233,12 +235,9 @@ export class TranscriptSearchService {
       options?.limit ?? DEFAULT_SEARCH_LIMIT,
       MAX_SEARCH_LIMIT
     );
-    const conversations = this.#index.search(query, {
-      limit,
-      ...(options?.author ? { author: options.author } : {}),
-      ...(options?.sessions ? { sessions: options.sessions } : {}),
-      ...(options?.before ? { before: options.before } : {}),
-    });
+    // No words and an author: that author's words, newest first, off the
+    // index's author-and-time order (fts5.ts `listed`), never a scan.
+    const conversations = this.#conversations(query, limit, options);
     return {
       conversations,
       catchingUp,
@@ -246,6 +245,32 @@ export class TranscriptSearchService {
       syncMs: Math.round(queried - started),
       queryMs: Math.round(performance.now() - queried),
     };
+  }
+
+  /**
+   * What the index answers `query`: its matches, best first; with no words
+   * and an author, that author's words newest first, off the index's author
+   * and time order (fts5.ts `listed`), never a scan.
+   */
+  #conversations(query: string, limit: number, options?: TranscriptQuery) {
+    const author = options?.author;
+    const narrowed = {
+      ...(options?.sessions ? { sessions: options.sessions } : {}),
+      ...(options?.before ? { before: options.before } : {}),
+    };
+    if (query.trim() === "" && author !== undefined) {
+      return this.#index.listed({
+        author,
+        limit: Math.min(options?.limit ?? MAX_LISTED_DOCS, MAX_LISTED_DOCS),
+        ...narrowed,
+        ...(options?.since ? { since: options.since } : {}),
+      });
+    }
+    return this.#index.search(query, {
+      limit,
+      ...(author ? { author } : {}),
+      ...narrowed,
+    });
   }
 
   /** Document count in the index. */

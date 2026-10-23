@@ -12,6 +12,7 @@
 
 <script lang="ts">
   import {
+    askWords,
     damagedWords,
     getToolGlance,
     machineLabel,
@@ -79,12 +80,12 @@
   import { planProgress } from "./plan/PlanPane.svelte";
   import PlanTree, { stepsTree, todosTree } from "./plan/PlanTree.svelte";
   import RowFault from "./RowFault.svelte";
+  import { refusals } from "./refusals.svelte";
   import SessionMark from "./SessionMark.svelte";
   import { sessionAct, stopOnRow } from "./session-acts.svelte";
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus } from "./session-status";
   import { startFork } from "./spawn/new-session.svelte";
-  import { toast } from "./toasts";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
   import { runIdOf } from "./workflow-runs";
@@ -304,19 +305,22 @@
   /**
    * The answer that is not Deny: a browser ask is taken over (the hub
    * refuses an Approve on one), anything else approved. A refused take-over
-   * reads in the hub's words.
+   * reads in the hub's words under the ask's own buttons, with Try again,
+   * never a toast (DESIGN.md, The Work Outlives Its Surface Rule).
    */
+  const takeKey = (requestId: string) => `take:${requestId}`;
   async function accept(request: PendingPermission): Promise<void> {
     if (!request.browserAsk) {
       answer(request, "allow");
       return;
     }
+    refusals.delete(takeKey(request.requestId));
     const refused = await takeOverBrowser(
       request.requestId,
       request.browserAsk
     );
     if (refused) {
-      toast.error(refused);
+      refusals.set(takeKey(request.requestId), { reason: refused });
     }
   }
 </script>
@@ -512,9 +516,15 @@
             variant="secondary"
           >
             <IconTick />
-            <span>{request.browserAsk ? "Take over" : "Approve"}</span>
+            <span>{request.browserAsk ? askWords.takeOver : "Approve"}</span>
           </Button>
         </div>
+        <!-- A refused take-over, under the buttons that asked: its words
+             name the way on, the Take over just above. -->
+        <RowFault
+          data-take-refusal={request.requestId}
+          reason={refusals.reason(takeKey(request.requestId))}
+        />
       {/if}
     </div>
   {/each}

@@ -358,6 +358,11 @@ const browserSocket: WebSocketHandler<BrowserSocket> = {
           socket as ServerWebSocket<PreviewSocket>,
           message
         ),
+  drain: (socket) => {
+    if (!isCdp(socket.data)) {
+      previewWebSocket.drain?.(socket as ServerWebSocket<PreviewSocket>);
+    }
+  },
   close: (socket, code, reason) =>
     isCdp(socket.data)
       ? cdpSocket.close?.(socket as ServerWebSocket<CdpSocket>, code, reason)
@@ -818,12 +823,9 @@ async function start(
             await closeBridge(instanceId);
             return downResponse("workspace", 503);
           }
-          previewFailed(
-            "agent listener",
-            instanceId,
-            `port ${source.port}${source.workspace ? ` in workspace ${source.workspace}` : ""} didn't answer: ${causeOf(error)}`
-          );
-          return downResponse("server");
+          const why = `port ${source.port}${source.workspace ? ` in workspace ${source.workspace}` : ""} didn't answer the agent's listener: ${causeOf(error)}`;
+          previewFailed("agent listener", instanceId, why);
+          return downResponse("server", 502, why);
         }
       } else {
         // A file at its folder's key (core `versionAssets`), or the page's own address.
@@ -919,8 +921,9 @@ async function start(
     },
     // Anything else that threw while serving the preview.
     error(error) {
-      previewFailed("agent listener", instanceId, causeOf(error));
-      return downResponse("server");
+      const why = `the agent's listener failed serving it: ${causeOf(error)}`;
+      previewFailed("agent listener", instanceId, why);
+      return downResponse("server", 502, why);
     },
   });
   previews.set(instanceId, {

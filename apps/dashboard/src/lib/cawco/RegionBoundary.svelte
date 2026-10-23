@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * One independently failing part of the page (the composer, a transcript,
    * a side panel, a conversation, the sidebar, the tabs, a page): an error
@@ -73,7 +74,7 @@
         >
         <AlertAction>
           <Button
-            label="Try again"
+            label={commonWords.tryAgain}
             onclick={reset}
             size="xs"
             variant="outline"

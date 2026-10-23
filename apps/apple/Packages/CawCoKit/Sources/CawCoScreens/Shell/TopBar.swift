@@ -730,7 +730,7 @@ final class BurgerButton: TapControl {
             glyph.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         isAccessibilityElement = true
-        accessibilityLabel = "Open navigation"
+        accessibilityLabel = Words.Sidebar.openNavigation
         accessibilityTraits = .button
     }
 

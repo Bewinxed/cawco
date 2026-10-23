@@ -229,6 +229,7 @@
 @custom-variant align-start (&[data-align="start"]);
 @custom-variant aria-busy-false (&[aria-busy="false"]);
 @custom-variant aria-checked-false (&[aria-checked="false"]);
+@custom-variant aria-controls-session-machines-popover (&[aria-controls="session-machines-popover"]);
 @custom-variant aria-current-false (&[aria-current="false"]);
 @custom-variant aria-current-page (&[aria-current="page"]);
 @custom-variant aria-disabled-false (&[aria-disabled="false"]);
@@ -241,6 +242,8 @@
 @custom-variant aria-required-false (&[aria-required="false"]);
 @custom-variant aria-selected-false (&[aria-selected="false"]);
 @custom-variant artifacts-floor-cards (&[data-artifacts-floor="cards"]);
+@custom-variant artifacts-floor-one (&[data-artifacts-floor="one"]);
+@custom-variant artifacts-floor-two (&[data-artifacts-floor="two"]);
 @custom-variant attachments-floor-one (&[data-attachments-floor="one"]);
 @custom-variant attachments-floor-two (&[data-attachments-floor="two"]);
 @custom-variant axis-row (&[data-axis="row"]);
@@ -290,7 +293,6 @@
 @custom-variant kind-dropped (&[data-kind="dropped"]);
 @custom-variant kind-fail (&[data-kind="fail"]);
 @custom-variant kind-gone (&[data-kind="gone"]);
-@custom-variant kind-local-name (&[data-kind="local-name"]);
 @custom-variant kind-markdown (&[data-kind="markdown"]);
 @custom-variant kind-pairing (&[data-kind="pairing"]);
 @custom-variant kind-phone (&[data-kind="phone"]);
@@ -501,7 +503,9 @@
 @custom-variant slot-option-group (&[data-slot="option-group"]);
 @custom-variant slot-order (&[data-slot="order"]);
 @custom-variant slot-page-head (&[data-slot="page-head"]);
+@custom-variant slot-page-scroll (&[data-slot="page-scroll"]);
 @custom-variant slot-page-thumb (&[data-slot="page-thumb"]);
+@custom-variant slot-pages (&[data-slot="pages"]);
 @custom-variant slot-pair (&[data-slot="pair"]);
 @custom-variant slot-pairing (&[data-slot="pairing"]);
 @custom-variant slot-palette-item (&[data-slot="palette-item"]);
@@ -640,6 +644,7 @@
 @custom-variant slot-value (&[data-slot="value"]);
 @custom-variant slot-view-bar (&[data-slot="view-bar"]);
 @custom-variant slot-view-calendar (&[data-slot="view-calendar"]);
+@custom-variant slot-view-canvas (&[data-slot="view-canvas"]);
 @custom-variant slot-wall (&[data-slot="wall"]);
 @custom-variant slot-want (&[data-slot="want"]);
 @custom-variant slot-well (&[data-slot="well"]);

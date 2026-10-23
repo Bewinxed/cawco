@@ -12,7 +12,7 @@
    * viewport is a phone's, so the panel's own phone rules apply. Every
    * switch is in the URL, so a script opens any state directly.
    */
-  import { machineLabel } from "@cawco/core";
+  import { cawHeadWords, machineLabel } from "@cawco/core";
   import type { BinaryUpdateState } from "@cawco/core/binary-updates";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
   import { barGlass, glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
@@ -117,6 +117,7 @@
   /** A landing in a tab older than the dashboard: its notes, and Reload. */
   const UPDATE = noticeFor(
     {
+      refused: new Map(),
       commanded: new Set(),
       machines: MACHINES,
       newerBuild: "e3cbba1",
@@ -316,6 +317,7 @@
       return moved;
     },
     rebalanced: [],
+    artifactNotices: [],
     noticesDamaged: null,
     resetNotices: () => Promise.resolve(),
     acknowledge(ids) {
@@ -377,7 +379,11 @@
           }
         }
       >
-        <CawPanel {feed} onchoose={() => undefined} quiet="All caught up" />
+        <CawPanel
+          {feed}
+          onchoose={() => undefined}
+          quiet={cawHeadWords.caughtUp}
+        />
       </HangCard>
     {/key}
   </Popover.Root>

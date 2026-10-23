@@ -1,0 +1,18 @@
+diff --git a/dist/index.js b/dist/index.js
+index 44bc4da28c5f8c0523fbd97dffd585c0561f863c..c95d7babed98e83359ff67ba07b572b3fd53e7bb 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3661,6 +3661,13 @@ function compilePattern(pattern) {
+ function checkEntries(entries, groupIds, classifier, fromFile) {
+ 	for (const entry of entries ?? []) {
+ 		if (entry === "layout" || entry.includes("*") || entry.includes(":")) continue;
++		// cawco: a marker entry (`group`, `peer`, `dark`) names a Tailwind
++		// marker, which `matches` reads as itself and with its `/<name>`
++		// (stripModifier), so it is a known entry. The check warned for one
++		// the classifier has no group for ("peer": "it matches only a class
++		// named exactly that"), though `peer/<name>` matches it too. Drop this
++		// when the check knows markers (contracts.ts checkEntries, main).
++		if (isMarkerClass(entry)) continue;
+ 		if (CATEGORIES.includes(entry)) continue;
+ 		if (groupIds.has(entry)) continue;
+ 		if (classifier.groupOf(entry)) continue;

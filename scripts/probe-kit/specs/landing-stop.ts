@@ -1,15 +1,11 @@
 /**
- * A landing spends no gate on a push that will be refused, a stopped item's
- * landing ends every gate step it started, and a landing gate's heavy run
- * goes before a leaf's (hub landing.ts `pushCheck`, work-items.ts
- * `landingStops`, core heavy-run.ts). On a scratch fleet (real hub, agent and
+ * A landing spends no gate on a push that will be refused, and a stopped
+ * item's landing ends every gate step it started (hub landing.ts
+ * `pushCheck`, work-items.ts `landingStops`). On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model). This spec delegates, so its
  * fleet cuts workspaces: it is `host`, run outside every boundary.
  *
- * The project's repository carries the machine's heavy-run gate
- * (scripts/lib/heavy-run.sh and .ts, disk-room.sh, packages/core/src) copied
- * from this checkout, as CawCo's own does, so its gate's steps take real
- * slots. Each leg declares its own gate.md; every step writes a line to its
+ * Each leg declares its own gate.md; every step writes a line to its
  * workspace's scratch dir, `$TMPDIR/probe-gate-steps.log`: the gate's step
  * log, read on the host.
  *
@@ -24,15 +20,10 @@
  *   gate is alive (no `sleep 7313` on the host), the item reads cancelled
  *   with no error, the hub says it cancelled the gate's run, and B's clone
  *   still holds its commit.
- * - (c) One slot (`CAWCO_HEAVY_RUNS=1`) in the fleet's workspaces' cache. A
- *   leaf's run L1 holds it; a second leaf's run L2 waits. C's gate step
- *   takes a slot through heavy-run.sh and waits too: L2's wait line names C's
- *   landing gate. L1 lets go: the gate takes the slot before L2, by the times
- *   each wrote as it took it.
  *
  *   bun scripts/probe-kit/run.ts landing-stop
  */
-import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isAlive,
@@ -48,34 +39,20 @@ import {
   until,
 } from "../../scratch-fleet";
 import { declareGate } from "../gate";
-import { type HeavyProbe, startHeavy, TOOK } from "../heavy";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-STOP-([ABC])/;
-type Tag = "A" | "B" | "C";
-/** This checkout: what the project's repository copies its heavy-run gate from. */
-const REPO = join(import.meta.dir, "..", "..", "..");
+const TAG = /PROBE-STOP-([AB])/;
+type Tag = "A" | "B";
 /** The gate's step log, in a workspace's scratch dir. */
 const STEP_LOG = "probe-gate-steps.log";
 /** B's gate step's process, found on the host by its argv. */
 const SLEEP = ["sleep", "7313"];
 const PID = /^\d+$/;
-/** The room's thresholds opened wide, so only the slot decides (core heavy-run.ts `ROOM_ENV`). */
-const ROOM = {
-  CAWCO_HEAVY_RUNS: "1",
-  CAWCO_HEAVY_MEMORY_STALL_MAX: "100",
-  CAWCO_HEAVY_CPU_STALL_MAX: "100",
-  CAWCO_HEAVY_RESERVE_GIB: "0",
-};
-const ROOM_WORDS = Object.entries(ROOM)
-  .map(([name, value]) => `${name}=${value}`)
-  .join(" ");
 /** Each leg's gate.md. */
 const GATES: Record<Tag, string> = {
   A: `---\nsh -c 'echo "ran A" >> "$TMPDIR/${STEP_LOG}"'\n  name: step log\n---\n`,
   B: `---\nsh -c 'echo "started B" >> "$TMPDIR/${STEP_LOG}"; exec ${SLEEP.join(" ")}'\n  name: long step\n---\n`,
-  C: `---\n${ROOM_WORDS} bash -c 'source scripts/lib/heavy-run.sh && heavy_run probe-gate-C && printf "TOOK gate %s\\n" "$(date +%s%N)" >> "$TMPDIR/${STEP_LOG}"'\n  name: heavy gate step\n---\n`,
 };
 /** How the push check's refusal reads (work-items.ts `refusedLine`). */
 const CHECK_REFUSED =
@@ -89,7 +66,6 @@ const steps: Record<
 > = {
   A: { armed: false, committed: false, finished: false, searched: false },
   B: { armed: true, committed: false, finished: false, searched: false },
-  C: { armed: true, committed: false, finished: false, searched: false },
 };
 
 const respond = (request: Seen): Reply => {
@@ -186,8 +162,6 @@ interface Legs {
   env: Record<string, string | undefined>;
   fleet: Fleet;
   home: string;
-  /** The leaves' runs a leg started, let go at the end. */
-  leaves: HeavyProbe[];
   mainLog: () => Promise<string[]>;
   parent: string;
   /** B's gate's processes, killed at the end when a stop did not end them. */
@@ -205,24 +179,12 @@ interface Delegated {
 const said = (row: ItemRow | undefined) =>
   `${row?.state} ${row?.error ?? ""}\n${(row?.result ?? "").slice(0, 1500)}`;
 
-/** The project's repository: a README, and the heavy-run gate copied from this checkout. */
+/** The project's repository: a README. */
 const projectRepo = async (
   repo: string,
   env: Record<string, string | undefined>
 ): Promise<void> => {
-  await mkdir(join(repo, "scripts", "lib"), { recursive: true });
-  for (const file of ["heavy-run.sh", "heavy-run.ts", "disk-room.sh"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: three small files
-    await cp(
-      join(REPO, "scripts", "lib", file),
-      join(repo, "scripts", "lib", file)
-    );
-  }
-  await cp(
-    join(REPO, "packages", "core", "src"),
-    join(repo, "packages", "core", "src"),
-    { recursive: true }
-  );
+  await mkdir(repo, { recursive: true });
   await writeFile(join(repo, "README.md"), "landing stop probe\n");
   await Bun.$`git init -q -b main && git add -A && git commit -qm 'First commit'`
     .cwd(repo)
@@ -231,9 +193,7 @@ const projectRepo = async (
 };
 
 /** The fleet up, its project made on {@link projectRepo}, and its parent session. */
-const standUp = async (
-  kit: Kit
-): Promise<Omit<Legs, "leaves" | "sleepers">> => {
+const standUp = async (kit: Kit): Promise<Omit<Legs, "sleepers">> => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -407,72 +367,14 @@ const legB = async (legs: Legs) => {
   );
 };
 
-/** (c) A landing gate's heavy run takes the slot before a leaf's that waited first. */
-const legC = async (legs: Legs) => {
-  const { check } = legs;
-  const slots = join(legs.home, ".cawco", "workspace-cache", "heavy-runs");
-  await mkdir(slots, { recursive: true });
-  const heavyDir = join(legs.fleet.sandbox, "heavy");
-  await mkdir(heavyDir, { recursive: true });
-  const heavyEnv = { ...legs.env, ...ROOM };
-  const l1 = startHeavy(heavyDir, heavyEnv, "L1", { hold: true });
-  legs.leaves.push(l1);
-  await until("L1 took the slot", l1.took, Boolean, 60_000);
-  const l2 = startHeavy(heavyDir, heavyEnv, "L2");
-  legs.leaves.push(l2);
-  await until(
-    "L2 waits",
-    l2.said,
-    (words) => words.includes("CAWCO-QUEUE wait heavy"),
-    60_000
-  );
-  const c = await legs.delegate("C");
-  const gateNamed = "the landing gate of “Commit and land C”";
-  const l2Said = await until(
-    "L2's wait line names C's landing gate",
-    l2.said,
-    (words) => words.includes(gateNamed),
-    600_000
-  ).catch(() => l2.said());
-  check(
-    "(c) with the slot held by a leaf's run, C's gate and a second leaf's run both wait, the leaf's line naming the gate",
-    l2Said.includes(
-      `a landing gate waits for a heavy-run slot, and takes the next free one before any other run: ${gateNamed}`
-    ) &&
-      l2.took() === undefined &&
-      !(await c.stepLog()).includes("TOOK gate"),
-    l2Said
-  );
-  l1.release();
-  const row = await c.ended();
-  await until("L2 took the slot", l2.took, Boolean, 60_000).catch(
-    () => undefined
-  );
-  const gateTook = TOOK.exec((await c.stepLog()).trim())?.[2];
-  const l2Took = l2.took();
-  check(
-    "(c) on release the gate takes the slot first, then the leaf, and the item lands",
-    gateTook !== undefined &&
-      l2Took !== undefined &&
-      BigInt(gateTook) < l2Took &&
-      row.state === "done",
-    `gate took at ${gateTook ?? "never"}, L2 at ${l2Took ?? "never"} (ns)\n${said(row)}`
-  );
-};
-
 const run = async (kit: Kit) => {
   const origin = refusingOrigin();
-  const leaves: HeavyProbe[] = [];
   const sleepers: Pid[] = [];
   try {
-    const legs: Legs = { ...(await standUp(kit)), leaves, sleepers };
+    const legs: Legs = { ...(await standUp(kit)), sleepers };
     await legA(legs, origin);
     await legB(legs);
-    await legC(legs);
   } finally {
-    for (const leaf of leaves) {
-      leaf.release();
-    }
     // A gate a stop did not end (the defect this spec catches) ends here.
     for (const pid of sleepers) {
       if (isAlive(pid)) {

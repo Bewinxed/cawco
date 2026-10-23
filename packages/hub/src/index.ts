@@ -25,9 +25,10 @@ const main = Effect.gen(function* () {
   const lifetime = yield* HubLifetime;
   // `idleTimeout` past Bun's 10s default: a request that waits on a machine
   // (an adopt reads its skill with a 10s timeout of its own) is silent that
-  // whole time. No download from the internet is one of these: a skill,
+  // whole time. A download from the internet is none of these: a skill,
   // plugin or marketplace fetch answers its request with `fetching` at once,
-  // and what came of it is a `fleet.fetch` frame.
+  // and what came of it is a `fleet.fetch` frame; a build's archive, which
+  // its route waits on, lifts the timer for its request (binary-updates.ts).
   // Before `listen`: every dashboard's first frame names this commit (see
   // `HubServices.build`), and two git calls are not worth a socket without it.
   const build = yield* Effect.promise(buildInfo);

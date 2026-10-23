@@ -20,6 +20,7 @@ import {
   removeSkill,
 } from "../fleet";
 import { type FleetHook, removeHook } from "../hooks";
+import { failureClause } from "../hub-read";
 import { removeRule } from "../rules";
 import { MAIN } from "./memory";
 import type { ConfigStore } from "./store.svelte";
@@ -30,7 +31,8 @@ import { type Deleted, offerUndo } from "./undo";
  * after the fact rather than a confirm dialog before it"): one gesture,
  * nothing asked first. The hub moves the item into its trash, whole (hub
  * db/trash.ts); its row leaves the list; the toast's Undo has the hub put
- * it back, and its row stands again where it stood, marked (undo.ts).
+ * it back, and its row stands again where it stood, marked (undo.ts); a
+ * refused Undo is said on the section the row stood in.
  *
  * `leave` runs once the hub has taken it and before its row goes: an editor
  * goes back to its list there, so the row is seen leaving it. A refused
@@ -48,17 +50,35 @@ async function deleteRow<T>(
     /** What the toast says, and what its Undo marks. */
     words: string;
     mark: string;
+    /** Its name, and the list it stood in: where a refused Undo is said. */
+    name: string;
+    section: string;
   },
   leave?: () => Promise<unknown>
 ): Promise<void> {
   const deleted = await item.remove();
   await leave?.();
   item.drop();
-  offerUndo<T>(`deleted:${item.mark}`, item.words, deleted, (row) => {
-    item.land(row);
-    store.mark(item.mark);
-  });
+  offerUndo<T>(
+    `deleted:${item.mark}`,
+    item.words,
+    deleted,
+    (row) => {
+      item.land(row);
+      store.mark(item.mark);
+    },
+    { section: item.section, name: item.name }
+  );
 }
+
+/**
+ * A delete the hub refused, in the error formula, said under the row that
+ * stays (never a toast; DESIGN.md, The Work Outlives Its Surface Rule): the
+ * refusal already says what did not happen and why ("Could not delete …"),
+ * then what stands. The row's Try again is the way on.
+ */
+export const notDeleted = (name: string, error: unknown): string =>
+  `${failureClause(error)}. ${name} stays as it was.`;
 
 /** `row` in `list` where `at` stood (the end when it had no place), any stale copy of it gone. */
 function putBack<T>(list: T[], row: T, at: number, same: (a: T) => boolean) {
@@ -87,6 +107,8 @@ export function deleteRule(
       },
       words: configureWords.deleted(rule.name),
       mark: rule.id,
+      name: rule.name,
+      section: "/config/rules",
     },
     leave
   );
@@ -112,6 +134,8 @@ export function deleteHook(
       },
       words: configureWords.deleted(hook.name),
       mark: hook.id,
+      name: hook.name,
+      section: "/config/hooks",
     },
     leave
   );
@@ -137,6 +161,8 @@ export function deleteDelegateType(
       },
       words: configureWords.deleted(name),
       mark: name,
+      name,
+      section: "/config/delegate-types",
     },
     leave
   );
@@ -170,6 +196,8 @@ export function deleteAgent(
       },
       words: configureWords.removed(name),
       mark: name,
+      name,
+      section: "/config/subagents",
     },
     leave
   );
@@ -203,6 +231,8 @@ export function deleteMcpServer(
       },
       words: configureWords.removed(name),
       mark: name,
+      name,
+      section: "/config/mcp",
     },
     leave
   );
@@ -229,6 +259,8 @@ export function deleteSkill(store: ConfigStore, name: string): Promise<void> {
     },
     words: configureWords.removed(name),
     mark: name,
+    name,
+    section: "/config/skills",
   });
 }
 
@@ -253,6 +285,8 @@ export function deletePlugin(store: ConfigStore, id: string): Promise<void> {
     },
     words: configureWords.removed(id),
     mark: id,
+    name: id,
+    section: "/config/skills",
   });
 }
 
@@ -288,6 +322,8 @@ export function deleteMarketplace(
     },
     words: configureWords.unlinked(name),
     mark: name,
+    name,
+    section: "/config/skills",
   });
 }
 
@@ -325,6 +361,8 @@ export function deleteMemory(
         },
         words: configureWords.deleted(MAIN),
         mark: MAIN,
+        name: MAIN,
+        section: "/config/memory",
       },
       leave
     );
@@ -352,6 +390,8 @@ export function deleteMemory(
       },
       words: configureWords.deleted(path),
       mark: path,
+      name: path,
+      section: "/config/memory",
     },
     leave
   );

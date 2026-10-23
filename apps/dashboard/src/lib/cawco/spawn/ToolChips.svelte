@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
-  import { accountsWords } from "@cawco/core";
+  import { accountsWords, spawnWords } from "@cawco/core";
 
   /** Why the effort chip offers no level, in the chip's words and its title's. */
   export interface EffortOff {
@@ -52,9 +52,11 @@
     type ChipSize,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
-  import { IconShield } from "#lib/icons.js";
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Tuning from "~icons/solar/tuning-2-bold-duotone";
+  import {
+    IconChevronDown as Down,
+    IconShield,
+    IconTuning as Tuning,
+  } from "#lib/icons.js";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import EffortPips from "./EffortPips.svelte";
   import NsPopover from "./NsPopover.svelte";
@@ -63,7 +65,7 @@
   import { permissionLook } from "./permission-look";
 
   /** The permission chip while no mode is chosen. */
-  const UNCHOSEN_MODE = "Choose a mode";
+  const UNCHOSEN_MODE = spawnWords.unchosenMode;
 
   let {
     tools,
@@ -224,7 +226,7 @@
           <NsPopover
             align="end"
             id={`${id}-permission`}
-            label={`Permission mode: ${look?.name ?? UNCHOSEN_MODE}`}
+            label={spawnWords.permissionMode(look?.name ?? UNCHOSEN_MODE)}
             onchange={(value) => {
               pop = value ? "permission" : null;
             }}

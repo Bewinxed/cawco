@@ -72,9 +72,12 @@ export const shownAccount = (instance: BoardRow): string | null =>
 /**
  * When the move a session is making takes effect, in its rows' words, or
  * undefined when it makes none: the hub moves a session at rest (asleep,
- * stopped, or running between turns) at once; one mid-turn at the turn's
- * end; one whose machine is away once that machine is connected again, as
- * its conversation is copied there.
+ * stopped, stopped at its limit, or running between turns) at once; one
+ * mid-turn at the turn's end; one whose background work keeps its process
+ * when that work ends; one whose machine is away once that machine is
+ * connected again, as its conversation is copied there. What it waits on is
+ * the hub's (its row's `owedMove.waits`), never guessed: a session stopped
+ * at its limit has no turn to end.
  */
 export function movingWords(instance: BoardRow): string | undefined {
   const target = movingTo(instance);
@@ -89,9 +92,33 @@ export function movingWords(instance: BoardRow): string | undefined {
         ?.hostname || instance.machineId;
     return `Moves to ${name} when ${host} is connected again`;
   }
-  return instance.owedMove || cawco.activityOf(instance.id) === "working"
-    ? `Moves to ${name} when this turn ends`
-    : `Moving to ${name}…`;
+  switch (instance.owedMove?.waits) {
+    case "turn":
+      return `Moves to ${name} when this turn ends`;
+    case "work":
+      return `Moves to ${name} when its background work ends`;
+    case "machine":
+    case undefined:
+      break;
+  }
+  return `Moving to ${name}…`;
+}
+
+/**
+ * A session stopped at its account's limit, as an error says it (WORDS.md's
+ * error formula): what happened and when it carries on, in the hub's words
+ * (its row's `stalled`), then the way out while one is open, another
+ * account signed in on its machine, which moves it now. Undefined while it
+ * runs, or while a move it was given is on its way (that move says itself).
+ */
+export function stopWords(instance: BoardRow): string | undefined {
+  const { stalled } = instance;
+  if (!stalled || movingTo(instance) !== undefined) {
+    return;
+  }
+  return switchable(instance).length > 0
+    ? `${stalled.words}. Pick another account to move it now.`
+    : `${stalled.words}. Sign in another account on its machine to move it now.`;
 }
 
 /**

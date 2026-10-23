@@ -43,6 +43,7 @@
 
 <script lang="ts">
   import type { ThreadMessage } from "@cawco/core";
+  import { commonWords } from "@cawco/core";
   /**
    * A session's card, as the house hover panel (HoverPanel) draws it: its
    * mark, title and state, then what its row cannot show: its live tail and
@@ -128,7 +129,7 @@
   };
   const WORD: Record<Tone, string> = {
     live: "Working",
-    needs: "Needs you",
+    needs: commonWords.needsYou,
     stopping: STOPPING_LABEL,
     done: "Finished",
     failed: "Failed",

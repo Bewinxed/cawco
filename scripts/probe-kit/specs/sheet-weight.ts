@@ -36,6 +36,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import type { SheetWeight } from "../../../packages/core/src/stage";
+import { connectWords } from "../../../packages/core/src/words/connect";
+import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -46,8 +48,8 @@ const SCRATCH = "src/lib/cawco/probe-sheet-weight";
 const EMPTY_STARTS = "src/lib/components/ui/empty/EmptyStarts.stories.ts";
 /** Its two-word button labels the review read, and their siblings. */
 const SPACED = [
-  "Add machine",
-  "Add server",
+  connectWords.addMachine,
+  mcpWords.add,
   "Ask Caw for this view",
   "Remove the filter",
   "Open Updates",
@@ -459,6 +461,8 @@ const folderCheck = async (kit: Kit) => {
     asks.set("1", {
       name: "mcp__cawco__artifact_create",
       input: {
+        // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+        response_format: "detailed",
         kind: "preview",
         does: "try",
         ask: "Try this page and say whether it works",

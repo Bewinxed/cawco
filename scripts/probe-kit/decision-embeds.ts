@@ -63,6 +63,8 @@ export const STAGE_START_MS = 240_000;
 /** An embed on a decision page: a Preview's live frame (dashboard decisions host Preview.svelte). */
 export const EMBED_FRAME = "[data-slot=media] iframe[data-slot=embed]";
 const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
+/** A page artifact's own address, as the hub serves it. */
+const PAGE_ARTIFACT = /^\/__cawco\/page\/([^/]+)\/$/;
 const TITLE = /Decisions\("([^"]*)"/;
 const STATES_EXT = /\.stories\.ts$/;
 /** Where a stage's page loads the overlay's own pick, wired to the stand-in bridge (`pickWiring`). */
@@ -289,13 +291,16 @@ export interface StageProject {
  * Starts the stage of `project` (the dashboard's own by default) and serves
  * each program of `programs` (by page name) as the hub's decision host
  * draws it, each id of `files` (the states files of one component canvas,
- * from the project's root, by artifact id) a canvas its Previews embed.
+ * from the project's root, by artifact id) a canvas its Previews embed, and
+ * each id of `pages` a page artifact (its HTML) at its own address on the
+ * page's origin, as the hub serves one (`/__cawco/page/<id>/`).
  * Answers once the stage says it is ready.
  */
 export async function startDecisionStage(
   programs: ReadonlyMap<string, string>,
   files: Readonly<Record<string, readonly string[]>>,
-  project: StageProject = { root: APP, kit: true }
+  project: StageProject = { root: APP, kit: true },
+  pages: Readonly<Record<string, string>> = {}
 ): Promise<DecisionStage> {
   const host = join(project.root, ".cawco/stage/host.mjs");
   mkdirSync(join(project.root, ".cawco/stage"), { recursive: true });
@@ -321,11 +326,17 @@ export async function startDecisionStage(
   stage.stderr.on("data", hear);
   const embedHost = embedOrigin(stagePort);
   const picking = await pickWiring();
-  const pages = Bun.serve({
+  const served = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const { pathname } = new URL(request.url);
+      const artifact = pathname.match(PAGE_ARTIFACT)?.[1];
+      if (artifact && pages[artifact] !== undefined) {
+        return new Response(pages[artifact], {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
       if (pathname === PICK_PATH) {
         return new Response(picking, {
           headers: { "content-type": "text/javascript; charset=utf-8" },
@@ -342,16 +353,17 @@ export async function startDecisionStage(
       if (!(program && theme)) {
         return new Response("Not found", { status: 404 });
       }
-      const media = Object.fromEntries(
-        Object.entries(files).map(([id, held]) => [
+      const media = Object.fromEntries([
+        ...Object.entries(files).map(([id, held]) => [
           id,
           {
             kind: "component",
             name: held[0]?.split("/").at(-1) ?? id,
             embed: `http://127.0.0.1:${embedHost.port}/@cawco/canvas?${held.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&scheme=${theme}`,
           },
-        ])
-      );
+        ]),
+        ...Object.keys(pages).map((id) => [id, { kind: "page", name: id }]),
+      ]);
       const title = program.match(TITLE)?.[1] ?? "";
       const html = programHost(program, title, {}).replace(
         "</body>",
@@ -363,7 +375,7 @@ export async function startDecisionStage(
     },
   });
   const stop = async () => {
-    await pages.stop(true);
+    await served.stop(true);
     await embedHost.stop(true);
     stage.kill();
   };
@@ -381,7 +393,7 @@ export async function startDecisionStage(
   return {
     stagePort,
     pageUrl: (name, theme) =>
-      `http://127.0.0.1:${pages.port}/page/${name}/${theme}/`,
+      `http://127.0.0.1:${served.port}/page/${name}/${theme}/`,
     stop,
   };
 }
@@ -473,10 +485,7 @@ function embedRead() {
       return [];
     }
     const r = body.getBoundingClientRect();
-    // A story too wide to fit at a legible scale scrolls sideways in its frame (runtime.ts fitToEmbed): the frame's box is what stands in the embed.
-    const wide = frame.hasAttribute("data-cawco-wide");
-    const box = wide ? frame.getBoundingClientRect() : r;
-    /** CSS zoom in effect on an element (the embed's fit, runtime.ts): its words are drawn this much smaller than their font size. */
+    /** CSS zoom in effect on an element: an embed draws every story at 1 (runtime.ts `sayShape`), so its words at their own size. */
     const zoomOf = (el: Element) =>
       (el as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
     const sizes = new Map<number, number>();
@@ -499,16 +508,10 @@ function embedRead() {
       {
         story: frame.dataset.cawcoStory ?? "",
         h: Math.round(r.height),
-        left: Math.round(box.left),
-        right: Math.round(box.right),
-        /** Its drawn width, the whole story's (past its frame's edge where it scrolls). */
+        left: Math.round(r.left),
+        right: Math.round(r.right),
+        /** Its drawn width. */
         w: Math.round(r.width),
-        wide,
-        /** How far it scrolls sideways in its frame, and whether its frame lets a person scroll it. */
-        scrolls: wide ? frame.scrollWidth - frame.clientWidth : 0,
-        scrollable: ["auto", "scroll"].includes(
-          getComputedStyle(frame).overflowX
-        ),
         zoom: Math.round(zoomOf(body) * 1000) / 1000,
         state:
           frame.querySelector<HTMLElement>(".cawco-frame-status")?.dataset
@@ -1027,18 +1030,33 @@ function wholesOf(pictures: string): { from: number; to: number }[] {
  */
 export async function capturePage(page: Page, path: string): Promise<Capture> {
   await scrollThrough(page, () => settle(page, 300));
-  // A box the page sticks to the window's edge (the decision host's Send
-  // picks bar) stands in every window it reaches, over the rows under it:
-  // stitched, those rows were never pictured. A sticky box takes its place
-  // in the flow whether it sticks or not, so unstuck (`static`) for the
-  // capture the page lays out the same and pictures it once, where it
-  // stands in the page; its own inline style comes back after.
+  // A box the page holds at the window's edge (the decision host's Send
+  // picks bar, the second row of a page the window's height whose cards
+  // scroll in its first; or a sticky one) stands in every window, over or
+  // beside the rows that pass it: stitched, those rows were never pictured.
+  // For the capture the page lays out as one document (its own scroller
+  // let go, the page as tall as what it holds, a sticky box `static`, each
+  // in the place it takes in the flow), and pictures its foot once, at its
+  // end; their own inline styles come back after.
   await page.evaluate(() => {
+    const hold = (el: HTMLElement, property: string, value: string) => {
+      el.dataset.captureStyle ??= el.getAttribute("style") ?? "";
+      el.style.setProperty(property, value);
+    };
     for (const el of document.querySelectorAll<HTMLElement>("body *")) {
       if (getComputedStyle(el).position === "sticky") {
-        el.dataset.captureStyle = el.getAttribute("style") ?? "";
-        el.style.setProperty("position", "static");
+        hold(el, "position", "static");
       }
+    }
+    const root = document.querySelector<HTMLElement>(
+      "[data-slot=decision-page]"
+    );
+    const scroller = document.querySelector<HTMLElement>(
+      "[data-slot=page-scroll]"
+    );
+    if (root && scroller) {
+      hold(root, "height", "auto");
+      hold(scroller, "overflow", "visible");
     }
   });
   const size = await page.evaluate(() => ({
@@ -1209,12 +1227,23 @@ export async function pageReach(
         })
     );
   const full = await scrollThrough(page, rest);
-  const height = await page.evaluate(() => innerHeight);
+  const height = await page.evaluate(
+    () =>
+      (
+        document.querySelector("[data-slot=page-scroll]") ??
+        document.documentElement
+      ).clientHeight
+  );
   const controls = new Map<string, ControlReach>();
   const spills = new Set<string>();
   for (let top = 0; top < full; top += height / 2) {
     await page.evaluate(
-      (y) => window.scrollTo(0, y),
+      (y) => {
+        (
+          document.querySelector("[data-slot=page-scroll]") ??
+          document.documentElement
+        ).scrollTop = y;
+      },
       Math.max(0, Math.min(top, full - height))
     );
     await rest();
@@ -1236,7 +1265,12 @@ export async function pageReach(
       takeReach(line, foot, controls, spills);
     }
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => {
+    (
+      document.querySelector("[data-slot=page-scroll]") ??
+      document.documentElement
+    ).scrollTop = 0;
+  });
   await rest();
   return { controls: [...controls.values()], spills: [...spills] };
 }
@@ -1293,30 +1327,50 @@ function takeReach(
 const THROUGH_PASSES = 6;
 
 /**
- * Scrolls `page` through, half a window at a time, until its height is the
- * same after a pass as before it, waiting `rest` at each stop; back at the
- * top. Its height as it held.
+ * Scrolls `page` through, half its scroller at a time (a decision page's
+ * own, its first row; else the document's), until its height is the same
+ * after a pass as before it, waiting `rest` at each stop; back at the top.
+ * Its height as it held.
  */
 async function scrollThrough(
   page: Page | Frame,
   rest: () => Promise<void>
 ): Promise<number> {
+  const scrollTo = (top: number) =>
+    page.evaluate((y) => {
+      (
+        document.querySelector("[data-slot=page-scroll]") ??
+        document.documentElement
+      ).scrollTop = y;
+    }, top);
   let tall = -1;
   for (let pass = 0; pass < THROUGH_PASSES; pass += 1) {
     const now = await page.evaluate(
-      () => document.documentElement.scrollHeight
+      () =>
+        (
+          document.querySelector("[data-slot=page-scroll]") ??
+          document.documentElement
+        ).scrollHeight
     );
     if (now === tall) {
       break;
     }
     tall = now;
-    const step = await page.evaluate(() => Math.max(1, innerHeight / 2));
+    const step = await page.evaluate(() =>
+      Math.max(
+        1,
+        (
+          document.querySelector("[data-slot=page-scroll]") ??
+          document.documentElement
+        ).clientHeight / 2
+      )
+    );
     for (let y = 0; y < tall; y += step) {
-      await page.evaluate((top) => window.scrollTo(0, top), y);
+      await scrollTo(y);
       await rest();
     }
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await scrollTo(0);
   await rest();
   return tall;
 }

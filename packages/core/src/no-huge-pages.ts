@@ -11,8 +11,8 @@
  * such a region compacts memory synchronously (docs.kernel.org
  * admin-guide/mm/transhuge.rst: "madvise: will enter direct reclaim like
  * `always` but only for regions that are have used madvise(MADV_HUGEPAGE)"),
- * which raises memory PSI on a machine with plenty free, and the heavy-run
- * gate (heavy-run.ts) then holds session starts and heavy runs. On obelisk
+ * which raises memory PSI on a machine with plenty free, and a session's
+ * start then waits on that reading (machine-room.ts). On obelisk
  * on 2026-10-20 the stage hosts held 0.25 to 2.1 GiB of AnonHugePages each.
  *
  * `prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0)` with flags 0 "will disable THPs

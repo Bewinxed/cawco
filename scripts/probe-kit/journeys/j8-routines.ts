@@ -13,6 +13,8 @@
  * where one can start (the host), never inside a workspace.
  */
 import { join } from "node:path";
+import { commonWords } from "../../../packages/core/src/words/common";
+import { routinesWords } from "../../../packages/core/src/words/routines";
 import { SESSION_TITLE_MAX } from "../../../packages/hub/src/work-items";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
@@ -86,7 +88,7 @@ async function walk(leg: Leg): Promise<void> {
     fleet
       .api<Listed[]>(`/api/routines?projectId=${encodeURIComponent(projectId)}`)
       .then((rows) => rows.find((row) => row.name === name));
-  const form = page.getByRole("form", { name: "New routine" });
+  const form = page.getByRole("form", { name: routinesWords.newRoutine });
 
   await leg.step(
     "Open the project's routines, then Create routine",
@@ -97,7 +99,9 @@ async function walk(leg: Leg): Promise<void> {
       // Caw is off but answers when written to, so the empty state asks
       // him: Create routine stands in the block's head, on the first leg
       // and on the next alike.
-      await page.getByRole("button", { name: "Create routine" }).click();
+      await page
+        .getByRole("button", { name: routinesWords.createRoutine })
+        .click();
     },
     () => shows(form.getByLabel("Name"), "the routine form's Name field")
   );
@@ -106,14 +110,14 @@ async function walk(leg: Leg): Promise<void> {
     "Fill the form: a name, what each run does, and when: every week on Mondays at 07:30, in London",
     async () => {
       await form.getByLabel("Name").fill(name);
-      await form.getByLabel("What each run does").fill(prompt);
+      await form.getByLabel(routinesWords.promptLabel).fill(prompt);
       const exact = { exact: true };
       await form
         .getByLabel("When", exact)
-        .selectOption({ label: "Every week" });
+        .selectOption({ label: routinesWords.repeats.week });
       await form.getByLabel("On", exact).selectOption({ label: "Mondays" });
       await form.getByLabel("At", exact).fill("07:30");
-      await form.getByLabel("Time zone").selectOption(zone);
+      await form.getByLabel(routinesWords.zoneLabel).selectOption(zone);
     },
     // The hub reads the schedule back, by its own parser, right under When,
     // and its week stands on the strip: every day's label inside the strip.
@@ -153,7 +157,7 @@ async function walk(leg: Leg): Promise<void> {
       await form
         .getByLabel("When", { exact: true })
         .selectOption({ label: "Custom" });
-      await form.getByLabel("Custom schedule").fill(CRON);
+      await form.getByLabel(routinesWords.customLabel).fill(CRON);
     },
     () =>
       shows(
@@ -165,7 +169,8 @@ async function walk(leg: Leg): Promise<void> {
   let id = "";
   await leg.step(
     "Create it",
-    () => form.getByRole("button", { name: "Create routine" }).click(),
+    () =>
+      form.getByRole("button", { name: routinesWords.createRoutine }).click(),
     async () => {
       const made = await eventually(
         "the hub lists the routine, as the form filled it",
@@ -225,7 +230,7 @@ async function walk(leg: Leg): Promise<void> {
     }
   );
   const before = runsOf(fleet, id).length;
-  const menu = page.getByRole("button", { name: `More for ${name}` });
+  const menu = page.getByRole("button", { name: commonWords.moreFor(name) });
 
   await leg.step(
     "Run it now",
@@ -291,6 +296,7 @@ async function walk(leg: Leg): Promise<void> {
 const journey: Journey = {
   name: "j8-routines",
   flow: "Routines: create by hand, run now, pause",
+  host: "each run of the routine starts in a workspace of its own",
   respond: (seen: Seen) => {
     if (!seen.tools) {
       return say("Board check");

@@ -8,11 +8,13 @@ import type {
   AuthState,
   BuildInfo,
   Envelope,
+  FleetHeld,
   HeartbeatAckPayload,
   HeartbeatPayload,
   LaunchAsk,
   LaunchGrant,
   LentAccess,
+  MachineActivity,
   MachineHarnessReport,
   MachineProviderLists,
   NamedSpawn,
@@ -75,6 +77,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
+  BROWSER_CLOSE_PAGES,
   BROWSER_HANDBACK,
   BROWSER_LISTEN,
   BROWSER_REMOVE,
@@ -84,12 +87,14 @@ import {
   BROWSER_STOP,
   BROWSER_VIEWER_TOKEN,
   BROWSER_VIEWERS,
+  type BrowserClosePagesArgs,
   type BrowserKey,
   type BrowserShieldArgs,
   type BrowserStartArgs,
   type BrowserViewersArgs,
   isBrowserKey,
 } from "@cawco/core/browser";
+import { timerMs } from "@cawco/core/clock";
 import {
   CUSTODY_BOUND_MS,
   type HandoverCommand,
@@ -101,6 +106,7 @@ import {
   REGISTER_ACK_MS,
 } from "@cawco/core/handover";
 import { machineEndpoint } from "@cawco/core/keepers";
+import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineKeyPath,
@@ -155,10 +161,12 @@ import {
   claudeSignins,
   onSigninsChanged,
 } from "./accounts";
+import { type Activity, watchActivity } from "./activity";
 import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
 import {
   BinaryUpdater,
+  hubRegistered,
   latestBinaryUpdate,
   reportBinaryUpdate,
 } from "./binary-update";
@@ -181,6 +189,7 @@ import {
   watchBrowsers,
 } from "./browser/browsers";
 import { sweepBrowserDoors } from "./browser/door";
+import { closeWorkspaceBrowsers } from "./browser/gate";
 import {
   certifyRelay,
   relayReachChanged,
@@ -215,13 +224,14 @@ import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { serveHubCredential } from "./hub-git";
-import { carryHub, stopCarrying } from "./hub-loopback";
+import { carryHub, followHub, stopCarrying } from "./hub-loopback";
+import { keepHubPreviews } from "./hub-previews";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
-import { isMachineAgent } from "./machine-agent";
+import { holdHubLink, isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
 import {
@@ -333,13 +343,9 @@ const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
   if (!(
     given &&
     typeof given.hostname === "string" &&
-    (given.cloudflareToken === undefined ||
-      typeof given.cloudflareToken === "string") &&
-    (given.webroot === undefined || typeof given.webroot === "string")
+    typeof given.cloudflareToken === "string"
   )) {
-    throw new Error(
-      "relay.certify takes a hostname and, for DNS, a token, or for HTTP through the hub's port 80, its webroot."
-    );
+    throw new Error("relay.certify takes a hostname and a Cloudflare token.");
   }
   return given as RelayCertifyArgs;
 };
@@ -347,12 +353,8 @@ const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
 /** A `relay.map`'s address on the router's network, or a refusal saying what came. */
 const relayMapOf = (args: unknown): RelayMapArgs => {
   const given = args as Partial<RelayMapArgs> | null;
-  if (!(
-    given &&
-    typeof given.lan === "string" &&
-    typeof given.http === "boolean"
-  )) {
-    throw new Error("relay.map takes the machine's router address and http.");
+  if (!(given && typeof given.lan === "string")) {
+    throw new Error("relay.map takes the machine's router address.");
   }
   return given as RelayMapArgs;
 };
@@ -396,16 +398,31 @@ import {
 } from "./workflow-command";
 import {
   archiveWorkspace,
+  clearInterruptedCuts,
   createWorkspace,
   discardWorkspace,
   workspaceAt,
   workspaceBoundary,
   workspaceBundle,
 } from "./workspace";
+import { workspaceNeeds } from "./workspace-needs";
 import { workspaceRefs } from "./workspace-records";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
+
+/**
+ * This machine's desktop as the person uses it (activity.ts), read once the
+ * daemon starts: on every beat, and a beat of its own on each change, on
+ * whichever connection is up.
+ */
+let machineActivity: Activity | undefined;
+const activityHeard = new Set<(activity: MachineActivity) => void>();
+/** The beat's `activity`, while the desktop is read. */
+const activityNow = (): { activity?: MachineActivity } => {
+  const activity = machineActivity?.now();
+  return activity ? { activity } : {};
+};
 /**
  * How long after a ping the hub's link may stay silent before it is dropped
  * as dead. Our choice: a whole beat's interval, so a hub that is slow under
@@ -414,8 +431,12 @@ const HEARTBEAT_INTERVAL = Duration.seconds(15);
 const HUB_SILENT_MS = 15_000;
 const USAGE_INTERVAL = Duration.seconds(60);
 const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
-/** How often every CawCo account dir's `auth status` is read again. */
-const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
+/**
+ * How often every CawCo account dir's `auth status` is read again: a minute,
+ * read through the clock the update's timed steps read (core clock.ts), so
+ * the stage 2 proof waits on these reads at the pace it runs the update.
+ */
+const CLAUDE_LOGIN_CHECK_INTERVAL_MS = timerMs(60_000);
 /**
  * How often each of pi's settings, models and sign-in files is looked at
  * (a stat) for a change. Ours: a change reaches the hub within this and the
@@ -831,6 +852,12 @@ export interface RegisterPayload extends MachineIdentity {
   /** Custody is not attachment: these still need a handle before being listed live. */
   custody: SessionCustody;
   /**
+   * What this agent holds of the fleet (core fleet.ts `FleetHeld`): the
+   * hub's welcome carries only what differs. Absent from an agent that has
+   * held nothing since it started.
+   */
+  fleetHeld?: FleetHeld;
+  /**
    * The id this machine last registered as with this hub, when its id has
    * moved since (it follows the hostname, core machine-id.ts): the hub moves
    * what it held for that id to this one once the register proves it is
@@ -856,6 +883,13 @@ export interface RegisterPayload extends MachineIdentity {
    * ({@link keyProof}); absent before the person admitted the machine.
    */
   proof?: string;
+  /**
+   * This machine's workspaces reach the hub's own preview origins through
+   * their relays (proxy-relay.ts, hub-previews.ts), from the origins the ack
+   * names: the hub hands a workspace here a pass to one of them. Absent from
+   * an agent from before it, whose workspaces reach none.
+   */
+  relaysHubPreviews: true;
   /**
    * The sessions this machine could resume, so the rows the daemon no
    * longer carries settle as sleeping or as lost rather than all alike. Absent
@@ -1349,25 +1383,6 @@ export const adoptable = (
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
-/** That restore as `SessionSupervisor.takeHeld` wants it: where it runs, and its conversation. */
-export const custodyRow = (
-  payload: SpawnPayload
-): {
-  instanceId: string;
-  cwd: string;
-  sessionId: string | null;
-  processGeneration?: string;
-  keepAliveTurn?: string;
-  permissionMode?: SpawnPayload["permissionMode"];
-} => ({
-  instanceId: payload.instanceId,
-  cwd: payload.cwd,
-  sessionId: payload.resume?.sessionKey ?? null,
-  processGeneration: payload.processGeneration,
-  ...(payload.permissionMode ? { permissionMode: payload.permissionMode } : {}),
-  ...(payload.keepAliveTurn ? { keepAliveTurn: payload.keepAliveTurn } : {}),
-});
-
 /**
  * What the register says about this machine's sessions: what every keeper is
  * still holding, the current one and any retiring one, and what each harness
@@ -1569,6 +1584,9 @@ const attach = (
     // proofs name (hub-proof.ts).
     setConnectedHub(challenge.hubId);
     yield* Effect.promise(() => recordJoinedHub(url, challenge.hubId));
+    // This process holds the machine's hub link: it is the machine's agent
+    // (machine-agent.ts).
+    holdHubLink();
     supervisor.resetStopSequence();
     process.env[CAWCO_ENV.hubUrl] = url;
     const { catalog } = yield* Effect.promise(() => reading);
@@ -1594,9 +1612,11 @@ const attach = (
       ...keyProof(challenge, identity.machineId),
       ...(formerMachineId ? { formerMachineId } : {}),
       ...(machineAgent ? { accountStores: accountStoreIds() } : {}),
+      ...(supervisor.fleetHeld() ? { fleetHeld: supervisor.fleetHeld() } : {}),
       sessionAddresses: supervisor.sessionAddresses,
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
+      relaysHubPreviews: true,
       custody: snapshot.custody,
       harnessKinds: harnesses().map((adapter) => adapter.kind),
       credentialHashes: storedHashes(),
@@ -1798,18 +1818,29 @@ const attach = (
         .map((one) => one.address)
         .sort()
         .join(",");
+    // On the same beat, what a workspace lacks here (workspace-needs.ts): a
+    // tool the person installs, or takes away, reaches the machine's row
+    // within a beat, not at the next reconnect.
+    const needsNow = (): string =>
+      (workspaceNeeds().missing ?? []).map((tool) => tool.command).join(",");
     let network = interfacesNow();
+    let needs = needsNow();
     const networkWatch = setInterval(() => {
       const now = interfacesNow();
-      if (now === network) {
+      const lacking = needsNow();
+      if (now === network && lacking === needs) {
         return;
       }
+      const moved = now !== network;
       network = now;
-      relayReachChanged().catch((error: unknown) =>
-        console.warn(
-          `[relay] its addresses were not told again: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      needs = lacking;
+      if (moved) {
+        relayReachChanged().catch((error: unknown) =>
+          console.warn(
+            `[relay] its addresses were not told again: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+      }
       readPart("the machine's capabilities", probeCapabilities)
         .then((machineCapabilities) => {
           if (machineCapabilities && socket.readyState === WebSocket.OPEN) {
@@ -1929,21 +1960,41 @@ const attach = (
     };
     // An install this agent ran, or a harness finding its binary at another
     // version than it last did (tools.ts `toolsMoved`): the tools are probed
-    // again and sent now, not at the next connect. Only the tools: a
-    // harness's own report is its `detect`, which may start its server, and a
-    // version moving is no reason to start one. A burst is read once, a
-    // second on.
+    // again and sent now, not at the next connect, and so is the report of
+    // each harness whose word on its version gate (`refused`) may be what
+    // just moved: Claude's always (its `detect` starts nothing), and any
+    // other whose last report was refused, which an install pressed in the
+    // dashboard is there to clear. An OpenCode that runs is not read again
+    // here: its `detect` may start its server, and a version moving is no
+    // reason to start one. A burst is read once, a second on.
     let toolsSoon: ReturnType<typeof setTimeout> | undefined;
     const reportTools = async (): Promise<void> => {
-      const tools = await readPart("tools", probeTools);
-      if (tools && socket.readyState === WebSocket.OPEN) {
+      const again = harnesses().filter(
+        (adapter) =>
+          adapter.kind === "claude" ||
+          reportedHarnesses.some(
+            (report) => report.harness === adapter.kind && report.refused
+          )
+      );
+      const [tools, ...reports] = await Promise.all([
+        readPart("tools", probeTools),
+        ...again.map(readHarness),
+      ]);
+      const read = reports.filter(
+        (report): report is MachineHarnessReport => report !== undefined
+      );
+      for (const report of read) {
+        keepReport(report);
+      }
+      if ((tools || read.length > 0) && socket.readyState === WebSocket.OPEN) {
         send(socket, {
           verb: "heartbeat",
           machineId: identity.machineId,
           payload: {
             at: Date.now(),
             instances: supervisor.instanceIds,
-            tools,
+            ...(tools ? { tools } : {}),
+            ...(read.length > 0 ? { harnesses: read } : {}),
           } satisfies HeartbeatPayload,
         });
       }
@@ -2191,6 +2242,7 @@ const attach = (
         frame.kind === "workflow" ||
         frame.kind === "fleet_mcp" ||
         frame.kind === "moves" ||
+        frame.kind === "installs" ||
         frame.kind === "move_progress" ||
         frame.kind === "command_queue" ||
         frame.kind === "stage" ||
@@ -2422,7 +2474,7 @@ const attach = (
               supervisor.takeHeld(
                 command.unit as (typeof SESSION_PROC_KINDS)[number],
                 ackPayload,
-                custodyRow(envelope.payload as SpawnPayload),
+                envelope.payload as SpawnPayload,
                 proc
               );
               adopted.push(command.id);
@@ -2655,6 +2707,9 @@ const attach = (
       if (envelope.verb === "register") {
         agentStep({ kind: "register-ack" });
         recordRegistered();
+        // A machine waiting for its hub's build looks again: the hub may
+        // have restarted into it (binary-update.ts `hubRegistered`).
+        hubRegistered();
         // What each session is owed goes first, ahead of anything this ack
         // sets off: every frame the hub has not taken, then each running
         // reply so far (outbox.ts).
@@ -2670,7 +2725,18 @@ const attach = (
             dashboard: (envelope.payload as RegisterAckPayload).dashboardPorts,
             previews: (envelope.payload as RegisterAckPayload).previewPorts,
           },
+          (envelope.payload as RegisterAckPayload).hostsHub,
+          (envelope.payload as RegisterAckPayload).tailnetHttps
+        );
+        // The hub's own preview origins, which this machine's workspaces
+        // reach through their relays from the host (hub-previews.ts).
+        keepHubPreviews(
+          (envelope.payload as RegisterAckPayload).previewOrigins,
           (envelope.payload as RegisterAckPayload).hostsHub
+        ).catch((error: unknown) =>
+          console.warn(
+            `[agent] the hub's preview origins were not kept, so this machine's workspaces reach none: ${error instanceof Error ? error.message : String(error)}`
+          )
         );
         // What the hub no longer honours of what the register named leaves
         // the redaction store: it grants nothing, so nothing it shows leaks.
@@ -2699,6 +2765,8 @@ const attach = (
         sweepAccounts(envelope.payload as RegisterAckPayload);
         // The welcome read whole: the doors of sessions it no longer has go.
         sweepBrowserDoors(envelope.payload);
+        // And the containers of sessions that ended while no agent was here.
+        supervisor.sweepContainers(envelope.payload);
         return true;
       }
       if (envelope.verb !== "spawn") {
@@ -2823,6 +2891,7 @@ const attach = (
         liveWorkItems(beat?.liveWorkspaces);
         takeSessionLimits(beat?.sessionLimits);
         takeUpstream(beat?.upstream);
+        followHub(beat?.tailnetHttps);
         supervisor.acknowledged(beat);
         return;
       }
@@ -2919,6 +2988,7 @@ const attach = (
             ...(latestBinaryUpdate()
               ? { binaryUpdate: latestBinaryUpdate() }
               : {}),
+            ...activityNow(),
           } satisfies HeartbeatPayload;
           // A connection waiting to be admitted says nothing more until it is
           // (`send`).
@@ -2934,6 +3004,25 @@ const attach = (
         Schedule.spaced(HEARTBEAT_INTERVAL)
       )
     );
+
+    // The desktop's change of state goes at once, on a beat of its own.
+    const tellActivity = (activity: MachineActivity): void => {
+      if (socket.readyState === WebSocket.OPEN) {
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            activity,
+          } satisfies HeartbeatPayload,
+        });
+      }
+    };
+    activityHeard.add(tellActivity);
+    socket.addEventListener("close", () => activityHeard.delete(tellActivity), {
+      once: true,
+    });
 
     // A turn on an account reads its windows shortly after; they go to the
     // hub on this connection as they come.
@@ -3000,6 +3089,35 @@ const attach = (
     return yield* closed(socket, url);
   });
 
+/** How often the agent looks at the size of every CawCo job's log on macOS (our call). */
+const LAUNCHD_LOG_CARE_MS = 5 * 60_000;
+
+/**
+ * Every CawCo job's log in `~/Library/Logs` within its cap (core launchd.ts
+ * `capLaunchdLogs`), and at `start` first each one whose service CawCo no
+ * longer has removed (`sweepLaunchdLogs`). Never rejects: what fails is said,
+ * and the next look tries again.
+ */
+const careForLaunchdLogs = async (start: boolean): Promise<void> => {
+  try {
+    if (start) {
+      const swept = await sweepLaunchdLogs();
+      if (swept.length > 0) {
+        console.info(
+          `[agent] removed ${swept.length} log(s) of services CawCo no longer has: ${swept.join(", ")}`
+        );
+      }
+    }
+    for (const path of await capLaunchdLogs()) {
+      console.info(`[agent] ${path} passed its cap; it is in ${path}.1 now`);
+    }
+  } catch (error) {
+    console.warn(
+      `[agent] the service logs could not be looked after: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
+
 /**
  * Runs until interrupted: connect, register, heartbeat, reconnect on loss.
  * Nothing on the way to the first register starts a harness's CLI: each
@@ -3020,6 +3138,10 @@ export const startDaemon = (rediscover = false) =>
         )
       )
     );
+    // Before any cut: each its last process left under way is cleared when
+    // its path holds only what that cut wrote (workspace.ts). Begun, not
+    // awaited: every cut waits for it, nothing else does.
+    clearInterruptedCuts();
     // First: CLIs already running read their workspace's hook on every shell
     // call, and one an earlier build wrote runs what this build no longer has.
     // Begun, not awaited: registration and custody go on meanwhile, and each
@@ -3038,6 +3160,20 @@ export const startDaemon = (rediscover = false) =>
     if (deadLinks.length > 0) {
       console.info(
         `[agent] removed ${deadLinks.length} short name(s) in the socket root whose target is gone: ${deadLinks.join(", ")}`
+      );
+    }
+    // macOS: launchd appends each job's output to its own file, which nothing
+    // else bounds (Linux's units log to journald, which keeps itself within
+    // its limits). A log whose service CawCo no longer has goes at start, and
+    // each live one is capped now and on a timer (core launchd.ts).
+    if (process.platform === "darwin") {
+      yield* Effect.promise(() => careForLaunchdLogs(true));
+      const logCare = setInterval(
+        () => careForLaunchdLogs(false),
+        LAUNCHD_LOG_CARE_MS
+      );
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => clearInterval(logCare))
       );
     }
     const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;
@@ -3120,9 +3256,25 @@ export const startDaemon = (rediscover = false) =>
           return network ? [network] : [];
         }),
     });
-    // While a turn, a gate step, a boundary's command or a heavy run is live
-    // here, the OS does not idle-sleep this machine (awake.ts).
+    // While a turn, a gate step, a boundary's command or a run a session
+    // left working is live here, the OS does not idle-sleep this machine
+    // (awake.ts).
     keepAwakeWhileWorking(() => supervisor.turnsRunning());
+    // How the person uses this machine, toward whether they are here.
+    watchActivity()
+      .then((activity) => {
+        machineActivity = activity;
+        activity.onChange((now) => {
+          for (const tell of activityHeard) {
+            tell(now);
+          }
+        });
+      })
+      .catch((error: unknown) =>
+        console.warn(
+          `[activity] this machine's desktop is not read: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
     // A sign-in moves what a workspace's policy denies: every boundary is
     // checked for a narrowed access at once (boundary.ts `recheckNarrowed`).
     onSigninsChanged(accountsChangedHere);
@@ -3325,6 +3477,16 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(BROWSER_REMOVE, async (args) =>
       removeBrowser(browserKeyOf(args))
     );
+    // A work item ended: its door's pages close on every browser here
+    // (browser/gate.ts), the browsers themselves running on.
+    supervisor.registerDaemonFunction(BROWSER_CLOSE_PAGES, async (args) => {
+      const { id } = (args ?? {}) as Partial<BrowserClosePagesArgs>;
+      if (typeof id !== "string" || id.length === 0) {
+        throw new Error("browser.closePages takes the door's id");
+      }
+      await closeWorkspaceBrowsers(id);
+      return true;
+    });
     // The person takes a browser over privately and hands it back
     // (browser/shield.ts); a take-over with no view for two minutes is
     // handed back here, and the hub told.
@@ -3414,28 +3576,19 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(RELAY_STOP, () => stopRelay());
     supervisor.registerDaemonFunction(RELAY_REMOVE, () => removeRelay());
     supervisor.registerDaemonFunction(RELAY_RENEW, (args) => {
-      const given = args as {
-        cloudflareToken?: unknown;
-        webroot?: unknown;
-      } | null;
-      return renewRelay({
-        ...(typeof given?.cloudflareToken === "string"
-          ? { cloudflareToken: given.cloudflareToken }
-          : {}),
-        ...(typeof given?.webroot === "string"
-          ? { webroot: given.webroot }
-          : {}),
-      });
+      const token = (args as { cloudflareToken?: unknown } | null)
+        ?.cloudflareToken;
+      if (typeof token !== "string") {
+        throw new Error("relay.renew takes the Cloudflare token.");
+      }
+      return renewRelay({ cloudflareToken: token });
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
     // runtime read, the router asked, and a binding from here through it.
     supervisor.registerDaemonFunction(RELAY_CERTIFY, (args) =>
       certifyRelay(relayCertifyOf(args))
     );
-    supervisor.registerDaemonFunction(RELAY_RUNTIME, (args) => {
-      const lowest = (args as { lowest?: unknown } | null)?.lowest;
-      return relayRuntimeRead(typeof lowest === "number" ? lowest : 443);
-    });
+    supervisor.registerDaemonFunction(RELAY_RUNTIME, () => relayRuntimeRead());
     supervisor.registerDaemonFunction(RELAY_MAP, (args) =>
       mapRelayPorts(relayMapOf(args))
     );

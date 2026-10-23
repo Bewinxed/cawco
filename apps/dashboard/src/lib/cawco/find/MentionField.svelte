@@ -37,13 +37,14 @@
    * Keys while the menu is open: ↑↓ move, ↵ or Tab inserts, Escape leaves
    * the text plain; a whole word that matches nothing closes it.
    */
-  import { Portal } from "bits-ui";
   import { type Component, mount, unmount, untrack } from "svelte";
   import type { ClassValue, HTMLAttributes } from "svelte/elements";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import {
+    IconPauseCircle as Idle,
+    IconServerAlt as Machine,
+  } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import Idle from "~icons/solar/pause-circle-bold-duotone";
-  import Machine from "~icons/solar/server-bold-duotone";
   import { copyChips } from "../chip-copy";
   import { CURVE, dur, motionOk } from "../motion/curves.svelte.js";
   import SkillChip from "../SkillChip.svelte";
@@ -884,6 +885,17 @@
     chips.clear();
   });
 
+  /**
+   * Stands the menu's box in `host` (the composer's pill, which places it),
+   * else leaves it where it is. Only the box moves: the block that holds it
+   * is still this field's, so its transitions run as it opens and shuts.
+   */
+  const standIn =
+    (host: HTMLElement | undefined) =>
+    (node: HTMLElement): void => {
+      host?.append(node);
+    };
+
   const dismissMenu = () => {
     dismissed = at;
     at = null;
@@ -901,12 +913,15 @@
   />
 {/snippet}
 
+<!-- The menu stays in this block, so it grows in as `mention.open` turns
+     and folds back as it goes (MentionMenu `grow`); with a host, only its
+     box is stood in the host (`standIn`). Through a mounted portal (bits-ui
+     Portal: `mount` and `unmount` without its outro) it came and went with
+     no motion at all. -->
 {#if mention.open}
-  {#if menuHost}
-    <Portal to={menuHost}>{@render menu()}</Portal>
-  {:else}
+  <div class="contents" {@attach standIn(menuHost)}>
     {@render menu()}
-  {/if}
+  </div>
 {/if}
 
 <div

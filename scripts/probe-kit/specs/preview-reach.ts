@@ -8,10 +8,10 @@
  * A scratch fleet, the built dashboard at the desk, read from the pane's
  * DOM. Nothing is pressed: every recovery is the pane's own.
  *
- * 1. A page artifact whose first ping this browser refuses (the route
- *    aborted as connection refused): the pane says it can't be reached, and
- *    why ("… didn't answer"); then it shows the page by itself, within
- *    `FIRST_BACK_MS`.
+ * 1. A page artifact whose first probe this browser refuses (its `cors`,
+ *    `no-cors` and second `cors` asks aborted as connection refused): the pane says it
+ *    can't be reached, and why ("… The hub reaches …"); then it shows the
+ *    page by itself, within `FIRST_BACK_MS`.
  * 2. A port preview whose machine's agent is stopped: the hub's ping
  *    answers 502 with its own words, and the pane says them ("… answered
  *    502: …"), with no "Previews need" advice (the origin answered) and one
@@ -23,9 +23,33 @@
  *    one): the hub's relayed ping fails, and the pane says "answered 502:
  *    its machine's listener didn't answer the hub (…)". The agent running
  *    again, the pane shows the page by itself.
+ * 4. Every cause the shared classifier names (core preview-reach.ts), each
+ *    by Playwright's own mechanism on the ping alone, said in its exact
+ *    sentence on the pane's card and on a decision page's Preview alike:
+ *    offline (`context.setOffline(true)`), refused at once (the browser's
+ *    own block list, CDP `Network.setBlockedURLs`, which fails the request
+ *    in the browser as a shield does: a `route.abort("blockedbyclient")`
+ *    goes through Playwright's driver first, and under a loaded run took
+ *    longer than any instant refusal), no answer (a route that never
+ *    answers), the hub's 502 with its words (a route answering it), a 200
+ *    without its CORS header (the ping sent on to a server that answers so:
+ *    Playwright's `route.fulfill` adds the header to a CORS request's
+ *    answer itself). The Preview, sampled every 100 ms in its frame from its first
+ *    paint, is never an empty box: a skeleton or Caw and his line, then the
+ *    cause with Try again.
+ * 5. The hub can't reach the origin either: the dashboard opened on a name
+ *    only this browser resolves (`--host-resolver-rules`), so the hub's own
+ *    reach of the same origin fails, and both say so.
  */
-import type { Page } from "playwright-core";
-import { until } from "../../scratch-fleet";
+import type { Page, Route } from "playwright-core";
+import {
+  INSTANT_REFUSAL_MS,
+  type PreviewUnreached,
+  previewsNeedWords,
+  previewUnreachedWords,
+} from "../../../packages/core/src/preview-reach";
+import { previewWords } from "../../../packages/core/src/words/preview";
+import { MACHINE, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
 
 /** The pane probes again 2 s after a failure (PreviewPane `PROBE_FIRST_MS`); slack for the probe and the frame's load. */
@@ -76,6 +100,463 @@ const paneNow = (page: Page, id: string) =>
     };
   }, id);
 
+/** The pane's own "what next" after a cause. */
+const PANE_NEXT = ` ${previewWords.tryingAgain}`;
+/** A cause's sentence on the pane's card: its words, then the pane's next step. */
+const paneSays = (words: string) => `${words}${PANE_NEXT}`;
+/** The hub's words a 502 of its own carries (hub preview.ts `pingFailed`). */
+const HUB_WHY = "its machine's listener didn't answer the hub (ECONNRESET)";
+/** A probe's limit (core preview-reach.ts `PROBE_ANSWER_MS`), and slack for the hub's own reach. */
+const TIMEOUT_SAID_MS = 25_000;
+/** A Preview waits out a status for 30 s (Preview.svelte `START_MS`) before it says it. */
+const STATUS_SAID_MS = 45_000;
+
+/** One cause, by what the ping meets in the browser, and what the classifier finds. */
+interface Cause {
+  /** Refused by the browser's own block list (CDP `Network.setBlockedURLs`) instead of a route. */
+  blocked?: true;
+  found: PreviewUnreached;
+  handle?: (route: Route) => Promise<void>;
+  name: string;
+  /** How long it may take to be said, on the pane and on the Preview. */
+  paneMs: number;
+  previewMs: number;
+}
+
+const never = () => new Promise<void>(() => undefined);
+
+/** The port of a server whose ping answers 200 without a CORS header, as a proxy or CDN rule that rewrote the hub's answer would; `run` starts it. */
+let barePort = 0;
+
+const CAUSES: Cause[] = [
+  {
+    name: "offline",
+    handle: async (route) => {
+      await route.request().frame().page().context().setOffline(true);
+      await route.abort("internetdisconnected");
+    },
+    found: { cause: "offline" },
+    paneMs: 15_000,
+    previewMs: 15_000,
+  },
+  {
+    name: "refused at once",
+    blocked: true,
+    found: { cause: "refused", hub: { reached: true } },
+    paneMs: 15_000,
+    previewMs: 15_000,
+  },
+  {
+    name: "no answer",
+    handle: never,
+    found: { cause: "timeout", seconds: 10, hub: { reached: true } },
+    paneMs: TIMEOUT_SAID_MS,
+    previewMs: TIMEOUT_SAID_MS,
+  },
+  {
+    name: "the hub's 502",
+    handle: (route) =>
+      route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ why: HUB_WHY }),
+      }),
+    found: { cause: "status", status: 502, why: HUB_WHY },
+    paneMs: 15_000,
+    previewMs: STATUS_SAID_MS,
+  },
+  {
+    name: "200 without its CORS header",
+    handle: (route) =>
+      route.continue({ url: `http://127.0.0.1:${barePort}/__cawco/ping` }),
+    found: { cause: "unreadable" },
+    paneMs: 15_000,
+    previewMs: 15_000,
+  },
+];
+
+/**
+ * In every frame, from its first paint: what a decision page's Preview
+ * shows every 100 ms, each change once. "empty" is a box with none of a
+ * skeleton, Caw and his line, the frame drawn, or the cause.
+ */
+const SAMPLE_PREVIEW = () => {
+  const seen: string[] = [];
+  (window as unknown as { previewSeen: string[] }).previewSeen = seen;
+  setInterval(() => {
+    const stage = document.querySelector(
+      '[data-slot="media"] [data-slot="media-stage"]'
+    );
+    if (!stage) {
+      return;
+    }
+    const caw = stage.querySelector<HTMLElement>('[data-slot="wait-row"] img');
+    const line =
+      stage.querySelector('p[role="status"]')?.textContent?.trim() ?? "";
+    let now = "empty";
+    if (stage.querySelector('[data-slot="embed-fault"]')) {
+      now = "cause";
+    } else if (stage.querySelector('iframe[data-slot="embed"][data-drawn]')) {
+      now = "drawn";
+    } else if (stage.querySelector('[data-slot="skeleton"]')) {
+      now = "skeleton";
+    } else if (caw?.checkVisibility() && line) {
+      now = "caw and line";
+    }
+    if (seen.at(-1) !== now) {
+      seen.push(now);
+    }
+  }, 100);
+};
+
+/** A decision page's Preview, as its frame says it: its cause's words, and every state it showed. */
+interface PreviewSaid {
+  cause: string;
+  seen: string[];
+}
+
+/** What the decision page's Preview says in the pane of session `id`. */
+const previewNow = async (page: Page, id: string): Promise<PreviewSaid> => {
+  const handle = await page
+    .locator(`[data-slot="pane"][data-pane="${id}"] iframe[title="Preview"]`)
+    .first()
+    .elementHandle()
+    .catch(() => null);
+  const frame = await handle?.contentFrame();
+  const nothing: PreviewSaid = { cause: "", seen: [] };
+  if (!frame) {
+    return nothing;
+  }
+  return frame
+    .evaluate(() => ({
+      cause:
+        document
+          .querySelector('[data-slot="embed-cause"]')
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim() ?? "",
+      seen: (window as unknown as { previewSeen?: string[] }).previewSeen ?? [],
+    }))
+    .catch(() => nothing);
+};
+
+/** What the cause legs stand on: the dashboard, the page artifact's session, the decision page's, and the hub's port range. */
+interface Legs {
+  base: string;
+  decided: string;
+  /** The port of the decision page's Preview's embed origin. */
+  embedPort: number;
+  kit: Kit;
+  paged: string;
+  /** The port of the page artifact's preview origin, the pane's. */
+  panePort: number;
+  ports: string;
+}
+
+/** A session whose panel shows a decision page with one Preview, of a dev server's preview on `port`. */
+const decisionSession = async (
+  fleet: Awaited<ReturnType<Kit["fleet"]>>,
+  port: number
+): Promise<{ decided: string; embedPort: number }> => {
+  const decided = await fleet.spawn("claude", "Pictures", fleet.repo);
+  const site = await fleet.api<{ id: string }>(
+    `/api/instances/${decided}/artifacts`,
+    {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "the-site",
+      port,
+      machine: MACHINE,
+    }
+  );
+  const page = await fleet.api<{ id: string }>(
+    `/api/instances/${decided}/artifacts`,
+    {
+      kind: "page",
+      does: "pick",
+      ask: "Pick one option on each card",
+      name: "pick-host",
+      program: `root = Decisions("Pick the host", [where])
+where = Decision("where", "Where does the site run?", [here, there], "It runs on the machine today.")
+here = Option("here", "Here", "As it runs now.", true, [live], "Nothing new to try.")
+there = Option("there", "Elsewhere", "Somewhere new.", false, [], "A move to make first.")
+live = Preview("${site.id}", "The site as it runs")`,
+    }
+  );
+  // The embed's origin, as the hub names it in the page it serves.
+  const { port: own } = await fleet.api<{ port: number }>(
+    `/api/instances/${decided}/preview-address`,
+    {}
+  );
+  const served = await fetch(
+    `http://127.0.0.1:${own}/__cawco/page/${page.id}/`
+  ).then((answer) => answer.text());
+  const embedPort = Number(EMBED_PORT.exec(served)?.[1] ?? 0);
+  return { decided, embedPort };
+};
+
+/** The embed's address in a decision page's `cawco-media`. */
+const EMBED_PORT = /"embed":"http:\/\/127\.0\.0\.1:(\d+)\//;
+
+/**
+ * Every ping of `page` to `port` meets `cause`: its route, or the browser's
+ * own block list. The page's frames run in one process, so the list covers
+ * the decision page's frame too.
+ */
+const meetPing = async (
+  page: Page,
+  port: number,
+  cause: Pick<Cause, "blocked" | "handle">
+): Promise<void> => {
+  if (cause.blocked) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Network.enable");
+    await cdp.send("Network.setBlockedURLs", {
+      urls: [`*:${port}/__cawco/ping*`],
+    });
+    return;
+  }
+  const { handle } = cause;
+  if (!handle) {
+    return;
+  }
+  await page.route(
+    (url) => url.pathname === "/__cawco/ping" && url.port === String(port),
+    handle
+  );
+};
+
+/** What previews need, as the pane and a decision page say it: the hub's range named, which the page hears with the hub's reach. */
+const needOf = (hostname: string, ports: string | null) =>
+  previewsNeedWords({ byHost: false, hostname, ports, hostMode: false });
+
+/** `said` against `wanted`, for a check's detail. */
+const against = (said: string, wanted: string) =>
+  `said: ${said === "" ? "nothing" : said}${said === wanted ? "" : ` | wanted: ${wanted}`}`;
+
+/** The pane's card's line once it says its cause, within `ms`. */
+const paneLine = (page: Page, id: string, label: string, ms: number) =>
+  until(
+    label,
+    () => paneNow(page, id),
+    (now) => now.line.includes(PANE_NEXT.trim()),
+    ms
+  ).then(
+    (now) => now.line,
+    async () => (await paneNow(page, id)).line
+  );
+
+/** The decision page's Preview once it says its cause, within `ms`. */
+const previewSaid = (
+  page: Page,
+  id: string,
+  label: string,
+  ms: number
+): Promise<PreviewSaid> =>
+  until(
+    label,
+    () => previewNow(page, id),
+    (now) => now.cause !== "",
+    ms
+  ).then(
+    // The sampler's next round, so its record ends on what was read.
+    async () => {
+      await Bun.sleep(SAMPLE_MS * 3);
+      return previewNow(page, id);
+    },
+    () => previewNow(page, id)
+  );
+
+/** How often SAMPLE_PREVIEW reads the Preview. */
+const SAMPLE_MS = 100;
+
+/** The Preview's samples: something stood in the box at every one, and it ended on its cause. */
+const neverEmpty = (seen: string[]) =>
+  seen.length > 0 && !seen.includes("empty") && seen.at(-1) === "cause";
+
+const paneCause = async (legs: Legs, cause: Cause) => {
+  const { base, kit, paged, panePort, ports } = legs;
+  const pane = await kit.page("desk", { oneProcess: true });
+  await meetPing(pane, panePort, cause);
+  await tabAt(pane, paged);
+  await pane.goto(`${base}/session/${paged}`).catch(() => undefined);
+  const said = await paneLine(
+    pane,
+    paged,
+    `the pane's card for ${cause.name}`,
+    cause.paneMs
+  );
+  const wanted = paneSays(
+    previewUnreachedWords(
+      `${new URL(base).hostname}:${panePort}`,
+      cause.found,
+      needOf(new URL(base).hostname, ports)
+    )
+  );
+  kit.check(
+    `4: ${cause.name}: the pane's card says its own cause`,
+    said === wanted,
+    against(said, wanted)
+  );
+  if (cause.blocked) {
+    // The threshold the cause stands on, read in the same page under the
+    // same load: how long the browser's own block list takes to fail a ping.
+    const took = await pane.evaluate(
+      async (url) => {
+        const times: number[] = [];
+        for (let i = 0; i < 20; i += 1) {
+          const started = performance.now();
+          // biome-ignore lint/performance/noAwaitInLoops: one ping at a time, each timed alone
+          await fetch(url, { mode: "cors", cache: "no-store" }).catch(
+            () => undefined
+          );
+          times.push(performance.now() - started);
+        }
+        times.sort((a, b) => a - b);
+        return { median: times[10] ?? 0, slowest: times[19] ?? 0 };
+      },
+      `http://${new URL(base).hostname}:${panePort}/__cawco/ping`
+    );
+    // A probe judges by the fastest of its asks (core `probePreview`), so
+    // the threshold holds the block list's usual ping, the median.
+    kit.check(
+      `4: ${cause.name}: the browser's block list fails a ping inside INSTANT_REFUSAL_MS (${INSTANT_REFUSAL_MS} ms)`,
+      took.median < INSTANT_REFUSAL_MS,
+      `20 pings: median ${took.median.toFixed(1)} ms, slowest ${took.slowest.toFixed(1)} ms`
+    );
+  }
+  await pane.context().setOffline(false);
+  await pane.context().close();
+};
+
+const previewCause = async (legs: Legs, cause: Cause) => {
+  const { base, decided, embedPort, kit } = legs;
+  const picture = await kit.page("desk", {
+    init: [SAMPLE_PREVIEW],
+    oneProcess: true,
+  });
+  await meetPing(picture, embedPort, cause);
+  await tabAt(picture, decided);
+  await picture.goto(`${base}/session/${decided}`).catch(() => undefined);
+  const shown = await previewSaid(
+    picture,
+    decided,
+    `the Preview's cause for ${cause.name}`,
+    cause.previewMs
+  );
+  const wanted = previewUnreachedWords(
+    `${new URL(base).hostname}:${embedPort}`,
+    cause.found,
+    needOf(new URL(base).hostname, legs.ports)
+  );
+  kit.check(
+    `4: ${cause.name}: the decision page's Preview says the same cause`,
+    shown.cause === wanted,
+    against(shown.cause, wanted)
+  );
+  kit.check(
+    `4: ${cause.name}: the Preview is never an empty box`,
+    neverEmpty(shown.seen),
+    shown.seen.join(" → ") || "never sampled"
+  );
+  await picture.context().setOffline(false);
+  await picture.context().close();
+};
+
+/** What a page shows, its first words, for a check that found nothing where it looked. */
+const pageWords = (page: Page) =>
+  page
+    .evaluate(() =>
+      (document.body?.innerText ?? "").replace(/\s+/g, " ").slice(0, 240)
+    )
+    .catch((error: unknown) => String(error));
+
+/**
+ * A name only this browser resolves (its `--host-resolver-rules`): the hub's
+ * own reach of it fails. Under `.ts.net`, which the dashboard's server
+ * allows as a host (vite.config.ts `allowedHosts`); no tailnet holds it.
+ */
+const ONLY_HERE = "cawco-probe-unheld.ts.net";
+const HUB_AWAY = /The hub can't reach it either \((.+?)\)\. Previews need/;
+/** The hub's own words for why it can't reach the origin, as the line says them. */
+const hubWhy = (line: string) => HUB_AWAY.exec(line)?.[1] ?? "";
+const refusedBoth = (why: string): PreviewUnreached => ({
+  cause: "refused",
+  hub: { reached: false, why },
+});
+
+/**
+ * The dashboard opened on {@link ONLY_HERE}, so every preview origin stands
+ * on that name too; the ping refused at once in the browser. The hub's own
+ * reach of the same origin fails, and both the pane and the Preview say so.
+ */
+const hubAway = async (legs: Legs) => {
+  const { base, decided, embedPort, kit, paged, panePort, ports } = legs;
+  const at = new URL(base);
+  at.hostname = ONLY_HERE;
+  const elsewhere = at.origin;
+  const refuse = { blocked: true } as const;
+  const options = {
+    hostRules: `MAP ${ONLY_HERE} 127.0.0.1`,
+    oneProcess: true,
+  };
+
+  const pane = await kit.page("desk", options);
+  await meetPing(pane, panePort, refuse);
+  await tabAt(pane, paged);
+  await pane.goto(`${elsewhere}/session/${paged}`).catch(() => undefined);
+  const said = await paneLine(
+    pane,
+    paged,
+    "the pane's card when the hub can't reach it either",
+    20_000
+  );
+  const paneWanted = paneSays(
+    previewUnreachedWords(
+      `${ONLY_HERE}:${panePort}`,
+      refusedBoth(hubWhy(said)),
+      needOf(ONLY_HERE, ports)
+    )
+  );
+  kit.check(
+    "5: the hub can't reach it either: the pane's card says both sides fail",
+    hubWhy(said) !== "" && said === paneWanted,
+    `${against(said, paneWanted)}${said === "" ? ` | the page at ${pane.url()}: ${await pageWords(pane)}` : ""}`
+  );
+  await pane.context().close();
+
+  const picture = await kit.page("desk", {
+    ...options,
+    init: [SAMPLE_PREVIEW],
+  });
+  await meetPing(picture, embedPort, refuse);
+  await tabAt(picture, decided);
+  await picture.goto(`${elsewhere}/session/${decided}`).catch(() => undefined);
+  const shown = await previewSaid(
+    picture,
+    decided,
+    "the Preview's cause when the hub can't reach it either",
+    20_000
+  );
+  const pictureWanted = previewUnreachedWords(
+    `${ONLY_HERE}:${embedPort}`,
+    refusedBoth(hubWhy(shown.cause)),
+    needOf(ONLY_HERE, ports)
+  );
+  kit.check(
+    "5: the hub can't reach it either: the decision page's Preview says both sides fail",
+    hubWhy(shown.cause) !== "" && shown.cause === pictureWanted,
+    against(shown.cause, pictureWanted)
+  );
+  kit.check(
+    "5: the hub can't reach it either: the Preview is never an empty box",
+    neverEmpty(shown.seen),
+    shown.seen.join(" → ") || "never sampled"
+  );
+  await picture.context().close();
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   fleet.launch("sessiond");
@@ -103,7 +584,8 @@ const run = async (kit: Kit) => {
     (url) => url.pathname === "/__cawco/ping",
     (route) => {
       pings += 1;
-      return pings === 1 ? route.abort("connectionrefused") : route.continue();
+      // The first probe's three asks: `cors`, `no-cors`, `cors` again.
+      return pings <= 3 ? route.abort("connectionrefused") : route.continue();
     }
   );
   await tabAt(desk, paged);
@@ -125,9 +607,9 @@ const run = async (kit: Kit) => {
   );
   kit.check(
     "1: a refused first ping: the pane says it can't be reached and why",
-    refused.down.includes("This preview can't be reached") &&
-      refused.down.includes("didn't answer.") &&
-      refused.down.includes("Trying again on its own."),
+    refused.down.includes(previewWords.cantBeReached) &&
+      refused.down.includes("The hub reaches") &&
+      refused.down.includes(previewWords.tryingAgain),
     refused.down
   );
   kit.check(
@@ -172,7 +654,7 @@ const run = async (kit: Kit) => {
   const nextSteps = hubSaid.line.match(NEXT_STEP)?.length ?? 0;
   kit.check(
     "2: its line says one next step, the pane's own: the hub's 502 carries the cause alone",
-    nextSteps === 1 && hubSaid.line.endsWith("Trying again on its own."),
+    nextSteps === 1 && hubSaid.line.endsWith(previewWords.tryingAgain),
     `${nextSteps} next steps: ${hubSaid.line}`
   );
   fleet.launch("agent");
@@ -235,7 +717,31 @@ const run = async (kit: Kit) => {
     `shown ${thawed ?? "never"} ms after the thaw; the pane now: ${thawedNow.down || "the page"}`
   );
   await frozen.close();
+
+  // 4. Each cause, on the pane's card and on a decision page's Preview.
+  const { ports } = await fleet.api<{ ports: string }>("/api/preview-settings");
+  const bare = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response("ok", { headers: { "content-type": "text/plain" } }),
+  });
+  barePort = Number(bare.port);
+  const { decided, embedPort } = await decisionSession(fleet, Number(app.port));
+  const { port: panePort } = await fleet.api<{ port: number }>(
+    `/api/instances/${paged}/preview-address`,
+    {}
+  );
+  const legs: Legs = { base, decided, embedPort, kit, paged, panePort, ports };
+  for (const cause of CAUSES) {
+    // biome-ignore lint/performance/noAwaitInLoops: one cause at a time, each in a browser of its own
+    await paneCause(legs, cause);
+    await previewCause(legs, cause);
+  }
+  // 5. The hub can't reach it either.
+  await hubAway(legs);
   app.stop(true);
+  bare.stop(true);
 };
 
 const spec: Spec = { name: "preview-reach", run };

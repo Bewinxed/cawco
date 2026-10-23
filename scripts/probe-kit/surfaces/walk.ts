@@ -13,7 +13,6 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { BrowserContext, Page, Request } from "playwright-core";
-import { heavySlot } from "../../lib/heavy-run";
 import { MACHINE, until } from "../../scratch-fleet";
 import {
   type Attach,
@@ -179,12 +178,9 @@ export class Servers {
 
 /**
  * `vite dev` against `hub`: the `/motion/` benches' server (the kit's own
- * is against no hub). The run's heavy-run slot is held from here for the
- * process's life (heavy-run.ts: a run holds its slot its whole heavy life;
- * one process holds one, however many of its parts ask).
+ * is against no hub).
  */
 async function devServer(hub: string) {
-  await heavySlot();
   const lease = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -281,13 +277,15 @@ const DASHBOARD_SOCKET = "/ws/dashboard";
 /**
  * A state's failure as the walk says it: the error's first line, and for an
  * action that waited out its timeout, the last thing Playwright's call log
- * saw in its way (an element not visible, another taking the pointer).
+ * saw in its way (an element not visible, another taking the pointer): a
+ * retry's own lines ("retrying click action", "waiting 500ms") name nothing.
  */
+const RETRY_LINE = /^- (retrying .* action|waiting \d+ms)/;
 const saidOf = (error: unknown): string => {
   const lines = String(error).split("\n");
   const seen = lines
     .map((line) => line.trim())
-    .filter((line) => line.startsWith("- "))
+    .filter((line) => line.startsWith("- ") && !RETRY_LINE.test(line))
     .at(-1);
   return seen ? `${lines[0]} (${seen.slice(2)})` : (lines[0] ?? "");
 };
@@ -993,6 +991,12 @@ async function opened(
   scene: Scene
 ): Promise<void> {
   const route = (state.route ?? surface.route)(scene);
+  // Each state opens as a tab of its own: what a state before it left in
+  // this tab's storage (a TabDraft: config-skills/fetch's popover, open,
+  // reopened over config-skills/removed's row menu at a tablet's width) is
+  // that tab's work, not this state's. Cleared before the load, not by an
+  // init script: an act that reloads reads its own draft back.
+  await page.evaluate(() => sessionStorage.clear()).catch(() => undefined);
   // Loaded, not the kit's `open`: its ready step waits on the Shell's
   // first-render release, which the walk's paused clock runs only in
   // `pageReady` below.
@@ -1094,9 +1098,6 @@ export async function walk(
   const lacks = (state: State): string | null => {
     if (state.hostOnly === "delegate" && !scene.split) {
       return "delegate (recorded --without-delegate)";
-    }
-    if (state.hostOnly === "join" && scene.joinable === "") {
-      return "address the hub lists to join it at (its machine had loopback alone)";
     }
     return null;
   };

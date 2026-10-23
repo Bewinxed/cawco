@@ -12,6 +12,7 @@
  * where the HIG asks for something the web does another way.
  */
 import type { AccountHue, PlacementStrategy } from "../accounts";
+import { commonWords } from "./common";
 import { andList, pad2 } from "./helpers";
 
 /** One strategy, as its card names it and its line explains it. */
@@ -66,7 +67,7 @@ export const accountsWords = {
     /** What the editor's row is, for "That account is gone". */
     what: "account",
     nickname: "Nickname",
-    save: "Save changes",
+    save: commonWords.saveChanges,
     remove: "Remove account",
     removing: "Removing…",
     removeTitle: (name: string) => `Remove ${name}?`,
@@ -104,6 +105,12 @@ export const accountsWords = {
     none: "No machine runs this account's agents yet.",
     signIn: "Sign in",
     sendKey: "Send key",
+    /** A sign-in under way, its popover put away: one press opens it again as it was. */
+    openSignIn: "Open sign-in",
+    pasteCode: "Paste code",
+    /** What a row says while its sign-in waits, the popover put away. */
+    waitingCode: "Waiting for the code",
+    waitingPaste: "Waiting for the pasted code",
     /** The sign-in's label: "Sign in you@x.com on obelisk". */
     signInOn: (verb: string, account: string, machine: string) =>
       `${verb} ${account} on ${machine}`,
@@ -200,6 +207,8 @@ export const accountsWords = {
   // ── Adding an account (AccountSetup) ──────────────────────────────────
   setup: {
     title: "Add account",
+    /** An account whose setup was left before it was done, on its row in the list. */
+    unfinished: (step: string) => `Setup not finished · ${step}`,
     steps: {
       provider: "Provider",
       signIn: "Sign in",

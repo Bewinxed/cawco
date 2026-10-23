@@ -26,7 +26,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ConsoleMessage, Locator, Page } from "playwright-core";
+import type { ArtifactNeedsFrame } from "../../../packages/core/src/artifact-needs";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { PRESENCE_ONBOARDING_SKIPPED } from "../../../packages/core/src/presence-onboarding";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import {
   type Engine,
@@ -185,6 +187,13 @@ export interface Journey {
   /** What the journey proves, from JOURNEY.md. */
   flow: string;
   /**
+   * Why the journey runs on the host, when it does: a step of it starts a
+   * workspace boundary (a delegate's, a routine run's, a place's), which no
+   * boundary starts inside (kit `Spec.host`). Inside a workspace it is not
+   * run: the run says so, with its command.
+   */
+  host?: string;
+  /**
    * The machine id the hub runs under, where it must not be the agent's:
    * a hub on the agent's own id takes that agent for its own machine and
    * serves it in place (a marketplace on the hub's disk is linked, never
@@ -305,11 +314,48 @@ async function restore(
     await fleet.stopSession(id);
   }
   await eventually(
-    "the hub holds no ask",
-    () => fleet.api<unknown[]>("/api/pending"),
-    (asks) => asks.length === 0,
+    "the hub holds no ask and Needs you no artifact",
+    () => waiting(fleet),
+    (now) => now.asks.length === 0 && now.artifacts.length === 0,
     60_000
   );
+}
+
+/**
+ * The person answered the presence onboarding row once, in this browser
+ * (Skip): a fresh browser stands in it ("Know when you're at your desk",
+ * Needs you), and a journey counts only what its own flow raises. Its
+ * storage, as the dashboard keeps it, from core; a frame with an opaque
+ * origin has no storage to write.
+ */
+const PRESENCE_ANSWERED = {
+  content: `if (self.origin !== "null") localStorage.setItem(${JSON.stringify(PRESENCE_ONBOARDING_SKIPPED.key)}, ${JSON.stringify(PRESENCE_ONBOARDING_SKIPPED.value)});`,
+};
+
+/** One `/api/pending` entry: a parked ask, or the artifact lane. */
+type Pending =
+  { payload: { kind?: undefined } } | { payload: ArtifactNeedsFrame };
+
+/**
+ * What waits on the person, as `/api/pending` lists it: each ask parked on
+ * them, and apart from them Needs you's artifacts, which come as one
+ * `artifact.needs` frame (hub artifacts/lane.ts) that is no session's ask
+ * and stands there even when it holds none.
+ */
+export async function waiting(
+  fleet: KitFleet
+): Promise<{ artifacts: ArtifactNeedsFrame["needs"]; asks: unknown[] }> {
+  const listed = await fleet.api<Pending[]>("/api/pending");
+  const asks: unknown[] = [];
+  const artifacts: ArtifactNeedsFrame["needs"] = [];
+  for (const { payload } of listed) {
+    if (payload.kind === "artifact.needs") {
+      artifacts.push(...payload.needs);
+    } else {
+      asks.push(payload);
+    }
+  }
+  return { artifacts, asks };
 }
 
 /** What a failed step measured: its own words, or where a script error came from. */
@@ -337,6 +383,8 @@ export interface Narrow {
 export function journeySpec(journey: Journey, narrow: Narrow): Spec {
   return {
     name: journey.name,
+    host: journey.host,
+    command: `bun scripts/probe-kit/run.ts journeys ${journey.name}`,
     run: async (kit) => {
       const fleet = await kit.fleet(journey.respond);
       await bootFleet(fleet, journey.hubMachine);
@@ -379,7 +427,10 @@ async function runLeg(
   const id = `${at.engine}-${at.size}-${at.data}`;
   const out = join(kit.out, id);
   await mkdir(out, { recursive: true });
-  const page = await kit.page(VIEW_OF[at.size], { engine: at.engine });
+  const page = await kit.page(VIEW_OF[at.size], {
+    engine: at.engine,
+    init: [PRESENCE_ANSWERED],
+  });
   const said: string[] = [];
   let hubDown = false;
   const heard = (message: ConsoleMessage) => {
@@ -429,9 +480,27 @@ async function runLeg(
           (refused: unknown) =>
             `# the page gave no tree within 5 s: ${measuredBy(refused)}`
         );
+      // Each frame's own tree after it: the page's tree stops at an
+      // iframe, and what a frame drew (a decision page's cards, a
+      // canvas) is often what the step waited for.
+      const frames = await Promise.all(
+        page
+          .frames()
+          .filter((frame) => frame !== page.mainFrame())
+          .map(async (frame) => {
+            const inside = await frame
+              .locator("body")
+              .ariaSnapshot({ timeout: 5000 })
+              .catch(
+                (refused: unknown) =>
+                  `# the frame gave no tree within 5 s: ${measuredBy(refused)}`
+              );
+            return `\n# frame ${frame.url()}\n${inside}`;
+          })
+      );
       await writeFile(
         join(out, `step-${number}.aria.yml`),
-        `# ${current}\n# ${page.url()}\n${tree}`
+        `# ${current}\n# ${page.url()}\n${tree}${frames.join("")}`
       ).catch(() => undefined);
       throw error;
     } finally {
@@ -471,8 +540,14 @@ async function runLeg(
   }
   const seconds = ((performance.now() - started) / 1000).toFixed(0);
   kit.check(`${label} [${seconds}s]`, failure === null, failure ?? undefined);
-  await restore(at.fleet, since, journey.hubMachine);
-  await journey.clean?.(at.fleet);
+  // Put away after every leg: one that fails is this leg's own failed line,
+  // and the legs after it still run and report.
+  try {
+    await restore(at.fleet, since, journey.hubMachine);
+    await journey.clean?.(at.fleet);
+  } catch (error) {
+    kit.check(`${label}: put away after the leg`, false, measuredBy(error));
+  }
 }
 
 /** The run's arguments: journeys named, `--engine` and `--size` narrowing. */

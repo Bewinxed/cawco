@@ -11,6 +11,7 @@
   turns it stood for slide in beneath it as it fades.
 -->
 <script lang="ts">
+  import { shellWords } from "@cawco/core";
   import { rise } from "#lib/cawco/motion/curves.svelte.js";
 </script>
 
@@ -28,5 +29,5 @@
     aria-hidden="true"
     class="loops size-(--status-dot-size) flex-none rounded-pill bg-status-live-ink motion-safe:animate-breath"
     data-slot="beat"
-  ></span>Catching up…
+  ></span>{shellWords.catchingUp}
 </div>

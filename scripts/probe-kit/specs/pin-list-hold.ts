@@ -36,6 +36,7 @@
  *    page writes after it is in the list.
  */
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -173,7 +174,7 @@ const drawn = (page: Page): Promise<Drawn> =>
       tryAgain:
         (await page
           .locator(`${LIST} [data-pin-list-failed]`)
-          .getByRole("button", { name: "Try again", exact: true })
+          .getByRole("button", { name: commonWords.tryAgain, exact: true })
           .count()) > 0,
     }));
 
@@ -630,7 +631,7 @@ const refused = async (at: At, leg: Leg) => {
   await settle(page);
   await page
     .locator(`${LIST} [data-pin-list-failed]`)
-    .getByRole("button", { name: "Try again" })
+    .getByRole("button", { name: commonWords.tryAgain })
     .click();
   const back = await until(
     "the rows after Try again",

@@ -1,7 +1,9 @@
 /**
  * The `cawco` MCP tools from a terminal (Projects spec §5.3): `cawco tools`
  * lists what a session's role has, `cawco tool <name> [json]` calls one (its
- * JSON from stdin when it is `-`, past one argument's 128 KiB). Both
+ * JSON from stdin when it is `-`, past one argument's 128 KiB): its words, or
+ * with `--record` the hub's record as one line of JSON (a program's read,
+ * core tool-answer.ts). Both
  * go through the hub's own list and call doors (`/api/delegation/tools`,
  * `/api/delegation/call/:instanceId`), which resolve the session and refuse
  * what its role does not have exactly as the MCP server does: one role check,
@@ -14,6 +16,14 @@
  * call on a session's name alone.
  */
 import { CAWCO_ENV } from "@cawco/core";
+import {
+  envelopeText,
+  NotARecord,
+  recordOf,
+  type ToolEnvelope,
+  type ToolForm,
+  toolArguments,
+} from "@cawco/core/tool-answer";
 
 /** Where the CLI reads the session it acts as, and that session's credential: every session's shell has both. */
 export const TOOL_ENV = {
@@ -91,12 +101,18 @@ export const listTools = async (
     .join("\n");
 };
 
-/** Calls one tool with a JSON object of arguments; answers its text, or throws the refusal. */
+/**
+ * Calls one tool with a JSON object of arguments. `words` answers its text, as
+ * an agent reads it; `record` asks for the hub's record (core tool-answer.ts)
+ * and answers it as one line of JSON, or throws when the tool gave words.
+ * A refusal throws its text.
+ */
 export const callTool = async (
   hub: string | undefined,
   instanceId: string,
   name: string,
-  json: string | undefined
+  json: string | undefined,
+  form: ToolForm
 ): Promise<string> => {
   let args: unknown = {};
   if (json !== undefined) {
@@ -109,13 +125,19 @@ export const callTool = async (
       );
     }
   }
+  if (typeof args !== "object" || args === null || Array.isArray(args)) {
+    throw new ToolError("the arguments are a JSON object, like {}");
+  }
   const response = await toolRoute(
     hub,
     `/api/delegation/call/${encodeURIComponent(instanceId)}`,
     {
       method: "POST",
       headers: { "content-type": "application/json", ...credentialHeader() },
-      body: JSON.stringify({ name, arguments: args }),
+      body: JSON.stringify({
+        name,
+        arguments: toolArguments(args as Record<string, unknown>, form),
+      }),
       // An admin write waits for the person to approve it; Bun's fetch would
       // otherwise drop a response silent for five minutes.
       timeout: false,
@@ -124,15 +146,19 @@ export const callTool = async (
   if (!response.ok) {
     throw new ToolError(`${response.status}: ${await response.text()}`);
   }
-  const result = (await response.json()) as {
-    content?: { text?: string; type: string }[];
-    isError?: boolean;
-  };
-  const text = (result.content ?? [])
-    .map((block) => block.text ?? "")
-    .join("\n");
+  const result = (await response.json()) as ToolEnvelope;
+  const text = envelopeText(result);
   if (result.isError) {
     throw new ToolError(text);
   }
-  return text;
+  if (form === "words") {
+    return text;
+  }
+  try {
+    return JSON.stringify(recordOf(name, text));
+  } catch (error) {
+    throw error instanceof NotARecord
+      ? new ToolError(error.message, { cause: error })
+      : error;
+  }
 };

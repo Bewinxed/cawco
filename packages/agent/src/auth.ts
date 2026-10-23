@@ -2,6 +2,7 @@ import { platform } from "node:os";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
+import { resolveBin } from "./tools";
 
 /**
  * A prompt that never yields. `query()` starts the CLI and its control channel
@@ -23,7 +24,10 @@ export const CLAUDE_NOT_INSTALLED =
 
 /**
  * The Claude Code installed on this machine: the absolute path of the
- * `claude` on the agent's PATH. CawCo carries no Claude Code of its own: the
+ * `claude` on the agent's PATH, then in the dirs installers put binaries in
+ * (tools.ts `toolPath`), so one the official installer put in `~/.local/bin`
+ * a second ago (the update action, core TOOL_CATALOG's `claude`) runs
+ * without a restart. CawCo carries no Claude Code of its own: the
  * installed one holds the person's login (on macOS its Keychain item is tied
  * to it), carries their plugins and updates itself. Found, not started:
  * whatever starts it takes its path from the version gate (claude-version.ts
@@ -33,7 +37,7 @@ export const CLAUDE_NOT_INSTALLED =
  * package instead.
  */
 export const resolveClaudeExecutable = (): string | undefined =>
-  Bun.which("claude") ?? undefined;
+  resolveBin("claude");
 
 /**
  * `errSecAuthFailed` (-25293), as `security` exits with it: the OSStatus's
@@ -69,7 +73,7 @@ export const unlockKeychain = async (password: string): Promise<void> => {
   }
 
   const keychain = loginKeychainPath();
-  const lockedBefore = keychainLocked(keychain);
+  const lockedBefore = await keychainLocked(keychain);
   const unlocked =
     await Bun.$`security unlock-keychain -p ${password} ${keychain}`
       .env(hostEnvironment())
@@ -80,7 +84,7 @@ export const unlockKeychain = async (password: string): Promise<void> => {
   // Live on a Mac the right password left it unlocked while the step said it
   // had refused it, and the agent never read Claude again or beat: the
   // answer had gone on the exit alone.
-  const lockedAfter = keychainLocked(keychain);
+  const lockedAfter = await keychainLocked(keychain);
   // The tool's own words: `security` prints the OSStatus's message and the
   // keychain's path, never the password it was given.
   const said = unlocked.stderr.toString().trim();

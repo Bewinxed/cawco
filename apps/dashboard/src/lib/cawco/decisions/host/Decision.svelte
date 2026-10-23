@@ -75,13 +75,26 @@
   import { OptionGroup } from "#lib/components/ui/option-group/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconPen } from "#lib/icons.js";
-  import { dur, ease, motionOk } from "../../motion/curves.svelte";
+  import { frameObserver } from "../../frame-observer.js";
+  import {
+    appearOnMount,
+    dur,
+    ease,
+    enterByStyle,
+    motionOk,
+  } from "../../motion/curves.svelte";
   import { fold, landFold } from "../../motion/fold.svelte";
   import { morph } from "../../motion/morph.svelte";
   import { scrollOnClock } from "../../motion/scroll-on";
   import { closeInto, departBox, land } from "../../motion/share.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { bridge, picks } from "./page.svelte.js";
+  import {
+    bridge,
+    hearWidths,
+    MEDIA_WIDTHS,
+    type MediaWidths,
+    picks,
+  } from "./page.svelte.js";
 
   let {
     props,
@@ -148,6 +161,61 @@
   });
   setContext("decision-rows", () => rows);
 
+  /**
+   * Its media's real widths, as their wells say them (Well.svelte `picture`:
+   * a Preview's design, a drawing's, a picture's or a diagram's own, 1 CSS
+   * px per px), each passed on to the page: the card's own media, and its
+   * options' (Option.svelte hands its media this ear). The widest option's
+   * sets the options' pitch: as many abreast as the card holds at that
+   * width, one under another at the card's full width where one is wider
+   * than a column (`grid-cols-fit-story`), each at its real size.
+   */
+  const pageWidths = getContext<MediaWidths | undefined>(MEDIA_WIDTHS);
+  const cardMedia = hearWidths(pageWidths);
+  const optionMedia = hearWidths(pageWidths);
+  setContext(MEDIA_WIDTHS, cardMedia.hear);
+  setContext("decision-option-widths", optionMedia.hear);
+  const storyWidth = $derived(optionMedia.widest());
+  /** The card's own media's widest real width: two pictures stand side by side only where both fit at it. */
+  const mediaWidth = $derived(cardMedia.widest());
+  /** The card's own media's columns: two pictures on their widest's pitch, or, saying no width, two equal columns once the body holds them; else one. */
+  const mediaColumns = $derived.by(() => {
+    if (!pictures) {
+      return "grid-cols-1";
+    }
+    return mediaWidth > 0
+      ? "grid-cols-fit-story max-phone:grid-cols-1"
+      : "grid-cols-1 @media-split:grid-cols-2";
+  });
+  let optionsGrid = $state<HTMLDivElement>();
+  /**
+   * Its pictured options leave one alone on their last row: that one spans
+   * the row (Option.svelte), so no empty cell stands beside it, its chip,
+   * words and picture still on the first column's edge as every row's are
+   * (a centred last row would stand them on no column's). Read from the
+   * grid's own tracks as it mounts and as it resizes (`grid-cols-fit-story`:
+   * every track its stories' pitch, as many as the row holds).
+   */
+  let lone = $state(false);
+  $effect(() => {
+    const grid = optionsGrid;
+    const count = options.length;
+    if (!(grid && storyWidth > 0)) {
+      lone = false;
+      return;
+    }
+    const read = () => {
+      const columns = getComputedStyle(grid)
+        .gridTemplateColumns.split(" ")
+        .filter((track) => Number.parseFloat(track) > 0).length;
+      lone = columns > 1 && count > columns && count % columns === 1;
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(grid);
+    return () => sizes.disconnect();
+  });
+
   /** The pieces drawn in a well (Well.svelte), by the library's names for them. */
   const WELLS = new Set(["Image", "Diagram", "Canvas", "Preview", "Dials"]);
   /** The card's media are two pictures: they may share the body's width. */
@@ -186,6 +254,7 @@
   const page = getContext<
     | {
         say: (words: string) => void;
+        scroller: () => HTMLElement | null;
         stand: (card: string, open: boolean) => void;
         tally: () => string;
         work: (card: string) => void;
@@ -345,6 +414,10 @@
     page?.say(`Decided: ${decidedLine}. ${page.tally()}`);
   }
 
+  /** What scrolls the page's cards (Decisions.svelte's first row). */
+  const pageScroller = (): HTMLElement =>
+    page?.scroller() ?? document.documentElement;
+
   /** The page's cards in its order. */
   const cardsOnPage = () => [
     ...document.querySelectorAll<HTMLElement>("[data-cawco-choice]"),
@@ -373,12 +446,12 @@
    * Where the page's scroll lands once `node` (`from`'s body) has folded
    * shut: the next open card in view, under `from`'s decided line when it
    * comes right after it, else at the top; with none left, where it stands
-   * (Send is in the sticky foot, always in view).
+   * (Send is in the page's foot, always in view).
    * Read with the body held at the fold's end, let go before anything is
    * drawn.
    */
   function landing(node: HTMLElement, gap: number, from: HTMLElement): number {
-    const scroller = document.scrollingElement ?? document.documentElement;
+    const scroller = pageScroller();
     // The page's own scroll as it stands: the read below lays the page out
     // at its folded height, and the browser clamps the scroll to that
     // shorter page (it fell 321px on a card near the foot, the fold's
@@ -394,8 +467,10 @@
     node.style.height = "0px";
     node.style.marginBottom = `${-gap}px`;
     node.style.overflow = "hidden";
+    const origin = scroller.getBoundingClientRect().top;
     const top = (el: Element) =>
-      el.getBoundingClientRect().top +
+      el.getBoundingClientRect().top -
+      origin +
       scroller.scrollTop -
       (Number.parseFloat(getComputedStyle(el).scrollMarginTop) || 0);
     const cards = cardsOnPage();
@@ -405,7 +480,7 @@
       to = top(cards.indexOf(next) === cards.indexOf(from) + 1 ? from : next);
     }
     // With none left the page stays where the reader has it: Send stands in
-    // the sticky foot, always in view, and only the page's own shrink moves
+    // the page's foot, always in view, and only the page's own shrink moves
     // the scroll (the clamp below).
     const most = scroller.scrollHeight - scroller.clientHeight;
     [node.style.height, node.style.marginBottom, node.style.overflow] = was;
@@ -565,11 +640,7 @@
       );
     }
     if (to !== null && run) {
-      stopRide = scrollOnClock(
-        run,
-        document.scrollingElement ?? document.documentElement,
-        to
-      );
+      stopRide = scrollOnClock(run, pageScroller(), to);
     }
     const still = () => {
       moving = false;
@@ -618,7 +689,7 @@
       // page where the fold would have taken it, focus on.
       landFold(node, !shut, { fade: true, gap });
       if (to !== null) {
-        (document.scrollingElement ?? document.documentElement).scrollTop = to;
+        pageScroller().scrollTop = to;
         nextStop(box)?.focus({ preventScroll: true });
       }
       return;
@@ -739,12 +810,33 @@
       noteAdd?.querySelector<HTMLElement>("button")?.focus();
     }
   }
+
+  /*
+   * What the decided line and the card's foot come in by as they mount,
+   * read off the card as they do (`data-instant`: it lands in one frame;
+   * `data-moving`: it moves to its answer); never `@starting-style`, which
+   * WebKit sometimes skips for an element just added. The decided chips'
+   * line (with less motion; with motion its chips fly home) and Change come
+   * in by their own transitions, which also carry them out, so a turn caught
+   * mid-way fades back from where they stand (`enterByStyle`); Continue
+   * grows out of the card's foot on its height tween (`appearOnMount`).
+   */
+  const lands = (node: HTMLElement) => node.closest("[data-instant]") !== null;
+  const decidedIn = enterByStyle((node) => !lands(node));
+  const changeIn = enterByStyle(
+    (node) => node.closest("[data-moving]") !== null && !lands(node)
+  );
+  const footIn = appearOnMount({
+    when: (node) => !lands(node),
+    motion: { over: "--dur-morph", easing: "--ease-drawer" },
+    reduced: { over: "--dur-fade" },
+  });
 </script>
 
 <article
   bind:this={card}
   {@attach morph({ still: () => instant })}
-  class="group/card relative flex min-w-0 data-instant:**:transition-none scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-space-5 shadow-tile coarse:p-space-4 data-decided:py-space-3"
+  class="group/card relative flex min-w-0 data-instant:**:transition-none scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-(--card-in) shadow-tile data-decided:py-space-3"
   data-cawco-choice={id}
   data-cawco-multiple={multiple ? "" : undefined}
   data-decided={decided ? "" : undefined}
@@ -759,7 +851,7 @@
     data-slot="decision-head"
   >
     <h2
-      class="type-title min-w-0 flex-1 basis-c-decision-question-basis text-balance text-ink-strong wrap-anywhere"
+      class="type-title min-w-0 max-w-c-measure flex-1 basis-c-decision-question-basis text-balance text-ink-strong wrap-anywhere"
     >
       {question}
     </h2>
@@ -774,9 +866,11 @@
           <!-- biome-ignore lint/a11y/useSemanticElements: a mark of the pick, named for a screen reader; no control is inside it. -->
           <span
             aria-label={`Decided: ${decidedLine}`}
-            class="flex flex-wrap items-center gap-space-2 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:in-data-leaving:opacity-0 motion-reduce:starting:opacity-0 group-data-instant/card:transition-none"
+            class="flex flex-wrap items-center gap-space-2 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:in-data-leaving:opacity-0 motion-reduce:data-entering:opacity-0 group-data-instant/card:transition-none"
+            data-entering
             data-slot="decided"
             role="group"
+            {@attach decidedIn}
           >
             {#each chips as chip (chip.id)}
               <span
@@ -797,7 +891,9 @@
             {/each}
           </span>
           <span
-            class="transition-opacity duration-(--dur-settle) ease-crossfade in-data-leaving:opacity-0 group-data-moving/card:starting:opacity-0 motion-reduce:duration-(--dur-fade) motion-reduce:ease-out group-data-instant/card:transition-none"
+            class="transition-opacity duration-(--dur-settle) ease-crossfade in-data-leaving:opacity-0 data-entering:opacity-0 motion-reduce:duration-(--dur-fade) motion-reduce:ease-out group-data-instant/card:transition-none"
+            data-entering
+            {@attach changeIn}
           >
             <Button
               data-change
@@ -843,13 +939,14 @@
       </p>
     {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}
-      <!-- Two pictures side by side in equal columns once the card's body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, each at the body's width. -->
+      <!-- Two pictures side by side where the card's body holds both at their real width (each well its pictures' pitch, `grid-cols-fit-story`), or, where neither says its width (a page that takes the room it is given), in equal columns once the body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
       <div
-        class={[
-          "grid min-w-0 grid-cols-1 gap-space-3",
-          pictures && "@media-split:grid-cols-2",
-        ]}
+        class={["grid min-w-0 gap-space-3", mediaColumns]}
+        data-bleeds={pictures ? undefined : ""}
         data-slot="decision-media"
+        style:--story-w={pictures && mediaWidth > 0
+          ? `${mediaWidth}px`
+          : undefined}
       >
         {@render renderNode(props.media)}
       </div>
@@ -866,9 +963,19 @@
         }
       }}
     >
+      <!-- Options with pictures stand on their widest picture's pitch, each at its real size in a well that hugs it, as many abreast as the card holds, one under another at the card's full width where one is wider than a column (it scrolls sideways in its well), one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its picture does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. -->
       <div
-        class="grid w-full min-w-0 grid-cols-fit-c-decision-option-min gap-space-3"
+        bind:this={optionsGrid}
+        class={[
+          "group/options grid w-full min-w-0 gap-space-3",
+          storyWidth > 0
+            ? "grid-cols-fit-story max-phone:grid-cols-1"
+            : "grid-cols-fit-c-decision-option-min",
+        ]}
+        data-bleeds={storyWidth > 0 ? "" : undefined}
+        data-lone={lone ? "" : undefined}
         data-slot="options"
+        style:--story-w={storyWidth > 0 ? `${storyWidth}px` : undefined}
       >
         {@render renderNode(props.options)}
       </div>
@@ -909,10 +1016,7 @@
     </div>
     {#if pick.picked}
       <!-- Continue grows out of the card's foot on its height tween (morph) and folds shut with the body. -->
-      <div
-        class="flex justify-end group-data-instant/card:transition-none motion-safe:transition-opacity motion-safe:duration-(--dur-morph) motion-safe:ease-drawer motion-safe:starting:opacity-0 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:starting:opacity-0"
-        data-slot="decision-foot"
-      >
+      <div class="flex justify-end" data-slot="decision-foot" {@attach footIn}>
         <Button
           aria-keyshortcuts="Enter"
           data-continue

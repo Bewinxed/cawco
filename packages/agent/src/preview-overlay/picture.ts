@@ -858,7 +858,7 @@ async function partRoot(
 const PNG_PREFIX = /^data:image\/png;base64,/;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
 export const SKIPPED =
-  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], script, style, template, noscript, link, meta";
+  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], [data-cawco-stand-ins], script, style, template, noscript, link, meta";
 /** Elements drawn whole wherever the crop meets them: their insides are not boxes of their own. */
 const WHOLE = new Set([
   "img",
@@ -1135,8 +1135,21 @@ export async function cropPicture(
           }
         },
         // The copied pseudo-elements' rules, before the SVG is serialized.
-        onCreateForeignObjectSvg: (svg) =>
-          slimPseudoRules(svg, defaults, breathe),
+        // The image the library draws the part from is made in the SVG's
+        // own document (its `createImage(dataUrl, svg.ownerDocument)`) and
+        // awaited by its `load` listener. A copy in the other scheme stands
+        // in a frame with scripts off (schemes.ts), and WebKit delivers no
+        // event to a listener on a node of such a document, whoever added
+        // it: the image loads (`complete`) and its `load` is never heard,
+        // so the part waited out the library's 30 s bound and the thumbnail
+        // never came (files-panel 32). Adopted into this page's document,
+        // the image is made here, where its `load` is heard.
+        onCreateForeignObjectSvg: async (svg) => {
+          await slimPseudoRules(svg, defaults, breathe);
+          if (svg.ownerDocument !== document) {
+            document.adoptNode(svg);
+          }
+        },
         // By node type, not `instanceof`: a copy's nodes are another window's.
         filter: (node) =>
           !(
@@ -1190,6 +1203,30 @@ export async function cropPicture(
     }
   }
   paintInk(ctx);
+  return pngOf(ctx, thumbnail);
+}
+
+/**
+ * The canvas as base64 PNG. A thumbnail that is one colour drew nothing of
+ * the page but its ground (an app behind a port that has not painted yet,
+ * or every part refused): it is no picture (null), and its card stands as
+ * its kind's glyph rather than an empty box. Nothing is heard: the page is
+ * not at fault.
+ */
+function pngOf(
+  ctx: CanvasRenderingContext2D,
+  thumbnail: boolean
+): string | null {
+  const { canvas } = ctx;
+  if (thumbnail) {
+    const pixels = new Uint32Array(
+      ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+    );
+    const [first] = pixels;
+    if (pixels.every((pixel) => pixel === first)) {
+      return null;
+    }
+  }
   const png = canvas.toDataURL("image/png");
   return PNG_PREFIX.test(png) ? png.replace(PNG_PREFIX, "") : null;
 }

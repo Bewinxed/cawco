@@ -40,6 +40,11 @@ import {
   versionAssets,
   versionedFile,
 } from "@cawco/core/preview-proxy";
+import {
+  type HubReach,
+  PREVIEW_PING_HEADER,
+  PREVIEW_REACH_PATH,
+} from "@cawco/core/preview-reach";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
@@ -65,7 +70,7 @@ import type { PreviewsDb } from "./db/previews";
 import { DECISION_ASSETS } from "./decision-program";
 import { enter, lockedResponse, type PassLock, passOf } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
-import type { TailnetHttpsService } from "./tailnet-https";
+import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
 /**
  * A session's preview: the artifact its panel shows, and the machine and
@@ -528,8 +533,10 @@ const ping = (): Response =>
   new Response("ok", {
     headers: {
       "access-control-allow-origin": "*",
+      "access-control-expose-headers": PREVIEW_PING_HEADER,
       "cache-control": "no-store",
       "content-type": "text/plain",
+      [PREVIEW_PING_HEADER]: "1",
     },
   });
 
@@ -541,7 +548,9 @@ const pingFailed = (why: string): Response =>
       status: 502,
       headers: {
         "access-control-allow-origin": "*",
+        "access-control-expose-headers": PREVIEW_PING_HEADER,
         "cache-control": "no-store",
+        [PREVIEW_PING_HEADER]: "1",
       },
     }
   );
@@ -712,13 +721,10 @@ async function relay(
       redirect: "manual",
     });
   } catch (error) {
-    previewFailed(
-      HOP,
-      instanceId,
-      `its machine's listener at ${address}:${at.port} didn't answer: ${causeOf(error)}`
-    );
+    const why = `its machine's listener at ${address}:${at.port} didn't answer the hub: ${causeOf(error)}`;
+    previewFailed(HOP, instanceId, why);
     deps.unreachable(instanceId, at);
-    return downResponse("machine");
+    return downResponse("machine", 502, why);
   }
   const down = downstreamHeaders(response, direct);
   if (down.get(PREVIEW_SERVED_HEADER) === "1") {
@@ -947,6 +953,9 @@ interface HostPattern {
   shape: RegExp;
 }
 
+/** The port a host pattern's name ends in (`HostPattern.after`), when it names one. */
+const PATTERN_PORT = /:(\d+)$/;
+
 /** One DNS label: what a `{session}` name's placeholder holds ({@link labelOf}). */
 const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -1070,10 +1079,11 @@ const probePattern = async (pattern: HostPattern): Promise<string | null> => {
  * previewed app's HMR socket cannot be upgraded there.)
  *
  * While the hub serves HTTPS on its machine's tailnet name
- * (tailnet-https.ts), every listener has a TLS twin on each tailnet address,
- * the same handler behind it, and a session's address names its origin on
- * that name too (`tailnet`). Both bind with `reusePort`, which Linux needs on
- * both sockets to let an address's listener stand beside the wildcard one.
+ * (tailnet-https.ts), every listener has a TLS twin, the same handler behind
+ * it, which the port's door on each tailnet address carries TLS to, and a
+ * session's address names its origin on that name too (`tailnet`). The
+ * plain one binds with `reusePort`, which Linux needs on both sockets to let
+ * a door on an address stand beside the wildcard listener.
  */
 export function createPreviewListeners(
   hostname: string,
@@ -1090,14 +1100,20 @@ export function createPreviewListeners(
       isArtifact(socket)
         ? deps.socket.message(socket, message)
         : proxy.message(socket, message),
+    drain: (socket) => {
+      if (!isArtifact(socket)) {
+        proxy.drain?.(socket);
+      }
+    },
     close: (socket, code, reason) =>
       isArtifact(socket)
         ? deps.socket.close(socket)
         : proxy.close?.(socket, code, reason),
   };
   const error = (thrown: Error) => {
-    previewFailed(HOP, null, causeOf(thrown));
-    return downResponse("machine");
+    const why = `the hub's preview listener failed serving it: ${causeOf(thrown)}`;
+    previewFailed(HOP, null, why);
+    return downResponse("machine", 502, why);
   };
   /**
    * A listener on `port`, each request's session from `route`, and its TLS
@@ -1119,6 +1135,17 @@ export function createPreviewListeners(
       const stopped = lock && atTheLock(request, lock, instanceId);
       if (stopped) {
         return framedBy(stopped, ancestorsOf(instanceId));
+      }
+      // A page served here (a decision page) asks whether the hub reaches
+      // one of its embeds' origins, which this browser didn't.
+      const asked = new URL(request.url);
+      if (asked.pathname === PREVIEW_REACH_PATH) {
+        return Response.json({
+          ...(await reachOrigin(asked.searchParams.get("origin") ?? "")),
+          // What the page can't read from the hub's API, for its words.
+          ports: PREVIEW_PORTS_TEXT,
+          hostMode: settings.mode === "host",
+        });
       }
       // Port mode: every listener is one session's, so a route names it.
       if (!instanceId) {
@@ -1155,15 +1182,12 @@ export function createPreviewListeners(
       error,
       fetch,
     });
-    const secure = tailnet.beside(port, (address, tls) =>
+    const secure = tailnet.beside(port, (at) =>
       Bun.serve<ListenerSocket>({
-        hostname: address,
-        port,
-        tls,
-        reusePort: true,
+        ...at,
         websocket,
         error,
-        fetch,
+        fetch: (request, server) => fetch(asReached(request), server),
       })
     );
     return {
@@ -1173,6 +1197,58 @@ export function createPreviewListeners(
         return plain.stop(true);
       },
     };
+  };
+
+  /**
+   * Whether the hub reaches `origin`'s ping itself now, as a browser asks it
+   * (core preview-reach.ts): the origin must be one of this hub's previews,
+   * a port of its range or a name under host mode's domain, and only its
+   * ping is asked. Reached is CawCo's own answer, which carries
+   * `PREVIEW_PING_HEADER`; anything else that answered (a proxy, a CDN's
+   * own page) is said with its status.
+   */
+  const reachOrigin = async (origin: string): Promise<HubReach> => {
+    let at: URL;
+    try {
+      at = new URL(origin);
+    } catch {
+      return { reached: false, why: "not an origin" };
+    }
+    const port = Number(at.port);
+    const ours =
+      (at.protocol === "http:" || at.protocol === "https:") &&
+      ((port >= PREVIEW_PORTS.first && port <= PREVIEW_PORTS.last) ||
+        (!!hostPattern &&
+          (at.hostname === hostPattern.domain ||
+            at.hostname.endsWith(`.${hostPattern.domain}`))));
+    if (!ours) {
+      return { reached: false, why: "not one of this hub's preview origins" };
+    }
+    try {
+      const read = await readWithin(PING_RELAY_MS, (signal) =>
+        fetch(`${at.origin}${PREVIEW_PING_PATH}`, {
+          cache: "no-store",
+          redirect: "manual",
+          signal,
+        })
+      );
+      if (read.kind !== "answered") {
+        return {
+          reached: false,
+          why: `no answer within ${PING_RELAY_MS / 1000} s`,
+        };
+      }
+      const answer = read.value;
+      await answer.body?.cancel();
+      return answer.headers.get(PREVIEW_PING_HEADER) === "1"
+        ? { reached: true }
+        : {
+            reached: false,
+            why: `something other than CawCo answered it ${answer.status}`,
+          };
+    } catch (thrown) {
+      return { reached: false, why: causeOf(thrown) };
+    }
   };
 
   let settings = db.settings();
@@ -1257,7 +1333,7 @@ export function createPreviewListeners(
     if (fleet) {
       return `it is ${fleet} port`;
     }
-    // A machine of the fleet may run the stream relay on these (443, 444,
+    // A machine of the fleet may run the stream relay on these (3478, 3479,
     // 5349, 5350): no preview ever takes one, wherever CAWCO_PREVIEW_PORTS
     // puts the range.
     if (isStreamRelayPort(port)) {
@@ -1603,6 +1679,9 @@ export function createPreviewListeners(
     /** The origin's owner ended (a session, a project): its listener stops and its port is free again. */
     release,
 
+    /** Whether the hub reaches a preview origin's ping itself now ({@link reachOrigin}). */
+    reach: reachOrigin,
+
     /**
      * Host mode's names as a browser's resolver takes them (Chromium's
      * `--host-resolver-rules` patterns: every name under the domain, and
@@ -1617,6 +1696,19 @@ export function createPreviewListeners(
         patterns: [`*.${hostPattern.domain}`, hostPattern.domain],
         sample: sampleName(hostPattern),
       };
+    },
+
+    /**
+     * Host mode's preview domain and the port its pattern names (443 when it
+     * names none): with the preview range, where its names are served (core
+     * hub-previews.ts). Null in port mode, or while host mode doesn't stand.
+     */
+    domain(): { name: string; port: number } | null {
+      if (!hostPattern) {
+        return null;
+      }
+      const named = PATTERN_PORT.exec(hostPattern.after)?.[1];
+      return { name: hostPattern.domain, port: named ? Number(named) : 443 };
     },
 
     settings(): PreviewSettings {

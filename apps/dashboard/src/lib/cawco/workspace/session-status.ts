@@ -6,16 +6,19 @@
  */
 import type { WorkflowStep } from "@cawco/core";
 import type { Component } from "svelte";
-import Passed from "~icons/solar/check-circle-bold-duotone";
-import Failed from "~icons/solar/close-circle-bold-duotone";
-import Attention from "~icons/solar/hand-shake-bold-duotone";
-import Sleeping from "~icons/solar/moon-sleep-bold-duotone";
-import Pause from "~icons/solar/pause-circle-bold-duotone";
-import Unknown from "~icons/solar/question-circle-bold-duotone";
-import Working from "~icons/solar/refresh-circle-bold-duotone";
+import {
+  IconNeedsYou as Attention,
+  IconError as Failed,
+  IconSuccess as Passed,
+  IconPauseCircle as Pause,
+  IconMoonSleep as Sleeping,
+  IconAsk as Unknown,
+  IconRenew as Working,
+} from "#lib/icons.js";
 import { STOPPED_LABEL, STOPPING_LABEL } from "../activity";
 import { cawco, isFailed, isStale } from "../client.svelte";
 import { type NamedSession, sessionAnswer } from "../session-names.svelte";
+import { STALLED_LABEL } from "../session-status";
 import { runIdOf } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 
@@ -76,6 +79,9 @@ export function stepSessionStatus(
   const row = cawco.instanceIndex.byId.get(sessionId);
   if (row && isFailed(row)) {
     return { label: "Failed", icon: Failed, tone: "failed" };
+  }
+  if (row?.stalled) {
+    return { label: STALLED_LABEL, icon: Failed, tone: "failed" };
   }
   if (row && isStale(row)) {
     return { label: "Unreachable", icon: Unknown, tone: "quiet" };

@@ -4,8 +4,7 @@ import CawCoDesign
 import Observation
 import UIKit
 
-// Connect a machine (AddMachineDialog.svelte, join/join.svelte.ts): two ways
-// in, one install. SSH has the hub run its install script on the machine
+// Connect a machine: two ways in, one install. SSH has the hub run its install script on the machine
 // and follows it step by step; Command hands over the same script as a
 // one-liner and waits for the machine to check in.
 
@@ -129,7 +128,7 @@ final class JoinState {
 final class AddMachineController: KitDialogController {
     private let hub: HubConnection
     private let join = JoinState.shared
-    /// JOIN_WAYS' names (join.svelte.ts): the strip hugs them, as the web's does.
+    /// The two ways' names: the strip hugs them.
     private let tabs = SegmentedTabs([.init("Over SSH", glyph: .server), .init("With one command", glyph: .terminal)])
     private let infoAlert = KitAlert(tone: .destructive)
     private let pane = CrossView()
@@ -507,7 +506,7 @@ final class AddMachineController: KitDialogController {
         column.axis = .vertical
         column.spacing = Space.space3
         if !hubUrl.isEmpty { column.addArrangedSubview(CopyBox(text: JoinState.installCommand(hubUrl), label: "Install command")) }
-        // CheckInStatus: waiting, or which machine joined.
+        // Waiting for check-in, or which machine joined.
         let dot = UIView()
         dot.layer.cornerRadius = 3
         dot.backgroundColor = joined == nil ? Palette.hueOrange500 : Palette.hueGreen500

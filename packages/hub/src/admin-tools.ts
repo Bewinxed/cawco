@@ -8,6 +8,8 @@
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
 import {
+  type FleetMemory,
+  type FleetMemoryDoc,
   type FleetPlugin,
   type FleetSkillMeta,
   type MarketplaceLink,
@@ -21,6 +23,19 @@ import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
 import { landedFetch } from "./fleet-fetches";
 import { hubHttpUrl, selfFetch } from "./hub-self";
+import { type Presenter, tool } from "./mcp-tool";
+import {
+  connectionSettingsWords,
+  delegateTypeSettingsWords,
+  HASH_HANDLE,
+  hookSettingsWords,
+  mcpSettingsWords,
+  memorySettingsWords,
+  pluginSettingsWords,
+  previewSettingsWords,
+  ruleSettingsWords,
+  skillSettingsWords,
+} from "./presenters/fleet-settings";
 
 /**
  * API timeout for one admin call. A fetch from GitHub is not waited on in
@@ -28,22 +43,6 @@ import { hubHttpUrl, selfFetch } from "./hub-self";
  * announcement of the outcome (fleet-fetches.ts).
  */
 const TIMEOUT_MS = 30_000;
-
-/** One MCP tool: its zod input as JSON Schema, and a handler that parses its input first. */
-export function tool<T extends z.ZodRawShape>(
-  name: string,
-  description: string,
-  input: T,
-  handler: (args: z.infer<z.ZodObject<T>>) => Promise<unknown>
-) {
-  const schema = z.object(input);
-  return {
-    name,
-    description,
-    inputSchema: z.toJSONSchema(schema, { target: "draft-07", io: "input" }),
-    handler: (args: unknown) => handler(schema.parse(args)),
-  };
-}
 
 /** JSON helper — calls a hub route and returns the parsed response, or throws a sentence. */
 const api = async (
@@ -100,11 +99,6 @@ const fieldsGiven = (
     )
   );
 
-const ok = (data: unknown) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(data) }],
-  structuredContent: data,
-});
-
 /**
  * The marketplace half of `manage_plugins`. A link is a different resource from
  * the plugins it carries — its own route, its own key — and keeping it here is
@@ -148,7 +142,7 @@ const reason = z
   .string()
   .max(300)
   .optional()
-  .describe("Required: one sentence on why, for which task.");
+  .describe("Required: why, for which task.");
 
 /** What a memory write answers: the hash to write against next, when it landed, and the size kept; never the text back. */
 const keptMemory = (
@@ -164,9 +158,34 @@ const keptMemory = (
   };
 };
 
+/**
+ * The hash an `expectedHash` names: the whole one, or the handle the read
+ * gave (its first {@link HASH_HANDLE} characters or more) of the copy the
+ * fleet keeps now, the CLAUDE.md or the document at `path`. A handle the
+ * kept copy no longer starts with goes on as given, and the write is
+ * refused as moved, with the current version.
+ */
+const wholeHash = async (
+  asked: string,
+  path: string | undefined
+): Promise<string> => {
+  if (asked.length >= 64 || asked.length < HASH_HANDLE) {
+    return asked;
+  }
+  const fleet = (await api("GET", "/api/fleet")) as {
+    memory?: { hash: string } | null;
+    memoryDocs?: { hash: string; path: string }[];
+  };
+  const kept =
+    path === undefined
+      ? fleet.memory?.hash
+      : fleet.memoryDocs?.find((doc) => doc.path === path)?.hash;
+  return kept?.startsWith(asked) ? kept : asked;
+};
+
 const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
 
-/** Whether a tool is an admin write: the hub asks the person before each call runs (admin-asks.ts). */
+/** Whether a tool is an admin write: the hub asks the person before each call runs, unless its session is in Full Send (admin-asks.ts). */
 export const isAdminWrite = (name: string): boolean =>
   ADMIN_WRITE_TOOL.test(name);
 
@@ -198,7 +217,7 @@ export const answeredWithoutAsking = (
  * `admin_<group>_read`, which takes only its read actions, and
  * `admin_<group>_write`, which takes the rest with the fields they need. One
  * handler serves both, through the hub's own REST routes; a write runs only
- * once the person approves it (admin-asks.ts).
+ * once the person approves it, or at once in Full Send (admin-asks.ts).
  */
 function admin<T extends z.ZodRawShape>(
   group: string,
@@ -209,6 +228,8 @@ function admin<T extends z.ZodRawShape>(
   handler: (
     args: { action: string } & Partial<z.infer<z.ZodObject<T>>>
   ) => Promise<unknown>,
+  /** How an agent reads the group's answers, knowing the action asked. */
+  present: Presenter<unknown, { action: string } & Record<string, unknown>>,
   writeNote = "",
   /** The fields of `input` a read takes too, by name; none by default. */
   readFields: readonly (keyof T & string)[] = []
@@ -222,11 +243,13 @@ function admin<T extends z.ZodRawShape>(
     },
     // A read names its action and the fields it was given; every other field is the write's.
     (args) =>
-      handler(args as { action: string } & Partial<z.infer<z.ZodObject<T>>>)
+      handler(args as { action: string } & Partial<z.infer<z.ZodObject<T>>>),
+    (answer, asked) =>
+      present(answer, asked as { action: string } & Record<string, unknown>)
   );
   const write = tool(
     `admin_${group}_write`,
-    `Change ${about} \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The call waits while the person approves it, then runs once with these arguments; a refusal comes back with their reason. Read with admin_${group}_read first.`,
+    `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} Waits for the person to approve it, unless in Full Send.`,
     { action: z.enum(writes), reason, ...input },
     // The reason is the person's to read on the approval, not a setting.
     (args) => {
@@ -234,7 +257,9 @@ function admin<T extends z.ZodRawShape>(
       return handler(
         setting as { action: string } & Partial<z.infer<z.ZodObject<T>>>
       );
-    }
+    },
+    (answer, asked) =>
+      present(answer, asked as { action: string } & Record<string, unknown>)
   );
   return [read, write];
 }
@@ -312,17 +337,15 @@ export function adminTools() {
         connections,
       }) => {
         if (action === "list") {
-          return ok(await api("GET", "/api/delegate-types"));
+          return await api("GET", "/api/delegate-types");
         }
         if (!name) {
           throw new Error("name is required for put and delete");
         }
         if (action === "delete") {
-          return ok(
-            await api(
-              "DELETE",
-              `/api/delegate-types/${encodeURIComponent(name)}`
-            )
+          return await api(
+            "DELETE",
+            `/api/delegate-types/${encodeURIComponent(name)}`
           );
         }
         // put
@@ -331,8 +354,10 @@ export function adminTools() {
             "description, harness, and model are required to create or update a delegate type"
           );
         }
-        return ok(
-          await api("PUT", `/api/delegate-types/${encodeURIComponent(name)}`, {
+        return await api(
+          "PUT",
+          `/api/delegate-types/${encodeURIComponent(name)}`,
+          {
             description,
             harness,
             model,
@@ -343,9 +368,10 @@ export function adminTools() {
               canDelegate,
               connections,
             }),
-          })
+          }
         );
-      }
+      },
+      delegateTypeSettingsWords
     ),
 
     // ── connections ──────────────────────────────────────────────────────
@@ -389,22 +415,20 @@ export function adminTools() {
       async (args) => {
         const { action, name } = args;
         if (action === "list") {
-          return ok(await api("GET", "/api/connections"));
+          return await api("GET", "/api/connections");
         }
         if (!name) {
           throw new Error("name is required for every connection write");
         }
         const path = `/api/connections/${encodeURIComponent(name)}`;
         if (action === "remove") {
-          return ok(await api("DELETE", path));
+          return await api("DELETE", path);
         }
         if (action === "sign_in") {
-          return ok(
-            await api(
-              "POST",
-              `${path}/sign-in`,
-              fieldsGiven({ origin: args.origin })
-            )
+          return await api(
+            "POST",
+            `${path}/sign-in`,
+            fieldsGiven({ origin: args.origin })
           );
         }
         const {
@@ -414,15 +438,14 @@ export function adminTools() {
           ...fields
         } = args;
         if (action === "create") {
-          return ok(
-            await api("POST", "/api/connections", {
-              name,
-              ...fieldsGiven(fields),
-            })
-          );
+          return await api("POST", "/api/connections", {
+            name,
+            ...fieldsGiven(fields),
+          });
         }
-        return ok(await api("PATCH", path, fieldsGiven(fields)));
+        return await api("PATCH", path, fieldsGiven(fields));
       },
+      connectionSettingsWords,
       " A key never goes through a session: the owner runs `cawco connections set-key <name>` on a machine joined to the hub. Never ask for a key in chat. sign_in answers the URL to open. Changing where it points drops the key."
     ),
 
@@ -462,24 +485,23 @@ export function adminTools() {
           const fleet = (await api("GET", "/api/fleet")) as {
             skills?: unknown[];
           };
-          return ok({ skills: fleet.skills ?? [] });
+          return { skills: fleet.skills ?? [] };
         }
         if (!name) {
           throw new Error("name is required");
         }
         if (action === "remove") {
-          return ok(
-            await api("DELETE", `/api/fleet/skills/${encodeURIComponent(name)}`)
+          return await api(
+            "DELETE",
+            `/api/fleet/skills/${encodeURIComponent(name)}`
           );
         }
         if (action === "enable" || action === "disable") {
           // The stored skill's flag; nothing is fetched.
-          return ok(
-            await api(
-              "PATCH",
-              `/api/fleet/skills/${encodeURIComponent(name)}`,
-              { enabled: action === "enable" }
-            )
+          return await api(
+            "PATCH",
+            `/api/fleet/skills/${encodeURIComponent(name)}`,
+            { enabled: action === "enable" }
           );
         }
         // install
@@ -488,22 +510,17 @@ export function adminTools() {
         }
         // The route answers before the source is fetched; the row as the
         // fetch landed it (files, the sentence it failed with, or `choices`).
-        return ok(
-          await landedFetch<FleetSkillMeta>(
-            (news) => (news.skill?.name === name ? news.skill : undefined),
-            async () =>
-              (await api(
-                "PUT",
-                `/api/fleet/skills/${encodeURIComponent(name)}`,
-                {
-                  source,
-                  enabled: true,
-                  ...(projectId === undefined ? {} : { projectId }),
-                }
-              )) as FleetSkillMeta
-          )
+        return await landedFetch<FleetSkillMeta>(
+          (news) => (news.skill?.name === name ? news.skill : undefined),
+          async () =>
+            (await api("PUT", `/api/fleet/skills/${encodeURIComponent(name)}`, {
+              source,
+              enabled: true,
+              ...(projectId === undefined ? {} : { projectId }),
+            })) as FleetSkillMeta
         );
       },
+      skillSettingsWords,
       " Install fetches the source (github:owner/repo, npm:package, a URL, or skills:slug) once at the hub and distributes the files to every machine."
     ),
 
@@ -548,14 +565,14 @@ export function adminTools() {
           const fleet = (await api("GET", "/api/fleet")) as {
             config?: { marketplaces?: unknown[]; plugins?: unknown[] };
           };
-          return ok({
+          return {
             marketplaces: fleet.config?.marketplaces ?? [],
             plugins: fleet.config?.plugins ?? [],
-          });
+          };
         }
 
         if (action === "link" || action === "unlink") {
-          return ok(await marketplaceAction(action, name, source));
+          return await marketplaceAction(action, name, source);
         }
 
         if (!id) {
@@ -563,11 +580,11 @@ export function adminTools() {
         }
         const path = `/api/fleet/plugins/${encodeURIComponent(id)}`;
         if (action === "remove") {
-          return ok(await api("DELETE", path));
+          return await api("DELETE", path);
         }
         if (action === "enable" || action === "disable") {
           // The stored plugin's flag; nothing is fetched.
-          return ok(await api("PATCH", path, { enabled: action === "enable" }));
+          return await api("PATCH", path, { enabled: action === "enable" });
         }
         // Install and refresh answer before the bytes are fetched; the row as
         // the fetch landed it.
@@ -577,10 +594,11 @@ export function adminTools() {
             async () => (await ask()) as FleetPlugin
           );
         if (action === "refresh") {
-          return ok(await landed(() => api("POST", `${path}/refresh`)));
+          return await landed(() => api("POST", `${path}/refresh`));
         }
-        return ok(await landed(() => api("PUT", path, { enabled: true })));
+        return await landed(() => api("PUT", path, { enabled: true }));
       },
+      pluginSettingsWords,
       " Order matters: 'link' the marketplace first, then 'install' a plugin from it by its `plugin@marketplace` id, with the name link answered; 'refresh' re-fetches one whose upstream moved. The hub resolves the bytes once and distributes them."
     ),
 
@@ -635,30 +653,30 @@ export function adminTools() {
           const fleet = (await api("GET", "/api/fleet")) as {
             config?: { mcp?: unknown[] };
           };
-          return ok({ mcp: fleet.config?.mcp ?? [] });
+          return { mcp: fleet.config?.mcp ?? [] };
         }
         if (!name) {
           throw new Error("name is required for put and remove");
         }
         if (action === "remove") {
-          return ok(
-            await api("DELETE", `/api/fleet/mcp/${encodeURIComponent(name)}`)
+          return await api(
+            "DELETE",
+            `/api/fleet/mcp/${encodeURIComponent(name)}`
           );
         }
         // put
         if (!config) {
           throw new Error("config is required to add or update an MCP server");
         }
-        return ok(
-          await api("PUT", `/api/fleet/mcp/${encodeURIComponent(name)}`, {
-            config,
-            ...(enabled === undefined ? {} : { enabled }),
-            ...(projectId === undefined ? {} : { projectId }),
-            ...(platforms === undefined ? {} : { platforms }),
-            ...(shared === undefined ? {} : { shared }),
-          })
-        );
+        return await api("PUT", `/api/fleet/mcp/${encodeURIComponent(name)}`, {
+          config,
+          ...(enabled === undefined ? {} : { enabled }),
+          ...(projectId === undefined ? {} : { projectId }),
+          ...(platforms === undefined ? {} : { platforms }),
+          ...(shared === undefined ? {} : { shared }),
+        });
       },
+      mcpSettingsWords,
       " A change reaches running sessions within seconds (a put connects, a removal leaves);" +
         " no new session is needed."
     ),
@@ -740,20 +758,21 @@ export function adminTools() {
       async (args) => {
         const { action } = args;
         if (action === "list") {
-          return ok(await api("GET", "/api/rules"));
+          return await api("GET", "/api/rules");
         }
         if (action === "templates") {
           const data = (await api("GET", "/api/rules")) as {
             templates?: unknown;
           };
-          return ok({ templates: data.templates ?? [] });
+          return { templates: data.templates ?? [] };
         }
         if (action === "remove") {
           if (!args.id) {
             throw new Error("id is required to remove a rule");
           }
-          return ok(
-            await api("DELETE", `/api/rules/${encodeURIComponent(args.id)}`)
+          return await api(
+            "DELETE",
+            `/api/rules/${encodeURIComponent(args.id)}`
           );
         }
 
@@ -764,22 +783,20 @@ export function adminTools() {
         );
 
         if (action === "create") {
-          return ok(
-            await api("POST", "/api/rules", {
-              name: "",
-              enabled: true,
-              pattern: "",
-              matchKind: "phrase",
-              caseSensitive: false,
-              wholeWord: false,
-              watch: "text",
-              reply: "",
-              timing: "turn",
-              repeat: false,
-              scope: {},
-              ...given,
-            })
-          );
+          return await api("POST", "/api/rules", {
+            name: "",
+            enabled: true,
+            pattern: "",
+            matchKind: "phrase",
+            caseSensitive: false,
+            wholeWord: false,
+            watch: "text",
+            reply: "",
+            timing: "turn",
+            repeat: false,
+            scope: {},
+            ...given,
+          });
         }
         // update: the route replaces the whole rule, so the given fields are
         // laid over the rule as it is stored; every other field stays.
@@ -800,13 +817,12 @@ export function adminTools() {
           orphaned: _orphaned,
           ...current
         } = stored;
-        return ok(
-          await api("PUT", `/api/rules/${encodeURIComponent(id)}`, {
-            ...current,
-            ...given,
-          })
-        );
-      }
+        return await api("PUT", `/api/rules/${encodeURIComponent(id)}`, {
+          ...current,
+          ...given,
+        });
+      },
+      ruleSettingsWords
     ),
 
     // ── hooks ────────────────────────────────────────────────────────────
@@ -861,17 +877,15 @@ export function adminTools() {
       async (args) => {
         const { action } = args;
         if (action === "list") {
-          return ok(await api("GET", "/api/fleet/hooks"));
+          return await api("GET", "/api/fleet/hooks");
         }
         if (action === "remove") {
           if (!args.id) {
             throw new Error("id is required to remove a hook");
           }
-          return ok(
-            await api(
-              "DELETE",
-              `/api/fleet/hooks/${encodeURIComponent(args.id)}`
-            )
+          return await api(
+            "DELETE",
+            `/api/fleet/hooks/${encodeURIComponent(args.id)}`
           );
         }
 
@@ -889,10 +903,13 @@ export function adminTools() {
             ? { ...given, enabled: given.enabled ?? true }
             : given;
 
-        return ok(
-          await api("PUT", `/api/fleet/hooks/${encodeURIComponent(id)}`, body)
+        return await api(
+          "PUT",
+          `/api/fleet/hooks/${encodeURIComponent(id)}`,
+          body
         );
       },
+      hookSettingsWords,
       " 'create' adds one (the hub mints the id), 'update' edits by id, 'remove' deletes by id."
     ),
 
@@ -936,41 +953,48 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "Optimistic concurrency: the hash of the content you read. If the server's copy " +
+            "Optimistic concurrency: the hash of the content you read, whole or as the handle the read gave. If the server's copy " +
               "has moved, the write is refused and the current version is returned."
           ),
       },
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches all five memory actions (get, set, list_docs, set_doc, remove_doc) with their validation in one handler; splitting would scatter the action enum's contract across several functions.
       async ({ action, content, path, scope, expectedHash }) => {
         if (action === "get") {
+          // CLAUDE.md with its linked documents, as a machine is sent it
+          // (FleetMemory): the hub's read keeps the two apart.
           const fleet = (await api("GET", "/api/fleet")) as {
-            memory?: unknown;
+            memory?: Omit<FleetMemory, "docs"> | null;
+            memoryDocs?: FleetMemoryDoc[];
           };
-          return ok({ memory: fleet.memory ?? null });
+          return {
+            memory: fleet.memory
+              ? { ...fleet.memory, docs: fleet.memoryDocs ?? [] }
+              : null,
+          };
         }
         if (action === "list_docs") {
           const fleet = (await api("GET", "/api/fleet")) as {
             memoryDocs?: { scope?: MemoryScope }[];
           };
           const docs = fleet.memoryDocs ?? [];
-          return ok({
+          return {
             docs: scope
               ? docs.filter((doc) => scopeKey(doc.scope) === scopeKey(scope))
               : docs,
-          });
+          };
         }
         if (action === "set") {
           if (content === undefined) {
             throw new Error("content is required to set fleet memory");
           }
-          return ok(
-            keptMemory(
-              await api("PUT", "/api/fleet/memory", {
-                content,
-                ...(expectedHash ? { expectedHash } : {}),
-              }),
-              content
-            )
+          return keptMemory(
+            await api("PUT", "/api/fleet/memory", {
+              content,
+              ...(expectedHash
+                ? { expectedHash: await wholeHash(expectedHash, undefined) }
+                : {}),
+            }),
+            content
           );
         }
         if (action === "set_doc") {
@@ -979,25 +1003,28 @@ export function adminTools() {
               "path and content are required to set a memory document"
             );
           }
-          return ok({
+          return {
             path,
             ...keptMemory(
               await api("PUT", "/api/fleet/memory/docs", {
                 path,
                 content,
                 ...(scope ? { scope } : {}),
-                ...(expectedHash ? { expectedHash } : {}),
+                ...(expectedHash
+                  ? { expectedHash: await wholeHash(expectedHash, path) }
+                  : {}),
               }),
               content
             ),
-          });
+          };
         }
         // remove_doc
         if (!path) {
           throw new Error("path is required to remove a memory document");
         }
-        return ok(await api("DELETE", "/api/fleet/memory/docs", { path }));
+        return await api("DELETE", "/api/fleet/memory/docs", { path });
       },
+      memorySettingsWords,
       "",
       ["scope"]
     ),
@@ -1029,19 +1056,18 @@ export function adminTools() {
       },
       async ({ action, mode, pattern }) => {
         if (action === "get") {
-          return ok(await api("GET", "/api/preview-settings"));
+          return await api("GET", "/api/preview-settings");
         }
         if (!mode) {
           throw new Error("mode is required to set how previews are reached");
         }
-        return ok(
-          await api(
-            "PUT",
-            "/api/preview-settings",
-            fieldsGiven({ mode, pattern })
-          )
+        return await api(
+          "PUT",
+          "/api/preview-settings",
+          fieldsGiven({ mode, pattern })
         );
       },
+      previewSettingsWords,
       " It changes how every preview on the fleet is reached, so the person approves it first."
     ),
   ];

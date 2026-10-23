@@ -84,6 +84,15 @@ import {
   undeclaredEndpoint,
 } from "./host-lfs";
 import {
+  createdAt,
+  cutMade,
+  cutMark,
+  entriesAt,
+  entryWords,
+  markCut,
+  ownCutProblem,
+} from "./interrupted-cut";
+import {
   configEnv,
   type DeclaredLfs,
   declaredPins,
@@ -98,6 +107,7 @@ import {
 } from "./move";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
+import { refuseShortOfWorkspace } from "./workspace-needs";
 import { cloneHolding } from "./workspace-records";
 
 type Git = (root: string, ...args: string[]) => Promise<string>;
@@ -397,6 +407,124 @@ const readySource = (
     return { hub, known };
   });
 
+/** This agent's start-up pass over the cuts its last process left under way ({@link clearInterruptedCuts}): every cut waits for it. */
+let interruptedCleared: Promise<void> = Promise.resolve();
+
+/**
+ * At this agent's start, before any cut: each cut its last process left
+ * marked under way (interrupted-cut.ts `cut.json`; an install's restart, a
+ * crash or a full disk ended it) whose path holds nothing but what that cut
+ * writes ({@link ownCutProblem}) is cleared as a failed cut is (an `unmade`
+ * archive: the path, the state and scratch dirs), so its husk never waits
+ * for the next ask; the hub, told the create was not run again
+ * (request-record.ts), cuts it whole at the next. One whose path holds
+ * anything else is left as it is and said, and its next cut is refused
+ * naming what is there.
+ */
+export const clearInterruptedCuts = (): Promise<void> => {
+  interruptedCleared = sweepInterrupted();
+  return interruptedCleared;
+};
+
+/** {@link clearInterruptedCuts}'s pass; never throws. */
+const sweepInterrupted = async (): Promise<void> => {
+  try {
+    const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+    for (const id of ids) {
+      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, each its own folder to read and clear
+      await clearInterrupted(id);
+    }
+  } catch (error) {
+    console.warn(
+      `[workspace] the cuts this agent's last process left under way could not all be looked at: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
+
+/** Workspace `id`'s cut, when its mark says this agent's last process left it under way: cleared when its path holds only what it writes. */
+const clearInterrupted = async (id: string): Promise<void> => {
+  let mark: Awaited<ReturnType<typeof cutMark>>;
+  try {
+    mark = await cutMark(id);
+  } catch (error) {
+    console.warn(
+      `[workspace] ${id}: its cut mark could not be read, so its cut is left as it is: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return;
+  }
+  if (!mark) {
+    return;
+  }
+  const there = await lstat(mark.path).catch(() => undefined);
+  const problem = there ? await ownCutProblem(mark) : undefined;
+  if (problem) {
+    console.warn(
+      `[workspace] ${id}: its cut at ${mark.path} was cut short when this agent's last process ended, and is left as it is: ${problem}`
+    );
+    return;
+  }
+  await archiveWorkspace({
+    id,
+    path: mark.path,
+    unlanded: "unmade",
+  } satisfies WorkspaceArchive);
+  console.info(
+    `[workspace] ${id}: its cut at ${mark.path}, cut short when this agent's last process ended, is cleared; its next cut is made whole`
+  );
+};
+
+/** What the folder at `path` holds, in words. */
+const heldAt = async (path: string): Promise<string> => {
+  try {
+    const names = await entriesAt(path);
+    return names.length > 0 ? entryWords(names) : "nothing";
+  } catch {
+    return "what cannot be read";
+  }
+};
+
+/**
+ * Something already at `path`, where workspace `id`'s cut (again, `at`)
+ * makes its clone. A cut that fails takes its path with it unread (its
+ * `unmade` archive), so a cut over someone's files would delete them
+ * (9a220f37b's refusal). Cleared and cut again only when this agent's
+ * records say a cut of this workspace's was made there (its mark, or the
+ * `create.json` every cut writes first, all a build before the mark wrote)
+ * and the folder holds nothing but what that cut writes
+ * ({@link ownCutProblem}): one cut short, or one whole whose answer never
+ * reached the hub. Anything else refuses the cut, naming what is there and
+ * how to clear it, and is left as it is.
+ */
+const clearOwnCut = async (
+  id: string,
+  path: string,
+  source: string,
+  at: WorkspaceCut | null
+): Promise<void> => {
+  if (!(await lstat(path).catch(() => undefined))) {
+    return;
+  }
+  const again = at ? " again" : "";
+  const mark = await cutMark(id).catch(() => undefined);
+  const refusal =
+    mark?.path === path || (await createdAt(id)) === path
+      ? await ownCutProblem(mark?.path === path ? mark : { path, source, at })
+      : `this machine's agent has no record of cutting workspace ${id} there, and it holds ${await heldAt(path)}`;
+  if (refusal) {
+    throw new Error(
+      `workspace ${id} cannot be cut${again} at ${path}: ${refusal}, so it is left as it is. Move it away or delete it (rm -rf ${shellQuote(path)}), then ask again.`
+    );
+  }
+  await archiveWorkspace({
+    id,
+    path,
+    unlanded: "unmade",
+  } satisfies WorkspaceArchive);
+  console.info(
+    `[workspace] ${id}: ${path} held only its own cut${again}, never finished; it is cleared and cut${again} now`
+  );
+};
+
 /**
  * {@link CONTROL_WORKSPACE_CREATE}: a clone of its own on `ws/<id8>` from the
  * remote's default branch as it stands now, and its boundary. A boundary that
@@ -412,9 +540,12 @@ const readySource = (
  * over (`boundaryFor`). `at` ({@link WorkspaceCut}) cuts a retired workspace
  * again at its own path (a function of its id): `ws/<id8>` at the commit its
  * clone's HEAD was on when it retired, fetched from `origin`'s branch that
- * held it then, tracking the default branch as a first cut does. Something
- * already at that path refuses it, and is left as it is; so does a commit
- * that branch no longer holds, which a cut anywhere else would leave behind.
+ * held it then, tracking the default branch as a first cut does. A commit
+ * that branch no longer holds refuses it, since a cut anywhere else would
+ * leave it behind. Something already at the path refuses any cut, and is
+ * left as it is, unless it is this workspace's own cut cut short
+ * ({@link clearOwnCut}). The cut is marked under way before it writes
+ * anything at the path, and unmarked once it is whole (interrupted-cut.ts).
  */
 export const createWorkspace = async (
   cwd: unknown,
@@ -423,6 +554,8 @@ export const createWorkspace = async (
   account?: unknown,
   at?: unknown
 ): Promise<WorkspaceCheckout> => {
+  // What this machine lacks first, before the folder is read at all.
+  refuseShortOfWorkspace();
   // A MachinePath from the hub (work-items `openWorkspace`): absolute.
   const dir = String(cwd);
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
@@ -463,13 +596,13 @@ export const createWorkspace = async (
   if (cut && !COMMIT.test(cut.commit)) {
     throw new Error(`"${cut.commit}" is not a commit id`);
   }
-  if (cut && (await lstat(path).catch(() => undefined))) {
-    throw new Error(
-      `workspace ${id} cannot be cut again at ${path}: something is there already, and it is left as it is`
-    );
-  }
+  await interruptedCleared;
+  await clearOwnCut(id, path, repoRoot, cut ?? null);
   try {
     await mkdir(state, { recursive: true });
+    // Before anything at the path: a cut this agent's end cuts short is
+    // found its own and cleared, at its start or the next cut.
+    await markCut(id, { path, source: repoRoot, at: cut ?? null });
     // Written before the clone: archive-by-id survives a lost reply or an agent restart.
     await writeStateFile(join(state, "create.json"), JSON.stringify({ path }));
     const base = await prepareClone(repoRoot, path, authed, known);
@@ -506,6 +639,7 @@ export const createWorkspace = async (
       await setProject(id, projectId);
     }
     const boundary = await ensureBoundary({ id, path });
+    await cutMade(id);
     return {
       repoRoot,
       path,

@@ -187,9 +187,6 @@
   const retryIn = $derived(
     cawco.retryAt ? Math.max(0, Math.ceil((cawco.retryAt - now) / 1000)) : 0
   );
-  /** How long an update has left, in whole seconds. */
-  const left = (until: number): number =>
-    Math.max(0, Math.ceil((until - now) / 1000));
 
   /** The retry, as the countdown or the try that is out now. */
   const retry = $derived(
@@ -213,12 +210,11 @@
     switch (shown?.kind) {
       case "updating":
         return connectionWords.updating(
-          shown.version ? unbroken(shown.version) : null,
-          left(shown.until)
+          shown.version ? unbroken(shown.version) : null
         );
       case "lost":
       case "retrying":
-        return `Hub unreachable — ${retry}.`;
+        return `${connectionWords.unreachable} — ${retry}.`;
       case "refused":
         return `— ${retry}.`;
       case "back":

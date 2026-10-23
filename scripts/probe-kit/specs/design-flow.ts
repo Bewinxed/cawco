@@ -36,6 +36,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { toolRecord, toolWords } from "../../lib/tool-call";
 import {
   type Fleet,
   MACHINE,
@@ -386,45 +387,20 @@ const run = async (kit: Kit) => {
           .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
           ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? ""
     );
+  const me = { base: fleet.base, id: session, credential };
   /** One tool call through the hub's REST door, as the session: its words, and whether it was refused. */
-  const call = async (name: string, args: object) => {
-    const response = await fetch(
-      `${fleet.base}/api/delegation/call/${session}`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${credential}`,
-        },
-        body: JSON.stringify({ name, arguments: args }),
-      }
-    );
-    const raw = await response.text();
-    try {
-      const result = JSON.parse(raw) as {
-        content?: { text?: string }[];
-        isError?: boolean;
-      };
-      return {
-        refused: !response.ok || result.isError === true,
-        text: (result.content ?? []).map((block) => block.text ?? "").join(""),
-      };
-    } catch {
-      return { refused: true, text: `${response.status} ${raw}` };
-    }
-  };
+  const call = (name: string, args: Record<string, unknown>) =>
+    toolWords(me, name, args);
   const disk = (path: string) =>
     readFile(join(place, "design", path)).catch(() => undefined);
 
   // ── 3. the build task carries the hub's words ───────────────────────
-  const filed = await call("task_create", {
+  const filed = await toolRecord<{ id?: string }>(me, "task_create", {
     title: BUILD,
     description: "Build it from the code.",
     acceptance: `- ${CAW_ACCEPTANCE}`,
   });
-  const filedId = filed.refused
-    ? undefined
-    : (JSON.parse(filed.text) as { id?: string }).id;
+  const filedId = filed.refused ? undefined : filed.record.id;
   const task = filedId
     ? await fleet.api<{ acceptance: string; description: string }>(
         `/api/projects/${tools.id}/tasks/${filedId}`
@@ -510,10 +486,10 @@ const run = async (kit: Kit) => {
     '5: a token typed only by its group is checked as that type: color.paper "#fff" and a 1.25rem scale.ratio under a group typed number are each refused by the DTCG check, naming the token, and tokens.json stays as it was',
     wroteBad.refused &&
       wroteBad.text.includes("not DTCG 2025.10") &&
-      wroteBad.text.includes("/color/paper") &&
+      wroteBad.text.includes("tokens.json color.paper") &&
       wroteRatio.refused &&
       wroteRatio.text.includes("not DTCG 2025.10") &&
-      wroteRatio.text.includes("/scale/ratio") &&
+      wroteRatio.text.includes("tokens.json scale.ratio") &&
       (await disk("tokens.json"))?.toString() === tokensBefore,
     `#fff ${wroteBad.refused ? "refused" : "written"}: ${wroteBad.text.slice(0, 300)}; ratio ${wroteRatio.refused ? "refused" : "written"}: ${wroteRatio.text.slice(0, 300)}`
   );
@@ -538,6 +514,7 @@ const run = async (kit: Kit) => {
   const cliEnv = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith("CAWCO_"))
   );
+  // tool answer: words (its exit code and what reached the disk are read)
   const cli = Bun.spawnSync(
     [
       "bun",

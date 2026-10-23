@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import HookEditor from "#lib/cawco/config/editors/HookEditor.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -19,7 +20,7 @@
   found={id === "new" || hook !== null}
   loaded={hooks !== null}
   problem={store.hooks.error}
-  saveLabel={id === "new" ? "Create hook" : "Save changes"}
+  saveLabel={id === "new" ? "Create hook" : commonWords.saveChanges}
   {section}
   what="hook"
 >

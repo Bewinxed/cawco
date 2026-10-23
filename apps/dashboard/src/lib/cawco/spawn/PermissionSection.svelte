@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { HarnessKind, PermissionMode } from "@cawco/core";
+  import { spawnWords } from "@cawco/core";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
@@ -11,7 +12,7 @@
    * says its restart, and a refusal, in that session's feedback line, as
    * any pick does.
    */
-  import Check from "~icons/solar/check-circle-bold-duotone";
+  import { IconSuccess as Check } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { fullSendCopy } from "../permission-modes";
@@ -53,9 +54,9 @@
     // biome-ignore lint/complexity/noVoid: the question answers itself; a Cancel changes nothing
     void asks.ask({
       at: "fullSend",
-      title: "Switch to Full Send?",
+      title: spawnWords.switchToFullSendTitle,
       body: restarts ? [...copy.confirm, copy.restarts] : copy.confirm,
-      confirmLabel: "Switch to Full Send",
+      confirmLabel: spawnWords.switchToFullSend,
       pendingLabel: "Switching…",
       grant: true,
       // The yes is what this asks for: the change then says how it goes
@@ -140,5 +141,9 @@
   {/each}
 </div>
 <!-- Full Send's question, under the rows: they place their fill by index,
-     so it stands after them, not between. -->
-<AskHere asker={asks} at="fullSend" />
+     so it stands after them, not between. It takes the width the rows set
+     and never sets one (inline-size containment): in a popover drawn at its
+     content's width (glide-popover, the permission rows' `w-max`), its
+     paragraphs' unwrapped length would otherwise stretch the surface across
+     the window. -->
+<AskHere asker={asks} at="fullSend" class="contain-inline-size" />

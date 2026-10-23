@@ -41,7 +41,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readWithin } from "../../../packages/core/src/bounded";
+import { workWords } from "../../../packages/core/src/words/work";
+import { type ToolRecord, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -217,7 +218,7 @@ interface Started {
 
 /** What the phases share. */
 interface Scene {
-  /** A tool of the parent's, called as the parent: its status and its answer's text. */
+  /** A tool of the parent's, called as the parent: its status and its words. */
   callAsParent: (
     name: string,
     args: object
@@ -229,6 +230,8 @@ interface Scene {
   fleet: Fleet;
   parentId: string;
   projectId: string;
+  /** delegate_list called as the parent, read as its record (scripts/lib/tool-call.ts). */
+  recordAsParent: (name: string, args: object) => Promise<ToolRecord<Answer>>;
   /** The project's repository, every delegate's cwd. */
   src: string;
   /** The workspace's row once its state is `state`, or as it stands when that does not come. */
@@ -283,9 +286,10 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
       s.instanceId
     );
   // S's own report names its workspace too (work-items.ts `reportLine`):
-  // the hold is the notice that names it.
+  // the hold is the notice that names it, by its handle as agents read it.
+  const handle = ws.id.slice(0, 8);
   const isHoldNotice = (row: { body: string | null; notice: number | null }) =>
-    row.notice === 1 && (row.body ?? "").includes(ws.id);
+    row.notice === 1 && (row.body ?? "").includes(`Workspace ${handle}`);
   const notice = await until(
     "the parent's notice of S's held workspace",
     reports,
@@ -314,11 +318,12 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
     place !== undefined && (place.held ?? null) === null,
     JSON.stringify(place)
   );
+  // Its words (hub presenters/sessions.ts `heldLine`): the workspace by its handle.
   const said = await scene.callAsParent("delegate_list", {});
   check(
     "(c) the parent's delegate_list lists it under held",
     said.status === 200 &&
-      said.text.includes(ws.id) &&
+      said.text.includes(`workspace ${handle} on`) &&
       said.text.includes("1 commit on no remote"),
     `${said.status} ${said.text.slice(0, 1200)}`
   );
@@ -358,7 +363,8 @@ const rebasedPhase = async (
   const xItem = await scene.ended(x);
   check(
     "(a) X lands a commit of its own while A waits: main moved under A's commit",
-    xItem?.state === "done" && (xItem.result ?? "").includes("Landed on main"),
+    xItem?.state === "done" &&
+      (xItem.result ?? "").includes(workWords.landedOn("main")),
     `${xItem?.state} ${xItem?.error ?? ""} ${(xItem?.result ?? "").slice(0, 400)}`
   );
   await writeFile(join(wa.tmp ?? "", goFile("A")), "go\n");
@@ -390,7 +396,7 @@ const rebasedPhase = async (
   check(
     "(a) T, cut from S's held workspace, lands S's commit rebased onto main as it moved",
     tItem?.state === "done" &&
-      (tItem.result ?? "").includes("Landed on main") &&
+      (tItem.result ?? "").includes(workWords.landedOn("main")) &&
       (tItem.result ?? "").includes("Delegate commit S"),
     `${tItem?.state} ${tItem?.error ?? ""} ${(tItem?.result ?? "").slice(0, 800)}`
   );
@@ -429,7 +435,7 @@ const leftoversPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(b) the item did not end on it: U finished once more, after moving them to $TMPDIR, and that landed",
     (steps.U?.finishes ?? 0) === 2 &&
       item?.state === "done" &&
-      (item.result ?? "").includes("Landed on main"),
+      (item.result ?? "").includes(workWords.landedOn("main")),
     `${steps.U?.finishes ?? 0} finishes; ${item?.state} ${item?.error ?? ""} ${(item?.result ?? "").slice(0, 400)}`
   );
   const wu = workspaceOf(u.workspaceId);
@@ -483,29 +489,21 @@ interface Listed {
   startedAt: string;
 }
 
-/** delegate_list's answer (hub delegation-tree.ts `DelegateList`), as the parent's call answered it. */
+/** delegate_list's record (hub delegation-tree.ts `DelegateList`), as `toolRecord` reads it. */
 interface Answer {
   delegates: Listed[];
   held: { workspaceId: string }[];
 }
 
-/** delegate_list's delegates and held workspaces, as the parent's call answered them, or what it answered instead. */
-const listed = (said: {
-  status: number;
-  text: string;
-}): Partial<Answer> & { refused?: string } => {
-  if (said.status !== 200) {
-    return { refused: `${said.status} ${said.text.slice(0, 600)}` };
-  }
-  const result = JSON.parse(said.text) as {
-    content?: { text?: string }[];
-    isError?: boolean;
-    structuredContent?: Answer;
-  };
-  return result.isError
-    ? { refused: result.content?.[0]?.text ?? "" }
-    : { ...result.structuredContent };
-};
+/** delegate_list's delegates and held workspaces, from its record, or the refusal's words. */
+const listed = (
+  said: ToolRecord<Answer>
+): Partial<Answer> & { refused?: string } =>
+  said.refused ? { refused: said.text } : said.record;
+
+/** delegate_list's record of a window, asked as the parent. */
+const windowOf = (scene: Scene, window: object) =>
+  scene.recordAsParent("delegate_list", window);
 
 /** (e) delegate_list with a window answers the delegates live inside it, in start order, and its tree's workspaces held inside it. */
 const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
@@ -550,7 +548,7 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `H ${h.held.state}, R ${rHeld.state}, Z ${z.held.state}; Q ${qItem?.state}; P ${JSON.stringify(ps)} Q ${JSON.stringify(qs)} R ${JSON.stringify(rs)}`
   );
   const around = listed(
-    await scene.callAsParent("delegate_list", {
+    await windowOf(scene, {
       since: iso(qs?.created_at),
       before: iso(qs?.ended_at),
     })
@@ -578,11 +576,7 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     around.held !== undefined && around.held.length === 0,
     JSON.stringify(around.held)
   );
-  const after = listed(
-    await scene.callAsParent("delegate_list", {
-      since: iso(rs?.created_at),
-    })
-  );
+  const after = listed(await windowOf(scene, { since: iso(rs?.created_at) }));
   const afterIds = (after.delegates ?? []).map((one) => one.instanceId);
   check(
     "(e) a window from R's start answers P then R",
@@ -595,9 +589,7 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     JSON.stringify(afterHeld) === JSON.stringify([r.workspaceId]),
     `${JSON.stringify(afterHeld)}; H ${h.started.workspaceId} R ${r.workspaceId} Z ${z.started.workspaceId}`
   );
-  const loose = listed(
-    await scene.callAsParent("delegate_list", { since: "yesterday" })
-  );
+  const loose = listed(await windowOf(scene, { since: "yesterday" }));
   check(
     "(e) a bound that is no ISO time is refused, saying the form",
     (loose.refused ?? "").includes("ISO date or datetime"),
@@ -701,26 +693,19 @@ const spec: Spec = {
           ITEM_MS
         ).catch(() => itemOf(started.workItemId)),
       callAsParent: async (name, args) => {
-        const called = await readWithin(300_000, async (signal) => {
-          const response = await fetch(
-            `${fleet.base}/api/delegation/call/${parent}`,
-            {
-              method: "POST",
-              signal,
-              headers: {
-                "content-type": "application/json",
-                Authorization: `Bearer ${credential}`,
-              },
-              body: JSON.stringify({ name, arguments: args }),
-            }
-          );
-          return { status: response.status, text: await response.text() };
-        });
-        if (called.kind !== "answered") {
-          throw new Error(`${name} did not answer within 300 s`);
-        }
-        return called.value;
+        const said = await toolWords(
+          { base: fleet.base, id: parent, credential },
+          name,
+          args as Record<string, unknown>
+        );
+        return { status: said.status, text: said.text };
       },
+      recordAsParent: (name, args) =>
+        toolRecord<Answer>(
+          { base: fleet.base, id: parent, credential },
+          name,
+          args as Record<string, unknown>
+        ),
     };
 
     const ws = await heldPhase(kit, scene);

@@ -397,20 +397,22 @@
   });
   /**
    * The card opened with something asked: what had the focus is kept to give
-   * it back, and the focus goes where the new contents put it.
+   * it back, and the focus goes where the new contents put it. `had`: what
+   * had the focus when the open was asked for, where the focus is taken a
+   * frame later (a real open ending the rehearsal), by when the page may
+   * have moved it.
    */
-  function takeFocus() {
+  function takeFocus(had: Element | null = document.activeElement) {
     // Rehearsed (opened with nothing asked), the focus stays where it is.
     if (asked === null) {
       return;
     }
     // What invoked it, or what invoked the opener that has gone (the
-    // phone's sheet hands over its burger, bar-glass `invoker`).
+    // phone's sheet hands over its burger, bar-glass `invoker`). Never the
+    // card's own contents, which go inert as it closes.
     returnTo =
       barGlass.invoker ??
-      (document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null);
+      (had instanceof HTMLElement && !content?.contains(had) ? had : null);
     barGlass.invoker = null;
     const card = asked;
     const node = content?.querySelector<HTMLElement>(`[data-face="${card}"]`);
@@ -443,14 +445,30 @@
   // once the face asked for has mounted.
   $effect.pre(() => {
     if (asked !== null && untrack(() => rehearsing)) {
+      const had = document.activeElement;
       endRehearsal();
-      requestAnimationFrame(() => takeFocus());
+      requestAnimationFrame(() => takeFocus(had));
     }
   });
 
   const close = () => {
     barGlass.open = null;
   };
+
+  /**
+   * Whose an Escape is. bits-ui hands it to the last layer opened that
+   * takes one, so the rehearsal, opened unseen just after the page loads,
+   * would take the first Escape from a popover the page opened before it (a
+   * surface a reload brought back open, The Work Outlives Its Surface Rule)
+   * and shut nothing anyone sees. While it rehearses it defers, and the
+   * Escape goes to what is really open; so does a press outside.
+   */
+  const escapeBehavior = $derived.by(() => {
+    if (rehearsing) {
+      return "defer-otherwise-ignore";
+    }
+    return shown === "jump" || lightbox.current ? "ignore" : "close";
+  });
 </script>
 
 <svelte:window
@@ -482,9 +500,8 @@
     frame={shown}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
-    escapeKeydownBehavior={shown === "jump" || lightbox.current
-      ? "ignore"
-      : "close"}
+    escapeKeydownBehavior={escapeBehavior}
+    interactOutsideBehavior={rehearsing ? "defer-otherwise-ignore" : "close"}
     folded={() => barGlass.instant}
     forceMount
     glass
@@ -532,11 +549,12 @@
       // tells of a press on one after its click has already done so. The
       // file floating beside Files is Files' own, and so is a picture it
       // opened (the lightbox's PhotoSwipe root, appended to the body, is no
-      // layer of bits-ui's).
+      // layer of bits-ui's). Add machine's window and its output stand over
+      // the machines while their installs' rows arrive in it: the list stays.
       if (
         event.target instanceof Element &&
         event.target.closest(
-          "[data-bar-group], [data-files-float], .cawco-pswp"
+          "[data-bar-group], [data-files-float], .cawco-pswp, [data-connect-window], [data-connect-output]"
         )
       ) {
         event.preventDefault();
@@ -574,7 +592,7 @@
         {#if one.card === "caw"}
           <CawPanel feed={liveFeed} onchoose={close} quiet={cawQuiet()} />
         {:else if one.card === "machines"}
-          <MachinesList onleave={close} />
+          <MachinesList />
         {:else if one.card === "files"}
           <FilesFace onclose={close} />
         {:else}

@@ -518,7 +518,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         var first: [TabAction] = []
         // A run, a Caw thread and an artifact's own tab are no harness session: no details, no continuing.
         if BoardRun.runId(of: id) == nil, !ThreadTabs.isThread(id), ArtifactTabs.artifactId(of: id) == nil {
-            first.append(TabAction(title: "Session details") { [weak self] in
+            first.append(TabAction(title: Words.Transcript.sessionDetails) { [weak self] in
                 guard let self else { return }
                 tabDetails.pin(id, tab: strip.tabView(id))
             })

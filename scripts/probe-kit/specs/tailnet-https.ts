@@ -25,11 +25,16 @@
  *    the https name as `dashboard` and `secureDashboard`. The dashboard
  *    answers over TLS on the tailnet address through the hub's relay, in a
  *    secure context with the name mapped there, its API and its socket
- *    included, while plain http on 127.0.0.1 still answers.
+ *    included, while plain http on 127.0.0.1 still answers. Plain http on
+ *    the tailnet address, by the address and by the name, answers the door's
+ *    308 to `https://<name>:<port>` with the path and query (hub
+ *    tailnet-door.ts). A new pair (a renewal) is served on new connections
+ *    while a socket opened on the old one stays open.
  * 6. A preview port (in-process listeners on the same stub): TLS on the
- *    tailnet address with `origin-agent-cluster: ?1`, plain http beside it;
- *    its address names its tailnet origin, which `previewRoute` gives a
- *    client that reached the hub over the tailnet and no other.
+ *    tailnet address with `origin-agent-cluster: ?1`, plain http beside it,
+ *    and plain http on the tailnet address the door's 308 as in 5; its
+ *    address names its tailnet origin, which `previewRoute` gives a client
+ *    that reached the hub over the tailnet and no other.
  *
  *   bun scripts/probe-kit/run.ts tailnet-https
  */
@@ -37,11 +42,14 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { join } from "node:path";
+import { connect } from "node:tls";
 import { chromium, type Page } from "playwright-core";
+import { tailnetWords } from "../../../packages/core/src/words/tailnet";
 import { leasePortRange, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { launchEnv } from "../browser-leftovers";
+import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
-const NAME = "probe-box.tail0000.ts.net";
+export const NAME = "probe-box.tail0000.ts.net";
 /** How long a state takes to be read: the hub reads Tailscale every 5 s while a step stands, else every 30 s. */
 const READ_MS = 45_000;
 /** An environment variable that names a proxy. */
@@ -102,6 +110,46 @@ cert)
 *) exit 2 ;;
 esac
 `;
+
+/**
+ * The stub on `fleet`'s PATH (`env`), its certificate for {@link NAME}
+ * written by `pairAt` (again for a renewal), its state set by `set`.
+ */
+export const tailnetStub = async (fleet: KitFleet) => {
+  const stub = join(fleet.sandbox, "tailscale-stub");
+  await mkdir(stub, { recursive: true });
+  const cert = join(stub, "cert.pem");
+  const key = join(stub, "key.pem");
+  const pairAt = () =>
+    Bun.$`openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout ${key} -out ${cert} -days 1 -subj /CN=${NAME} -addext subjectAltName=DNS:${NAME},IP:::1`.quiet();
+  await pairAt();
+  const stateFile = join(stub, "state");
+  const bin = join(stub, "tailscale");
+  await writeFile(bin, stubOf(stateFile, cert, key));
+  await chmod(bin, 0o755);
+  return {
+    bin,
+    env: { PATH: `${stub}:${fleet.env.PATH}` },
+    pairAt,
+    set: (state: StubState) => writeFile(stateFile, state),
+  };
+};
+
+/**
+ * Plain http to `port` on the tailnet address `[::1]`, named by `host` (the
+ * address itself when absent): its status and Location, never followed.
+ */
+export const plainAt = async (
+  port: number | string,
+  path: string,
+  host?: string
+) => {
+  const answer = await fetch(`http://[::1]:${port}${path}`, {
+    redirect: "manual",
+    ...(host ? { headers: { host } } : {}),
+  });
+  return `${answer.status} ${answer.headers.get("location")}`;
+};
 
 interface Read {
   command?: string;
@@ -325,18 +373,101 @@ const openNeeds = async (page: Page, view: Hand, base: string) => {
   await settle(page, 400);
 };
 
+/**
+ * 5, the door and a renewal on the dashboard's port (`dashboardPort`,
+ * served on {@link NAME}): plain http on the tailnet address answers the
+ * door's 308 to the name, the path and query kept, by the address and by
+ * the name, and nothing is served; then a new pair (`pairAt`) is served on
+ * new connections while a socket opened on the old one stays open (the new
+ * listener opens before the old one stops).
+ */
+const doorAndRenewal = async (
+  kit: Kit,
+  dashboardPort: string,
+  pairAt: () => Promise<unknown>
+) => {
+  const https = `https://${NAME}:${dashboardPort}`;
+  const byAddress = await plainAt(dashboardPort, "/session?from=ip");
+  const byName = await plainAt(
+    dashboardPort,
+    "/a/b?c=d&e",
+    `${NAME}:${dashboardPort}`
+  );
+  kit.check(
+    "5: plain http to the dashboard port on the tailnet address answers 308 to https://<name>:<port> with the path and query, by the address and by the name",
+    byAddress === `308 ${https}/session?from=ip` &&
+      byName === `308 ${https}/a/b?c=d&e`,
+    `by address: ${byAddress}; by name: ${byName}`
+  );
+
+  // The served certificate as a new connection meets it (fetch runs no
+  // checkServerIdentity under rejectUnauthorized: false, measured on 1.4.4).
+  const fingerprint = () =>
+    new Promise<string>((done) => {
+      const socket = connect(
+        {
+          host: "::1",
+          port: Number(dashboardPort),
+          servername: NAME,
+          rejectUnauthorized: false,
+        },
+        () => {
+          done(socket.getPeerCertificate().fingerprint256);
+          socket.end();
+        }
+      );
+      socket.on("error", (error) => done(`error ${error.message}`));
+    });
+  const oldPair = await fingerprint();
+  // At the address, whose origin the dashboard's /ws gate admits.
+  const held = new WebSocket(`wss://[::1]:${dashboardPort}/ws/dashboard`, {
+    headers: { origin: `https://[::1]:${dashboardPort}` },
+    tls: { rejectUnauthorized: false },
+  } as never);
+  const heldOpen = await new Promise<boolean>((done) => {
+    const timer = setTimeout(() => done(false), 15_000);
+    held.onmessage = () => {
+      clearTimeout(timer);
+      done(true);
+    };
+  });
+  let heldClosed = "";
+  held.onclose = (event) => {
+    heldClosed = `closed ${event.code}`;
+  };
+  await pairAt();
+  const renewed = await until(
+    "the renewed pair served",
+    fingerprint,
+    (now) => now !== oldPair,
+    READ_MS
+  );
+  kit.check(
+    "5: a renewal serves the new pair on a new connection while a socket opened on the old pair stays open",
+    heldOpen &&
+      renewed !== oldPair &&
+      held.readyState === WebSocket.OPEN &&
+      heldClosed === "",
+    `before ${oldPair.slice(0, 20)}…, after ${renewed.slice(0, 20)}…, held socket ${heldOpen ? "heard" : "silent"}, ${heldClosed || `readyState ${held.readyState}`}`
+  );
+  held.close();
+};
+
+/** 6, the door on preview port `port`: plain http on the tailnet address answers its 308 as in 5. */
+const previewDoor = async (kit: Kit, port: number) => {
+  const byAddress = await plainAt(port, "/x?y=1");
+  const byName = await plainAt(port, "/", `${NAME}:${port}`);
+  kit.check(
+    "6: plain http to the preview port on the tailnet address answers 308 to https://<name>:<port> with the path and query, by the address and by the name",
+    byAddress === `308 https://${NAME}:${port}/x?y=1` &&
+      byName === `308 https://${NAME}:${port}/`,
+    `by address: ${byAddress}; by name: ${byName}`
+  );
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
-  const stub = join(fleet.sandbox, "tailscale-stub");
-  await mkdir(stub, { recursive: true });
-  const cert = join(stub, "cert.pem");
-  const key = join(stub, "key.pem");
-  await Bun.$`openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout ${key} -out ${cert} -days 1 -subj /CN=${NAME} -addext subjectAltName=DNS:${NAME},IP:::1`.quiet();
-  const stateFile = join(stub, "state");
-  await writeFile(join(stub, "tailscale"), stubOf(stateFile, cert, key));
-  await chmod(join(stub, "tailscale"), 0o755);
-  const set = (state: StubState) => writeFile(stateFile, state);
-  const env = { PATH: `${stub}:${fleet.env.PATH}` };
+  const { bin, env, pairAt, set } = await tailnetStub(fleet);
   const read = async (): Promise<Read> =>
     (await fetch(`${fleet.base}/api/tailnet-https`)).json() as Promise<Read>;
   const health = async () =>
@@ -477,16 +608,14 @@ const run = async (kit: Kit) => {
   const [admin, operator] = asking.steps;
   kit.check(
     "3: Needs you says HTTPS on your tailnet, its line, then step 1 the DNS page's switches with its link, step 2 the command whole in its box",
-    asking.name === "HTTPS on your tailnet" &&
-      asking.want ===
-        "Every device on your tailnet opens CawCo over HTTPS once these are done. Each ticks by itself." &&
+    asking.name === tailnetWords.title &&
+      asking.want === tailnetWords.lead &&
       asking.meta.startsWith("Onboarding · Tailscale on ") &&
-      admin?.label === "Turn on MagicDNS, then HTTPS Certificates" &&
-      admin.note ===
-        "On Tailscale's DNS page. Tailscale lists your machine names in the public certificate log." &&
-      admin.link === "Open Tailscale's DNS page" &&
+      admin?.label === tailnetWords.stepMagicDns &&
+      admin.note === tailnetWords.adminNote &&
+      admin.link === tailnetWords.openDnsPage &&
       admin.href === "https://console.tailscale.com/admin/dns" &&
-      operator?.label === "Let CawCo take Tailscale's certificate" &&
+      operator?.label === tailnetWords.stepOperator &&
       operator.note.startsWith("Run it once in a terminal on ") &&
       operator.command === COMMAND &&
       asking.buttons === 0,
@@ -542,13 +671,13 @@ const run = async (kit: Kit) => {
   kit.check(
     "4: the operator's step ticks by itself: its tick and label, no command; the admin step stands with its link",
     ticking.steps[1]?.ticked === true &&
-      ticking.steps[1].label === "Let CawCo take Tailscale's certificate" &&
+      ticking.steps[1].label === tailnetWords.stepOperator &&
       ticking.steps[1].spoken ===
         "Done: Let CawCo take Tailscale's certificate" &&
       ticking.steps[1].command === null &&
       ticking.steps[1].note === "" &&
       ticking.steps[0]?.done === false &&
-      ticking.steps[0].link === "Open Tailscale's DNS page",
+      ticking.steps[0].link === tailnetWords.openDnsPage,
     JSON.stringify(ticking)
   );
 
@@ -563,9 +692,9 @@ const run = async (kit: Kit) => {
     JSON.stringify(off)
   );
   const httpsOff = await until(
-    "Turn on HTTPS Certificates",
+    tailnetWords.stepHttps,
     async () => (await readRow(page)) ?? undefined,
-    (row) => row.steps[0]?.label === "Turn on HTTPS Certificates",
+    (row) => row.steps[0]?.label === tailnetWords.stepHttps,
     30_000
   );
   kit.check(
@@ -591,7 +720,7 @@ const run = async (kit: Kit) => {
   kit.check(
     "4: the admin step ticks by itself, and the command stands whole",
     httpsOn.steps[0]?.ticked === true &&
-      httpsOn.steps[0].label === "Turn on HTTPS Certificates" &&
+      httpsOn.steps[0].label === tailnetWords.stepHttps &&
       httpsOn.steps[0].link === null &&
       httpsOn.steps[1]?.command === COMMAND,
     JSON.stringify(httpsOn)
@@ -623,7 +752,7 @@ const run = async (kit: Kit) => {
     ticked.want ===
       `HTTPS is on. Every device on your tailnet opens CawCo at ${https}.` &&
       ticked.steps.length === 0 &&
-      ticked.button === "Open the HTTPS dashboard" &&
+      ticked.button === tailnetWords.openDashboard &&
       ticked.href === https,
     JSON.stringify(ticked)
   );
@@ -665,16 +794,20 @@ const run = async (kit: Kit) => {
     socket
   );
 
+  await doorAndRenewal(kit, dashboardPort, pairAt);
+
   // The dashboard on its name, as a device on the tailnet opens it: the name
   // mapped to the tailnet address, with none of a workspace's proxy
   // variables, which Chromium takes over its own flags and whose proxy can't
   // reach the name (measured: 407, ERR_TUNNEL_CONNECTION_FAILED).
   const browser = await chromium.launch({
     headless: true,
-    env: Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] =>
-          !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
+    env: launchEnv(
+      Object.fromEntries(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] =>
+            !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
+        )
       )
     ),
     args: ["--no-sandbox", `--host-resolver-rules=MAP ${NAME} [::1]`],
@@ -711,7 +844,7 @@ const run = async (kit: Kit) => {
   const { makeLifetime } = await import("../../../packages/hub/src/lifetime");
   const lifetime = makeLifetime();
   const tailnet = createTailnetHttps({
-    bin: join(stub, "tailscale"),
+    bin,
     dashboardPort: 1,
     lifetime,
   });
@@ -740,11 +873,13 @@ const run = async (kit: Kit) => {
     {} as Parameters<typeof createPreviewListeners>[1],
     {
       settings: () => ({ mode: "port", pattern: null }),
+      // The session the leg opens is held: it keeps a port (preview.ts `portFor`).
+      ownerHeld: () => true,
       ports: () => [],
-      keepPort: () => undefined,
+      keepPort: () => true,
       dropPort: () => undefined,
       setSettings: () => undefined,
-    } as unknown as Parameters<typeof createPreviewListeners>[2],
+    } satisfies Parameters<typeof createPreviewListeners>[2],
     // Port mode alone here: no listener holds host mode's lock, so no pass is read.
     {} as Parameters<typeof createPreviewListeners>[3],
     tailnet
@@ -760,6 +895,7 @@ const run = async (kit: Kit) => {
         beside.headers.get("origin-agent-cluster") === "?1",
       `tls ${secured.status} ${secured.headers.get("origin-agent-cluster")}, plain ${beside.status}`
     );
+    await previewDoor(kit, address.port);
     const origin = `https://${NAME}:${address.port}`;
     const viaTailnet = previewRoute(address, {
       hostname: "[::1]",

@@ -19,7 +19,10 @@
  * `faces.css`, the house faces' rules (house-faces.ts), each face's woff2
  * pieces beside it as `face-<hash>.woff2`, linked by a program's page and
  * imported by an HTML page's `{{KIT_CSS}}`; `dials.js` and `dials.css`, DialKit with
- * the kit's dials.js, loaded only by a page that has Dials.
+ * the kit's dials.js, loaded only by a page that has Dials; `icon.png`, the
+ * plain CawCo icon the dashboard's tab wears (`tab-icon-working.png`), which
+ * every decision page names, so a page in a tab of its own asks the origin
+ * for no `/favicon.ico` it doesn't serve.
  */
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
@@ -40,6 +43,11 @@ const HOST_DIR = new URL(
 const HOST_CSS = join(HOST_DIR, "host.css");
 const KIT_DIR = new URL("../../hub/skills/decision-page/kit/", import.meta.url)
   .pathname;
+/** The plain CawCo icon, the dashboard's tab's while sessions work: a decision page's icon. */
+const ICON = new URL(
+  "../../../apps/dashboard/src/lib/assets/brand/tab-icon-working.png",
+  import.meta.url
+).pathname;
 /** Where the page loads the bundle's chunks and files from, on any preview origin. */
 const PUBLIC_PATH = "/__cawco/decision/";
 
@@ -321,20 +329,25 @@ async function faceFiles(): Promise<Map<string, Blob>> {
   ]);
 }
 
-/** The host's files for a release build: the bundle's outputs (`outdir`), the faces and DialKit's. */
+/** The page's icon, `icon.png`. */
+const iconFiles = async (): Promise<Map<string, Blob>> =>
+  new Map([["icon.png", new Blob([await readFile(ICON)])]]);
+
+/** The host's files for a release build: the bundle's outputs (`outdir`), the faces, the icon and DialKit's. */
 export async function decisionHostAssets(
   outdir: string,
   filesUnder: (dir: string, prefix: string) => Promise<[string, string][]>
 ): Promise<[string, string][]> {
   await rm(outdir, { recursive: true, force: true });
   await mkdir(outdir, { recursive: true });
-  const [files, dials, faces] = await Promise.all([
+  const [files, dials, faces, icon] = await Promise.all([
     buildDecisionHost(),
     dialFiles(),
     faceFiles(),
+    iconFiles(),
   ]);
   await Promise.all([
-    ...[...files, ...faces].map(([name, file]) =>
+    ...[...files, ...faces, ...icon].map(([name, file]) =>
       Bun.write(join(outdir, name), file)
     ),
     ...[...dials].map(([name, text]) => Bun.write(join(outdir, name), text)),
@@ -348,12 +361,18 @@ let built: Promise<Map<string, Blob>> | undefined;
 
 /** The host's files and DialKit's by name, built once per process; a failure clears the slot so the next request retries. */
 const bundle = (): Promise<Map<string, Blob>> => {
-  built ??= Promise.all([buildDecisionHost(), dialFiles(), faceFiles()])
+  built ??= Promise.all([
+    buildDecisionHost(),
+    dialFiles(),
+    faceFiles(),
+    iconFiles(),
+  ])
     .then(
-      ([files, dials, faces]) =>
+      ([files, dials, faces, icon]) =>
         new Map<string, Blob>([
           ...files,
           ...faces,
+          ...icon,
           ...[...dials].map(
             ([name, text]) => [name, new Blob([text])] as const
           ),
@@ -369,6 +388,7 @@ const bundle = (): Promise<Map<string, Blob>> => {
 const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
   js: "text/javascript; charset=utf-8",
+  png: "image/png",
   webp: "image/webp",
   woff2: "font/woff2",
 };

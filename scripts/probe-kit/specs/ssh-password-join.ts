@@ -40,7 +40,7 @@
  * (l) On a real OpenSSH sshd, Stop ends the command on the machine too
  *     (sshd signals none started without a terminal), and an add that runs
  *     to its end leaves no watchdog behind.
- * (k) The dialog's password field, masked, with its show/hide toggle.
+ * (k) Add machine's password field, masked, with its show/hide toggle.
  * (f) The password is in no job's lines, the hub's log or its database.
  *
  * (b) and (h) are timed: a wrong password ends the add, it never spins.
@@ -61,6 +61,7 @@ import { dirname, join } from "node:path";
 import type { AuthContext } from "ssh2";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { listedPid, signal } from "../../../packages/core/src/signal";
+import { connectWords } from "../../../packages/core/src/words/connect";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import {
@@ -192,8 +193,6 @@ const modesOf = (dir: string, file: string): string =>
   existsSync(file)
     ? `${statSync(dir).mode.toString(8).slice(-3)} ${statSync(file).mode.toString(8).slice(-3)}`
     : "none";
-
-const OVER_SSH = /Over SSH/;
 
 /** The step an add fails on when ssh ended before the machine ran anything (hub join.ts `SIGN_IN_STEP`). */
 const SIGN_IN = "signing in over SSH";
@@ -353,17 +352,36 @@ async function realSshd(
   }
 }
 
-/** (k) The dialog's password field: masked, and its toggle flips it. */
+/** (k) Add machine's password field (connect/PasswordField): masked, and its toggle flips it. */
 async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
   const page = await kit.page("desk");
-  await open(page, `${await fleet.dashboard()}/`, "button[aria-haspopup]");
-  await page.getByRole("button", { name: OVER_SSH }).first().click();
-  await page.waitForSelector("#join-password");
+  // Add machine's window on Reach, over SSH, signing in with a password once.
+  await fetch(`${fleet.base}/api/installs/draft`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      stamp: { page: "probe-kit", seq: 1 },
+      draft: {
+        route: "ssh",
+        target: "",
+        port: "",
+        signIn: "password",
+        address: null,
+      },
+    }),
+  });
+  await open(
+    page,
+    `${await fleet.dashboard()}/?install=new`,
+    "[data-connect-window]"
+  );
+  await page.waitForSelector("#connect-password");
   const fieldNow = () =>
     page.evaluate(() => {
-      const input = document.querySelector<HTMLInputElement>("#join-password");
+      const input =
+        document.querySelector<HTMLInputElement>("#connect-password");
       const toggle = document.querySelector<HTMLButtonElement>(
-        'button[aria-controls="join-password"]'
+        'button[aria-controls="connect-password"]'
       );
       return {
         type: input?.type,
@@ -378,9 +396,9 @@ async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
       };
     });
   const masked = await fieldNow();
-  await page.getByRole("button", { name: "Show password" }).click();
+  await page.getByRole("button", { name: connectWords.showPassword }).click();
   const shown = await fieldNow();
-  await page.getByRole("button", { name: "Hide password" }).click();
+  await page.getByRole("button", { name: connectWords.hidePassword }).click();
   const maskedAgain = await fieldNow();
   kit.check(
     "k: the password field is masked with its attributes, and its toggle inside it flips type, name and aria-pressed",
@@ -388,11 +406,11 @@ async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
       masked.autocomplete === "current-password" &&
       masked.spellcheck === "false" &&
       masked.autocapitalize === "off" &&
-      masked.name === "Show password" &&
+      masked.name === connectWords.showPassword &&
       masked.pressed === "false" &&
       masked.inside &&
       shown.type === "text" &&
-      shown.name === "Hide password" &&
+      shown.name === connectWords.hidePassword &&
       shown.pressed === "true" &&
       maskedAgain.type === "password" &&
       maskedAgain.pressed === "false",

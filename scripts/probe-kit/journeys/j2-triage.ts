@@ -14,6 +14,7 @@
  */
 import { existsSync } from "node:fs";
 import type { Seen } from "../../scratch-fleet";
+import { caw, cawSays, ZERO } from "../caw-head";
 import {
   answerThroughHub,
   asking,
@@ -26,7 +27,7 @@ import {
   resumed,
   sessionAsking,
 } from "./asks";
-import { askCard, caw, cawSays, ONE_NEEDS, ZERO } from "./j1-check-in";
+import { askCard, ONE_NEEDS } from "./j1-check-in";
 import {
   eventually,
   expect,

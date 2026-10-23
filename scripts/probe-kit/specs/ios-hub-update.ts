@@ -32,6 +32,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { UPDATE_TRIAL_MS } from "../../../packages/core/src/binary-updates";
+import { connectionWords } from "../../../packages/core/src/words/connection";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply } from "../../scratch-fleet";
@@ -47,9 +48,9 @@ const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** StatusLineView's DEBUG line: its words, then its action when it shows one. */
 const STATUS = /status line: (.*)\|(.*)$/;
 const UPDATING = new RegExp(
-  `^CawCo is updating to ${VERSION.replaceAll(".", "\\.")}\\b — the hub is back within \\d+(s| min)\\.$`
+  `^CawCo is updating to ${VERSION.replaceAll(".", "\\.")}\\b\\.$`
 );
-const UPDATED = `CawCo updated to ${VERSION}.`;
+const UPDATED = connectionWords.updated(VERSION);
 const AWAY = /unreachable|retrying|reconnect/i;
 /** The home's DEBUG line as the status line's row is taken away. */
 const GONE = "home status line gone";
@@ -283,7 +284,8 @@ async function backLate({ announce, fleet, heard, kit, read }: Round) {
   );
   const outFrom = heard.length;
   const outAt = () =>
-    said(outFrom).find((l) => l.words.startsWith("Hub unreachable"))?.at;
+    said(outFrom).find((l) => l.words.startsWith(connectionWords.unreachable))
+      ?.at;
   await within(() => outAt() !== undefined, 15_000);
   const out = outAt();
   kit.check(
@@ -302,7 +304,10 @@ async function backLate({ announce, fleet, heard, kit, read }: Round) {
   const late = said(lateFrom);
   kit.check(
     "back past its deadline: the app reads the hub, and says no update",
-    lateRead && !late.some((l) => l.words.startsWith("CawCo updated")),
+    lateRead &&
+      !late.some((l) =>
+        l.words.startsWith(connectionWords.updated("").slice(0, -1))
+      ),
     `${lateRead ? "read" : "not read"}: ${show(late)}`
   );
 }

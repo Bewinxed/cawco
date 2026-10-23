@@ -9,6 +9,7 @@ import {
   type AccountOverage,
   type AccountProvider,
   type AccountReading,
+  type AccountSetupStep,
   type AccountSignin,
   defaultRouting,
   type HomeStore,
@@ -41,7 +42,7 @@ export type AccountPatch = Partial<
   Pick<
     Account,
     "atPlanLimit" | "hue" | "label" | "neverBackup" | "order" | "reservePct"
-  >
+  > & { setupStep: AccountSetupStep | null }
 >;
 
 export type AccountHistoryRow = typeof usageLimitHistory.$inferSelect;
@@ -89,6 +90,8 @@ export interface AccountsDb {
     kind: AccountKind;
     label?: string | null;
     provider: AccountProvider;
+    /** Made by a setup still under way: the step it stands at. */
+    setupStep?: AccountSetupStep;
   }) => Account;
   readonly get: (id: string) => Account | undefined;
   readonly history: (q: {
@@ -195,6 +198,7 @@ const toAccount = (row: AccountRow): Account => ({
           organization: row.organization ?? "",
           orgId: row.orgId,
         },
+  ...(row.setupStep ? { setupStep: row.setupStep } : {}),
   createdAt: row.createdAt.getTime(),
 });
 
@@ -350,7 +354,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         })
         .run();
     },
-    create: ({ provider, kind, label, hue, identity }) => {
+    create: ({ provider, kind, label, hue, identity, setupStep }) => {
       const taken = list().map((account) => account.hue);
       const order =
         (db
@@ -375,6 +379,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           email: identity?.email ?? null,
           organization: identity?.organization ?? null,
           orgId: identity?.orgId || null,
+          setupStep: setupStep ?? null,
         })
         .returning()
         .get();

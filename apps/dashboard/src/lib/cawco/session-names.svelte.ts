@@ -19,6 +19,7 @@
  */
 import type { FindConversation, FindThread } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
+import { browser } from "$app/env";
 import { cawco } from "./client.svelte";
 import { findNames } from "./find/find-client";
 import { age, rowOf } from "./find/find-rows";
@@ -115,10 +116,13 @@ function namedBy(
 /**
  * Asks the hub's names what `name` names, once. An answer is kept, naming
  * a session or nothing; an unreached hub is asked again the next time the
- * name is drawn.
+ * name is drawn. The browser asks: its `/api/find` is its own origin's,
+ * however the dashboard is served. The server's render holds no fleet and
+ * no origin to ask from, and these answers are this tab's, never shared
+ * across requests; it draws the words, and hydration asks.
  */
 function ask(name: string): void {
-  if (asking.has(name)) {
+  if (!browser || asking.has(name)) {
     return;
   }
   asking.add(name);
@@ -142,7 +146,8 @@ function ask(name: string): void {
       resolved.set(name, hit ? drawnId(hit) : null);
     })
     .catch((error: unknown) => {
-      console.error(`[cawco] naming ${name} failed:`, error);
+      const why = error instanceof Error ? error.message : String(error);
+      console.error(`[cawco] naming ${name} failed: ${why}`);
     })
     .finally(() => {
       asking.delete(name);

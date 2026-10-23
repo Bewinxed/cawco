@@ -8,14 +8,14 @@
    * panel with the tray row and what stands on it, or the grown ask when it
    * reaches higher; `perch`, how far Caw perched on the pill rises over its
    * top (0 with no perch, or while an ask has it stepped aside); `parked`,
-   * what stands higher than the panel and its tray row (0 with nothing);
-   * `shelf`, the delegate tray's shelf open between its row and the panel
-   * (0 shut), which the transcript makes room for and a pinned tail follows.
+   * what stands higher than the panel and its tray row (0 with nothing).
+   * What floats out of the composer (the tray's shelf and panel, the `/`
+   * and `@` menu, the recall wheel) is in none of them: a layer over the
+   * transcript's foot, never a size the transcript is told.
    */
   export interface ComposerFoot {
     parked: number;
     perch: number;
-    shelf: number;
     stack: number;
   }
 
@@ -52,7 +52,12 @@
 </script>
 
 <script lang="ts">
-  import { type AvailableCommand, questionsOf } from "@cawco/core";
+  import {
+    type AvailableCommand,
+    commonWords,
+    questionsOf,
+    transcriptWords,
+  } from "@cawco/core";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
    * and send controls. A parked permission or question is the composer
@@ -77,7 +82,7 @@
   import { flushSync, type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import {
     CURVE,
@@ -86,9 +91,9 @@
     easeDrawer,
     easeOut,
     motionOk,
-    popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { popIn, popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
   import { Button, sendVariants } from "#lib/components/ui/button/index.js";
@@ -102,7 +107,12 @@
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { IconChevronUp, IconSend, IconStop } from "#lib/icons.js";
+  import {
+    IconChevronUp,
+    IconRefresh,
+    IconSend,
+    IconStop,
+  } from "#lib/icons.js";
   import { handBack, stages } from "../canvas/stage.svelte";
   import {
     cawco,
@@ -116,6 +126,14 @@
   import MentionField from "../find/MentionField.svelte";
   import { readAs } from "../find/mention.svelte";
   import { mcpSignInIntent, signInToMcp } from "../fleet";
+  import HarnessBlock from "../HarnessBlock.svelte";
+  import {
+    forgetRelaunch,
+    harnessBlockOf,
+    relaunchRefusalOf,
+    relaunchUnblocked,
+    retryRelaunch,
+  } from "../harness-block.svelte";
   import CawFace from "../home/CawFace.svelte";
   import { hubSeam } from "../hub-seam";
   import { newId } from "../id";
@@ -164,6 +182,7 @@
     sending = false,
     sendError = "",
     sendAgain = false,
+    faultAgain,
     held = false,
     paneVisible = true,
     commands = [],
@@ -215,6 +234,12 @@
      * field: the error line offers Send again, which sends them as Enter does.
      */
     sendAgain?: boolean;
+    /**
+     * What `sendError` says is a command of the session that failed (a
+     * stop, a model change, an answer): the error line offers Try again,
+     * which asks for it again.
+     */
+    faultAgain?: () => unknown;
     /**
      * A swipe is carrying the conversations under this composer. The action
      * button waits until one has landed, so nothing is sent to a chat that
@@ -354,7 +379,6 @@
       stack: standing,
       perch: perch && !askRaised ? perchHeight : 0,
       parked: standing - panel - lift,
-      shelf: showing ? (shelves[showing] ?? 0) : 0,
     });
   });
   /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
@@ -387,8 +411,14 @@
    * measured, not the viewport: a narrow pane on a wide screen is narrow.
    */
   let hint = $state(untrack(() => HINT_SHORT));
-  /** How far the perch stands above the pill: the parked cards stand clear of it, above. */
+  /**
+   * How far the perch stands above the pill: the parked cards stand clear of
+   * it, above. Read as it mounts, and a change in the next frame (frameSize).
+   */
   let perchHeight = $state(0);
+  const measurePerch = frameSize<HTMLElement>((node) => {
+    perchHeight = node.clientHeight;
+  });
   const fitHint = (node: HTMLElement) => {
     const probe = document.createElement("span");
     probe.setAttribute("aria-hidden", "true");
@@ -542,29 +572,6 @@
       duration: dur("--dur-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
-    };
-  }
-
-  /**
-   * The `/` and `@` menu leaves the way the kit's surfaces leave
-   * (`floatingSurface` closed, here `data-side="top"`): back
-   * down toward the field it stands on, shrinking to the pop scale as it
-   * fades, over --dur-exit. It comes in by the kit's own `@starting-style`.
-   */
-  function menuOut(node: HTMLElement): TransitionConfig {
-    const duration = dur("--dur-exit");
-    if (!motionOk.current) {
-      return { duration, css: (t) => `opacity: ${t}` };
-    }
-    const scale = popScale();
-    const lift = Number.parseFloat(
-      getComputedStyle(node).getPropertyValue("--pop-rise")
-    );
-    return {
-      duration,
-      easing: easeDrawer,
-      css: (t) =>
-        `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: 0 ${((1 - t) * lift).toFixed(2)}px`,
     };
   }
 
@@ -1229,6 +1236,57 @@
     const next = (at + by + entries.length) % entries.length;
     highlight = entries[next].id;
   }
+
+  /** This session's row, while its start failed. */
+  const failedRow = $derived.by(() => {
+    const row = recallOf ? cawco.instanceIndex.byId.get(recallOf) : undefined;
+    return row?.status === "error" && row.harness !== null ? row : undefined;
+  });
+  /**
+   * This session's start was refused for its machine's harness CLI
+   * (harness-block.svelte.ts): the refusal stands over the field with its
+   * fix (Update Claude Code, Update pi, Install OpenCode 2.0.29), and once
+   * that lands the session starts again with nothing more to press
+   * (`relaunchUnblocked`).
+   */
+  const harnessStart = $derived.by(() => {
+    const row = failedRow;
+    if (!row?.harness) {
+      return null;
+    }
+    const machine = cawco.machines.find(
+      (one) => one.machineId === row.machineId
+    );
+    const block = machine ? harnessBlockOf(machine, row.harness) : null;
+    return machine && block ? { machine, block } : null;
+  });
+  /** A start again after its harness was brought up that was refused: said here, with Retry. */
+  const relaunchRefused = $derived(
+    recallOf && failedRow ? relaunchRefusalOf(recallOf) : undefined
+  );
+  let retrying = $state(false);
+  async function retryStart(): Promise<void> {
+    if (!recallOf || retrying) {
+      return;
+    }
+    retrying = true;
+    try {
+      await retryRelaunch(recallOf);
+    } finally {
+      retrying = false;
+    }
+  }
+  // Any session this tab saw refused whose machine's harness now runs goes
+  // again, whichever composer is on screen.
+  $effect(() => {
+    relaunchUnblocked(cawco.machines);
+  });
+  // A session that went on some other way has no refusal left to say.
+  $effect(() => {
+    if (recallOf && !failedRow) {
+      forgetRelaunch(recallOf);
+    }
+  });
 
   let sendBlock = $state("");
   const sendNotice = $derived(
@@ -2978,11 +3036,22 @@
   /**
    * The panel's own height, the delegate tray's standing on it, and the
    * prompt stack's standing on that (what the desk's toasts rise above).
+   * Each of these sizes is read as its box mounts, and a change in the next
+   * frame (frameSize).
    */
   let panel = $state(0);
+  const measurePanel = frameSize<HTMLElement>((node) => {
+    panel = node.clientHeight;
+  });
   let lift = $state(0);
+  const measureLift = frameSize<HTMLElement>((node) => {
+    lift = node.clientHeight;
+  });
   /** The plan's ring's width: the delegate tray's row keeps clear of it. */
   let ringWidth = $state(0);
+  const measureRing = frameSize<HTMLElement>((node) => {
+    ringWidth = node.clientWidth;
+  });
   /**
    * Each conversation's offer as it is laid out, by id, kept as it stands
    * whether shown or not: handed the next conversation, the stack is the
@@ -2990,13 +3059,15 @@
    * column to say so.
    */
   const offerHeights: Record<string, number> = $state({});
+  const measureOffer = (id: string) =>
+    frameSize<HTMLElement>((node) => {
+      offerHeights[id] = node.clientHeight;
+    });
   const stack = $derived(offerHeights[showing] ?? 0);
 
   /** The rows with an offer to stand on the tray row, and those with a tray. */
   const offered = $derived(trayRows.filter((row) => row.prompts));
   const trayed = $derived(trayRows.filter((row) => row.delegatesOf));
-  /** Each row's tray shelf as drawn, px (0 shut): the one shown is the foot's `shelf`. */
-  const shelves: Record<string, number> = $state({});
   /** The box the offers stand in: a `reflow` container. */
   let offers = $state<HTMLElement>();
   /*
@@ -3105,7 +3176,7 @@
           <div
             data-composer-away={row.id !== showing || undefined}
             class="absolute inset-x-0 bottom-0 pointer-events-auto has-[>*]:pb-space-3 data-composer-away:invisible"
-            bind:clientHeight={offerHeights[row.id]}
+            {@attach measureOffer(row.id)}
           >
             {@render row.prompts?.()}
           </div>
@@ -3123,8 +3194,7 @@
     data-slot="lift"
     class="relative flex-none w-c-composer-w pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     inert={askRaised}
-    bind:clientHeight={lift}
-    style:--shelf-rise={shelves[showing] ? `${shelves[showing]}px` : null}
+    {@attach measureLift}
   >
     {#if minimized && ask && askQuestions}
       <!-- The minimized question, in the tray row's place: Caw's needs-you
@@ -3192,14 +3262,16 @@
     {#if planRing}
       <!-- The plan's chip, at the tray row's trailing end, standing on the
            tray's line: the step off the panel the delegate chips stand on.
-           On the tray's line: risen by the tray's shelf while it is open. -->
+           The slot spans the row, so the plan the chip opens (PlanPane)
+           stands over the row across the composer's width; only the chip
+           takes the pointer, and only the chip is measured. -->
       <div
         data-slot="progress-slot"
-        class="absolute bottom-(--progress-foot) end-0 z-1 flex items-end h-c-tray-row pb-c-tray-gap pointer-events-auto transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
-        bind:clientWidth={ringWidth}
-        style:--progress-foot="var(--shelf-rise, 0px)"
+        class="absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-c-tray-row pb-c-tray-gap pointer-events-none transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
       >
-        {@render planRing()}
+        <div class="flex pointer-events-auto" {@attach measureRing}>
+          {@render planRing()}
+        </div>
       </div>
     {/if}
     {#if trayed.length > 0}
@@ -3209,9 +3281,8 @@
            render, chips or none (app.css `--c-tray-row`, which every
            transcript keeps clear), with the tray standing on its foot: a chip
            arriving late fills room already there, and the suggestion row
-           standing on the slot never moves. The row, and the tray's shelf
-           under it while it is open: the dock grows up by the shelf, and the
-           transcript keeps the room. -->
+           standing on the slot never moves. The tray's shelf and panel
+           float over it, in none of its flow. -->
       <div
         data-slot="tray-slot"
         class="relative grid grid-cols-1 items-box-end min-h-c-tray-row transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
@@ -3230,13 +3301,7 @@
             data-composer-away={row.id !== showing || undefined}
             class="row-start-1 col-start-1 transition-exit-show data-composer-away:opacity-0 data-composer-away:invisible data-composer-away:transition-exit-hide"
           >
-            <DelegateTray
-              {held}
-              onshelf={(px) => {
-                shelves[row.id] = px;
-              }}
-              parentId={row.delegatesOf}
-            />
+            <DelegateTray {held} parentId={row.delegatesOf} />
           </div>
         {/each}
       </div>
@@ -3248,7 +3313,7 @@
     data-slot="composer"
     class="relative flex-none w-c-composer-w flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     bind:this={column}
-    bind:clientHeight={panel}
+    {@attach measurePanel}
     in:rise
     out:fade
   >
@@ -3279,7 +3344,39 @@
          back stands on the line that says what failed, after its words.
          While the canvas stands, it stands in the grown shape over the
          field, above its surface. -->
-    {#if sendNotice}
+    {#if harnessStart && recallOf}
+      <div
+        data-slot="start-block"
+        class="pointer-events-auto px-space-3 group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        transition:unfold
+      >
+        <HarnessBlock
+          block={harnessStart.block}
+          machineId={harnessStart.machine.machineId}
+          online={harnessStart.machine.status === "online"}
+          relaunch={recallOf}
+        />
+      </div>
+    {:else if relaunchRefused}
+      <!-- Its harness was brought up, and its start again was refused: the
+           machine's words, and the way on. -->
+      <div
+        data-slot="relaunch-error"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail-ink text-size-meta font-normal wrap-anywhere group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        role="alert"
+        transition:unfold
+      >
+        <p class="min-w-0">{relaunchRefused}</p>
+        <Button
+          label="Retry"
+          onclick={retryStart}
+          pending={retrying}
+          pendingLabel="Starting…"
+          size="sm"
+          variant="ghost"
+        />
+      </div>
+    {:else if sendNotice}
       <div
         data-slot="send-error"
         class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail-ink text-size-meta font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
@@ -3292,8 +3389,17 @@
             disabled={pending}
             onclick={() => submit()}
             size="sm"
-            variant="ghost">Send again</Button
+            variant="ghost">{commonWords.sendAgain}</Button
           >
+        {:else if faultAgain && sendError === sendNotice}
+          <Button
+            data-fault-again
+            icon={IconRefresh}
+            label={commonWords.tryAgain}
+            onclick={faultAgain}
+            size="sm"
+            variant="ghost"
+          />
         {/if}
       </div>
     {:else if signInNote}
@@ -3472,7 +3578,7 @@
             data-slot="perch"
             aria-hidden="true"
             class="absolute bottom-full start-space-3 pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide"
-            bind:clientHeight={perchHeight}
+            {@attach measurePerch}
           >
             {@render perch()}
           </div>
@@ -3497,15 +3603,16 @@
           <div
             data-slot="menu"
             class={floatingSurface({
+              motion: "hang",
               class:
                 "absolute inset-x-0 bottom-(--menu-foot) max-h-c-composer-menu-max-h overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-c-composer-menu-max-h [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-border-hairline [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-c-btn-h-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:text-ink-strong coarse:[&_[data-slot=command-item]]:min-h-c-row-h",
             })}
             data-side="top"
-            data-state="open"
             id="composer-menu"
             onmousedown={(event) => event.preventDefault()}
             role="presentation"
-            out:menuOut
+            in:popIn={{ side: "top" }}
+            out:popOut={{ side: "top" }}
             style:--menu-foot="calc(100% + var(--space-2))"
           >
             <Command.Root loop shouldFilter={false} bind:value={highlight}>
@@ -3753,7 +3860,8 @@
             data-slot="stop"
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
-            aria-label={action ?? (stops ? "Stop the agent" : "Send message")}
+            aria-label={action ??
+              (stops ? "Stop the agent" : transcriptWords.sendMessage)}
             class={sendVariants({ class: "group/stop select-none touch-hit" })}
             title={action}
             disabled={!(

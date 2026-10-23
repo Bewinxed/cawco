@@ -23,17 +23,26 @@ import {
   type SessionPlan,
 } from "@cawco/core";
 import { z } from "zod";
-import { tool } from "./admin-tools";
 import { BUILD_TITLE } from "./design-offers";
 import type { AttemptStart } from "./dispatch";
+import { tool } from "./mcp-tool";
 import type { WrittenStep } from "./plans";
+import {
+  attemptStartWords,
+  type LinkScope,
+  taskArchivedWords,
+  taskChangedWords,
+  taskCommentedWords,
+  taskCreatedWords,
+  taskReadWords,
+  taskResultWords,
+  todoWrittenWords,
+} from "./presenters/tasks";
 import { appleSuggestion } from "./runs-on";
 import { EDGES, normaliseTaskRef } from "./task-file";
 import {
-  type StagesView,
   sessionActor,
   type TaskActor,
-  type TaskList,
   type Tasks,
   type TaskView,
 } from "./tasks";
@@ -54,6 +63,8 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
 
 export interface TaskToolContext {
   actor: InstanceRow;
+  /** The whole id of the artifact the actor names by its name, handle or id (artifacts/service.ts `named`). */
+  artifactNamed?: (asked: string) => string;
   /**
    * Files "Build the design system" in the hub's words (design-offers.ts
    * `fileBuild`): a `task_create` with that title gives only its stage.
@@ -98,86 +109,21 @@ export interface TaskToolContext {
   ) => Promise<SessionPlan & { personChanged?: string }>;
 }
 
-const ok = (data: unknown) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(data) }],
-});
-
-/** A stage as a model reads it: `draft (active, runs writer)`. */
-const stageLine = ({ name, kind, hooks }: StagesView["stages"][number]) => {
-  const said = [
-    kind,
-    ...(hooks.runs ? [`runs ${hooks.runs}`] : []),
-    ...(hooks.until ? [`until ${hooks.until}`] : []),
-    ...(hooks.after ? [`after ${hooks.after}`] : []),
-    ...(hooks.by ? [`only ${hooks.by} moves a task in`] : []),
-  ];
-  return `${name} (${said.join(", ")})`;
-};
-
-type TaskLine = TaskList["tasks"][number];
-
-/** What a task's attempts and edges add to its line: only what is so. */
-const attemptFields = (task: TaskLine) => ({
-  ...(task.liveAttempt ? { attempt: "live" } : {}),
-  ...(task.lastAttemptFailed ? { attempt: "failed" } : {}),
-  ...(task.lastAttemptStopped ? { attempt: "stopped" } : {}),
-  ...(task.lastAttemptFailed || task.lastAttemptStopped
-    ? { attemptEnded: task.attempts[0]?.endedHow }
-    : {}),
-  ...(task.blockedBy.length > 0 ? { blockedBy: task.blockedBy } : {}),
-  ...(task.startProblem ? { startProblem: task.startProblem } : {}),
-});
-
-/** One task as a model reads it in a list: its fields that are set. */
-const taskLine = (task: TaskLine) => ({
-  id: task.id,
-  title: task.title,
-  stage: task.stage,
-  ...(task.needsYou ? { needsYou: true } : {}),
-  ...(task.type ? { type: task.type } : {}),
-  ...(task.after.length > 0 ? { after: task.after } : {}),
-  ...(task.parent ? { parent: task.parent } : {}),
-  ...(task.labels.length > 0 ? { labels: task.labels } : {}),
-  ...(task.todos.total > 0
-    ? { todos: `${task.todos.done}/${task.todos.total}` }
-    : {}),
-  ...attemptFields(task),
-  ...(task.duplicateOf ? { duplicateOf: task.duplicateOf } : {}),
-  ...(task.problem ? { problem: task.problem } : {}),
-  createdAt: task.createdAt,
-  ...(task.createdBy ? { createdBy: task.createdBy.name } : {}),
-  updatedAt: task.updatedAt,
-  ...(task.updatedBy ? { updatedBy: task.updatedBy.name } : {}),
-  ...(task.startedAt === null ? {} : { startedAt: task.startedAt }),
-  ...(task.completedAt === null ? {} : { completedAt: task.completedAt }),
-  ...(task.droppedAt === null ? {} : { droppedAt: task.droppedAt }),
-  ...(task.closeReason ? { closeReason: task.closeReason } : {}),
-  ...(task.archivedAt === null ? {} : { archivedAt: task.archivedAt }),
-  ...(Object.keys(task.fields).length > 0 ? { fields: task.fields } : {}),
-});
-
-/** A list as a model reads it: the project's stages, then one short line of fields per task. */
-const compact = (list: TaskList, stages: StagesView) => ({
-  stages: stages.stages.map(stageLine),
-  ...(list.stagesProblems.length > 0
-    ? { stagesProblems: list.stagesProblems }
-    : {}),
-  tasks: list.tasks.map(taskLine),
-  ...(list.problems.length > 0 ? { problems: list.problems } : {}),
-});
-
 /**
  * One artifact as `task_result` takes it, read as the kind it names: a file
  * or a post its `path`, a link its `url`, a page artifact its `artifactId`.
  */
-const resultArtifact = (written: {
-  kind: ResultArtifactKind;
-  path?: string;
-  url?: string;
-  artifactId?: string;
-  name?: string;
-  primary?: boolean;
-}): ResultArtifact => {
+const resultArtifact = (
+  written: {
+    kind: ResultArtifactKind;
+    path?: string;
+    url?: string;
+    artifactId?: string;
+    name?: string;
+    primary?: boolean;
+  },
+  artifactNamed: (asked: string) => string
+): ResultArtifact => {
   const shown = {
     ...(written.name ? { name: written.name } : {}),
     ...(written.primary ? { primary: true } : {}),
@@ -194,7 +140,7 @@ const resultArtifact = (written: {
     case "artifact":
       return {
         kind: "artifact",
-        artifactId: need(written.artifactId, "artifactId"),
+        artifactId: artifactNamed(need(written.artifactId, "artifactId")),
         ...shown,
       };
     case "file":
@@ -214,41 +160,31 @@ const landsParameter = () =>
   z
     .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
     .describe(
-      "Where passing work goes: main (the default branch), branch (cawco/<task> on origin), pr (that branch and a pull request), none (nothing pushed; outputs are the deliverable). Left out: the project's default."
+      "main, branch (cawco/<task>), pr (and a pull request) or none (outputs are the deliverable). Default: the project's."
     );
 const runsOnParameter = () =>
-  z
-    .string()
-    .trim()
-    .min(1)
-    .describe("Machine its attempts run on: apple, linux or a hostname.");
-const lines = (what: string) => z.array(z.string()).optional().describe(what);
+  z.string().trim().min(1).describe("apple, linux or a hostname.");
+const lines = (what?: string) =>
+  what === undefined
+    ? z.array(z.string()).optional()
+    : z.array(z.string()).optional().describe(what);
 /** The project's own fields a task file carries beyond its known ones: task_create's and task_update's one shape. */
 const fieldsParameter = () =>
   z
     .record(z.string(), z.union([z.string(), z.array(z.string())]))
     .optional()
-    .describe(
-      "The project's own fields, like {priority: 'high'}; '' or [] takes one out."
-    );
+    .describe("Like {priority: 'high'}; '' or [] takes one out.");
+
+/** An artifact named where no session can resolve it (discovery): as given. */
+const same = (asked: string): string => asked;
 
 /** A step as `todo_write` takes it: ACP's entry, its id and depth optional. */
 const stepParameter = () =>
   z.object({
-    content: z.string().trim().min(1).describe("One line."),
+    content: z.string().trim().min(1),
     status: z.enum(PLAN_STEP_STATUSES),
-    depth: z
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .describe("0 at the top; one more per level."),
-    id: z
-      .string()
-      .trim()
-      .min(1)
-      .optional()
-      .describe("Left out: its position (2, 2.1)."),
+    depth: z.number().int().min(0).optional(),
+    id: z.string().trim().min(1).optional(),
     priority: z.enum(PLAN_STEP_PRIORITIES).optional(),
     waitsOn: z
       .string()
@@ -256,18 +192,24 @@ const stepParameter = () =>
       .describe("Card it waits on: <artifact>#<card>; '' clears."),
   });
 
-/** A step's `waitsOn` as written: `<artifact id>#<card>`, or '' to clear it. */
-const waitOf = (written: string): PlanWait | null => {
+/** A step's `waitsOn` as written: `<artifact>#<card>`, the artifact by its name, handle or id; or '' to clear it. */
+const waitOf = (
+  written: string,
+  artifactNamed: (asked: string) => string
+): PlanWait | null => {
   if (written === "") {
     return null;
   }
   const at = written.indexOf("#");
   if (at <= 0 || at === written.length - 1) {
     throw new Error(
-      `waitsOn “${written}” names no card: write the page's artifact id, #, and the card's id.`
+      `waitsOn “${written}” names no card: write the page's name, #, and the card's id.`
     );
   }
-  return { artifactId: written.slice(0, at), card: written.slice(at + 1) };
+  return {
+    artifactId: artifactNamed(written.slice(0, at)),
+    card: written.slice(at + 1),
+  };
 };
 
 /**
@@ -275,7 +217,8 @@ const waitOf = (written: string): PlanWait | null => {
  * one before, and each without an id given its position (`2`, `2.1`).
  */
 const stepsOf = (
-  written: z.infer<ReturnType<typeof stepParameter>>[]
+  written: z.infer<ReturnType<typeof stepParameter>>[],
+  artifactNamed: (asked: string) => string
 ): WrittenStep[] => {
   const counts: number[] = [];
   return written.map((step, index) => {
@@ -293,7 +236,9 @@ const stepsOf = (
       status: step.status,
       depth,
       ...(step.priority ? { priority: step.priority } : {}),
-      ...(step.waitsOn === undefined ? {} : { waitsOn: waitOf(step.waitsOn) }),
+      ...(step.waitsOn === undefined
+        ? {}
+        : { waitsOn: waitOf(step.waitsOn, artifactNamed) }),
     };
   });
 };
@@ -302,26 +247,12 @@ const stepsOf = (
 export const budgetParameter = () =>
   z
     .object({
-      usd: z
-        .number()
-        .positive()
-        .optional()
-        .describe("Dollars, by the usage its machine reports."),
-      turns: z
-        .number()
-        .int()
-        .min(1)
-        .optional()
-        .describe("Turns its session may end."),
-      minutes: z
-        .number()
-        .int()
-        .min(1)
-        .optional()
-        .describe("Wall time from its start."),
+      usd: z.number().positive().optional(),
+      turns: z.number().int().min(1).optional(),
+      minutes: z.number().int().min(1).optional(),
     })
     .describe(
-      "Limits for the work: at one the hub stops the session, fails the item naming the budget, and tells the parent. Fields left out fall back to the task's, then the project's."
+      "At a limit the hub stops the work and fails it, naming the limit. Unset: the task's, then the project's."
     );
 
 /** Globs of the repository's files a work item owns: `delegate`'s and the task tools' one shape. */
@@ -329,7 +260,7 @@ export const ownsParameter = () =>
   z
     .array(z.string())
     .describe(
-      "Globs of the repository's files the work owns, from its root, like ['src/theme/**']. Two live items whose globs overlap in one repository never run at once: the later waits, queued. Overlap is judged on each glob's part before its first wildcard, so it errs towards waiting."
+      "Globs from the repository's root, like ['src/theme/**']: two live items whose globs overlap in one repository never run at once; the later waits."
     );
 
 /** A group of work items under one parent: `delegate`'s and the task tools' one shape. */
@@ -340,7 +271,7 @@ export const groupParameter = () =>
     .min(1)
     .max(64)
     .describe(
-      "Work that belongs together, like 'theme': items in one group under one parent report once, together, when all have ended (each one's summary and where it landed); a failure still reports at once."
+      "Items in one group under one parent report once, together, when all have ended; a failure reports at once."
     );
 
 /**
@@ -364,6 +295,12 @@ export function taskTools(context: TaskToolContext | undefined) {
       actor: sessionActor(context.actor),
     };
   };
+
+  /** The calling session's project and id: the links its answers carry (presenters/tasks.ts); none in discovery. */
+  const linkScope = (): LinkScope => ({
+    project: context?.actor.projectId ?? null,
+    session: context?.actor.id ?? null,
+  });
 
   /** The task todo_write or task_comment may change: the work item's own, or any one a mainline session names. */
   const ownTask = (
@@ -394,32 +331,30 @@ export function taskTools(context: TaskToolContext | undefined) {
   return [
     tool(
       "task_read",
-      "Your project's tasks. With `id`: its file parsed (to-dos by id td-3 or position 2.1, comments) and attempts; `history: true` adds its changes. Without: the stages and a line per task, filtered by the other parameters. needsYou: waits on the operator; blockedBy: tasks it waits for.",
+      "Your project's tasks: the stages and a line per task, filtered by the other parameters; with `id`, one task whole (`history` adds its changes).",
       {
         id: taskRef().optional(),
         history: z.boolean().optional(),
         stage: z.string().optional(),
-        q: z.string().optional().describe("In id, title or description."),
+        q: z.string().optional(),
         label: z.string().optional(),
         type: z.string().optional(),
         parent: z.string().optional(),
         fields: z.record(z.string(), z.string()).optional(),
         blocked: z.boolean().optional(),
         needsYou: z.boolean().optional(),
-        archived: z.boolean().optional().describe("Archived tasks instead."),
+        archived: z.boolean().optional(),
       },
       async ({ id, history, ...filter }) => {
         const { projectId, tasks } = scope();
         if (id) {
           const task = await tasks.get(projectId, id);
-          return ok(
-            history
-              ? {
-                  ...task,
-                  history: (await tasks.history(projectId, id)).events,
-                }
-              : task
-          );
+          return history
+            ? {
+                ...task,
+                history: (await tasks.history(projectId, id)).events,
+              }
+            : task;
         }
         if (history) {
           throw new Error(
@@ -430,50 +365,48 @@ export function taskTools(context: TaskToolContext | undefined) {
           tasks.list(projectId, filter),
           tasks.stages(projectId),
         ]);
-        return ok(compact(list, stages));
-      }
+        return { list, stages };
+      },
+      (said) => taskReadWords(said, linkScope())
     ),
     tool(
       "task_create",
-      "File a task: work that must outlive this conversation or run without you. Returns it with its id (tsk-12) and `duplicates` to act on. `stage` defaults to the first stage.",
+      "File a task: work that must outlive this conversation or run without you. Answers its id (tsk-12) and any duplicates to act on.",
       {
-        title: z.string().describe("One line, verb first."),
+        title: z.string().describe("Verb first."),
         description: z.string().optional(),
         acceptance: z
           .string()
           .optional()
-          .describe("What must be true when it is done, as a markdown list."),
-        todos: lines("Top-level to-dos, one line each."),
+          .describe("What must be true when done, a markdown list."),
+        todos: lines("Top-level to-dos."),
         stage: z.string().optional(),
-        type: z
-          .string()
-          .optional()
-          .describe("The delegate type that should run it."),
-        after: lines("Tasks it waits for, like tsk-3."),
+        type: z.string().optional().describe("The delegate type to run it."),
+        after: lines("Tasks it waits for."),
         parent: z.string().optional(),
-        related: lines("Tasks it relates to, without waiting for them."),
+        related: lines("Tasks it relates to, not waiting."),
         found_in: z
           .string()
           .optional()
-          .describe("The task whose work turned this one up."),
+          .describe("The task whose work turned it up."),
         checks: lines(
-          "Shell commands that prove the work, like bun run lint: the attempt runs each and quotes its output; `host: <command>` marks one that needs the host."
+          "Commands whose output proves the work; `host: <command>` needs the host."
         ),
-        outputs: lines("Files it produces that are not commits."),
+        outputs: lines("Files it makes that are not commits."),
         context: lines("knowledge/ files for its brief."),
         lands: landsParameter().optional(),
         runs_on: runsOnParameter().optional(),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
         budget: budgetParameter().optional(),
-        labels: lines("Short labels."),
+        labels: lines(),
         fields: fieldsParameter(),
       },
       async ({ found_in, runs_on, ...draft }) => {
         const { projectId, tasks, actor } = scope();
         // The design system's build carries the hub's words, never the filer's.
         if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
-          return ok(await context.designBuild(projectId, actor, draft.stage));
+          return await context.designBuild(projectId, actor, draft.stage);
         }
         const task = await tasks.create(
           projectId,
@@ -491,40 +424,34 @@ export function taskTools(context: TaskToolContext | undefined) {
                 task.acceptance,
                 ...task.checks,
               ]);
-        return ok({
+        return {
           ...task,
           ...(duplicates ? { duplicates } : {}),
           ...(suggest ? { suggest } : {}),
-        });
-      }
+        };
+      },
+      (said) => taskCreatedWords(said, linkScope())
     ),
     tool(
       "task_update",
-      "Change a task: move its `stage` (checked against the project's moves; `reason` is kept in its history), or replace any other field you give. What you leave out stays as written.",
+      "Change a task: move its `stage` (checked against the project's moves), or replace any field you give; the rest stays.",
       {
         id: taskRef(),
         stage: z.string().optional(),
-        reason: z.string().optional().describe("With `stage`: why, one line."),
+        reason: z.string().optional().describe("Why, with `stage`."),
         title: z.string().optional(),
         description: z.string().optional(),
         acceptance: z.string().optional(),
-        type: z
-          .string()
-          .nullable()
-          .optional()
-          .describe("A delegate type; null clears it."),
-        checks: lines("Replaces the checks."),
-        outputs: lines("Replaces the outputs."),
-        context: lines("Replaces the context."),
-        lands: landsParameter()
-          .nullable()
-          .optional()
-          .describe("Where its attempts land; null: the project's default."),
+        type: z.string().nullable().optional(),
+        checks: lines(),
+        outputs: lines(),
+        context: lines(),
+        lands: landsParameter().nullable().optional(),
         runs_on: runsOnParameter().nullable().optional(),
         group: groupParameter().nullable().optional(),
         owns: ownsParameter().optional(),
         budget: budgetParameter().nullable().optional(),
-        labels: lines("Replaces the labels."),
+        labels: lines(),
         fields: fieldsParameter(),
       },
       async ({ id, stage, reason, runs_on, ...rest }) => {
@@ -544,71 +471,71 @@ export function taskTools(context: TaskToolContext | undefined) {
         if (stage !== undefined) {
           task = await tasks.move(projectId, id, stage, actor, reason);
         }
-        return ok(task ?? (await tasks.get(projectId, id)));
-      }
+        return task ?? (await tasks.get(projectId, id));
+      },
+      (said) => taskChangedWords(said, linkScope())
     ),
     tool(
       "task_link",
-      "Add or remove an edge from one task to another: `after` (it waits for that task), `parent`, `related` (no effect on order), `found_in` (turned up while working on that task), or `duplicate_of` (it repeats that task: it is dropped, if your moves allow, and its waiters wait on that task).",
+      "Add or remove an edge: after (it waits for that task), parent, related, found_in, or duplicate_of (it is dropped, its waiters moved to that task).",
       {
         id: taskRef(),
         edge: z.enum(EDGES),
         to: taskRef(),
-        remove: z.boolean().optional().describe("Take the edge out instead."),
+        remove: z.boolean().optional(),
       },
       async ({ id, edge, to, remove }) => {
         const { projectId, tasks, actor } = scope();
-        return ok(await tasks.link(projectId, id, { edge, to, remove }, actor));
-      }
+        return await tasks.link(projectId, id, { edge, to, remove }, actor);
+      },
+      (said) => taskChangedWords(said, linkScope())
     ),
     tool(
       "task_start",
-      "Start an attempt at a task: a delegate in a new workspace from a checkout of the project on an online machine its runs_on names, briefed from the task file (description, acceptance, open to-dos, checks), reporting to you. The task moves to its active stage and runs that stage's type, else its own. Refused while an attempt is live or it is done.",
+      "Start an attempt at a task: a delegate in a new workspace on a machine its runs_on names, briefed from the task file, reporting to you; the task moves to its active stage. Refused while one is live or it is done.",
       { id: taskRef() },
       async ({ id }) => {
         const { projectId } = scope();
         if (!context?.startAttempt) {
           throw new Error("Attempts cannot be started on this hub.");
         }
-        return ok(await context.startAttempt(projectId, id, context.actor));
-      }
+        return await context.startAttempt(projectId, id, context.actor);
+      },
+      attemptStartWords
     ),
     tool(
       "task_retry",
-      "Retry a task whose last attempt failed or was cancelled: a fresh session in that attempt's workspace as it was left (a new one if the clone is gone), briefed from the task file with the failure and the to-dos done so far, reporting to you. Refused while an attempt is live or the last neither failed nor was stopped.",
+      "Retry a task whose last attempt failed or was stopped: a fresh session in that attempt's workspace, briefed with the failure, reporting to you.",
       { id: taskRef() },
       async ({ id }) => {
         const { projectId } = scope();
         if (!context?.retryAttempt) {
           throw new Error("Attempts cannot be retried on this hub.");
         }
-        return ok(await context.retryAttempt(projectId, id, context.actor));
-      }
+        return await context.retryAttempt(projectId, id, context.actor);
+      },
+      attemptStartWords
     ),
     tool(
       "todo_write",
-      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests), `spec` your spec (markdown: what you build, how, and why); returns your plan. A task's to-dos: tick, untick, add or reword by id (td-3) or position (2.1) on your work item's task (an operator's session names any); all land together. Every compaction lists them.",
+      "Your plan: `steps` replaces your step list (`depth` nests), `spec` your spec (what you build, how and why). Or a task's to-dos: tick, untick, add or reword by id (td-3) or position (2.1), on your work item's task (an operator's session names any); all land together. Every compaction lists them.",
       {
-        steps: z
-          .array(stepParameter())
-          .optional()
-          .describe("The whole list, in order."),
-        spec: z.string().optional().describe("The whole document."),
-        task: z.string().optional().describe("Like tsk-12; yours by default."),
-        tick: lines("To-dos done."),
-        untick: lines("Not done after all."),
+        steps: z.array(stepParameter()).optional(),
+        spec: z.string().optional(),
+        task: z.string().optional().describe("Default: your work item's."),
+        tick: lines(),
+        untick: lines(),
         add: z
           .array(
             z.object({
-              text: z.string().describe("One line."),
+              text: z.string(),
               under: z.string().optional().describe("Its parent to-do."),
             })
           )
           .optional(),
         edit: z
           .array(z.object({ todo: z.string(), text: z.string() }))
-          .optional()
-          .describe("New words."),
+          .optional(),
       },
       async ({ task, steps, spec, ...changes }) => {
         if (steps !== undefined || spec !== undefined) {
@@ -623,12 +550,12 @@ export function taskTools(context: TaskToolContext | undefined) {
           if (!context?.writePlan) {
             throw new Error("Discovery cannot execute tools");
           }
-          return ok(
-            await context.writePlan(context.actor, {
-              ...(steps ? { steps: stepsOf(steps) } : {}),
-              ...(spec === undefined ? {} : { spec }),
-            })
-          );
+          return await context.writePlan(context.actor, {
+            ...(steps
+              ? { steps: stepsOf(steps, context.artifactNamed ?? same) }
+              : {}),
+            ...(spec === undefined ? {} : { spec }),
+          });
         }
         const { projectId, tasks, actor } = scope();
         const done = await tasks.todos(
@@ -637,8 +564,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           changes,
           actor
         );
-        return ok({ id: done.id, todos: done.todos });
-      }
+        return { id: done.id, todos: done.todos };
+      },
+      (said) => todoWrittenWords(said, linkScope())
     ),
     tool(
       "task_comment",
@@ -652,12 +580,13 @@ export function taskTools(context: TaskToolContext | undefined) {
           text,
           actor
         );
-        return ok({ id: done.id, comments: done.comments });
-      }
+        return { id: done.id, comments: done.comments };
+      },
+      taskCommentedWords
     ),
     tool(
       "task_result",
-      "Hand in your task's work before finish_item: what you did, what to check, what you made. Show it with artifact_create (a page, a component's sheet, or a preview of the running app) and hand that artifact's id in first, primary; files by folder path. Again replaces it.",
+      "Hand in your task's work before finish_item: what you did, what to check, what you made. Show it with artifact_create and hand that artifact in first, primary (its name or handle); files by folder path. Again replaces it.",
       {
         summary: z.string().trim().min(1),
         check: z.array(z.string()).optional(),
@@ -683,14 +612,15 @@ export function taskTools(context: TaskToolContext | undefined) {
             "task_result hands in an attempt at a task, and this session works none. Say what you did in finish_item instead."
           );
         }
-        return ok(
-          await tasks.result(projectId, own, workItemId, {
-            summary,
-            check,
-            artifacts: artifacts?.map(resultArtifact),
-          })
-        );
-      }
+        return await tasks.result(projectId, own, workItemId, {
+          summary,
+          check,
+          artifacts: artifacts?.map((one) =>
+            resultArtifact(one, context?.artifactNamed ?? same)
+          ),
+        });
+      },
+      taskResultWords
     ),
     tool(
       "task_archive",
@@ -704,12 +634,13 @@ export function taskTools(context: TaskToolContext | undefined) {
           actor,
           archived ?? true
         );
-        return ok({
+        return {
           id: done.id,
           path: done.path,
           archivedAt: done.archivedAt,
-        });
-      }
+        };
+      },
+      taskArchivedWords
     ),
   ];
 }

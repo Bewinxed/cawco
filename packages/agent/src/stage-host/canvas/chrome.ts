@@ -67,8 +67,6 @@ declare global {
 export interface ChromeOptions {
   applyDials: (values: Record<string, unknown>) => void;
   canvas: HTMLElement;
-  /** The house edge fade's sheet, set in the page: a wide embed's frame scrolls under it (runtime.ts `fitToEmbed`). */
-  edgeFade: string;
   /** The house faces' `@font-face` rules, set in the page: a shadow root's own are not heard. */
   faces: string;
   go: (key: string) => void;
@@ -218,17 +216,16 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 .cawco-section-status { grid-column: 2; grid-row: 1; align-self: baseline; margin: 0; font: var(--type-meta); color: var(--ink-muted); }
 .cawco-stand-in { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
 .cawco-stand-in > .cawco-frame-words { padding: var(--space-row) var(--space-1); }
-/* The skeleton recipe: a surface-fill block at the frame's size, one raised band crossing it each loop, still without motion. */
-.cawco-stand-in-body { position: relative; overflow: hidden; inline-size: var(--c-canvas-skeleton-w); max-inline-size: 100vw; block-size: var(--c-canvas-skeleton-h);
+/* The skeleton recipe: a surface-fill block at the frame's size, pulsing down to --skeleton-pulse-floor and back once a
+   --dur-skeleton-pulse on ease-in-out (transitions.dev Skeleton loader and reveal), still without motion. */
+.cawco-stand-in-body { inline-size: var(--c-canvas-skeleton-w); max-inline-size: 100vw; block-size: var(--c-canvas-skeleton-h);
   border-radius: var(--radius-sm); background: var(--surface-fill); }
 @media (prefers-reduced-motion: no-preference) {
   .cawco-waiting { animation-duration: var(--dur-fade); animation-timing-function: var(--ease-out); }
-  .cawco-stand-in-body::after { content: ""; position: absolute; inset: 0; translate: -100% 0;
-    background: linear-gradient(90deg, transparent 0 30%, var(--skeleton-sheen) 50%, transparent 70% 100%);
-    animation: cawco-sweep var(--dur-loop) linear infinite; }
+  .cawco-stand-in-body { animation: cawco-pulse var(--dur-skeleton-pulse) var(--ease-crossfade) infinite; }
 }
 @keyframes cawco-wait { from { opacity: 0; } }
-@keyframes cawco-sweep { to { translate: 100% 0; } }
+@keyframes cawco-pulse { 0%, 100% { opacity: 1; } 50% { opacity: var(--skeleton-pulse-floor); } }
 /* A section whose module didn't load says so where its frames would stand: the error formula's line, then Show details. */
 /* It reads raised on the well, as a frame's page does, so its details recess inside it in both schemes (the well is surface-recess in light). */
 .cawco-section-failed { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); inline-size: 0; min-inline-size: max(100%, var(--c-canvas-skeleton-w)); box-sizing: border-box;
@@ -265,8 +262,8 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 /* The frame in view is said by its label row, in the selected pair. */
 .cawco-frame[data-cawco-current] > .cawco-frame-label { background: var(--selected-bg); }
 .cawco-frame[data-cawco-current] > .cawco-frame-label :is(.cawco-frame-words, .cawco-frame-small) { color: var(--selected-ink); }
-/* The inspector's story: one solid ring round its frames. */
-.cawco-frame[data-cawco-selected] > .cawco-frame-body { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+/* The inspector's story: one solid neutral edge round its frames (3:1); the focus ring is for focus alone. */
+.cawco-frame[data-cawco-selected] > .cawco-frame-body { outline: var(--focus-ring-width) solid var(--border-button-outline); outline-offset: var(--focus-ring-offset); }
 .cawco-frame[data-cawco-edited] .cawco-frame-small::after { content: " · edited"; }
 .cawco-frame-body { position: relative; min-inline-size: 24px; min-block-size: 16px; }
 .cawco-frame-status { font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
@@ -290,9 +287,9 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 html[data-cawco-phone] .cawco-dock-dials { inset-block-start: auto; inset-inline: var(--space-3); inline-size: auto;
   inset-block-end: calc(var(--foot) + var(--space-2) + var(--cawco-timeline-room)); max-block-size: 25dvh; }
 /* A decision page's Preview (runtime by=embed): its frames alone, one under another in the page's own flow, each at its own
-   width and centred in the embed, one wider than the embed scaled down to fit it (runtime fitToEmbed, CSS zoom), and one
-   that would scale its words under 10px stops there and scrolls sideways in its frame (data-cawco-wide); the page
-   holding it makes its frame as tall (CANVAS_EMBED_SIZE), and a wheel or a finger on it scrolls that page. A section that
+   size from the embed's start (the decision page's words stand on the same edge), never scaled; the page holding it makes
+   its frame as tall and as wide as its widest story (CANVAS_EMBED_SIZE, runtime sayShape) and scrolls it sideways where its
+   room is narrower, and a wheel or a finger on it scrolls that page. A section that
    didn't load still says so; one holding none of the stories the embed names takes no place (data-cawco-none), and a named
    story no section holds is said once, in the embed's own place (runtime unnamedInEmbed). */
 html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; }
@@ -304,13 +301,8 @@ html.cawco-embed .cawco-world { position: static; inline-size: 100%; gap: var(--
 html.cawco-embed .cawco-section { min-block-size: 0; gap: var(--space-3); }
 html.cawco-embed .cawco-section[data-cawco-none] { display: none; }
 html.cawco-embed :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status, .cawco-edges, .cawco-stand-in > .cawco-frame-words) { display: none; }
-html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
-html.cawco-embed .cawco-frame { gap: 0; min-inline-size: 0; max-inline-size: 100%; }
-html.cawco-embed .cawco-frame[data-cawco-wide] { align-self: stretch; overflow-x: auto; overscroll-behavior-inline: contain; }
-/* Its fade is the house edge fade at its full 40px on every width (DESIGN.md: over words cut mid-word a phone's 16px reads as
-   a clip); a frame showing less than twice that has each fade cut to half of what it shows (the kit's caps), so the two meet
-   in its middle and never cross into a hard edge. */
-html.cawco-embed .cawco-frame[data-cawco-wide] { --fade-len: 40px; --fade-cap-start: 50%; --fade-cap-end: 50%; }
+html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: start; gap: var(--space-3); }
+html.cawco-embed .cawco-frame { gap: 0; min-inline-size: 0; }
 html.cawco-embed .cawco-stand-in-body { max-inline-size: 100%; }
 html[data-cawco-phone][data-cawco-current] .cawco-frame:not([data-cawco-shown]), html[data-cawco-phone] .cawco-colhead, html[data-cawco-phone][data-cawco-current] .cawco-section:not([data-cawco-shown]) { display: none; }
 `;
@@ -430,7 +422,7 @@ export class Chrome {
     this.#o = options;
     const page = document.createElement("style");
     page.dataset.cawcoCanvas = "";
-    page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${options.edgeFade}\n${PAGE_CSS}`;
+    page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${PAGE_CSS}`;
     document.head.append(page);
     this.#host = document.createElement("div");
     this.#host.id = "cawco-chrome";

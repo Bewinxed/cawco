@@ -2,7 +2,7 @@
 /**
  * Append-jerk measurement harness.
  *
- * Opens a live session transcript (http://localhost:3000/session/<id>), waits
+ * Opens a live session transcript (http://localhost:3455/session/<id>), waits
  * for the virtualized transcript to settle, then records the scroller's
  * `scrollTop` and `scrollHeight` every animation frame for a fixed window.
  * The point is to quantify how much the viewport lurches while new groups
@@ -32,7 +32,7 @@ if (!id) {
   process.exit(1);
 }
 
-const url = process.env.CAWCO_URL || `http://localhost:3000/session/${id}`;
+const url = process.env.CAWCO_URL || `http://localhost:3455/session/${id}`;
 const WAIT_MS = Number(process.env.WAIT_MS || 6000);
 const RECORD_MS = Number(process.env.RECORD_MS || 30_000);
 

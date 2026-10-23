@@ -51,8 +51,20 @@ a {
 
 /* `--page-inset-bottom`: what a host's docked composer covers of the page's
    foot (the project's Decisions tab says it), so the last card scrolls clear. */
+/* `--dp-real-w`: the widest real-size drawing's width (page.js), so the
+   column grows to hold it whole where the screen is wide enough: the
+   drawing plus the page's, card's, pane's and frame's insets. */
 .dp {
-  max-width: 920px;
+  max-width: max(
+    920px,
+    calc(
+      var(--dp-real-w, 0px) + 2 *
+        (
+          var(--space-4) + 1px + var(--space-5) + var(--space-4) +
+            var(--space-1)
+        )
+    )
+  );
   margin: 0 auto;
   padding: var(--space-6) var(--space-4)
     calc(var(--space-8) * 2 + var(--page-inset-bottom, 0px));
@@ -412,6 +424,67 @@ a {
   .dp-note textarea {
     font-size: 16px;
     min-block-size: var(--c-btn-h-lg);
+  }
+}
+
+/* A drawing at its real size (RECIPES.md, "At its real size"): a mockup of
+   a declared width (CONTRACT.md, Layout) drawn at 1 CSS px per px, never
+   scaled. Frames stand side by side where the card holds them; a frame
+   narrower than its drawing scrolls sideways inside itself, says so in its
+   caption (page.js sets data-dp-more), and never widens the page. */
+.dp-reals {
+  display: block flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-start;
+  min-inline-size: 0;
+}
+.dp-real {
+  flex: 0 1 auto;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
+/* The caption never widens its frame: the drawing sets the width. */
+.dp-real > figcaption {
+  display: block flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  inline-size: 0;
+  min-inline-size: 100%;
+}
+.dp-real > figcaption b {
+  color: var(--ink-strong);
+}
+.dp-real-more {
+  display: none;
+  font-weight: var(--weight-body);
+}
+.dp-real[data-dp-more] .dp-real-more {
+  display: inline;
+}
+.dp-real-scroll {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  max-inline-size: 100%;
+  /* Room for the drawing's own shadow inside the frame. */
+  padding: var(--space-1);
+}
+/* On a phone the frame runs to the card's edges, so the drawing gets the
+   card's inset back; its caption keeps the inset. */
+@media (width <= 640px) {
+  .dp-real {
+    flex: none;
+    margin-inline: calc(-1 * var(--space-5));
+    max-inline-size: none;
+    inline-size: calc(100% + 2 * var(--space-5));
+    border-radius: 0;
+    padding-inline: 0;
+  }
+  .dp-real > figcaption {
+    padding-inline: var(--space-5);
+  }
+  .dp-real-scroll {
+    padding-inline: 0;
   }
 }
 

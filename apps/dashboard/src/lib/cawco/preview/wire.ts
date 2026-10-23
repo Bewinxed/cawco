@@ -88,12 +88,9 @@ export interface PageThumbnail {
  * other scheme, or `single` when the page draws the same in both. Null when
  * it carries no picture.
  */
-export function previewThumbnail(message: {
-  other?: unknown;
-  png?: unknown;
-  scheme?: unknown;
-  single?: unknown;
-}): PageThumbnail | null {
+export function previewThumbnail(
+  message: Record<string, unknown>
+): PageThumbnail | null {
   const png = previewPng(message.png);
   if (!png) {
     return null;
@@ -180,7 +177,7 @@ export function previewPinAt(value: unknown): PreviewPinAt | null {
 /** The most of a press's chain the page may offer (overlay page.ts `CHAIN_MOST` and the page as a whole). */
 const CHAIN_MAX = 8;
 
-/** One target the composer's chip offers: what it stands on, as a pin would hold it (named by pin-name.ts). */
+/** One target the composer's chip offers: what it stands on, as a pin would hold it (named by core pin-name.ts). */
 export interface ComposeTarget {
   anchor: Record<string, unknown> & { selector: string };
   elements: unknown[];
@@ -420,5 +417,47 @@ export function previewShortcut(message: {
 }): ShellShortcut | null {
   return message.type === SHORTCUT_MESSAGE
     ? shellShortcutNamed(message.name)
+    : null;
+}
+
+/** The `type` of every message the pane answers by kind (PreviewPane `receive`). */
+const PAGE_MESSAGES = [
+  "cawco:ready",
+  "cawco:navigated",
+  "cawco:held",
+  "cawco:captured",
+  "cawco:pin-open",
+  "cawco:compose",
+  "cawco:compose-at",
+  "cawco:comment-result",
+  "cawco:pin-chain",
+  "cawco:peek",
+  "cawco:change-stops",
+  "cawco:change-pressed",
+  "cawco:reply-result",
+  "cawco:resolve-result",
+  "cawco:delete-result",
+  "cawco:page-pins",
+  "cawco:sync",
+  "cawco:press",
+  "cawco:pin-at",
+  "cawco:key",
+  "cawco:escape",
+  SHORTCUT_MESSAGE,
+  "cawco:error",
+  "cawco:resolved",
+  "cawco:sheet",
+] as const;
+
+/** A message the pane answers by its `type`; each field besides is checked by what reads it. */
+export type PageMessage = Record<string, unknown> & {
+  type: (typeof PAGE_MESSAGES)[number];
+};
+
+/** A message the page posted, as one the pane answers, or null for any other. */
+export function pageMessage(value: unknown): PageMessage | null {
+  const message = record(value);
+  return message && PAGE_MESSAGES.some((type) => type === message.type)
+    ? (message as PageMessage)
     : null;
 }

@@ -1,21 +1,11 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
+import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core";
 import { writeJsonAtomic } from "@cawco/core/binary-installation";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { claudeVersionPath } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { Subprocess } from "bun";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
-
-/**
- * The oldest Claude Code CawCo runs at all ({@link claudeToStart}).
- * Its reason, Claude Code's CHANGELOG under 2.1.301: "Fixed sign-in refresh
- * timeouts and unexpected sign-outs after a short command such as `claude
- * auth status` or `claude plugin list` exited in the middle of a token
- * refresh". Below it, a refresh cut short can leave an account dir's stored
- * login blank (anthropics/claude-code#88583: the lock "protect[s] the save,
- * not the network call"), and every process on that dir is signed out after.
- */
-export const CLAUDE_VERSION_FLOOR = "2.1.301";
 
 /**
  * The first Claude Code whose initialize reply carries `claude_code_version`
@@ -25,21 +15,6 @@ export const CLAUDE_VERSION_FLOOR = "2.1.301";
  * {@link CLAUDE_VERSION_FLOOR} too.
  */
 export const INITIALIZE_SAYS_VERSION_FROM = "2.1.299";
-
-const VERSION = /^(\d+)\.(\d+)\.(\d+)/;
-
-/** Whether `version` (`x.y.z`, anything after it ignored) is older than `than`. */
-export const olderThan = (version: string, than: string): boolean => {
-  const a = VERSION.exec(version)?.slice(1).map(Number) ?? [0, 0, 0];
-  const b = VERSION.exec(than)?.slice(1).map(Number) ?? [0, 0, 0];
-  for (const [at, part] of a.entries()) {
-    const other = b[at] ?? 0;
-    if (part !== other) {
-      return part < other;
-    }
-  }
-  return false;
-};
 
 /*
  * THE VERSION READ. A binary's version is a fact about the file, so it is
@@ -192,6 +167,14 @@ export const claudeHostVersion = (): Promise<Bounded<string | undefined>> => {
 };
 
 /**
+ * The fix every refusal ends on: the press that runs Claude Code's own
+ * updater on the machine (core TOOL_CATALOG's `claude`), wherever the
+ * refusal stands in the dashboard (`ClaudeBlock`).
+ */
+const UPDATE_FIX =
+  "Update Claude Code on this machine, and CawCo runs it again: nothing was started or signed in.";
+
+/**
  * Why CawCo runs nothing of this machine's Claude Code, in one sentence;
  * nothing when it is {@link CLAUDE_VERSION_FLOOR} or newer. The words
  * {@link claudeToStart} refuses with, and the machine's report says.
@@ -201,13 +184,13 @@ export const versionRefusal = (
 ): string | undefined => {
   switch (version.kind) {
     case "unanswered":
-      return `Claude Code on this machine hasn't said its version yet (\`claude --version\` gave no answer in ${Math.round(version.after / 1000)} s), so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs.`;
+      return `Claude Code on this machine hasn't said its version yet (\`claude --version\` gave no answer in ${Math.round(version.after / 1000)} s), so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs. ${UPDATE_FIX}`;
     case "answered":
       if (!version.value) {
-        return `Claude Code on this machine didn't say its version, so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs.`;
+        return `Claude Code on this machine didn't say its version, so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs. ${UPDATE_FIX}`;
       }
       return olderThan(version.value, CLAUDE_VERSION_FLOOR)
-        ? `Claude Code ${version.value} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can sign an account out when a sign-in refresh is cut short: run \`claude update\` there.`
+        ? `Claude Code ${version.value} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can sign an account out when a sign-in refresh is cut short. ${UPDATE_FIX}`
         : undefined;
     default:
       return version satisfies never;

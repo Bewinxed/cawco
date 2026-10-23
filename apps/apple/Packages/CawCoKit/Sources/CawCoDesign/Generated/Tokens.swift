@@ -204,6 +204,8 @@ public enum Palette {
     public static let brandWash = Palette.named("brand-wash")
     /// The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through.
     public static let cTargetTint = Palette.named("c-target-tint")
+    /// The overlay's see-through done wash over what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): status-done-bg at 40%, never the opaque chip fill and never coral; drawn by the overlay over the element, not under it, so the element's words read through it.
+    public static let cChangeWash = Palette.named("c-change-wash")
     public static let brandInk = Palette.named("brand-ink")
     /// Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills.
     public static let brandInkStrong = Palette.named("brand-ink-strong")
@@ -276,7 +278,7 @@ public enum Palette {
     public static let presenceOff = Palette.named("presence-off")
     /// Every scrollbar's thumb, inherited from the root.
     public static let scrollbarThumb = Palette.named("scrollbar-thumb")
-    /// The band of raised surface that crosses a skeleton once per loop.
+    /// The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse).
     public static let skeletonSheen = Palette.named("skeleton-sheen")
     /// List bullets in rendered markdown.
     public static let proseBullet = Palette.named("prose-bullet")
@@ -604,6 +606,14 @@ public enum Size {
     public static let cFindW: Double = 520
     /// The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own.
     public static let cNewSessionPopW: Double = 569
+    /// Add machine's step rail (connect/RunningStep): the connector's line stands on the middle of a step's 16px glyph.
+    public static let cStepRailX: Double = 8
+    /// Add machine's step rail: from a step's row top to its glyph's foot (the row's 30px, its glyph centred), where the connector to the next step starts.
+    public static let cStepRailTop: Double = 23
+    /// Add machine's step rail: from a step's foot to the next step's glyph top, where the connector ends (the room above a glyph centred in its 30px row).
+    public static let cStepRailGap: Double = 7
+    /// Add machine's raised body on the desk (the kit dialog's `connect` width, its tray's padding round it) and its output sheet: the width at which the command route's longest address row (a Tailscale name and "anywhere on the tailnet") and the install's one line stand on one line each in the label and code roles, so no step of the window wraps a row and its height ladder holds.
+    public static let cConnectW: Double = 480
     /// A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line.
     public static let cPanelW: Double = 380
     /// The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next.
@@ -1285,8 +1295,6 @@ public enum Size {
 }
 
 public enum Layer {
-    /// A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome.
-    public static let layerSticky: Double = 10
     /// The hub band's slot under the bar: over the page column it opens above, its shadow on the page.
     public static let layerBand: Double = 20
     /// The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage.
@@ -1299,7 +1307,7 @@ public enum Layer {
     public static let layerBar: Double = 60
     /// A toolbar fixed over the page (the task board's bulk bar): over the bar and the dock, under the phone's preview sheet.
     public static let layerToolbar: Double = 70
-    /// The phone's preview sheet host (SideSheet): over every page layer, under the floating surfaces.
+    /// A phone's sheet that is part of the page, holding nothing (no scrim, the page above it live): the preview sheet host (SideSheet) and Caw's panel on a project's page (CawFloat). Over every page layer, under the floating surfaces, so a menu or a sheet opened from the page stands over it.
     public static let layerSheet: Double = 80
     /// A canvas stage standing in the phone's preview sheet: just over the sheet it stands in.
     public static let layerSheetStage: Double = 90
@@ -1351,7 +1359,7 @@ public enum Motion {
     public static let easeOut = TimingCurve(x1: 0.23, y1: 1, x2: 0.32, y2: 1)
     public static let easeInOut = TimingCurve(x1: 0.77, y1: 0, x2: 0.175, y2: 1)
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
-    /// Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
+    /// Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
     public static let easeCrossfade = TimingCurve(x1: 0.42, y1: 0, x2: 0.58, y2: 1)
     /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
     public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)
@@ -1428,6 +1436,12 @@ public enum Motion {
     /// One turn of an ambient loop: spinner, pulse, ping.
     /// In seconds.
     public static let durLoop: TimeInterval = 1.2
+    /// One pulse of a skeleton while it waits: its opacity from 1 down to --skeleton-pulse-floor and back, on --ease-crossfade, looping until what it stands for arrives. transitions.dev Skeleton loader and reveal, --pulse-dur: 1000ms (the owner's pick: "transitions.dev exactly").
+    /// In seconds.
+    public static let durSkeletonPulse: TimeInterval = 1
+    /// A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms.
+    /// In seconds.
+    public static let durSkeletonReveal: TimeInterval = 0.4
     /// In seconds.
     public static let c500: TimeInterval = 0.5
     /// In seconds.
@@ -1449,9 +1463,6 @@ public enum Motion {
     /// The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1).
     /// By day and by night: read it with `value(for:)`.
     public static let breathFloor = SchemeValue(light: 0.8, dark: 0.58)
-    /// The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5.
-    /// By day and by night: read it with `value(for:)`.
-    public static let glyphDuoStatusOpacity = SchemeValue(light: 0.57, dark: 0.46)
     /// How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track.
     /// By day and by night: read it with `value(for:)`.
     public static let accountWeekMix = SchemeValue(light: 0.32, dark: 0.63)
@@ -1462,4 +1473,8 @@ public enum Motion {
     public static let popRise: Double = 8
     /// How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr.
     public static let foldBlur: Double = 2
+    /// The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5.
+    public static let skeletonPulseFloor: Double = 0.5
+    /// How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px.
+    public static let skeletonRevealBlur: Double = 2
 }

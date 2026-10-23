@@ -4,8 +4,9 @@
  * this registers it with the service manager, brings the machine up, and tells
  * the person what is missing and offers to install it.
  */
-import { rm } from "node:fs/promises";
-import { platform } from "node:os";
+import { mkdtemp, rm } from "node:fs/promises";
+import { platform, tmpdir } from "node:os";
+import { join } from "node:path";
 import { probeCapabilities } from "@cawco/agent/capabilities";
 import { CAWCO_ENV, INSTALL_JOINED, INSTALL_STEP_PREFIX } from "@cawco/core";
 import {
@@ -29,7 +30,7 @@ import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { askYes, closeAsking } from "./ask";
 import { awaitJoined } from "./await-joined";
-import { discoverHub } from "./discover";
+import { keepJoinedHub } from "./joined-hub";
 import {
   awaitFirstMachineReady,
   dashboardUrl,
@@ -99,7 +100,7 @@ async function offerTools(ask: boolean): Promise<boolean> {
       }
       const command = item.installCommand;
       console.log(
-        `${item.id}: not installed. ${item.reason ?? ""}${command ? `\n  To install it: ${command}` : ""}`
+        `${item.id}: not installed. ${item.reason ?? ""}${command && !item.reason?.includes(command) ? `\n  To install it: ${command}` : ""}`
       );
       if (!(
         command &&
@@ -112,10 +113,16 @@ async function offerTools(ask: boolean): Promise<boolean> {
       if (!(await runAllowed(item.id))) {
         continue;
       }
+      // A folder of its own, for the installer script the command downloads
+      // before it runs it (core ToolInstallMethod `command`), gone after.
+      const dir = await mkdtemp(join(tmpdir(), "cawco-install-"));
       const child = Bun.spawn(["/bin/sh", "-c", command], {
+        cwd: dir,
         stdio: ["inherit", "inherit", "inherit"],
       });
-      if ((await child.exited) === 0) {
+      const exited = await child.exited;
+      await rm(dir, { recursive: true, force: true });
+      if (exited === 0) {
         installed = true;
       } else {
         console.error(
@@ -155,8 +162,8 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     updatedAt: Date.now(),
     hostsHub: options.role === "hub",
   } satisfies BinaryUpdateState);
-  // Saved the way `up` saves a hub it was told, so the agent unit finds it.
-  await discoverHub({ hub: options.hubUrl });
+  await keepJoinedHub(options.hubUrl);
+  // The agent's unit names its hub from this.
   process.env[CAWCO_ENV.hubUrl] = options.hubUrl;
   // An agent already running here (an earlier install whose files a failed
   // run removed, its unit left up) is left running by systemd's `enable
@@ -244,8 +251,8 @@ export async function rejoinBinary(hubUrl: string): Promise<void> {
   const note = (line: string) =>
     console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line);
   await writeJsonAtomic(installationPath(), { ...installed, hubUrl });
+  await keepJoinedHub(hubUrl);
   // The agent's unit names its hub, so the unit is rewritten before the agent restarts.
-  await discoverHub({ hub: hubUrl });
   process.env[CAWCO_ENV.hubUrl] = hubUrl;
   // Only the agent's unit is written: no keeper's is touched.
   const layout = binaryLayout(installed.installedVersion);

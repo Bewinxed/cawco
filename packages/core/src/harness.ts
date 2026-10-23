@@ -21,9 +21,20 @@
  */
 
 import { CLAUDE_PROVIDER } from "./accounts";
+import { harnessWords } from "./words/harness";
 
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = "claude" | "opencode" | "pi";
+
+/**
+ * Each harness's CLI, by its tool catalog id (core tools.ts `TOOL_CATALOG`):
+ * what installing or updating the harness puts on a machine.
+ */
+export const HARNESS_TOOL: Record<HarnessKind, string> = {
+  claude: "claude",
+  opencode: "opencode",
+  pi: "pi",
+};
 
 /**
  * How long one part of a machine's report may take before the agent gives
@@ -87,9 +98,13 @@ export const harnessNamed = (value: unknown): HarnessKind | undefined =>
 
 /**
  * How a session answers tool permissions. The union is Claude Code's, plus
- * `fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host
- * also answering the safety checks the CLI still raises in that mode. Each
- * adapter maps `fullSend` onto its harness; none hands it to an SDK as is.
+ * `fullSend`, CawCo's own: bypass, with every approval approved for the
+ * session (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS FULL SEND"):
+ * on Claude Code the host answers the checks and ask rules the CLI still
+ * raises in bypass, and on every harness the hub approves CawCo's admin
+ * writes (hub admin-asks.ts). A question to the person still asks; a
+ * fleet-denied tool still never runs. Each adapter maps `fullSend` onto its
+ * harness; none hands it to an SDK as is.
  */
 export type PermissionMode =
   | "default"
@@ -99,6 +114,66 @@ export type PermissionMode =
   | "dontAsk"
   | "auto"
   | "fullSend";
+
+/**
+ * The permission modes CawCo offers: the one list every machine reports for
+ * each harness that has modes (agent claude.ts `CLAUDE_CAPABILITIES`,
+ * opencode.ts `OPENCODE_CAPABILITIES`; pi has none), and so the one list
+ * every tool schema and picker takes its modes from. Claude Code's
+ * `dontAsk` and `auto` are not among them: no harness here is offered either.
+ *
+ * {@link PermissionMode} stays wider, as the wire names a mode: a CLI may
+ * report `dontAsk` or `auto` as its mode, and the TestFlight builds still
+ * installable (20261015 to 20261018) were built to send either (hub
+ * scripts/wire-compat.ts). The hub refuses a start in one with the
+ * machine's own list (hub server.ts `modeRefusal`), and an agent refuses one
+ * that reaches it ({@link offeredMode}).
+ */
+export const PERMISSION_MODES = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "bypassPermissions",
+  "fullSend",
+] as const satisfies readonly PermissionMode[];
+
+export type OfferedMode = (typeof PERMISSION_MODES)[number];
+
+/**
+ * The modes one session may start or continue another in: every
+ * {@link PERMISSION_MODES} but `fullSend`, which only the owner chooses. A
+ * session in Full Send passes it on by naming none.
+ */
+export const SESSION_CHOSEN_MODES = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "bypassPermissions",
+] as const satisfies readonly OfferedMode[];
+
+export type SessionChosenMode = (typeof SESSION_CHOSEN_MODES)[number];
+
+/** `value` as an {@link OfferedMode}, when it is one CawCo offers. */
+export const permissionModeNamed = (value: unknown): OfferedMode | undefined =>
+  PERMISSION_MODES.find((mode) => mode === value);
+
+/**
+ * `mode` as one CawCo offers, or none when none was named. One it does not
+ * offer throws, in words that list what it does: a session is never started
+ * in a mode other than the one asked for.
+ */
+export const offeredMode = (
+  mode: PermissionMode | undefined
+): OfferedMode | undefined => {
+  if (mode === undefined) {
+    return;
+  }
+  const offered = permissionModeNamed(mode);
+  if (!offered) {
+    throw new Error(harnessWords.modeNotOffered(mode, PERMISSION_MODES));
+  }
+  return offered;
+};
 
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's
@@ -305,9 +380,30 @@ export const CUSTODY_HELD = "custody_held";
 export const LIMIT_REACHED = "limit_reached";
 
 /**
+ * Something a session started leaks: a process whose memory keeps climbing
+ * past its machine's threshold, or processes left running after the command
+ * that started them ended (agent leak-watch.ts). The agent's frame to the hub
+ * (`content` names what, where and the measurement; `uuid` names the leak, so
+ * one said again is told once), and the hub tells the session in its own
+ * word, a message it reads (hub server.ts `tellSession`). Nothing is stopped.
+ */
+export const LEAK_FOUND = "leak_found";
+
+/**
+ * A session ended, and the containers its work started were stopped with it
+ * (agent session-containers.ts): the agent's frame to the hub (`content`
+ * names each container and what was done to it; `uuid` names this ending,
+ * so one said again is told once). The hub tells the session that delegated
+ * it, else the session itself, in its own word (hub server.ts
+ * `tellContainersEnded`).
+ */
+export const CONTAINERS_ENDED = "containers_ended";
+
+/**
  * A session's start waits for its machine's memory: the machine's room on
- * memory (core heavy-run.ts `measureMemoryRoom`: swap read back, swap left,
- * memory stall or pressure) fails, so its process is not started yet. The
+ * memory (core machine-room.ts `measureMemoryRoom`: Linux's memory available
+ * and the room under its keeper's cgroup limit; the Mac's pressure level)
+ * fails, so its process is not started yet. The
  * agent's frame to the hub (`content`, {@link roomHeldSentence}), and the
  * hub's line in the session's transcript, kept on its row. Drawn as a note
  * titled by its first sentence, the readings under it. The start goes on by
@@ -1549,6 +1645,17 @@ export interface HarnessReport {
    */
   modelsUnread?: string;
   /**
+   * Why the machine refuses every start of this harness's CLI, its sentence
+   * in {@link authReason}: `not-installed`, or `version` (not a version the
+   * harness's catalog entry runs: below Claude Code's or pi's floor, not
+   * OpenCode's one version, or no version said). Claude's gate is agent
+   * claude-version.ts `claudeToStart`; OpenCode's and pi's tools.ts
+   * `toolGate`. Absent when it runs. Where the dashboard puts the refusal in
+   * place of what it blocks, with the catalog's install of the harness's
+   * tool ({@link HARNESS_TOOL}) as its one press (`HarnessBlock`).
+   */
+  refused?: "not-installed" | "version";
+  /**
    * OpenCode only: each of the machine's own OpenCode sign-ins (not a CawCo
    * account) whose provider refused it the last time a session here used
    * it, until a turn on that provider succeeds. The home says each on the
@@ -1794,12 +1901,15 @@ export interface EndedTask {
 
 /**
  * What a move ended with a session's process ({@link CarrySessionRequest.endLater}):
- * Claude Code restores neither a background task nor a one-time wake-up on
- * resume, so the session is told of each once it runs on the new account.
+ * Claude Code restores no background task on resume ("Background Bash and
+ * monitor tasks aren't", code.claude.com/docs/en/sessions), and a one-time
+ * wake-up only when it was set with CronCreate and its time hasn't passed
+ * (a self-paced loop's isn't, code.claude.com/docs/en/scheduled-tasks), so
+ * the session is told of each once it runs on the new account.
  */
 export interface MoveEnded {
   tasks: EndedTask[];
-  /** One-time wake-ups it had scheduled (CronCreate, not recurring). */
+  /** One-time wake-ups it had scheduled (the Stop hook's `session_crons`, not recurring): CronCreate's or ScheduleWakeup's, which it doesn't say. */
   wakeups: number;
 }
 
@@ -1817,7 +1927,12 @@ export type CarrySessionOutcome =
    * task, a one-time wake-up), which a request with `endLater` ends.
    */
   | { state: "live"; why: string; later?: true }
-  | { state: "failed"; error: string };
+  /**
+   * Nothing moved. `clash`: another carry of the same conversation was
+   * copying it at that moment, which passes; nothing says the target's dir
+   * is at fault.
+   */
+  | { state: "failed"; error: string; clash?: true };
 
 /**
  * Machine control (arg: {@link CarrySessionRequest}[]): carries each Claude
@@ -2366,8 +2481,8 @@ export const CONTROL_CANCEL_COMMAND = "cancelCommand";
 
 /**
  * The line a command prints, on stdout or stderr, as it starts and stops
- * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh,
- * build-both.sh and the heavy-run gate, core heavy-run.ts, print it):
+ * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh and
+ * build-both.sh print it):
  *
  *   CAWCO-QUEUE wait <slot>: <who holds it, and for how long>
  *   CAWCO-QUEUE held <slot>
@@ -2391,7 +2506,6 @@ export const QUEUE_SLOTS = {
   boundary: "its workspace's boundary to start",
   build: "the Mac's build slot",
   folder: "its turn in its folder",
-  heavy: "a heavy-run slot",
   sim: "a simulator slot",
   template: "the simulator template lock",
 } as const;
@@ -2408,22 +2522,12 @@ export const QUEUE_WAIT_MAX_MS = 3 * 60 * 60 * 1000;
 export interface CommandRun {
   /**
    * The run is a step of a work item's landing gate, in these words (`the
-   * landing gate of “Fix the tray” (153fd0db): iOS build compiles`): the
-   * machine runs it with {@link HEAVY_GATE_ENV} set to them, so a heavy run
-   * it starts takes the next free slot before any other run there (core
-   * heavy-run.ts).
+   * landing gate of “Fix the tray” (153fd0db): iOS build compiles`).
    */
   gate?: string;
   id: string;
   queueMaxMs: number;
 }
-
-/**
- * Set in a landing gate step's environment by the machine that runs it
- * ({@link CommandRun.gate}), to the words that name the gate: a heavy run
- * started under it is a gate's, and goes first (core heavy-run.ts).
- */
-export const HEAVY_GATE_ENV = "CAWCO_HEAVY_GATE";
 
 /** A command's wait for a slot: which, and who holds it (the marker's words). */
 export interface CommandQueue {

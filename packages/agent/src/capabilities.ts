@@ -25,6 +25,7 @@ import { claudeHostVersion } from "./claude-version";
 import { opencodeBinary } from "./harnesses/opencode-client";
 import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
+import { packageInstall, workspaceNeeds } from "./workspace-needs";
 
 let sandboxable: boolean | undefined;
 
@@ -139,19 +140,10 @@ const publicAddressItem = async (): Promise<MachineCapability> => {
 };
 
 function linuxInstall(pkg: string): string {
-  if (resolveBin("apt-get")) {
-    return `sudo apt-get update && sudo apt-get install -y ${pkg}`;
-  }
-  if (resolveBin("dnf")) {
-    return `sudo dnf install -y ${pkg}`;
-  }
-  if (resolveBin("pacman")) {
-    return `sudo pacman -S --needed ${pkg}`;
-  }
-  if (resolveBin("apk")) {
-    return `sudo apk add ${pkg}`;
-  }
-  return `Install ${pkg} with this Linux distribution's package manager`;
+  return (
+    packageInstall([pkg]) ??
+    `Install ${pkg} with this Linux distribution's package manager`
+  );
 }
 
 const VERSIONED: readonly string[] = [
@@ -264,7 +256,20 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       ? { reason: runtimeMissing() }
       : await foundRuntimeFacts(runtime);
   const reach = await publicAddressItem();
-  const opencodeAdvice = await installAdvice("opencode");
+  // What the install action runs here for each harness CLI (tools.ts
+  // `installAdvice`): the way its copy got here, or the first way this
+  // machine can run, or why there is none.
+  const [claudeAdvice, opencodeAdvice, piAdvice] = await Promise.all([
+    installAdvice("claude"),
+    installAdvice("opencode"),
+    installAdvice("pi"),
+  ]);
+  const adviceOf = (
+    advice: Awaited<ReturnType<typeof installAdvice>>
+  ): Pick<MachineCapability, "installCommand" | "reason"> =>
+    "command" in advice
+      ? { installCommand: advice.command }
+      : { installCommand: "", reason: advice.refusal };
   const items: MachineCapability[] = [
     {
       id: "git",
@@ -277,26 +282,20 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       id: "claude",
       available: !!claude,
       path: claude,
-      // Claude Code's native installer for macOS, Linux and WSL
-      // (https://code.claude.com/docs/en/setup).
-      installCommand: "curl -fsSL https://claude.ai/install.sh | bash",
+      ...adviceOf(claudeAdvice),
       ...(claude ? {} : { reason: CLAUDE_NOT_INSTALLED }),
     },
     {
       id: "opencode",
       available: !!opencode,
       path: opencode,
-      // The command the install action runs here: the way this machine's
-      // OpenCode got here, or none and why.
-      ...("command" in opencodeAdvice
-        ? { installCommand: opencodeAdvice.command }
-        : { installCommand: "", reason: opencodeAdvice.refusal }),
+      ...adviceOf(opencodeAdvice),
     },
     {
       id: "pi",
       available: !!resolveBin("pi"),
       path: resolveBin("pi"),
-      installCommand: "npm install -g @earendil-works/pi-coding-agent",
+      ...adviceOf(piAdvice),
     },
     {
       id: "node",
@@ -337,6 +336,8 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
               : "systemd must be running as the service manager; installing its package alone does not change PID 1",
           }),
     },
+    // What a delegate's workspace needs here, read as a delegate is refused by it.
+    workspaceNeeds(),
   ];
   await Promise.all(items.map(readVersion));
   return { at: Date.now(), platform: platform(), items };

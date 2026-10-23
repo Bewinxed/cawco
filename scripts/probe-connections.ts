@@ -48,6 +48,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../packages/core/src/bounded";
 import { ensureDeps } from "./lib/deps";
+import { toolRecord, toolWords } from "./lib/tool-call";
 import type { Reply, Seen } from "./scratch-fleet";
 
 // The dependencies first (lib/deps.ts): what needs them loads after.
@@ -594,40 +595,20 @@ const readWhileHeld = async (
   }
 };
 
-/** A tool call through the hub's REST door, as the session the credential is. */
+/** A tool call through the hub's REST door, as the session the credential is: its words, or with `record` the hub's record. */
 const door = async (
   instanceId: string,
   credential: string,
   name: string,
-  args: object
+  args: Record<string, unknown>,
+  form: "words" | "record" = "words"
 ) => {
-  const read = await readWithin(120_000, async (signal) => {
-    const response = await fetch(
-      `${fleet.base}/api/delegation/call/${instanceId}`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${credential}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ name, arguments: args }),
-        signal,
-      }
-    );
-    return { status: response.status, text: await response.text() };
-  });
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      throw new Error(
-        `${name} through the hub's door did not answer within ${read.after} ms (${read.reason})`
-      );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
+  const session = { base: fleet.base, id: instanceId, credential };
+  const said =
+    form === "words"
+      ? await toolWords(session, name, args, { timeoutMs: 120_000 })
+      : await toolRecord<unknown>(session, name, args, { timeoutMs: 120_000 });
+  return { status: said.status, text: said.text };
 };
 const listedTo = async (instanceId: string) =>
   (
@@ -918,6 +899,14 @@ try {
           action: "list",
         }
       );
+      // The record an agent may ask for holds no secret either.
+      const record = await door(
+        parent,
+        parentCredential,
+        "admin_connections_read",
+        { action: "list" },
+        "record"
+      );
       const raw = await fetch(`${fleet.base}/api/connections`).then((r) =>
         r.text()
       );
@@ -926,7 +915,12 @@ try {
         read.text.includes("echo-alpha") &&
           read.text.includes("echo-oauth") &&
           secrets().every(
-            (secret) => !(read.text.includes(secret) || raw.includes(secret))
+            (secret) =>
+              !(
+                read.text.includes(secret) ||
+                record.text.includes(secret) ||
+                raw.includes(secret)
+              )
           ),
         read.text.slice(0, 400)
       );

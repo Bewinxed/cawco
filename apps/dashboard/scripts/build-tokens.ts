@@ -228,6 +228,9 @@ const ANIMATIONS: Record<string, string> = {
   "animate-arrive-late":
     "kit-fade-in var(--dur-menu) var(--ease-out) var(--dur-control) both",
   "animate-finish": "finish calc(var(--dur-fade) * 2) var(--ease-out)",
+  // A needs-you dot's echo (DESIGN.md, Status dot: "three loops and then
+  // still"): its ring grows from the dot and fades, once a --dur-loop.
+  "animate-attn-echo": "ping var(--dur-loop) var(--ease-out) 3 forwards",
   // The transcript head's layers come in over the first c-head-fade of
   // scroll, on the transcript's scroll timeline (`head-fade-scrub`).
   "animate-head-fade": "head-fade linear both",
@@ -239,11 +242,11 @@ const ANIMATIONS: Record<string, string> = {
   // (`--kit-tip-from`, by its side); with reduced motion it only fades.
   "animate-tip-fade": "kit-tip-fade var(--dur-fade) var(--ease-out) both",
   "animate-tip-in": "kit-tip-in var(--dur-fade) var(--ease-out) both",
-  // The skeleton's sweep (DESIGN.md Skeleton): one band crossing the
-  // placeholder once per --dur-loop, turning linearly as every pending loop
-  // does (The One Loop Rule).
-  "animate-skeleton-sweep":
-    "kit-skeleton-sweep var(--dur-loop) linear infinite",
+  // The skeleton's pulse (DESIGN.md Skeleton; transitions.dev Skeleton loader
+  // and reveal): its opacity down to --skeleton-pulse-floor and back once
+  // per --dur-skeleton-pulse, on ease-in-out, until what it stands for comes.
+  "animate-skeleton-pulse":
+    "kit-skeleton-pulse var(--dur-skeleton-pulse) var(--ease-crossfade) infinite",
 };
 /** The keyframes the house's animations name that app.css does not keep. */
 const KEYFRAMES: Record<string, string> = {
@@ -290,7 +293,8 @@ const KEYFRAMES: Record<string, string> = {
   "kit-dialog-in": "from {\n  opacity: 0;\n  transform: translateY(6px);\n}",
   "kit-dialog-out": "to {\n  opacity: 0;\n  transform: translateY(6px);\n}",
   "kit-tip-in": "from {\n  opacity: 0;\n  translate: var(--kit-tip-from);\n}",
-  "kit-skeleton-sweep": "to {\n  translate: 100% 0;\n}",
+  "kit-skeleton-pulse":
+    "0%,\n100% {\n  opacity: 1;\n}\n50% {\n  opacity: var(--skeleton-pulse-floor);\n}",
 };
 
 /**

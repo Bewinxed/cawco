@@ -6,24 +6,28 @@
    * that act on them. An error sits above whatever rows were last read.
    *
    * Loading stands the card at the height it settled at last time (cards),
-   * with skeleton rows filling it, and the rows fade in over them in the
-   * same place: the card does not move. With no height kept yet, three
+   * with skeleton rows filling it, and the skeleton hands its place to the
+   * rows in its reveal (motion/curves `reveal`), in the same place: the card
+   * does not move. With no height kept yet, three
    * skeleton rows.
    */
   import { configureWords } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
-  import { fade } from "svelte/transition";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { appear, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { reveal } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { IconWarningTriangle } from "#lib/icons.js";
   import { page } from "$app/state";
   import { cawco } from "../client.svelte";
+  import RowFault from "../RowFault.svelte";
+  import { refusals } from "../refusals.svelte";
   import { type Cards, rememberCard } from "./cards";
   import { hubDown } from "./hub.svelte";
   import SkeletonRows from "./SkeletonRows.svelte";
+  import { configStore } from "./store.svelte";
+  import { unrestoredOn } from "./unrestored.svelte";
 
   let {
     title,
@@ -83,6 +87,36 @@
       sizes.disconnect();
     };
   };
+  /** The section this page is: `/config/<section>`, its list or an editor under it. */
+  const sectionOf = (path: string) => `/config/${path.split("/")[2] ?? ""}`;
+  const store = configStore();
+  /**
+   * This section's refused Undos (unrestored.svelte.ts), kept through a
+   * reload. Try again after a reload reads the section's lists again, the
+   * Configure store's and a page's own (`cawco:config-restored`).
+   */
+  const refusedUndos = $derived(
+    unrestoredOn(sectionOf(page.url.pathname), () => {
+      // biome-ignore lint/complexity/noVoid: the lists say what they read
+      void store.loadAll();
+      window.dispatchEvent(new CustomEvent("cawco:config-restored"));
+    })
+  );
+  // Leaving the section for another page is acting on what it said; a
+  // reload is not, and keeps it. A teardown runs in the browser only: on
+  // the server there is no leaving, and no page to read after the render.
+  $effect(() => {
+    const here = untrack(() => sectionOf(page.url.pathname));
+    return () =>
+      untrack(() => {
+        if (sectionOf(page.url.pathname) === here) {
+          return;
+        }
+        for (const said of unrestoredOn(here, () => undefined)) {
+          refusals.delete(said.key);
+        }
+      });
+  });
   /** Rows read, nothing wrong, the hub up: the size worth keeping. */
   const settled = $derived(ready && !problem && cawco.hub === "connected");
 </script>
@@ -147,7 +181,7 @@
           <div
             data-slot="slot"
             class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-5"
-            in:appear
+            in:reveal
             {@attach holding && !settling ? settleThen : undefined}
           >
             {#if toolbar}
@@ -158,13 +192,20 @@
             {#if problem}
               {@render fault(problem)}
             {/if}
+            {#each refusedUndos as said (said.key)}
+              <RowFault
+                again={said.again}
+                data-unrestored={said.key}
+                reason={said.reason}
+              />
+            {/each}
             {@render children()}
           </div>
         {:else}
           <div
             data-slot="slot"
             class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-5"
-            out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
+            out:reveal
           >
             <SkeletonRows fill={card !== null} />
           </div>

@@ -4,6 +4,7 @@
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
 import { readWithin } from "../../packages/core/src/bounded";
 import {
   accountClaudeJson,
@@ -170,6 +171,13 @@ try {
   spawn("sessiond");
   spawn("hub");
   console.log(`health ${await wait("http://127.0.0.1:43456/health")}`);
+  // The machine joined this hub as an install joins it (cli joined-hub.ts,
+  // binary-install's own step): `up --hub` names a hub for its run and saves
+  // none (discover.ts `settle`), so without this the agent is not the
+  // machine's own, refuses every fleet sync, and starts no session ("Not
+  // started: this machine has not had its first fleet sync …, and this agent
+  // refused the hub's sync", nightly 515796316).
+  await keepJoinedHub("http://127.0.0.1:43456");
   const captureWs = await capture();
   let agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const registered = await wait("http://127.0.0.1:43456/api/agents", (s) =>

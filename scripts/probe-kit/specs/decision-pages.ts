@@ -22,7 +22,9 @@
  * (c) The graph is derived: a card per decision, an edge per `after`, a
  *     frame per Section; a drag's place is kept in the page's state under
  *     `graph.places` and survives a revision; the Decisions tab's graph
- *     draws its cards and edges.
+ *     draws its cards and edges; the page live in the tab stands its Send
+ *     picks bar above the docked composer and the foot fade's dissolve,
+ *     no fade layer over the bar's box.
  * (d) A flowchart, a sequence diagram and a Gantt chart draw as Pele SVG on
  *     the house tokens in both themes; "Open as canvas" stands under the
  *     two types the converter draws as elements, never the Gantt, and opens
@@ -75,12 +77,14 @@ import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { pageReach } from "../decision-embeds";
 import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   pressIn,
   type Spec,
   settle,
@@ -356,9 +360,9 @@ const overflowIn = (frame: Frame) =>
   });
 
 /**
- * Each Canvas piece's frame against its drawing (DESIGN.md item 12: "a
- * canvas is its own box, width-fitted, capped at 80vb"): its box, its well's
- * room and the cap, and the drawing's own bounds read from the canvas's doc
+ * Each Canvas piece's frame against its drawing (a canvas is its own box at
+ * its real size, zoom 1): its box, its well's room and whether its well
+ * scrolls it sideways, and the drawing's own bounds read from the canvas's doc
  * in its frame, padded by its fitted view's 32px as the canvas host pads them
  * (canvas-host scene.ts `sceneBox`).
  */
@@ -415,7 +419,7 @@ const canvasBoxes = (frame: Frame) =>
             ?.textContent?.trim() ?? "",
         box: { w: f.width, h: f.height },
         room: s?.width ?? 0,
-        cap: Number.parseFloat(getComputedStyle(el).maxBlockSize),
+        wide: stage?.hasAttribute("data-wide") ?? false,
         off: s ? Math.abs(s.left + s.width / 2 - (f.left + f.width / 2)) : 99,
         scene,
       };
@@ -834,26 +838,18 @@ const mediaLeg = async (
       all.length === 2 && all.every((one) => one.box.h > 0 && !!one.scene),
     30_000
   ).catch(() => canvasBoxes(frame));
-  // The frame the canvas's own fit fills: the drawing at the room's width
-  // less its 32px each side, the margin round it; past the cap, the cap's
-  // height and the width it allows.
+  // The frame the canvas's own fit fills at zoom 1: the drawing and its
+  // fitted view's 32px margin each side (canvas-host scene.ts `sceneBox`).
   const fitted = (one: (typeof canvases)[number]) => {
     if (!one.scene) {
       return null;
     }
     const m = 32;
-    const tall =
-      2 * m + (one.scene.height * (one.room - 2 * m)) / one.scene.width;
-    return tall <= one.cap
-      ? { w: one.room, h: tall }
-      : {
-          w: 2 * m + (one.scene.width * (one.cap - 2 * m)) / one.scene.height,
-          h: one.cap,
-        };
+    return { w: one.scene.width + 2 * m, h: one.scene.height + 2 * m };
   };
   const shapes = canvases.map((one) => ({ ...one, want: fitted(one) }));
   kit.check(
-    `(a) ${leg}: each canvas is its drawing's own box, width-fitted under the 80vb cap and centred in its well, a wide one and a tall one (${shapes.map((one) => `“${one.caption}” ${Math.round(one.box.w)}×${Math.round(one.box.h)}, its drawing ${one.scene ? `${Math.round(one.scene.width)}×${Math.round(one.scene.height)}` : "unread"}`).join("; ")})`,
+    `(a) ${leg}: each canvas is its drawing's own box at its real size, centred in its well or, wider than it, scrolling sideways in it, a wide one and a tall one (${shapes.map((one) => `“${one.caption}” ${Math.round(one.box.w)}×${Math.round(one.box.h)}, its drawing ${one.scene ? `${Math.round(one.scene.width)}×${Math.round(one.scene.height)}` : "unread"}`).join("; ")})`,
     shapes.length === 2 &&
       shapes.some((one) => one.box.w > one.box.h) &&
       shapes.some((one) => one.box.h > one.box.w) &&
@@ -862,8 +858,8 @@ const mediaLeg = async (
           !!one.want &&
           Math.abs(one.box.w - one.want.w) <= 1 &&
           Math.abs(one.box.h - one.want.h) <= 1 &&
-          one.box.h <= one.cap + 0.5 &&
-          one.off <= 0.5
+          one.wide === one.box.w > one.room + 0.5 &&
+          (one.wide || one.off <= 0.5)
       ),
     JSON.stringify(shapes)
   );
@@ -990,11 +986,11 @@ const LOOP_MOVES = 81;
 
 /** A loop drawn by the mouse round `box` (the screen's px), outside it by 8px. */
 const loopRound = async (
-  page: Page,
+  frame: Frame,
   box: { height: number; width: number; x: number; y: number }
 ) => {
-  await page.mouse.move(box.x - 8, box.y - 8);
-  await page.mouse.down();
+  const page = frame.page();
+  await pressAt(frame, { x: box.x - 8, y: box.y - 8 }, { how: "down" });
   for (const [x, y] of [
     [box.x + box.width + 8, box.y - 8],
     [box.x + box.width + 8, box.y + box.height + 8],
@@ -1089,7 +1085,7 @@ const marks = async (on: On, frame: Frame) => {
   await settle(desk, 300);
   const box = await options.boundingBox();
   if (box) {
-    await loopRound(desk, box);
+    await loopRound(frame, box);
   }
   const inked = await until(
     "the ink group in the doc",
@@ -1202,7 +1198,10 @@ const resolveIn = (frame: Frame, anchors: Named[]) =>
 const toPaneTop = (target: Locator) =>
   target.evaluate((el) => {
     el.scrollIntoView({ block: "start" });
-    scrollBy(0, -40);
+    // Back 40px in what scrolls the page: a decision page's cards scroll in its first row.
+    (
+      el.closest("[data-slot=page-scroll]") ?? document.documentElement
+    ).scrollBy(0, -40);
   });
 
 /** What the page shows topmost at the middle of `box` (the desk's px), seen through the overlay. */
@@ -1277,8 +1276,7 @@ const drawOverEmbed = async (on: On, frame: Frame) => {
     from = to;
   }
   const [start] = corners as [[number, number]];
-  await desk.mouse.move(start[0], start[1]);
-  await desk.mouse.down();
+  await pressAt(frame, { x: start[0], y: start[1] }, { how: "down" });
   for (const [x, y] of sent) {
     await desk.mouse.move(x, y);
   }
@@ -1356,7 +1354,12 @@ const commentInEmbed = async (on: On, frame: Frame) => {
     await desk.emulateMedia({ reducedMotion: null });
     return;
   }
-  await pressIn(frame.frameLocator(EMBED).first(), ".box >> nth=0");
+  // In Comment mode the page's overlay takes the press over the embed and
+  // asks the embed's overlay what stands at the point (preview-overlay
+  // embeds.ts); the dashboard around the page must still leave it open.
+  await pressIn(frame.frameLocator(EMBED).first(), ".box >> nth=0", {
+    through: "cawco-overlay",
+  });
   await desk.emulateMedia({ reducedMotion: null });
   await writeComment(desk, "This box, inside the embed.");
   const pinned = await until(
@@ -1408,6 +1411,13 @@ const insertAhead = async (on: On, first: string) => {
   );
   const after = await frameWith(desk, 4);
   await settle(desk, 600);
+  // The stack card in view: a pin stands drawn only where its element is
+  // seen (pins.ts, clipped to the scroll containers round it), and the
+  // page's cards scroll in its first row.
+  await after
+    .locator("#decision-stack")
+    .evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await settle(desk, 400);
   const placed = await after.evaluate(() => {
     const stack = document
       .querySelector("#decision-stack")
@@ -1550,6 +1560,52 @@ const graphChecks = async (on: On) => {
     drawn?.nodes === 4 && drawn.edges === 2 && drawn.frames === 1,
     JSON.stringify(drawn)
   );
+  // The page live in the tab: its Send picks bar stands above the docked
+  // composer and above the foot fade's dissolve over it (FootFade), so no
+  // layer of the fade is drawn over the bar's box.
+  await open(
+    tab,
+    `${on.base}/project/${projectId}?view=decisions&page=${NAME}`,
+    "[data-slot=page-view] iframe"
+  );
+  const live = tab.frameLocator("[data-slot=page-view] iframe");
+  await live.locator("[data-slot=page-foot]").waitFor({ timeout: 30_000 });
+  await settle(tab, 600);
+  const barAt = await live.locator("[data-slot=page-foot]").boundingBox();
+  const barBox = barAt && {
+    x: barAt.x,
+    y: barAt.y,
+    w: barAt.width,
+    h: barAt.height,
+  };
+  const layers = await tab.evaluate(() => {
+    const box = (el: Element | null) => {
+      const r = el?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+    };
+    const view = document.querySelector("[data-slot=page-view]");
+    return {
+      fade: box(view?.querySelector(":scope > [data-standing]") ?? null),
+      dock: box(view?.querySelector("[data-slot=dock]") ?? null),
+    };
+  });
+  const meets = (
+    a: { h: number; w: number; x: number; y: number } | null,
+    b: { h: number; w: number; x: number; y: number } | null
+  ) =>
+    !!a &&
+    !!b &&
+    Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0.5 &&
+    Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 0.5;
+  kit.check(
+    `(c) the live page's Send picks bar stands above the dock and the foot fade: no fade layer over its box (the bar ${barBox ? `${Math.round(barBox.y)}–${Math.round(barBox.y + barBox.h)}px` : "missing"}, the fade from ${layers.fade ? Math.round(layers.fade.y) : "none"}px, the dock from ${layers.dock ? Math.round(layers.dock.y) : "none"}px)`,
+    !!barBox &&
+      !!layers.fade &&
+      !!layers.dock &&
+      !meets(barBox, layers.fade) &&
+      !meets(barBox, layers.dock),
+    JSON.stringify({ bar: barBox, ...layers })
+  );
   await tab.close();
 };
 
@@ -1576,7 +1632,7 @@ const makeTasks = async (on: On) => {
         )
         .map((each) => each.body)
         .join("\n"),
-    (body) => body.includes("Make tasks"),
+    (body) => body.includes(decisionsWords.makeTasks),
     30_000
   ).catch(() => "");
   const cards = made.record?.cards ?? [];
@@ -1712,12 +1768,14 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
   // The page's media are still loading in: the tap waits for the layout to stand still.
   await settle(shown, 800);
   await pressIn(frame, "#decision-stack [data-change] >> nth=0");
+  // Read once it has unfolded: mid-unfold its options are still fading in
+  // (a read at 70px of a card folded at 68 showed svelte alone).
   const opened = await until(
     `${theme}: the stack card open again`,
     () => foldOf(frame, "stack"),
-    (fold) => !fold.decided && fold.body,
+    (fold) => !fold.decided && fold.body && fold.options.length === 2,
     10_000
-  ).catch(() => null);
+  ).catch(() => foldOf(frame, "stack"));
   const after = (await on.read()).state.stack;
   kit.check(
     `(g) ${theme}: a card loads folded; Change opens it, both options showing, astro still marked, Continue standing, focus on astro`,
@@ -2802,7 +2860,7 @@ const tapLeg = async (on: On) => {
         .map((el) => `${el.tagName.toLowerCase()}.${el.className}`),
     };
   });
-  await frame.locator('#decision-tall [data-option="stages"]').tap();
+  await pressIn(frame, '#decision-tall [data-option="stages"]', { tap: true });
   const tapped = await until(
     "the tall card holding the tap's pick",
     () => foldOf(frame, "tall"),
@@ -2817,7 +2875,7 @@ const tapLeg = async (on: On) => {
     under?.top === "stages" && !!tapped && !tapped.decided && tapped.body,
     JSON.stringify({ under, tapped, heard })
   );
-  await frame.locator("#decision-tall [data-continue]").tap();
+  await pressIn(frame, "#decision-tall [data-continue]", { tap: true });
   const folded = await until(
     "the tall card folded by Continue",
     () => foldOf(frame, "tall"),
@@ -2836,7 +2894,7 @@ const tapLeg = async (on: On) => {
   // The card opened again by Change keeps its pick, and a tap on the
   // chosen option keeps it (the overlay's pick, preview-overlay pick.ts: a
   // one-pick choice is never let go), for a finger as for a mouse.
-  await frame.locator("#decision-tall [data-change]").tap();
+  await pressIn(frame, "#decision-tall [data-change]", { tap: true });
   await until(
     "the tall card open again",
     () => foldOf(frame, "tall"),
@@ -2845,7 +2903,7 @@ const tapLeg = async (on: On) => {
   ).catch(() => null);
   await settle(phone, 600);
   const reopened = await foldOf(frame, "tall");
-  await frame.locator('#decision-tall [data-option="stages"]').tap();
+  await pressIn(frame, '#decision-tall [data-option="stages"]', { tap: true });
   await settle(phone, 600);
   const stayed = await foldOf(frame, "tall");
   kit.check(
@@ -2857,14 +2915,14 @@ const tapLeg = async (on: On) => {
       stayed.next,
     JSON.stringify({ reopened, stayed })
   );
-  await frame.locator('#decision-tall [data-option="skim"]').tap();
+  await pressIn(frame, '#decision-tall [data-option="skim"]', { tap: true });
   const moved = await until(
     "the tall card's pick moved by a tap",
     () => foldOf(frame, "tall"),
     (fold) => JSON.stringify(fold.marked) === '["skim"]',
     5000
   ).catch(() => null);
-  await frame.locator("#decision-tall [data-continue]").tap();
+  await pressIn(frame, "#decision-tall [data-continue]", { tap: true });
   const other = await until(
     "the tall card folded again by Continue",
     () => foldOf(frame, "tall"),

@@ -67,11 +67,13 @@
       flow.done();
     }}
   >
+    <!-- svelte-ignore a11y_autofocus -->
     <Input
       aria-describedby={flow.problem ? `${codeId}-problem` : undefined}
       aria-invalid={flow.problem ? "true" : undefined}
       aria-label={words.codeLabel}
       autocomplete="off"
+      autofocus={flow.url !== null && flow.phase === "ready"}
       class="flex-1"
       disabled={flow.url === null || flow.phase === "signed-in"}
       placeholder={words.codePlaceholder}

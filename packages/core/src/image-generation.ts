@@ -17,6 +17,6 @@ export interface GeneratedImage {
 export const GENERATE_IMAGE = "generateImage";
 export const IMAGE_GENERATION_TIMEOUT_MS = 600_000;
 export const IMAGE_GENERATION_DESCRIPTION =
-  "Generate one PNG, or a reference-guided edit, on the owner's ChatGPT subscription whatever model or harness calls it: the machine's OpenCode ChatGPT login, never API-key billing or another provider. " +
-  "For requested photos, illustrations, textures and raster assets; for SVGs, icons or code-native graphics, edit source instead. " +
-  "Saves on the calling session's machine and returns the absolute path and actual dimensions; show it with show_image.";
+  "Generate one PNG, or a reference-guided edit, on the owner's ChatGPT subscription, from any model or harness. " +
+  "For photos, illustrations, textures and raster assets; SVGs, icons and code-native graphics are source to edit instead. " +
+  "Saved on your machine; show it with show_image.";

@@ -1,0 +1,431 @@
+/**
+ * What the agent's updates to the canvas changed that the person hasn't
+ * looked at (PRD §5.7, "Pointing and what changed"; core comments.ts
+ * `ArtifactChanges`, kept under the canvas's scene version): the doc's
+ * `meta.changes` less the person's looks in its `seen` map, read from the doc
+ * this page holds, so every screen of the canvas marks the same.
+ *
+ * Each changed element wears the done wash (`--c-change-wash`, the same the
+ * pages wear: the element's strokes and words read through it) on a layer of
+ * its own over the scene, in the scene's coordinates: it pans and zooms with
+ * the drawing, takes no press, and fades off over `--dur-fade` once seen. An
+ * ellipse is washed as an ellipse, a diamond as a diamond, a rounded box at
+ * its own radius.
+ *
+ * The tag (the floating tag recipe, under the rail) reads "N changed since
+ * you looked", then "k of N" while stepping, between ‹ (Previous change) and
+ * › (Next change); a press on its words starts at the first stop, and J and
+ * K step it while it holds the focus. Stops run in the scene's reading
+ * order, top to bottom, then what was taken out. A step brings the element
+ * into view and selects it (the canvas's chosen line), and marks it seen;
+ * so does the person selecting a washed element; so does a Send (the
+ * hub's). The tag leaves once every stop is seen.
+ */
+import {
+  type ArtifactChanges,
+  type ChangedItem,
+  seeChanges,
+  seenOf,
+} from "@cawco/core/comments";
+import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { Doc } from "yjs";
+import { Icon } from "./icons";
+import { tokenMs } from "./motion";
+
+/** The doc's latest changes, and the anchors of them the person has looked at. */
+interface Read {
+  changes: ArtifactChanges | null;
+  seen: Set<string>;
+}
+
+const readOf = (doc: Doc): Read => {
+  const changes =
+    (doc.getMap("meta").get("changes") as ArtifactChanges | undefined) ?? null;
+  return {
+    changes,
+    seen: new Set(
+      changes ? (seenOf(doc).get(String(changes.revision)) ?? []) : []
+    ),
+  };
+};
+
+/** One element's wash in the view's px: its box, and the shape it is drawn in. */
+interface Wash {
+  anchor: string;
+  h: number;
+  radius: number;
+  shape: "box" | "ellipse" | "diamond";
+  w: number;
+  x: number;
+  y: number;
+}
+
+/** Excalidraw's rounded box: a quarter of its short side, at most 32 (its adaptive radius). */
+const ROUND_MOST = 32;
+const ROUND_SHARE = 0.25;
+
+/** An element's box in the scene: its own, or its points' for a line, an arrow or a stroke. */
+const sceneBoxOf = (el: ExcalidrawElement) => {
+  if ("points" in el && el.points.length > 0) {
+    const xs = el.points.map(([px]) => px);
+    const ys = el.points.map(([, py]) => py);
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    return {
+      x: el.x + left,
+      y: el.y + top,
+      w: Math.max(...xs) - left,
+      h: Math.max(...ys) - top,
+    };
+  }
+  return { x: el.x, y: el.y, w: el.width, h: el.height };
+};
+
+/** The washes of `anchors` as the view stands now, in its px. */
+const washesOf = (
+  api: ExcalidrawImperativeAPI,
+  anchors: readonly string[]
+): Wash[] => {
+  const state = api.getAppState();
+  const zoom = state.zoom.value;
+  const byId = new Map(
+    api
+      .getSceneElements()
+      .filter((el) => !el.isDeleted)
+      .map((el) => [el.id, el])
+  );
+  return anchors.flatMap((anchor): Wash[] => {
+    const el = byId.get(anchor);
+    if (!el) {
+      return [];
+    }
+    const box = sceneBoxOf(el);
+    let shape: Wash["shape"] = "box";
+    if (el.type === "ellipse") {
+      shape = "ellipse";
+    } else if (el.type === "diamond") {
+      shape = "diamond";
+    }
+    const radius = el.roundness
+      ? Math.min(ROUND_MOST, ROUND_SHARE * Math.min(box.w, box.h))
+      : 0;
+    return [
+      {
+        anchor,
+        shape,
+        x: (box.x + state.scrollX) * zoom,
+        y: (box.y + state.scrollY) * zoom,
+        w: box.w * zoom,
+        h: box.h * zoom,
+        radius: radius * zoom,
+      },
+    ];
+  });
+};
+
+/** One wash, drawn in its element's shape; fading off once it leaves. */
+function WashShape({ wash, leaving }: { leaving: boolean; wash: Wash }) {
+  const common = {
+    "data-change": leaving ? undefined : wash.anchor,
+    "data-leaving": leaving ? "" : undefined,
+    className: "canvas-change",
+  };
+  if (wash.shape === "ellipse") {
+    return (
+      <ellipse
+        {...common}
+        cx={wash.x + wash.w / 2}
+        cy={wash.y + wash.h / 2}
+        rx={wash.w / 2}
+        ry={wash.h / 2}
+      />
+    );
+  }
+  if (wash.shape === "diamond") {
+    const cx = wash.x + wash.w / 2;
+    const cy = wash.y + wash.h / 2;
+    return (
+      <polygon
+        {...common}
+        points={`${cx},${wash.y} ${wash.x + wash.w},${cy} ${cx},${wash.y + wash.h} ${wash.x},${cy}`}
+      />
+    );
+  }
+  return (
+    <rect
+      {...common}
+      height={wash.h}
+      rx={wash.radius}
+      ry={wash.radius}
+      width={wash.w}
+      x={wash.x}
+      y={wash.y}
+    />
+  );
+}
+
+/** One stop of the tag: its anchor and its words. */
+interface Stop {
+  anchor: string;
+  label: string;
+}
+
+/** The stops not looked at, in the scene's reading order (top to bottom, then left to right), then what was taken out. */
+const stopsOf = (
+  api: ExcalidrawImperativeAPI,
+  unseen: readonly ChangedItem[]
+): Stop[] => {
+  const byId = new Map(api.getSceneElements().map((el) => [el.id, el]));
+  const placed = unseen
+    .filter((item) => item.kind === "canvas" && byId.has(item.anchor))
+    .map((item) => ({
+      item,
+      box: sceneBoxOf(byId.get(item.anchor) as ExcalidrawElement),
+    }))
+    .sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
+    .map(({ item }) => item);
+  const rest = unseen.filter((item) => !placed.includes(item));
+  return [...placed, ...rest].map((item) => ({
+    anchor: item.anchor,
+    label: item.label,
+  }));
+};
+
+export function Changes({
+  api,
+  doc,
+}: {
+  api: ExcalidrawImperativeAPI;
+  doc: Doc;
+}) {
+  const [read, setRead] = useState<Read>(() => readOf(doc));
+  // The doc changes: the hub's next changes, the person's looks from any screen.
+  useEffect(() => {
+    const again = () => setRead(readOf(doc));
+    again();
+    doc.on("update", again);
+    return () => doc.off("update", again);
+  }, [doc]);
+  // The view moves: the washes follow the scene's scroll and zoom.
+  const [view, setView] = useState(0);
+  useEffect(
+    () =>
+      api.onChange(() => {
+        setView((n) => n + 1);
+      }),
+    [api]
+  );
+  const unseen = useMemo(
+    () =>
+      (read.changes?.items ?? []).filter((item) => !read.seen.has(item.anchor)),
+    [read]
+  );
+  const anchors = useMemo(
+    () =>
+      unseen
+        .filter((item) => item.kind === "canvas")
+        .map((item) => item.anchor),
+    [unseen]
+  );
+  // `view` is the scene's scroll, zoom and elements moving, which washesOf reads from the API.
+  const washes = useMemo(() => washesOf(api, anchors), [api, anchors, view]);
+  /**
+   * Washes looked at, fading off over --dur-fade before they go: each one
+   * the last washes held that these don't, kept until its fade has run
+   * however often the view redraws meanwhile.
+   */
+  const [leaving, setLeaving] = useState<Wash[]>([]);
+  const before = useRef<Wash[]>([]);
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const now = new Set(washes.map((wash) => wash.anchor));
+    const gone = before.current.filter((wash) => !now.has(wash.anchor));
+    before.current = washes;
+    if (gone.length === 0) {
+      return;
+    }
+    const goneAnchors = new Set(gone.map((wash) => wash.anchor));
+    setLeaving((was) => [
+      ...was.filter((wash) => !goneAnchors.has(wash.anchor)),
+      ...gone,
+    ]);
+    const timer = setTimeout(() => {
+      timers.current.delete(timer);
+      setLeaving((was) => was.filter((wash) => !gone.includes(wash)));
+    }, tokenMs("--dur-fade"));
+    timers.current.add(timer);
+  }, [washes]);
+  useEffect(() => {
+    const held = timers.current;
+    return () => {
+      for (const timer of held) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
+
+  const stops = useMemo(() => stopsOf(api, unseen), [api, unseen]);
+  /** The stops as they stood at the first step: "k of N" counts them while he steps. */
+  const [tour, setTour] = useState<Stop[] | null>(null);
+  const [at, setAt] = useState(0);
+  useEffect(() => {
+    if (stops.length === 0) {
+      setTour(null);
+    }
+  }, [stops.length]);
+  /** What the handlers read as it stands now, so each keeps one identity. */
+  const latest = useRef({ at, key: read.changes?.revision, stops, tour });
+  latest.current = { at, key: read.changes?.revision, stops, tour };
+
+  const looked = useCallback(
+    (seenAnchors: string[]) => {
+      const { key } = latest.current;
+      if (key !== undefined && seenAnchors.length > 0) {
+        seeChanges(doc, key, seenAnchors);
+      }
+    },
+    [doc]
+  );
+
+  // The person selecting a washed element has looked at it.
+  useEffect(
+    () =>
+      api.onChange((_elements, state) => {
+        const chosen = Object.keys(state.selectedElementIds).filter(
+          (id) => state.selectedElementIds[id] && anchors.includes(id)
+        );
+        if (chosen.length > 0) {
+          looked(chosen);
+        }
+      }),
+    [api, anchors, looked]
+  );
+
+  /** A step of the tag: by one stop each way, or the first when it starts; brought into view, selected and seen. */
+  const step = useCallback(
+    (by: 1 | -1 | 0) => {
+      const { at: from, stops: live, tour: frozen } = latest.current;
+      const list = frozen ?? live;
+      if (list.length === 0) {
+        return;
+      }
+      let next: number;
+      if (frozen) {
+        next = (from + by + list.length) % list.length;
+      } else {
+        setTour(list);
+        next = by === -1 ? list.length - 1 : 0;
+      }
+      setAt(next);
+      const stop = list[next];
+      if (!stop) {
+        return;
+      }
+      const el = api
+        .getSceneElements()
+        .find((one) => one.id === stop.anchor && !one.isDeleted);
+      if (el) {
+        api.scrollToContent(el, {
+          animate: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+        });
+        api.updateScene({
+          appState: { selectedElementIds: { [el.id]: true } },
+        });
+      }
+      looked([stop.anchor]);
+    },
+    [api, looked]
+  );
+  const back = useCallback(() => step(-1), [step]);
+  const on = useCallback(() => step(1), [step]);
+  const count = useCallback(() => step(latest.current.tour ? 0 : 1), [step]);
+  /** J and K step it while it holds the focus. */
+  const keys = useCallback(
+    (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      if (key === "j" || key === "k") {
+        event.preventDefault();
+        event.stopPropagation();
+        step(key === "j" ? 1 : -1);
+      }
+    },
+    [step]
+  );
+  const total = tour?.length ?? stops.length;
+  const said = tour
+    ? `${at + 1} of ${total}`
+    : `${total} changed since you looked`;
+
+  return (
+    <>
+      <svg
+        aria-hidden="true"
+        className="canvas-changes"
+        data-canvas-changes=""
+        data-cawco-changes=""
+      >
+        {washes.map((wash) => (
+          <WashShape key={wash.anchor} leaving={false} wash={wash} />
+        ))}
+        {leaving.map((wash) => (
+          <WashShape key={`gone:${wash.anchor}`} leaving wash={wash} />
+        ))}
+      </svg>
+      {stops.length > 0 ? (
+        <fieldset
+          aria-label={`${total} changed since you looked`}
+          className="canvas-changes-tag"
+          data-slot="changes-tag"
+        >
+          <button
+            aria-label="Previous change"
+            className="canvas-changes-step"
+            data-slot="change-previous"
+            onClick={back}
+            onKeyDown={keys}
+            title="Previous change"
+            type="button"
+          >
+            <span className="canvas-changes-back">
+              <Icon name="chevron" />
+            </span>
+          </button>
+          <button
+            className="canvas-changes-count"
+            data-slot="change-count"
+            onClick={count}
+            onKeyDown={keys}
+            type="button"
+          >
+            {said}
+          </button>
+          <button
+            aria-label="Next change"
+            className="canvas-changes-step"
+            data-slot="change-next"
+            onClick={on}
+            onKeyDown={keys}
+            title="Next change"
+            type="button"
+          >
+            <span className="canvas-changes-on">
+              <Icon name="chevron" />
+            </span>
+          </button>
+        </fieldset>
+      ) : null}
+    </>
+  );
+}

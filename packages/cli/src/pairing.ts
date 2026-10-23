@@ -14,6 +14,7 @@
 
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
+import { configurePage } from "@cawco/core";
 import { hubDbPath } from "@cawco/core/paths";
 
 /** Thrown when there is no hub here to change: a sentence for the person. */
@@ -50,7 +51,7 @@ export const pairingOff = (): number => {
     db.close();
   }
   console.log(
-    "Paired devices are no longer required: every device on your network reaches the fleet again, and the paired devices and machine keys are forgotten. Turn it on again in Configure › Devices."
+    `Paired devices are no longer required: every device on your network reaches the fleet again, and the paired devices and machine keys are forgotten. Turn it on again in ${configurePage("devices")}.`
   );
   return 0;
 };

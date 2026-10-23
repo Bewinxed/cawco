@@ -9,8 +9,9 @@
  * response) and every socket's frames, both ways in order, go on the tape.
  * `player(tape)` answers as that hub did:
  *  - HTTP: the first response recorded for the request (method, path, query
- *    and body, the client's own random ids masked); a request the tape never
- *    saw is a 404 and a miss.
+ *    and body, the client's own random ids masked; a body the page drew, a
+ *    mark's pictures, left out: `DRAWN_BODY`); a request the tape never saw
+ *    is a 404 and a miss.
  *  - A socket: the hub's frames the recorded connection opened with, then,
  *    for each frame the page sends, the frames the hub answered the same
  *    frame with on tape (its ids put back to the page's own); a frame the
@@ -23,6 +24,8 @@
  * the page goes there itself. Each page's context routes it (`attach`):
  * its HTTP is recorded and answered by port and path, its sockets by frame,
  * so the preview and its overlay load from the tape with nothing listening.
+ * A page whose overlay tag carries its artifact's doc carries it as the
+ * doc's room holds it then (`withRoomDoc`), as the hub embeds its own.
  *
  * The preview overlay's script is code under test, never data: its
  * request is answered with the tree's own build (`overlayOfTree`) behind the
@@ -33,10 +36,11 @@
  * on the preview's origin) speaks y-websocket in binary frames, which hold
  * the page's own random client ids, so it is played by the hub's own rules
  * (hub artifacts/sync.ts `artifactSocket`), not by bytes: the page's sync
- * step 1 gets the step 2 the tape holds; its step 2 and its updates go to
- * the artifact's other sockets in the same page's context (the pane's and
- * its preview's), as the hub relays them; awareness and text frames get
- * nothing, as the hub ignores them. The walk's passes read side by side on
+ * step 1 gets the step 2 the tape holds, then every step 2 and update the
+ * artifact's sockets in the same page's context (the pane's and its
+ * preview's) sent before it, as the hub's doc holds them; those go to the
+ * other sockets open then too, as the hub relays them; awareness and text
+ * frames get nothing, as the hub ignores them. The walk's passes read side by side on
  * one tape, each its own reader: relayed across them, a pin one pass dropped
  * was counted on the other's pane whenever the two acts met (artifact/pin
  * read "Comments, 2" in two walks of three, "1" in the third).
@@ -47,6 +51,7 @@
  */
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { BrowserContext, Route, WebSocketRoute } from "playwright-core";
+import { mergeUpdates } from "yjs";
 import {
   bundleOverlay,
   OVERLAY_PATH,
@@ -220,6 +225,9 @@ const ID_KEYS = new Set([
   "presenceId",
   // A preview pane's own id, in what it reports (`…/artifacts/<id>/shown`).
   "client",
+  // The page an Add machine draft's edit is stamped by (dashboard
+  // connect/installs.svelte.ts `#stamp`, minted per page load).
+  "page",
   "nonce",
   "subscriptionId",
 ]);
@@ -278,8 +286,17 @@ const DROPPED = new Set([
   "transfer-encoding",
   "date",
 ]);
-const HTTP_KEY = (method: string, path: string, body: string) =>
-  `${method} ${normalPath(path)} ${body}`;
+/**
+ * A route whose body is what the page drew, not what it asked: a comment's
+ * mark pictures (PNGs of the marked element, `POST /__cawco/artifact/<id>/pictures`),
+ * whose bytes differ from run to run. Matched by its route and artifact alone.
+ */
+const DRAWN_BODY = /^\/__cawco\/artifact\/[0-9a-f-]{36}\/pictures$/;
+
+const HTTP_KEY = (method: string, path: string, body: string) => {
+  const normal = normalPath(path);
+  return `${method} ${normal} ${DRAWN_BODY.test(new URL(normal, "http://tape").pathname) ? "" : body}`;
+};
 
 /** A path with its query sorted: the same request asked in another order. */
 function normalPath(path: string): string {
@@ -653,18 +670,52 @@ function repliesTo(
   );
 }
 
-/** A page's step 2 or update, to the artifact's other sockets, as the hub relays it. */
-function relay(
-  room: Set<Peer> | null,
-  from: Peer,
-  data: Uint8Array<ArrayBuffer>
-): void {
-  for (const other of room ?? []) {
+/**
+ * An artifact's doc as one page context's sockets share it: the sockets
+ * open on it now, and every step 2 and update they sent, which the hub
+ * applied to its doc (sync.ts `docs.join`) and so holds for any socket that
+ * opens on it later.
+ */
+interface Room {
+  kept: Uint8Array<ArrayBuffer>[];
+  peers: Set<Peer>;
+}
+
+/**
+ * A page's step 2 or update, to the artifact's other sockets, as the hub
+ * relays it, and kept in the room's doc. Relayed alone, a write reached
+ * only the sockets open at that moment: the pane that opened after the
+ * page cleared its pins read the tape's step 2 alone, the tape's pins
+ * standing in it again (artifact/comments-fault's Send 9 against Send 1).
+ */
+function relay(room: Room, from: Peer, data: Uint8Array<ArrayBuffer>): void {
+  const update = asUpdate(data);
+  room.kept.push(update);
+  for (const other of room.peers) {
     if (other !== from) {
-      other.send(asUpdate(data));
+      other.send(update);
     }
   }
 }
+
+/** A sync message's Yjs update: what follows its type, its step and its length. */
+function payloadOf(frame: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+  let at = 2;
+  let length = 0;
+  for (let shift = 0; at < frame.length; shift += 7) {
+    const byte = frame[at] as number;
+    at += 1;
+    length += (byte % 128) * 2 ** shift;
+    if (byte < 128) {
+      break;
+    }
+  }
+  return frame.slice(at, at + length);
+}
+
+/** The overlay's tag on a page the hub serves (preview-proxy.ts `injectOverlay`): its artifact and the doc's state it carries. */
+const OVERLAY_DOC =
+  /(<script [^>]*data-artifact="([0-9a-f-]{36})"[^>]*data-state=")([^"]*)(")/;
 
 /** A step 2 or an update, as the hub relays it: an update (one-byte varUints: `[0, 2, …]`). */
 const asUpdate = (data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> => {
@@ -685,16 +736,23 @@ const PROJECT_ADDRESS = /^\/api\/projects\/[^/]+\/preview-address$/;
 const PAGE_PATH = "/__cawco/page/";
 
 export function player(tape: TapeHub) {
+  // Each recorded body masked again, as a request is: a key `ID_KEYS` took
+  // in after the tape was recorded masks it on both sides.
   const http = new Map<string, TapeHttp>();
   for (const one of tape.http) {
-    const key = HTTP_KEY(one.method, one.path, one.body);
+    const key = HTTP_KEY(one.method, one.path, canonical(one.body));
     if (!http.has(key)) {
       http.set(key, one);
     }
   }
   const previews = new Map<string, TapePreview>();
   for (const one of tape.preview) {
-    const key = PREVIEW_KEY(one.port, one.method, one.path, one.body);
+    const key = PREVIEW_KEY(
+      one.port,
+      one.method,
+      one.path,
+      canonical(one.body)
+    );
     if (!previews.has(key)) {
       previews.set(key, one);
     }
@@ -753,7 +811,7 @@ export function player(tape: TapeHub) {
    * Each artifact's open doc sockets, on either origin, by the page context
    * that opened them (`scope`): what a relay reaches.
    */
-  const rooms = new Map<string, Set<Peer>>();
+  const rooms = new Map<string, Room>();
 
   /** Held requests and silent sockets open now: held on purpose, answered as the hub state answers (a wait on the tape counts them done). */
   let holding = 0;
@@ -780,15 +838,21 @@ export function player(tape: TapeHub) {
     }
     const artifact = pathname.match(ARTIFACT_SOCKET)?.[1];
     const roomKey = `${scope} ${artifact}`;
-    const room = artifact ? (rooms.get(roomKey) ?? new Set<Peer>()) : null;
-    if (artifact && room) {
+    const room = artifact
+      ? (rooms.get(roomKey) ?? { kept: [], peers: new Set<Peer>() })
+      : null;
+    if (room) {
       rooms.set(roomKey, room);
-      room.add(peer);
+      room.peers.add(peer);
     }
     for (const frame of opening(script)) {
       peer.send(wireOf(frame));
     }
-    /** The tape's answer to a frame it must answer; a frame it never saw is a miss. */
+    /**
+     * The tape's answer to a frame it must answer; a frame it never saw is a
+     * miss. A doc's step 1 is answered with the tape's step 2 and then what
+     * the room's sockets wrote since, as the hub answers from its doc.
+     */
     const answer = (data: Wire) => {
       const key = frameKey(frameOf("out", data));
       const found = answers.get(`${played} ${key}`);
@@ -799,22 +863,48 @@ export function player(tape: TapeHub) {
       for (const reply of repliesTo(found, data)) {
         peer.send(reply);
       }
+      for (const update of room?.kept ?? []) {
+        peer.send(update);
+      }
     };
     return {
       message(data: Wire) {
         const met = room ? artifactFrame(data) : "answered";
         if (met === "answered") {
           answer(data);
-        } else if (met === "relayed" && typeof data !== "string") {
+        } else if (met === "relayed" && room && typeof data !== "string") {
           relay(room, peer, data);
         }
       },
       close() {
-        room?.delete(peer);
+        room?.peers.delete(peer);
       },
     };
   };
   type Connection = NonNullable<ReturnType<typeof connect>>;
+
+  /**
+   * A page the hub serves, its overlay's tag carrying the doc as the hub
+   * holds it now: the state the tape recorded with what `scope`'s sockets
+   * wrote since merged in (the hub embeds its doc's state, preview-proxy.ts
+   * `injectOverlay`). Served as recorded, a page filled itself from pins the
+   * walk had cleared, and the overlay, finding their anchors before the
+   * device's copy of the clear came in, wrote them again as its own
+   * (pins.ts `settle`): artifact/comments-reading drew pins 1 to 9 in some
+   * walks and pin 1 alone in others.
+   */
+  const withRoomDoc = (html: string, scope: string): string =>
+    html.replace(OVERLAY_DOC, (whole, head, id, state, tail) => {
+      const kept = rooms.get(`${scope} ${id}`)?.kept ?? [];
+      if (kept.length === 0) {
+        return whole;
+      }
+      const merged = mergeUpdates([
+        new Uint8Array(Buffer.from(state, "base64")),
+        ...kept.map(payloadOf),
+      ]);
+      return `${head}${Buffer.from(merged).toString("base64")}${tail}`;
+    });
 
   /** Page contexts attached so far: each one's doc sockets relay among themselves alone. */
   let contexts = 0;
@@ -860,7 +950,7 @@ export function player(tape: TapeHub) {
         ),
         body: found.binary
           ? Buffer.from(found.bytes, "base64")
-          : withParent(found.bytes, PARENT_MASK, parent),
+          : withRoomDoc(withParent(found.bytes, PARENT_MASK, parent), scope),
       });
     });
     const play = (ws: WebSocketRoute) => {

@@ -86,6 +86,101 @@ function layoutTop(element: HTMLElement, host: HTMLElement): number {
   return top;
 }
 
+/** The `data-*` names the page's styles select on, and the sheets they were read from. */
+let styled: { sheets: number; names: Set<string> } | undefined;
+
+/** Each `data-*` name a selector reads (`[data-state=open]`, `[data-slot]`). */
+const SELECTED = /\[\s*(data-[\w-]+)/g;
+
+/**
+ * The `data-*` attributes some style selects on: what an element is drawn
+ * by, as against what code finds it by. Read from the page's sheets once
+ * for each set of them (a route's sheet arriving adds one).
+ */
+function styledData(): Set<string> {
+  const sheets = document.styleSheets;
+  if (styled?.sheets === sheets.length) {
+    return styled.names;
+  }
+  const names = new Set<string>();
+  const read = (rules: CSSRuleList) => {
+    for (const rule of rules) {
+      if (rule instanceof CSSStyleRule) {
+        for (const [, name] of rule.selectorText.matchAll(SELECTED)) {
+          names.add(name);
+        }
+      }
+      // @media, @layer, @supports, @container, and nested style rules.
+      if ("cssRules" in rule) {
+        read((rule as CSSGroupingRule).cssRules);
+      }
+    }
+  };
+  for (const sheet of sheets) {
+    // Another origin's sheet (an extension's) is not the page's, and its
+    // rules are closed to it: reading them throws.
+    if (!sheet.href || new URL(sheet.href).origin === location.origin) {
+      read(sheet.cssRules);
+    }
+  }
+  styled = { sheets: sheets.length, names };
+  return names;
+}
+
+/**
+ * What names an element to a lookup or a reader, never to its look: an id
+ * and what points at one, a form name, an accessible name or description.
+ */
+const NAMING = new Set([
+  "id",
+  "name",
+  "for",
+  "form",
+  "headers",
+  "title",
+  "alt",
+  "aria-label",
+  "aria-labelledby",
+  "aria-describedby",
+  "aria-description",
+  "aria-details",
+  "aria-controls",
+  "aria-owns",
+  "aria-activedescendant",
+  "aria-errormessage",
+  "aria-flowto",
+  "aria-keyshortcuts",
+  "aria-roledescription",
+]);
+
+/** The list's own names for a row: its key, its flight, its shared element. */
+const ROW_KEYS = new Set(["data-key", "data-flip", "data-share"]);
+
+/**
+ * A copy of a row is a picture of it and nobody's row: it keeps what draws
+ * it (its classes, its style and the `data-*` states the styles select on)
+ * and loses every name (NAMING, the list's keys, and every `data-*`
+ * attribute no style reads: `data-row-name`, `data-artifact`, a block's id).
+ * A lookup by name, in the app or in a spec, finds the real row alone, never
+ * a copy still closing where it stood. Hidden from readers and inert.
+ */
+function anonymous(copy: HTMLElement): void {
+  const drawn = styledData();
+  for (const node of [copy, ...copy.querySelectorAll("*")]) {
+    for (const { name } of [...node.attributes]) {
+      if (
+        NAMING.has(name) ||
+        ROW_KEYS.has(name) ||
+        (name.startsWith("data-") && !drawn.has(name))
+      ) {
+        node.removeAttribute(name);
+      }
+    }
+  }
+  copy.setAttribute("aria-hidden", "true");
+  copy.inert = true;
+}
+
 /** The row as it is drawn, in a table of its own. */
 function copyOf(row: HTMLElement, left: number, top: number): HTMLElement {
   const { width, height } = row.getBoundingClientRect();
@@ -93,11 +188,6 @@ function copyOf(row: HTMLElement, left: number, top: number): HTMLElement {
   table.style.width = `${width}px`;
   const tbody = row.parentElement?.cloneNode(false) as HTMLElement;
   const copy = row.cloneNode(true) as HTMLElement;
-  // A copy is nobody's row: not a shared-element source, not a list row.
-  for (const node of [copy, ...copy.querySelectorAll("[data-share]")]) {
-    node.removeAttribute("data-share");
-  }
-  copy.removeAttribute("data-key");
   tbody.append(copy);
   // A row that was not the last keeps its bottom rule: an empty row after
   // it keeps the table's `tr:last-child` rules off the copy.
@@ -105,9 +195,8 @@ function copyOf(row: HTMLElement, left: number, top: number): HTMLElement {
     tbody.append(document.createElement("tr"));
   }
   table.append(tbody);
+  anonymous(table);
   const wrap = document.createElement("div");
-  wrap.setAttribute("aria-hidden", "true");
-  wrap.inert = true;
   wrap.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${width}px;height:${height}px;overflow:hidden;pointer-events:none`;
   wrap.append(table);
   return wrap;
@@ -865,12 +954,7 @@ function departure(
   still: boolean
 ) {
   const copy = element.cloneNode(true) as HTMLElement;
-  for (const marked of [copy, ...copy.querySelectorAll("[data-flip]")]) {
-    marked.removeAttribute("data-flip");
-  }
-  copy.setAttribute("data-reflow-ghost", "");
-  copy.setAttribute("aria-hidden", "true");
-  copy.inert = true;
+  anonymous(copy);
   Object.assign(copy.style, {
     position: "absolute",
     left: `${was.cx + at.x}px`,

@@ -60,15 +60,24 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconArchive, IconPlus } from "#lib/icons.js";
+  import {
+    IconArchive,
+    IconPlus,
+    IconStructure as Structure,
+    IconStructureSolid as StructureOn,
+  } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import StructureOn from "~icons/solar/structure-bold";
-  import Structure from "~icons/solar/structure-bold-duotone";
   import { type BoardRow, cawco, isFailed } from "../client.svelte";
   import { conversationHref } from "../links";
   import { nestFrom } from "../motion/branch.svelte";
-  import { crossIn, crossOut, dur, motionOk } from "../motion/curves.svelte";
+  import {
+    crossIn,
+    dur,
+    motionOk,
+    reveal,
+    revealOut,
+  } from "../motion/curves.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
@@ -857,13 +866,14 @@
     </div>
     {#if waiting}
       <!-- The list is being read: rows at a session row's height stand in
-           its place, and leave as it cross-fades in over them. -->
+           its place, and hand it to the list in their reveal (revealOut,
+           reveal). -->
       <div
         aria-busy="true"
         aria-label="Reading the fleet"
         class="flex flex-col gap-(--tree-gap)"
         role="status"
-        out:crossOut
+        out:revealOut
       >
         {#each WAITING_ROWS as row (row)}
           <Skeleton class="w-full" height="tabs" />
@@ -874,7 +884,7 @@
            cell, as tall as the taller of the two. Changing to or from an
            empty tab, the panel goes from one height to the other in one
            move, never through nothing. -->
-      <div class="grid" in:crossIn>
+      <div class="grid" in:reveal>
         <div
           data-slot="list"
           class="col-start-1 row-start-1 flex min-w-0 flex-col overflow-x-clip"

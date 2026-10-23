@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shellWords, sidebarWords } from "@cawco/core";
   import {
     type ShellShortcut,
     shellShortcutOf,
@@ -40,11 +41,12 @@
   import { browser, dev } from "$app/env";
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
-  import AddMachineDialog from "./AddMachineDialog.svelte";
   import { deletePreview } from "./artifact-api";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import { barStrip } from "./bar-strip.svelte";
   import { cawco } from "./client.svelte";
+  import ConnectWindow from "./connect/ConnectWindow.svelte";
+  import { connect } from "./connect/installs.svelte";
   import { continuing } from "./continue.svelte";
   import EdgePull from "./EdgePull.svelte";
   import FilesFloat from "./files/FilesFloat.svelte";
@@ -924,6 +926,25 @@
   const filesCounted = $derived(
     files.session ? filesCount(files.session) : null
   );
+  /**
+   * Add machine's window, opened from the machines in the phone's sheet (a
+   * way in, an install's row): the sheet goes as its drawer rises, and the
+   * window gives the focus back to what invoked the sheet, the burger.
+   */
+  $effect(() => {
+    if (!connect.open) {
+      return;
+    }
+    untrack(() => {
+      if (railOpen && !railed) {
+        if (connect.anchor?.closest("[data-rail-sheet]")) {
+          connect.anchor = burger;
+        }
+        railOpen = false;
+      }
+    });
+  });
+
   /** Files' drawer, from the sidebar's row: the sidebar goes as it rises. */
   function openFilesSheet() {
     files.returnTo = burger;
@@ -1139,7 +1160,7 @@
              less motion not at all. -->
         <button
           data-slot="burger"
-          aria-label="Open navigation"
+          aria-label={sidebarWords.openNavigation}
           class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-(--burger-start) max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
@@ -1283,14 +1304,14 @@
                  own class and the bar group's (`[data-machines]`), both on
                  the shell container's desk line (`@max-desk/shell`), so the
                  first client render keeps the bar the server drew. -->
-            <Tip keys="⌘K" label="Jump to session">
+            <Tip keys="⌘K" label={shellWords.jumpToSession}>
               {#snippet children(tip)}
                 <button
                   data-bar-item
                   {...tip}
                   aria-expanded={barGlass.open === "jump"}
                   aria-haspopup="dialog"
-                  aria-label="Jump to session"
+                  aria-label={shellWords.jumpToSession}
                   class="select-none touch-hit press-tint @max-desk/shell:hidden"
                   data-share="jump"
                   onclick={() => {
@@ -1428,29 +1449,28 @@
     <!-- Files on a phone: the house bottom drawer. -->
     <FilesSheet />
   {/if}
-  <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
-  <AddMachineDialog />
+  <!-- One Add machine window for every entry that adds one, and every
+       install's row that opens it again (connect/installs.svelte.ts). -->
+  <ConnectWindow />
   <!-- One New Session form for every opener (the rail's rows, the phone's
        Start session, a `?spawn=` link, the session strip's "+", a project's
        Spin off) and every session menu's Continue (spawn/new-session,
        continue.svelte.ts): a popover hanging from the trigger pressed on a
        desk, the bottom sheet on a phone. -->
   <NewSessionPopover
-    anchor={continuing.source ? null : spawning.anchor}
+    anchor={spawning.anchor}
     continueFrom={continuing.source ?? undefined}
     onclose={() => {
       spawning.open = false;
       spawning.anchor = null;
+      spawning.shown = null;
       continuing.source = null;
-      continuing.restore = null;
     }}
     onexitcontinue={() => {
       spawning.open = true;
       continuing.source = null;
-      continuing.restore = null;
     }}
     open={spawning.open || continuing.source !== null}
     prefill={continuing.source ? undefined : spawning.prefill}
-    restore={continuing.restore ?? undefined}
   />
 </Overlays>

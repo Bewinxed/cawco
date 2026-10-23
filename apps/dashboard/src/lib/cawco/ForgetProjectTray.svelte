@@ -1,59 +1,68 @@
 <script lang="ts">
   /**
-   * Forget a project: the running-sessions tray (StopTray) with the
-   * forget's words and the delete as its end, standing in the page under
-   * the control that asked (forget.svelte.ts): the project head's `⋯` or a
-   * folder's row in the rail. Each of those places draws one of these with
-   * its own `at`; only the one the forget was asked from shows.
+   * Forget a project: the running-sessions tray (StopTray) on the forget's
+   * job (stop-work.svelte.ts), standing in the page under the control that
+   * asked (forget.svelte.ts): the project head's `⋯` or a folder's row in
+   * the rail. Each of those places draws one of these with its own `at`;
+   * the tray shows at the one it stands at, and the forget parked meanwhile
+   * shows its line (StopParked) under the project's row in the rail, or,
+   * while that row is not drawn (a phone's closed sheet), under the head.
+   * Caw turned off with what he started still stopping (CawLeadSwitch) is
+   * the same kind of work on the same project, so it parks here too.
    *
    * With nothing running it is the plain question: Forget, the delete,
-   * "Forgotten" held in place, then the project's page leaves for home (the
-   * page keeps its project as it was loaded while that is said).
+   * "Forgotten" held in place, then the project's page leaves for home.
    * With sessions running it stops them first ("Stop 3 and forget", then
    * "Stop 3 mid-turn and forget"), each row confirmed as its machine ends it,
    * and the delete runs once the ring is whole ("Forgetting…", "Forgotten").
    * The hub refuses the delete while anything of the project runs, so a
    * failure keeps the project: the row says why, and Try again stops what
-   * is left (it reads what still runs when no row failed). The project is
-   * forgotten once every session on a connected machine has stopped; its
-   * page and its rail row go with it.
+   * is left. Put away part-way, the forget goes on (The Work Outlives Its
+   * Surface Rule): the stops land, and the delete runs once none is left.
    *
    * Nothing here holds the page: pressing something else meanwhile breaks
    * nothing, since the hub refuses the delete while anything of the project
    * still runs, and the tray says so.
    */
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { route } from "#lib/cawco/motion/route.svelte.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { cn } from "#lib/utils.js";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
-  import {
-    deleteProject,
-    type ProjectRow,
-    projectRunning,
-    type RunningSession,
-    readProjects,
-    stopProjectSessions,
-  } from "./client.svelte";
-  import { forgetHost } from "./forget.svelte";
+  import { type ProjectRow, projectRunning } from "./client.svelte";
+  import { forgetAtRail, forgetHost } from "./forget.svelte";
   import RowFault from "./RowFault.svelte";
-  import StopTray, { type StopWords } from "./StopTray.svelte";
+  import StopParked from "./StopParked.svelte";
+  import StopTray from "./StopTray.svelte";
+  import { stopWork } from "./stop-work.svelte";
 
   let {
     at,
+    projectId,
+    parks = false,
     class: className,
   }: {
     /** This place: the forget asked here (`head:<id>`, `rail:<id>`) shows here. */
     at: string;
+    /** The project this place belongs to. */
+    projectId: string;
+    /**
+     * This place is where the project's stops are parked (its rail row).
+     * Any other place (the head) parks them only while that row is not
+     * drawn (a phone's rail is a sheet, drawn only while open), so the line
+     * stands in one place, one press from the page.
+     */
+    parks?: boolean;
     class?: string;
   } = $props();
 
   const project = $derived(forgetHost.at === at ? forgetHost.project : null);
-  /** What runs, read as the forget was asked; null while it is read. */
-  let sessions = $state<RunningSession[] | null>(null);
+  /** The project's stop jobs: its forget, and Caw turned off; parked, each shows here. */
+  const jobs = $derived(stopWork.on(projectId));
+  /** The rail's row stands for the project's parked stops; this place does while it is not drawn. */
+  const parksHere = $derived(parks || !stopWork.drawn(forgetAtRail(projectId)));
   /** Reading what runs was refused: said here, with Try again. */
   let unread = $state<string | null>(null);
+  /** Reading what runs for the forget asked here. */
+  let reading = $state(false);
   /** The latest read: an answer to an earlier one (a forget since replaced) is dropped. */
   let latest = 0;
 
@@ -61,16 +70,19 @@
   function read(asked: ProjectRow): void {
     latest += 1;
     const mine = latest;
-    sessions = null;
+    reading = true;
     unread = null;
     projectRunning(asked.id).then(
       (running) => {
         if (mine === latest) {
-          sessions = running;
+          reading = false;
+          stopWork.askForget(asked, at, running);
+          forgetHost.close();
         }
       },
       (error: unknown) => {
         if (mine === latest) {
+          reading = false;
           unread = failureWords(error);
         }
       }
@@ -85,64 +97,28 @@
       return;
     }
     latest += 1;
-    sessions = null;
+    reading = false;
     unread = null;
   });
 
+  // This place can hold a tray while it is drawn (stop-work `reopen`).
+  $effect(() => stopWork.place(at));
+
   // This place goes (its page left, its row dropped) while the forget it
-  // asked stands: the forget ends with it.
+  // asked is still being read: the ask ends with it. A job already asked
+  // is the work's, and goes on.
   $effect(() => () => {
     if (forgetHost.at === at) {
       forgetHost.close();
     }
   });
-
-  const plural = (n: number, one: string, many: string) =>
-    n === 1 ? one : many;
-
-  const words = $derived.by((): StopWords => {
-    const name = project?.name ?? "";
-    return {
-      title: `Forget ${name}?`,
-      plain: "Forget",
-      stop: (n) => `Stop ${n} and forget`,
-      armed: (n) => `Stop ${n} mid-turn and forget`,
-      ending: "Forgetting…",
-      ended: "Forgotten",
-      partway: (stopped, total) =>
-        `Stopped ${stopped} of ${total}; ${name || "the project"} kept.`,
-      line: (phase, n, done) => {
-        switch (phase) {
-          case "none":
-            return "The grouping is removed. The checkout and its sessions stay on disk.";
-          case "list":
-            return `${n} running ${plural(n, "session stops", "sessions stop")} first. The checkout and its sessions stay on disk.`;
-          case "armed":
-          case "stopping":
-            return "Transcripts and the checkout stay on disk.";
-          case "fail":
-            return `${name} is kept until every session is stopped.`;
-          default:
-            return done;
-        }
-      },
-    };
-  });
-
-  /** The project is gone: the reader is taken off its page before the list drops it. */
-  async function forgotten(id: string): Promise<void> {
-    if (page.url.pathname === `/project/${id}`) {
-      await goto(route.spoke, { replace: true });
-    }
-    await readProjects();
-  }
 </script>
 
-{#if project}
+{#if project && (reading || unread !== null)}
   {@const asked = project}
   <!-- The forget was pressed: said here while what runs is read, so the
        press is answered before the tray can be. -->
-  {#if sessions === null && unread === null}
+  {#if reading}
     <!-- Where the tray will stand, in its host's indent: the meta line, a
          spinner at its start. -->
     <p
@@ -159,19 +135,15 @@
     </p>
   {/if}
   <RowFault again={() => read(asked)} class={className} reason={unread} />
-  <StopTray
-    class={className}
-    end={() => deleteProject(asked.id)}
-    ended={() => forgotten(asked.id)}
-    onclose={() => {
-      if (forgetHost.project === asked) {
-        forgetHost.close();
-      }
-    }}
-    projectId={asked.id}
-    reread={() => projectRunning(asked.id)}
-    {sessions}
-    stop={(ids) => stopProjectSessions(asked.id, ids).then(() => undefined)}
-    {words}
-  />
 {/if}
+{#each jobs as job (job.kind)}
+  {#if job.at === at}
+    <StopTray class={className} {job} />
+  {/if}
+  <!-- Caw's off tray put away in his settings is said there while they
+       stand open (CawLeadSwitch); here once they close. Reopened here (his
+       settings closed meanwhile), this is its place, and it parks here. -->
+  {#if parksHere && !(job.kind === "caw-off" && job.at !== at && stopWork.drawn(job.at))}
+    <StopParked {at} class={className} {job} />
+  {/if}
+{/each}

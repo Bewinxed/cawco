@@ -151,6 +151,7 @@ export type TokenColor =
   | "color.brand-hover"
   | "color.brand-wash"
   | "color.c-target-tint"
+  | "color.c-change-wash"
   | "color.brand-ink"
   | "color.brand-ink-strong"
   | "color.link-ink"
@@ -327,6 +328,10 @@ export type TokenSize =
   | "size.c-toolbar-ctl"
   | "size.c-find-w"
   | "size.c-new-session-pop-w"
+  | "size.c-step-rail-x"
+  | "size.c-step-rail-top"
+  | "size.c-step-rail-gap"
+  | "size.c-connect-w"
   | "size.c-panel-w"
   | "size.c-signin-pop-w"
   | "size.c-caw-panel-h"
@@ -381,6 +386,7 @@ export type TokenSize =
   | "size.c-tray-chip"
   | "size.c-inline-chip-line"
   | "size.c-inline-chip-pad"
+  | "size.c-inline-chip-max-w"
   | "size.c-peek-glyph"
   | "size.c-tray-gap"
   | "size.c-tray-row"
@@ -676,7 +682,8 @@ export type TokenSize =
   | "motion.deck-step"
   | "motion.ride-fade"
   | "motion.pop-rise"
-  | "motion.fold-blur";
+  | "motion.fold-blur"
+  | "motion.skeleton-reveal-blur";
 
 export type TokenFont =
   | "font.font-wordmark"

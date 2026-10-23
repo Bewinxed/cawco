@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     CONTINUED_IN,
+    commonWords,
     type HarnessKind,
     type PermissionResult,
   } from "@cawco/core";
@@ -23,6 +24,7 @@
     crossIn,
     crossOut,
     crossOutWith,
+    reveal,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -32,6 +34,7 @@
     cawco,
     clearReadFault,
     clearRestore,
+    commandFault,
     faultMessage,
     latestCommandFor,
     loadMcpServers,
@@ -55,12 +58,13 @@
   import { cleanDetail } from "./command-detail";
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
+  import { frameSize } from "./frame-observer";
   import { instanceTitle, projectOfRow } from "./home/home-state.svelte";
   import { deadlineIn } from "./hub-read";
   import { delegateHandle, rowHref } from "./links";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
-  import { planProgress, planShows } from "./plan/PlanPane.svelte";
+  import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import {
     listTasks,
@@ -72,6 +76,7 @@
     type TaskView,
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
+  import { planAsked } from "./reference-things.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
@@ -133,7 +138,6 @@
     serverTail?: ServerTail | null;
   } = $props();
 
-  let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):
    * 0 while it is closed or a sheet. What is left is the transcript's, and
@@ -141,35 +145,36 @@
    */
   let previewShare = $state(0);
   /**
-   * The pane's width as the layout below reads it. Its first width (none laid
-   * yet) is taken as the binding reports it, so the first frame painted is
-   * the split or the sheet the pane's width asks for. Every change after it
-   * is taken in the next frame's callbacks: the binding hears it in a
-   * ResizeObserver callback, and read there, a pane crossing 900px swapped
-   * the split for the sheet inside that delivery, mounting panes observed at
-   * a depth the delivery had passed ("ResizeObserver loop completed with
-   * undelivered notifications").
+   * The pane's width as the layout below reads it: read as the pane mounts,
+   * so the first frame painted is the split or the sheet the pane's width
+   * asks for, and a change in the next frame (frameSize). Read inside a
+   * ResizeObserver delivery, a pane crossing 900px swapped the split for the
+   * sheet there, mounting panes observed at a depth the delivery had passed
+   * ("ResizeObserver loop completed with undelivered notifications").
    */
   let laidWidth = $state(0);
-  $effect(() => {
-    const width = paneWidth;
-    if (untrack(() => laidWidth) === 0) {
-      laidWidth = width;
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      laidWidth = width;
-    });
-    return () => cancelAnimationFrame(frame);
+  const measurePane = frameSize<HTMLElement>((node) => {
+    laidWidth = node.clientWidth;
   });
   const phone = $derived(laidWidth > 0 && laidWidth < 900);
   /** The side surface is the bottom drawer, not the split; null until the pane is measured (layoutPolicy.sideDrawer). */
   const drawer = $derived(layoutPolicy.sideDrawer(laidWidth));
-  let side = $state<ReturnType<typeof SideSplit>>();
+  /** The plan its ring opens over the composer's row (PlanPane). */
+  let planOpen = $state(false);
+  // A plan with nothing left to show takes its open plan with it.
+  $effect(() => {
+    if (!planProgressNow) {
+      planOpen = false;
+    }
+  });
+  // A plan's or a step's chip asked for this session's plan (reference-things.svelte.ts `askPlan`): it opens over the composer, and PlanPane brings the step into view.
+  $effect(() => {
+    if (planProgressNow && planAsked(viewId)) {
+      planOpen = true;
+    }
+  });
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
-  /** The delegate tray's open shelf: room past the end that a pinned tail follows. */
-  let shelfRoom = $state(0);
   /** The session's plan has something to show: its ring opens it (SideSplit). */
   const plan = $derived(cawco.planOf(viewId));
   const planProgressNow = $derived(
@@ -935,8 +940,20 @@
     }
   });
 
-  /** Why this session's last send failed, said over its composer's field. */
-  const sendFailure = $derived(sendFailureNotice(viewId));
+  /**
+   * Why this session's last send failed, said over its composer's field; or
+   * else a command of it that failed with nowhere else to say it (a stop, a
+   * model change with its details card closed, an answer whose card has
+   * gone), with Try again where a try can go (client.svelte.ts
+   * `commandFault`).
+   */
+  const failedCommand = $derived(commandFault(viewId));
+  const sendFailure = $derived(
+    sendFailureNotice(viewId) || (failedCommand?.words ?? "")
+  );
+  const faultAgain = $derived(
+    sendFailureNotice(viewId) ? undefined : failedCommand?.again
+  );
 
   /**
    * "Edit" on a message that never sent: the store parks the whole payload in
@@ -1073,6 +1090,9 @@
     get sendError() {
       return sendFailure;
     },
+    get faultAgain() {
+      return faultAgain;
+    },
     get commands() {
       return commands;
     },
@@ -1104,7 +1124,6 @@
     },
     onfoot: (next) => {
       parkedRoom = next.parked;
-      shelfRoom = next.shelf;
     },
     get planRing() {
       return planProgressNow ? planRing : undefined;
@@ -1131,10 +1150,20 @@
   {#if planProgressNow}
     <PlanRing
       done={planProgressNow.done}
-      onopen={() => side?.openPlan()}
-      open={side?.planShowing() ?? false}
+      onopen={() => {
+        planOpen = !planOpen;
+      }}
+      open={planOpen}
       total={planProgressNow.total}
     />
+    {#if planOpen}
+      <PlanPane
+        instanceId={viewId}
+        onclose={() => {
+          planOpen = false;
+        }}
+      />
+    {/if}
   {/if}
 {/snippet}
 
@@ -1166,7 +1195,7 @@
     title={faultTitle}
   >
     {#snippet action()}
-      <Button onclick={retry} variant="outline">Try again</Button>
+      <Button onclick={retry} variant="outline">{commonWords.tryAgain}</Button>
     {/snippet}
   </EmptyState>
 {/snippet}
@@ -1211,7 +1240,7 @@
 <div
   data-slot="pane"
   class="relative flex min-h-0 min-w-0 flex-auto flex-col @container bg-surface-recess"
-  bind:clientWidth={paneWidth}
+  {@attach measurePane}
 >
   {#if prestart}
     <!-- Nothing stands behind the wait: the session does not exist yet. -->
@@ -1219,12 +1248,10 @@
     <SideSplit
       {active}
       phone={drawer}
-      planOf={viewId}
       task={besideStages ? besideSurface : undefined}
       taskOpen={!!beside}
       {viewId}
       {visible}
-      bind:this={side}
       bind:share={previewShare}
     >
       <div
@@ -1277,7 +1304,6 @@
                     shown = drawn;
                   }}
                   parkedHeight={writable ? parkedRoom : 0}
-                  shelfHeight={writable ? shelfRoom : 0}
                   {session}
                   {visible}
                 />
@@ -1285,9 +1311,10 @@
             </div>
             <HeadFade />
           {/if}
-          <!-- The skeleton stands in for rows still on their way and goes the
-               moment they are drawn: its rows are not where the real ones fall, so
-               fading it over them reads as a second, stale transcript. -->
+          <!-- The skeleton stands in for rows still on their way and hands its
+               place to them in its reveal (motion/curves `reveal`) once they are
+               drawn: its blur carries its rows into the real ones, which fall
+               elsewhere. -->
           {#if writable && browser}
             <FootFade />
           {/if}
@@ -1295,6 +1322,7 @@
             <div
               class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
               in:crossIn
+              out:reveal
             >
               <TranscriptSkeleton />
             </div>
@@ -1340,6 +1368,7 @@
             paneVisible={visible}
             recallOf={viewId}
             sendError={sendFailure}
+            {faultAgain}
             {sending}
             showing={viewId}
             {suggest}

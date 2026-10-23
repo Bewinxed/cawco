@@ -14,7 +14,8 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { showArtifact } from "../artifact-api";
-  import { toast } from "../toasts.js";
+  import { failureClause } from "../hub-read";
+  import { refusals } from "../refusals.svelte";
   import { askOpenAt } from "../transcript/open-at.svelte";
   import FilesList from "./FilesList.svelte";
   import {
@@ -39,17 +40,34 @@
   });
 
   const instanceId = $derived(files.session);
+  /**
+   * The artifact the hub would not show, and why: said over the list
+   * (FilesList), kept through a reload (refusals.svelte.ts).
+   */
+  const pickKey = $derived(`files-pick:${files.session}`);
+  const pickRefused = $derived.by(() => {
+    const said = refusals.get(pickKey);
+    if (!said) {
+      return null;
+    }
+    const asked = said.asked as Pick<ArtifactSummary, "id" | "name">;
+    return { reason: said.reason, again: () => pick(asked) };
+  });
 
-  async function pick(artifact: ArtifactSummary) {
+  async function pick(artifact: Pick<ArtifactSummary, "id" | "name">) {
     const id = instanceId;
     if (!id) {
       return;
     }
+    refusals.delete(`files-pick:${id}`);
     try {
       await showArtifact(id, artifact.id);
       files.sheet = false;
     } catch (error) {
-      toast.error((error as Error).message);
+      refusals.set(`files-pick:${id}`, {
+        reason: `${artifact.name} was not shown: ${failureClause(error)}. Files stays open.`,
+        asked: { id: artifact.id, name: artifact.name },
+      });
     }
   }
 
@@ -126,6 +144,7 @@
             onattach={attach}
             onpick={pick}
             onshow={show}
+            {pickRefused}
             segmented
           />
         {/key}

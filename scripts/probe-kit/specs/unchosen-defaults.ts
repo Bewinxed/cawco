@@ -53,6 +53,7 @@ import {
   ARTIFACT_SESSION_PATH,
 } from "../../../packages/core/src/frames";
 import { PAIRING_REQUIRED } from "../../../packages/core/src/hub-auth";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
 import {
   MACHINE,
   MODEL,
@@ -69,6 +70,7 @@ import {
   type Spec,
   settle,
 } from "../kit";
+import { startsWith } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -77,7 +79,7 @@ const SERVE = join(ROOT, "apps/dashboard/serve.js");
 /** The fleet board's ways into the New Session dialog. */
 const STARTER = /^(New session|Start session)$/;
 const MACHINES = /^Machines:/;
-const PERMISSION = /^Permission mode:/;
+const PERMISSION = startsWith(spawnWords.permissionModeHead);
 /** What the probe's OpenCode says as it refuses to start. */
 const OPENCODE_REFUSES = "probe: this opencode will not start";
 /** What check 7's Claude Code says as it refuses to start a session. */
@@ -269,8 +271,12 @@ const dialogWith = async (
   storage: Record<string, unknown>
 ) => {
   await open(page, `${base}/session`, "body");
+  // Nothing kept from the dialog before: the remembered prefs are the case's
+  // alone, and the form as the tab last left it (NewSessionForm's
+  // `cawco:new-session-form`, in the tab's own storage) goes too.
   await page.evaluate((entries) => {
     localStorage.clear();
+    sessionStorage.clear();
     for (const [key, value] of Object.entries(entries)) {
       localStorage.setItem(key, JSON.stringify(value));
     }
@@ -535,6 +541,8 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
     asks.set(marker, {
       name: CREATE,
       input: {
+        // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+        response_format: "detailed",
         kind: "page",
         does: "judge",
         ask: "Judge this page: pin anything that reads wrong",

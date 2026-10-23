@@ -71,7 +71,7 @@ export const frameOrigin = (frame: FrameElement): string => {
  * at, its drawn box over its layout box (a transform on the frame or on what
  * holds it; 1 where nothing scales it).
  */
-const contentBox = (frame: FrameElement) => {
+export const contentBox = (frame: FrameElement) => {
   const r = frame.getBoundingClientRect();
   const sx = frame.offsetWidth > 0 ? r.width / frame.offsetWidth : 1;
   const sy = frame.offsetHeight > 0 ? r.height / frame.offsetHeight : 1;

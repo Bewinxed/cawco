@@ -94,6 +94,17 @@ export const OPENCODE_DIR = join(
  */
 export const OPENCODE_PLACED_MCP = join(OPENCODE_DIR, "cawco-placed-mcp.json");
 
+/**
+ * The location the agent's own reads of a server go to (its config sources,
+ * its models, its integrations): one where the plugin turns every MCP server
+ * off. OpenCode 2.0 boots a location on its first request and connects every
+ * MCP server it has there (2.0.29: one `GET /api/config` at the server's own
+ * directory started the launch config's stdio server, 2026-10-22), so a read
+ * left on the server's own directory, the home, started every fleet server
+ * there and left them running.
+ */
+export const OPENCODE_QUIET_DIR = join(homedir(), ".cawco", "opencode-quiet");
+
 /** The plugin's own tools, which take no session credential: they ask the hub as the session's step. */
 const WORKFLOW_TOOLS = [
   "cawco_submit_result",
@@ -132,6 +143,7 @@ const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const cawcoCredentials = ${JSON.stringify(opencodeCredentialFile())};
 const cawcoPlacedMcp = ${JSON.stringify(OPENCODE_PLACED_MCP)};
+const cawcoQuiet = ${JSON.stringify(OPENCODE_QUIET_DIR)};
 const machineData = ${JSON.stringify(machineDataHome())};
 const sessionNames = ${JSON.stringify(SESSION_CAWCO_ENV)};
 const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
@@ -285,13 +297,14 @@ const cutInto = async (result, name, folderOf) => {
 };
 
 // Each session's CawCo identity, by OpenCode session id, as the agent records
-// it when the session opens.
+// it when the session opens, with its doors to the container runtimes
+// (DOCKER_HOST, CONTAINER_HOST: agent session-containers.ts).
 const sessionHeld = (sessionID) => {
   try { return JSON.parse(readFileSync(cawcoCredentials, "utf8"))[sessionID]; } catch { return undefined; }
 };
 const sessionEnv = (sessionID) => {
   const held = sessionHeld(sessionID);
-  return held ? { ${JSON.stringify(CAWCO_ENV.instanceId)}: held.instanceId, ${JSON.stringify(CAWCO_ENV.sessionCredential)}: held.credential } : {};
+  return held ? { ...held.containerEnv, ${JSON.stringify(CAWCO_ENV.instanceId)}: held.instanceId, ${JSON.stringify(CAWCO_ENV.sessionCredential)}: held.credential } : {};
 };
 // What every shell and local MCP server gets: the machine's own data dir, no
 // password, and none of CawCo's wiring but what the session's own tools read.
@@ -506,16 +519,26 @@ export default {
     // server's command line, which every local user can read.
     const door = state && existsSync(state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)}) ? state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)} : undefined;
     await ctx.mcp.transform((editor) => {
+      // Servers kept from a location are removed: 2.0.29 starts one set
+      // \`enabled = false\` (2026-10-22, a stdio fixture writing its pid; v2's
+      // field is \`disabled\`, opencode.ai/v2/docs/mcp-servers), and keeps a
+      // \`disabled\` one listed, which a status read would take for a verdict.
+      // The agent's reads of this server run here, and need no MCP server.
+      if (realOf(directory) === realOf(cawcoQuiet)) {
+        for (const [name] of [...editor.list()]) {
+          editor.remove(name);
+        }
+        return;
+      }
       placeMcp(editor, directory);
+      if (!door && editor.get(${JSON.stringify(CHROME_DEVTOOLS)})?.type === "local") {
+        editor.remove(${JSON.stringify(CHROME_DEVTOOLS)});
+      }
       for (const [name, config] of editor.list()) {
         if (config.type !== "local") continue;
         editor.update(name, (server) => {
           server.environment = { ...(server.environment ?? {}), XDG_DATA_HOME: machineData };
           if (name !== ${JSON.stringify(CHROME_DEVTOOLS)}) return;
-          if (!door) {
-            server.enabled = false;
-            return;
-          }
           server.command = [...server.command.filter((arg) => !browserArg.test(arg)), "--config=" + door];
           if (typeof roots?.scratch === "string" && typeof roots?.clone === "string") {
             server.command = [...server.command, "--filesystem-root=" + roots.scratch, "--filesystem-root=" + roots.clone];

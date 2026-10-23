@@ -33,7 +33,7 @@ import {
   skillsWords,
 } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
-import { hubFailure } from "#lib/cawco/hub-read.js";
+import { awayOf, hubFailure } from "#lib/cawco/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
@@ -67,6 +67,11 @@ export interface FleetSnapshot {
    */
   agents: FleetAgent[];
   config: FleetConfig;
+  /**
+   * Marketplace links with no row yet: under way, or refused and not let go.
+   * Each stands in the marketplace list until it lands or is let go.
+   */
+  links: MarketplaceLink[];
   /** Null while the fleet keeps no memory, which is where every fleet starts. */
   memory: FleetMemoryRow | null;
   /**
@@ -306,7 +311,10 @@ async function send<T>(
 ): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
-    throw new Error(`Could not ${attempt}. ${await said(response)}.`);
+    throw (
+      (await awayOf(response)) ??
+      new Error(`Could not ${attempt}. ${await said(response)}.`)
+    );
   }
   return (await response.json()) as T;
 }
@@ -519,38 +527,31 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
 };
 
 /**
- * Links the marketplace at `source`, under the name its manifest gives; comes
- * back with the row once the hub has read the source and linked it. A link
- * the hub refused throws its sentence.
+ * Asks the hub to link the marketplace at `source`, under the name its
+ * manifest gives. Answers at once, `fetching`: the hub keeps the link under
+ * way, and a refusal, in the snapshot's `links` until it lands or is let go,
+ * and every `fleet.fetch` frame says how it stands.
  */
-export const linkMarketplace = async (
-  wanted: string
-): Promise<FleetMarketplace> => {
+export const linkMarketplace = (wanted: string): Promise<MarketplaceLink> => {
   const source = wanted.trim();
-  const link = await untilFetched(
-    `link ${source}`,
-    (frame) => (frame.link?.source === source ? frame.link : undefined),
-    () =>
-      send<MarketplaceLink>(
-        "/api/fleet/marketplace-links",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source }),
-        },
-        `link ${source}`
-      )
+  return send<MarketplaceLink>(
+    "/api/fleet/marketplace-links",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source }),
+    },
+    `link ${source}`
   );
-  if (!link.marketplace) {
-    throw new Error(
-      skillsWords.couldNotLink(
-        source,
-        (link.error ?? skillsWords.saidNothing).replace(TRAILING_STOPS, "")
-      )
-    );
-  }
-  return link.marketplace;
 };
+
+/** Lets a refused link go: it leaves the marketplace list. */
+export const dropMarketplaceLink = (source: string): Promise<unknown> =>
+  send(
+    `/api/fleet/marketplace-links?${new URLSearchParams({ source })}`,
+    { method: "DELETE" },
+    `let go of ${source}`
+  );
 
 export const removeMarketplace = (name: string): Promise<Deleted> =>
   erase(
@@ -676,21 +677,16 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
   );
 
 /**
- * Stores a skill and resolves it on the hub, once, for every machine; comes
- * back with the row once the fetch has landed. A source the hub could not
- * resolve still lands as a row — the failure is the row's to carry, not this
- * call's to throw — and an ambiguous one carries its `choices`.
+ * Stores a skill and has the hub resolve it, once, for every machine.
+ * Answers at once with the row marked `fetching`; what the fetch came to is
+ * the row's, as the `fleet.fetch` frames bring it: its files, the hub's
+ * reason it could not resolve, or the `choices` an ambiguous source holds.
  */
 export const saveSkill = (
   name: string,
   body: { source: string; enabled?: boolean; projectId?: string | null }
 ): Promise<FleetSkillMeta> =>
-  untilFetched(
-    `save ${name}`,
-    (frame) => (frame.skill?.name === name ? frame.skill : undefined),
-    () =>
-      put(`/api/fleet/skills/${encodeURIComponent(name)}`, body, `save ${name}`)
-  );
+  put(`/api/fleet/skills/${encodeURIComponent(name)}`, body, `save ${name}`);
 
 /**
  * What a machine really has, fleet or not (NEW.md §11), and what a session in
@@ -1033,8 +1029,11 @@ export async function peekMemory(
     body: JSON.stringify({ machineId }),
   });
   if (!response.ok) {
-    throw new Error(
-      `Could not read this machine's memory. ${await said(response)}.`
+    throw (
+      (await awayOf(response)) ??
+      new Error(
+        `Could not read this machine's memory. ${await said(response)}.`
+      )
     );
   }
   if (response.status === 204) {
@@ -1060,6 +1059,11 @@ export const memoryVersion = (
   id: number
 ): Promise<FleetMemoryVersion & { content: string }> =>
   send(`/api/fleet/memory/history/${id}`, {}, "read that version");
+
+/** The memory's documents as they stand now, files and all (`GET /api/fleet`'s `memoryDocs`). */
+export const memoryDocsNow = async (): Promise<FleetMemoryDocRow[]> =>
+  (await send<FleetSnapshot>("/api/fleet", {}, "read the memory documents"))
+    .memoryDocs;
 
 /** Undo: the version becomes the fleet's, and what it replaced joins the history. */
 export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
@@ -1174,8 +1178,11 @@ export async function peekHook(
     body: JSON.stringify({ machineId, id }),
   });
   if (!response.ok) {
-    throw new Error(
-      `Could not read this machine's script. ${await said(response)}.`
+    throw (
+      (await awayOf(response)) ??
+      new Error(
+        `Could not read this machine's script. ${await said(response)}.`
+      )
     );
   }
   if (response.status === 204) {
@@ -1206,6 +1213,21 @@ export const pushHook = (machineId: string, id: string): Promise<unknown> =>
       body: JSON.stringify({ machineId, id }),
     },
     "overwrite this machine"
+  );
+
+/** One item that did not set up on a machine, converged again: the hub sends it forced (hub fleet-sync.ts `retry`). */
+export const retryFleetItem = (
+  machineId: string,
+  id: string
+): Promise<unknown> =>
+  send(
+    "/api/fleet/items/retry",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ machineId, id }),
+    },
+    "set this up again"
   );
 
 /**

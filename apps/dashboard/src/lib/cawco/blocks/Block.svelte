@@ -20,7 +20,11 @@
    * across that edge in the gap, its dot at the leading end. A width change
    * tweens the box (`morph`, while `resizing`).
    */
-  import { type BlockWidth, blocksWords as words } from "@cawco/core";
+  import {
+    type BlockWidth,
+    commonWords,
+    blocksWords as words,
+  } from "@cawco/core";
   import type { Component, Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -157,7 +161,7 @@
       {@render action?.()}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
-          aria-label={words.more(title)}
+          aria-label={commonWords.moreFor(title)}
           class="touch-hit"
           size="icon-sm"
           variant="ghost"

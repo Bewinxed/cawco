@@ -51,12 +51,14 @@
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { previewRoute } from "../../../packages/core/src/frames";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   COMPOSER,
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   pressIn,
   type Spec,
   settle,
@@ -193,7 +195,11 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
   const call = async (tool: string, input: object): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, { name: tool, input });
+    asks.set(marker, {
+      name: tool,
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      input: { response_format: "detailed", ...input },
+    });
     await fleet.send(session, `PROBE-CALL:${marker}`);
     return (await until(
       `the ${tool} call (${marker})`,
@@ -309,7 +315,7 @@ const runSpec = async (kit: Kit) => {
 /**
  * The rail and the empty canvas as DESIGN.md draws them (Artifact panel,
  * canvas and ink), from geometry and computed style: the tool group 11px
- * in, 34px boxes at 5px, the chosen one on surface-pressed, the groups apart,
+ * in, 34px boxes at the concentric 4px, the chosen one on surface-pressed, the groups apart,
  * Excalidraw's own chrome gone; an empty canvas made by the agent says so,
  * shows the empty recipe, and its Draw picks the pen.
  */
@@ -375,10 +381,10 @@ const emptyChecks = async (on: OnCanvas) => {
     };
   });
   on.kit.check(
-    "rail: tools --space-3 (11px) in and --space-2 (7px) down in the panel (no host chrome over it), 34px boxes at 5px, the chosen one on surface-pressed, the two groups apart, Excalidraw's chrome hidden",
+    "rail: tools --space-3 (11px) in and --space-2 (7px) down in the panel (no host chrome over it), 34px boxes at the concentric 4px (the group's 12px less its 7px inset and 1px edge), the chosen one on surface-pressed, the two groups apart, Excalidraw's chrome hidden",
     rail.tools?.join() === "11,7" &&
       rail.boxes.every((size) => size === "34×34") &&
-      rail.radius === "5px" &&
+      rail.radius === "4px" &&
       rail.chosenFill &&
       rail.apart &&
       rail.chrome.length > 0 &&
@@ -394,7 +400,7 @@ const emptyChecks = async (on: OnCanvas) => {
   ).catch(() => 0);
   on.kit.check(
     "empty: artifact_create with neither says the canvas is empty; it shows the empty recipe, and Draw picks the pen",
-    answer.includes("The canvas is empty") &&
+    answer.includes(artifactToolWords.canvasEmpty) &&
       rail.title === "Nothing drawn yet" &&
       rail.line === "Draw with the pencil, or ask the agent to draw." &&
       pen === 1,
@@ -541,10 +547,10 @@ const imageChecks = async (on: OnCanvas) => {
     )
     .boundingBox()) as { x: number; y: number; width: number; height: number };
   await pressIn(frame, '.rail-box[aria-label^="Select"]');
-  await page.mouse.click(
-    well.x + well.width * 0.3,
-    well.y + well.height * 0.75
-  );
+  await pressAt(frame, {
+    x: well.x + well.width * 0.3,
+    y: well.y + well.height * 0.75,
+  });
   await pasteFile(frame, { kind: "red" });
   const here = await until(
     "the pasted image with its file",
@@ -646,8 +652,11 @@ const imageChecks = async (on: OnCanvas) => {
   });
   // A press on the grid takes it away: one fade on opacity over --dur-exit,
   // held still as it is read.
-  await page.mouse.move(well.x + well.width * 0.6, well.y + well.height * 0.85);
-  await page.mouse.down();
+  await pressAt(
+    frame,
+    { x: well.x + well.width * 0.6, y: well.y + well.height * 0.85 },
+    { how: "down" }
+  );
   const leaving = await frame.evaluate(() => {
     const band = document.querySelector(".canvas-refusal");
     const runs = band?.getAnimations() ?? [];
@@ -965,8 +974,7 @@ const pressChecks = async (on: OnCanvas, id: string, hubId: string) => {
       );
     }
   });
-  await on.page.mouse.move(at.x, at.y);
-  await on.page.mouse.down();
+  await pressAt(frame, at, { how: "down" });
   await on.page.mouse.move(at.x + 60, at.y, { steps: 8 });
   await on.page.mouse.up();
   await settle(on.page, 300);
@@ -991,11 +999,11 @@ const pressChecks = async (on: OnCanvas, id: string, hubId: string) => {
   // 12. A press on Hub, then one on the empty canvas.
   const now = await screenOf(on, frame, hubId);
   if (now) {
-    await on.page.mouse.click(now.x, now.y);
+    await pressAt(frame, now);
   }
   const box = await on.page.locator(PANEL_CANVAS).boundingBox();
   if (box) {
-    await on.page.mouse.click(box.x + 60, box.y + box.height - 60);
+    await pressAt(frame, { x: box.x + 60, y: box.y + box.height - 60 });
   }
   const heard = await until(
     "two presses at the dashboard's host",

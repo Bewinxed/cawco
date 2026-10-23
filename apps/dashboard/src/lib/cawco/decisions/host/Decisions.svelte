@@ -1,14 +1,18 @@
 <!--
-  The page (the root): one centred column on the recessed ground (DESIGN.md,
-  The Frame Recesses Rule), 21px in at a desk and 14px under a finger, its
-  groups 18px apart (Layout: "the groups of a page … stand 18px apart"). Its
-  head is the page head: Caw as the title's mark (The Mark Line Rule) and the
-  title. Then the offline notice when CawCo does not show the page, every
-  decision and piece of media the program puts on it, and the foot: a band
-  of the panel material standing at the window's foot (sticky, as the update
-  notice's footer is "never a scroll away"), clear of a host's docked
-  composer and the screen's bottom inset, with the count picked and its bar
-  at its start and Send at its end.
+  The page (the root): the panel's height, in two rows. The first scrolls
+  one centred column on the recessed ground (DESIGN.md, The Frame Recesses
+  Rule), 21px in at a desk and 14px under a finger, its groups 18px apart
+  (Layout: "the groups of a page … stand 18px apart"): 920px wide, or on a
+  pictured page (media that knows its own width: a Preview's `width`, a
+  drawing, a picture, a diagram) as wide as the most options abreast its
+  room holds with each at 1:1, or the room's whole width where none fits. Its head is
+  the page head: Caw as the title's mark (The Mark Line Rule) and the title.
+  Then the offline notice when CawCo does not show the page, and every
+  decision and piece of media the program puts on it. The second row is the
+  foot, the panel's full width on the raised surface with a hairline over
+  it, "never a scroll away" and never over a card, clear of a host's docked
+  composer (the page's bottom padding) and the screen's bottom inset: the
+  count picked and its bar at the column's start, Send at its end.
 
   The count and Send's label ("Send 3 picks": what goes) change in place
   through MorphText (DESIGN.md, The Steady Swap Rule), the count's digit
@@ -25,7 +29,7 @@
   turns coral where it stands. Change takes it back the same way.
 -->
 <script lang="ts">
-  import { pickOf, readProgram } from "@cawco/core/decisions";
+  import { pickMade, readProgram } from "@cawco/core/decisions";
   import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -42,7 +46,7 @@
   import { CURVE, dur, motionOk } from "../../motion/curves.svelte";
   import { morph } from "../../motion/morph.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { bridge, picks } from "./page.svelte.js";
+  import { bridge, hearWidths, MEDIA_WIDTHS, picks } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
 
   let {
@@ -53,19 +57,66 @@
     children: unknown[];
   }> = $props();
 
-  const cards = $derived(
+  const program = $derived(
     readProgram({
       type: "element",
       typeName: "Decisions",
       props,
       partial: false,
       hasDynamicProps: false,
-    } as unknown as ElementNode).cards
+    } as unknown as ElementNode)
   );
+  const cards = $derived(program.cards);
+  /**
+   * The widest piece of media on the page at its real size, px, as its well
+   * says it (Well.svelte `picture`, through its card); 0 on a page with no
+   * pictures, which keeps its one 920px column.
+   */
+  const widths = hearWidths();
+  setContext(MEDIA_WIDTHS, widths.hear);
+  const storyWidth = $derived(widths.widest());
+  let scroller = $state<HTMLDivElement>();
+  /**
+   * A pictured page's column: as many options abreast as its room holds,
+   * each its picture at 1:1 in its well (`--well-in` each side, `--space-3`
+   * between them), inside the card's and the page's insets; the largest
+   * such step that fits, never under `--c-decision-page-w`; the room's
+   * whole width where not one fits, so a picture wider than the room shows
+   * as much of itself as it can, scrolling sideways in its well. Read from the
+   * scroller's own room (its gutter kept, so a scrollbar coming never moves
+   * it), as it mounts and as the panel resizes.
+   */
+  let pageWidth = $state<number | null>(null);
+  $effect(() => {
+    const box = scroller;
+    const story = storyWidth;
+    if (!(box && story > 0)) {
+      pageWidth = null;
+      return;
+    }
+    const read = () => {
+      const style = getComputedStyle(box);
+      const px = (name: string) =>
+        Number.parseFloat(style.getPropertyValue(name)) || 0;
+      const gap = px("--space-3");
+      const pitch = story + 2 * px("--well-in");
+      const insets = 2 * (px("--page-in") + px("--card-in"));
+      const abreast = Math.floor(
+        (box.clientWidth - insets + gap) / (pitch + gap)
+      );
+      const step =
+        abreast > 0 ? abreast * (pitch + gap) - gap + insets : box.clientWidth;
+      pageWidth = Math.max(px("--c-decision-page-w"), step);
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(box);
+    return () => sizes.disconnect();
+  });
   const ids = $derived(cards.map((card) => card.id));
-  /** Cards picked as core `pickOf` counts them, as artifact_list and the graph do. */
+  /** Cards picked as core `pickMade` counts them, as artifact_list, artifact_read and the graph do. */
   const count = $derived(
-    cards.filter((card) => pickOf(card, picks.now[card.id]).picked).length
+    cards.filter((card) => pickMade(card, picks.now[card.id])).length
   );
   /** The bar's share filled, 0 to 1. */
   const share = $derived(ids.length ? count / ids.length : 0);
@@ -99,27 +150,6 @@
       });
       run.startTime = document.timeline.currentTime;
     });
-  };
-  /**
-   * How much of the window's foot the page's foot stands over (its height,
-   * over the docked composer's inset), as the page's own scroll padding: the
-   * browser's focus scrolling and a scroll into view stop above it, never
-   * under it (WCAG 2.4.11, Focus Not Obscured), as a sticky footer's
-   * scroller keeps its room (visible-viewport.svelte.ts `aboveKeyboard`).
-   * Read now, and a change in the next frame (frameObserver).
-   */
-  const footRoom: Attachment<HTMLElement> = (node) => {
-    const root = document.documentElement;
-    const read = () => {
-      root.style.scrollPaddingBlockEnd = `calc(var(--page-inset-bottom) + ${node.offsetHeight}px)`;
-    };
-    read();
-    const sizes = frameObserver(read);
-    sizes.observe(node);
-    return () => {
-      sizes.disconnect();
-      root.style.scrollPaddingBlockEnd = "";
-    };
   };
   let sending = $state(false);
   /** What the person has picked and written on each card, as one string. */
@@ -166,6 +196,7 @@
       working = card;
     },
     working: () => working,
+    scroller: () => scroller ?? null,
   });
 
   /** Under a finger: Send is the large button (DESIGN.md, The 44 Touch Rule). */
@@ -210,79 +241,99 @@
 
 <svelte:window onkeydown={sendKey} />
 
-<!-- At least the window's height, its foot taking the room left above it: on a short page the foot stands at the window's foot as it does on a long one, never under the last card. -->
+<!-- The page is the panel's height: its cards scroll in the first row and the foot stands in the second, the panel's full width, its parts on the column's edges, so the foot never stands over a card. A host's docked composer is the page's own bottom padding (its inset). The scroller and the foot keep the same gutter for a scrollbar, so the column and the foot's parts share their edges. -->
 <main
-  class="mx-auto flex min-h-dvh w-full min-w-0 max-w-c-decision-page-w flex-col gap-space-5 px-space-6 pt-space-6 pb-(--page-inset-bottom) coarse:px-space-4 coarse:pt-space-4"
+  class="decision-page-insets grid h-dvh min-w-0 grid-rows-page-foot pb-(--page-inset-bottom)"
+  data-pictured={storyWidth > 0 ? "" : undefined}
   data-slot="decision-page"
+  style:--page-w={pageWidth === null ? undefined : `${pageWidth}px`}
 >
-  <header
-    class="mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2"
-    data-slot="page-head"
+  <div
+    bind:this={scroller}
+    class="min-h-0 overflow-y-auto overscroll-y-contain scrollbar-gutter-stable"
+    data-slot="page-scroll"
   >
-    <span class="mark-cell">
-      <img
-        alt="Caw"
-        height="40"
-        src={scheme.now === "dark" ? cawDark : cawLight}
-        width="40"
-      />
-    </span>
-    <h1
-      class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere"
+    <div
+      class="mx-auto flex w-full min-w-0 max-w-(--page-w) flex-col gap-space-5 px-(--page-in) pt-(--page-in) pb-space-5"
+      data-slot="page-column"
     >
-      {String(props.title ?? "")}
-    </h1>
-  </header>
-  {#if !bridge()}
-    <Alert variant="warning">
-      <IconWarningTriangle />
-      <AlertDescription>
-        Picks are kept only when CawCo shows this page: publish it with <code
-          class="text-size-meta wrap-anywhere">artifact_create</code
-        >.
-      </AlertDescription>
-    </Alert>
-  {/if}
-  {@render renderNode(props.children)}
+      <header
+        class="mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2"
+        data-slot="page-head"
+      >
+        <span class="mark-cell">
+          <img
+            alt="Caw"
+            height="40"
+            src={scheme.now === "dark" ? cawDark : cawLight}
+            width="40"
+          />
+        </span>
+        <h1
+          class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere"
+        >
+          {String(props.title ?? "")}
+        </h1>
+      </header>
+      {#if !bridge()}
+        <Alert variant="warning">
+          <IconWarningTriangle />
+          <AlertDescription>
+            Picks are kept only when CawCo shows this page: publish it with <code
+              class="text-size-meta wrap-anywhere">artifact_create</code
+            >.
+          </AlertDescription>
+        </Alert>
+      {/if}
+      {@render renderNode(props.children)}
+    </div>
+  </div>
+  <!-- Its words and Send on one row at a desk; under a finger the count's bar gives way first, then Send wraps under the count. -->
   <footer
     {@attach morph()}
-    {@attach footRoom}
-    class="sticky bottom-(--page-inset-bottom) z-(--layer-sticky) -mx-space-6 mt-auto flex flex-wrap items-center justify-between gap-space-3 border-t border-border-hairline bg-material-panel px-space-6 pt-space-3 pb-safe-space-3 glass-backdrop coarse:-mx-space-4 coarse:px-space-4 reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+    class="min-w-0 overflow-hidden border-t border-border-hairline bg-surface-raised pt-space-3 pb-safe-space-3 scrollbar-gutter-stable"
     data-safe-bottom
     data-slot="page-foot"
   >
-    <p
-      class="mark-line type-meta num flex items-center gap-space-3 text-ink-muted"
-      data-slot="meter"
+    <div
+      class="mx-auto flex w-full min-w-0 max-w-(--page-w) flex-wrap items-center justify-between gap-space-3 px-(--page-in)"
     >
-      <span><MorphText text={String(count)} /> of {ids.length} picked</span>
-      <span
-        class="h-space-1 w-c-decision-meter-w overflow-hidden rounded-xs bg-surface-recess-deep"
-        data-box
+      <p
+        class="mark-line type-meta num flex min-w-0 grow items-center gap-space-3 text-ink-muted"
+        data-slot="meter"
       >
-        <i
-          {@attach fill}
-          class="block h-full w-full origin-left bg-brand-solid rtl:origin-right"
-        ></i>
-      </span>
-    </p>
-    <Button
-      aria-keyshortcuts="Meta+Enter Control+Enter"
-      data-send
-      disabled={!bridge()}
-      onclick={send}
-      pending={sending}
-      size={coarse.current ? "lg" : "default"}
-      variant={opened.size > 0 ? "outline" : "default"}
-      ><PendingContent
-        icon={spent ? IconTick : IconSend}
-        label={sendLabel}
+        <span class="shrink-0"
+          ><MorphText text={String(count)} /> of {ids.length} picked</span
+        >
+        <span
+          class="h-space-1 w-0 max-w-c-decision-meter-w grow overflow-hidden rounded-xs bg-surface-recess-deep"
+          data-box
+          data-slot="meter-bar"
+        >
+          <i
+            {@attach fill}
+            class="block h-full w-full origin-left bg-brand-solid rtl:origin-right"
+          ></i>
+        </span>
+      </p>
+      <Button
+        aria-keyshortcuts="Meta+Enter Control+Enter"
+        data-send
+        disabled={!bridge()}
+        onclick={send}
         pending={sending}
-      />{#if !spent}<KbdGroup aria-hidden="true" data-box
-          ><Kbd reach="keyboard">{modifier}</Kbd><Kbd reach="keyboard">↵</Kbd
-          ></KbdGroup
-        >{/if}</Button
-    >
+        size={coarse.current ? "lg" : "default"}
+        variant={opened.size > 0 ? "outline" : "default"}
+        ><PendingContent
+          icon={spent ? IconTick : IconSend}
+          label={sendLabel}
+          pending={sending}
+        />{#if !spent}<KbdGroup aria-hidden="true" data-box
+            ><Kbd reach="keyboard">{modifier}</Kbd><Kbd reach="keyboard">↵</Kbd
+            ></KbdGroup
+          >{/if}</Button
+      >
+    </div>
   </footer>
   <p aria-live="polite" class="sr-only" data-slot="page-said">{said}</p>
 </main>

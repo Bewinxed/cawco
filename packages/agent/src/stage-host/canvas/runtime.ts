@@ -40,6 +40,7 @@ import {
   type Story,
   sectionName,
 } from "@cawco/core/stage";
+import { shellWords } from "@cawco/core/words/shell";
 import { Chrome } from "./chrome";
 import {
   deltaOf,
@@ -128,8 +129,6 @@ const STAGE_SAYS_MS = 1000;
 
 export interface BootOptions {
   adapter: Adapter;
-  /** The house edge fade's sheet (the dashboard's edge-fade.css), set in the page: a wide embed's frame scrolls under it (`fitToEmbed`). */
-  edgeFade: string;
   /** The house faces' `@font-face` rules (Figtree, JetBrains Mono), their files served beside the canvas. */
   faces: string;
   /** How to load each section's module, by its states file. */
@@ -167,8 +166,6 @@ const UNMOUNT_MARGIN = 3;
 const SWEEP_KEPT = 3;
 /** The quiet after the last change before a report is posted. Ours. */
 const REPORT_QUIET_MS = 200;
-/** The smallest an embed draws a story's words, in px: scaled further, they stop being legible. The owner's call ("if the scale would put body text under ~10px, say so"). */
-const EMBED_TYPE_FLOOR = 10;
 
 export type WidthSlot = number | "own";
 
@@ -368,10 +365,11 @@ export function boot(options: BootOptions): void {
   /**
    * A decision page's Preview (`by=embed`): a second page of a canvas that
    * draws only the stories `story` names (every story when it names none),
-   * at rest, one under another in the page's own flow at their own size,
-   * centred, one wider than the embed scaled down to fit it (`fitToEmbed`),
-   * with none of the canvas's chrome; it never posts, and tells the page holding it how tall
-   * it stands (`cawco:embed-size`), so the frame is as tall as it.
+   * at rest, one under another in the page's own flow, each at its own size
+   * (1 CSS px per px, never scaled), with none of the canvas's chrome; it
+   * never posts, and tells the page holding it how tall it stands and how
+   * wide its widest story is (`cawco:embed-size`, `sayShape`), so the frame
+   * is that wide and that tall.
    */
   const embed = params.get("by") === "embed";
   const named = new Set(params.getAll("story"));
@@ -730,24 +728,23 @@ export function boot(options: BootOptions): void {
   /**
    * A frame's layer collides with the frame's own box (viewport.ts), so a
    * frame the window cuts could place it where nobody sees it (a 1440
-   * frame in a 1440 window, the canvas's edge past the window's; an
-   * embed's wide frame scrolled sideways). The canvas moves the frame,
-   * never the layer: an open layer standing past what the person sees
-   * across is brought in by its overflow, the canvas's world panned, an
-   * embed's wide frame scrolled sideways. False while it is not open and
-   * placed, so it is asked again.
+   * frame in a 1440 window, the canvas's edge past the window's). The
+   * canvas moves the frame, never the layer: an open layer standing past
+   * what the person sees across is brought in by its overflow, the canvas's
+   * world panned. An embed is as wide as its widest frame (`sayShape`), so
+   * its layers stand where they open; the page holding it scrolls it. False
+   * while it is not open and placed, so it is asked again.
    */
-  const reveal = (layer: Element, frame: Frame): boolean => {
+  const reveal = (layer: Element): boolean => {
     const box = layer.getBoundingClientRect();
     if (!standsOpen(layer) || box.width === 0) {
       return false;
     }
-    const wide = embed && frame.el.hasAttribute("data-cawco-wide");
-    if (embed && !wide) {
+    if (embed) {
       return true;
     }
-    /** What the person sees across: the embed's wide frame, or the canvas, cut by the window. */
-    const seen = (wide ? frame.el : canvas).getBoundingClientRect();
+    /** What the person sees across: the canvas, cut by the window. */
+    const seen = canvas.getBoundingClientRect();
     const from = Math.max(0, seen.left);
     const to = Math.min(windowWidth(), seen.right);
     let over = 0;
@@ -757,10 +754,6 @@ export function boot(options: BootOptions): void {
       over = Math.min(box.right - to, box.left - from);
     }
     if (Math.abs(over) < 0.5) {
-      return true;
-    }
-    if (wide) {
-      frame.el.scrollLeft += over;
       return true;
     }
     letGo();
@@ -776,7 +769,7 @@ export function boot(options: BootOptions): void {
     }
     sighted.add(layer);
     requestAnimationFrame(() => {
-      if (!reveal(layer, frame)) {
+      if (!reveal(layer)) {
         sighted.delete(layer);
       }
     });
@@ -787,7 +780,7 @@ export function boot(options: BootOptions): void {
       if (!layer.isConnected) {
         layersAt.delete(layer);
       } else if (frame.el === el) {
-        reveal(layer, frame);
+        reveal(layer);
       }
     }
   };
@@ -944,10 +937,12 @@ export function boot(options: BootOptions): void {
     line.textContent = FAILED_LINE[kind](section.name);
     const details = document.createElement("details");
     const summary = document.createElement("summary");
-    summary.textContent = "Show details";
+    summary.textContent = shellWords.showDetails;
     // The house's disclosure (dashboard RowFault): its words say what a press does.
     details.addEventListener("toggle", () => {
-      summary.textContent = details.open ? "Hide details" : "Show details";
+      summary.textContent = details.open
+        ? shellWords.hideDetails
+        : shellWords.showDetails;
     });
     const words = document.createElement("pre");
     words.textContent = error.message;
@@ -975,6 +970,7 @@ export function boot(options: BootOptions): void {
     section.head.after(failed);
     section.standIns = [failed];
     section.failed = true;
+    sayShape();
   }
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
@@ -1245,47 +1241,37 @@ export function boot(options: BootOptions): void {
       width === null ? "" : `${WIDTH_CONTAINER} / inline-size`;
   }
 
+  let saidShape = "";
   /**
-   * An embed's frame at its own width, never reflowed below it: a story
-   * wider than the embed is scaled down to fit it with CSS zoom, which
-   * scales its box and its paint together (MDN, zoom: it "scales the
-   * targeted element, which can affect the page layout", where scale()
-   * leaves the layout), so the embed stands as tall as what it draws and a
-   * narrower story centres in it at its own size. The scale stops where the
-   * story's words would be drawn under EMBED_TYPE_FLOOR: a story still
-   * wider than the embed there scrolls sideways in its frame
-   * (`data-cawco-wide`), its words legible, under the house edge fade
-   * (DESIGN.md `kit-edge-fade`, its sheet set in the page by the chrome),
-   * drawn on the side where more is hidden and gone at each end of the
-   * scroll.
+   * The page holding an embed (a decision page's Preview) makes its frame
+   * this tall and, where a story says its own width, as wide as the widest
+   * (null where none does): every frame at its own size, 1 CSS px per px,
+   * never scaled, the frames whole, no inner scroll; the page holding it
+   * scrolls it where its room is narrower. Said whenever it changes: from
+   * the world's resize observer while the frame is on the page's screen,
+   * and as its sections draw. A cross-origin frame off the page's screen
+   * gets no rendering steps until it is scrolled to, so no observer
+   * delivery: said only from there, nine of ten Previews of one canvas below
+   * the fold stood in a 16:10 box at 252px beside the first at its own
+   * 760px. Its height read here lays it out, rendering steps or none.
    */
-  function fitToEmbed(frame: Frame): void {
-    const width = widthOf(frame.story, frame.column.width);
-    const room = world.clientWidth;
-    const fit = width === null || room === 0 ? 1 : Math.min(1, room / width);
-    const type = fit < 1 ? typeOf(frame.body) : null;
-    const scale =
-      type === null ? fit : Math.max(fit, Math.min(1, EMBED_TYPE_FLOOR / type));
-    frame.body.style.zoom = scale < 1 ? String(scale) : "";
-    const wide = width !== null && width * scale > room + 0.5;
-    frame.el.toggleAttribute("data-cawco-wide", wide);
-    frame.el.classList.toggle("kit-edge-fade", wide);
-  }
-
-  /** The font size most of a story's words stand at, in its own px (CSS zoom leaves the computed size alone); null before it draws any. */
-  function typeOf(body: HTMLElement): number | null {
-    const sizes = new Map<number, number>();
-    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const many = (node.textContent ?? "").trim().length;
-      if (many && node.parentElement) {
-        const size = Number.parseFloat(
-          getComputedStyle(node.parentElement).fontSize
-        );
-        sizes.set(size, (sizes.get(size) ?? 0) + many);
-      }
+  function sayShape(): void {
+    if (!embed) {
+      return;
     }
-    return [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const height = Math.ceil(world.offsetHeight);
+    const widths = sections.flatMap((section) =>
+      [...section.frames.values()].flatMap(
+        (frame) => widthOf(frame.story, frame.column.width) ?? []
+      )
+    );
+    const width = widths.length > 0 ? Math.max(...widths) : null;
+    const shape = `${width} ${height}`;
+    if (shape === saidShape) {
+      return;
+    }
+    saidShape = shape;
+    window.parent.postMessage({ type: CANVAS_EMBED_SIZE, height, width }, "*");
   }
 
   /** The frame's body set for its column: its scheme, width and forced state. */
@@ -1299,9 +1285,6 @@ export function boot(options: BootOptions): void {
     body.style.backgroundColor = ground.background;
     body.style.color = ground.color;
     sizeBody(body, widthOf(story, column.width));
-    if (embed) {
-      fitToEmbed(frame);
-    }
     for (const states of Object.values(FORCED)) {
       for (const state of states) {
         body.classList.remove(allClass(state));
@@ -1474,6 +1457,10 @@ export function boot(options: BootOptions): void {
     said(section);
     if (embed) {
       unnamedInEmbed();
+      sayShape();
+      // Once what the stories mounted has settled (their own effects, the faces).
+      setTimeout(sayShape);
+      document.fonts.ready.then(sayShape, () => undefined);
     } else {
       quietly(
         columnsFor(section).then(() => {
@@ -2708,7 +2695,6 @@ export function boot(options: BootOptions): void {
     canvas,
     spec,
     tokens: options.tokens,
-    edgeFade: options.edgeFade,
     faces: options.faces,
     view,
     sections: () => sections,
@@ -2753,19 +2739,7 @@ export function boot(options: BootOptions): void {
   new ResizeObserver(() => {
     drawEdges();
     later();
-    if (embed) {
-      // The embed's width changed: each frame wider than it fits it again.
-      for (const section of sections) {
-        for (const frame of section.frames.values()) {
-          fitToEmbed(frame);
-        }
-      }
-      // The page holding an embed (a decision page's Preview) makes its frame this tall: the frames whole, no inner scroll.
-      window.parent.postMessage(
-        { type: CANVAS_EMBED_SIZE, height: Math.ceil(world.offsetHeight) },
-        "*"
-      );
-    }
+    sayShape();
   }).observe(world);
 
   /* --- Pictures: a frame posed, settled and read for its picture --------- */

@@ -12,6 +12,7 @@ import {
 } from "@cawco/core/workflow-sandbox";
 import { Elysia, ElysiaStatus, status, t } from "elysia";
 import type { DbShape } from "../db";
+import { byHandle } from "../handles";
 import { hidden } from "../hidden";
 import type { ToolCallKeys } from "../tool-call-keys";
 import { WorkItemRefusal } from "../work-items";
@@ -171,6 +172,21 @@ export function workflowRoutes(
       },
       (words) => new Response(words, { status: 409 })
     );
+  /** The run `asked` names for its supervisor `caller`: its id, or the handle of a run it supervises (handles.ts). */
+  const runNamed = (asked: string, caller: string | undefined): string =>
+    asked.length >= 36 || !caller
+      ? asked
+      : byHandle(
+          asked,
+          db
+            .workflowRunHeads()
+            .filter((run) => run.supervisorInstanceId === caller),
+          {
+            id: (run) => run.id,
+            said: (run) => `${run.id.slice(0, 8)} (${run.status})`,
+          },
+          "run you supervise"
+        ).id;
   return new Elysia()
     .get("/api/workflows", (): { workflows: WorkflowListing[] } => ({
       workflows: db.listWorkflows(),
@@ -319,7 +335,7 @@ export function workflowRoutes(
           value === undefined || value === "" ? undefined : Number(value);
         return new Response(
           runtime.read(
-            params.id,
+            runNamed(params.id, caller),
             {
               ref: ref === "result" ? "result" : Number(ref),
               path: query.path ? String(query.path) : undefined,
@@ -370,7 +386,7 @@ export function workflowRoutes(
           }
           return {
             message: await runtime.steer(
-              params.id,
+              runNamed(params.id, body.instanceId),
               body.action as Parameters<typeof runtime.steer>[1],
               body.instanceId
             ),

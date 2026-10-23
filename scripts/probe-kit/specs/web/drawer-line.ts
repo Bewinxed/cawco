@@ -40,6 +40,7 @@ import { readWithin } from "../../../../packages/core/src/bounded";
 import type { InstancesFrame } from "../../../../packages/core/src/frames";
 import type { Envelope } from "../../../../packages/core/src/index";
 import { WIRE_PROTOCOL } from "../../../../packages/core/src/stream";
+import { launchEnv } from "../../browser-leftovers";
 import { type Kit, open, ROOT, type Spec, settle } from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
@@ -313,11 +314,11 @@ async function firefoxAt(
 ): Promise<{ browser: Browser; page: Page }> {
   const browser = await firefox.launch({
     headless: true,
-    env: {
+    env: launchEnv({
       ...process.env,
       MOZ_HEADLESS_WIDTH: String(Math.round(css * 2)),
       MOZ_HEADLESS_HEIGHT: String(HEIGHT * 2),
-    },
+    }),
     firefoxUserPrefs: { "layout.css.devPixelsPerPx": "2" },
   });
   const context = await browser.newContext({ viewport: null });
@@ -359,6 +360,7 @@ async function chromiumZoomedAt(
     channel: "chromium",
     headless: true,
     viewport: null,
+    env: launchEnv(),
     args: [
       "--no-sandbox",
       "--disable-gpu",

@@ -1,42 +1,55 @@
 /**
- * Builds what prove-stage2.sh needs into OUTPUT: the proof's key pair and two
+ * Builds what prove-stage2.sh needs into OUTPUT: the proof's key pair and four
  * real linux-x64 builds of the repository's entry point, each with that key's
  * public half embedded as the release key and the stub harnesses linked in
  * (and with them the proof clock, scripts/binary/proof-clock.ts). Usage:
  *   bun scripts/binary/build-stage2.ts /ABSOLUTE/OUTPUT/DIR [--skip-prepare]
  *
- * `--skip-prepare`: this checkout's assets (the dashboard's build, the preview
- * overlay) are prepared already, as build-binary.ts's flag of that name says;
- * release.ts passes it after its own proof build prepared them.
+ * `--skip-prepare`: this checkout's assets are prepared already
+ * (`build-binary.ts prepare`); release.ts passes it, having prepared them
+ * once for every compile.
  *
  * - cawco-2, 0.0.1-test.2: this tree. Every rig installs it.
  * - cawco-3, 0.0.1-test.3: this tree again, newer: the build each rig updates to.
+ * - cawco-nightly, 0.0.1-nightly.30+333333333333: build 3 as the nightly
+ *   channel publishes it, its version in the shape release.ts gives a nightly
+ *   (`<base>-nightly.<sequence>+<commit:12>`), which `releaseTag` reads and
+ *   the agent holds the binary's own version to (nightlyjoin's hub).
+ * - cawco-wire, 0.0.1-test.4: this tree again, newer still, speaking the
+ *   next wire protocol only (`protocolRange` one above this tree's, both
+ *   ends): a release that moves the protocol, which no machine but the hub's
+ *   own may install before its hub runs it (hubwire's rig).
+ *
+ * All compile at once.
  *
  * KEPT BETWEEN RUNS, in the proof cache (`CAWCO_PROOF_CACHE`, default
  * ~/.cache/cawco-proof). The key pair is made once and kept there, mode 0600:
  * it signs only the proof's fixtures, and only proof builds trust it; the
  * release key is never in reach of this script (release.ts holds it). Builds
- * 2 and 3 are kept
- * per tree (`git rev-parse HEAD^{tree}`) of a clean checkout, so a proof run
- * again at the same commit compiles nothing; a checkout with changes always
- * compiles them. A published release leaves its own tree's builds alone in the
- * cache (release.ts runs proof-cache-prune.sh).
+ * 2, 3, nightly and wire are kept by the key of the proof inputs at HEAD (proof-inputs.ts),
+ * so a commit that changes none of them (docs, the Apple app, the release
+ * script) compiles nothing; a checkout with changes to them always compiles.
+ * A published release leaves its own key's builds alone in the cache
+ * (release.ts runs proof-cache-prune.sh).
  *
- * A heavy run: it holds one of the machine's slots (lib/heavy-run.ts) for
- * its whole life, waiting for one when all are held.
+ * It starts only with room on the disk (lib/disk-room.ts), and holds the
+ * machine awake until it ends (lib/hold-awake.ts).
  */
 import { copyFile, mkdir, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildBinary } from "../build-binary";
-import { heavySlot } from "../lib/heavy-run";
+import { protocolRange } from "../../packages/core/src/runtime";
+import { compileBinary, prepareAssets } from "../build-binary";
+import { diskRoomOrExit } from "../lib/disk-room";
+import { holdAwake } from "../lib/hold-awake";
+import { proofInputsChanged, proofInputsKey } from "./proof-inputs";
 
 const [, , output] = Bun.argv;
 if (!output?.startsWith("/")) {
   throw new Error("Usage: bun scripts/binary/build-stage2.ts /absolute/output");
 }
-// Held until this process exits: the kernel frees it then.
-await heavySlot();
+diskRoomOrExit("The stage-2 build");
+holdAwake("The stage-2 build");
 const run = async (argv: string[], cwd?: string) => {
   const child = Bun.spawn(argv, {
     stdout: "inherit",
@@ -46,14 +59,6 @@ const run = async (argv: string[], cwd?: string) => {
   if ((await child.exited) !== 0) {
     throw new Error(`${argv.join(" ")} failed`);
   }
-};
-const read = async (argv: string[], cwd: string): Promise<string> => {
-  const child = Bun.spawn(argv, { cwd, stdout: "pipe", stderr: "inherit" });
-  const text = await new Response(child.stdout).text();
-  if ((await child.exited) !== 0) {
-    throw new Error(`${argv.join(" ")} failed`);
-  }
-  return text.trim();
 };
 const exists = (path: string) => Bun.file(path).exists();
 const hash = (text: string) =>
@@ -88,53 +93,69 @@ const publicKey = (
 ).trim();
 const keyId = hash(publicKey);
 
-// Builds 2 and 3: this tree, kept per tree of a clean checkout.
-const clean = (await read(["git", "status", "--porcelain"], repository)) === "";
-const tree = clean
-  ? await read(["git", "rev-parse", "HEAD^{tree}"], repository)
-  : undefined;
+// Builds 2, 3, nightly and wire: this tree, kept by its proof inputs' key when they are committed.
+const inputs = (await proofInputsChanged(repository))
+  ? undefined
+  : await proofInputsKey(repository, "HEAD");
 const builds = [
   ["2", "0.0.1-test.2", "2222222222222222222222222222222222222222"],
   ["3", "0.0.1-test.3", "3333333333333333333333333333333333333333"],
+  [
+    "nightly",
+    "0.0.1-nightly.30+333333333333",
+    "3333333333333333333333333333333333333333",
+  ],
+  ["wire", "0.0.1-test.4", "4444444444444444444444444444444444444444"],
 ] as const;
-const keptDir = tree
-  ? join(cache, "builds", `${tree.slice(0, 16)}-${keyId}`)
-  : undefined;
-let prepared = Bun.argv.includes("--skip-prepare");
-/** One of this tree's builds into the output: the kept one, or compiled (and kept, from a clean checkout). */
-const provide = async (name: string, version: string, commit: string) => {
-  const kept = keptDir ? join(keptDir, `cawco-${name}`) : undefined;
-  if (kept && (await exists(kept))) {
-    await copyFile(kept, join(output, `cawco-${name}`));
-    return;
-  }
-  const built = join(output, `cawco-${name}.building`);
-  await buildBinary({
-    target: "linux-x64",
-    outfile: built,
-    version,
-    commit,
-    testPublicKey: publicKey,
-    stubHarness: true,
-    // The first compile prepares the assets (the dashboard, the overlay); the next reuses them.
-    prepare: !prepared,
-  });
-  prepared = true;
-  if (!kept) {
-    await rename(built, join(output, `cawco-${name}`));
-    return;
-  }
-  await keep(built, kept);
-  await copyFile(kept, join(output, `cawco-${name}`));
+/** What the `wire` build speaks: the next protocol alone, so it overlaps none of this tree's. */
+const MOVED_PROTOCOL = {
+  min: protocolRange.max + 1,
+  max: protocolRange.max + 1,
 };
-for (const [name, version, commit] of builds) {
-  // biome-ignore lint/performance/noAwaitInLoops: one compile at a time bounds memory
-  await provide(name, version, commit);
+const keptDir = inputs
+  ? join(cache, "builds", `${inputs.slice(0, 16)}-${keyId}`)
+  : undefined;
+const keptPath = (name: string) =>
+  keptDir ? join(keptDir, `cawco-${name}`) : undefined;
+const present = await Promise.all(
+  builds.map(([name]) => {
+    const path = keptPath(name);
+    return path ? exists(path) : false;
+  })
+);
+if (present.includes(false) && !Bun.argv.includes("--skip-prepare")) {
+  await prepareAssets({ dashboard: true });
 }
+// Each of this tree's builds into the output: the kept one, or compiled (and kept, from committed inputs).
+await Promise.all(
+  builds.map(async ([name, version, commit], at) => {
+    const path = keptPath(name);
+    if (path && present[at]) {
+      await copyFile(path, join(output, `cawco-${name}`));
+      return;
+    }
+    const built = join(output, `cawco-${name}.building`);
+    await compileBinary({
+      target: "linux-x64",
+      outfile: built,
+      version,
+      commit,
+      testPublicKey: publicKey,
+      stubHarness: true,
+      ...(name === "wire" ? { protocol: MOVED_PROTOCOL } : {}),
+    });
+    if (!path) {
+      await rename(built, join(output, `cawco-${name}`));
+      return;
+    }
+    await keep(built, path);
+    await copyFile(path, join(output, `cawco-${name}`));
+  })
+);
 console.log(
-  `Built 2 binaries in ${output} (${
+  `Built ${builds.length} binaries in ${output} (${
     keptDir
-      ? `builds 2 and 3 kept in ${keptDir}`
-      : "builds 2 and 3 from a checkout with changes, not kept"
+      ? `builds ${builds.map(([name]) => name).join(", ")} kept in ${keptDir}`
+      : "from a checkout with changes to the proof inputs, not kept"
   }), with the proof key from ${keys}`
 );

@@ -47,9 +47,12 @@ const CAP_HOLDS = {
   both: "attempts and Caw paused",
 } as const;
 
-/** A project's reached cap in one line: "$12.40 of $10.00 this day · Caw paused". */
+/** What period a cap's budget covers, in words. */
+const CAP_PERIODS = { day: "daily", month: "monthly" } as const;
+
+/** A project's reached cap in one line: "Reached its daily budget · Caw paused". */
 export const capLine = (cap: ProjectCap): string =>
-  `${usd(cap.spentUsd)} of ${usd(cap.usd)} this ${cap.period} · ${CAP_HOLDS[cap.onCap]}`;
+  `Reached its ${CAP_PERIODS[cap.period]} budget · ${CAP_HOLDS[cap.onCap]}`;
 
 const WHOLE_DOLLARS = new Intl.NumberFormat("en-US", {
   style: "currency",

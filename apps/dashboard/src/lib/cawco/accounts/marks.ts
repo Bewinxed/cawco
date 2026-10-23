@@ -13,33 +13,35 @@
  * A provider nobody draws a mark for here has none: its tile carries the
  * accounts glyph.
  */
-import cerebras from "~icons/logos/cerebras-icon?raw";
-import claude from "~icons/logos/claude-icon?raw";
-import huggingface from "~icons/logos/hugging-face-icon?raw";
-import perplexity from "~icons/logos/perplexity-icon?raw";
-import together from "~icons/logos/togetherai-icon?raw";
-import baseten from "~icons/thesvg-color/baseten?raw";
-import bedrock from "~icons/thesvg-color/bedrock-aws?raw";
-import cloudflare from "~icons/thesvg-color/cloudflare?raw";
-import deepseek from "~icons/thesvg-color/deepseek?raw";
-import fireworks from "~icons/thesvg-color/fireworks?raw";
-import copilot from "~icons/thesvg-color/github-copilot-light?raw";
-import gemini from "~icons/thesvg-color/google-gemini?raw";
-import grok from "~icons/thesvg-color/grok-light?raw";
-import groq from "~icons/thesvg-color/groq?raw";
-import kimi from "~icons/thesvg-color/kimi?raw";
-import meta from "~icons/thesvg-color/metaai?raw";
-import minimax from "~icons/thesvg-color/minimax?raw";
-import mistral from "~icons/thesvg-color/mistral?raw";
-import moonshot from "~icons/thesvg-color/moonshot?raw";
-import nvidia from "~icons/thesvg-color/nvidia-light?raw";
-import openai from "~icons/thesvg-color/openai-light?raw";
-import opencode from "~icons/thesvg-color/opencode?raw";
-import openrouter from "~icons/thesvg-color/openrouter-light?raw";
-import qwen from "~icons/thesvg-color/qwen-light?raw";
-import vercel from "~icons/thesvg-color/vercel-light?raw";
-import xiaomi from "~icons/thesvg-color/xiaomi?raw";
-import zhipu from "~icons/thesvg-color/zhipu?raw";
+import {
+  SvgBaseten as baseten,
+  SvgBedrock as bedrock,
+  SvgCerebras as cerebras,
+  SvgClaude as claude,
+  SvgCloudflare as cloudflare,
+  SvgCopilot as copilot,
+  SvgDeepseek as deepseek,
+  SvgFireworks as fireworks,
+  SvgGemini as gemini,
+  SvgGrok as grok,
+  SvgGroq as groq,
+  SvgHuggingface as huggingface,
+  SvgKimi as kimi,
+  SvgMeta as meta,
+  SvgMinimax as minimax,
+  SvgMistral as mistral,
+  SvgMoonshot as moonshot,
+  SvgNvidia as nvidia,
+  SvgOpenai as openai,
+  SvgOpencode as opencode,
+  SvgOpenrouter as openrouter,
+  SvgPerplexity as perplexity,
+  SvgQwen as qwen,
+  SvgTogether as together,
+  SvgVercel as vercel,
+  SvgXiaomi as xiaomi,
+  SvgZhipu as zhipu,
+} from "@cawco/icons/marks";
 
 /** `?raw` answers the SVG's source; the icons' own module types name a component. */
 const svg = (source: unknown): string => source as string;

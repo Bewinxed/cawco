@@ -14,8 +14,10 @@
    * A region named for the artifact, placed in the page after Files' card,
    * so Tab goes on from Files into it. Chosen from the keyboard, the focus
    * goes to the panel's name; the panel's own Close closes it and gives the
-   * focus back to the artifact's card in Files. It comes and goes as every
-   * floating surface (the kit's `floatingSurface`, on `data-state`), standing closed for
+   * focus back to the artifact's card in Files. It comes in by `popIn`
+   * (motion/pop, never `@starting-style`, which WebKit sometimes skips for
+   * an element just added) and goes as every floating surface does (the
+   * kit's `floatingSurface`, on `data-state`), standing closed for
    * `--dur-exit` before it leaves the page.
    */
   import { untrack } from "svelte";
@@ -25,6 +27,7 @@
   import { cawco } from "../client.svelte";
   import { frameObserver } from "../frame-observer";
   import { dur } from "../motion/curves.svelte";
+  import { popIn } from "../motion/pop.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import { SIDE_FLOOR_PX } from "../side/floor";
@@ -47,6 +50,9 @@
   } | null>(null);
   let place = $state<ReturnType<typeof floatPlace>>(null);
   let node = $state<HTMLElement | null>(null);
+  /** It comes in by `popIn` when it comes in open, as it always does; closed, at once. */
+  const enter = (el: HTMLElement) =>
+    standing?.open ? popIn(el) : { duration: 0 };
 
   $effect(() => {
     if (showing && picked && preview) {
@@ -177,6 +183,7 @@
     style:--float-w="{place.width}px"
     style:--float-h={"min(var(--c-caw-panel-h), calc(100dvh - var(--float-top) - var(--space-3)))"}
     {@attach afterFiles}
+    in:enter
   >
     <RegionBoundary region="preview">
       <PreviewPane instanceId={standing.instanceId} onScreen />

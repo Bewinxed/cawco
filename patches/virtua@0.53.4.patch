@@ -1,0 +1,42 @@
+diff --git a/lib/core/index.js b/lib/core/index.js
+index e0242e4d0f5678062eafc6516e894bee4a7fa063..f0bbc8a5cfc135cfd52d3d3047ae68285ccc9c8b 100644
+--- a/lib/core/index.js
++++ b/lib/core/index.js
+@@ -488,15 +488,33 @@ t), m = 5, w = 7, h = 1, S = 2, b = 4, v = 8, I = t => o(t.$getTotalSize(), t.$g
+         $getItemLane: t => (h(), p[t])
+     };
+ }, D = t => {
+-    let e;
++    // cawco: an item observed while this observer delivers, or after it
++    // before the next frame (a row its callback's flush mounted), is
++    // observed at that frame. Observed inside the delivery, its first size
++    // is at a depth the delivery has passed: the browser skips it to the
++    // next frame and reports "ResizeObserver loop completed with
++    // undelivered notifications" (inokawa/virtua#470). Its first size comes
++    // in the same frame either way.
++    let e, w, h = null, q = 0;
++    const r = (s, o) => {
++        h || (h = new Set, q = w.requestAnimationFrame(() => {
++            const a = h;
++            h = null;
++            for (const n of a) e.observe(n);
++        }));
++        t(s, o);
++    };
+     return {
+         l(n) {
+-            (e || (e = new (d(g(n)).ResizeObserver)(t))).observe(n);
++            e || (w = d(g(n)), e = new w.ResizeObserver(r));
++            h ? h.add(n) : e.observe(n);
+         },
+-        i(t) {
+-            e.unobserve(t);
++        i(n) {
++            h && h.delete(n);
++            e.unobserve(n);
+         },
+         u() {
++            h = null, w && w.cancelAnimationFrame(q);
+             e && e.disconnect();
+         }
+     };

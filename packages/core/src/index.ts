@@ -9,6 +9,8 @@ export * from "./accounts";
 export * from "./actions";
 // "Continue in new session": the size rules the hub and the dashboard share.
 export * from "./archive";
+// What waits on the person among the artifacts: Needs you's artifact items.
+export * from "./artifact-needs";
 // Files and texts a turn carries, and the line naming each attached file.
 export * from "./attachments";
 // Pages are blocks: a project page's arrangement, kept by the hub.
@@ -51,12 +53,15 @@ export * from "./harness";
 export * from "./hooks";
 export * from "./hub-auth";
 export * from "./injected";
+// Adding a machine: one install, kept by the hub from its start to the
+// person's act on its outcome (hub installs.ts), and its window's steps.
+export * from "./install";
 // The system's laws, named and checked in the running product: `invariant()`.
 export * from "./invariant";
 // Adding a machine: the join routes' shapes and the install script's step
 // prefix, which `cawco binary-install agent` prints and the hub reads back off SSH output.
 export * from "./join";
-// The hub's `.local` name typed in a browser: port 80's state.
+// The hub's `.local` name and the dashboard's address at it.
 export * from "./local-name";
 // Moving a project to a machine without a checkout of it: the hub-owned job,
 // its estimate and request, and the hub ↔ machine controls that run its steps.
@@ -69,6 +74,7 @@ export * from "./notifications";
 export * from "./permission-presentation";
 // A session's plan: its steps, its spec, its task's to-dos, and their live frames.
 export * from "./plan";
+export * from "./presence-onboarding";
 // A project's landing gate as its gate.md declares it: the hub reads it, Settings draws it.
 export type {
   DeclaredStep,
@@ -541,6 +547,13 @@ export const damagedHubRecordWords = (
  * a register missed because it raced a spawn shows up on the very next beat.
  */
 export interface HeartbeatPayload {
+  /**
+   * The machine's activity as its desktop reads it (agent activity.ts): in
+   * use, idle, locked or asleep, and how long since its last input. On
+   * every 15s beat and on a beat of its own when it changes; absent where
+   * the machine has no desktop source (no GUI session, no logind).
+   */
+  activity?: import("./notifications").MachineActivity;
   at: number;
   /** The machine's binary update state, live on every beat. */
   binaryUpdate?: import("./binary-updates").BinaryUpdateState;
@@ -641,6 +654,12 @@ export interface HeartbeatAckPayload {
    * its keeper starts runs under them.
    */
   sessionLimits?: SessionLimits;
+  /**
+   * The tailnet name and addresses the hub serves HTTPS on now, absent while
+   * it doesn't (tailnet-https.ts `TailnetServing`), on every beat: the
+   * agent's loopback carries to the hub by it (agent hub-loopback.ts).
+   */
+  tailnetHttps?: import("./tailnet-https").TailnetServing;
   /**
    * The upstream guard's rules as the hub holds them now (upstream-guard.ts
    * `UpstreamRules`), on every beat: each workspace's shims judge the next
@@ -834,6 +853,17 @@ export interface AgentRow {
    * Last-known fleet-config sync report (NEW.md §11).
    */
   fleet?: FleetSyncReport;
+  /**
+   * Each fleet item as the machine's harnesses converge it (core fleet.ts
+   * `FleetConvergeFrame`), by item id. Absent until the machine has said.
+   */
+  fleetItems?: Record<string, import("./fleet").FleetItemStatus>;
+  /**
+   * What became of the last fleet sync the hub sent it: sent, applied,
+   * failed in the machine's words, or unanswered. Absent until the hub has
+   * sent it one.
+   */
+  fleetSync?: import("./fleet").FleetSyncOutcome;
   /** What each installed harness can do, as the daemon reported at register. */
   harnesses?: import("./harness").HarnessReport[];
   /** The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has. */
@@ -1392,10 +1422,10 @@ export interface InstanceRow {
   /**
    * The account a person moved it to that it moves to at its next launch,
    * as the hub keeps it (its `owed_moves`), until the move lands: what it
-   * waits on, its turn's end or its machine connected again. Absent when it
-   * owes none.
+   * waits on, its turn's end, the background work its process holds ending,
+   * or its machine connected again. Absent when it owes none.
    */
-  owedMove?: { accountId: string; waits: "turn" | "machine" };
+  owedMove?: { accountId: string; waits: "turn" | "work" | "machine" };
   /**
    * The session that started this one (`delegate`, `start_session`, a
    * workflow's supervisor), which every rail nests it under; absent on a
@@ -1426,6 +1456,15 @@ export interface InstanceRow {
   seenAt?: string | number | Date | null;
   /** The harness's own session id, once the session has named itself. */
   sessionId: string | null;
+  /**
+   * The session is stopped at its account's limit (or on its refused
+   * sign-in), in words, as the hub's at-limit controller holds it (hub
+   * at-limit.ts `stall`): what happened and when it carries on; `until`,
+   * epoch ms, the moment it does. Absent while it runs. Its row, its head and
+   * its transcript show it as an error with the way out: another account
+   * from its menu.
+   */
+  stalled?: { until?: number; words: string };
   status: InstanceStatus;
   /**
    * The thread with its project's Caw this session works for, when Caw's
@@ -1642,6 +1681,7 @@ export const SERVER_STOPPED_MID_TURN =
 export type FramePayload =
   | import("./frames").FleetMcpFrame
   | import("./frames").FleetReportFrame
+  | import("./fleet").FleetConvergeFrame
   | import("./frames").PreviewFrame
   | import("./frames").MessageFrame
   | import("./frames").SendFrame
@@ -1674,17 +1714,24 @@ export type FramePayload =
   | import("./frames").HubRestartFrame
   | import("./frames").FleetUpstreamFrame
   | import("./frames").TailnetHttpsFrame
-  | import("./frames").LocalNameFrame
   | import("./frames").FleetFetchFrame
   | import("./frames").ProjectCapFrame
   | import("./actions").ActionsFrame
   | import("./hub-auth").HubAuthFrame
+  /** Hub-originated: every install and the draft, whole, on each change. */
+  | import("./install").InstallsFrame
   | import("./frames").ProjectStopFrame
   | import("./frames").DelegateEventFrame
   /** Hub-originated: every open fleet-watch notice, whole, on each change. */
   | import("./fleet-watch").FleetWatchNoticesFrame
+  /** Hub-originated: every artifact waiting on the person, and their notices, whole, on each change. */
+  | import("./artifact-needs").ArtifactNeedsFrame
   /** Hub-originated: every law the hub caught broken, whole, on each break. */
   | import("./invariant").LawsBrokenFrame
+  /** Hub-originated: the person's presence and the machines that count toward it. */
+  | import("./notifications").PersonFrame
+  /** Hub-originated: something that needs the person, shown on the desk tab they use. */
+  | import("./notifications").DeskAlertFrame
   /** Hub-originated: every project move, whole, on each change. */
   | import("./move").MovesFrame
   /** Daemon-originated: how far a move's clone or large files are. */
@@ -1713,13 +1760,13 @@ export type FramePayload =
 export const CAWCO_HUB_PORT = 3456;
 
 /**
- * The dashboard's port on every computer's loopback, beside the hub's
- * (IANA lists 3455 as `prsvp`, a legacy RSVP encapsulation; no dev server
- * defaults to it, unlike 3000): `http://localhost:3455` is the dashboard on
- * the hub's computer, where the dashboard's socket listens on it, and on
- * every other computer running the agent, which carries it to the hub
- * (agent hub-loopback.ts). Loopback is a secure context, so its previews run
- * in a process of their own.
+ * The dashboard's port, beside the hub's (IANA lists 3455 as `prsvp`, a
+ * legacy RSVP encapsulation; no dev server defaults to it, as Vite, Next and
+ * Rails do to 3000): on the hub's computer the dashboard's socket listens on
+ * it, on the network and loopback alike, and on every other computer running
+ * the agent `http://localhost:3455` is carried to it (agent hub-loopback.ts).
+ * Every address of the dashboard ends in it. Loopback is a secure context,
+ * so its previews run in a process of their own.
  */
 export const CAWCO_LOCAL_DASHBOARD_PORT = 3455;
 
@@ -1734,7 +1781,7 @@ export const PREVIEW_START_PATH = /^\/(?!\/)\S*$/;
  * the session's machine (a preview), or a page the hub built and keeps under
  * its data dir at `artifacts/<id>/` and serves itself, named by the page's
  * name. A dev server or folder may name `path`, the page inside it the
- * preview opens at (`/motion/mac-readiness`); the root when absent.
+ * preview opens at (`/motion/updates`); the root when absent.
  */
 export type PreviewSource =
   | {
@@ -1799,6 +1846,12 @@ export interface ArtifactSummary {
   kind: ArtifactKind;
   name: string;
   /**
+   * What it waits on the person for, as Needs you derives it (core
+   * artifact-needs.ts), strongest first; null when nothing is asked of the
+   * person.
+   */
+  pending: import("./artifact-needs").ArtifactPending | null;
+  /**
    * The project whose preview origin serves it: a project's page (Projects
    * spec §5.8), loaded at `/__cawco/page/<id>/` there (`projectPagePlace`);
    * absent for anything its session's origin serves.
@@ -1813,7 +1866,7 @@ export interface ArtifactSummary {
   /** Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one. */
   thumbnail: ArtifactThumbnail | null;
   updatedAt: string;
-  /** The person has something to do on it now (`artifact_list`'s `waitingOn` person): its row wears a dot. */
+  /** What it waits on the person for ({@link pending}) stands: its card and its row wear the needs-you dot. */
   waiting: boolean;
 }
 
@@ -2015,12 +2068,13 @@ export const CAWCO_ENV = {
   /** Where the links the hub hands out point. */
   dashboardUrl: "CAWCO_DASHBOARD_URL",
   /**
-   * The port the dashboard's socket listens on, as the installer wrote it
-   * into the hub's unit: the hub's preview ports never take it, and the
-   * hub's composed links point at it.
+   * The dashboard's port on the hub's machine when it is not
+   * {@link localDashboardPort}: a scratch fleet's, which serves its
+   * dashboard on a port of its own beside the loopback port its agents
+   * carry. The installer writes none (hub config.ts `DASHBOARD_PORT`).
    */
   dashboardPort: "CAWCO_DASHBOARD_PORT",
-  /** The dashboard's loopback port on every computer ({@link localDashboardPort}). */
+  /** The dashboard's port, on the hub's machine and every computer's loopback ({@link localDashboardPort}). */
   localDashboardPort: "CAWCO_LOCAL_DASHBOARD_PORT",
   /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
@@ -2135,7 +2189,8 @@ export const mcpGatewayPort = (): number => {
  * The dashboard's loopback port: `CAWCO_LOCAL_DASHBOARD_PORT`, else
  * {@link CAWCO_LOCAL_DASHBOARD_PORT}. The hub names it to every agent in its
  * register answer, and the installer listens on it with the dashboard's
- * socket on the hub's computer; both read it here.
+ * sockets on the hub's computer (cli service.ts `dashboardAddress`); both
+ * read it here.
  */
 export const localDashboardPort = (): number => {
   const named = readEnv(CAWCO_ENV.localDashboardPort);
@@ -2155,17 +2210,27 @@ export const CAWCO_MDNS_TYPE = "cawco";
 export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
+export * from "./words/artifact-tools";
 export * from "./words/artifacts";
+export * from "./words/asks";
 export * from "./words/blocks";
 export * from "./words/catalog";
+export * from "./words/caw-head";
+export * from "./words/comments";
+export * from "./words/common";
 export * from "./words/configure";
+export * from "./words/connect";
 export * from "./words/connection";
 export * from "./words/connections";
+export * from "./words/containers";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
+export * from "./words/files";
+export * from "./words/harness";
 export * from "./words/helpers";
+export * from "./words/leaks";
 export * from "./words/lfs";
-export * from "./words/local-name";
+export * from "./words/machine";
 export * from "./words/made";
 export * from "./words/mcp";
 export * from "./words/memory";
@@ -2173,15 +2238,24 @@ export * from "./words/offers";
 export * from "./words/pairing";
 export * from "./words/place";
 export * from "./words/plan";
+export * from "./words/presence";
 export * from "./words/preview";
+export * from "./words/project";
 export * from "./words/routines";
+export * from "./words/rules";
 export * from "./words/sheet";
+export * from "./words/shell";
 export * from "./words/side";
 export * from "./words/sidebar";
 export * from "./words/skills";
+export * from "./words/spawn";
 export * from "./words/spend";
 export * from "./words/tailnet";
+export * from "./words/transcript";
+export * from "./words/updates";
 export * from "./words/views";
+export * from "./words/work";
+export * from "./words/workspace-needs";
 export * from "./workflow";
 export * from "./workflow-compile";
 

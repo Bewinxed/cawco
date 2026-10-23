@@ -28,7 +28,7 @@ import {
   type Server,
   type Socket,
 } from "node:net";
-import { dirname } from "node:path";
+import { dirname, relative } from "node:path";
 import {
   type BuildInfo,
   type ChildLimit,
@@ -52,6 +52,7 @@ import {
   type SessiondLine,
   type SessiondProcInfo,
   type SessiondServerMessage,
+  type SessiondWelcome,
 } from "@cawco/core/sessiond";
 import {
   listedPid,
@@ -62,7 +63,9 @@ import {
 import {
   type ChildGroup,
   type Children,
+  groupMembers,
   JOIN_CHILDREN,
+  killGroup,
   LIMITS,
   OWN_LIMIT_SHARE,
   openChildGroup,
@@ -91,6 +94,16 @@ import { capChildTasks, START_ROOM, spawnRefusal, TASK_RESERVE } from "./tasks";
 export const SESSIOND_RING_LINES = 4096;
 
 export const RING_BYTES = 8 * 1024 * 1024;
+
+/**
+ * How much of a child's stderr is kept, its last bytes, to hand on with its
+ * exit (`proc.exit`'s `stderr`): what a harness that refused to start said
+ * about why ("--dangerously-skip-permissions cannot be used with root/sudo
+ * privileges for security reasons", Claude Code as root). Our choice: room
+ * for a stack trace's head and the sentence under it, and nothing a chatty
+ * child's long life can grow.
+ */
+export const STDERR_TAIL_BYTES = 4096;
 
 /** What every welcome says this keeper speaks: the protocol, and `release`. */
 const CAPABILITIES = [SESSIOND_V1, SESSIOND_RELEASE];
@@ -213,6 +226,12 @@ interface Proc {
   /** The spec's `cwd`, kept so a reattaching agent learns where this child runs. */
   cwd?: string;
   exitCode: number | null;
+  /**
+   * Its own cgroup's directory, when the keeper made it one ({@link
+   * openChildGroup}): everything in it is the child's, and a kill of the
+   * child kills it whole (`#kill`).
+   */
+  group?: string;
   /** Cuts stdout into lines. Framing only. */
   lines: LineSplitter;
   /** The child's pid, read once its spawn made it: a child with none never becomes a proc. */
@@ -227,6 +246,8 @@ interface Proc {
    * replayable.
    */
   sizes: number[];
+  /** The last {@link STDERR_TAIL_BYTES} the child wrote on stderr, unread: handed on with its exit. */
+  stderr: Buffer;
   /**
    * Every process this child was seen to have started, by pid, with its start
    * time: read when the child is asked to end or signalled, while it is still
@@ -497,12 +518,32 @@ export class SessiondServer {
       alive: proc.alive,
       ...(proc.exitCode === null ? {} : { exitCode: proc.exitCode }),
       ...(proc.signal === null ? {} : { signal: proc.signal }),
+      ...(proc.alive ? {} : stderrOf(proc)),
       head: proc.ring.head,
       ...(proc.cwd === undefined ? {} : { cwd: proc.cwd }),
     }));
   }
 
   // ---------------------------------------------------------------- connections
+
+  /**
+   * The welcome, and the answer to a listing: with the cgroup a child starts
+   * under, its `children` group or the keeper's own, which a start's room is
+   * read under (agent session.ts `#roomForStart`).
+   */
+  #welcomeOf(): SessiondWelcome {
+    const cgroup = this.#children
+      ? `/${relative(this.#children.root, this.#children.group)}`
+      : this.#ownCgroup;
+    return {
+      type: "welcome",
+      epoch: this.epoch,
+      capabilities: CAPABILITIES,
+      build: this.#build,
+      procs: this.procs(),
+      ...(cgroup ? { cgroup } : {}),
+    };
+  }
 
   #accept(socket: Socket): void {
     const conn: Conn = {
@@ -519,13 +560,7 @@ export class SessiondServer {
     // the ring. That is the whole tmux property, and it needs no code here.
     socket.on("error", () => this.#conns.delete(conn));
     socket.on("close", () => this.#conns.delete(conn));
-    this.#send(conn, {
-      type: "welcome",
-      epoch: this.epoch,
-      capabilities: CAPABILITIES,
-      build: this.#build,
-      procs: this.procs(),
-    });
+    this.#send(conn, this.#welcomeOf());
     // A connection the listener took in just as the drain began.
     // biome-ignore lint/suspicious/noUnnecessaryConditions: set true by drain() at runtime; biome's inference sees only the initializer
     if (this.#draining) {
@@ -575,14 +610,7 @@ export class SessiondServer {
       return;
     }
     if (type === "list") {
-      const answer = () =>
-        this.#send(conn, {
-          type: "welcome",
-          epoch: this.epoch,
-          capabilities: CAPABILITIES,
-          build: this.#build,
-          procs: this.procs(),
-        });
+      const answer = () => this.#send(conn, this.#welcomeOf());
       paceList(answer);
       return;
     }
@@ -758,7 +786,7 @@ export class SessiondServer {
     if (existing?.alive) {
       // The kill lands once its tree is read; the successor starts now, under
       // its own process group, so nothing of it is in what gets killed.
-      this.#signalTree(existing, "SIGKILL").catch((error: unknown) => {
+      this.#kill(existing).catch((error: unknown) => {
         console.error(
           `[sessiond] ${procId}: the replaced child's tree could not be read, so it was not killed: ${reasonOf(error)}`
         );
@@ -841,7 +869,9 @@ export class SessiondServer {
       alive: true,
       exitCode: null,
       signal: null,
+      stderr: Buffer.alloc(0),
       ...(spec.cwd === undefined ? {} : { cwd: spec.cwd }),
+      ...(group ? { group: group.path } : {}),
       ...this.#startsIn(group),
     };
     this.#procs.set(procId, proc);
@@ -850,8 +880,11 @@ export class SessiondServer {
     child.stdout.on("data", (chunk: string) => this.#ingest(proc, chunk));
     // stderr is not a second stream in the protocol: it is drained so the
     // pipe can never fill and wedge the child (§6's "no path from a slow
-    // agent to a blocked child"), and otherwise ignored.
-    child.stderr.resume();
+    // agent to a blocked child"), and its last bytes are kept, unread, to go
+    // with the child's exit ({@link STDERR_TAIL_BYTES}).
+    child.stderr.on("data", (chunk: Buffer) => {
+      proc.stderr = keepTail(proc.stderr, chunk);
+    });
     child.stdin.on("error", () => {
       /* a write to a stdin whose child already died is not an event */
     });
@@ -874,7 +907,15 @@ export class SessiondServer {
       });
     }
     child.on("error", () => this.#reap(proc, null, null));
-    child.on("exit", (code, signal) => this.#reap(proc, code, signal));
+    // Reaped once what it wrote on stderr is in: a child that refuses to
+    // start says why and exits at once, and node may tell its exit before
+    // the last of its stderr has been read ({@link stderrRead}).
+    child.on("exit", (code, signal) => {
+      detach(
+        stderrRead(child).then(() => this.#reap(proc, code, signal)),
+        "sessiond reap"
+      );
+    });
     await capChildTasks(pid);
     return ack(commandId, "applied");
   }
@@ -924,7 +965,9 @@ export class SessiondServer {
     if (!proc?.alive) {
       return ack(commandId, "failed", notAliveReason("signal", procId));
     }
-    return this.#signalTree(proc, sig).then(() => ack(commandId, "applied"));
+    return (
+      sig === "SIGKILL" ? this.#kill(proc) : this.#signalTree(proc, sig)
+    ).then(() => ack(commandId, "applied"));
   }
 
   #stdinEnd(
@@ -981,11 +1024,12 @@ export class SessiondServer {
    * ONLY WHAT IS STILL IN THE CHILD'S CGROUP IS ITS TREE. A process that left
    * it was put elsewhere on purpose, by itself or by the service manager:
    * conmon, which podman moves into a `libpod-conmon-<id>.scope` of its own
-   * after its double fork and `setsid()`, or anything a user or CawCo moved
-   * into a scope to outlive the session. It is dropped from the tree, here
-   * and in every later reading, and never signalled: CawCo signals no process
-   * it did not start. The child itself is its own while it lives, wherever it
-   * is.
+   * after its double fork and `setsid()`, or anything a user moved into a
+   * scope of its own. It is dropped from the tree, here and in every later
+   * reading, and never signalled: CawCo signals no process it did not start.
+   * A container a session's work started is ended through its runtime as the
+   * session ends (agent session-containers.ts), never by a signal from here.
+   * The child itself is its own while it lives, wherever it is.
    */
   async #survey(proc: Proc, table: Listed[]): Promise<Pid[]> {
     const root = proc.pid;
@@ -1037,15 +1081,46 @@ export class SessiondServer {
   }
 
   /**
+   * Everything the child started that is running now, and the child while it
+   * lives: its tree ({@link #survey}), and, when it has a cgroup of its own,
+   * every process in it, which is its tree whatever session or group a
+   * process put itself in and whoever its parent is now.
+   */
+  async #everything(proc: Proc): Promise<Pid[]> {
+    const tree = await this.#readTree(proc);
+    const members = proc.group ? await groupMembers(proc.group) : [];
+    return [...new Set([...tree, ...members.map(listedPid)])];
+  }
+
+  /**
+   * A KILL OF A CHILD ENDS ALL IT STARTED. With a cgroup of its own, the
+   * kernel kills the group whole ({@link killGroup}): nothing in it is
+   * missed for having left the child's process group and been reparented
+   * before any reading, as bwrap's sandbox does (`--new-session` calls
+   * setsid(), bubblewrap.c), which a boundary's srt host starts. Without
+   * one, every process of its tree is sent SIGKILL.
+   */
+  async #kill(proc: Proc): Promise<void> {
+    if (!proc.group) {
+      await this.#signalTree(proc, "SIGKILL");
+      return;
+    }
+    await killGroup(proc.group);
+    // Read too, for the record: a later reading knows what it was.
+    await this.#readTree(proc);
+  }
+
+  /**
    * WHAT A CHILD STARTED DOES NOT OUTLIVE IT. A harness that exits leaves its
    * MCP servers to close themselves and their browsers to follow, and one
    * killed outright leaves them running under init with nobody to end them:
    * 136 MCP server sets and 569 browser processes were alive behind about a
    * dozen working sessions the day this was written. Whatever is left is told
-   * to end now, and killed after {@link SWEEP_GRACE_MS}.
+   * to end now ({@link #everything}), and killed after {@link SWEEP_GRACE_MS}
+   * ({@link #kill}).
    */
   async #sweep(proc: Proc): Promise<void> {
-    const left = await this.#readTree(proc);
+    const left = await this.#everything(proc);
     if (left.length === 0) {
       return;
     }
@@ -1054,7 +1129,7 @@ export class SessiondServer {
     }
     const timer = setTimeout(() => {
       this.#sweeps.delete(timer);
-      this.#signalTree(proc, "SIGKILL").catch((error: unknown) => {
+      this.#kill(proc).catch((error: unknown) => {
         console.error(
           `[sessiond] ${proc.procId}: what it started could not be read for the kill: ${reasonOf(error)}`
         );
@@ -1188,6 +1263,7 @@ export class SessiondServer {
         pid: proc.pid,
         exitCode: code,
         signal,
+        ...stderrOf(proc),
       });
     }
   }
@@ -1270,6 +1346,20 @@ export class SessiondServer {
     for (const pid of trees.flat()) {
       signalPid(pid, "SIGKILL");
     }
+    // A child's own cgroup goes whole, whatever its tree missed (#kill).
+    await Promise.all(
+      [...this.#procs.values()].flatMap((proc) =>
+        proc.group
+          ? [
+              killGroup(proc.group).catch((error: unknown) => {
+                console.error(
+                  `[sessiond] drain: ${proc.procId}'s cgroup could not be killed: ${reasonOf(error)}`
+                );
+              }),
+            ]
+          : []
+      )
+    );
   }
 
   /**
@@ -1351,6 +1441,45 @@ const neverRan = async (
   unmade();
   return refusedSpawn(commandId, why ?? new Error("the spawn made no process"));
 };
+
+/**
+ * How long a child's exit waits for the end of its stderr before it is
+ * reaped. Ours: a pipe the child alone held ends within a tick of its exit;
+ * one a process it started still holds never ends, and is not waited on.
+ */
+const STDERR_SETTLE_MS = 250;
+
+/** Settles once `child`'s stderr has ended, or {@link STDERR_SETTLE_MS} on. */
+const stderrRead = (child: ChildProcessWithoutNullStreams): Promise<void> =>
+  child.stderr.readableEnded
+    ? Promise.resolve()
+    : new Promise((resolve) => {
+        const timer = setTimeout(resolve, STDERR_SETTLE_MS);
+        child.stderr.once("end", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        child.stderr.once("close", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+
+/** `kept` with `chunk` after it, cut to its last {@link STDERR_TAIL_BYTES}. */
+const keepTail = (kept: Buffer, chunk: Buffer): Buffer => {
+  const both = kept.length === 0 ? chunk : Buffer.concat([kept, chunk]);
+  return both.length > STDERR_TAIL_BYTES
+    ? both.subarray(both.length - STDERR_TAIL_BYTES)
+    : both;
+};
+
+/**
+ * A dead child's kept stderr, as its exit and its listing carry it: bytes
+ * turned into text whole, never read for what they say. Nothing when it
+ * wrote nothing there.
+ */
+const stderrOf = (proc: Proc): { stderr?: string } =>
+  proc.stderr.length === 0 ? {} : { stderr: proc.stderr.toString("utf8") };
 
 const toLine = (event: {
   seq: number;

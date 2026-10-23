@@ -4,8 +4,9 @@
  * or files for a session easily").
  *
  * What it holds, per session, both read from the hub, so neither depends on
- * the transcript pages this tab has loaded: its artifacts (`listArtifacts`,
- * newest first, each with the thumbnail the hub keeps of it) and its
+ * the transcript pages this tab has loaded: its artifacts that reached the
+ * person (`listFiles`, newest first, each with the thumbnail the hub keeps
+ * of it; every other one stays in its panel's menu) and its
  * attachments (`listAttachments`: every text, file and picture its
  * conversation carried, the person's and the agent's, newest first). Each
  * read is read when Files opens, and again once each time the session moves
@@ -21,13 +22,15 @@
 import type { ArtifactSummary, SessionAttachment } from "@cawco/core";
 import { field, KIND_WORDS, matchOf, parse } from "@cawco/core/find-match";
 import { SvelteMap } from "svelte/reactivity";
-import { listArtifacts, listAttachments } from "../artifact-api";
+import { listAttachments, listFiles } from "../artifact-api";
 import { cawco } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { failureWords } from "../hub-read";
 import { extensionOf } from "../lightbox/extension";
+import { readJson, writeJson } from "../storage";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
+import { onArtifactReached } from "./reached";
 
 /** One of a session's lists as Files last read it. */
 export interface ListRead<T> {
@@ -84,7 +87,7 @@ class SessionReads<T> {
   }
 }
 
-const artifactReads = new SessionReads<ArtifactSummary>(listArtifacts);
+const artifactReads = new SessionReads<ArtifactSummary>(listFiles);
 /** The harness each session's attachments were read under, for who sent them. */
 const harnessOf = new SvelteMap<string, string>();
 const attachmentReads = new SessionReads<SessionAttachment>(
@@ -103,6 +106,18 @@ export const artifactsOf = (
 /** Reads the session's artifacts again; its promise settles once the hub answered. */
 export const readArtifacts = (instanceId: string): Promise<void> =>
   artifactReads.read(instanceId);
+
+/*
+ * An artifact a view of this tab had on screen has reached the person
+ * (files/reached.ts): Files, once it read the session, reads it again when
+ * it doesn't list it.
+ */
+onArtifactReached((instanceId, id) => {
+  const list = artifactReads.of(instanceId)?.list;
+  if (list && !list.some((artifact) => artifact.id === id)) {
+    readArtifacts(instanceId);
+  }
+});
 
 /** Reads the session's attachments again; its promise settles once the hub answered. */
 export const readAttachments = (instanceId: string): Promise<void> =>
@@ -277,17 +292,38 @@ const newestCarrying = (instanceId: string): string => {
 };
 
 /**
+ * What waits on the person among the session's artifacts, as Needs you has
+ * it now (core artifact-needs.ts): each one's reasons and raise, and its
+ * notices. A change is a card's dot or reason moving.
+ */
+const waitingKey = (instanceId: string): string =>
+  JSON.stringify([
+    cawco.artifactNeeds
+      .filter((need) => need.instanceId === instanceId)
+      .map((need) => [
+        need.artifactId,
+        need.raisedAt,
+        need.parked,
+        need.pending,
+      ]),
+    cawco.artifactNotices
+      .filter((notice) => notice.instanceId === instanceId)
+      .map((notice) => [notice.artifactId, notice.parts]),
+  ]);
+
+/**
  * Files follows the conversation on screen: its lists are read once it is,
  * so the count stands, and each again only when it can have changed: the
  * artifacts when its panel frame names other artifacts (one made, one
- * removed), the attachments when a new message carries one. A reply that
- * carries none reads nothing again.
+ * removed) or what waits on the person among them moves (Needs you's
+ * `artifact.needs`), the attachments when a new message carries one. A
+ * reply that carries none reads nothing again.
  */
 export function followFiles(instanceId: string | null): void {
   if (!instanceId) {
     return;
   }
-  const held = cawco.previews[instanceId]?.artifacts?.join(",") ?? "";
+  const held = `${cawco.previews[instanceId]?.artifacts?.join(",") ?? ""}|${waitingKey(instanceId)}`;
   if (artifactsReadAt.get(instanceId) !== held) {
     artifactsReadAt.set(instanceId, held);
     readArtifacts(instanceId);
@@ -325,6 +361,35 @@ export function attachToSession(instanceId: string): boolean {
   draft.pickFiles();
   return true;
 }
+
+/* ── How the artifacts are shown ──────────────────────────────────── */
+
+/** The artifacts as their thumbnails' masonry, or one row each as the attachments are. */
+export type ArtifactsView = "thumbnails" | "list";
+
+const VIEW_KEY = "cawco-files-view";
+const view = $state<{ shown: ArtifactsView }>({
+  shown:
+    readJson<unknown>(VIEW_KEY, "thumbnails") === "list"
+      ? "list"
+      : "thumbnails",
+});
+
+/**
+ * Thumbnails or list, the person's pick, kept in this browser as the
+ * home's Working or Finished is (home/work-tab): the bar's card, the
+ * phone's drawer and every session's Files read the one answer, and a
+ * reload keeps it. Thumbnails until the person picks.
+ */
+export const artifactsView = {
+  get shown(): ArtifactsView {
+    return view.shown;
+  },
+  set(shown: ArtifactsView): void {
+    view.shown = shown;
+    writeJson(VIEW_KEY, shown);
+  },
+};
 
 /* ── Where it stands ──────────────────────────────────────────────── */
 

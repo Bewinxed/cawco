@@ -9,6 +9,11 @@
  * hanging from the trigger pressed (NewSessionPopover); asked without one, from
  * the rail's Start session. Under 640px it is the bottom sheet
  * (NewSessionDialog).
+ *
+ * Whether it is open, what it was opened with and the parked start it shows
+ * are kept in the tab's own storage: a reload opens it again, on the same
+ * start (DESIGN.md, The Work Outlives Its Surface Rule). The trigger is not
+ * kept; reopened by a reload it hangs from the rail's Start session.
  */
 import type { Bounded } from "@cawco/core/bounded";
 import {
@@ -16,6 +21,7 @@ import {
   forkSession,
   type SendExtras,
 } from "../client.svelte";
+import { readJson, writeJson } from "../storage";
 
 export interface SpawnPrefill {
   cwd?: string;
@@ -40,15 +46,64 @@ export interface SpawnPrefill {
  */
 export const FORM_SIZES = ["data-stepped", "data-pair"] as const;
 
+/** Where the tab keeps whether the form is open, and on what. */
+const KEY = "cawco:new-session";
+
+interface KeptForm {
+  open: boolean;
+  prefill?: SpawnPrefill;
+  shown: string | null;
+}
+
+const keptForm = readJson<KeptForm>(
+  KEY,
+  { open: false, shown: null },
+  "session"
+);
+
 export const spawning = $state<{
   open: boolean;
   prefill: SpawnPrefill | undefined;
   /** The trigger it was opened from, which it hangs from; null hangs it from the rail's Start session. */
   anchor: HTMLElement | null;
+  /**
+   * The parked start the form shows (spawn/parked), from the moment its
+   * Start is pressed or its row reopens it; null for a form not started.
+   */
+  shown: string | null;
+  /** Counts each opening: the form reads what it opens with again on each. */
+  opening: number;
 }>({
-  open: false,
-  prefill: undefined,
+  open: keptForm.open,
+  prefill: keptForm.prefill,
   anchor: null,
+  shown: keptForm.shown,
+  opening: 0,
+});
+
+/** What of a prefill is kept: a refused send's words ride in the form's kept draft instead. */
+export function placeOf(
+  prefill: SpawnPrefill | undefined
+): SpawnPrefill | undefined {
+  if (!prefill) {
+    return;
+  }
+  const { prompt: _prompt, ...where } = prefill;
+  return where;
+}
+
+$effect.root(() => {
+  $effect(() => {
+    writeJson(
+      KEY,
+      {
+        open: spawning.open,
+        prefill: $state.snapshot(placeOf(spawning.prefill)),
+        shown: spawning.shown,
+      } satisfies KeptForm,
+      "session"
+    );
+  });
 });
 
 /**
@@ -62,6 +117,8 @@ export function newSession(
 ): void {
   spawning.prefill = prefill;
   spawning.anchor = anchor;
+  spawning.shown = null;
+  spawning.opening += 1;
   spawning.open = true;
 }
 

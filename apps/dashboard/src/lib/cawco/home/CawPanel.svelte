@@ -2,9 +2,10 @@
   /**
    * What Caw's popover holds (NeedsCaw): one list in two sections. Needs you
    * first, longest wait first (home `needs`), each a NeedsCard row; then
-   * Notices, the update notice, the logins moved in and what an account's
-   * arrival set moving, each with its ✕, and `Clear all` at the head's
-   * trailing edge acknowledging every one. A notice never outranks an ask.
+   * Notices, the update notice, the logins moved in, what an account's
+   * arrival set moving and each artifact's notice (ArtifactNoticeRow), each
+   * with its ✕, and `Clear all` at the head's trailing edge acknowledging
+   * every one. A notice never outranks an ask.
    * A section with nothing in it is not drawn; with neither, the empty
    * block says what he knows (The Claim Of Nothing Rule).
    *
@@ -19,14 +20,17 @@
    * where its acts land is its `feed` (caw-feed): NeedsCaw's live fleet, or
    * the dev bench's fixture (/motion/caw-notices).
    */
-  import { damagedHubRecordWords } from "@cawco/core";
+  import { commonWords, damagedHubRecordWords } from "@cawco/core";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou, IconNotices } from "#lib/icons.js";
   import RebalanceNotices from "../accounts/RebalanceNotices.svelte";
+  import InstallNotice from "../connect/InstallNotice.svelte";
+  import { connect } from "../connect/installs.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { reflow } from "../motion/rows.svelte";
   import type { Notice } from "../updates/model";
+  import ArtifactNoticeRow from "./ArtifactNoticeRow.svelte";
   import CawFace from "./CawFace.svelte";
   import type { CawFeed } from "./caw-feed.svelte";
   import MovedLogins from "./MovedLogins.svelte";
@@ -85,6 +89,7 @@
   const updated = $derived(feed.updated);
   const moved = $derived(feed.moved);
   const rebalanced = $derived(feed.rebalanced);
+  const artifactNotices = $derived(feed.artifactNotices);
 
   /**
    * Reload was chosen: the row says its goodbye until the tab goes, also
@@ -94,9 +99,18 @@
   const updateShown = $derived(updated !== null || reloading);
   /** The hub's notices record is damaged: one row says so, with Reset. */
   const damaged = $derived(feed.noticesDamaged);
-  /** The notices standing: the update, each moved login and rebalance, or the damaged record. */
+  /** Machines Add machine brought in, until their outcome is acknowledged (connect/). */
+  const joined = $derived(
+    connect.installs.filter((one) => one.state === "joined")
+  );
+  /** The notices standing: the update, each moved login and rebalance, each machine joined, each artifact's, or the damaged record. */
   const noticeCount = $derived(
-    (updateShown ? 1 : 0) + moved.length + rebalanced.length + (damaged ? 1 : 0)
+    (updateShown ? 1 : 0) +
+      moved.length +
+      rebalanced.length +
+      joined.length +
+      artifactNotices.length +
+      (damaged ? 1 : 0)
   );
 
   let resetting = $state(false);
@@ -115,11 +129,18 @@
   }
   /** Every notice but a goodbye has an id to acknowledge. */
   const clearable = $derived(
-    updated !== null || moved.length > 0 || rebalanced.length > 0
+    updated !== null ||
+      moved.length > 0 ||
+      rebalanced.length > 0 ||
+      joined.length > 0 ||
+      artifactNotices.length > 0
   );
   /** The update is all the panel holds: there is room for its notes. */
   const alone = $derived(
-    needs.length === 0 && moved.length === 0 && rebalanced.length === 0
+    needs.length === 0 &&
+      moved.length === 0 &&
+      rebalanced.length === 0 &&
+      artifactNotices.length === 0
   );
 
   function dismissUpdate(notice: Notice): void {
@@ -145,9 +166,14 @@
     const ids = [
       ...moved.map((one) => one.id),
       ...rebalanced.map((one) => one.id),
+      ...artifactNotices.flatMap((one) => one.parts.map((part) => part.id)),
     ];
     if (ids.length > 0) {
       feed.acknowledge(ids);
+    }
+    // A machine brought in is acknowledged as its notice's ✕ does: its install goes.
+    for (const install of joined) {
+      connect.remove(install.id).catch(() => undefined);
     }
   }
 </script>
@@ -194,7 +220,7 @@
         <span
           data-slot="title"
           class="type-label text-ink-strong"
-          id="caw-needs">Needs you</span
+          id="caw-needs">{commonWords.needsYou}</span
         >
         <span data-slot="count" class="type-meta num text-ink-muted"
           >{needs.length}</span
@@ -329,6 +355,20 @@
             />
           </li>
         {/if}
+        {#each joined as install (install.id)}
+          <li data-flip>
+            <InstallNotice {install} {onchoose} />
+          </li>
+        {/each}
+        {#each artifactNotices as notice (notice.artifactId)}
+          <li data-flip>
+            <ArtifactNoticeRow
+              {notice}
+              {onchoose}
+              ondismiss={(ids) => feed.acknowledge(ids)}
+            />
+          </li>
+        {/each}
       </ul>
     </section>
   {/if}

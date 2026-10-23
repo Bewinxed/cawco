@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords, connectWords } from "@cawco/core";
   /**
    * A Configure group that is about machines, with none joined yet: the kit's
    * empty block (DESIGN.md, Empty: a 20px mark, a title, one line saying
@@ -8,7 +9,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconLaptop } from "#lib/icons.js";
-  import { addMachine } from "../join/join.svelte";
+  import { connect } from "../connect/installs.svelte";
 
   let {
     line,
@@ -18,12 +19,12 @@
   } = $props();
 </script>
 
-<EmptyState icon={IconLaptop} {line} title="No machines yet">
+<EmptyState icon={IconLaptop} {line} title={commonWords.noMachines}>
   {#snippet action()}
     <Button
       aria-haspopup="dialog"
-      label="Add machine"
-      onclick={() => addMachine.show()}
+      label={connectWords.addMachine}
+      onclick={(event) => connect.openNew(event.currentTarget)}
       variant="outline"
     />
   {/snippet}

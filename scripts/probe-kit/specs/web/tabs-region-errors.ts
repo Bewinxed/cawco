@@ -33,6 +33,7 @@
  */
 import type { Page } from "playwright-core";
 import { PREF_VALUE_LIMIT } from "../../../../apps/dashboard/src/lib/cawco/prefs";
+import { commonWords } from "../../../../packages/core/src/words/common";
 import type { Reply } from "../../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../../kit";
 
@@ -574,7 +575,7 @@ async function tryAgain(kit: Kit, step: string, page: Page) {
   }
   await page
     .locator(FAILED)
-    .getByRole("button", { name: "Try again", exact: true })
+    .getByRole("button", { name: commonWords.tryAgain, exact: true })
     .first()
     .click();
   await stripOrFailure(page);

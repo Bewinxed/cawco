@@ -6,6 +6,7 @@
    */
   import type { EffortLevel } from "@cawco/core";
   import { untrack } from "svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
 
   let {
@@ -23,7 +24,15 @@
     embedded?: boolean;
   } = $props();
 
+  /** The chip's width and the track's: read as each mounts, and a change in the next frame (frameSize). */
   let knobWidth = $state(0);
+  const measureKnob = frameSize<HTMLElement>((node) => {
+    knobWidth = node.offsetWidth;
+  });
+  let trackWidth = $state(0);
+  const measureTrack = frameSize<HTMLElement>((node) => {
+    trackWidth = node.clientWidth;
+  });
   /** Transitions wait for the chip's first measurement, so nothing slides in from zero. */
   let ready = $state(false);
   $effect(() => {
@@ -52,7 +61,6 @@
   /** Offset from the pointer to the chip's centre at grab, so a drag moves it from there. */
   let grab = 0;
   const active = $derived(hover || drag || focused);
-  let trackWidth = $state(0);
   /**
    * The level the bars last rested on, so a move fills the bars between there
    * and the new level in order (or drains them from the top down), rather than
@@ -187,7 +195,7 @@
       onpointerup={up}
       role="presentation"
       style:--kw={`${kw}px`}
-      bind:clientWidth={trackWidth}
+      {@attach measureTrack}
     >
       <div
         data-slot="fill"
@@ -200,7 +208,7 @@
           data-active={active || undefined}
           style:--bars={n}
           style:opacity={n ? 1 : 0.7}
-          bind:offsetWidth={knobWidth}
+          {@attach measureKnob}
         >
           <!-- The chip is as wide as its longest label so the rail never moves.
                The ghost holds that width; the icon and the label sit together,

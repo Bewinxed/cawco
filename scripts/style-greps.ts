@@ -1,6 +1,6 @@
 /**
- * `bun scripts/style-greps.ts` (part of `bun run lint`): the three style
- * shapes the dashboard never writes, found by grep over apps/dashboard/src
+ * `bun scripts/style-greps.ts` (part of `bun run lint`): the shapes the
+ * dashboard never writes, found by grep over apps/dashboard/src
  * (tracked and untracked files):
  *  - `transition-all`: every property the element ever changes would
  *    transition; a transition names its properties.
@@ -20,6 +20,11 @@
  *    through `--tw-duration`. A transition's duration is Tailwind's
  *    `duration-(--dur-*)` (https://tailwindcss.com/docs/transition-duration:
  *    "`transition-duration: var(<custom-property>)`"), which sets both.
+ *  - `toast.error` or `toast.warning`: a failure is said on the surface it
+ *    happened on, in the error formula, with its way out (RowFault, a
+ *    pane's own line, the composer's), never in a toast that leaves on a
+ *    timer (DESIGN.md, The Work Outlives Its Surface Rule). The one toast
+ *    the dashboard keeps is a delete's Undo (config/undo.ts), on `toast(`.
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
@@ -55,6 +60,10 @@ const RULES: {
     name: "a dur-* class is banned: a transition's duration is duration-(--dur-*), which sets --tw-duration for a transition-[…] after it",
     pattern: "(^|[^-[:alnum:]])dur-[a-z]",
   },
+  {
+    name: "a failure is never a toast (DESIGN.md, The Work Outlives Its Surface Rule): say it where it happened, in the error formula, with its way out (RowFault, the pane's line, the composer's)",
+    pattern: "(^|[^[:alnum:]_$])toast\\.(error|warning)([^[:alnum:]_$]|$)",
+  },
 ];
 
 const outs = await Promise.all(
@@ -80,7 +89,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

@@ -40,7 +40,25 @@
  *   `probefleet`; the new generation's pass reads nothing more) and nothing
  *   read or started it again;
  * - the hub signs in to it: the row reads it applied on every harness, and
- *   the same three sessions, with no new one spawned, call its `whoami`.
+ *   the same three sessions, with no new one spawned, call its `whoami`;
+ * - a project binds `probeplaced` (the fixture) to its one place here, and a
+ *   second place is added, then removed (`POST`/`DELETE
+ *   /api/projects/:id/places`: the hub's "a place changed" sync, the one a
+ *   workspace's cut and archive send; cutting a real one needs a delegate's
+ *   boundary, which a workspace cannot start): each time the place file
+ *   holds what the hub carried, and for {@link PLACE_WATCH_MS} after the
+ *   sync the machine's OpenCode server is the same generation, nothing is
+ *   applied, no location is evicted by fleet MCP status and no OpenCode
+ *   location boots (his own server, which only an OpenCode location starts,
+ *   does not start);
+ * - with every session stopped, the person edits his `opencode.json` and the
+ *   hub is asked for a sync: for {@link IDLE_MS} the machine starts no
+ *   OpenCode server, applies nothing, evicts nothing and starts no MCP
+ *   server, and its log says the edit waits for the next need; the next
+ *   OpenCode session's start applies it;
+ * - the fleet carries a `chrome-devtools` and an OpenCode session starts in a
+ *   folder no workspace holds: no process of it runs under an OpenCode
+ *   server, and the row reads it applied for OpenCode.
  *
  * Runs inside a workspace or on the host alike: it delegates nothing.
  *
@@ -56,9 +74,11 @@ import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
 } from "../../../packages/core/src/claude-dirs";
+import { MCP_NEEDS_SIGN_IN } from "../../../packages/core/src/fleet";
 import {
   ACCOUNT,
   type Harness,
+  MACHINE,
   type Reply,
   type Seen,
   until,
@@ -83,9 +103,29 @@ const DOCS_TOOL = {
  */
 const QUIET_MS = 90_000;
 /** The words every harness says a server waiting on the hub's sign-in with (core `MCP_NEEDS_SIGN_IN`). */
-const SIGN_IN_WORDS = "Sign in to this server from Configure → MCP servers.";
+const SIGN_IN_WORDS = MCP_NEEDS_SIGN_IN.detail ?? "";
 /** His own OpenCode agent, beside the plan agent. */
 const HIS_AGENT = "hisagent";
+/** A project's server, bound to its places (the fixture). */
+const PLACED = "probeplaced";
+/**
+ * How long the agent is watched after a place's sync: past the first pass a
+ * new generation's publication schedules (15 s, opencode.ts
+ * `MCP_RETRY_FIRST_MS`) and a location release's retry (30 s,
+ * `DIRECTORY_RELEASE_RETRY_MS`), with margin.
+ */
+const PLACE_WATCH_MS = 45_000;
+/**
+ * How long an idle machine is watched: 11 minutes. Longer than the Mac's
+ * cadence (a server started at its home folder about every 10 minutes,
+ * 2026-10-22), and twice every timer the OpenCode adapter runs on a machine
+ * with nothing running, short of the hourly sign-in check: the model
+ * catalog's refresh (5 min, opencode-models.ts `REFRESH_MS`), the stray
+ * server sweep and an account server's idle retirement (5 min each,
+ * opencode.ts `STRAY_SWEEP_MS`, `ACCOUNT_SERVER_IDLE_MS`) and the fleet MCP
+ * pass's longest wait (5 min, `MCP_RETRY_MAX_MS`).
+ */
+const IDLE_MS = 11 * 60_000;
 /** The machine's OpenCode generation record (agent opencode-server.ts `recordStem`), not an account's. */
 const SERVER_RECORD = /^opencode-server-[0-9a-f]{16}\.json$/;
 const FIXTURE = join(import.meta.dir, "../fixtures/shared-mcp-server.ts");
@@ -249,8 +289,8 @@ interface Row {
 
 /** The agent's line for each location a fleet MCP status read booted and let go (opencode.ts `#releaseDirectory`). */
 const EVICTED = "location evicted by fleet MCP status";
-/** What the hub's log says before a sync's reason. */
-const SYNC_PREFIX = /^.*\[fleet\] sync → [^:]*: /;
+/** What the hub's log says before a welcome's count and reason (hub fleet-sync.ts). */
+const SYNC_PREFIX = /^.*\[fleet\] welcome rev \d+ sent → /;
 /** The wait 8ca774966 put on every fleet sync, which only the start-up's first may have. */
 const HELD_MS = 1500;
 /** A fleet sync the agent took, and how many servers it carried. */
@@ -413,22 +453,20 @@ const waitsForSignIn = async (
 };
 
 /**
- * The agent's start, up to the first fleet change: one sync, held until
- * every harness its register named had reported (hub server.ts
- * `awaitHarnesses`), and one read of the fleet's servers for it.
+ * The agent's start, up to the first fleet change: one welcome (hub
+ * fleet-sync.ts), converged on every harness the agent has, and one read
+ * of the fleet's servers for it.
  */
 const startedOnce = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const syncs = (await fleet.logs("hub"))
     .split("\n")
-    .filter((line) => line.includes("[fleet] sync → "));
+    .filter((line) => SYNC_PREFIX.test(line));
   const evicted = (await fleet.logs("agent"))
     .split("\n")
     .filter((line) => line.includes(EVICTED)).length;
   kit.check(
     `the agent's start-up got ${syncs.length} fleet sync(s) before the first fleet change, on ${HARNESSES.join(", ")}, and its location was evicted by fleet MCP status ${evicted} time(s): ${syncs[0]?.replace(SYNC_PREFIX, "")}`,
-    syncs.length === 1 &&
-      HARNESSES.every((h) => syncs[0]?.includes(h) === true) &&
-      evicted <= 1,
+    syncs.length === 1 && evicted <= 1,
     syncs.join("\n")
   );
 };
@@ -459,6 +497,347 @@ const syncedAtOnce = async (
     `the fleet change reached the agent ${reachedMs === undefined ? "never" : `${Math.round(reachedMs)} ms`} after the PUT, under the ${HELD_MS} ms every sync waited in 8ca774966`,
     reachedMs !== undefined && reachedMs < HELD_MS
   );
+};
+
+/** The machine's active OpenCode generation, by the record the agent keeps in `home`. */
+const activeGeneration = async (home: string): Promise<string | undefined> => {
+  const file = (await readdir(join(home, ".cawco"))).find((name) =>
+    SERVER_RECORD.test(name)
+  );
+  return file
+    ? (
+        (await readJson(join(home, ".cawco", file))) as {
+          active?: { procId?: string };
+        }
+      ).active?.procId
+    : undefined;
+};
+
+/** How many processes the fixture servers writing into `dirs` have started so far. */
+const startedIn = async (dirs: string[]): Promise<number> =>
+  (await Promise.all(dirs.map(pidsIn))).reduce(
+    (sum, one) => sum + one.length,
+    0
+  );
+
+/** The agent's log lines that say each sign of churn. */
+interface Churn {
+  applying: string[];
+  evicted: string[];
+  left: string[];
+  started: string[];
+  synced: string[];
+}
+
+/** The agent's log lines since `mark` that say each sign of churn, by name. */
+const churnSince = async (mark: {
+  since: () => Promise<string>;
+}): Promise<Churn> => {
+  const lines = (await mark.since()).split("\n");
+  const saying = (words: string) =>
+    lines.filter((line) => line.includes(words));
+  return {
+    // A server generation's event feed coming up: a server started.
+    started: saying("subscribe ready"),
+    applying: saying('"state":"applying"'),
+    evicted: saying(EVICTED),
+    synced: saying("[fleet] sync from the hub"),
+    left: saying("left for the next need"),
+  };
+};
+
+/**
+ * A project's place added and removed (hub "a place changed", the sync a
+ * workspace's cut and archive send) touches that place alone: the place
+ * file holds what the hub carried, and the machine's OpenCode server is not
+ * replaced, nothing is applied or evicted, and nothing starts in the
+ * server's own location (`home` pids: the person's own server, which every
+ * OpenCode location boot starts and no other harness does). Live sessions
+ * run meanwhile, so an apply
+ * would not wait for the machine to be idle.
+ */
+const placeTouchesItsPlace = async (
+  kit: Kit,
+  fleet: KitFleet,
+  placedPids: string,
+  homePids: string[]
+): Promise<void> => {
+  const home = fleet.env.HOME as string;
+  const folder = (name: string) => join(fleet.sandbox, name);
+  for (const name of ["place-main", "place-cut"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: two folders, each made once
+    await Bun.$`mkdir -p ${folder(name)} && git init -q -b main ${folder(name)}`.quiet();
+  }
+  const { id: project } = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Places",
+    caw: false,
+  });
+  await fleet.api(`/api/projects/${project}/places`, {
+    machineId: MACHINE,
+    path: folder("place-main"),
+  });
+  const placedFile = join(home, ".config", "opencode", "cawco-placed-mcp.json");
+  const placedAt = async () =>
+    Object.values(await readJson(placedFile)).map(
+      (one) => (one as { cwd?: string }).cwd ?? ""
+    );
+  const bound = await fetch(`${fleet.base}/api/fleet/mcp/${PLACED}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      config: fixture(placedPids),
+      enabled: true,
+      projectId: project,
+    }),
+  });
+  kit.check(
+    `the fleet binds ${PLACED} to a project with one place here`,
+    bound.ok,
+    `${bound.status} ${await bound.text()}`
+  );
+  await until(
+    `${PLACED} placed at the project's place`,
+    placedAt,
+    (cwds) => cwds.includes(folder("place-main")),
+    120_000
+  ).catch(() => undefined);
+  // Whatever the binding's own sync set going is over before the place's.
+  await Bun.sleep(PLACE_WATCH_MS);
+
+  const watch = async (
+    what: string,
+    change: () => Promise<boolean>,
+    placed: (cwds: string[]) => boolean
+  ): Promise<void> => {
+    const agent = await fleet.logMark("agent");
+    const hub = await fleet.logMark("hub");
+    const generation = await activeGeneration(home);
+    const before = await startedIn(homePids);
+    kit.check(`the project's place ${what}`, await change());
+    const synced = await until(
+      `the agent took the sync for the place ${what}`,
+      async () => (await churnSince(agent)).synced,
+      (lines) => lines.length > 0,
+      60_000
+    ).catch(() => [] as string[]);
+    const placedNow = await until(
+      `the place file after the place ${what}`,
+      placedAt,
+      placed,
+      60_000
+    ).catch(placedAt);
+    await Bun.sleep(PLACE_WATCH_MS);
+    const churn = await churnSince(agent);
+    const said = (await hub.since())
+      .split("\n")
+      .filter((line) => line.includes("a place changed"));
+    const after = await activeGeneration(home);
+    const started = (await startedIn(homePids)) - before;
+    kit.check(
+      `the place ${what}: the hub said "a place changed" (${said.length}), the agent synced (${synced.length}) and placed ${PLACED} at ${placedNow.map((one) => one.replace(fleet.sandbox, "")).join(", ")}; for ${PLACE_WATCH_MS / 1000} s after, the machine's OpenCode server stayed ${generation} (now ${after}), ${churn.started.length} server(s) started, ${churn.applying.length} apply, ${churn.evicted.length} location(s) evicted by fleet MCP status, ${started} MCP server(s) started in its own location`,
+      said.length > 0 &&
+        synced.length > 0 &&
+        placed(placedNow) &&
+        generation !== undefined &&
+        generation === after &&
+        churn.started.length === 0 &&
+        churn.applying.length === 0 &&
+        churn.evicted.length === 0 &&
+        started === 0,
+      Object.values(churn).flat().join("\n").slice(0, 2000)
+    );
+  };
+
+  let cut: string | undefined;
+  await watch(
+    "is added (a workspace cut)",
+    async () => {
+      const added = await fleet.api<{ place?: { id?: string } }>(
+        `/api/projects/${project}/places`,
+        { machineId: MACHINE, path: folder("place-cut") }
+      );
+      cut = added.place?.id;
+      return cut !== undefined;
+    },
+    (cwds) =>
+      cwds.includes(folder("place-main")) && cwds.includes(folder("place-cut"))
+  );
+  await watch(
+    "is removed (a workspace archived)",
+    async () =>
+      (
+        await fetch(`${fleet.base}/api/projects/${project}/places/${cut}`, {
+          method: "DELETE",
+        })
+      ).ok,
+    (cwds) =>
+      cwds.includes(folder("place-main")) && !cwds.includes(folder("place-cut"))
+  );
+};
+
+/** The fleet's browser server, by the name each harness gates it by (agent browser/door.ts `CHROME_DEVTOOLS`). */
+const BROWSER = "chrome-devtools";
+
+/** An OpenCode server's command line. */
+const OPENCODE_SERVE = /opencode\S* serve/;
+
+/** The command line of `pid`'s parent, read from /proc; empty when either is gone. */
+const parentCommand = async (pid: string): Promise<string> => {
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => "");
+  // After the command's closing parenthesis: state, then the parent's pid.
+  const [, ppid] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  return ppid
+    ? (
+        await readFile(`/proc/${ppid}/cmdline`, "utf8").catch(() => "")
+      ).replaceAll("\0", " ")
+    : "";
+};
+
+/**
+ * chrome-devtools runs in an OpenCode location only through a workspace's
+ * browser door. The fleet carries a `chrome-devtools` (the fixture, writing
+ * its pids), and an OpenCode session starts in a folder no workspace holds:
+ * its location boots (his own server starts there) and no process of the
+ * fleet's browser server has an OpenCode server for a parent. Claude Code's
+ * and pi's own status reads start it too, ungated, so a process is judged
+ * by its parent. The row reads it applied for OpenCode, the status read
+ * having started none. Linux only: a parent is read from /proc.
+ */
+const noBrowserOutsideWorkspace = async (
+  kit: Kit,
+  fleet: KitFleet,
+  browserPids: string,
+  homePids: string[]
+): Promise<void> => {
+  if (process.platform !== "linux") {
+    kit.check("chrome-devtools outside a workspace: read on Linux only", true);
+    return;
+  }
+  const put = await fetch(`${fleet.base}/api/fleet/mcp/${BROWSER}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ config: fixture(browserPids), enabled: true }),
+  });
+  kit.check(
+    `the fleet runs a ${BROWSER} (the fixture)`,
+    put.ok,
+    `${put.status} ${await put.text()}`
+  );
+  const opencodeState = () => {
+    const said = fleet
+      .query<{ fleet: string | null }>("SELECT fleet FROM agents")
+      .map((one) => one.fleet ?? "")
+      .at(0);
+    return said
+      ? (JSON.parse(said) as Row).mcpByHarness?.opencode?.[BROWSER]
+      : undefined;
+  };
+  const read = await until(
+    `the row reads ${BROWSER} for OpenCode`,
+    opencodeState,
+    (state) => state?.state === "applied",
+    180_000
+  ).catch(opencodeState);
+  const booted = await startedIn(homePids);
+  const session = await fleet.spawn("opencode", "Outside a workspace");
+  const location = await until(
+    "the session's location booted (his own server started there)",
+    () => startedIn(homePids),
+    (count) => count > booted,
+    60_000
+  ).catch(() => booted);
+  const startedByOpencode = async (dirs: string[]) =>
+    (
+      await Promise.all(
+        (await Promise.all(dirs.map(pidsIn))).flat().map(async (pid) => ({
+          pid,
+          parent: await parentCommand(pid),
+        }))
+      )
+    ).filter(({ parent }) => OPENCODE_SERVE.test(parent));
+  // His own server, which the location started: the parent reading works.
+  const his = await startedByOpencode(homePids);
+  const browser = await startedByOpencode([browserPids]);
+  kit.check(
+    `an OpenCode session outside a workspace (its location booted: ${location - booted} server(s) of his started, ${his.length} running under an OpenCode server) started no ${BROWSER} (${browser.length} process(es) under an OpenCode server); the row reads it ${read?.state} for OpenCode`,
+    location > booted &&
+      his.length > 0 &&
+      browser.length === 0 &&
+      read?.state === "applied",
+    JSON.stringify({ browser, his })
+  );
+  await fleet.stopSession(session);
+};
+
+/**
+ * A machine with no session running starts no OpenCode server and no MCP
+ * server on its own, over {@link IDLE_MS}: not for the person's own
+ * `opencode.json` edit (a config change nothing runs on), not for a fleet
+ * sync that changes nothing here, not for any timer. The edit waits for the
+ * next need, which the next OpenCode session's start is.
+ */
+const idleStartsNothing = async (
+  kit: Kit,
+  fleet: KitFleet,
+  opencodeJson: string,
+  homePids: string[]
+): Promise<void> => {
+  const home = fleet.env.HOME as string;
+  const agent = await fleet.logMark("agent");
+  const generation = await activeGeneration(home);
+  const before = await startedIn(homePids);
+  const his = await readJson(opencodeJson);
+  await writeFile(
+    opencodeJson,
+    JSON.stringify({
+      ...his,
+      agents: {
+        ...(his.agents as object),
+        [HIS_AGENT]: { description: "his own agent, edited", system: "his" },
+      },
+    })
+  );
+  const asked = await fetch(`${fleet.base}/api/fleet/sync`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ machineId: MACHINE }),
+  });
+  kit.check("the hub is asked for a fleet sync of the machine", asked.ok);
+  await Bun.sleep(IDLE_MS);
+  const churn = await churnSince(agent);
+  const after = await activeGeneration(home);
+  const started = (await startedIn(homePids)) - before;
+  kit.check(
+    `idle for ${IDLE_MS / 60_000} min, with his opencode.json edited and a sync asked for (${churn.synced.length} taken): the machine's OpenCode server stayed ${generation} (now ${after}), ${churn.started.length} server(s) started, ${churn.applying.length} apply, ${churn.evicted.length} location(s) evicted by fleet MCP status, ${started} MCP server(s) started; the edit left for the next need (${churn.left.length})`,
+    churn.synced.length > 0 &&
+      generation !== undefined &&
+      generation === after &&
+      churn.started.length === 0 &&
+      churn.applying.length === 0 &&
+      churn.evicted.length === 0 &&
+      started === 0 &&
+      churn.left.length > 0,
+    Object.values(churn).flat().join("\n").slice(0, 2000)
+  );
+
+  const need = await fleet.logMark("agent");
+  const session = await fleet.spawn("opencode", "After idle");
+  const applied = await until(
+    "the edit applied for the session's start",
+    async () => await need.since(),
+    (log) => log.includes("applied via process restart"),
+    180_000
+  ).catch(() => "");
+  kit.check(
+    "the next OpenCode session's start applied the edit left for it",
+    applied.includes("applied via process restart"),
+    applied
+      .split("\n")
+      .filter((line) => line.includes("config-convergence"))
+      .join("\n")
+      .slice(0, 1500)
+  );
+  await fleet.stopSession(session);
 };
 
 const run = async (kit: Kit): Promise<void> => {
@@ -826,6 +1205,11 @@ const run = async (kit: Kit): Promise<void> => {
   );
 
   await waitsForSignIn(kit, fleet, askAll);
+  // What a boot of an OpenCode location starts that no other harness does:
+  // his own server, from his opencode.json. (The fleet's is started by
+  // Claude Code's and pi's status reads too.)
+  const homePids = [pids("his-opencode")];
+  await placeTouchesItsPlace(kit, fleet, pids("placed"), homePids);
   const agentLog = await fleet.logs("agent");
   const perSync = statusReads(agentLog);
   /** The lines the counts are taken from, for the reader of the result. */
@@ -853,6 +1237,21 @@ const run = async (kit: Kit): Promise<void> => {
   await Promise.allSettled(
     Object.values(sessions).map((id) => fleet.stopSession(id as string))
   );
+  const stopped = await until(
+    "every session stopped",
+    () =>
+      Object.values(sessions).map((id) => fleet.instance(id as string)?.status),
+    (all) => all.every((one) => one === "stopped"),
+    120_000
+  ).catch(() =>
+    Object.values(sessions).map((id) => fleet.instance(id as string)?.status)
+  );
+  kit.check(
+    `every session stopped before the idle watch (${stopped.join(", ")})`,
+    stopped.every((one) => one === "stopped")
+  );
+  await idleStartsNothing(kit, fleet, opencodeJson, homePids);
+  await noBrowserOutsideWorkspace(kit, fleet, pids("browser"), homePids);
 };
 
 const spec: Spec = { name: "fleet-mcp-parity", run };

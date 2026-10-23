@@ -104,18 +104,22 @@ export async function callDelegationTool(
         `CawCo tool ${name}: HTTP ${response.status}${why ? `: ${why}` : ""}`
       );
     }
+    // The hub's answer is its content alone: words, and a picture beside them (hub mcp-tool.ts).
     const result = (await response.json()) as {
-      content: { type: "text"; text: string }[];
-      structuredContent?: Record<string, unknown>;
+      content: (
+        | { type: "text"; text: string }
+        | { type: "image"; data: string; mimeType: string }
+      )[];
       isError?: boolean;
     };
     if (result.isError) {
-      throw new Error(result.content.map((part) => part.text).join("\n"));
+      throw new Error(
+        result.content
+          .map((part) => (part.type === "text" ? part.text : ""))
+          .join("\n")
+      );
     }
-    return {
-      content: result.content,
-      details: result.structuredContent ?? {},
-    };
+    return { content: result.content, details: {} };
   };
   // Workspace creation, continuation and checks may take minutes without a response byte.
   if (

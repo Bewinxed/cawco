@@ -220,7 +220,8 @@ export interface DispatchDeps {
 
 /**
  * An attempt as it started; or, `queued`, waiting for files a live item owns
- * (its ids null until it starts).
+ * (its ids null until it starts). Wire-pinned: installable app builds decode
+ * these fields from `POST /api/projects/:id/tasks/:taskId/attempts`.
  */
 export interface AttemptStart {
   instanceId: string | null;
@@ -233,7 +234,7 @@ export interface AttemptStart {
   task: string;
   /** What the starting session reads. */
   text: string;
-  /** The delegate type it runs. */
+  /** The delegate type it runs; null, the hub's default. */
   type: string | null;
   workItemId: string | null;
   workspaceId: string | null;

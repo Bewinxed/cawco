@@ -22,6 +22,36 @@
 </script>
 
 <script lang="ts">
+  /*
+   * Every mark here is square, and that is a hard requirement rather than a
+   * coincidence: the caller sizes this with one role, so a mark whose viewBox
+   * is wider than it is tall gets letterboxed inside that square and lands
+   * shorter than the number asked for. The `logos` set is a brand set, not an
+   * icon set, and several of its entries are wordmarks — `logos:nvidia` is
+   * 512x98, so at 9px it draws 1.7px of ink and reads as a smudge, while
+   * `logos:google-gemini` (512x188) and `logos:meta-icon` (256x171) land short
+   * by different amounts again. That is why a single ring could never sit at an
+   * even distance from all of them. Where `logos` has only a wide mark, the
+   * square sibling from `thesvg-color` is used instead.
+   */
+  import {
+    LogoClaude as IconClaude,
+    LogoDeepseek as IconDeepseek,
+    LogoGemini as IconGemini,
+    LogoGithub as IconGithub,
+    LogoGmail as IconGmail,
+    LogoGrok as IconGrok,
+    LogoLinear as IconLinear,
+    LogoMeta as IconMeta,
+    LogoMinimax as IconMinimax,
+    LogoMistral as IconMistral,
+    LogoMoonshot as IconMoonshot,
+    LogoNvidia as IconNvidia,
+    LogoOpenai as IconOpenai,
+    LogoQwen as IconQwen,
+    LogoSlack as IconSlack,
+    LogoZhipu as IconZhipu,
+  } from "@cawco/icons/marks";
   /**
    * A provider's mark, as a passive glyph: the lab behind a model (next to its
    * name in a delegate's header or a picker row), or a provider named outright
@@ -35,36 +65,9 @@
   import type { Component } from "svelte";
   import { providerOf } from "#lib/cawco/models.svelte.js";
   import { cn } from "#lib/utils.js";
-  /*
-   * Every mark here is square, and that is a hard requirement rather than a
-   * coincidence: the caller sizes this with one role, so a mark whose viewBox
-   * is wider than it is tall gets letterboxed inside that square and lands
-   * shorter than the number asked for. The `logos` set is a brand set, not an
-   * icon set, and several of its entries are wordmarks — `logos:nvidia` is
-   * 512x98, so at 9px it draws 1.7px of ink and reads as a smudge, while
-   * `logos:google-gemini` (512x188) and `logos:meta-icon` (256x171) land short
-   * by different amounts again. That is why a single ring could never sit at an
-   * even distance from all of them. Where `logos` has only a wide mark, the
-   * square sibling from `thesvg-color` is used instead.
-   */
-  import IconClaude from "~icons/logos/claude-icon";
-  import IconGithub from "~icons/logos/github-icon";
-  import IconGrok from "~icons/logos/grok-icon";
-  import IconLinear from "~icons/logos/linear-icon";
-  import IconMistral from "~icons/logos/mistral-ai-icon";
-  import IconMoonshot from "~icons/logos/moonshot-ai-icon";
-  import IconOpenai from "~icons/logos/openai-icon";
-  import IconQwen from "~icons/logos/qwen-icon";
-  import IconSlack from "~icons/logos/slack-icon";
-  import IconDeepseek from "~icons/thesvg-color/deepseek";
-  import IconGmail from "~icons/thesvg-color/gmail";
-  import IconGemini from "~icons/thesvg-color/google-gemini";
-  import IconMeta from "~icons/thesvg-color/metaai";
-  import IconMinimax from "~icons/thesvg-color/minimax";
+
   /* `nemotron` is the only id that resolves to this lab (see `provider.ts`), so
      the Nemotron mark is the accurate one as well as the square one. */
-  import IconNvidia from "~icons/thesvg-color/nvidia-nemotron";
-  import IconZhipu from "~icons/thesvg-color/zhipu";
 
   const LOGOS: Record<string, Component> = {
     anthropic: IconClaude,

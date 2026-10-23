@@ -61,12 +61,18 @@ export const hostGhToken = async (): Promise<string | undefined> => {
   if (!gh) {
     return;
   }
-  const read = Bun.spawnSync([gh, "auth", "token"], {
+  // Not spawnSync: gh reads its token from the login keychain, and a
+  // spawnSync would wait on the keychain on the agent's JS thread.
+  const read = Bun.spawn([gh, "auth", "token"], {
     env: hostEnvironment(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
   });
-  const token = read.stdout.toString().trim();
+  const [out] = await Promise.all([
+    new Response(read.stdout).text(),
+    read.exited,
+  ]);
+  const token = out.trim();
   return read.exitCode === 0 && token ? token : undefined;
 };

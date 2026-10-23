@@ -9,11 +9,11 @@
  * the session: when the person sends their picks, the session hears that the
  * artifact has new responses ({@link ArtifactServiceDeps.signal}) and reads
  * them itself with `artifact_read`. The person's pins, replies, resolves and
- * ink wait for their Send, which delivers them as one message with their
- * note ({@link ArtifactServiceDeps.deliverMarks}); a sheet's saves and
- * compile errors go by themselves once quiet {@link MARKS_QUIET_MS}.
+ * ink go to the session by themselves once quiet {@link COMMENTS_QUIET_MS},
+ * as one message ({@link ArtifactServiceDeps.deliverMarks}); a sheet's
+ * saves and compile errors go the same way once quiet {@link MARKS_QUIET_MS}.
  */
-import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
   type AgentRow,
@@ -22,6 +22,8 @@ import {
   type ArtifactDoes,
   type ArtifactHit,
   type ArtifactKind,
+  type ArtifactNeedsRead,
+  type ArtifactPending,
   type ArtifactPromotion,
   type ArtifactSummary,
   type ArtifactThumbnail,
@@ -29,41 +31,53 @@ import {
   ASK_PATHLIKE,
   artifactCommentsNotice,
   artifactErrorsNotice,
+  artifactLink,
   artifactSavesNotice,
+  artifactToolWords,
   type ChoiceEntry,
   choiceEntryProblem,
   DESK_CAPTURE_WIDTH,
   DESK_CAPTURES_PER_PAGE,
+  decisionLink,
   fileHash,
   type InstanceRow,
   machineLabel,
   noteText,
+  type PlanStep,
   type PreviewAddress,
   type PreviewSource,
+  pinLink,
   type SendAttachment,
   type ShownFailure,
+  sessionLink,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
+  type CanvasEntry,
   canvasOutline,
   excalidrawFile,
   NO_SCREEN,
 } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
+  type ArtifactChanges,
   type Carried,
+  CHANGES_LIMIT,
+  type ChangedItem,
   COMMENT_LIMITS,
   type CommentAttachment,
   inkSection,
   type MarkPictures,
+  newAnswer,
   type Pin,
   pinDelivery,
   pinHeard,
   pinSaid,
   pinUnsent,
   type SendBody,
-  sendNoteSection,
+  seeChanges,
+  seenOf,
   type ThreadEntry,
   unheardEntries,
 } from "@cawco/core/comments";
@@ -72,7 +86,9 @@ import {
   type GraphLinks,
   type GraphPlace,
   PLACES_KEY,
+  pickMade,
   pickOf,
+  picksMade,
 } from "@cawco/core/decisions";
 import {
   excerptOf,
@@ -82,6 +98,7 @@ import {
   parse,
 } from "@cawco/core/find-match";
 import type { InkGroup } from "@cawco/core/ink";
+import { pinName } from "@cawco/core/pin-name";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
 import {
   type CanvasDial,
@@ -120,6 +137,7 @@ import {
   type StatementChange,
 } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
+import { byHandle, HANDLE_MIN } from "../handles";
 import { sessionLabel } from "../labels";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
 import { storedFilePath } from "../media";
@@ -152,6 +170,25 @@ import {
   weightSaid,
 } from "./component";
 import type { ArtifactDocs } from "./docs";
+import { heldPictures } from "./held-pictures";
+import {
+  type ArtifactAsked,
+  type ArtifactFacts,
+  type ArtifactSessions,
+  mayWait,
+  movedOn,
+  needOf,
+  noticeOf,
+  pendingOf,
+} from "./needs";
+import {
+  bytesHash,
+  cardChanges,
+  cssEscape,
+  htmlChanges,
+  pictureChanges,
+  sceneChanges,
+} from "./page-changes";
 import { picturePath, thumbnailPath } from "./sync";
 
 export class ArtifactRefusal extends Error {
@@ -169,6 +206,21 @@ export class ArtifactRefusal extends Error {
 /** A program the hub can't keep, refused as the artifact's (decision-program.ts). */
 const refusedProgram = (error: ProgramRefusal): ArtifactRefusal =>
   new ArtifactRefusal(error.status, error.message, { cause: error });
+
+/** A page's files as they stood before a revision wrote the next: its HTML, a decision page's program, and its pictures' fingerprints by address. */
+interface PageWas {
+  files: ReadonlyMap<string, string>;
+  html: string;
+  program?: string;
+}
+
+/**
+ * Pin `pin`'s link on artifact `artifact`, labelled by what it stands on
+ * (core pin-name.ts): what the agent names it by to the person, drawn as
+ * the pin's chip (core references.ts).
+ */
+const linkOfPin = (artifact: string, pin: Pin): string =>
+  pinLink(artifact, pin.number, pinName(pin));
 
 /** Statements lang-core could not merge into the program: nothing was changed. */
 const unmerged = (error: unknown): ArtifactRefusal =>
@@ -348,7 +400,7 @@ export const askProblem = (ask: string): string | null => {
     return 'The ask reaches the person: say what they do (pick, pin, try, draw) and to what, without "tap" or "poke".';
   }
   if (ASK_PATHLIKE.test(ask)) {
-    return "The ask is in the person's words: no file, path or id in it. Name the thing as they call it.";
+    return artifactToolWords.askInTheirWords;
   }
   return null;
 };
@@ -394,14 +446,71 @@ const capturesRefused = (n: number): string =>
 const NOT_SERVED =
   'A preview of a port in a workspace names what serves it: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }. CawCo runs it in the workspace and keeps it up for as long as the preview and the workspace last; a server started in your own shell ends with it.';
 
+/** The session a handed file is written for, and the machine of the workspace it is written into. */
+export interface HandedReceiver {
+  machineId: string;
+  session: InstanceRow;
+}
+
+/**
+ * One file of an artifact handed to another session (hub handed-inputs.ts):
+ * its bytes, or, for a preview's pass, the bytes made for the session it is
+ * handed to once that session stands, in the workspace it reads them in.
+ */
+export interface HandedArtifactFile {
+  bytes: Buffer | ((receiver: HandedReceiver) => Promise<Buffer>);
+  name: string;
+}
+
+/** A value as a JSON file a session reads. */
+const jsonFile = (value: unknown): Buffer =>
+  Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+
+/** A whole artifact id, which needs no resolving. */
+const WHOLE_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 /** An entry as `artifact_read` answers it. */
 type ReadEntry = ChoiceEntry & { earlierRevision?: true };
+
+/**
+ * One choice a page asks the person (a decision page's question, or a
+ * `data-cawco-choice` an HTML page declares), as they answered it: not yet
+ * (`open`, perhaps with a note), with options (`picked`), picked then
+ * unpicked (`cleared`), or with an option a revision took out (`gone`).
+ * `earlierRevision`: answered on a revision before the one shown now.
+ */
+export type DecisionAnswer = {
+  id: string;
+  /** Its question; a choice an HTML page declares has none. */
+  question?: string;
+} & (
+  | { answer: "open"; note?: string }
+  | {
+      answer: "picked";
+      at: string;
+      earlierRevision?: true;
+      note?: string;
+      options: { id: string; label?: string }[];
+    }
+  | { answer: "cleared"; at: string; earlierRevision?: true; note?: string }
+  | {
+      answer: "gone";
+      at: string;
+      earlierRevision?: true;
+      gone: string[];
+      note?: string;
+      options: string[];
+    }
+);
 
 export interface ArtifactRead {
   /** A canvas's elements the person changed since `since` (or since your last read). */
   changed?: string[];
   /** A canvas's elements you replaced that the person had changed since your last read: "<id> changed under you". */
   changedUnderYou?: string[];
+  /** A page's choices in page order, each answered or not ({@link DecisionAnswer}); on a whole read of a page that asks any. */
+  decisions?: DecisionAnswer[];
   /** Elements an update deleted, and the ids it named that the canvas does not hold. */
   deleted?: string[];
   /** A canvas the person opened in the composer and has not sent yet. */
@@ -420,6 +529,7 @@ export interface ArtifactRead {
   name: string;
   /** A canvas, as you read it: one line per element (core `canvasOutline`). */
   outline?: string;
+  /** A built page's hash, which each pick records; null for a preview (the hub never built it) and a canvas. Wire-pinned: installable app builds decode it. */
   pageHash: string | null;
   /** When the canvas's latest picture was drawn; null when it has none. */
   pictureAt?: string | null;
@@ -430,6 +540,7 @@ export interface ArtifactRead {
   /** Keys that changed since `since` and are no longer there. */
   removed?: string[];
   revision: number;
+  /** When the person last pressed Send; null before they have (and on a canvas, which has no Send). */
   sentAt: string | null;
   /** What the page's `cawco.send(text)` sent with the person's last send. */
   sentText?: string;
@@ -439,7 +550,7 @@ export interface ArtifactRead {
   sheet?: SheetRead;
   /** A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`. */
   stage?: StageState;
-  /** Every key, or with `since` only those changed after it. */
+  /** Every key, or with `since` only those changed after it; a canvas's is empty. */
   state: Record<string, ReadEntry>;
   /** A component canvas's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it. */
   unreached?: StageUnreached;
@@ -476,6 +587,8 @@ export interface GraphBroken {
 export interface Revised {
   /** What it left broken on the picks and the graph; absent when nothing. */
   broken?: GraphBroken;
+  /** The cards it put in or rewrote, each by its link (`[question](cawco:decision/<artifact>/<card>)`), by id. */
+  cards: Record<string, string>;
   /** Its decisions now, by id, in page order. */
   decisions: string[];
   /** Components the library does not have, dropped and never drawn. */
@@ -522,13 +635,15 @@ export interface ArtifactStatus {
   /** The person's changes (picks, notes, drawn elements) since the session last read it. */
   unread: number;
   updatedAt: string;
-  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
+  /** Whose move it is: the person's (what Needs you lists it for: never opened, picks not made, marks not sent, an answer not looked at, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
   waitingOn: ("person" | "session")[];
 }
 
 export interface Created {
   /** What a decision page's program left broken on the picks and the graph; absent when nothing. */
   broken?: GraphBroken;
+  /** A decision page's cards' links, by id (`[question](cawco:decision/<artifact>/<card>)`): what the agent names each by. */
+  cards?: Record<string, string>;
   /** A decision page's decisions, by id, in page order. */
   decisions?: string[];
   /** Components a decision page's program names that the library does not have: dropped, never drawn. */
@@ -543,6 +658,8 @@ export interface Created {
   host?: string;
   id: string;
   kind: ArtifactKind;
+  /** Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person. */
+  link?: string;
   /** A component canvas's flow moves, each with the animations it fired. */
   moves?: ReturnType<typeof movesSaid>;
   name: string;
@@ -588,6 +705,10 @@ export interface Created {
  */
 export type Opened = { opened: true } | { opened: false; why: string };
 
+/** What `artifact_show` answers: {@link Opened}, with the artifact's link, `[name](cawco:artifact/<id>)`, which the agent names it by and its tool row draws. */
+export type Shown =
+  { link: string; opened: true } | { link: string; opened: false; why: string };
+
 /**
  * What `artifact_browse` answers: the address the session's own browser
  * loads, and when it stops opening (ISO); null where previews are reached
@@ -606,15 +727,16 @@ export const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
 
 /** Why a `to: "parent"` create opened nothing: the parent opens it. */
-const HELD =
-  "Handed to your parent, not opened: it opens in their panel when they call artifact_show.";
+const HELD = artifactToolWords.handedToParent;
 
 /** Why a maker's change opened nothing: the parent had opened the artifact, so the change waits as its next version ({@link holdNext}). */
-const HELD_NEXT =
-  "Your parent opened it, so this change waits as its next version: their panel keeps the version they opened until they call artifact_show.";
+const HELD_NEXT = artifactToolWords.heldAsNext;
 
 /** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
 const HANDED = "handed";
+
+/** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
+const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/;
 
 /** A view's word that it has (or could not load) the artifact at `revision` (`POST …/artifacts/:artifact/shown`). */
 export interface ShownAck {
@@ -638,8 +760,11 @@ export interface CommentRead {
     address: string;
     id: string;
     kind: ArtifactKind;
+    /** Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person. */
+    link: string;
     name: string;
-    pins: (Pin & { inkBox?: InkGroup["page"] })[];
+    /** Each with its link, `[label](cawco:pin/<artifact>/<number>)`. */
+    pins: (Pin & { inkBox?: InkGroup["page"]; link: string })[];
   }[];
   at: string;
 }
@@ -766,6 +891,62 @@ const metaOf = (doc: Doc) => {
 /** The words a page's `cawco.send(text)` sent with the person's last send; none when it sent none. */
 const sentTextOf = (doc: Doc): string | null =>
   (doc.getMap("meta").get("sentText") as string | null | undefined) ?? null;
+
+/** How the person answered one choice a page asks ({@link DecisionAnswer}), from its entry in the doc's state. */
+const answerOf = (
+  asked: { card?: DecisionCard; id: string },
+  entry: ChoiceEntry | undefined,
+  current: string | null
+): DecisionAnswer => {
+  const { card, id } = asked;
+  const question = card ? { question: card.question } : {};
+  if (!entry) {
+    return { id, ...question, answer: "open" };
+  }
+  const said = {
+    at: entry.at,
+    ...(current && entry.pageHash !== current
+      ? { earlierRevision: true as const }
+      : {}),
+    ...(noteText(entry.note) ? { note: noteText(entry.note) as string } : {}),
+  };
+  if (entry.options.length === 0) {
+    // A note with no pick is still open; a pick taken back, cleared.
+    return said.note
+      ? { id, ...question, answer: "open", note: said.note }
+      : { id, ...question, answer: "cleared", ...said };
+  }
+  // Picked by the one rule every count reads (core `pickMade`); else a pick on options a revision took out.
+  if (!pickMade(card, entry)) {
+    return {
+      id,
+      ...question,
+      answer: "gone",
+      options: entry.options,
+      gone: card ? pickOf(card, entry).gone : [],
+      ...said,
+    };
+  }
+  return {
+    id,
+    ...question,
+    answer: "picked",
+    options: entry.options.map((option) => {
+      const label = card?.options.find((one) => one.id === option)?.label;
+      return label ? { id: option, label } : { id: option };
+    }),
+    ...said,
+  };
+};
+
+/** The person's picks and notes written since their last send (a card's places on the graph are no answer): what Send sends of the page's choices. */
+const unsentChoices = (
+  state: Record<string, ChoiceEntry>,
+  sentAt: string | null
+): number =>
+  Object.entries(state).filter(
+    ([key, entry]) => key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
+  ).length;
 
 /** The page hash the newest entry was made on: a preview's, which the hub never built. */
 const newestHash = (state: Record<string, ChoiceEntry>): string | null =>
@@ -1006,6 +1187,16 @@ function carryOne(
 export const MARKS_QUIET_MS = 10_000;
 
 /**
+ * How long the person's comments, replies, resolves and ink stay quiet
+ * before they go to the session, since their last one: the owner's pick,
+ * "Go by themselves" (2026-10-23), a few seconds after they're written. Past
+ * the page's own pause before it posts their pictures (preview-overlay
+ * page.ts `PICTURES_AFTER_MS`, 1.5 s), so the delivery carries them. 3 s,
+ * our call.
+ */
+export const COMMENTS_QUIET_MS = 3000;
+
+/**
  * The longest a burst waits from its first mark: someone pinning steadily
  * for a minute is not held back past it. Our call.
  */
@@ -1020,8 +1211,69 @@ export interface MarksDelivery {
   text: string;
 }
 
+/** The person's marks as the journal names them: each pin by number and id, then the loose stroke groups' count. */
+const marksNamed = (pins: Pin[], strokes: number): string =>
+  [
+    ...(pins.length > 0
+      ? [
+          `${pins.length === 1 ? "pin" : "pins"} ${pins.map((pin) => `${pin.number} (${pin.id})`).join(", ")}`,
+        ]
+      : []),
+    ...(strokes > 0
+      ? [`${strokes} ${strokes === 1 ? "stroke group" : "stroke groups"}`]
+      : []),
+  ].join(" and ") || "no marks";
+
 /** Whether someone took a delivery of the marks; why not, when no one did. */
 export type MarksOutcome = { ok: true } | { ok: false; reason: string };
+
+/** Artifact `row` as the journal names it: its id, kind and name. */
+const labelOf = (row: ArtifactRow): string =>
+  `${row.id} (${row.kind} "${row.name}")`;
+
+/** The person's marks on artifact `row` found no session holding it: the journal says they stay owed. */
+const sayNoHolder = (row: ArtifactRow, owed: number) => {
+  if (owed > 0) {
+    console.warn(artifactToolWords.marksUnheld(labelOf(row)));
+  }
+};
+
+/** One delivery of artifact `row`'s marks in the journal: what it carried, for which session, and whether someone took it. */
+const sayDelivery = (
+  row: ArtifactRow,
+  instance: InstanceRow,
+  went: {
+    errors: number;
+    outcome: MarksOutcome;
+    pins: Pin[];
+    retry: boolean;
+    saves: number;
+    strokes: number;
+  }
+) => {
+  const carried = [
+    marksNamed(went.pins, went.strokes),
+    ...(went.errors > 0 ? [`${went.errors} compile error(s)`] : []),
+    ...(went.saves > 0 ? [`${went.saves} save(s)`] : []),
+  ].join(", ");
+  if (went.outcome.ok) {
+    console.log(
+      artifactToolWords.marksDelivered(
+        labelOf(row),
+        carried,
+        instance.id,
+        went.retry
+      )
+    );
+  } else {
+    console.warn(
+      artifactToolWords.marksOwed(
+        `${labelOf(row)} (${carried}, for session ${instance.id})`,
+        went.outcome.reason
+      )
+    );
+  }
+};
 
 /**
  * Where a stage runs: a session's own workspace (a sheet being made), or
@@ -1043,12 +1295,18 @@ export type PageFrom =
   | { folder: true };
 
 export interface ArtifactServiceDeps {
+  /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
+  acknowledged: () => readonly string[];
+  /** The Caw thread a project's lead's turn answers now (caw.ts `askThread`); none for any other session. */
+  askThread: (instance: InstanceRow) => string | undefined;
   /**
    * Where session `instance`'s own browser opens artifact `row`, which it
    * may read (`artifact_browse`, server.ts `browseAt`): its address, behind
    * a one-time entry and a pass of the session's own in host mode.
    */
   browse: (instance: InstanceRow, row: ArtifactRow) => Browsed;
+  /** Nothing on the artifact waits on the person: no step of the session waits on it whole (plans.ts `clearArtifactWait`). */
+  clearArtifactWait: (instanceId: string, artifactId: string) => void;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => Promise<void>;
   db: ArtifactsDb;
@@ -1081,8 +1339,14 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     { refused: string; status: ArtifactRefusal["status"] } | undefined
   >;
-  /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
+  /** Whether a session has ended: it takes no input now, so its marks go to its parent, else its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
+  /**
+   * Whether a session's asks are over for good (Needs you's rule 4): it
+   * finished, its workspace was archived or moved on, its conversation is
+   * gone, or nothing can give it a turn again. A machine away is not.
+   */
+  finished: (instance: InstanceRow) => boolean;
   /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
   folderWeight: (
     machineId: string,
@@ -1113,6 +1377,13 @@ export interface ArtifactServiceDeps {
   ) => Promise<void>;
   instance: (id: string) => InstanceRow | undefined;
   /**
+   * Whether the session's work item ended (done, failed or cancelled),
+   * whatever its workspace's state: the sessions up its delegation tree may
+   * then delete what it wrote ({@link Artifacts.remove}). False for a session
+   * with no item, and while its item is live (a reopened one included).
+   */
+  itemEnded: (instance: InstanceRow) => boolean;
+  /**
    * Page `name`'s source kept in `instance`'s project folder at
    * `decisions/<name>/`, as a build with `keep` keeps it: a held next
    * version's, once its parent opens it. Why not, when the folder refuses.
@@ -1138,8 +1409,15 @@ export interface ArtifactServiceDeps {
    * there, made the first time (browsers.ts `listed`).
    */
   listing: (instance: InstanceRow) => void;
+  /** The person looked at artifact `id` (a view's word that it had it on screen): its push is over. */
+  looked: (id: string) => void;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
+  /**
+   * Something an artifact's Needs-you item is read from moved (its row, its
+   * ask, the person's look): the lane is read again and every screen told.
+   */
+  needsMoved: () => void;
   /**
    * Publishes `artifact` to session `panel`'s panel (its own session's
    * unless named: another session of its delegation tree shows it in its
@@ -1271,10 +1549,23 @@ export interface ArtifactServiceDeps {
    * Throws an {@link ArtifactRefusal} saying why it can't.
    */
   stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
+  /** The session's plan steps: what a wait on its artifacts stands on (plans.ts `steps`). */
+  steps: (instanceId: string) => PlanStep[];
+  /**
+   * Whether a session can no longer act, ever: no one, its parent and the
+   * person included, can give it a turn again. Its item ended and its
+   * workspace was discarded or retired past cutting again, or a newer item
+   * holds that workspace, or the session itself ended for good (continued
+   * into another, its conversation gone). What it wrote is then deleted by
+   * the sessions up its delegation tree ({@link Artifacts.remove}), as it is
+   * once its work item ended ({@link ArtifactServiceDeps.itemEnded}).
+   */
+  stranded: (instance: InstanceRow) => boolean;
   /**
    * Every session of `instance`'s delegation tree (delegation-tree.ts
    * `treeSessions`): each reads, never changes, the others' artifacts of
-   * its project.
+   * its project; one up a writer whose work item ended deletes that
+   * writer's ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
   /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
@@ -1290,6 +1581,15 @@ export interface ArtifactServiceDeps {
    * the ask did, one sentence.
    */
   verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
+  /** The session's current step waits on the artifact; the step that does, or null (plans.ts `waitOn`). */
+  waitOn: (instanceId: string, artifactId: string) => string | null;
+  /**
+   * Why a browser in a workspace on machine `machineId` cannot open `url`,
+   * or null when it can (server.ts, core boundary-reach.ts
+   * `workspaceReach`): a Linux workspace's boundary reaches public hosts
+   * only; a Mac's dials as its host does.
+   */
+  workspaceReach: (url: string, machineId: string) => Promise<string | null>;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
@@ -1407,23 +1707,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return !!sentAt && (!revisedAt || sentAt > revisedAt);
   };
 
-  const summaryOf = (row: ArtifactRow): ArtifactSummary => ({
-    id: row.id,
-    kind: row.kind,
-    name: row.name,
-    does: row.does,
-    ask: row.ask,
-    sent: sentOf(row),
-    waiting: waitingOnPerson(row),
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-    shownAt: row.shownAt?.toISOString() ?? null,
-    ...(isProjectPage(row) ? { project: row.projectId as string } : {}),
-    promoted:
-      (docs.doc(row.id).getMap("meta").get("promoted") as
-        ArtifactPromotion | undefined) ?? null,
-    thumbnail: thumbnailOf(row),
-  });
+  const summaryOf = (row: ArtifactRow): ArtifactSummary => {
+    const pending = pendingFor(row);
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      does: row.does,
+      ask: row.ask,
+      sent: sentOf(row),
+      waiting: pending !== null,
+      pending,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      shownAt: row.shownAt?.toISOString() ?? null,
+      ...(isProjectPage(row) ? { project: row.projectId as string } : {}),
+      promoted:
+        (docs.doc(row.id).getMap("meta").get("promoted") as
+          ArtifactPromotion | undefined) ?? null,
+      thumbnail: thumbnailOf(row),
+    };
+  };
 
   /**
    * The words on an artifact's page, for Files' search: a page's text (its
@@ -1487,26 +1791,102 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : []
     );
 
+  /**
+   * The artifact `asked` names for `instance`: a whole id as given, else its
+   * handle or its name among the artifacts the session can name (its own,
+   * its project's it answers, its delegation tree's, its project's pages),
+   * refused when none or several are (handles.ts).
+   */
+  const whole = (instance: InstanceRow, asked: string): string => {
+    if (WHOLE_ID.test(asked)) {
+      return asked;
+    }
+    const seen = new Map<string, ArtifactRow>();
+    for (const row of [
+      ...answerable(instance),
+      ...ofTree(instance),
+      ...(instance.projectId
+        ? db.ofProject(instance.projectId).filter((one) => one.kind === "page")
+        : []),
+    ]) {
+      seen.set(row.id, row);
+    }
+    return byHandle(
+      asked,
+      [...seen.values()],
+      {
+        id: (row) => row.id,
+        names: (row) => [row.name],
+        said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
+      },
+      "artifact"
+    ).id;
+  };
+
   /** The session's artifact `id`; refused when it is another session's or not there. */
-  const own = (instance: InstanceRow, id: string): ArtifactRow => {
+  const own = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const row = db.get(id);
     if (row && row.instanceId !== instance.id && inTree(instance, row)) {
       throw new ArtifactRefusal(
         403,
-        `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is session ${row.instanceId?.slice(0, 8)}'s: your delegation tree reads it, and only that session changes it.`
+        artifactToolWords.othersArtifact(
+          `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`,
+          row.instanceId?.slice(0, 8) ?? ""
+        )
       );
     }
     if (!row || row.instanceId !== instance.id) {
-      throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+      throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
     }
     return row;
+  };
+
+  /** The sessions above `writer`: its parent, that one's parent, up to the top. */
+  const above = (writer: InstanceRow): Set<string> => {
+    const up = new Set<string>();
+    let at = writer.parentInstanceId;
+    while (at && !up.has(at)) {
+      up.add(at);
+      at = deps.instance(at)?.parentInstanceId ?? null;
+    }
+    return up;
+  };
+
+  /**
+   * Artifact `id` for a delete: the session's own ({@link own}), or another
+   * session's whose work item ended ({@link ArtifactServiceDeps.itemEnded})
+   * or that can no longer act at all ({@link ArtifactServiceDeps.stranded})
+   * when this session is up the writer's delegation tree, so whoever is up
+   * the tree cleans up after a delegate whose work is over. Its content
+   * stays the writer's while its item is live: no other change widens so.
+   * Refused otherwise, naming who deletes it.
+   */
+  const deletable = (instance: InstanceRow, id: string): ArtifactRow => {
+    const row = db.get(id);
+    const writer = row && row.heldFor === null ? holder(row) : undefined;
+    if (!(row && writer) || writer.id === instance.id) {
+      return own(instance, id);
+    }
+    const up = above(writer).has(instance.id);
+    if (up && (deps.itemEnded(writer) || deps.stranded(writer))) {
+      return row;
+    }
+    const whose = `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is ${sessionLink(writer.id, sessionLabel(writer).name)}'s`;
+    throw new ArtifactRefusal(
+      403,
+      up
+        ? artifactToolWords.makerDeletes(whose)
+        : artifactToolWords.notInTree(whose)
+    );
   };
 
   /**
    * Artifact `id`, when the session owns it or made it: a delegate goes on
    * updating and reading what it handed to its parent.
    */
-  const ownedOrMade = (instance: InstanceRow, id: string): ArtifactRow => {
+  const ownedOrMade = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const row = db.get(id);
     if (row?.madeBy === instance.id) {
       return row;
@@ -1520,7 +1900,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * session's of its delegation tree ({@link inTree}); refused as not there
    * otherwise. Every change keeps to {@link own}.
    */
-  const viewable = (instance: InstanceRow, id: string): ArtifactRow => {
+  const viewable = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const row = db.get(id);
     if (
       row &&
@@ -1530,7 +1911,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ) {
       return row;
     }
-    throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+    throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
   };
 
   /**
@@ -1570,8 +1951,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const readTarget = (
     instance: InstanceRow,
-    id: string | undefined
+    asked: string | undefined
   ): ArtifactRow => {
+    const id = asked === undefined ? undefined : whole(instance, asked);
     const handed = id === undefined ? undefined : db.get(id);
     let row: ArtifactRow | undefined = handed;
     if (id === undefined) {
@@ -1811,6 +2193,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const answerable = (instance: InstanceRow): ArtifactRow[] => [
     ...db.ofInstance(instance.id),
+    // Its delegates' that have ended: their marks come to it (server.ts `deliverArtifactMarks`).
+    ...[...deps.tree(instance)].flatMap((id) => {
+      const delegate = id === instance.id ? undefined : deps.instance(id);
+      return delegate?.parentInstanceId === instance.id && deps.ended(delegate)
+        ? db.ofInstance(id)
+        : [];
+    }),
     ...deps
       .ledProjects(instance)
       .flatMap((projectId) =>
@@ -1845,7 +2234,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * none. A held next version is read by whoever
    * reads its artifact: the parent reviews what its maker changed.
    */
-  const readable = (instance: InstanceRow, id: string): ArtifactRow => {
+  const readable = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const id = whole(instance, asked);
     const next = db.get(id);
     if (next?.heldFor) {
       readable(instance, next.heldFor);
@@ -1857,15 +2247,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       projectPage(instance, id) ??
       (next && inTree(instance, next) ? next : undefined);
     if (!row) {
-      throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+      throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
     }
     return row;
   };
 
   /**
    * Whether the session is the one the artifact's marks go to: its writer,
-   * or its project's lead once the writer has ended. What it reads of them
-   * counts as heard.
+   * or, once the writer has ended, the writer's parent or its project's
+   * lead. What it reads of them counts as heard.
    */
   const takes = (instance: InstanceRow, row: ArtifactRow): boolean => {
     if (row.instanceId === instance.id) {
@@ -1900,16 +2290,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     instance: InstanceRow,
     pinId: string
   ): { pin: Pin; row: ArtifactRow } => {
+    const handle = pinId.length >= HANDLE_MIN && pinId.length < 36;
     for (const row of answerable(instance)) {
-      const pin = docs.doc(row.id).getMap("pins").get(pinId) as Pin | undefined;
+      const pins = docs.doc(row.id).getMap("pins");
+      const pin =
+        (pins.get(pinId) as Pin | undefined) ??
+        (handle
+          ? (Object.values(pins.toJSON() as Record<string, Pin>).find((one) =>
+              one.id.startsWith(pinId)
+            ) as Pin | undefined)
+          : undefined);
       if (pin) {
         return { pin, row };
       }
     }
-    throw new ArtifactRefusal(
-      404,
-      `No artifact of this session holds pin ${pinId}. comment_read lists its pins with their ids.`
-    );
+    throw new ArtifactRefusal(404, artifactToolWords.noPin(pinId));
   };
 
   /**
@@ -2060,6 +2455,145 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
+  /** A page's files as they stand before a revision writes the next: its HTML and a decision page's program; null before its first. */
+  const pageWas = (id: string): PageWas | null => {
+    const folder = join(deps.root, id);
+    const html = join(folder, "index.html");
+    if (!existsSync(html)) {
+      return null;
+    }
+    const program = join(folder, PROGRAM_FILE);
+    // Each picture's file by its address, fingerprinted: what tells one drawn again.
+    const files = new Map<string, string>();
+    const pictures = join(folder, "files");
+    if (existsSync(pictures)) {
+      for (const name of readdirSync(pictures)) {
+        files.set(
+          `files/${name}`,
+          bytesHash(readFileSync(join(pictures, name)))
+        );
+      }
+    }
+    return {
+      html: readFileSync(html, "utf8"),
+      files,
+      ...(existsSync(program)
+        ? { program: readFileSync(program, "utf8") }
+        : {}),
+    };
+  };
+
+  /**
+   * What a page's revision changed (page-changes.ts): a decision page's
+   * cards, else an HTML page's elements, told at the elements its pins
+   * stand on where a change falls inside one.
+   */
+  const pageChanges = (
+    id: string,
+    was: PageWas,
+    now: { html: string; program?: BuiltProgram | undefined }
+  ): ChangedItem[] => {
+    if (now.program && was.program !== undefined) {
+      return [
+        ...cardChanges(readKept(was.program).cards, now.program.read.cards),
+        ...pictureChanges(was.files, now.program.files),
+      ];
+    }
+    const anchors = Object.values(
+      docs.doc(id).getMap("pins").toJSON() as Record<string, Pin>
+    ).flatMap((pin) =>
+      "selector" in pin.anchor && !pin.anchor.frames?.length
+        ? [pin.anchor.selector]
+        : []
+    );
+    return htmlChanges(was.html, now.html, anchors);
+  };
+
+  /**
+   * Revision `row.revision`'s changes, in the doc's meta (core
+   * `ArtifactChanges`): every view marks them until the person has looked.
+   * The next revision's replace them.
+   */
+  const markChanges = (row: ArtifactRow, items: ChangedItem[]) => {
+    const changes: ArtifactChanges = {
+      revision: row.revision,
+      at: new Date().toISOString(),
+      items: items.slice(0, CHANGES_LIMIT),
+    };
+    docs.transact(row.id, "hub", (doc) =>
+      doc.getMap("meta").set("changes", changes)
+    );
+  };
+
+  /**
+   * What an agent's update to canvas `row` changed (page-changes.ts
+   * `sceneChanges`, from the scene `before` it and as it stands now), marked
+   * under the canvas's next scene version (`meta.sceneVersion`). A canvas's
+   * looks are kept by its scene version, not its revision: an update draws
+   * into the live scene every screen holds, and moving the revision would
+   * load the panel's frame again under the person for every batch the agent
+   * draws. What the last update changed that the person hasn't looked at yet
+   * is carried into the new set, so a turn of several updates marks all of
+   * them; one changed again is marked once, as it stands now.
+   */
+  const markSceneChanges = (row: ArtifactRow, before: CanvasEntry[]) => {
+    const items = sceneChanges(before, canvasEntries(docs, row.id));
+    if (items.length === 0) {
+      return;
+    }
+    docs.transact(row.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      const was = meta.get("changes") as ArtifactChanges | undefined;
+      const seen = new Set(
+        was ? (seenOf(doc).get(String(was.revision)) ?? []) : []
+      );
+      const fresh = new Set(items.map((item) => item.anchor));
+      const carried = (was?.items ?? []).filter(
+        (item) => !(seen.has(item.anchor) || fresh.has(item.anchor))
+      );
+      const version = (Number(meta.get("sceneVersion")) || 0) + 1;
+      meta.set("sceneVersion", version);
+      const changes: ArtifactChanges = {
+        revision: version,
+        at: new Date().toISOString(),
+        items: [...carried, ...items].slice(0, CHANGES_LIMIT),
+      };
+      meta.set("changes", changes);
+    });
+  };
+
+  /**
+   * A made page's files written for `row`: one made again under its name
+   * is its next revision, and what that changed is marked
+   * ({@link markChanges}).
+   */
+  const writeMade = (
+    row: ArtifactRow,
+    html: string,
+    program: BuiltProgram | undefined
+  ) => {
+    const was = pageWas(row.id);
+    writePage(row.id, html, program);
+    if (was) {
+      markChanges(row, pageChanges(row.id, was, { html, program }));
+    }
+  };
+
+  /** A create's answer with the artifact's link, which the agent names it by. */
+  const linked = (made: Created): Created => ({
+    ...made,
+    link: artifactLink(made.id, made.name),
+  });
+
+  /** A decision page's cards' links, by id: what the agent names each by. */
+  const cardLinks = (
+    id: string,
+    cards: readonly DecisionCard[]
+  ): Record<string, string> =>
+    Object.fromEntries(
+      cards.map((card) => [card.id, decisionLink(id, card.id, card.question)])
+    );
+
   /** A decision page's program as the hub keeps it; undefined for an HTML page or any other artifact. */
   const programOf = (row: ArtifactRow): string | undefined => {
     const file = join(deps.root, row.id, PROGRAM_FILE);
@@ -2173,6 +2707,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ...(docs.viewers(row.id) > 0 ? { openedRevision: row.revision + 1 } : {}),
   });
 
+  /** A whole read's `decisions`: each choice the page asks, answered or not; nothing for a page that asks none. */
+  const decisionsOf = (
+    row: ArtifactRow,
+    state: Record<string, ChoiceEntry>,
+    current: string | null
+  ): Pick<ArtifactRead, "decisions"> => {
+    const asked = choicesAsked(row);
+    return asked.length > 0
+      ? {
+          decisions: asked.map((one) => answerOf(one, state[one.id], current)),
+        }
+      : {};
+  };
+
   /**
    * A page or preview as the session reads it, which counts as its read
    * when `ownersRead`: its owner's. A maker's read leaves the owner's unread.
@@ -2201,6 +2749,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ? [...changed].filter((key) => !(key in state))
       : [];
     return {
+      ...(since === undefined ? decisionsOf(row, state, current) : {}),
       id: row.id,
       kind: row.kind,
       name: row.name,
@@ -2310,7 +2859,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (workspace.id !== mine && !deps.delegatesIn(instance, workspace.id)) {
       throw new ArtifactRefusal(
         403,
-        `"${needle}" is not your delegate's workspace — you can only preview your own workspace or your delegates'.`
+        artifactToolWords.notYourDelegate(String(needle))
       );
     }
     return workspace;
@@ -2374,13 +2923,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** What a create answers of a decision page: its decisions, and the components it dropped. */
   const programAnswer = (
+    id: string,
     program: BuiltProgram | undefined
-  ): Pick<Created, "decisions" | "dropped"> => {
+  ): Pick<Created, "cards" | "decisions" | "dropped"> => {
     if (!program) {
       return {};
     }
     return {
       decisions: program.read.cards.map((card) => card.id),
+      cards: cardLinks(id, program.read.cards),
       ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
     };
   };
@@ -2519,11 +3070,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const machine = machineOf(row);
     const subject =
       "port" in source
-        ? `The server on port ${source.port} ${source.workspace ? `in workspace ${source.workspace.slice(0, 8)}` : `on ${machine}`}`
+        ? artifactToolWords.serverOnPort(
+            source.port,
+            source.workspace
+              ? `in workspace ${source.workspace.slice(0, 8)}`
+              : `on ${machine}`
+          )
         : `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`;
     switch (failure) {
       case "server":
-        return `${subject} did not answer: nothing is listening on that port.`;
+        return artifactToolWords.notListening(subject);
       case "workspace":
         return `${subject} did not answer: the workspace isn't running.`;
       case "machine":
@@ -2618,6 +3174,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * An artifact's latest picture, light where it keeps two: a canvas's own;
+   * a page's or preview's kept thumbnail, else its ink picture; null when it
+   * has none.
+   */
+  const latestPicture = (row: ArtifactRow): Buffer | null => {
+    if (row.kind !== "canvas" && keptThumbnail(row.id)) {
+      try {
+        return readFileSync(thumbnailPath(deps.root, row.id, "light"));
+      } catch {
+        // Its file went since it was kept: its ink picture, when it has one.
+      }
+    }
+    return pictureBytes(row.id);
+  };
+
+  /**
    * A delivered page's latest picture of the person's ink (the crop of the
    * last stroke group that went) becomes a page's or preview's picture, as a
    * canvas keeps its own; `artifact_promote` writes it.
@@ -2633,50 +3205,53 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /*
-   * The person's marks (pins, replies, resolves, ink) wait for their Send
-   * ({@link send}): one press delivers everything the session hasn't heard,
-   * with their note, as one message. A sheet's saves and compile errors are
-   * not the person's marks and go by themselves: each pushes its delivery
-   * back to {@link MARKS_QUIET_MS} from now, never past
-   * {@link MARKS_LONGEST_MS} from the burst's first. The page posts its
-   * pictures of the marks it just made beside the doc (sync.ts
-   * `artifactPictures`); they wait here for the Send.
+   * The person's marks (pins, replies, resolves, ink) go to the session by
+   * themselves: each change of theirs pushes the artifact's delivery back to
+   * {@link COMMENTS_QUIET_MS} from now ({@link personMarked}), and one
+   * delivery carries everything the session hasn't heard as one message. A
+   * sheet's saves and compile errors go on the same delivery, pushed back
+   * to {@link MARKS_QUIET_MS}. Neither waits past {@link MARKS_LONGEST_MS}
+   * from the burst's first. The page posts its pictures of the marks it
+   * just made beside the doc (sync.ts `artifactPictures`); they wait for the
+   * delivery on disk, beside the artifact's own files ({@link held}), so a
+   * hub restart between the marking and the delivery keeps them.
    */
   const bursts = new Map<string, { first: number; timer: HubTimer }>();
-  const held = new Map<
-    string,
-    { pictures: Map<string, string>; url?: string }
-  >();
+  const held = heldPictures(deps.root);
   const delivering = new Set<string>();
-  const marked = (id: string) => {
+  const marked = (id: string, quiet = MARKS_QUIET_MS) => {
     const now = Date.now();
     const burst = bursts.get(id);
     deps.lifetime.cancel(burst?.timer);
     const first = burst?.first ?? now;
-    const wait = Math.max(
-      0,
-      Math.min(MARKS_QUIET_MS, first + MARKS_LONGEST_MS - now)
-    );
+    const wait = Math.max(0, Math.min(quiet, first + MARKS_LONGEST_MS - now));
     bursts.set(id, {
       first,
       timer: deps.lifetime.after(wait, () => {
         bursts.delete(id);
         // One delivery at a time: what is still owed when it ends goes next.
         if (delivering.has(id)) {
-          marked(id);
+          marked(id, quiet);
           return;
         }
         delivering.add(id);
-        deliverMarks(id, null)
+        deliverMarks(id)
           .catch((error: unknown) => {
             console.warn(
-              `[artifacts] ${id}: the sheet's saves and errors were not delivered: ${error instanceof Error ? error.message : String(error)}`
+              `[artifacts] ${id}: the person's marks and the sheet's saves and errors were not delivered: ${error instanceof Error ? error.message : String(error)}`
             );
           })
           .finally(() => delivering.delete(id));
       }),
     });
   };
+
+  /**
+   * The person's own change to artifact `id`'s doc (a comment, a reply, a
+   * resolve, a stroke): what of it the session hasn't heard goes once their
+   * changes have stood quiet {@link COMMENTS_QUIET_MS} ({@link marked}).
+   */
+  const personMarked = (id: string) => marked(id, COMMENTS_QUIET_MS);
 
   /**
    * What of the person's marks on an artifact's doc the session has not
@@ -2741,22 +3316,97 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * A comment's Try again: comments `only` of artifact `row`, which a
+   * delivery no one took left owed, go to the session now. Refused while a
+   * delivery is on its way, when none of them is owed, or when no one takes
+   * them (each pin says why again).
+   */
+  const retry = async (row: ArtifactRow, only: ReadonlySet<string>) => {
+    if (!marksOwed(docs.doc(row.id)).owed.some((pin) => only.has(pin.id))) {
+      throw new ArtifactRefusal(
+        409,
+        "Nothing new to send on this comment: the session has heard all of it."
+      );
+    }
+    if (delivering.has(row.id)) {
+      throw new ArtifactRefusal(
+        409,
+        "Its comments are on their way to the session already, so this didn't go."
+      );
+    }
+    delivering.add(row.id);
+    try {
+      const outcome = await deliverMarks(row.id, only);
+      if (outcome !== "nothing" && !outcome.ok) {
+        throw new ArtifactRefusal(
+          503,
+          `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. It's kept; Try again.`
+        );
+      }
+    } finally {
+      delivering.delete(row.id);
+    }
+  };
+
+  /**
+   * What a Send carries of an artifact's doc: every pick since the last
+   * Send, and the note. The person's marks are not its to carry: they go by
+   * themselves ({@link marked}). Refused when it would carry nothing.
+   */
+  const sendOwes = (
+    doc: Doc,
+    state: Record<string, ChoiceEntry>,
+    body: SendBody
+  ) => {
+    const { sentAt } = metaOf(doc);
+    const picked = Object.values(state).some(
+      (entry) => !sentAt || entry.at > sentAt
+    );
+    const note = body.text?.trim() || null;
+    if (!(picked || note)) {
+      throw new ArtifactRefusal(
+        409,
+        "Nothing new to send: every pick here has gone to the session."
+      );
+    }
+    return { picked, note };
+  };
+
+  /**
+   * A delivery no one took, said on each pin it carried (core `Pin.notSent`):
+   * the pin says why, wherever it is shown, and offers Try again until a
+   * delivery carries it ({@link stampDelivered} clears it).
+   */
+  const notSent = (id: string, owed: Pin[], why: string) => {
+    if (owed.length === 0) {
+      return;
+    }
+    const at = new Date().toISOString();
+    docs.transact(id, "hub", (live) => {
+      const livePins = live.getMap("pins");
+      for (const pin of owed) {
+        const now = livePins.get(pin.id) as Pin | undefined;
+        if (now) {
+          livePins.set(pin.id, { ...now, notSent: { at, why } });
+        }
+      }
+    });
+  };
+
+  /**
    * What went is let go of the held pictures, and what is gone from the doc;
    * a pin not sent yet keeps its own for its Send.
    */
   const letGoPictures = (id: string, went: string[], standing: Set<string>) => {
-    const kept = held.get(id);
-    if (!kept) {
-      return;
-    }
     const gone = new Set(went);
-    for (const mark of kept.pictures.keys()) {
+    for (const mark of held.marks(id)) {
       if (gone.has(mark) || !standing.has(mark)) {
-        kept.pictures.delete(mark);
+        held.letGo(id, mark);
       }
     }
-    if (kept.pictures.size === 0) {
-      held.delete(id);
+    // Nothing held now: its address goes with them, the last delivery's standing in.
+    if (held.marks(id).length === 0) {
+      held.drop(id);
     }
   };
 
@@ -2810,7 +3460,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** Where the person marked artifact `id`: the page's address the page last said, else the last delivery's, else its own route. */
   const addressOf = (id: string, doc: Doc): string =>
-    held.get(id)?.url ??
+    held.url(id) ??
     (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
     routeOf(id);
 
@@ -2820,10 +3470,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * the page drew round it.
    */
   const loosePictures = (row: ArtifactRow, loose: InkGroup[]) => {
-    const kept = held.get(row.id);
     const canvas = row.kind === "canvas" ? pictureOf(row.id) : null;
     const pictureOfGroup = (group: InkGroup) =>
-      row.kind === "canvas" ? null : (kept?.pictures.get(group.id) ?? null);
+      row.kind === "canvas" ? null : held.picture(row.id, group.id);
     return {
       canvas,
       pictureOfGroup,
@@ -2834,8 +3483,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** Each owed pin's section, what it carries named as the delivery carries it. */
+  /** Each owed pin's section of artifact `artifact`, its link with it, what it carries named as the delivery carries it. */
   const pinSections = (
+    artifact: string,
     owed: Pin[],
     groups: Record<string, InkGroup>,
     url: string,
@@ -2844,54 +3494,58 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     owed.map((pin) =>
       pinDelivery(pin, {
         url,
+        link: linkOfPin(artifact, pin),
         carried: (one) => carried.get(one.ref) ?? { as: "file" },
         ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
       })
     );
 
   /**
-   * Delivers what artifact `id` owes its session as one message. On the
-   * person's Send (`send`, with their note): every pin and loose stroke
-   * group the session hasn't heard ({@link marksOwed}), each pin as its
-   * section or its one resolve line with what it carries, the page's
-   * pictures of them, the note first; a sheet's saves and errors with them.
-   * Without a Send (the quiet timer), a sheet's saves and errors alone.
-   * Once someone took it, what went is stamped heard ({@link stampDelivered});
-   * when no one did, it stays owed and the outcome says why (the writer's
-   * transcript keeps it as not sent: server.ts `deliverArtifactMarks`).
-   * Nothing owed, nothing goes (`nothing`).
+   * Delivers what artifact `id` owes its session as one message: every pin
+   * and loose stroke group the session hasn't heard ({@link marksOwed}),
+   * each pin as its section or its one resolve line with what it carries,
+   * the page's pictures of them; a sheet's saves and errors with them. With
+   * `only` (a comment's Try again), those comments alone. Once someone took
+   * it, what went is stamped heard ({@link stampDelivered}); when no one
+   * did, it stays owed, each pin of it says why ({@link notSent}), and the
+   * outcome says why (the writer's transcript keeps it as not sent:
+   * server.ts `deliverArtifactMarks`). Nothing owed, nothing goes
+   * (`nothing`).
    */
   const deliverMarks = async (
     id: string,
-    send: { note: string | null } | null
+    only?: ReadonlySet<string>
   ): Promise<MarksOutcome | "nothing"> => {
     const row = db.get(id);
-    const instance = row ? holder(row) : undefined;
-    if (!(row && instance)) {
-      held.delete(id);
+    if (!row) {
+      held.drop(id);
       return "nothing";
     }
+    const instance = holder(row);
     const doc = docs.doc(id);
     const all = marksOwed(doc);
+    if (!instance) {
+      sayNoHolder(row, all.owed.length + all.loose.length);
+      return "nothing";
+    }
     const { pins, groups } = all;
-    const owed = send ? all.owed : [];
-    const loose = send ? all.loose : [];
+    // A comment's Try again carries that comment alone: no other pin, no loose ink.
+    const owed = all.owed.filter((pin) => !only || only.has(pin.id));
+    const loose = only ? [] : all.loose;
     const errors = errorsOwed(row, doc);
     const saves = savesOwed(row, doc);
     if (owed.length + loose.length + errors.length + saves.length === 0) {
       return "nothing";
     }
-    const kept = held.get(id);
     const url = addressOf(id, doc);
     const { canvas, pictureOfGroup, ahead } = loosePictures(row, loose);
     const { images, attachments, carried } = carryAttachments(
       owed,
-      (pin) => kept?.pictures.get(pin.id),
+      (pin) => held.picture(id, pin.id) ?? undefined,
       ahead
     );
     const marks = [
-      ...(send?.note ? [sendNoteSection(send.note)] : []),
-      ...pinSections(owed, groups, url, carried),
+      ...pinSections(row.id, owed, groups, url, carried),
       ...loose.map((group) =>
         inkSection(group, {
           url,
@@ -2906,10 +3560,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       images: images.slice(0, COMMENT_LIMITS.pictures),
       attachments,
     });
+    sayDelivery(row, instance, {
+      pins: owed,
+      strokes: loose.length,
+      errors: errors.length,
+      saves: saves.length,
+      retry: !!only,
+      outcome,
+    });
     if (!outcome.ok) {
-      console.warn(
-        `[artifacts] ${id}: the person's marks reached no one, and stay owed: ${outcome.reason}`
-      );
+      notSent(id, owed, outcome.reason);
       return outcome;
     }
     stampDelivered(
@@ -3382,7 +4042,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ? made
       : {
           ...made,
-          note: "The canvas is empty. Draw on it with artifact_update (elements or mermaid), or wait for the person to draw.",
+          note: artifactToolWords.canvasEmpty,
         };
   };
 
@@ -3399,7 +4059,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `One call deletes at most ${CANVAS_LIMITS.deletePerCall} elements.`
         );
       }
+      const before = canvasEntries(docs, row.id);
       const { deleted, missing } = deleteElements(docs, row.id, change.delete);
+      markSceneChanges(row, before);
       return {
         ...readCanvas(
           db.get(row.id) as ArtifactRow,
@@ -3412,9 +4074,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
     }
     // Replacing what the person changed since the session last read it.
-    const present = new Set(
-      canvasEntries(docs, row.id).map((entry) => entry.el.id)
-    );
+    const before = canvasEntries(docs, row.id);
+    const present = new Set(before.map((entry) => entry.el.id));
     const underYou =
       "elements" in change
         ? personChangedAfter(row, row.deliveredSeq, present).filter((id) =>
@@ -3422,6 +4083,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           )
         : [];
     const wrote = await draw(row, change);
+    markSceneChanges(row, before);
     return {
       ...readCanvas(
         db.get(row.id) as ArtifactRow,
@@ -4138,7 +4800,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     releaseServed(at);
     throw new ArtifactRefusal(
       503,
-      `${notLoaded(at, down.failure)}${down.why ? ` (${down.why})` : ""} It wasn't handed to your parent.`
+      `${notLoaded(at, down.failure)}${down.why ? ` (${down.why})` : ""} ${artifactToolWords.notHanded}`
     );
   };
 
@@ -4146,18 +4808,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const handedBy = (row: ArtifactRow): { madeBy?: string } =>
     row.madeBy && row.madeBy !== row.instanceId ? { madeBy: row.madeBy } : {};
 
-  /** Whether the person has something to do on it now, as `artifact_list` reads it for its owner. */
-  const waitingOnPerson = (row: ArtifactRow): boolean => {
-    const owner = holder(row);
-    return !!owner && statusOf(owner, row).waitingOn.includes("person");
-  };
-
-  /** An answer about a held next version, said as its artifact's: that one's id, and the next version's as `held`. */
+  /**
+   * An answer about a held next version, said as its artifact's: that one's
+   * id, and the next version's as `held`; with the artifact's link
+   * (`[name](cawco:artifact/<id>)`), which the agent names it by.
+   */
   const heldAnswer = <T extends { held?: string; id: string }>(
     answer: T
-  ): T => {
+  ): T & { link?: string } => {
     const row = db.get(answer.id);
-    return row?.heldFor ? { ...answer, ...heldId(row) } : answer;
+    const said = row?.heldFor ? { ...answer, ...heldId(row) } : answer;
+    return row ? { ...said, link: artifactLink(said.id, row.name) } : said;
   };
 
   /**
@@ -4180,10 +4841,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         row.heldFor === null
       );
       const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+      const was = pageWas(moved.id);
       writePage(moved.id, html);
       // Every page open on it hears the new revision in the doc and morphs
       // in place (the overlay); nothing reloads.
       stampMeta(moved, pageHash(html));
+      markChanges(moved, was ? pageChanges(moved.id, was, { html }) : []);
       return read(moved, undefined, ownersRead);
     }
     const doc = docs.doc(row.id);
@@ -4237,18 +4900,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
     const program = page.program as BuiltProgram;
     mediaHeld(holder(row) ?? instance, program);
-    const before = new Set(readKept(existing).cards.map((card) => card.id));
+    const kept = readKept(existing).cards;
+    const before = new Set(kept.map((card) => card.id));
     const after = program.read.cards.map((card) => card.id);
     const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+    const was = pageWas(moved.id);
     writePage(moved.id, page.html, program);
     const hash = pageHash(program.program);
     stampMeta(moved, hash);
+    const changes = [
+      ...cardChanges(kept, program.read.cards),
+      ...pictureChanges(was?.files ?? new Map(), program.files),
+    ];
+    markChanges(moved, changes);
+    const touched = new Set(
+      changes.filter((item) => item.kind === "card").map((item) => item.anchor)
+    );
     return {
       id: moved.id,
       revision: moved.revision,
       pageHash: hash,
       statements: merged.change,
       decisions: after,
+      // The cards it put in or rewrote, each by its link: what the agent names them by.
+      cards: cardLinks(
+        moved.heldFor ?? moved.id,
+        program.read.cards.filter((card) =>
+          touched.has(`#decision-${cssEscape(card.id)}`)
+        )
+      ),
       moved: {
         added: after.filter((card) => !before.has(card)),
         removed: [...before].filter((card) => !after.includes(card)),
@@ -4256,6 +4936,258 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
       ...(broken ? { broken } : {}),
     };
+  };
+
+  /* ── Needs you (needs.ts) ───────────────────────────────────────────── */
+
+  /** Each artifact's facts as last read, with the row's marks they were read at. */
+  const factsKept = new Map<string, { facts: ArtifactFacts; mark: string }>();
+  /** What a change of the doc (its seq) or of the row moves: past it, the facts are read again. */
+  const factsMark = (row: ArtifactRow): string =>
+    `${row.seq}:${row.revision}:${row.openedRevision}:${row.readSeq}:${row.deliveredSeq}:${row.updatedAt.getTime()}`;
+
+  /** When the agent last answered on `pin`: its newest entry, or its resolve. */
+  const answeredOn = (pin: Pin): string => {
+    const entry = pin.thread.findLast((one) => one.by === "agent")?.at ?? "";
+    const resolved =
+      pin.resolvedBy === "agent" && pin.resolvedAt ? pin.resolvedAt : "";
+    return entry > resolved ? entry : resolved;
+  };
+
+  /** A decision page's picks, made of asked, and its first card not picked; none for any other artifact. */
+  const picksFacts = (
+    row: ArtifactRow,
+    state: Record<string, ChoiceEntry>
+  ): Pick<ArtifactFacts, "firstUnpicked" | "picks"> => {
+    const { asked, made, firstUnpicked } = picksMade(choicesAsked(row), state);
+    return {
+      firstUnpicked,
+      picks: asked > 0 ? { asked, made } : null,
+    };
+  };
+
+  /** The latest revision's changes the person hasn't looked at. */
+  const changesFacts = (doc: Doc): ArtifactFacts["changes"] => {
+    const changes = doc.getMap("meta").get("changes") as
+      ArtifactChanges | undefined;
+    if (!changes) {
+      return null;
+    }
+    const seen = new Set(seenOf(doc).get(String(changes.revision)) ?? []);
+    return {
+      revision: changes.revision,
+      count: changes.items.filter((item) => !seen.has(item.anchor)).length,
+    };
+  };
+
+  /** What artifact `row`'s doc says, read once per change of it or of its row. */
+  const factsOf = (row: ArtifactRow): ArtifactFacts => {
+    // A maker's change held for its parent to open: the parent's move.
+    const heldNext = db.heldOf(row.id) !== undefined;
+    const mark = factsMark(row);
+    const kept = factsKept.get(row.id);
+    if (kept?.mark === mark) {
+      return heldNext ? { ...kept.facts, handed: true } : kept.facts;
+    }
+    const doc = docs.doc(row.id);
+    const meta = doc.getMap("meta");
+    const state = stateOf(doc);
+    const { sentAt } = metaOf(doc);
+    const pins = Object.values(
+      doc.getMap("pins").toJSON() as Record<string, Pin>
+    ).sort((a, b) => a.number - b.number);
+    const answered = pins.filter((pin) => !pin.resolvedAt && newAnswer(pin));
+    const facts: ArtifactFacts = {
+      ...picksFacts(row, state),
+      answeredAt: answered
+        .map(answeredOn)
+        .reduce<string | null>((a, b) => (a !== null && a > b ? a : b), null),
+      answers: answered.map((pin) => pin.number),
+      asked: (meta.get("asked") as ArtifactAsked | undefined) ?? null,
+      changes: changesFacts(doc),
+      closed: pins
+        .filter((pin) => pin.resolvedAt && newAnswer(pin))
+        .map((pin) => ({ pin: pin.number, at: answeredOn(pin) })),
+      draft: meta.get("draft") === true,
+      lookedAt: (meta.get("lookedAt") as string | undefined) ?? null,
+      pins: pins.length,
+      revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
+      handed: meta.get(HANDED) === true,
+      unsent: unsentChoices(state, sentAt),
+    };
+    factsKept.set(row.id, { facts, mark });
+    return heldNext ? { ...facts, handed: true } : facts;
+  };
+
+  /**
+   * Its ask as its doc keeps it; one made before asks were kept stands as
+   * its maker's at its last publish, so its writer's turns retire it too.
+   */
+  const askOf = (
+    row: ArtifactRow,
+    facts: ArtifactFacts
+  ): ArtifactAsked | null => {
+    if (facts.asked) {
+      return facts.asked;
+    }
+    const by = row.madeBy ?? row.instanceId;
+    return by
+      ? { by, at: facts.revisedAt ?? row.updatedAt.toISOString() }
+      : null;
+  };
+
+  /** What the hub holds of `row`'s sessions, as its rules read it (needs.ts). */
+  const sessionsOf = (
+    row: ArtifactRow,
+    facts: ArtifactFacts
+  ): ArtifactSessions => {
+    const owner = holder(row);
+    const writer = askOf(row, facts)?.by;
+    return {
+      ended: !owner || deps.finished(owner),
+      harness: owner?.harness ?? null,
+      machineId: owner?.machineId ?? null,
+      steps: writer ? deps.steps(writer) : [],
+    };
+  };
+
+  /** What `row` waits on the person for now; null when nothing. */
+  const pendingFor = (row: ArtifactRow): ArtifactPending | null => {
+    const facts = factsOf(row);
+    if (!mayWait(row, facts)) {
+      return null;
+    }
+    return pendingOf(
+      row,
+      { ...facts, asked: askOf(row, facts) },
+      sessionsOf(row, facts)
+    );
+  };
+
+  /* ── Files: what reached the person ─────────────────────────────────── */
+
+  /**
+   * Whether `row` waits on the person now: Needs you raises it (a pick or a
+   * judgement asked and not moved on from, picks or pins owed, while its
+   * session can act: needs.ts `needOf`), or it is a try its session put in
+   * front of them, not handed up and not ended.
+   */
+  const waitsOnPerson = (row: ArtifactRow): boolean => {
+    const kept = factsOf(row);
+    const facts = { ...kept, asked: askOf(row, kept) };
+    const sessions = sessionsOf(row, kept);
+    if (row.does === "try") {
+      return !(
+        facts.draft ||
+        facts.handed ||
+        row.heldFor !== null ||
+        sessions.ended ||
+        movedOn(row.id, facts.asked, sessions.steps)
+      );
+    }
+    return mayWait(row, kept) && needOf(row, facts, sessions) !== null;
+  };
+
+  /**
+   * Whether `row` reached the person, so Files lists it: a view of theirs
+   * had it on screen at least once (`openedRevision`, `shownAt`), it waits
+   * on them ({@link waitsOnPerson}), or they made it (their composer canvas,
+   * the one create that writes `meta.draft`). A browser is a tool, never a
+   * file. Nothing is deleted by it: the panel's menu ({@link Artifacts.list})
+   * and `artifact_list` keep every artifact, and one that reaches the person
+   * later is listed from then on.
+   */
+  const reachedPerson = (row: ArtifactRow): boolean =>
+    row.kind !== "browser" &&
+    (row.openedRevision !== null ||
+      row.shownAt !== null ||
+      docs.doc(row.id).getMap("meta").has("draft") ||
+      waitsOnPerson(row));
+
+  /** The artifacts each decision page's Canvas and Preview pieces show, by the page's id, read once per change of it. */
+  const mediaKept = new Map<string, { at: number; ids: string[] }>();
+  const mediaOf = (row: ArtifactRow): string[] => {
+    const at = row.updatedAt.getTime();
+    const kept = mediaKept.get(row.id);
+    if (kept?.at === at) {
+      return kept.ids;
+    }
+    const program = programOf(row);
+    const ids =
+      program === undefined
+        ? []
+        : readKept(program).artifacts.map((media) => media.id);
+    mediaKept.set(row.id, { at, ids });
+    return ids;
+  };
+
+  /**
+   * Files' list of the session's artifacts, newest first: those that
+   * reached the person ({@link reachedPerson}), less a listed decision
+   * page's embedded media (its Canvases and Previews), which are reached
+   * through their page and get no row of their own.
+   */
+  const filesOf = (instance: InstanceRow): ArtifactRow[] => {
+    const rows = db.ofInstance(instance.id).filter(reachedPerson);
+    const embedded = new Set(rows.flatMap(mediaOf));
+    return rows.filter((row) => !embedded.has(row.id));
+  };
+
+  /**
+   * `writer`'s create, revision or show of artifact `id`: its ask stands
+   * again from now, and when it asks a pick or a judgement the writer's
+   * current step waits on it (plans.ts `waitOn`; needs.ts rule 2).
+   */
+  const askedNow = (writer: InstanceRow, id: string): void => {
+    const row = db.get(id);
+    // The person's own composer canvas asks nothing until it is sent.
+    if (
+      !row ||
+      row.heldFor !== null ||
+      docs.doc(row.id).getMap("meta").get("draft") === true
+    ) {
+      return;
+    }
+    const step =
+      row.does === "pick" || row.does === "judge"
+        ? deps.waitOn(writer.id, row.id)
+        : null;
+    const thread = deps.askThread(writer);
+    const asked: ArtifactAsked = {
+      by: writer.id,
+      at: new Date().toISOString(),
+      ...(step ? { step } : {}),
+      ...(thread ? { thread } : {}),
+    };
+    docs.transact(row.id, "hub", (doc) =>
+      doc.getMap("meta").set("asked", asked)
+    );
+    deps.needsMoved();
+  };
+
+  /** The person's Send of `row`: answered whole (needs.ts rule 1), no step of its writer waits on it any more. */
+  const answeredBy = (row: ArtifactRow): void => {
+    const writer = askOf(row, factsOf(row))?.by;
+    if (writer && !pendingFor(row)) {
+      deps.clearArtifactWait(writer, row.id);
+    }
+    deps.needsMoved();
+  };
+
+  /**
+   * The Not now's in the person's acknowledgements, by artifact: the
+   * latest `raisedAt` each was put away at. Raised again later, it is back.
+   */
+  const parkedNow = (acknowledged: readonly string[]): Map<string, number> => {
+    const parked = new Map<string, number>();
+    for (const id of acknowledged) {
+      const match = NOT_NOW.exec(id);
+      if (match) {
+        const [, artifact = "", at = "0"] = match;
+        parked.set(artifact, Math.max(parked.get(artifact) ?? 0, Number(at)));
+      }
+    }
+    return parked;
   };
 
   /** One artifact as `artifact_list` answers it, read for `caller`. */
@@ -4270,19 +5202,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const pins = Object.values(
       doc.getMap("pins").toJSON() as Record<string, Pin>
     ).filter((pin) => !pin.resolvedAt).length;
-    const asked = choicesAsked(row);
+    const { asked, made } = picksMade(choicesAsked(row), state);
     const picks =
-      asked.length > 0
+      asked > 0
         ? {
-            asked: asked.length,
-            // A program's pick counts while its card still offers every option of it.
-            made: asked.filter(({ card, id }) =>
-              card ? pickOf(card, state[id]).picked : id in state
-            ).length,
-            unsent: Object.entries(state).filter(
-              ([key, entry]) =>
-                key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
-            ).length,
+            asked,
+            made,
+            unsent: unsentChoices(state, sentAt),
           }
         : undefined;
     const shown = inPanel(row);
@@ -4293,11 +5219,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       doc.getMap("meta").get(HANDED) === true ||
       db.heldOf(row.id) !== undefined;
     const waitingOn: ArtifactStatus["waitingOn"] = [];
-    if (
-      !draft &&
-      ((shown && !opened) ||
-        (picks && (picks.made < picks.asked || picks.unsent > 0)))
-    ) {
+    // The person's move: what Needs you lists it for (needs.ts), its asks retired by their rules.
+    if (pendingFor(row)) {
       waitingOn.push("person");
     }
     if (
@@ -4331,23 +5254,154 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   return {
+    /**
+     * Needs you's artifacts (needs.ts): each waiting on the person, oldest
+     * first, one put away with Not now marked `parked` until it is raised
+     * again; and each artifact's
+     * notice, its parts the person has not acknowledged, newest first.
+     */
+    needs: (): ArtifactNeedsRead => {
+      const acknowledged = deps.acknowledged();
+      const seen = new Set(acknowledged);
+      const parked = parkedNow(acknowledged);
+      const needs: ArtifactNeedsRead["needs"] = [];
+      const notices: ArtifactNeedsRead["notices"] = [];
+      const rows = db.asking();
+      // An artifact gone takes its facts with it.
+      const standing = new Set(rows.map((row) => row.id));
+      for (const id of factsKept.keys()) {
+        if (!standing.has(id)) {
+          factsKept.delete(id);
+        }
+      }
+      for (const row of rows) {
+        const kept = factsOf(row);
+        if (!mayWait(row, kept)) {
+          continue;
+        }
+        const facts = { ...kept, asked: askOf(row, kept) };
+        const sessions = sessionsOf(row, kept);
+        const need = needOf(row, facts, sessions);
+        if (need) {
+          needs.push({
+            ...need,
+            parked: (parked.get(row.id) ?? -1) >= need.raisedAt,
+          });
+        }
+        const notice = noticeOf(row, facts, sessions);
+        const parts = notice?.parts.filter((part) => !seen.has(part.id));
+        if (notice && parts && parts.length > 0) {
+          notices.push({ ...notice, parts });
+        }
+      }
+      return {
+        needs: needs.sort((a, b) => a.raisedAt - b.raisedAt),
+        notices: notices.sort((a, b) => b.at - a.at),
+      };
+    },
+
+    /** Whether the person had artifact `id` on screen at or after `at` (ms epoch). */
+    lookedSince: (id: string, at: number): boolean => {
+      const row = db.get(id);
+      const looked = row ? factsOf(row).lookedAt : null;
+      return looked !== null && Date.parse(looked) >= at;
+    },
+
+    /**
+     * Whether session `instanceId` asked artifact `id` in the turn that
+     * followed the end at `before` (null: its first): its create, revision
+     * or show came after it.
+     */
+    askedIn: (id: string, instanceId: string, before: Date | null): boolean => {
+      const row = db.get(id);
+      const asked = row ? askOf(row, factsOf(row)) : null;
+      return (
+        asked?.by === instanceId &&
+        (before === null || asked.at > before.toISOString())
+      );
+    },
+
+    /** What artifact `id` waits on the person for now; null when nothing, or no artifact. */
+    pending: (id: string): ArtifactPending | null => {
+      const row = db.get(id);
+      return row ? pendingFor(row) : null;
+    },
+
+    /**
+     * Session `instanceId`'s turn ended at `endedAt`, the one before it at
+     * `before` (server.ts, at every result, on every harness). Each ask it
+     * made before this turn began, still asked, with no step of its plan
+     * waiting on it, is one it moved on from (needs.ts rule 2): this turn
+     * was its next.
+     */
+    turnEnded: (
+      instanceId: string,
+      before: Date | null,
+      endedAt: Date
+    ): void => {
+      if (!before) {
+        return;
+      }
+      const from = before.toISOString();
+      const steps = deps.steps(instanceId);
+      let moved = false;
+      for (const row of db.asking()) {
+        const facts = factsOf(row);
+        const asked = askOf(row, facts);
+        if (
+          !asked ||
+          asked.by !== instanceId ||
+          asked.movedAt ||
+          asked.at >= from ||
+          movedOn(row.id, asked, steps) ||
+          steps.some(
+            (step) =>
+              step.status !== "completed" && step.waitsOn?.artifactId === row.id
+          ) ||
+          !pendingFor(row)
+        ) {
+          continue;
+        }
+        const next: ArtifactAsked = {
+          ...asked,
+          movedAt: endedAt.toISOString(),
+        };
+        docs.transact(row.id, "hub", (doc) =>
+          doc.getMap("meta").set("asked", next)
+        );
+        moved = true;
+      }
+      if (moved) {
+        deps.needsMoved();
+      }
+    },
+
+    /** The whole id of the artifact a session names by its name, handle or id ({@link whole}). */
+    named: (instanceId: string, asked: string): string =>
+      whole(sessionOf(instanceId), asked),
+
+    /** Every artifact the session holds, newest first: its panel's menu, where each stays reachable. */
     list: (instanceId: string): ArtifactSummary[] => {
       const instance = sessionOf(instanceId);
       deps.listing(instance);
       return db.ofInstance(instance.id).map(summaryOf);
     },
 
+    /** Files' list: the session's artifacts that reached the person, newest first ({@link filesOf}). */
+    files: (instanceId: string): ArtifactSummary[] =>
+      filesOf(sessionOf(instanceId)).map(summaryOf),
+
     /**
-     * Files' search over the session's artifacts, by the find engine's own
-     * matcher (find-names `matchOf`, what Find and the composer's finder
-     * answer with): every word must match the name, the kind words, or the
-     * words on its page, at the transcript's lower weight. Best match first,
-     * then newest; a page that matched by its words brings the words round
-     * the first hit (`excerptOf`).
+     * Files' search over the artifacts Files lists ({@link filesOf}), by
+     * the find engine's own matcher (find-names `matchOf`, what Find and the
+     * composer's finder answer with): every word must match the name, the
+     * kind words, or the words on its page, at the transcript's lower
+     * weight. Best match first, then newest; a page that matched by its
+     * words brings the words round the first hit (`excerptOf`).
      */
     search: (instanceId: string, q: string): ArtifactHit[] => {
       const query = parse(q);
-      const rows = db.ofInstance(sessionOf(instanceId).id);
+      const rows = filesOf(sessionOf(instanceId));
       if (query.tokens.length === 0) {
         return rows.map((row) => ({ id: row.id, excerpt: null }));
       }
@@ -4525,7 +5579,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
       const ownWay = madeOwnWay(making, input);
       if (ownWay !== null) {
-        return await ownWay;
+        const made = linked(await ownWay);
+        askedNow(instance, made.id);
+        return made;
       }
       let source: PreviewSource = { page: input.name };
       let machineId: string | null = null;
@@ -4557,7 +5613,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       });
       await letGo(movedFrom, row);
       if (html !== null) {
-        writePage(row.id, html, program);
+        writeMade(row, html, program);
       }
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
@@ -4571,15 +5627,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         throw new ArtifactRefusal(503, shown.why);
       }
       const said = heldId(row);
+      askedNow(instance, said.id);
       return {
         ...said,
         kind: row.kind,
         name: row.name,
         route: routeOf(said.id),
+        link: artifactLink(said.id, row.name),
         ...openedOf(shown),
         ...(stage ? { stage } : {}),
         ...(weight ? { weight } : {}),
-        ...programAnswer(program),
+        ...programAnswer(said.id, program),
         ...(broken ? { broken } : {}),
       };
     },
@@ -4613,6 +5671,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? pageChanged(instance, row, change, ownersRead)
           : updateCanvas(row, change, ownersRead)
       );
+      askedNow(instance, found.id);
       return heldAnswer(answer);
     },
 
@@ -4664,10 +5723,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
         return programRevised(instance, row, existing, merged);
       };
-      if (peer) {
-        return heldAnswer(await revisedOn(db.heldOf(peer.id) ?? peer));
-      }
-      return heldAnswer(await changedBy(instance, found, revisedOn));
+      const revised = peer
+        ? await revisedOn(db.heldOf(peer.id) ?? peer)
+        : await changedBy(instance, found, revisedOn);
+      askedNow(instance, found.id);
+      return heldAnswer(revised);
     },
 
     /**
@@ -4781,6 +5841,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         "agent",
         row.instanceId === instance.id
       );
+      askedNow(instance, row.id);
       return componentWritten(row, change, written);
     },
 
@@ -4822,6 +5883,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (inPanel(next)) {
         await show(next, "agent");
       }
+      askedNow(instance, next.id);
       return { id: next.id, revision: next.revision, spec };
     },
 
@@ -4844,6 +5906,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       askNow(row.id, ask);
       // Every view of the panel hears the frame again with the new ask; nothing reloads.
       relistOf(row);
+      askedNow(sessionOf(instanceId), row.id);
       return { id: row.id, ask };
     },
 
@@ -5046,6 +6109,118 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     },
 
+    /**
+     * Artifact `id` as the files a session hands another (hub
+     * handed-inputs.ts), for a session that reads it as `artifact_read` does
+     * ({@link readTarget}), each named `artifact-<name>.<ext>`, and none of
+     * it the owner's read:
+     * - a page: its HTML, its program when a decision page, and its picks
+     *   and notes as JSON;
+     * - a preview: its source, picks and stage as JSON with a pass into it,
+     *   minted when it is written for the session it is handed to, whose
+     *   browser alone it lets in; when that session's workspace cannot reach
+     *   the preview's origin ({@link ArtifactServiceDeps.workspaceReach}),
+     *   no pass, and why, in its place;
+     * - a canvas: its scene (`.excalidraw`) and outline;
+     * - a component canvas: its stories, stage, picks and what its stage
+     *   drew, read as `artifact_read` with `render` and `png` reads it, its
+     *   frames as drawn the picture, and `states`, the states files for the
+     *   caller to read from its workspace;
+     * and the latest picture of any that has one.
+     */
+    handed: async (
+      instanceId: string,
+      id: string
+    ): Promise<{
+      files: HandedArtifactFile[];
+      row: ArtifactRow;
+      states: { files: string[]; workspace: string } | null;
+    }> => {
+      const instance = sessionOf(instanceId);
+      const row = readTarget(instance, id);
+      const base = `artifact-${row.name}`;
+      const files: HandedArtifactFile[] = [];
+      let drawn: Buffer | null = null;
+      let states: { files: string[]; workspace: string } | null = null;
+      if (row.kind === "browser") {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is a browser: nothing of it is a file. Hand what it shows as a preview, or its URL as text.`
+        );
+      }
+      if (row.kind === "canvas") {
+        const { file, outline } = canvasFile(row.id);
+        files.push(
+          { name: `${base}.excalidraw`, bytes: jsonFile(file) },
+          { name: `${base}.md`, bytes: Buffer.from(`${outline}\n`) }
+        );
+      } else if (row.kind === "page") {
+        const program = programOf(row);
+        files.push(
+          {
+            name: `${base}.html`,
+            bytes: readFileSync(join(deps.root, row.id, "index.html")),
+          },
+          ...(program === undefined
+            ? []
+            : [{ name: `${base}.oui`, bytes: Buffer.from(program) }]),
+          { name: `${base}.json`, bytes: jsonFile(read(row, undefined, false)) }
+        );
+      } else if (row.kind === "preview") {
+        // Refused now, in its words, when it has no address to open: the
+        // pass the receiver gets is minted once its session stands.
+        deps.browse(instance, row);
+        const stands = {
+          ...read(row, undefined, false),
+          source: row.source,
+          machine: machineOf(row),
+        };
+        files.push({
+          name: `${base}.json`,
+          bytes: async ({ session, machineId }) => {
+            const pass = deps.browse(session, row);
+            const unreached = await deps.workspaceReach(pass.url, machineId);
+            return jsonFile(
+              unreached
+                ? {
+                    ...stands,
+                    pass: null,
+                    reach: `${unreached}. What you have of it is this file and its latest picture, ${base}.png, when it has one; for more, ask your parent with handoff.`,
+                  }
+                : {
+                    ...stands,
+                    pass: {
+                      ...pass,
+                      how: `Load url once in your own browser tool: it lets that browser into ${row.name}${pass.expiresAt ? ` until expiresAt or your session ends; artifact_browse { id: "${row.id}" } gives you a fresh one` : ""}.`,
+                    },
+                  }
+            );
+          },
+        });
+      } else {
+        const sheet = sheetOf(row);
+        const { png, ...answer } = await readSheet(row, undefined, false, {
+          render: true,
+          png: true,
+        });
+        drawn = png ? Buffer.from(png, "base64") : null;
+        states = sheet && { files: sheet.files, workspace: sheet.workspace };
+        files.push({
+          name: `${base}.json`,
+          bytes: jsonFile({
+            ...answer,
+            files: sheet?.files ?? [],
+            sheet: docs.doc(row.id).getMap("meta").get("sheet") ?? null,
+          }),
+        });
+      }
+      const picture = drawn ?? latestPicture(row);
+      if (picture) {
+        files.push({ name: `${base}.png`, bytes: picture });
+      }
+      return { files, row, states };
+    },
+
     /** A canvas's `.excalidraw` file, its outline and its latest picture: what a send carries. */
     export: (id: string): CanvasExport => {
       const row = db.get(id);
@@ -5146,12 +6321,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       id: string,
       by: PanelHand
-    ): Promise<Opened> => {
+    ): Promise<Shown> => {
       const instance = sessionOf(instanceId);
       const found = viewable(instance, id);
       let row = found.heldFor === null ? found : db.get(found.heldFor);
       if (!row) {
-        throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+        throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
       }
       const next =
         by === "agent" && row.instanceId === instance.id
@@ -5164,7 +6339,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }
-      return openedOf(shown);
+      // The agent's show of its own asks again (needs.ts rule 2: a new show of it).
+      if (by === "agent" && row.instanceId === instance.id) {
+        askedNow(instance, row.id);
+      }
+      // Its link: what the agent names it by, and its tool row draws.
+      return { ...openedOf(shown), link: artifactLink(row.id, row.name) };
     },
 
     /**
@@ -5172,9 +6352,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * artifact `id`, for any artifact `artifact_read` reads ({@link
      * readTarget}): its maker opens what it changed, the next version held
      * for its parent. A browser artifact is the browser itself, and opens
-     * nothing.
+     * nothing. A session in a workspace whose boundary cannot reach the
+     * address ({@link ArtifactServiceDeps.workspaceReach}) is refused, in
+     * words saying why, rather than handed an address it cannot open.
      */
-    browse: (instanceId: string, id: string): Browsed => {
+    browse: async (
+      instanceId: string,
+      id: string
+    ): Promise<Browsed & { link: string }> => {
       const instance = sessionOf(instanceId);
       const row = readTarget(instance, id);
       if (row.kind === "browser") {
@@ -5183,7 +6368,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `${row.name} is a browser: it is the browser your browser tool drives, so open its pages there.`
         );
       }
-      return deps.browse(instance, row);
+      const pass = deps.browse(instance, row);
+      const bound = deps.ownWorkspace(instance);
+      const [workspace] = bound ? deps.workspaces(bound) : [];
+      const unreached = workspace
+        ? await deps.workspaceReach(pass.url, workspace.machineId)
+        : null;
+      if (unreached) {
+        throw new ArtifactRefusal(
+          409,
+          `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`
+        );
+      }
+      return { ...pass, link: artifactLink(row.id, row.name) };
     },
 
     /**
@@ -5196,6 +6393,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      *   ({@link ArtifactServiceDeps.personShown}), or closes the panel: an
      *   agent taking something away never brings a different artifact
      *   forward as if it wanted the person there.
+     * A session up the delegation tree of a writer whose work item ended
+     * removes that writer's too ({@link deletable}); the writer's panel that
+     * showed it closes, else it hears its artifacts again.
      * Answers what the panel shows after.
      */
     remove: async (
@@ -5204,8 +6404,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       by: PanelHand
     ): Promise<Removed> => {
       const instance = sessionOf(instanceId);
-      const row = own(instance, id);
+      const row = deletable(instance, id);
       const wasShown = deps.showing(instance.id) === row.id;
+      const writerShown = row.instanceId !== instance.id && inPanel(row);
       // A project's page is its source in the project's folder: both go, the
       // source first, so a refused commit leaves the page as it was.
       if (isProjectPage(row)) {
@@ -5219,6 +6420,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
       }
       discard(row);
+      if (row.instanceId !== instance.id) {
+        if (writerShown) {
+          await deps.close(row.instanceId as string);
+        } else {
+          relistOf(row);
+        }
+      }
       if (!wasShown) {
         deps.relist(instance.id);
         const shown = deps.showing(instance.id);
@@ -5233,6 +6441,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       await deps.close(instance.id);
       return { showing: null };
+    },
+
+    /**
+     * Session `instanceId`'s browser artifact, once its work item ended: it
+     * goes from every list, and the panel that showed it closes. Its
+     * browser itself is its project's (or its machine's), shared by every
+     * session there, and stays. Nothing when it has none.
+     */
+    dropBrowser: async (instanceId: string): Promise<void> => {
+      const row = db
+        .ofInstance(instanceId)
+        .find((one) => one.kind === "browser");
+      if (!row) {
+        return;
+      }
+      const shown = inPanel(row);
+      discard(row);
+      if (shown) {
+        await deps.close(instanceId);
+      } else {
+        deps.relist(instanceId);
+      }
     },
 
     /**
@@ -5264,6 +6494,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const row = viewable(sessionOf(instanceId), id);
       if (ack.ok && row.instanceId === instanceId) {
         db.update(row.id, { openedRevision: row.revision });
+        // The person's look (needs.ts rule 6): their own mark in the doc, on every device.
+        docs.transact(row.id, "hub", (doc) =>
+          doc.getMap("meta").set("lookedAt", new Date().toISOString())
+        );
+        deps.looked(row.id);
+        deps.needsMoved();
       }
       const key = shownKey(row.id, ack.revision);
       const waiter = waiting.get(key);
@@ -5325,7 +6561,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
         const answered = pins.map((pin) => {
           const inkBox = pin.ink ? groups[pin.ink]?.page : undefined;
-          return inkBox ? { ...pin, inkBox } : pin;
+          const link = linkOfPin(row.id, pin);
+          return inkBox ? { ...pin, inkBox, link } : { ...pin, link };
         });
         const address =
           (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
@@ -5336,6 +6573,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
                 id: row.id,
                 kind: row.kind,
                 name: row.name,
+                link: artifactLink(row.id, row.name),
                 address,
                 pins: answered,
               },
@@ -5351,7 +6589,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       pinId: string,
       text: string,
       files?: string[]
-    ): { entry: ThreadEntry; number: number; pin: string } => {
+    ): { entry: ThreadEntry; link: string; number: number; pin: string } => {
       const { row, pin } = pinOf(sessionOf(instanceId), pinId);
       if (pin.thread.length >= COMMENT_LIMITS.entries) {
         throw new ArtifactRefusal(
@@ -5373,7 +6611,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           .getMap("pins")
           .set(pin.id, { ...before, thread: [...before.thread, entry] })
       );
-      return { pin: pin.id, number: pin.number, entry };
+      return {
+        pin: pin.id,
+        number: pin.number,
+        link: linkOfPin(row.id, pin),
+        entry,
+      };
     },
 
     /** The agent resolves a pin, with a last reply when given; the person can reopen it. */
@@ -5381,7 +6624,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       pinId: string,
       text?: string
-    ): { number: number; pin: string; resolvedAt: string } => {
+    ): { link: string; number: number; pin: string; resolvedAt: string } => {
       const { row, pin } = pinOf(sessionOf(instanceId), pinId);
       const at = new Date().toISOString();
       const thread = text
@@ -5395,7 +6638,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             },
           ].slice(-COMMENT_LIMITS.entries)
         : pin.thread;
-      const resolved: Pin = { ...pin, thread, resolvedAt: at };
+      // The agent's resolve is an answer: the person's next look takes it in (core `newAnswer`).
+      const resolved: Pin = {
+        ...pin,
+        thread,
+        resolvedAt: at,
+        resolvedBy: "agent",
+      };
       // The agent's own resolve is not the person's to tell it of.
       docs.transact(row.id, "hub", (doc) =>
         doc.getMap("pins").set(pin.id, {
@@ -5403,14 +6652,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ...(pin.heard === undefined ? {} : { heard: pinSaid(resolved) }),
         })
       );
-      return { pin: pin.id, number: pin.number, resolvedAt: at };
+      return {
+        pin: pin.id,
+        number: pin.number,
+        link: linkOfPin(row.id, pin),
+        resolvedAt: at,
+      };
     },
+
+    /** The person changed artifact `id`'s doc: what of it the session hasn't heard goes once quiet ({@link personMarked}). */
+    personMarked,
 
     /**
      * The page's pictures of the marks the person just made there (core
      * `MarkPictures`), each a crop round one mark, by the pin's or the
-     * stroke group's id: the next delivery carries the ones it delivers. A
-     * later post replaces a mark's picture.
+     * stroke group's id, kept on disk ({@link heldPictures}): the next
+     * delivery carries the ones it delivers. A later post replaces a mark's
+     * picture.
      */
     pictures: (
       instanceId: string,
@@ -5418,25 +6676,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       body: MarkPictures
     ): { held: number } => {
       const row = own(sessionOf(instanceId), id);
-      const kept: { pictures: Map<string, string>; url?: string } = held.get(
-        row.id
-      ) ?? { pictures: new Map() };
-      for (const picture of body.pictures) {
-        kept.pictures.set(picture.mark, picture.png);
-      }
-      if (body.url) {
-        kept.url = body.url;
-      }
-      held.set(row.id, kept);
-      return { held: kept.pictures.size };
+      // On disk before the page hears it was held: a restart keeps it for the delivery.
+      held.hold(row.id, body);
+      return { held: held.marks(row.id).length };
     },
 
     /**
      * After a restart: each artifact changed within the last day has its
-     * sheet's saves and errors scheduled again, so those written just before
-     * the hub went down still go (nothing owed, nothing goes). The person's
-     * marks wait for their Send. A day, our call: a hub down longer than
-     * that has a person who has moved on.
+     * delivery scheduled again, so the person's marks and a sheet's saves
+     * and errors written just before the hub went down still go (nothing
+     * owed, nothing goes). A day, our call: a hub down longer than that has
+     * a person who has moved on.
      */
     resumeMarks: (): void => {
       for (const row of db.touchedSince(new Date(Date.now() - 86_400_000))) {
@@ -5445,16 +6695,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * The person's Send (the panel's Send, a page's `cawco.send`): one press
-     * sends everything the session hasn't heard of the artifact. Their
-     * comments, replies, resolves and ink go as one message, the note
-     * (`body.text`) its first section, exactly once ({@link deliverMarks});
-     * their picks are applied first (`sending`), and the session hears it
-     * has new responses to read ({@link ArtifactServiceDeps.signal}) when
-     * there are picks, or a note with nothing else. The note is kept as
-     * `sentText` for `artifact_read`. A Send while one is on its way, or
-     * with nothing new, is refused; one no one took says why, and what it
-     * carried stays owed.
+     * The person's Send (the panel's Send, a page's `cawco.send`): their
+     * picks are applied (`sending`) and the session hears it has new
+     * responses to read ({@link ArtifactServiceDeps.signal}), the note
+     * (`body.text`) kept as `sentText` for `artifact_read`. Their comments
+     * are not its to carry: they go by themselves ({@link marked}). With
+     * `body.pins`, a comment's Try again after a delivery no one took: those
+     * comments go now ({@link retry}), and the page's Send time stands. A
+     * Send with nothing new is refused.
      */
     send: async (
       instanceId: string,
@@ -5465,52 +6713,41 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const row = own(instance, id);
       const doc = docs.doc(row.id);
       const state = stateOf(doc);
-      const { sentAt } = metaOf(doc);
-      const picked = Object.values(state).some(
-        (entry) => !sentAt || entry.at > sentAt
-      );
-      const { owed, loose } = marksOwed(doc);
-      const marks = owed.length + loose.length > 0;
-      const note = body.text?.trim() || null;
-      if (!(picked || marks || note)) {
-        throw new ArtifactRefusal(
-          409,
-          "Nothing new to send: every pick and comment here has gone to the session."
-        );
+      if (body.pins) {
+        await retry(row, new Set(body.pins));
+        return { choices: state, ...metaOf(doc) };
       }
-      if (delivering.has(row.id)) {
-        throw new ArtifactRefusal(
-          409,
-          "A Send is already on its way to the session, so this one didn't go."
-        );
+      const { picked, note } = sendOwes(doc, state, body);
+      if (picked) {
+        await deps.sending(instance, row, state);
       }
-      delivering.add(row.id);
-      try {
-        if (picked) {
-          await deps.sending(instance, row, state);
-        }
-        if (marks) {
-          const outcome = await deliverMarks(row.id, { note });
-          if (outcome !== "nothing" && !outcome.ok) {
-            throw new ArtifactRefusal(
-              503,
-              `The session didn't get the comments: ${outcome.reason.replace(FINAL_STOP, "")}. They're kept; Send again.`
-            );
-          }
-        }
-        if (picked || !marks) {
-          await deps.signal(instance, row, { since: row.deliveredSeq });
-        }
-      } finally {
-        delivering.delete(row.id);
-      }
+      await deps.signal(instance, row, { since: row.deliveredSeq });
       const at = new Date().toISOString();
       docs.transact(row.id, "hub", (live) => {
         const meta = live.getMap("meta");
         meta.set("sentAt", at);
         meta.set("sentText", note);
+        // His Send is a look at everything on this revision: every change and every answer.
+        const changes = meta.get("changes") as ArtifactChanges | undefined;
+        if (changes) {
+          seeChanges(
+            live,
+            changes.revision,
+            changes.items.map((item) => item.anchor)
+          );
+        }
+        const pins = live.getMap("pins");
+        for (const [pinId, pin] of [...pins.entries()] as [string, Pin][]) {
+          if (newAnswer(pin)) {
+            pins.set(pinId, { ...pin, seenAt: at });
+          }
+        }
       });
-      db.update(row.id, { deliveredSeq: (db.get(row.id) as ArtifactRow).seq });
+      answeredBy(
+        db.update(row.id, {
+          deliveredSeq: (db.get(row.id) as ArtifactRow).seq,
+        }) as ArtifactRow
+      );
       return { choices: state, ...metaOf(doc) };
     },
   };

@@ -5,9 +5,11 @@
  *
  *   bun scripts/probe-kit/run.ts web files-panel
  *
- * A scratch fleet; three sessions: one with nothing, one with one page, and
- * one with 42 pages (one with a 63-character name, one whose words hold
- * "pricing tiers", one whose kept picture won't decode, two never pictured)
+ * A scratch fleet; three sessions: one with nothing, one with one page (its
+ * picture 305×656, taller than a card's 3:4), and one with 42 pages (one with
+ * a 63-character name, one whose words hold "pricing tiers", one whose kept
+ * picture won't decode, two never pictured, one picture 305×656 and one
+ * 1600×320, and two decision pages never pictured, one titled in 40 words)
  * and nine attachments (texts and pictures, over three sends). Seeded
  * through the hub's own routes, as the dashboard and the pane write them.
  * At 1440 (desk), 680 and 390, light and dark:
@@ -31,29 +33,55 @@
  *     Artifacts | Attachments tabs (pins 3, 11);
  * 10. none, one, the list unreadable (offline): each says so in place;
  * 11. the overflow sweep (journeys/scan.ts) over every state totals zero;
- * 12. no console error.
+ * 12. no console error;
+ * 33. at 390, 680 and 1440, in Chromium and WebKit, with one card and with
+ *     many: every card, and everything its thumbnail paints, lies inside the
+ *     card's slot in the masonry, every card inside Files' region, and an
+ *     overflow scan of Files totals zero.
+ * 34. Thumbnails | List (owner: "i want to be able to toggle this to list or
+ *     thumbnails"): at 390, 680 and 1440, in Chromium and WebKit, with one
+ *     artifact and with many (a 63-character name, a 40-word title), the
+ *     switch stands in the Artifacts head inside Files; in the list the rows
+ *     never overlap and nothing they draw stands past their row or Files'
+ *     edge, the "N more" sign counts the rows below the fold, and back in
+ *     thumbnails the cards keep their slots (33's read);
+ * 35. the choice survives a reload, and holds where Files opens next (the
+ *     bar's card, then the phone's drawer);
+ * 36. a row opens its artifact as its card does (floating on Files' left,
+ *     the row the one on show);
+ * 37. the switch's motion on the clock: every row slides on one clock (one
+ *     start, length and curve) from its card's place to its row's; with
+ *     less motion nothing travels.
  *
- * One capture per state at 390 and 1440, light and dark, in caps/files-panel/.
+ * One capture per state at 390 and 1440, light and dark, in the run's output
+ * folder (`kit.out`).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { commonWords } from "../../../../packages/core/src/words/common";
+import { filesWords } from "../../../../packages/core/src/words/files";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { tokenColour } from "../../geom";
 import { scan } from "../../journeys/scan";
 import {
   COMPOSER,
+  type Engine,
   type Kit,
+  kitsOwnMessage,
+  type MotionRun,
   open,
-  ROOT,
+  readMotion,
   type Spec,
+  specOut,
+  stillWithin,
   THEMES,
   type Theme,
   type View,
 } from "../../kit";
 
-const CAPS = join(ROOT, "caps", "files-panel");
+const CAPS = specOut("files-panel");
 const MANY = 42;
 const LONG_NAME =
   "a-page-whose-name-runs-on-and-on-to-the-very-end-of-what-it-may";
@@ -61,15 +89,78 @@ const PRICING = "pricing-notes";
 const BROKEN = "broken-picture";
 const UNPICTURED = ["never-pictured", "also-unpictured"];
 const ATTACHMENT_SENDS = 3;
+/** A picture taller than the cards' 3:4: the owner's "What workflows become", 305×656. */
+const TALL = "tall-decision-picture";
+/** A picture five times wider than tall. */
+const WIDE = "wide-picture";
+/** Each seeded picture's own size, where it is not the 320-wide default. */
+const SHAPES: Record<string, [number, number]> = {
+  [TALL]: [305, 656],
+  [WIDE]: [1600, 320],
+  "the-only-page": [305, 656],
+};
+/** A decision page's title of 40 words. */
+const FORTY_WORDS = Array.from(
+  { length: 40 },
+  (_, i) =>
+    [
+      "what",
+      "workflows",
+      "become",
+      "once",
+      "a",
+      "saved",
+      "program",
+      "runs",
+      "real",
+      "delegates",
+    ][i % 10]
+).join(" ");
+/** Decision pages no pane has drawn: Files draws them unseen, through the overlay's own picture. */
+const DECISIONS = [
+  {
+    name: "what-workflows-become",
+    program: `root = Decisions("${FORTY_WORDS}", [shape])
+shape = Decision("shape", "A saved program that runs real delegates", [saved, adhoc], "Today a workflow is a script in the session.")
+saved = Option("saved", "A saved program", "Runs again from the project, with its own name.", true, [], "One more thing to keep.")
+adhoc = Option("adhoc", "As it is", "Nothing new to learn.", false, [], "Nothing to run again.")`,
+  },
+  {
+    name: "resize-handle-pick",
+    program: `root = Decisions("Which resize handle?", [handle])
+handle = Decision("handle", "Which handle does the panel's edge wear?", [bead, light], "Today the edge has none.")
+bead = Option("bead", "A bead", "A dot at the edge's middle.", true, [], "It covers a line of the page.")
+light = Option("light", "A light", "The edge lights under the pointer.", false, [], "Nothing shows until the pointer comes.")`,
+  },
+];
 
-/** The session's artifact list read, which the offline leg refuses. */
-const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts$/;
+/** Files' read of the session's artifacts (those that reached the person), which the offline leg refuses. */
+const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts\/files$/;
 /** Files' search of a session's artifacts. */
 const SEARCH_READ = /\/artifacts\/search\?/;
 /** The session's attachments read. */
 const ATTACHMENT_LIST = /\/api\/instances\/[^/]+\/attachments$/;
-/** How long the slow legs hold each list read back: past the grace, so the skeleton stands. */
-const HELD_MS = 2500;
+/**
+ * The session's two list reads, held until the leg releases them, so the
+ * skeleton stands past the grace however long the page took to open: they
+ * start once the conversation is on screen (files.svelte.ts `followFiles`,
+ * for the bar's count), not when Files opens.
+ */
+const heldReads = () => {
+  let release: () => void = () => undefined;
+  const released = new Promise<void>((done) => {
+    release = () => done();
+  });
+  const hold = async (page: Page) => {
+    for (const read of [ARTIFACT_LIST, ATTACHMENT_LIST]) {
+      await page.route(read, async (route) => {
+        await released;
+        await route.continue();
+      });
+    }
+  };
+  return { hold, release: () => release() };
+};
 /** The sidebar row's name once its count stands. */
 const FILES_COUNTED = /Files, \d+/;
 
@@ -81,17 +172,87 @@ const watch = (page: Page) => {
   const seen: string[] = [];
   errors.set(page, seen);
   page.on("console", (message) => {
-    if (message.type() === "error") {
+    if (message.type() === "error" && !kitsOwnMessage(message.text())) {
       seen.push(message.text());
     }
   });
   page.on("pageerror", (error) => seen.push(String(error)));
 };
 
-/** The overflow sweep's findings, summed over every state. */
+/** What Files is drawn in: the drawer, the bar's card, each region and its "N more" sign, and a picked artifact's float. */
+const FILES_PARTS =
+  "[data-files-sheet], [data-glass-card-frame='files-pop'], [data-files-region], [data-files-more], [data-files-float]";
+
+/**
+ * Waits until Files stands as the person comes to see it: nothing on the
+ * page running (kit `stillWithin`), no words mid-morph (MorphText draws its
+ * letters only while it swaps them), and Files' boxes and counts the same
+ * for three frames. WebKit told the drawer's rise to its stop as finished
+ * while its box still stood 15–40px under it (680: transform 264.6 →
+ * 246.9, landing at 225), and an "N more" sign's count rolled from 37 to
+ * 41 as the sweep read it: the sweep named both a spill. Answers why it
+ * never stood still, or null.
+ */
+const filesAtRest = async (page: Page): Promise<string | null> => {
+  const moving = await stillWithin(page, "body", { ms: 5000 });
+  if (moving.length > 0) {
+    return `the page still moves: ${moving.slice(0, 4).join(", ")}`;
+  }
+  return page.evaluate(async (parts) => {
+    const read = () =>
+      [...document.querySelectorAll(parts)]
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return `${r.x},${r.y},${r.width},${r.height} ${el.getAttribute("data-files-more") ?? ""}`;
+        })
+        .join(" | ");
+    const morphing = () =>
+      document.querySelector(
+        '[data-slot="morph-text"] [data-slot="letters"]'
+      ) !== null;
+    const deadline = performance.now() + 5000;
+    let last = read();
+    for (let same = 0; same < 3;) {
+      if (performance.now() > deadline) {
+        return `Files never stood still for three frames${morphing() ? " (words still morphing)" : ""}: ${last}`;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until three pass still
+      await new Promise((done) => requestAnimationFrame(done));
+      const now = read();
+      same = now === last && !morphing() ? same + 1 : 0;
+      last = now;
+    }
+    return null;
+  }, FILES_PARTS);
+};
+
+/** Files at rest before a read of it, or the run stops on why it never stood still. */
+const atRest = async (page: Page): Promise<void> => {
+  const restless = await filesAtRest(page);
+  if (restless) {
+    throw new Error(restless);
+  }
+};
+
+/** Waits until `holds` reads true in the page; false when it never does within `ms`, for the check to say. */
+const comes = (
+  page: Page,
+  holds: () => boolean,
+  ms = 15_000
+): Promise<boolean> =>
+  page.waitForFunction(holds, null, { timeout: ms }).then(
+    () => true,
+    () => false
+  );
+
+/** The overflow sweep's findings, summed over every state: each read once Files stands still. */
 const sweeps: { state: string; findings: string[] }[] = [];
 const sweep = async (page: Page, state: string) => {
-  sweeps.push({ state, findings: await page.evaluate(scan) });
+  const restless = await filesAtRest(page);
+  sweeps.push({
+    state,
+    findings: restless ? [restless] : await page.evaluate(scan),
+  });
 };
 
 const shot = async (page: Page, name: string) => {
@@ -113,9 +274,10 @@ const openSession = async (
   view: View,
   theme: Theme,
   id: string,
-  before?: (page: Page) => Promise<void>
+  before?: (page: Page) => Promise<void>,
+  engine?: Engine
 ): Promise<Page> => {
-  const page = await kit.page(view, { theme });
+  const page = await kit.page(view, { theme, engine });
   watch(page);
   await page.addInitScript(
     ([tab]) => {
@@ -143,7 +305,7 @@ const openSession = async (
 const seed = (page: Page, id: string, names: string[]) =>
   page.evaluate(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, every seed in it
-    async ({ instanceId, names: all, pricing, broken, unpictured }) => {
+    async ({ instanceId, names: all, pricing, broken, unpictured, shapes }) => {
       const made: string[] = [];
       for (const [i, name] of all.entries()) {
         const words =
@@ -186,8 +348,12 @@ const seed = (page: Page, id: string, names: string[]) =>
           light = btoa(String.fromCharCode(...bytes));
         } else {
           const canvas = document.createElement("canvas");
-          canvas.width = 320;
-          canvas.height = [200, 240, 427, 180][i % 4] ?? 200;
+          const [w, h] = shapes[name] ?? [
+            320,
+            [200, 240, 427, 180][i % 4] ?? 200,
+          ];
+          canvas.width = w;
+          canvas.height = h;
           const ctx = canvas.getContext("2d");
           if (ctx) {
             ctx.fillStyle = `oklch(0.94 0.03 ${(i * 37) % 360})`;
@@ -224,7 +390,37 @@ const seed = (page: Page, id: string, names: string[]) =>
       pricing: PRICING,
       broken: BROKEN,
       unpictured: UNPICTURED,
+      shapes: SHAPES,
     }
+  );
+
+/** Seeds the decision pages, unpictured, as a session's agent makes them (OpenUI programs). */
+const seedDecisions = (page: Page, id: string) =>
+  page.evaluate(
+    async ({ instanceId, pages }) => {
+      for (const { name, program } of pages) {
+        const response = await fetch(
+          `/api/instances/${encodeURIComponent(instanceId)}/artifacts`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              kind: "page",
+              name,
+              does: "pick",
+              ask: "Pick one option on each card",
+              program,
+            }),
+          }
+        );
+        if (!response.ok) {
+          throw new Error(
+            `create ${name}: ${response.status} ${await response.text()}`
+          );
+        }
+      }
+    },
+    { instanceId: id, pages: DECISIONS }
   );
 
 /** A small PNG, base64, a picture an attachment carries. */
@@ -256,7 +452,7 @@ const run = async (kit: Kit) => {
   const seeder = await openSession(kit, base, "desk", "light", many);
   const names = [
     ...Array.from(
-      { length: MANY - 4 - UNPICTURED.length },
+      { length: MANY - 6 - UNPICTURED.length - DECISIONS.length },
       (_, i) => `page-${i + 1}`
     ),
     LONG_NAME,
@@ -264,8 +460,12 @@ const run = async (kit: Kit) => {
     BROKEN,
     "tall-board",
     ...UNPICTURED,
+    WIDE,
+    TALL,
   ];
   await seed(seeder, many, names);
+  // The newest: decision pages, at the top of the masonry as the owner's were.
+  await seedDecisions(seeder, many);
   await seed(seeder, one, ["the-only-page"]);
   await seeder.close();
   // Three sends, each carrying two texts and a picture.
@@ -305,6 +505,8 @@ const run = async (kit: Kit) => {
   await reviewLegs(kit, base, { many, one });
   await askLegs(kit, base, none, noneOpenCode);
   await roundThree(kit, base, fleet, { many, one, none });
+  await slotLegs(kit, base, { many, one });
+  await viewLegs(kit, base, { many, one });
   for (const theme of THEMES) {
     await desk(kit, base, theme, { many, one, none });
     for (const view of ["phone", "narrowDesk"] as const) {
@@ -395,7 +597,7 @@ const desk = async (
   const panel = page.locator("[data-glass-card-frame='files-pop']");
   await panel.waitFor();
   await page.locator("[data-files-card]").first().waitFor();
-  await page.waitForTimeout(600);
+  await atRest(page);
 
   // 2. It floats.
   const floats = await page.evaluate(() => {
@@ -513,11 +715,33 @@ const desk = async (
   );
 
   // 8. Pictures that don't load, and pages never pictured, stand as glyphs.
+  // A card's picture is asked for once it nears the region's view (lazy), so
+  // the broken one is scrolled to, as a person would, and the region back.
+  await page
+    .locator(`[data-files-card][title="${BROKEN}"]`)
+    .scrollIntoViewIfNeeded();
+  await until(
+    "the broken picture's glyph",
+    () =>
+      page
+        .locator(
+          `[data-files-card][title="${BROKEN}"] [data-files-thumb="glyph"]`
+        )
+        .count(),
+    (n) => n > 0,
+    10_000
+  ).catch(() => 0);
   const glyphs = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>("[data-files-card]")]
       .filter((card) => card.querySelector('[data-files-thumb="glyph"]'))
       .map((card) => card.title)
   );
+  await page.evaluate(() => {
+    const scroller = document.querySelector(
+      '[data-files-region="artifacts"] [data-files-scroll]'
+    );
+    scroller?.scrollTo({ top: 0 });
+  });
   kit.check(
     `8 (${theme}): a picture that won't decode stands as its kind's glyph in the well`,
     glyphs.includes(BROKEN),
@@ -603,8 +827,12 @@ const desk = async (
       ) &&
       byTitle.length === 1 &&
       byTitle[0] === "tall-board" &&
-      nothing.some((line) => line.includes("No artifacts match")) &&
-      nothing.some((line) => line.includes("No attachments match")),
+      nothing.some(
+        (line) => line.trim() === filesWords.noArtifactsMatch("invoice")
+      ) &&
+      nothing.some(
+        (line) => line.trim() === filesWords.noAttachmentsMatch("invoice")
+      ),
     `content ${JSON.stringify(byContent)}; title ${JSON.stringify(byTitle)}; none ${JSON.stringify(nothing)}`
   );
   await field.fill("");
@@ -613,7 +841,7 @@ const desk = async (
   await page.locator(`[data-files-card][title="${PRICING}"]`).click();
   const float = page.locator("[data-files-float]");
   await float.waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(600);
+  await filesAtRest(page);
   const picked = await page.evaluate(() => {
     const pop = document
       .querySelector("[data-glass-card-frame='files-pop']")
@@ -661,7 +889,12 @@ const desk = async (
     const each = await openSession(kit, base, "desk", theme, id);
     await each.locator("[data-files-control]").click();
     await each.locator("[data-glass-card-frame='files-pop']").waitFor();
-    await each.waitForTimeout(600);
+    // The read answered: its empty state, or its card.
+    await each
+      .locator("[data-files-empty], [data-files-card]")
+      .first()
+      .waitFor({ timeout: 30_000 });
+    await atRest(each);
     const said = await each.evaluate(() => ({
       empty: !!document.querySelector("[data-files-empty]"),
       cards: document.querySelectorAll("[data-files-card]").length,
@@ -689,7 +922,7 @@ const desk = async (
   const failedSaid = await offline.locator("[data-files-failed]").textContent();
   kit.check(
     `10 offline (${theme}): the list unread says so in Artifacts' place, with Try again, the attachments still listed`,
-    !!failedSaid?.includes("Couldn't read") &&
+    !!failedSaid?.includes(filesWords.cantReadArtifacts) &&
       (await offline
         .locator('[data-files-region="attachments"] [data-files-row]')
         .count()) > 0,
@@ -728,24 +961,14 @@ const reviewLegs = async (
   ids: { many: string; one: string }
 ) => {
   // 13. Both reads held back past the grace: nothing, then the skeleton, then the read.
+  const slowReads = heldReads();
   const slow = await openSession(
     kit,
     base,
     "desk",
     "light",
     ids.many,
-    async (p) => {
-      for (const read of [ARTIFACT_LIST, ATTACHMENT_LIST]) {
-        await p.route(read, async (route) => {
-          await new Promise((done) => setTimeout(done, HELD_MS));
-          await route.continue();
-        });
-      }
-    }
-  );
-  await recordIntros(
-    slow,
-    '[data-files-region="artifacts"] [data-files-scroll]'
+    slowReads.hold
   );
   await slow.locator("[data-files-control]").click();
   await slow.locator("[data-glass-card-frame='files-pop']").waitFor();
@@ -770,12 +993,23 @@ const reviewLegs = async (
       "[data-glass-card-frame='files-pop'] [data-files-head-count]"
     ).length,
   }));
-  await slow.locator("[data-files-card]").first().waitFor({ timeout: 15_000 });
-  await slow.waitForTimeout(400);
-  const arrival = await introsOf(slow);
-  const crossMs = await durationOf(slow, "--dur-control");
+  // The read's arrival, as the kit reads motion: each run's length.
+  const arriving = await readMotion(
+    slow,
+    async () => {
+      slowReads.release();
+      await slow
+        .locator("[data-files-card]")
+        .first()
+        .waitFor({ timeout: 15_000 });
+    },
+    '[data-files-region="artifacts"] [data-files-scroll]',
+    { ms: 15_000 }
+  );
+  const arrival = lengths(arriving.runs);
+  const crossMs = await durationOf(slow, "--dur-skeleton-reveal");
   kit.check(
-    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read takes the skeleton's place in one cross-fade over --dur-control (crossIn)",
+    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read takes the skeleton's place in the skeleton's reveal over --dur-skeleton-reveal (reveal)",
     atOpen.waits === 0 &&
       atOpen.counts === 0 &&
       atOpen.none === 0 &&
@@ -784,7 +1018,7 @@ const reviewLegs = async (
       pastGrace.attachmentsWait &&
       pastGrace.counts === 0 &&
       arrival.includes(crossMs),
-    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)} (--dur-control ${crossMs})`
+    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)}, read by ${arriving.by} (--dur-skeleton-reveal ${crossMs}): ${JSON.stringify(arriving.runs)}`
   );
   await slow.close();
 
@@ -810,11 +1044,11 @@ const reviewLegs = async (
   // Its Try again by its accessible name: a kit Button's text holds its pending words too.
   const refusedRetry = await refused
     .locator('[data-files-region="attachments"] [data-files-failed]')
-    .getByRole("button", { name: "Try again", exact: true })
+    .getByRole("button", { name: commonWords.tryAgain, exact: true })
     .count();
   kit.check(
     "14: the attachments read refused says so in its region (RowFault, Try again), the artifacts still listed, and the bar claims no count",
-    !!refusedSaid.fault?.includes("Couldn't read this session's attachments") &&
+    !!refusedSaid.fault?.includes(filesWords.cantReadAttachments) &&
       refusedRetry > 0 &&
       refusedSaid.cards > 0 &&
       refusedSaid.count === null,
@@ -830,10 +1064,10 @@ const reviewLegs = async (
   await page.locator("[data-files-control]").focus();
   await page.keyboard.press("Enter");
   await page.locator("[data-files-card]").first().waitFor();
-  await page.waitForTimeout(400);
+  await atRest(page);
   const order = await page.evaluate(async (id) => {
     const listed = (await (
-      await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts`)
+      await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts/files`)
     ).json()) as { id: string }[];
     const cards = [
       ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
@@ -901,7 +1135,11 @@ const reviewLegs = async (
   await page
     .locator("[data-files-float][data-state='open']")
     .waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(500);
+  // The pick's focus move, which the check reads.
+  await comes(
+    page,
+    () => !!document.activeElement?.closest("[data-files-float]")
+  );
   const afterPick = await focused(page);
   const floatRole = await page.evaluate(() => {
     const float = document.querySelector<HTMLElement>("[data-files-float]");
@@ -927,7 +1165,13 @@ const reviewLegs = async (
   await page
     .locator("[data-files-float]")
     .waitFor({ state: "detached", timeout: 10_000 });
-  await page.waitForTimeout(200);
+  // The focus handed back to a card, which the check reads.
+  await comes(
+    page,
+    () =>
+      (document.activeElement as HTMLElement | null)?.dataset.artifact !==
+      undefined
+  );
   const afterClose = await focused(page);
   kit.check(
     "17: a keyboard pick moves the focus to the panel's name in the float (a region named for the artifact, after Files in the page); its Close gives it back to the artifact's card",
@@ -944,13 +1188,18 @@ const reviewLegs = async (
     .locator('[data-files-region="attachments"] button[data-menu-item]')
     .first()
     .click();
-  await page.waitForTimeout(800);
-  const lightboxOpen = await page.evaluate(
+  const lightboxOpen = await comes(
+    page,
     () => !!document.querySelector(".pswp, [role='dialog'] img")
   );
   await page.mouse.click(720, 450);
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(600);
+  // The lightbox put away, and whatever that started landed.
+  await comes(
+    page,
+    () => !document.querySelector(".pswp, [role='dialog'] img")
+  );
+  await atRest(page);
   const stillOpen = await page.evaluate(
     () =>
       !!document.querySelector(
@@ -964,14 +1213,23 @@ const reviewLegs = async (
   );
   // 19. A short window: both heads in sight, nothing spills.
   await page.setViewportSize({ width: 1440, height: 520 });
-  await page.waitForTimeout(400);
+  // Files reflowed to the short window: its card inside it, at rest.
+  await comes(
+    page,
+    () =>
+      (document
+        .querySelector("[data-glass-card-frame='files-pop']")
+        ?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY) <=
+      window.innerHeight
+  );
+  await atRest(page);
   const short = await page.evaluate(() => {
     const pop = document
       .querySelector("[data-glass-card-frame='files-pop']")
       ?.getBoundingClientRect();
     const heads = [
       ...document.querySelectorAll(
-        "[data-glass-card-frame='files-pop'] [data-files-region] > h3"
+        "[data-glass-card-frame='files-pop'] [data-files-region] > [data-files-head]"
       ),
     ].map((head) => head.getBoundingClientRect());
     return {
@@ -1000,7 +1258,7 @@ const reviewLegs = async (
     .locator("[data-files-card]")
     .first()
     .waitFor({ timeout: 30_000 });
-  await zoomed.waitForTimeout(600);
+  await atRest(zoomed);
   const zoomSaid = await zoomed.evaluate(() => {
     const list = document.querySelector(
       '[data-files-region="artifacts"] [data-files-scroll]'
@@ -1086,7 +1344,12 @@ const reviewLegs = async (
     .locator("[data-files-sheet]")
     .waitFor({ state: "detached", timeout: 10_000 })
     .catch(() => null);
-  await phone.waitForTimeout(400);
+  // The focus handed back, which the check reads.
+  await comes(
+    phone,
+    () =>
+      (document.activeElement as HTMLElement | null)?.dataset.slot === "burger"
+  );
   const burgerFocus = await focused(phone);
   kit.check(
     "21c: Files opened from the sidebar's row gives the focus back to the burger when it closes",
@@ -1103,7 +1366,13 @@ const reviewLegs = async (
     .first()
     .waitFor({ timeout: 30_000 });
   await narrow.locator("[data-files-search] input").fill("brief");
-  await narrow.waitForTimeout(500);
+  // The search answered: a segment counts its hits ("3 of 9"), at rest.
+  await comes(narrow, () =>
+    [...document.querySelectorAll("[data-files-segment]")].some((segment) =>
+      segment.textContent?.includes(" of ")
+    )
+  );
+  await atRest(narrow);
   // Each run of words inside its segment's padding box, and whole (not
   // clipped). The segment's own scrollWidth also counts its touch area, the
   // `::after` that stands half a pixel past its box on a coarse pointer
@@ -1185,6 +1454,24 @@ const sentAnywhere = (page: Page, words: string) =>
     [COMPOSER, words] as const
   );
 
+/** Waits until the composer holds `words`, the ask put there (the check reads whether it did). */
+const composerHolds = (page: Page, words: string) =>
+  page
+    .waitForFunction(
+      ([selector, text]) =>
+        document.querySelector(selector)?.textContent === text,
+      [COMPOSER, words] as const,
+      { timeout: 15_000 }
+    )
+    .catch(() => undefined);
+
+/**
+ * How long nothing being sent is watched for: a send the press made would
+ * stand in the transcript by then. A wait on what does not happen has no
+ * state to wait on, so it is a window.
+ */
+const SEND_WINDOW_MS = 1500;
+
 /** The ask's words (files.svelte.ts ASK_FOR_A_PAGE). */
 const ASK_WORDS = "Make a page that shows what we've done so far";
 
@@ -1232,9 +1519,9 @@ const askLegs = async (
     .locator("[data-glass-card-frame='files-pop'][data-state='open']")
     .waitFor({ state: "detached", timeout: 10_000 })
     .catch(() => null);
-  await onDesk.waitForTimeout(800);
+  await composerHolds(onDesk, ASK_WORDS);
   const deskSaid = await composerSaid(onDesk);
-  await onDesk.waitForTimeout(1500);
+  await onDesk.waitForTimeout(SEND_WINDOW_MS);
   const deskSent = await sentAnywhere(onDesk, ASK_WORDS);
   kit.check(
     '23a (desk): Files with nothing in it offers "Ask Claude Code for a page" once the read answered; pressed, Files goes, the words stand in the session\'s composer with the focus and the caret after them, and nothing is sent',
@@ -1252,7 +1539,7 @@ const askLegs = async (
   await phone.locator("[data-sidebar-files]").click();
   const ask = phone.locator("[data-files-sheet] [data-files-ask]");
   await ask.waitFor({ timeout: 15_000 });
-  await phone.waitForTimeout(600);
+  await atRest(phone);
   const hit = await ask.evaluate((el) => {
     const after = getComputedStyle(el, "::after");
     const box = el.getBoundingClientRect();
@@ -1270,9 +1557,9 @@ const askLegs = async (
     .locator("[data-files-sheet]")
     .waitFor({ state: "detached", timeout: 10_000 })
     .catch(() => null);
-  await phone.waitForTimeout(800);
+  await composerHolds(phone, ASK_WORDS);
   const phoneSaid = await composerSaid(phone);
-  await phone.waitForTimeout(1500);
+  await phone.waitForTimeout(SEND_WINDOW_MS);
   const phoneSent = await sentAnywhere(phone, ASK_WORDS);
   kit.check(
     "23b (phone): the ask's touch area is at least 44×44, and pressed, the drawer goes and the words stand in the composer with the focus and the caret after them, nothing sent",
@@ -1299,32 +1586,9 @@ const durationOf = async (page: Page, token: string): Promise<number> => {
     : Number.parseFloat(said) * 1000;
 };
 
-/**
- * Records the durations of the animations each element matching `selector`
- * runs as it mounts, read a frame after it is added (a 120ms intro is
- * gone before a later read).
- */
-const recordIntros = (page: Page, selector: string) =>
-  page.evaluate((sel) => {
-    const seen: number[] = [];
-    (window as unknown as { __intros: number[] }).__intros = seen;
-    new MutationObserver(() => {
-      for (const el of document.querySelectorAll(sel)) {
-        if ((el as HTMLElement).dataset.introRead) {
-          continue;
-        }
-        (el as HTMLElement).dataset.introRead = "1";
-        requestAnimationFrame(() => {
-          for (const one of el.getAnimations()) {
-            seen.push(one.effect?.getTiming().duration as number);
-          }
-        });
-      }
-    }).observe(document.body, { childList: true, subtree: true });
-  }, selector);
-
-const introsOf = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __intros: number[] }).__intros);
+/** Each ended run's length, ms, as a token reads (`durationOf`): whole. */
+const lengths = (runs: readonly MotionRun[]) =>
+  runs.filter((one) => one.ended).map((one) => Math.round(one.end));
 
 /**
  * The third review round's legs (light):
@@ -1338,7 +1602,7 @@ const introsOf = (page: Page) =>
  *  29. E: narrowed under the panel's least width, the float hands the pick
  *      to the session's panel and Files goes;
  *  30. Jump's field draws the house ring (FindField);
- *  31. the skeleton gives its place to the empty state in one cross-fade.
+ *  31. the skeleton gives its place to the empty state in its reveal.
  */
 const roundThree = async (
   kit: Kit,
@@ -1351,7 +1615,7 @@ const roundThree = async (
     const page = await openSession(kit, base, view, "light", ids.many);
     await page.locator("[data-files-control]").click();
     await page.locator("[data-files-row]").first().waitFor({ timeout: 30_000 });
-    await page.waitForTimeout(400);
+    await atRest(page);
     const read = await page.evaluate(() => {
       /** Where a control's touch area ends: its ::after's trailing edge, or its own. */
       const touchRight = (el: HTMLElement | null) => {
@@ -1388,7 +1652,7 @@ const roundThree = async (
         ),
       ].map((region) => {
         const head = region
-          .querySelector<HTMLElement>(":scope > h3")
+          .querySelector<HTMLElement>(":scope > [data-files-head]")
           ?.getBoundingClientRect();
         const scroller = region.querySelector<HTMLElement>(
           "[data-files-scroll]"
@@ -1532,10 +1796,29 @@ const roundThree = async (
       reads += 1;
     }
   });
-  await quiet.waitForTimeout(2000);
+  // The page's own reads answered: the bar counts once both lists are in.
+  await quiet.locator("[data-files-count]").waitFor({ timeout: 60_000 });
+  await atRest(quiet);
   const before = reads;
-  await fleet.send(ids.many, "A word with nothing attached");
-  await quiet.waitForTimeout(5000);
+  const sent = await fleet.send(ids.many, "A word with nothing attached");
+  // The send read and its turn answered on the hub, its reply on the page.
+  await until(
+    "the word read",
+    () => fleet.sendRow(sent),
+    (one) => one?.state === "read",
+    60_000
+  );
+  await until(
+    "its turn answered",
+    () =>
+      fleet.query<{ turn_open_at: number | null }>(
+        "SELECT turn_open_at FROM instances WHERE id = ?",
+        ids.many
+      )[0],
+    (one) => one?.turn_open_at === null,
+    60_000
+  );
+  await atRest(quiet);
   kit.check(
     "26: a message and its streamed reply that carry no attachment read the session's attachments 0 times",
     reads - before === 0,
@@ -1598,7 +1881,14 @@ const roundThree = async (
     attach.waitForEvent("filechooser", { timeout: 10_000 }).catch(() => null),
     attachButton.click(),
   ]);
-  await attach.waitForTimeout(600);
+  // Files going, which the check reads.
+  await comes(
+    attach,
+    () =>
+      !document.querySelector(
+        "[data-glass-card-frame='files-pop'][data-state='open']"
+      )
+  );
   const attachSaid = await attach.evaluate(() => ({
     filesOpen: !!document.querySelector(
       "[data-glass-card-frame='files-pop'][data-state='open']"
@@ -1630,7 +1920,15 @@ const roundThree = async (
   // Still a desk (900px and up), but Files' card leaves the float under
   // the panel's 320px least width beside the rail (about 270px at 920).
   await narrowing.setViewportSize({ width: 920, height: 900 });
-  await narrowing.waitForTimeout(1200);
+  // The hand-off the check reads: the float gone and the session's panel open.
+  await comes(
+    narrowing,
+    () =>
+      !document.querySelector("[data-files-float]") &&
+      [...document.querySelectorAll('iframe[title="Preview"]')].some(
+        (frame) => !frame.closest("[data-files-float]")
+      )
+  );
   const narrowed = await narrowing.evaluate(() => ({
     float: !!document.querySelector("[data-files-float]"),
     filesOpen: !!document.querySelector(
@@ -1649,14 +1947,19 @@ const roundThree = async (
 
   // 30. Jump's field draws the house ring.
   const jump = await openSession(kit, base, "desk", "light", ids.many);
-  await jump.waitForTimeout(1500);
+  // The page stands hydrated once open (kit `pageReady`), so the shortcut is
+  // its own; the ring is read once the focus is in Jump's field.
   await jump.keyboard.press("Control+KeyK");
   await jump
     .locator(
       "[data-glass-card-frame='jump-pop'] [data-slot='finder-field'] input"
     )
     .waitFor({ timeout: 10_000 });
-  await jump.waitForTimeout(300);
+  await comes(
+    jump,
+    () => !!document.activeElement?.closest("[data-slot='finder-field']")
+  );
+  await atRest(jump);
   const jumpRing = await jump.evaluate(() => {
     const ringed = document.querySelector<HTMLElement>(
       "[data-glass-card-frame='jump-pop'] [data-slot='finder-field']"
@@ -1686,6 +1989,20 @@ const roundThree = async (
   // 32. The pages no pane had a picture of are drawn unseen by Files, and
   // kept by the hub; neither is shown in the session's panel for it.
   const drawn = await openSession(kit, base, "desk", "light", ids.many);
+  // What each unseen page's frame says to Files (page-thumbs.ts), so a
+  // picture that never comes is read where it stopped.
+  await drawn.evaluate(() => {
+    const w = window as unknown as { probeSaid: string[] };
+    w.probeSaid = [];
+    window.addEventListener("message", (event) => {
+      const data = event.data as { error?: unknown; type?: unknown } | null;
+      if (typeof data?.type === "string" && data.type.startsWith("cawco:")) {
+        w.probeSaid.push(
+          `+${Math.round(performance.now())} ${data.type}${data.error ? ` (${String(data.error)})` : ""}`
+        );
+      }
+    });
+  });
   await drawn.locator("[data-files-control]").click();
   await drawn.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
   const pictured = await until(
@@ -1733,42 +2050,262 @@ const roundThree = async (
     pictured !== null &&
       kept.length === UNPICTURED.length &&
       kept.every((one) => one.thumbnail && !one.shown),
-    `cards ${JSON.stringify(pictured)}; hub ${JSON.stringify(kept)}`
+    `cards ${JSON.stringify(pictured)}; hub ${JSON.stringify(kept)}; the frames said ${(
+      await drawn.evaluate(
+        () => (window as unknown as { probeSaid: string[] }).probeSaid
+      )
+    ).join(", ")}`
   );
   await drawn.close();
 
-  // 31. The skeleton gives its place to the empty state in one cross-fade.
+  // 31. The skeleton gives its place to the empty state in its reveal.
+  const emptiedReads = heldReads();
   const emptied = await openSession(
     kit,
     base,
     "desk",
     "light",
     ids.none,
-    async (p) => {
-      for (const read of [ARTIFACT_LIST, ATTACHMENT_LIST]) {
-        await p.route(read, async (route) => {
-          await new Promise((done) => setTimeout(done, HELD_MS));
-          await route.continue();
-        });
-      }
-    }
+    emptiedReads.hold
   );
-  await recordIntros(emptied, "[data-files-empty]");
   await emptied.locator("[data-files-control]").click();
   await emptied
     .locator("[data-files-wait]")
     .first()
     .waitFor({ timeout: 10_000 });
-  await emptied.locator("[data-files-empty]").waitFor({ timeout: 15_000 });
-  await emptied.waitForTimeout(400);
-  const emptyIntro = await introsOf(emptied);
-  const emptyCross = await durationOf(emptied, "--dur-control");
+  const emptying = await readMotion(
+    emptied,
+    async () => {
+      emptiedReads.release();
+      await emptied.locator("[data-files-empty]").waitFor({ timeout: 15_000 });
+    },
+    "[data-files-empty]",
+    { ms: 15_000 }
+  );
+  const emptyIntro = lengths(emptying.runs);
+  const emptyCross = await durationOf(emptied, "--dur-skeleton-reveal");
   kit.check(
-    "31: the skeleton gives its place to the empty state in one cross-fade over --dur-control",
+    "31: the skeleton gives its place to the empty state in its reveal over --dur-skeleton-reveal",
     emptyIntro.includes(emptyCross),
-    `intros ${JSON.stringify(emptyIntro)} (--dur-control ${emptyCross})`
+    `intros ${JSON.stringify(emptyIntro)}, read by ${emptying.by} (--dur-skeleton-reveal ${emptyCross}): ${JSON.stringify(emptying.runs)}`
   );
   await emptied.close();
+};
+
+/**
+ * Each card's slot in the masonry against what it draws, read in the page:
+ * the slot's columns from the grid's resolved tracks and its column gap at
+ * the card's lane, its rows from the card's top down its row span (1px rows,
+ * no row gap: a card's span is its height and the gap under it). Every box
+ * the card draws (itself, its thumbnail's well and everything in it, its
+ * words) must lie inside its slot; every card inside Files' region. Then the
+ * overflow scan of Files: every element whose box reaches past Files' own
+ * box sideways, and every scroller in it that scrolls sideways.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, every read in it
+const slotsOf = () => {
+  const SLACK = 0.5;
+  const files =
+    document.querySelector<HTMLElement>("[data-files-sheet]") ??
+    document.querySelector<HTMLElement>("[data-glass-card-frame='files-pop']");
+  const grid = files?.querySelector<HTMLElement>("[data-files-cards]");
+  const region = grid?.closest<HTMLElement>("[data-files-region]");
+  if (!(files && grid && region)) {
+    return null;
+  }
+  const said = (r: DOMRect) =>
+    `${r.left.toFixed(1)}..${r.right.toFixed(1)}×${r.top.toFixed(1)}..${r.bottom.toFixed(1)}`;
+  const style = getComputedStyle(grid);
+  const tracks = style.gridTemplateColumns.split(" ").map(Number.parseFloat);
+  const gap = Number.parseFloat(style.columnGap) || 0;
+  const start =
+    grid.getBoundingClientRect().left +
+    grid.clientLeft +
+    Number.parseFloat(style.paddingLeft);
+  const regionBox = region.getBoundingClientRect();
+  const misses: string[] = [];
+  const cards = [...grid.querySelectorAll<HTMLElement>("[data-files-card]")];
+  const thumbs = { picture: 0, tall: 0 };
+  for (const card of cards) {
+    const own = getComputedStyle(card);
+    const lane = Number.parseInt(own.gridColumnStart, 10);
+    const span = Number.parseInt(own.gridRowEnd.replace("span", ""), 10);
+    const left =
+      start +
+      tracks.slice(0, lane - 1).reduce((sum, w) => sum + w, 0) +
+      gap * (lane - 1);
+    const box = card.getBoundingClientRect();
+    const slot = {
+      left,
+      right: left + (tracks[lane - 1] ?? 0),
+      top: box.top,
+      bottom: box.top + span,
+    };
+    const inSlot = (r: DOMRect) =>
+      r.left >= slot.left - SLACK &&
+      r.right <= slot.right + SLACK &&
+      r.top >= slot.top - SLACK &&
+      r.bottom <= slot.bottom + SLACK;
+    const thumb = card.querySelector<HTMLElement>("[data-files-thumb]");
+    const img = thumb?.querySelector("img");
+    if (img?.complete && img.naturalWidth > 0) {
+      thumbs.picture += 1;
+      if (img.naturalHeight / img.naturalWidth > 4 / 3) {
+        thumbs.tall += 1;
+      }
+    }
+    const drawn = [card, ...card.querySelectorAll<HTMLElement>("*")].filter(
+      (el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }
+    );
+    for (const el of drawn) {
+      const r = el.getBoundingClientRect();
+      if (!inSlot(r)) {
+        misses.push(
+          `${card.title}: ${el === card ? "the card" : `${el.tagName.toLowerCase()}${el === thumb ? " (its well)" : ""}`} ${said(r)} past its slot ${slot.left.toFixed(1)}..${slot.right.toFixed(1)}×${slot.top.toFixed(1)}..${slot.bottom.toFixed(1)}`
+        );
+      }
+    }
+    if (
+      box.left < regionBox.left - SLACK ||
+      box.right > regionBox.right + SLACK
+    ) {
+      misses.push(
+        `${card.title}: the card ${said(box)} past Files' region ${said(regionBox)}`
+      );
+    }
+  }
+  const filesBox = files.getBoundingClientRect();
+  const overflow: string[] = [];
+  for (const el of files.querySelectorAll<HTMLElement>("*")) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) {
+      continue;
+    }
+    const s = getComputedStyle(el);
+    if (r.left < filesBox.left - SLACK || r.right > filesBox.right + SLACK) {
+      overflow.push(
+        `${el.tagName.toLowerCase()} ${said(r)} past Files ${said(filesBox)}`
+      );
+    } else if (
+      ["auto", "scroll"].includes(s.overflowX) &&
+      el.scrollWidth > el.clientWidth + 1
+    ) {
+      overflow.push(
+        `${el.tagName.toLowerCase()} scrolls sideways: ${el.scrollWidth}px in ${el.clientWidth}px`
+      );
+    }
+  }
+  return {
+    cards: cards.length,
+    columns: tracks.length,
+    thumbs,
+    misses,
+    overflow,
+  };
+};
+
+/**
+ * 33. The cards' slots (the owner: "why is one of the artifacts spilling out
+ * from the files panel?"): at 390 and 680 (the drawer) and 1440 (the bar's
+ * card), in Chromium and WebKit, with one card (its picture taller than
+ * 3:4) and with many (a decision page titled in 40 words, pictures taller
+ * than 3:4 and five times wider than tall).
+ */
+const slotLegs = async (
+  kit: Kit,
+  base: string,
+  ids: { many: string; one: string }
+) => {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["phone", "narrowDesk", "desk"] as const) {
+      await slotLeg(kit, base, engine, view, "one", ids.one);
+      await slotLeg(kit, base, engine, view, "many", ids.many);
+    }
+  }
+};
+
+const SLOT_WIDTHS = { phone: 390, narrowDesk: 680, desk: 1440 } as const;
+
+/** One of 33's legs: an engine, a width, one card or many. */
+const slotLeg = async (
+  kit: Kit,
+  base: string,
+  engine: Engine,
+  view: keyof typeof SLOT_WIDTHS,
+  count: "one" | "many",
+  id: string
+) => {
+  const leg = `${engine} ${SLOT_WIDTHS[view]} ${count}`;
+  const page = await openSession(
+    kit,
+    base,
+    view,
+    "light",
+    id,
+    undefined,
+    engine
+  );
+  if (view === "desk") {
+    await page.locator("[data-files-control]").click();
+  } else {
+    await page.locator('[data-slot="burger"]').click();
+    await page.locator("[data-sidebar-files]").click();
+  }
+  await page.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
+  // The pictures on show, the decision pages' among them, loaded and drawn.
+  await until(
+    `${leg}: the pictures on show`,
+    () =>
+      page.evaluate(
+        picturesShown,
+        DECISIONS.map((one) => one.name)
+      ),
+    (ready) => ready,
+    30_000
+  ).catch(() => false);
+  // Read once Files stands still; the sweep after it says so if it never does.
+  await filesAtRest(page);
+  const read = await page.evaluate(slotsOf);
+  kit.check(
+    `33 (${leg}): every card and everything its thumbnail draws lie inside the card's slot, every card inside Files' region`,
+    !!read &&
+      read.cards === (count === "one" ? 1 : MANY) &&
+      read.thumbs.tall > 0 &&
+      read.misses.length === 0,
+    read
+      ? `${read.cards} cards in ${read.columns} columns, ${read.thumbs.picture} pictures drawn (${read.thumbs.tall} taller than 3:4); ${read.misses.slice(0, 4).join(" | ") || "none past its slot"}`
+      : "Files' cards not found"
+  );
+  kit.check(
+    `33 (${leg}): an overflow scan of Files totals zero`,
+    !!read && read.overflow.length === 0,
+    read
+      ? `${read.overflow.length} found${read.overflow.length ? `: ${read.overflow.slice(0, 4).join(" | ")}` : ""}`
+      : "Files not found"
+  );
+  await sweep(page, `slots ${leg}`);
+  await page.close();
+};
+
+/** The first cards' pictures loaded, and the decision pages pictured. */
+const picturesShown = (names: string[]) => {
+  const shown = [
+    ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
+  ].slice(0, 6);
+  const ready = shown.every((card) => {
+    const img = card.querySelector("img");
+    return !img || (img.complete && img.naturalWidth > 0);
+  });
+  return (
+    ready &&
+    names.every((name) => {
+      const card = document.querySelector(`[data-files-card][title="${name}"]`);
+      return !card || !!card.querySelector("img");
+    })
+  );
 };
 
 /** The drawer's legs at 390 and 680, in one theme. */
@@ -1797,7 +2334,7 @@ const narrowLeg = async (
   const sheet = page.locator("[data-files-sheet]");
   await sheet.waitFor();
   await page.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(700);
+  await atRest(page);
   const drawer = await page.evaluate(() => ({
     // The kit's drawer content is vaul's (components/ui/drawer).
     vaul: !!document.querySelector(
@@ -1835,6 +2372,382 @@ const narrowLeg = async (
     await shot(page, `drawer-search-none-${width}-${theme}`);
   }
   await sweep(page, `drawer search none ${width} ${theme}`);
+  await page.close();
+};
+
+/** Files' artifacts head's switch, by its way (motion/Rail's radios). */
+const VIEW_PICK = (way: "thumbnails" | "list") =>
+  `[data-files-region="artifacts"] [data-files-head] [data-rail-item="${way}"]`;
+
+/** Opens Files where the width puts it: the bar's card on a desk, the drawer from the sidebar's row else. */
+const openFiles = async (page: Page, view: keyof typeof SLOT_WIDTHS) => {
+  if (view === "desk") {
+    await page.locator("[data-files-control]").click();
+  } else {
+    await page.locator('[data-slot="burger"]').click();
+    await page.locator("[data-sidebar-files]").click();
+  }
+  await page.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
+};
+
+/** The list read in the page: its rows against each other, the region, Files, the switch and the "N more" sign. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, every read in it
+const listOf = () => {
+  const SLACK = 0.5;
+  const files =
+    document.querySelector<HTMLElement>("[data-files-sheet]") ??
+    document.querySelector<HTMLElement>("[data-glass-card-frame='files-pop']");
+  const grid = files?.querySelector<HTMLElement>("[data-files-cards]");
+  const region = grid?.closest<HTMLElement>("[data-files-region]");
+  const scroller = grid?.closest<HTMLElement>("[data-files-scroll]");
+  if (!(files && grid && region && scroller)) {
+    return null;
+  }
+  const said = (r: DOMRect) =>
+    `${r.left.toFixed(1)}..${r.right.toFixed(1)}×${r.top.toFixed(1)}..${r.bottom.toFixed(1)}`;
+  const filesBox = files.getBoundingClientRect();
+  const regionBox = region.getBoundingClientRect();
+  const misses: string[] = [];
+  const rows = [...grid.querySelectorAll<HTMLElement>("[data-files-card]")];
+  let last: DOMRect | null = null;
+  for (const row of rows) {
+    const box = row.getBoundingClientRect();
+    if (last && box.top < last.bottom - SLACK) {
+      misses.push(
+        `${row.title}: ${said(box)} over the row above ${said(last)}`
+      );
+    }
+    last = box;
+    if (
+      box.left < regionBox.left - SLACK ||
+      box.right > regionBox.right + SLACK
+    ) {
+      misses.push(
+        `${row.title}: ${said(box)} past the region ${said(regionBox)}`
+      );
+    }
+    for (const el of row.querySelectorAll<HTMLElement>("*")) {
+      const r = el.getBoundingClientRect();
+      if (
+        r.width > 0 &&
+        r.height > 0 &&
+        (r.left < box.left - SLACK || r.right > box.right + SLACK)
+      ) {
+        misses.push(
+          `${row.title}: its ${el.tagName.toLowerCase()} ${said(r)} past the row ${said(box)}`
+        );
+      }
+    }
+  }
+  const rail = region.querySelector<HTMLElement>(
+    '[data-files-head] [data-slot="rail"]'
+  );
+  const head = rail?.closest<HTMLElement>("[data-files-head]");
+  const railBox = rail?.getBoundingClientRect();
+  const headBox = head?.getBoundingClientRect();
+  const switchInside =
+    !!railBox &&
+    !!headBox &&
+    railBox.left >= headBox.left - SLACK &&
+    railBox.right <= headBox.right + SLACK &&
+    railBox.top >= headBox.top - SLACK &&
+    railBox.bottom <= headBox.bottom + SLACK &&
+    railBox.right <= filesBox.right + SLACK;
+  const foot = scroller.getBoundingClientRect().bottom;
+  const past = rows.filter(
+    (row) => row.getBoundingClientRect().bottom > foot + 1
+  ).length;
+  const sign =
+    region.querySelector<HTMLElement>("[data-files-more]")?.dataset.filesMore ??
+    "0";
+  const overflow: string[] = [];
+  for (const el of files.querySelectorAll<HTMLElement>("*")) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) {
+      continue;
+    }
+    const style = getComputedStyle(el);
+    if (r.left < filesBox.left - SLACK || r.right > filesBox.right + SLACK) {
+      overflow.push(
+        `${el.tagName.toLowerCase()}${el.dataset.slot ? `[${el.dataset.slot}]` : ""} ${said(r)} past Files ${said(filesBox)}`
+      );
+    } else if (
+      ["auto", "scroll"].includes(style.overflowX) &&
+      el.scrollWidth > el.clientWidth + 1
+    ) {
+      overflow.push(
+        `${el.tagName.toLowerCase()} scrolls sideways: ${el.scrollWidth}px in ${el.clientWidth}px`
+      );
+    }
+  }
+  return {
+    view: grid.dataset.filesView ?? null,
+    rows: rows.length,
+    tallest: Math.max(...rows.map((row) => row.getBoundingClientRect().height)),
+    misses,
+    switchInside,
+    checked:
+      region
+        .querySelector('[data-rail-item][aria-checked="true"]')
+        ?.getAttribute("data-rail-item") ?? null,
+    past,
+    sign,
+    overflow,
+  };
+};
+
+/**
+ * 34–37: Thumbnails | List, at 390, 680 and 1440 in Chromium and WebKit with
+ * one artifact and many; the choice kept through a reload and from the
+ * bar's card to the drawer; a row's press; the switch's motion.
+ */
+const viewLegs = async (
+  kit: Kit,
+  base: string,
+  ids: { many: string; one: string }
+) => {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["phone", "narrowDesk", "desk"] as const) {
+      for (const count of ["one", "many"] as const) {
+        await viewLeg(kit, base, engine, view, count, ids[count]);
+      }
+    }
+  }
+  await keptLeg(kit, base, ids.many);
+  await rowOpensLeg(kit, base, ids.many);
+  await switchMotionLeg(kit, base, ids.many);
+};
+
+/** One of 34's legs: an engine, a width, one artifact or many. */
+const viewLeg = async (
+  kit: Kit,
+  base: string,
+  engine: Engine,
+  view: keyof typeof SLOT_WIDTHS,
+  count: "one" | "many",
+  id: string
+) => {
+  const leg = `${engine} ${SLOT_WIDTHS[view]} ${count}`;
+  const page = await openSession(
+    kit,
+    base,
+    view,
+    "light",
+    id,
+    undefined,
+    engine
+  );
+  await openFiles(page, view);
+  await page.locator(VIEW_PICK("list")).click();
+  await page
+    .locator('[data-files-cards][data-files-view="list"]')
+    .waitFor({ timeout: 10_000 });
+  // The slide played out, and the sign's count read after it.
+  await filesAtRest(page);
+  const list = await page.evaluate(listOf);
+  kit.check(
+    `34 (${leg}): in the list, one row each (${count === "one" ? 1 : MANY}), no row over another, nothing a row draws past its row or the region, the switch inside the Artifacts head and Files, its List checked`,
+    !!list &&
+      list.view === "list" &&
+      list.rows === (count === "one" ? 1 : MANY) &&
+      list.misses.length === 0 &&
+      list.switchInside &&
+      list.checked === "list",
+    list
+      ? `${list.rows} rows, the tallest ${list.tallest.toFixed(1)}px, switch inside ${list.switchInside}, checked ${list.checked}; ${list.misses.slice(0, 4).join(" | ") || "none past"}`
+      : "Files' list not found"
+  );
+  kit.check(
+    `34 (${leg}): the list's "N more" sign counts the rows below the fold, and an overflow scan of Files totals zero`,
+    !!list &&
+      list.sign === String(list.past) &&
+      (count === "one" || list.past > 0) &&
+      list.overflow.length === 0,
+    list
+      ? `${list.past} rows past the foot, the sign says ${list.sign}; ${list.overflow.length} past Files${list.overflow.length ? `: ${list.overflow.slice(0, 4).join(" | ")}` : ""}`
+      : "Files not found"
+  );
+  if (view !== "narrowDesk" && count === "many") {
+    await shot(page, `list-${SLOT_WIDTHS[view]}-${engine}`);
+  }
+  await sweep(page, `list ${leg}`);
+  await page.locator(VIEW_PICK("thumbnails")).click();
+  await page
+    .locator('[data-files-cards][data-files-view="thumbnails"]')
+    .waitFor({ timeout: 10_000 });
+  await filesAtRest(page);
+  const back = await page.evaluate(slotsOf);
+  kit.check(
+    `34 (${leg}): back in thumbnails every card lies inside its slot again, and an overflow scan of Files totals zero`,
+    !!back &&
+      back.cards === (count === "one" ? 1 : MANY) &&
+      back.misses.length === 0 &&
+      back.overflow.length === 0,
+    back
+      ? `${back.cards} cards in ${back.columns} columns; ${[...back.misses, ...back.overflow].slice(0, 4).join(" | ") || "none past"}`
+      : "Files' cards not found"
+  );
+  await page.close();
+};
+
+/** 35: the list picked on the bar's card, the page reloaded, then at a phone's width. */
+const keptLeg = async (kit: Kit, base: string, id: string) => {
+  const page = await openSession(kit, base, "desk", "light", id);
+  await openFiles(page, "desk");
+  await page.locator(VIEW_PICK("list")).click();
+  await page
+    .locator('[data-files-cards][data-files-view="list"]')
+    .waitFor({ timeout: 10_000 });
+  await page.reload();
+  await page.locator('[data-slot="pane"]').first().waitFor({ timeout: 60_000 });
+  await openFiles(page, "desk");
+  const onDesk = await page.evaluate(() => ({
+    view:
+      document.querySelector<HTMLElement>("[data-files-cards]")?.dataset
+        .filesView ?? null,
+    checked:
+      document
+        .querySelector(
+          '[data-files-head] [data-rail-item][aria-checked="true"]'
+        )
+        ?.getAttribute("data-rail-item") ?? null,
+  }));
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.locator('[data-slot="pane"]').first().waitFor({ timeout: 60_000 });
+  await openFiles(page, "phone");
+  const inDrawer = await page.evaluate(() => ({
+    drawer: !!document.querySelector("[data-files-sheet]"),
+    view:
+      document.querySelector<HTMLElement>(
+        "[data-files-sheet] [data-files-cards]"
+      )?.dataset.filesView ?? null,
+  }));
+  kit.check(
+    "35: List picked on the bar's card survives a reload (the card opens on it, List checked) and holds in the phone's drawer",
+    onDesk.view === "list" &&
+      onDesk.checked === "list" &&
+      inDrawer.drawer &&
+      inDrawer.view === "list",
+    `desk after reload ${JSON.stringify(onDesk)}; drawer ${JSON.stringify(inDrawer)}`
+  );
+  await page.close();
+};
+
+/** 36: in the list, a row's press opens its artifact floating on Files' left, as a card's does (7). */
+const rowOpensLeg = async (kit: Kit, base: string, id: string) => {
+  const page = await openSession(kit, base, "desk", "light", id);
+  await openFiles(page, "desk");
+  await page.locator(VIEW_PICK("list")).click();
+  const row = page.locator(
+    `[data-files-cards][data-files-view="list"] [data-files-card][title="${PRICING}"]`
+  );
+  await row.click();
+  await page.locator("[data-files-float]").waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(600);
+  const opened = await page.evaluate((name) => {
+    const pop = document
+      .querySelector("[data-glass-card-frame='files-pop']")
+      ?.getBoundingClientRect();
+    const float = document
+      .querySelector("[data-files-float]")
+      ?.getBoundingClientRect();
+    const current = document.querySelector<HTMLElement>(
+      '[data-files-card][aria-current="true"]'
+    );
+    return {
+      leftOf: !!pop && !!float && float.right <= pop.left,
+      current: current?.title ?? null,
+      wanted: name,
+      view:
+        document.querySelector<HTMLElement>("[data-files-cards]")?.dataset
+          .filesView ?? null,
+    };
+  }, PRICING);
+  kit.check(
+    "36: a row's press opens its artifact as its card's does: floating on Files' left, the row the one on show, Files still the list",
+    opened.leftOf && opened.current === PRICING && opened.view === "list",
+    JSON.stringify(opened)
+  );
+  await page.close();
+};
+
+/** The first rows' boxes, read for 37. */
+const firstBoxes = () =>
+  [...document.querySelectorAll<HTMLElement>("[data-files-card]")]
+    .slice(0, 6)
+    .map((one) => {
+      const r = one.getBoundingClientRect();
+      return { id: one.dataset.artifact ?? "", x: r.left, y: r.top };
+    });
+
+/** 37: the switch's motion on the clock (Chromium's Animation domain), then with less motion. */
+const switchMotionLeg = async (kit: Kit, base: string, id: string) => {
+  const page = await openSession(kit, base, "desk", "light", id);
+  await openFiles(page, "desk");
+  await page.waitForTimeout(900);
+  const before = await page.evaluate(firstBoxes);
+  const sliding = await readMotion(
+    page,
+    () => page.locator(VIEW_PICK("list")).click(),
+    "[data-files-cards]",
+    { fractions: [0, 0.5, 1], read: () => page.evaluate(firstBoxes) }
+  );
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(firstBoxes);
+  const slides = sliding.runs.filter((one) =>
+    one.target.includes("data-files-card")
+  );
+  const clocks = new Set(
+    slides.map((one) => `${one.start} ${Math.round(one.end)} ${one.easing}`)
+  );
+  const near = (
+    read: { id: string; x: number; y: number }[] | undefined,
+    want: { id: string; x: number; y: number }[]
+  ) =>
+    !!read &&
+    want.every((one, i) => {
+      const at = read[i];
+      return (
+        at?.id === one.id &&
+        Math.abs(at.x - one.x) <= 1.5 &&
+        Math.abs(at.y - one.y) <= 1.5
+      );
+    });
+  const start = sliding.at.find((one) => one.fraction === 0)?.value;
+  const end = sliding.at.find((one) => one.fraction === 1)?.value;
+  const moved = before.some(
+    (one, i) =>
+      Math.abs(one.x - (after[i]?.x ?? one.x)) > 4 ||
+      Math.abs(one.y - (after[i]?.y ?? one.y)) > 4
+  );
+  kit.check(
+    "37a: Thumbnails to List: every row slides on one clock (one start, length and curve), from its card's place at 0 to its row's at 1",
+    sliding.by === "clock" &&
+      slides.length >= before.length &&
+      clocks.size === 1 &&
+      moved &&
+      near(start, before) &&
+      near(end, after),
+    `${slides.length} slides on ${clocks.size} clock(s) ${JSON.stringify([...clocks])}; before ${JSON.stringify(before.slice(0, 2))}, at 0 ${JSON.stringify(start?.slice(0, 2))}, at 1 ${JSON.stringify(end?.slice(0, 2))}, after ${JSON.stringify(after.slice(0, 2))}`
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const still = await readMotion(
+    page,
+    () => page.locator(VIEW_PICK("thumbnails")).click(),
+    "[data-files-cards]",
+    { ms: 2000 }
+  );
+  const travels = still.runs.filter(
+    (one) =>
+      one.target.includes("data-files-card") && one.name.includes("translate")
+  );
+  kit.check(
+    "37b: with less motion, List to Thumbnails moves nothing: no row travels",
+    travels.length === 0,
+    `${still.runs.length} runs, ${travels.length} travelling: ${JSON.stringify(still.runs.slice(0, 3))}`
+  );
   await page.close();
 };
 

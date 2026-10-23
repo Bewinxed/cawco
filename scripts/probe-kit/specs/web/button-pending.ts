@@ -6,15 +6,15 @@
  *    label alone with its padding and edge (the pending wording is never
  *    drawn, so it never widens the cell); its label at the button's centre
  *    at rest; pending, the spinner at the label's start and the words at
- *    opacity 0 at the end of their fade (paused and seeked through the
- *    Animation domain), on --dur-morph and --ease-out; done, the check at
+ *    opacity 0 at the end of their fade (kit.ts `readMotion`: held and
+ *    sought to its end), on --dur-morph and --ease-out; done, the check at
  *    the label's start, and the words back once it leaves;
  *  - the accessible name in each phase;
  *  - the icon cases' readings, for comparing with main's;
  *  - every label-only call site with a literal `pendingLabel`: its width.
  */
 import type { Page } from "playwright-core";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { type Kit, open, readMotion, type Spec, settle } from "../../kit";
 
 const CYCLE = '[data-case="label-cycle"]';
 
@@ -76,58 +76,52 @@ const cycle = (page: Page, how: "start" | "stop") =>
     ).__buttonBench[call]();
   }, how);
 
-/** The words' fade caught with the page's clock slowed, paused, and seeked to its end. */
+/** The pending words' cell, whose opacity fades. */
+const LABEL_TEXT = `${CYCLE} [data-slot="label-text"]`;
+
+/**
+ * The words' fade as Start begins it, read as the kit reads motion
+ * (kit.ts `readMotion`): its opacity transition's length and curve, and
+ * where it ends: held and sought to its end.
+ */
 async function scrubFade(page: Page) {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Animation.enable");
-  await cdp.send("Animation.setPlaybackRate", { playbackRate: 0.02 });
-  try {
-    await cycle(page, "start");
-    await page.waitForFunction(
+  const opacity = () =>
+    page.evaluate(
       (selector) =>
-        (
-          document
-            .querySelector(`${selector} [data-slot="label-text"]`)
-            ?.getAnimations() ?? []
-        ).some(
-          (run) =>
-            run instanceof CSSTransition &&
-            run.transitionProperty === "opacity" &&
-            run.playState === "running"
+        Number(
+          getComputedStyle(document.querySelector(selector) as HTMLElement)
+            .opacity
         ),
-      CYCLE,
-      { timeout: 15_000, polling: "raf" }
+      LABEL_TEXT
     );
-    return await page.evaluate((selector) => {
-      const text = document.querySelector<HTMLElement>(
-        `${selector} [data-slot="label-text"]`
-      ) as HTMLElement;
-      const run = text
-        .getAnimations()
-        .find(
-          (one) =>
-            one instanceof CSSTransition && one.transitionProperty === "opacity"
-        ) as CSSTransition;
-      run.pause();
-      const timing = run.effect?.getComputedTiming();
-      run.currentTime = Number(timing?.duration);
-      const atEnd = Number(getComputedStyle(text).opacity);
-      run.finish();
-      const root = getComputedStyle(document.documentElement);
-      return {
-        duration: Number(timing?.duration),
-        easing: String(timing?.easing),
-        tokens: {
-          duration: root.getPropertyValue("--dur-morph").trim(),
-          easing: root.getPropertyValue("--ease-out").trim(),
-        },
-        atEnd,
-      };
-    }, CYCLE);
-  } finally {
-    await cdp.send("Animation.setPlaybackRate", { playbackRate: 1 });
-    await cdp.detach();
-  }
+  const fade = await readMotion(page, () => cycle(page, "start"), LABEL_TEXT, {
+    fractions: [1],
+    of: "opacity",
+    read: opacity,
+    ms: 15_000,
+  });
+  const run = fade.runs.find(
+    (one) =>
+      one.type === "CSSTransition" &&
+      one.name === "opacity" &&
+      one.target === "span[label-text]"
+  );
+  const tokens = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      duration: root.getPropertyValue("--dur-morph").trim(),
+      easing: root.getPropertyValue("--ease-out").trim(),
+    };
+  });
+  const atEnd = fade.at.at(-1)?.value ?? Number.NaN;
+  return {
+    by: fade.by,
+    duration: run?.end ?? Number.NaN,
+    easing: run?.easing ?? "",
+    tokens,
+    atEnd,
+    runs: fade.runs,
+  };
 }
 
 const NUMBER = /-?\d*\.?\d+/g;
@@ -177,7 +171,7 @@ async function labelOnly(kit: Kit, page: Page) {
     JSON.stringify({ slot: busy.slotDrawn, labelStart: busy.labelStart })
   );
   kit.check(
-    "label only, pending: the words at opacity 0 at the end of their fade, on --dur-morph and --ease-out",
+    `label only, pending: the words at opacity 0 at the end of their fade, on --dur-morph and --ease-out (read by ${fade.by})`,
     fade.atEnd === 0 &&
       Math.abs(fade.duration - ms(fade.tokens.duration)) < 0.5 &&
       numbers(fade.easing) === numbers(fade.tokens.easing),

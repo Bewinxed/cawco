@@ -14,6 +14,7 @@
  * replaced by one snapshot.
  */
 import type { CanvasAuthor } from "@cawco/core/canvas";
+import { honourDeletions } from "@cawco/core/comments";
 import { RESYNC_MS } from "@cawco/core/doc-link";
 import {
   type AbstractType,
@@ -35,9 +36,13 @@ export const MAPS = [
   "ink",
   "moved",
   "pins",
+  // Deleted pins' tombstones (core comments.ts `goneOf`): a deletion no later write undoes.
+  "gone",
   "comments",
   "files",
   "requests",
+  // The person's looks at what the latest revision changed (core comments.ts `seenOf`).
+  "seen",
 ] as const;
 
 /** The doc's one top-level array: a canvas's scene, as y-excalidraw lays it out. */
@@ -144,6 +149,8 @@ export const createArtifactDocs = (deps: {
   db: ArtifactsDb;
   /** The hub's lifetime: each doc's idle timer runs on it. */
   lifetime: HubLifetimeShape;
+  /** Any update the doc took, from anyone, and whose it was: what waits on the person in it may have moved (Needs you). */
+  updated?: (id: string, by: CanvasAuthor) => void;
 }): ArtifactDocs => {
   const loaded = new Map<string, Loaded>();
 
@@ -203,6 +210,7 @@ export const createArtifactDocs = (deps: {
     if (changed.keys.length > 0) {
       deps.changed?.(id);
     }
+    deps.updated?.(id, by);
   };
 
   const load = (id: string): Loaded => {
@@ -250,6 +258,11 @@ export const createArtifactDocs = (deps: {
         keep(id, entry, update, origin, changed);
       }
     });
+    // A pin deleted on any device stays deleted here: a write that reached
+    // the hub before its tombstone (a page placing its pins on a stale load,
+    // a delivery's stamp, an agent's reply) is undone as the tombstone lands,
+    // and that undoing is kept and sent like any update.
+    honourDeletions(doc);
     loaded.set(id, entry);
     sleep(id, entry);
     return entry;

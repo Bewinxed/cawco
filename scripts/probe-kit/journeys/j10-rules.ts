@@ -12,6 +12,9 @@
  *    affordance after the fact rather than a confirm dialog before it”;
  *    undone, the hub holds the rule again.
  */
+
+import { commonWords } from "../../../packages/core/src/words/common";
+import { rulesWords } from "../../../packages/core/src/words/rules";
 import type { Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import { say } from "./mock";
@@ -76,7 +79,7 @@ async function walk(leg: Leg): Promise<void> {
     () => page.goto(`${base}/config/rules`, { waitUntil: "domcontentloaded" }),
     async () => {
       await shows(
-        page.getByText("Nothing is watching yet"),
+        page.getByText(rulesWords.nothingWatching),
         "the empty Rules page"
       );
       await shows(
@@ -90,7 +93,7 @@ async function walk(leg: Leg): Promise<void> {
     `Add the “${TEMPLATE}” starter`,
     () =>
       page
-        .getByRole("list", { name: "Starter rules" })
+        .getByRole("list", { name: rulesWords.starterRules })
         .getByRole("listitem")
         .filter({ hasText: TEMPLATE })
         .getByRole("button", { name: "Add" })
@@ -125,9 +128,9 @@ async function walk(leg: Leg): Promise<void> {
     "Edit the rule's name and reply, and save",
     async () => {
       await ruleRow().getByRole("link").first().click();
-      await page.getByLabel("Rule name").fill(name);
+      await page.getByLabel(rulesWords.ruleName).fill(name);
       await page.getByLabel("Reply").fill(EDITED);
-      await page.getByRole("button", { name: "Save changes" }).click();
+      await page.getByRole("button", { name: commonWords.saveChanges }).click();
     },
     async () => {
       await eventually(
@@ -157,8 +160,10 @@ async function walk(leg: Leg): Promise<void> {
       await page.goto(`${base}/config/rules`, {
         waitUntil: "domcontentloaded",
       });
-      await page.getByRole("button", { name: `More for ${name}` }).click();
-      await page.getByRole("menuitem", { name: "Delete rule" }).click();
+      await page
+        .getByRole("button", { name: commonWords.moreFor(name) })
+        .click();
+      await page.getByRole("menuitem", { name: rulesWords.deleteRule }).click();
     },
     async () => {
       await eventually(

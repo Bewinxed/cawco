@@ -1,15 +1,19 @@
 /**
  * J7, previews and comments: a session shows a page; the person opens it,
  * presses what they mean, writes in the composer that opens there and
- * presses Comment, then Send: the session receives it as one delivery
- * (artifacts/service.ts `deliverMarks`, on Send alone).
+ * presses Comment: the session receives it by itself as one delivery a few
+ * seconds later, with no Send (artifacts/service.ts `personMarked`,
+ * `deliverMarks`).
  *
  * The page is the session's own, made through the hub's artifact API as
  * `artifact_create` makes one. The outcome is read from the model: it is
  * asked with the comments notice and the person's words.
  */
+
+import { previewWords } from "../../../packages/core/src/words/preview";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import type { Seen } from "../../scratch-fleet";
-import type { KitFleet } from "../kit";
+import { type KitFleet, pressAt } from "../kit";
 import { say } from "./mock";
 import {
   eventually,
@@ -71,7 +75,7 @@ async function walk(leg: Leg): Promise<void> {
   // where a phone's head has no room for them, one button (`Mode: …`)
   // opening the three.
   const segment = page
-    .getByRole("tablist", { name: "Preview mode" })
+    .getByRole("tablist", { name: previewWords.previewMode })
     .getByRole("tab", { name: "Comment" })
     .filter({ visible: true });
   const modeButton = page
@@ -105,7 +109,7 @@ async function walk(leg: Leg): Promise<void> {
 
   const composer = page.locator('[data-slot="pin-composer"]');
   await leg.step(
-    "Comment on the first line, then Send",
+    "Comment on the first line",
     async () => {
       // A tap where the line is: in Comment mode the comment layer lies
       // over the page and takes the tap (as the person's finger lands).
@@ -113,25 +117,20 @@ async function walk(leg: Leg): Promise<void> {
       if (!line) {
         unmet("the first line has no box in the preview");
       }
-      await page.mouse.click(
-        line.x + line.width * 0.3,
-        line.y + line.height / 2
-      );
+      await pressAt(preview, {
+        x: line.x + line.width * 0.3,
+        y: line.y + line.height / 2,
+      });
       await composer.waitFor({ timeout: 10_000 });
       await composer.getByRole("combobox").fill(words);
       await composer
         .getByRole("button", { name: "Comment", exact: true })
         .click();
       await composer.waitFor({ state: "detached", timeout: 10_000 });
-      await page
-        .locator('[data-slot="send"]')
-        .filter({ visible: true })
-        .first()
-        .click();
     },
     async () => {
       const heard = await eventually(
-        "the session is sent the comment on Send",
+        "the session is sent the comment by itself",
         () =>
           fleet.seen.find(
             (one) =>
@@ -148,7 +147,7 @@ async function walk(leg: Leg): Promise<void> {
       );
       await shows(
         page
-          .getByRole("log", { name: "Session transcript" })
+          .getByRole("log", { name: transcriptWords.transcript })
           .getByText(`Comments on ${PAGE}`),
         `the session's “Comments on ${PAGE}” line`
       );
@@ -158,7 +157,7 @@ async function walk(leg: Leg): Promise<void> {
 
 const journey: Journey = {
   name: "j7-comments",
-  flow: "Previews and comments: open a preview, comment on it, Send, the agent receives it",
+  flow: "Previews and comments: open a preview, comment on it, the agent receives it by itself",
   respond: (seen: Seen) =>
     seen.tools && seen.last.includes(NOTICE)
       ? say("Read your comment; putting the version first.")

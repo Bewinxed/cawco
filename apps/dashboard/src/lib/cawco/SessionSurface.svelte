@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The workspace surface: the fleet board, and the groups of conversations
    * arranged over it.
@@ -119,7 +120,7 @@
       return "Reaching the hub again…";
     }
     return detailState === "loading"
-      ? "Reading the fleet…"
+      ? commonWords.readingTheFleet
       : "Open a session from the list, or start one.";
   });
   /** The fleet is read and the hub is live: no wait, whether he sleeps or not. */

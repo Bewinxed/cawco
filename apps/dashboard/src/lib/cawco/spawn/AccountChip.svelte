@@ -36,8 +36,7 @@
    * placement's reason) and each account with its small rings and a key
    * line; a pick holds for this session only.
    */
-  import Down from "~icons/solar/alt-arrow-down-linear";
-  import Check from "~icons/solar/check-circle-bold-duotone";
+  import { IconSuccess as Check, IconChevronDown as Down } from "#lib/icons.js";
   import AccountName from "../accounts/AccountName.svelte";
   import Rings from "../usage/Rings.svelte";
   import Words from "../usage/Words.svelte";

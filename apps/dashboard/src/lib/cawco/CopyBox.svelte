@@ -1,0 +1,76 @@
+<script lang="ts">
+  /**
+   * One line of something to paste elsewhere — an install command, a
+   * command that fixes the hub — in a code box with a Copy button. The one
+   * command box of the Machines chip's pairing panel, Needs you's fixes and
+   * the relay journey, so a command reads and copies the same wherever it is
+   * offered.
+   *
+   * The line truncates to fit; what is copied is always the whole of it, and
+   * the whole of it is the box's title. A command the person reads before
+   * running it (`wrap`) takes the box's whole width and wraps only between
+   * its words, never inside one (`--port-forwarder` stays whole); a word
+   * wider than the box scrolls the command sideways.
+   * Copy stands under it, at the trailing edge, so it never narrows the
+   * command.
+   */
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
+  import { IconDocuments as Documents } from "#lib/icons.js";
+
+  let {
+    text,
+    label,
+    wrap = false,
+  }: { text: string; label: string; wrap?: boolean } = $props();
+
+  /** The command's words, for `wrap`: the line breaks between them, never inside one. */
+  const words = $derived(text.split(" "));
+
+  const clipboard = new UseClipboard();
+  const said = $derived.by(() => {
+    if (clipboard.status === "success") {
+      return "Copied";
+    }
+    return clipboard.status === "failure" ? "Copy failed" : "Copy";
+  });
+</script>
+
+<div
+  class="flex h-c-btn-h min-w-0 items-center gap-space-2 rounded-md border border-border-control bg-surface-hover pe-space-1 ps-space-3 data-wrap:h-auto data-wrap:min-h-c-btn-h data-wrap:flex-wrap data-wrap:gap-y-space-1 data-wrap:py-space-1"
+  data-wrap={wrap || undefined}
+>
+  <span class="sr-only">{label}:</span>
+  {#if wrap}
+    <!-- Read whole, on the box's whole width: the line breaks between
+         words and never inside one; a word wider than the box scrolls the
+         command sideways. -->
+    <code
+      class="min-w-0 basis-full overflow-x-auto overscroll-x-contain text-meta whitespace-normal text-ink-strong"
+      title={text}
+      >{#each words as word, index (index)}{#if index > 0}{" "}{/if}<span
+          data-slot="word"
+          class="inline-block whitespace-nowrap">{word}</span
+        >{/each}</code
+    >
+  {:else}
+    <code class="min-w-0 flex-1 truncate text-meta text-ink-strong" title={text}
+      >{text}</code
+    >
+  {/if}
+  <Button
+    class="flex-none in-data-wrap:ms-auto"
+    onclick={() => clipboard.copy(text)}
+    press="pressable"
+    size="xs"
+    type="button"
+    variant="outline"
+  >
+    <Documents
+      aria-hidden="true"
+      class="size-icon-sm text-ink-muted"
+      data-box
+    />
+    <span aria-live="polite">{said}</span>
+  </Button>
+</div>

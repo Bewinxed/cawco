@@ -12,9 +12,26 @@
  * against the same tape ("dev").
  */
 import type { Locator, Page, WebSocketRoute } from "playwright-core";
+import { deviceDocName } from "../../../packages/core/src/doc-link";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
+import { commentWords } from "../../../packages/core/src/words/comments";
+import { commonWords } from "../../../packages/core/src/words/common";
+import { CONFIG_SECTIONS } from "../../../packages/core/src/words/configure";
+import { connectWords } from "../../../packages/core/src/words/connect";
+import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
+import { machineWords } from "../../../packages/core/src/words/machine";
+import { mcpWords } from "../../../packages/core/src/words/mcp";
+import { memoryWords } from "../../../packages/core/src/words/memory";
+import { projectWords } from "../../../packages/core/src/words/project";
+import { rulesWords } from "../../../packages/core/src/words/rules";
+import { shellWords } from "../../../packages/core/src/words/shell";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
+import { skillsWords } from "../../../packages/core/src/words/skills";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
-import { COMPOSER_FIELD } from "../kit";
+import { COMPOSER_FIELD, pressAt, pressIn } from "../kit";
+import { exactly, literal, startsWith } from "../words";
 import {
   ANSWERED_PIN,
   commentPins,
@@ -67,11 +84,9 @@ export interface State {
    * It stands on what only a host's recording holds, and is left out, with
    * a NOTE saying which, from a tape that holds none (walk.ts `lacks`):
    * `delegate`, the scene's delegate (a workspace has no user namespaces to
-   * make its workspace in; the scene's `split`); `join`, an address the
-   * hub lists for another machine to join it at (a workspace's machine has
-   * loopback alone; the scene's `joinable`, "" then).
+   * make its workspace in; the scene's `split`).
    */
-  hostOnly?: "delegate" | "join";
+  hostOnly?: "delegate";
   /**
    * The hub state it reads, when not the scene's own: one the scene moves
    * the fleet into after the main recording (scene.ts `VARIANTS`), recorded
@@ -163,10 +178,10 @@ const BOARD = "[data-slot=board]";
 const CAW_COMPOSER = '[aria-label="Message Caw"]';
 /** The words a state is told by, where its element is not enough (each state's `says`). */
 const SIGN_IN_UNFINISHED = /^Sign-in didn't finish/;
-const START_SIGN_IN = /^Start sign-in/;
+const START_SIGN_IN = startsWith(accountsWords.device.start);
 const GROWN_DRAFT =
   /Wrap the chip's label at the badge\.\s*Keep the count whole\.\s*Then measure it on a phone\./;
-const CATCHING_UP_LINE = /^Catching up…$/;
+const CATCHING_UP_LINE = exactly(shellWords.catchingUp);
 /** A preview drawn in its frame, the pane's Comments rail, and the page's where-to-start (MachinesEmpty's title). */
 const PREVIEW_READY = "iframe[data-ready=true]";
 const PIN_LIST = 'aside[data-slot=comment-rail][aria-label="Comments"]';
@@ -183,11 +198,11 @@ const COMPOSER_PLACED =
   "[data-slot=pin-composer]:is([data-sheet], [data-side=end], [data-side=start], [data-side=below])";
 /** The card's notice for a pin whose element is gone, and its line while the next tap places it. */
 const GONE_SAYS = /^Its element is gone from the page/;
-const PLACING_SAYS = /^Tap the page where it goes/;
+const PLACING_SAYS = startsWith(commentWords.placeHere);
 const TAB_RESOLVED = /^Resolved/;
 /** The panel's empty lines, each tab's. */
-const NO_OPEN = /^No open comments/;
-const NO_RESOLVED = /^Nothing resolved yet/;
+const NO_OPEN = startsWith(commentWords.noneOpen);
+const NO_RESOLVED = startsWith(commentWords.noneResolved);
 /** The pane's Comment mode, as its compact mode menu names it. */
 const COMMENT_MODE = /^Comment/;
 /** The pane's artifact doc socket on the hub. */
@@ -234,6 +249,17 @@ const MOVE_WAIT = "[data-slot=wait] [data-slot=move-wait-card]";
 /** Presses the first visible button named `name`. */
 const press = (name: string | RegExp) => (page: Page) =>
   page.getByRole("button", { name }).filter({ visible: true }).first().click();
+
+/**
+ * Opens the tool row that says `words`: the row, never another button whose
+ * name holds them (the memory session's title, "Read the fleet memory", does).
+ */
+const openToolRow = (words: RegExp) => (page: Page) =>
+  page
+    .locator("button[data-slot=trow]")
+    .filter({ hasText: words, visible: true })
+    .first()
+    .click();
 
 /**
  * A pane head's control by its key (SideSurface `data-head-item`), where the
@@ -288,7 +314,9 @@ const emptyComposer = async (page: Page) => {
 
 /** The phone and tablet's rail: the sheet the navigation button opens. */
 const openRail = async (page: Page) => {
-  const burger = page.getByRole("button", { name: "Open navigation" });
+  const burger = page.getByRole("button", {
+    name: sidebarWords.openNavigation,
+  });
   if (await burger.isVisible()) {
     await burger.click();
   }
@@ -308,7 +336,7 @@ const TOOL_ROWS = [
   /Searched/,
 ];
 /** The rail's sort menu. */
-const SORT = /Sort sessions/;
+const SORT = startsWith(sidebarWords.sortSessions(""));
 /** The phone rail's way into Jump. */
 const JUMP_BUTTON = /Jump|Search/;
 /** The skills page's way in for a skill from a source. */
@@ -333,8 +361,9 @@ const recentOpen = async (page: Page) => {
     .waitFor();
 };
 
-/** Connect a machine's title, which its dialog and drawer open with. */
-const CONNECT_A_MACHINE = /^Connect a machine/;
+/** Add machine's window (connect/), and its title before an install starts. */
+const CONNECT_WINDOW = "[data-connect-window][data-state=open]";
+const ADD_MACHINE_TITLE = exactly(connectWords.addMachine);
 /** The stored transcript's title, as its row says it. */
 const STORED_TITLE = /Sketch the tray's empty state/;
 /** The usage page's project filter, opened. */
@@ -380,13 +409,13 @@ const manyProjects = (page: Page) =>
   });
 
 /** The Full Send ask's yes (PermissionSection's). */
-const SWITCH_FULL_SEND = /^Switch to Full Send$/;
+const SWITCH_FULL_SEND = exactly(spawnWords.switchToFullSend);
 /** The permission mode the scene's sessions run on. */
 const SCENE_MODE = "bypassPermissions";
 /** A refused send's way back: its row's Choose a mode (MessageRow). */
-const CHOOSE_A_MODE = /^Choose a mode$/;
+const CHOOSE_A_MODE = exactly(spawnWords.unchosenMode);
 /** No machine at all, where a page needs one (config NoMachines' title). */
-const NO_MACHINES = /No machines yet/;
+const NO_MACHINES = new RegExp(literal(commonWords.noMachines));
 /** A model's combobox (ModelCombobox's "Model"). */
 const MODEL_CHIP = /^Model/;
 /** The workflows page's New workflow, its two kinds, and a project menu's upstream row (core upstream-guard.ts `title`). */
@@ -465,7 +494,7 @@ const BULK_DROP = /^Drop$/;
 const BULK_LABEL = /^Label$/;
 /** The project head's More menu, and its stages picker. */
 const PROJECT_MORE = /More for cawco/;
-const PICK_STAGES = /Pick stages/;
+const PICK_STAGES = startsWith(projectWords.pickStages);
 /** The stages picker's Outreach set (StagesControl `NAMES.outreach`, then its chain). */
 const OUTREACH_STAGES = /^Outreach/;
 /** A column's way to a new task (NewTaskForm, closed). */
@@ -491,7 +520,7 @@ const DELEGATE_CARD = new RegExp(`^${DELEGATE_TITLE}`);
 /** The spawn sheet's chips, each its popover's trigger (NsPopover's `label`). */
 const LOCATION_CHIP = /^Location: /;
 const EFFORT_CHIP = /^Effort: /;
-const PERMISSION_CHIP = /^Permission mode: /;
+const PERMISSION_CHIP = startsWith(spawnWords.permissionMode(""));
 const ACCOUNT_CHIP = /^Account: /;
 /** The artifact's page in its session's pane. */
 const PREVIEW_FRAME = 'iframe[title="Preview"]';
@@ -502,8 +531,16 @@ const INSPECT = "Inspect";
 const INSPECTOR_ROW = "aside[aria-label=Inspector] li[data-prop]";
 /** The machines popover's trigger, Connect a machine's, and the routing's Fill first card. */
 const MACHINES = /machine/;
-const ADD_MACHINE = /^Add machine$/;
-const FILL_FIRST = /^Fill first/;
+const ADD_MACHINE = exactly(connectWords.addMachine);
+const FILL_FIRST = (() => {
+  const strategy = accountsWords.strategies.find(
+    (one) => one.id === "fill-first"
+  );
+  if (!strategy) {
+    throw new Error("accountsWords.strategies has no fill-first strategy");
+  }
+  return startsWith(strategy.label);
+})();
 /** The project's ⋯ menu. */
 const MORE_FOR_CAWCO = /More for cawco/;
 /**
@@ -633,7 +670,11 @@ const reloadedWith =
 
 /** Jump: the phone's and tablet's from the rail, the desk's on ⌘K. */
 const openJump = async (page: Page) => {
-  if (await page.getByRole("button", { name: "Open navigation" }).isVisible()) {
+  if (
+    await page
+      .getByRole("button", { name: sidebarWords.openNavigation })
+      .isVisible()
+  ) {
     await openRail(page);
     await press(JUMP_BUTTON)(page);
     return;
@@ -669,7 +710,7 @@ const SIGN_IN_ON = /^Sign in .+ on /;
  */
 const toKeyStep = async (page: Page) => {
   // A search field (role searchbox), found by the words in it.
-  await page.getByPlaceholder("Search providers").fill(KEY_PROVIDER);
+  await page.getByPlaceholder(accountsWords.setup.search).fill(KEY_PROVIDER);
   await page
     .locator("[data-choice]")
     .filter({ hasText: KEY_PROVIDER })
@@ -679,7 +720,7 @@ const toKeyStep = async (page: Page) => {
 };
 
 /** The keychain dialog's password field and its Unlock (UnlockKeychain's). */
-const KEYCHAIN_PASSWORD = /^Login password for /;
+const KEYCHAIN_PASSWORD = startsWith(machineWords.loginPasswordFor(""));
 const UNLOCK = /^Unlock$/;
 /** The machine control a keychain's unlock sends (UnlockKeychain `machineControl(…, "unlockKeychain")`). */
 const UNLOCK_CONTROL = (frame: string) => frame.includes('"unlockKeychain"');
@@ -692,7 +733,9 @@ const openKeychain = async (page: Page) => {
     .getByText(STUDIO_HOST, { exact: true })
     .first()
     .click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Unlock keychain…" }).click();
+  await page
+    .getByRole("menuitem", { name: machineWords.unlockKeychain })
+    .click();
 };
 
 /** What a Mac answers its keychain's unlock with (core `AuthState`). */
@@ -810,6 +853,8 @@ const studioRouted = async (page: Page): Promise<void> => {
 };
 
 /** The studio's keychain unlocked from its menu, its password sent, and `answer` the Mac's (`studioRouted`). */
+/** The unlock tile's title while the Mac has not answered (UnlockKeychain `working`). */
+const UNLOCKING = /^Unlocking /;
 const unlockStudio = (answer?: UnlockAnswer) => async (page: Page) => {
   await studioRouted(page);
   studioAnswers.set(page, answer);
@@ -1029,7 +1074,7 @@ const TRANSCRIPT_READ = "**/api/instances/*/transcript*";
 const PROJECT_CHIP = /^Project: /;
 const MACHINES_CHIP = /^Machines: /;
 const CAWCO_PROJECT = /^cawco\b/;
-const MOVE_AND_START = /^Move & start$/;
+const MOVE_AND_START = exactly(spawnWords.moveAndStart);
 /** A row in the Machines chip's popover (MachinesChip's), and a machine's, not its Add. */
 const MACHINE_ROW_ANY = "button[data-slot=row]";
 const MACHINE_ROW = `${MACHINE_ROW_ANY}:not([data-add])`;
@@ -1105,7 +1150,7 @@ const machinesOpen = async (page: Page) => {
 };
 /** A context menu's submenu standing open, the Pause until… row and its ends, and a session menu's Account. */
 const SUB_MENU = "[data-slot=context-menu-sub-content][data-state=open]";
-const PAUSE_UNTIL = /^Pause until/;
+const PAUSE_UNTIL = startsWith(machineWords.pauseUntil);
 const PAUSE_ENDS = /\d/;
 const ACCOUNT_ITEM = /^Account/;
 
@@ -1323,7 +1368,10 @@ const composeOn = async (page: Page) => {
   if (!box) {
     throw new Error("the preview's heading has no box");
   }
-  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+  await pressAt(frame, {
+    x: box.x + box.width * 0.3,
+    y: box.y + box.height / 2,
+  });
   await page
     .locator(COMPOSER_PLACED)
     .filter({ visible: true })
@@ -1351,7 +1399,10 @@ const dropPin = async (page: Page) => {
   if (!pill) {
     throw new Error("pin 1's pill has no box");
   }
-  await page.mouse.click(pill.x + pill.width / 2, pill.y + pill.height / 2);
+  await pressAt(frame, {
+    x: pill.x + pill.width / 2,
+    y: pill.y + pill.height / 2,
+  });
   // Its thread stands clear of its pill: beside it where the well allows,
   // else the foot sheet (DESIGN.md, A thread beside its pin). Placed once
   // the page has said where the pill stands (its overlay's `cawco:pin-at`,
@@ -1385,6 +1436,14 @@ const dropPin = async (page: Page) => {
  * drops one is refused whole (core comments.ts `pinsProblem`: "The agent's
  * replies are written by comment_reply, not by the page"). Whether pin 1
  * holds the agent's answer, after.
+ *
+ * Written once the doc holds all there is of it: the hub's (its socket has
+ * synced, the overlay's `hasSynced`, as the overlay itself refuses a write
+ * before) and the device's (its y-indexeddb copy merged in). A write
+ * before either removes only the pins the doc held then, and what the hub
+ * or the device held beside them stood again on the next load: a state
+ * read after a clear held the seeded pins in some walks and none in others
+ * (artifact/place-folder "Open 4, Resolved 6" against "Open 1").
  */
 const writePins = async (
   page: Page,
@@ -1396,11 +1455,66 @@ const writePins = async (
   if (!inner) {
     throw new Error("the preview's frame has no document");
   }
-  await inner.waitForFunction(
-    () =>
-      !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
-        .cawcoArtifact?.doc
-  );
+  await inner.waitForFunction(() => {
+    const artifact = (
+      window as unknown as {
+        cawcoArtifact?: {
+          subscribe: (
+            holder: (hold: { hasSynced: boolean; ref: unknown }) => void
+          ) => () => boolean;
+        };
+      }
+    ).cawcoArtifact;
+    let synced = false;
+    // `subscribe` answers at once with the hold as it stands.
+    artifact?.subscribe((hold) => {
+      synced = hold.hasSynced && hold.ref !== null;
+    })();
+    return synced;
+  });
+  await inner.evaluate(async (prefix) => {
+    interface Hold {
+      doc: object;
+      ref: { id: string } | null;
+    }
+    const artifact = (
+      window as unknown as {
+        cawcoArtifact: {
+          subscribe: (holder: (hold: Hold) => void) => () => boolean;
+          Y: { applyUpdate: (doc: object, update: Uint8Array) => void };
+        };
+      }
+    ).cawcoArtifact;
+    let held: Hold | null = null;
+    artifact.subscribe((hold) => {
+      held = hold;
+    })();
+    const { doc, ref } = held as unknown as Hold;
+    const name = `${prefix}${ref?.id}`;
+    const listed = await indexedDB.databases();
+    if (!listed.some((one) => one.name === name)) {
+      return;
+    }
+    const kept = await new Promise<Uint8Array[]>((resolve, reject) => {
+      const open = indexedDB.open(name);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const read = db.transaction("updates").objectStore("updates").getAll();
+        read.onsuccess = () => {
+          db.close();
+          resolve(read.result as Uint8Array[]);
+        };
+        read.onerror = () => {
+          db.close();
+          reject(read.error);
+        };
+      };
+    });
+    for (const update of kept) {
+      artifact.Y.applyUpdate(doc, update);
+    }
+  }, deviceDocName(""));
   return await inner.evaluate(
     ({ seeds: wanted, answered }) => {
       interface Entry {
@@ -1654,7 +1768,10 @@ const pinWith = async (page: Page, target: string, words: string) => {
   if (!box) {
     throw new Error(`the preview's ${target} has no box`);
   }
-  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+  await pressAt(page.frameLocator(PREVIEW_FRAME), {
+    x: box.x + box.width * 0.3,
+    y: box.y + box.height / 2,
+  });
   const composer = page
     .locator("[data-slot=pin-composer]")
     .filter({ visible: true })
@@ -1680,7 +1797,7 @@ const inspectSheet = async (page: Page) => {
 const inSheet =
   (...steps: ((page: Page) => Promise<unknown>)[]) =>
   async (page: Page) => {
-    await press("Start session")(page);
+    await press(spawnWords.startSession)(page);
     for (const step of steps) {
       // biome-ignore lint/performance/noAwaitInLoops: one step of the sheet at a time
       await step(page);
@@ -1853,11 +1970,6 @@ const BENCHES: [string, string, string][] = [
   ],
   ["head-tint", "/motion/head-tint", "[data-head-tint]"],
   ["lift", "/motion/lift", `${BENCH_MAIN} section[data-case]`],
-  [
-    "mac-readiness",
-    "/motion/mac-readiness",
-    'nav[aria-label="Readiness state"]',
-  ],
   ["new-session", "/motion/new-session", `${BENCH_MAIN} h1`],
   ["overlays", "/motion/overlays", `${BENCH_MAIN} [data-slot=openers]`],
   ["recall", "/motion/recall", "main#main-content form[data-slot=cin]"],
@@ -1926,26 +2038,32 @@ const openFiles = async (page: Page) => {
   await openRail(page);
   await page.locator("[data-sidebar-files]").first().click();
 };
-/** The config sections, each with its page's title (SectionFrame's `h1`, sections.ts `label`). */
+/** The config sections, each with its page's title (SectionFrame's `h1`, sections.ts `label`, from core's CONFIG_SECTIONS). */
 const CONFIG: [string, string][] = [
-  ["accounts", "Accounts"],
-  ["cli-tools", "Command-line tools"],
-  ["connections", "Connections"],
-  ["delegate-types", "Delegate types"],
-  ["devices", "Devices"],
-  ["hooks", "Hooks"],
-  ["mcp", "MCP servers"],
-  ["memory", "Memory files"],
-  ["models", "Models CawCo uses"],
-  ["phone", "Phone"],
-  ["previews", "Previews"],
-  ["rules", "Rules"],
-  ["browsers", "Browsers"],
-  ["skills", "Skills & plugins"],
-  ["spend", "Spend"],
-  ["subagents", "Subagents"],
-  ["updates", "Updates"],
-];
+  "accounts",
+  "cli-tools",
+  "connections",
+  "delegate-types",
+  "devices",
+  "hooks",
+  "mcp",
+  "memory",
+  "models",
+  "phone",
+  "previews",
+  "rules",
+  "browsers",
+  "skills",
+  "spend",
+  "subagents",
+  "updates",
+].map((slug) => {
+  const section = CONFIG_SECTIONS.find((one) => one.slug === slug);
+  if (!section) {
+    throw new Error(`CONFIG_SECTIONS has no ${slug} section`);
+  }
+  return [slug, section.label];
+});
 /** A config section's page title, and a section's rows while the fleet is still being read. */
 const SECTION_TITLE = "h1[data-slot=title]";
 const SKELETON = "[data-slot=skeleton]";
@@ -1958,9 +2076,9 @@ const at = (path: string) =>
 /** Each `new` editor's own field, by section. */
 const NEW_FIELD: Record<string, string> = {
   hooks: field("Hook name"),
-  mcp: field("Server name"),
+  mcp: field(mcpWords.nameLabel),
   subagents: field("new-subagent definition"),
-  "delegate-types": field("Delegate type name"),
+  "delegate-types": field(delegateTypesWords.nameLabel),
 };
 
 /** A config section's editors: each opens on `new` (its route's own word for a new one), and an account's own pages. */
@@ -2074,7 +2192,7 @@ const EDITORS: Record<string, State[]> = {
       // The adopted skill's Remove everywhere: gone from the list at once,
       // Undo in its toast (no ask: deletes.ts).
       name: "removed",
-      act: deletedFrom(MORE_FOR_SKILL, "Remove everywhere"),
+      act: deletedFrom(MORE_FOR_SKILL, skillsWords.removeEverywhere),
       restore: undoDelete('[aria-label="More for tray-check"]'),
       root: "body",
       ready: {
@@ -2098,7 +2216,7 @@ const EDITORS: Record<string, State[]> = {
       name: "filtered",
       act: (page) =>
         page
-          .getByRole("textbox", { name: "Filter memory files" })
+          .getByRole("textbox", { name: memoryWords.filterLabel })
           .fill("no-such-file"),
       root: "body",
       // The kit's EmptyState, its title naming the filter.
@@ -2137,7 +2255,7 @@ const EDITORS: Record<string, State[]> = {
       // The memory's Delete everywhere: its row gone at once, Undo in its
       // toast (no ask: deletes.ts).
       name: "deleted",
-      act: deletedFrom(MORE_FOR_MEMORY, "Delete everywhere"),
+      act: deletedFrom(MORE_FOR_MEMORY, memoryWords.deleteEverywhere),
       restore: undoDelete('[aria-label$="CLAUDE.md"][aria-label^="More for"]'),
       root: "body",
       ready: {
@@ -2160,7 +2278,10 @@ const EDITORS: Record<string, State[]> = {
       name: "editor",
       route: () => "/config/rules/new",
       root: "body",
-      ready: { shows: field("Rule name"), path: at("/config/rules/new") },
+      ready: {
+        shows: field(rulesWords.ruleName),
+        path: at("/config/rules/new"),
+      },
     },
     // The scene's rule: what it has caught.
     {
@@ -2168,7 +2289,7 @@ const EDITORS: Record<string, State[]> = {
       route: (s) => `/config/rules/${s.rule}`,
       root: "body",
       ready: (s) => ({
-        shows: field("Rule name"),
+        shows: field(rulesWords.ruleName),
         path: at(`/config/rules/${s.rule}`),
       }),
     },
@@ -2209,7 +2330,7 @@ const EDITORS: Record<string, State[]> = {
       route: (s) => `/config/accounts/${s.spare}`,
       act: press(SIGN_IN_ON),
       root: "body",
-      ready: { shows: field("Code from the sign-in page") },
+      ready: { shows: field(accountsWords.signin.codeLabel) },
     },
     {
       // A GitHub Copilot account signed in nowhere: its Sign in on the
@@ -2260,13 +2381,13 @@ const EDITORS: Record<string, State[]> = {
       act: async (page) => {
         await toKeyStep(page);
         await page
-          .getByRole("textbox", { name: "API key" })
+          .getByRole("textbox", { name: accountsWords.key.label })
           .fill("probe-302-key");
-        await press("Send key")(page);
-        await page.getByText("Key sent").first().waitFor();
+        await press(accountsWords.key.send)(page);
+        await page.getByText(accountsWords.key.sent).first().waitFor();
       },
       root: "body",
-      ready: { shows: "span", says: /^Key sent$/ },
+      ready: { shows: "span", says: exactly(accountsWords.key.sent) },
     },
   ],
 };
@@ -2308,7 +2429,7 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: `${HOME} [role=status]`,
-          says: /^Reading the fleet…$/,
+          says: exactly(commonWords.readingTheFleet),
         },
       },
       {
@@ -2343,32 +2464,47 @@ export const SURFACES: Surface[] = [
         ready: { shows: SUB_MENU, says: PAUSE_ENDS },
       },
       {
-        // The machines list's Add machine: Connect a machine, on its
-        // one-command tab (the command, and the wait for the machine).
+        // The machines list's Add machine: the modal on its Over SSH tab,
+        // then By a command (the hub's addresses, one per kind, and the line).
         name: "add-machine",
         widths: ["desk"],
         act: async (page) => {
           await press(MACHINES)(page);
           await press(ADD_MACHINE)(page);
-          await page.getByRole("tab", { name: "With one command" }).click();
+          await page
+            .locator(CONNECT_WINDOW)
+            .getByRole("tab", { name: connectWords.byCommand })
+            .click();
         },
         root: "body",
         ready: {
-          shows: `${OPEN_DIALOG} [role=tab][aria-selected=true]`,
-          says: /^With one command$/,
+          shows: `${CONNECT_WINDOW}[data-step=reach] #connect-reaches`,
+          says: exactly(connectWords.reachesHubAt),
         },
       },
       // The studio online and its keychain's unlock sent (`studioRouted`,
       // which stays the page's: these come last on this hub).
       {
-        // The Mac yet to answer: the unlock under way (MachineAuthStatus waiting).
+        // The Mac yet to answer: the unlock under way (MachineAuthStatus
+        // waiting), read where its act leaves it. A control no machine
+        // answers is "unanswered" after CONTROL_TIMEOUT_MS of page time
+        // (15 s, core `readWithin`), and the walk's act and stand after the
+        // press ran 13 to 16 s of it: the reduced desk pass read the form
+        // again, "Unlock studio", the unlock given up on.
         name: "unlocking",
         widths: ["desk"],
-        act: unlockStudio(),
+        act: async (page) => {
+          await unlockStudio()(page);
+          await page
+            .locator(`${UNLOCK_TILE} [data-slot=title]`)
+            .filter({ hasText: UNLOCKING })
+            .waitFor();
+        },
+        heldFrame: true,
         root: "body",
         ready: {
           shows: `${UNLOCK_TILE} [data-slot=title]`,
-          says: /^Unlocking /,
+          says: UNLOCKING,
         },
       },
       {
@@ -2379,7 +2515,7 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: `${UNLOCK_TILE} [role=status]:has([data-tone=ok])`,
-          says: / is unlocked/,
+          says: new RegExp(literal(machineWords.unlocked(""))),
         },
       },
       {
@@ -2390,7 +2526,7 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: `${UNLOCK_TILE} [role=status]:has([data-tone=caution])`,
-          says: / cannot read its logins/,
+          says: new RegExp(literal(machineWords.cantReadLogins(""))),
         },
       },
       {
@@ -2473,7 +2609,7 @@ export const SURFACES: Surface[] = [
         root: LAYER,
         ready: {
           shows: `${OPEN_MENU}[data-slot=dropdown-menu-content]`,
-          says: /Last activity/,
+          says: new RegExp(literal(sidebarWords.lastActivity)),
         },
       },
       {
@@ -2596,7 +2732,7 @@ export const SURFACES: Surface[] = [
           shows: on(s.compact, '[aria-label="Compacted, show the summary"]'),
         }),
       },
-      // The plan's ring pressed: its steps in the side panel.
+      // The plan's ring pressed: its steps over the composer's row.
       {
         name: "plan",
         route: (s) => `/session/${s.planned}`,
@@ -2805,7 +2941,7 @@ export const SURFACES: Surface[] = [
         // CawCo's fleet-memory read, its card opened: the memory it read.
         name: "memory-tool",
         route: (s) => `/session/${s.memoryRead}`,
-        act: press(MEMORY_ROW),
+        act: openToolRow(MEMORY_ROW),
         root: MAIN,
         ready: (s) => ({
           shows: on(s.memoryRead, OPEN_TOOL_ROW),
@@ -2816,7 +2952,7 @@ export const SURFACES: Surface[] = [
         // A skill the session ran, its card opened: what it was asked.
         name: "skill-tool",
         route: (s) => `/session/${s.skillRun}`,
-        act: press(SKILL_ROW),
+        act: openToolRow(SKILL_ROW),
         root: MAIN,
         ready: (s) => ({
           shows: on(s.skillRun, OPEN_TOOL_ROW),
@@ -2976,28 +3112,28 @@ export const SURFACES: Surface[] = [
       // The ⋯ menu's rows: the project's details, Caw's settings, its stages, and the forget it asks.
       {
         name: "details",
-        act: fromMore("Project details…"),
+        act: fromMore(projectWords.projectDetails),
         root: "body",
         ready: { shows: 'section[aria-label="Project details"]' },
       },
       {
         name: "caw-settings",
-        act: fromMore("Caw settings…"),
+        act: fromMore(projectWords.cawSettings),
         root: "body",
         ready: { shows: "[data-slot=caw-panel] [role=switch]" },
       },
       {
         name: "stages",
-        act: fromMore("Pick stages…"),
+        act: fromMore(projectWords.pickStages),
         root: "body",
         ready: {
           shows: "[data-slot=lead]",
-          says: /^This project has no stages of its own yet$/,
+          says: exactly(projectWords.noStages),
         },
       },
       {
         name: "forget",
-        act: fromMore("Forget project…"),
+        act: fromMore(projectWords.forgetProject),
         root: "body",
         ready: { shows: "section[data-stop-tray] [data-stop-confirm]" },
       },
@@ -3031,7 +3167,7 @@ export const SURFACES: Surface[] = [
         name: "forget-reading",
         act: async (page) => {
           await neverAnswered(page, PROJECT_RUNNING, PROJECT_RUNNING_PATH);
-          await fromMore("Forget project…")(page);
+          await fromMore(projectWords.forgetProject)(page);
         },
         root: "body",
         ready: { shows: "p[role=status]", says: /^Reading what runs in / },
@@ -3106,7 +3242,7 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
         ready: {
           shows: `${OPEN_POPOVER} [data-slot=lead]`,
-          says: /^This project has no stages of its own yet$/,
+          says: exactly(projectWords.noStages),
           not: "section[data-ask]",
         },
       },
@@ -3427,13 +3563,24 @@ export const SURFACES: Surface[] = [
         ready: { shows: `${HOST_CARD("plan")} [data-slot=diagram] svg` },
       },
       {
-        // A dev server's preview past --dur-wait-grace with no answer: Caw and "Opening…".
+        // A dev server's preview past --dur-wait-grace with no answer: Caw and
+        // "Opening…". It stands until the ping's answer is given up on
+        // (core preview-reach.ts PROBE_ANSWER_MS, 10s), then the well says
+        // why it can't be reached; the walk's own time after an act (ACT_MS
+        // and `arrive`'s 11s) runs past that, so the frame the act leaves,
+        // once the line stands, is the one read.
         name: "wait",
         act: async (page) => {
           const { SILENT_ORIGIN } = await import("../decision-embeds");
           await neverAnswered(page, `${SILENT_ORIGIN}/**`, PING_PATH);
           await hostPage("wait")(page);
+          await page
+            .locator("[data-slot=media] p[role=status]", {
+              hasText: "Opening the preview launch-site…",
+            })
+            .waitFor();
         },
+        heldFrame: true,
         root: "body",
         inView: "[data-slot=media] p[role=status]",
         ready: {
@@ -3654,13 +3801,9 @@ export const SURFACES: Surface[] = [
         ready: { shows: `${NS_POP} [data-account-option=auto]` },
       },
       {
-        // The Machines chip's "Connect a machine…": the pairing panel in the
-        // list's place, its install command in the join step's CopyBox. The
-        // command stands once the hub lists an address (hub join.ts
-        // `joinAddresses`: Tailscale, then each non-internal IPv4), which a
-        // host's tape holds and a workspace's (loopback alone) does not.
-        name: "machines-pair",
-        hostOnly: "join",
+        // The Machines chip's "Connect a machine…": Add machine, on its Over
+        // SSH tab, over the sheet.
+        name: "machines-add",
         act: inSheet(
           press(PROJECT_CHIP),
           (page) =>
@@ -3674,7 +3817,10 @@ export const SURFACES: Surface[] = [
               .click()
         ),
         root: "body",
-        ready: { shows: `${nsPop("machines")} code`, says: /install\.sh/ },
+        ready: {
+          shows: `${CONNECT_WINDOW}[data-step=reach] #connect-title`,
+          says: ADD_MACHINE_TITLE,
+        },
       },
       {
         // The cawco project on the machine with no checkout of it: Move &
@@ -3690,7 +3836,9 @@ export const SURFACES: Surface[] = [
       {
         name: "insert",
         act: inSheet(async (page) => {
-          await page.getByRole("textbox", { name: "First prompt" }).click();
+          await page
+            .getByRole("textbox", { name: spawnWords.firstPrompt })
+            .click();
           await page.keyboard.type("/");
         }),
         root: "body",
@@ -3705,7 +3853,9 @@ export const SURFACES: Surface[] = [
         name: "chip",
         act: inSheet(async (page) => {
           // The prompt's draft is kept across the sheet's openings: emptied first.
-          await page.getByRole("textbox", { name: "First prompt" }).click();
+          await page
+            .getByRole("textbox", { name: spawnWords.firstPrompt })
+            .click();
           await page.keyboard.press("ControlOrMeta+a");
           await page.keyboard.press("Delete");
           await page.keyboard.type("/");
@@ -3979,11 +4129,14 @@ export const SURFACES: Surface[] = [
       // The pane's Comments rail, its pins seeded: a short comment the agent
       // answered (its reply in meta, after the agent's glyph), a 48-word one
       // cut at two lines, and a gone pin's row beside them, its pill recessed.
+      // The rows stand 1, the gone 3, then 2, which on a phone stands past
+      // the foot sheet's end (60% of the well) until it is scrolled to.
       {
         name: "comments",
         route: (s) => `/session/${s.art}`,
         act: inComments(),
         root: "body",
+        inView: `${PIN_LIST} ${PIN_ROW}[data-pin-row="2"]`,
         widths: ["desk", "tablet", "phone"],
         ready: (s) => ({
           shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="2"]`),
@@ -4059,7 +4212,7 @@ export const SURFACES: Surface[] = [
         act: inComments(openRow(3), (page) =>
           page
             .locator(pinCard(3))
-            .getByRole("button", { name: "Pin it somewhere else" })
+            .getByRole("button", { name: commentWords.placeElsewhere })
             .click()
         ),
         root: "body",
@@ -4199,7 +4352,7 @@ export const SURFACES: Surface[] = [
           (page) =>
             page
               .locator(pinCard(3))
-              .getByRole("button", { name: "Pin it somewhere else" })
+              .getByRole("button", { name: commentWords.placeElsewhere })
               .click(),
           async (page) => {
             const frame = page.frameLocator(PREVIEW_FRAME);
@@ -4212,10 +4365,10 @@ export const SURFACES: Surface[] = [
             }
             // Left of the heading's pills (pressed at 0.3) and clear of the
             // gone pin's thread at the well's top-right.
-            await page.mouse.click(
-              box.x + box.width * 0.12,
-              box.y + box.height / 2
-            );
+            await pressAt(frame, {
+              x: box.x + box.width * 0.12,
+              y: box.y + box.height / 2,
+            });
           }
         ),
         root: "body",
@@ -4371,10 +4524,7 @@ export const SURFACES: Surface[] = [
         act: async (page) => {
           await pinWith(page, "h1", "Keep the heading on one line.");
           await paneKey(page, "v");
-          await page
-            .frameLocator(PREVIEW_FRAME)
-            .locator("[data-option=wrap]")
-            .click();
+          await pressIn(page.frameLocator(PREVIEW_FRAME), "[data-option=wrap]");
           await page.locator("[data-slot=send]").first().waitFor();
           await sideToFloor(page);
           await page
@@ -4514,7 +4664,7 @@ export const SURFACES: Surface[] = [
       {
         name: "rest",
         root: "body",
-        ready: { shows: "main p", says: /^Page not found$/ },
+        ready: { shows: "main p", says: exactly(shellWords.pageNotFound) },
       },
     ],
   },
@@ -4565,7 +4715,7 @@ export const SURFACES: Surface[] = [
         widths: ["tablet", "phone"],
         ready: {
           shows: MACHINES_EMPTY,
-          says: /^None of your machines are online$/,
+          says: exactly(shellWords.noneOnline),
         },
       },
       // No machine at all, every one removed: where the page says to add one.
@@ -4575,12 +4725,12 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: MACHINES_EMPTY,
-          says: /^Connect a machine to run sessions$/,
+          says: exactly(shellWords.noMachines),
         },
       },
       {
-        // Its first way to connect one pressed: Connect a machine, the
-        // dialog on a desk and the bottom drawer on a phone.
+        // Its first way to connect one pressed: Add machine on its Over SSH
+        // tab, the modal on a desk and its sheet on a phone.
         name: "connect",
         hub: "unregistered",
         act: async (page) => {
@@ -4593,9 +4743,8 @@ export const SURFACES: Surface[] = [
         },
         root: "body",
         ready: {
-          // The dialog is named by its title; the drawer by its label.
-          shows: `${OPEN_DIALOG}, [data-slot=drawer-content][data-state=open]`,
-          says: CONNECT_A_MACHINE,
+          shows: `${CONNECT_WINDOW}[data-step=reach] #connect-title`,
+          says: ADD_MACHINE_TITLE,
         },
       },
       // A session on the machine that went away: what its pane can still show.
@@ -4629,14 +4778,20 @@ export const SURFACES: Surface[] = [
       },
       {
         // Its pairing asked of a hub it can't reach just then: "Pairing
-        // didn't start", and the reason opened whole.
+        // didn't start", and the reason opened whole. A tab that holds no
+        // code yet: the route's first load started one and kept it in the
+        // tab's storage, which a reload shows again rather than asking anew
+        // (hub-auth.svelte.ts `resumePairing`, since 57846636c).
         name: "start-failed",
         hub: "pairing",
         act: async (page) => {
-          await reloadedWith((p) =>
-            p.route(PAIR_START, (route) => route.abort("connectionrefused"))
-          )(page);
-          await page.getByTitle("Show the whole error").first().click();
+          await reloadedWith(async (p) => {
+            await p.route(PAIR_START, (route) =>
+              route.abort("connectionrefused")
+            );
+            await p.evaluate(() => window.sessionStorage.clear());
+          })(page);
+          await page.getByTitle(shellWords.wholeError).first().click();
         },
         root: "body",
         ready: {

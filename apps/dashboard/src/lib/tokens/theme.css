@@ -169,6 +169,7 @@
   --color-brand-hover: var(--brand-hover);
   --color-brand-wash: var(--brand-wash);
   --color-c-target-tint: var(--c-target-tint);
+  --color-c-change-wash: var(--c-change-wash);
   --color-brand-ink: var(--brand-ink);
   --color-brand-ink-strong: var(--brand-ink-strong);
   --color-link-ink: var(--link-ink);
@@ -338,6 +339,10 @@
   --spacing-c-toolbar-ctl: var(--c-toolbar-ctl);
   --spacing-c-find-w: var(--c-find-w);
   --spacing-c-new-session-pop-w: var(--c-new-session-pop-w);
+  --spacing-c-step-rail-x: var(--c-step-rail-x);
+  --spacing-c-step-rail-top: var(--c-step-rail-top);
+  --spacing-c-step-rail-gap: var(--c-step-rail-gap);
+  --spacing-c-connect-w: var(--c-connect-w);
   --spacing-c-panel-w: var(--c-panel-w);
   --spacing-c-signin-pop-w: var(--c-signin-pop-w);
   --spacing-c-caw-panel-h: var(--c-caw-panel-h);
@@ -393,6 +398,7 @@
   --spacing-c-tray-chip: var(--c-tray-chip);
   --spacing-c-inline-chip-line: var(--c-inline-chip-line);
   --spacing-c-inline-chip-pad: var(--c-inline-chip-pad);
+  --spacing-c-inline-chip-max-w: var(--c-inline-chip-max-w);
   /* Switches with its context: no literal maps to it. */
   --spacing-c-peek-glyph: var(--c-peek-glyph);
   /* Switches with its context: no literal maps to it. */
@@ -658,6 +664,8 @@
   --duration-reveal: var(--dur-reveal);
   --duration-hold: var(--dur-hold);
   --duration-loop: var(--dur-loop);
+  --duration-skeleton-pulse: var(--dur-skeleton-pulse);
+  --duration-skeleton-reveal: var(--dur-skeleton-reveal);
   --duration-c-500: var(--c-500);
   --duration-breath: var(--breath);
 
@@ -731,13 +739,15 @@
   --animate-arrive-late: kit-fade-in var(--dur-menu) var(--ease-out)
     var(--dur-control) both;
   --animate-finish: finish calc(var(--dur-fade) * 2) var(--ease-out);
+  --animate-attn-echo: ping var(--dur-loop) var(--ease-out) 3 forwards;
   --animate-head-fade: head-fade linear both;
   --animate-dialog-in: kit-dialog-in var(--dur-panel) var(--ease-out) both;
   --animate-dialog-out: kit-dialog-out var(--dur-exit) var(--ease-out) both;
   --animate-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) both;
   --animate-tip-fade: kit-tip-fade var(--dur-fade) var(--ease-out) both;
   --animate-tip-in: kit-tip-in var(--dur-fade) var(--ease-out) both;
-  --animate-skeleton-sweep: kit-skeleton-sweep var(--dur-loop) linear infinite;
+  --animate-skeleton-pulse: kit-skeleton-pulse var(--dur-skeleton-pulse)
+    var(--ease-crossfade) infinite;
   @keyframes spin {
     to {
       transform: rotate(360deg);
@@ -975,9 +985,13 @@
       translate: var(--kit-tip-from);
     }
   }
-  @keyframes kit-skeleton-sweep {
-    to {
-      translate: 100% 0;
+  @keyframes kit-skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: var(--skeleton-pulse-floor);
     }
   }
 }

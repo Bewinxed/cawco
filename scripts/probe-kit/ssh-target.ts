@@ -71,8 +71,10 @@ export const machineBin = (dir: string): string => {
     "sed",
     "mv",
     "id",
-    // The hub reads where the machine listens, and ends its own stale
-    // session, with these (hub ssh-tunnels.ts `listenersOn`, `endStaleOn`).
+    // The hub reads where the machine listens, records the session holding
+    // its port and ends that one alone, with these and `ps`, `sed`, `kill`
+    // (hub ssh-tunnels.ts `listenersOn`, `holderOn`, `endOwnOn`). No `tr`:
+    // the hub's commands must not need one.
     "ss",
     // A clone and push through the hub's remote (ssh-reach (i)).
     "git",
@@ -232,9 +234,14 @@ const running = (
   });
 };
 
-/** The target on `host`:`port` (0: any), signing in by `authenticate`; answers its port. */
+/**
+ * The target on `host`:`port` (0: any), signing in by `authenticate`;
+ * answers its port. `forwards: false` refuses every `tcpip-forward`, as an
+ * sshd with `AllowTcpForwarding no` does.
+ */
 export const serveTarget = async (options: {
   authenticate: (ctx: AuthContext) => void;
+  forwards?: boolean;
   home: string;
   host: string;
   hostKey: Buffer;
@@ -245,7 +252,11 @@ export const serveTarget = async (options: {
     client
       .on("authentication", options.authenticate)
       .on("ready", () => {
-        forwarding(client);
+        if (options.forwards === false) {
+          client.on("request", (_accept, reject) => reject?.());
+        } else {
+          forwarding(client);
+        }
         running(client, options);
       })
       .on("error", () => undefined);

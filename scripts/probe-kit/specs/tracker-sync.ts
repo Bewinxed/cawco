@@ -107,6 +107,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { connectionsWords } from "../../../packages/core/src/words/connections";
 import { until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { type GitHubGrant, githubStub, linearStub } from "../tracker-stubs";
@@ -1516,7 +1517,7 @@ const legs = async (
   );
 
   await open(desk, `${base}/config/connections`, '[aria-label="Connections"]');
-  await desk.getByRole("button", { name: "Sign in to a service" }).click();
+  await desk.getByRole("button", { name: connectionsWords.signInTo }).click();
   await desk.getByRole("menuitem", { name: "GitHub" }).click();
   await desk.waitForSelector('form[aria-label="Sign in to GitHub"]');
   await desk.fill("#connection-account", "ui app");

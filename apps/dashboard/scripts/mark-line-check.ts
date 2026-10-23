@@ -390,12 +390,27 @@ interface Reading {
   css: string;
   file: string;
   hits: Hit[];
-  /** Components imported from unplugin-icons (`~icons/…`): each renders an svg. */
+  /** Components imported from the icon barrel or the icon package (`#lib/icons.js`, `@cawco/icons`, its marks), by the name the file gives each: each renders an svg. */
   icons: Set<string>;
   source: string;
 }
 
-const ICON_IMPORT = /import\s+(\w+)\s+from\s+["']~icons\//g;
+/** An import from the icon barrel or the icon package: its specifiers. */
+const ICON_IMPORT =
+  /import\s*\{([^}]*)\}\s*from\s*["'](?:#lib\/icons(?:\.js)?|\$lib\/icons(?:\.js)?|@cawco\/icons(?:\/marks)?)["']/g;
+/** One specifier's local name: `A as B` is `B`. */
+const LOCAL_NAME = /(?:\w+\s+as\s+)?(\w+)\s*$/;
+
+/** The local names `source` imports from the icon barrel or the icon package. */
+const iconNames = (source: string): Set<string> =>
+  new Set(
+    [...source.matchAll(ICON_IMPORT)].flatMap((found) =>
+      (found[1] ?? "")
+        .split(",")
+        .map((spec) => spec.trim().match(LOCAL_NAME)?.[1] ?? "")
+        .filter(Boolean)
+    )
+  );
 
 const lineOf = (r: Reading, at: number): number =>
   r.source.slice(0, at).split("\n").length;
@@ -590,7 +605,7 @@ export function check(file: string, source: string): Hit[] {
     css: STYLE.exec(source)?.[1] ?? "",
     file,
     hits: [],
-    icons: new Set([...source.matchAll(ICON_IMPORT)].map((m) => m[1] ?? "")),
+    icons: iconNames(source),
     source,
   };
   const top = ast.fragment.nodes;

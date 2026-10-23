@@ -77,18 +77,30 @@
  * 20. The field emptied as a person empties it (typed, select all, delete)
  *    reads empty to every reader of the draft: one line tall with its
  *    placeholder, Send off, no draft kept for a reload, ↑ starts recall.
+ * 21. In WebKit at the desk, a canvas opened by ⌘⇧D: each top corner's
+ *    grip comes in by one animation on itself over --dur-grow (CanvasGrip,
+ *    motion/curves `appearOnMount`), never a @starting-style transition,
+ *    which WebKit sometimes skips for an element just added.
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
+import {
+  durOf,
+  runsOn as entranceRunsOn,
+  oneEntrance,
+  recordRuns,
+} from "../entrances";
 import { type Box, box } from "../geom";
 import {
   COMPOSER,
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   pressIn,
   type Spec,
   settle,
@@ -595,11 +607,39 @@ const probe = async (kit: Kit) => {
   await phoneCheck(on, "tablet", 768);
   // A docked canvas about 500px wide under a finger: the iPad's panel width.
   await phoneCheck(on, "tablet", 516);
+  await gripEntrance(on);
   kit.check(
     "the page said no error",
     on.said.length === 0,
     on.said.slice(0, 6).join(" | ") || "none"
   );
+};
+
+/**
+ * 21. In WebKit at the desk, a canvas opened by ⌘⇧D: each top corner's grip
+ * comes in by one animation on itself over --dur-grow, never @starting-style.
+ */
+const gripEntrance = async (on: On) => {
+  const { kit, base, session } = on;
+  const page = await kit.page("desk", { engine: "webkit" });
+  await page.addInitScript(recordRuns);
+  await open(page, `${base}/session/${session}`, FIELD);
+  await settle(page);
+  await page.focus(FIELD);
+  await page.keyboard.press("Control+Shift+KeyD");
+  await page.locator(CORNER_LEFT).waitFor({ timeout: 15_000 });
+  await page.waitForTimeout(700);
+  const grow = await page.evaluate(durOf, "--dur-grow");
+  const grips = await page.evaluate(entranceRunsOn, {
+    selector: `${CORNER_LEFT}, ${CORNER_RIGHT}`,
+    pseudo: null,
+  });
+  kit.check(
+    `21: WebKit desk, each top corner's grip comes in by one animation on itself over --dur-grow (${grow}ms), never @starting-style`,
+    grips.length === 2 && grips.every(({ runs }) => oneEntrance(runs, grow)),
+    JSON.stringify(grips)
+  );
+  await page.close();
 };
 
 /** The Send/Stop button and the glyph carriers it swaps. */
@@ -697,7 +737,7 @@ const swapCheck = async (on: On, clock: Clock) => {
     await until(
       "the button back on Send",
       () => page.locator(SEND).getAttribute("aria-label"),
-      (label) => label === "Send message",
+      (label) => label === transcriptWords.sendMessage,
       60_000
     );
     await page.focus(FIELD);
@@ -747,7 +787,9 @@ const swapCheck = async (on: On, clock: Clock) => {
         };
       }, SEND);
     const settledNow = (seen: Awaited<ReturnType<typeof button>>) =>
-      seen.label === "Send message" && seen.busy === null && seen.leaving === 0;
+      seen.label === transcriptWords.sendMessage &&
+      seen.busy === null &&
+      seen.leaving === 0;
     const ready = await until(
       "the last press settled",
       button,
@@ -833,7 +875,7 @@ const swapCheck = async (on: On, clock: Clock) => {
   await until(
     "the button back on Send",
     () => page.locator(SEND).getAttribute("aria-label"),
-    (label) => label === "Send message",
+    (label) => label === transcriptWords.sendMessage,
     60_000
   ).catch(() => undefined);
   await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
@@ -2044,7 +2086,7 @@ const heldExportCheck = async (on: On) => {
       sent === 0 &&
       after2.field === words &&
       after2.canvas &&
-      after2.label === "Send message" &&
+      after2.label === transcriptWords.sendMessage &&
       after2.busy === null,
     `held ${held} export request(s); said after ${after} ms: "${said}"; sent ${sent}; ${JSON.stringify(after2)}`
   );
@@ -2703,13 +2745,17 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
   /** This page's own canvas, once Draw has made it (the panel may show another the session docked). */
   let mine =
     '[data-slot="canvas-stage"]:is([data-standing], [data-slot="standing"]) iframe';
-  /** A tap on `selector`'s centre: Playwright's box of an element in a frame is already in the page's terms. */
+  /** A tap on `selector`'s centre: Playwright's box of an element in a frame is already in the page's terms; one in a frame, once nothing around the frame covers it (kit pressAt). */
   const tap = async (selector: string, within = page.mainFrame()) => {
     const at = await within.locator(selector).first().boundingBox();
     if (!at) {
       throw new Error(`nothing to tap at ${selector}`);
     }
-    await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
+    await pressAt(
+      within,
+      { x: at.x + at.width / 2, y: at.y + at.height / 2 },
+      { how: "tap" }
+    );
   };
   await tap("[data-att-btn]");
   await page.getByRole("menuitem", { name: "Draw" }).waitFor();

@@ -32,6 +32,7 @@
  */
 import { join } from "node:path";
 import type { Page, WebSocketRoute } from "playwright-core";
+import { connectionWords } from "../../../../packages/core/src/words/connection";
 import { bezierAt, sameCurve } from "../../anim";
 import { scan } from "../../journeys/scan";
 import {
@@ -39,10 +40,12 @@ import {
   frames,
   type Kit,
   open,
+  readMotion,
   type Spec,
   settle,
   type View,
 } from "../../kit";
+import { literal } from "../../words";
 
 const BAND = '[data-slot="hub-band"]';
 const CARD = "[data-glass-card-frame]";
@@ -60,7 +63,7 @@ const installing = (phase: "installing" | "available") => ({
 const AWAY =
   /hub unreachable|can.t reach the hub|reach the hub|retrying in|retrying now|reconnecting|reconnect/i;
 
-const UNREACHABLE = /Hub unreachable/;
+const UNREACHABLE = new RegExp(literal(connectionWords.unreachable));
 const RECONNECTED = /reconnected/i;
 /** The build's name kept whole: a word joiner may follow its hyphen. */
 const UPDATING_PROBE = /updating to 9\.9\.9-\u2060?probe/;
@@ -191,9 +194,16 @@ const bandNow = (page: Page) =>
   }, BAND);
 
 interface Read {
-  /** Each transition's property, duration (ms), easing and start. */
-  runs: { duration: number; easing: string; prop: string; start: number }[];
-  /** Opacity seeked to each fraction. */
+  /** The clock it was read on (kit.ts `readMotion`): the DevTools one, or the page's own. */
+  by: "clock" | "held";
+  /** Each transition's property, length (ms), easing and start. */
+  runs: {
+    duration: number;
+    easing: string;
+    prop: string;
+    start: number | null;
+  }[];
+  /** The band at each fraction of its clock (none when read by events). */
   samples: {
     bottom: number;
     clipTop: number;
@@ -206,113 +216,77 @@ interface Read {
   tokens: { duration: number; easing: string };
 }
 
+/** The slot the band stands in, whose row opens and shuts with it. */
+const BAND_SLOT = '[data-slot="hub-band-slot"]';
+
+/** The band as drawn now: its opacity and slide, its foot, its clip's top, and what follows it. */
+function sampleBand(selector: string) {
+  const band = document.querySelector<HTMLElement>(selector) as HTMLElement;
+  // What stands under the band's foot: the bar, where the band is over it
+  // (a bar floating over a phone's tabs), else the page.
+  const floating = window.matchMedia("(max-width: 899px)").matches
+    ? document.querySelector('header[data-slot="top"][data-floating]')
+    : null;
+  const next = floating ?? document.querySelector("#main-content");
+  const style = getComputedStyle(band);
+  return {
+    opacity: Number(style.opacity),
+    translate: style.translate,
+    bottom: band.getBoundingClientRect().bottom,
+    clipTop: (band.parentElement as HTMLElement).getBoundingClientRect().top,
+    pageTop: next?.getBoundingClientRect().top ?? Number.NaN,
+  };
+}
+
 /**
- * The band's transitions caught mid-way (the page's clock slowed through
- * the Animation domain, then each paused and seeked through its fractions),
- * with the tokens they should be on.
+ * The band's transitions as `start` begins them (its own opacity and
+ * slide, and its row's opening or shutting in the slot), read as the kit
+ * reads motion (kit.ts `readMotion`): held and sought through its
+ * fractions. With the tokens they should be on.
  */
 async function scrubBand(
   page: Page,
   start: () => Promise<void>,
   token: { duration: string; easing: string }
 ): Promise<Read | null> {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Animation.enable");
-  await cdp.send("Animation.setPlaybackRate", { playbackRate: 0.02 });
-  try {
-    await start();
-    const caught = await page
-      .waitForFunction(
-        (selector) =>
-          (document.querySelector(selector)?.getAnimations() ?? []).some(
-            (run) =>
-              run.playState === "running" &&
-              run instanceof CSSTransition &&
-              ["opacity", "translate"].includes(run.transitionProperty)
-          ),
-        BAND,
-        { timeout: 15_000, polling: "raf" }
-      )
-      .then(() => true)
-      .catch(() => false);
-    if (!caught) {
-      return null;
-    }
-    return await page.evaluate(
-      ({ selector, names }) => {
-        const band = document.querySelector<HTMLElement>(
-          selector
-        ) as HTMLElement;
-        // The band's own, and its row's opening or shutting in the slot
-        // that holds it.
-        const slot = band.closest<HTMLElement>('[data-slot="hub-band-slot"]');
-        const runs = [
-          ...band.getAnimations(),
-          ...(slot?.getAnimations() ?? []),
-        ].filter(
-          (run) =>
-            run instanceof CSSTransition &&
-            ["opacity", "translate", "grid-template-rows"].includes(
-              run.transitionProperty
-            )
-        ) as CSSTransition[];
-        // What stands under the band's foot: the bar, where the band is
-        // over it (a bar floating over a phone's tabs), else the page.
-        const floating = window.matchMedia("(max-width: 899px)").matches
-          ? document.querySelector('header[data-slot="top"][data-floating]')
-          : null;
-        const next = floating ?? document.querySelector("#main-content");
-        for (const run of runs) {
-          run.pause();
-        }
-        const root = getComputedStyle(document.documentElement);
-        const ms = (v: string) =>
-          v.trim().endsWith("ms")
-            ? Number.parseFloat(v)
-            : Number.parseFloat(v) * 1000;
-        const read = {
-          tokens: {
-            duration: ms(root.getPropertyValue(names.duration)),
-            easing: root.getPropertyValue(names.easing).trim(),
-          },
-          runs: runs.map((run) => {
-            const timing = run.effect?.getComputedTiming();
-            return {
-              prop: run.transitionProperty,
-              duration: Number(timing?.duration),
-              easing: String(timing?.easing),
-              start: Number(run.startTime),
-            };
-          }),
-          samples: [0, 0.25, 0.5, 0.75, 1].map((f) => {
-            for (const run of runs) {
-              run.currentTime =
-                f * Number(run.effect?.getComputedTiming().duration);
-            }
-            const style = getComputedStyle(band);
-            return {
-              f,
-              opacity: Number(style.opacity),
-              translate: style.translate,
-              bottom: band.getBoundingClientRect().bottom,
-              clipTop: (
-                band.parentElement as HTMLElement
-              ).getBoundingClientRect().top,
-              pageTop: next?.getBoundingClientRect().top ?? Number.NaN,
-            };
-          }),
-        };
-        for (const run of runs) {
-          run.finish();
-        }
-        return read;
-      },
-      { selector: BAND, names: token }
-    );
-  } finally {
-    await cdp.send("Animation.setPlaybackRate", { playbackRate: 1 });
-    await cdp.detach();
+  const motion = await readMotion(page, start, BAND_SLOT, {
+    fractions: [0, 0.25, 0.5, 0.75, 1],
+    read: () => page.evaluate(sampleBand, BAND),
+    ms: 15_000,
+  });
+  const runs = motion.runs.filter(
+    (run) =>
+      run.type === "CSSTransition" &&
+      ["opacity", "translate", "grid-template-rows"].includes(run.name)
+  );
+  if (runs.length === 0) {
+    return null;
   }
+  const tokens = await page.evaluate((names) => {
+    const root = getComputedStyle(document.documentElement);
+    const said = (v: string) =>
+      v.trim().endsWith("ms")
+        ? Number.parseFloat(v)
+        : Number.parseFloat(v) * 1000;
+    return {
+      duration: said(root.getPropertyValue(names.duration)),
+      easing: root.getPropertyValue(names.easing).trim(),
+    };
+  }, token);
+  return {
+    by: motion.by,
+    tokens,
+    runs: runs.map((run) => ({
+      prop: run.name,
+      duration: run.end,
+      easing: run.easing,
+      start: run.start,
+    })),
+    samples: motion.at.map(({ fraction, value }) => ({
+      f: fraction,
+      ...value,
+    })),
+  };
 }
 
 /** Holds a read to its tokens: one clock, the tokens' duration and curve, opacity on that curve. */
@@ -338,10 +312,11 @@ function checkMotion(
     (run) =>
       Math.abs(run.duration - read.tokens.duration) < 0.5 &&
       sameCurve(run.easing, read.tokens.easing) &&
+      run.start !== null &&
       run.start === read.runs[0]?.start
   );
   kit.check(
-    `${name}: the band's ${what} is one clock on its tokens`,
+    `${name}: the band's ${what} is one clock on its tokens (read by ${read.by})`,
     clock,
     `${read.runs.map((r) => `${r.prop} ${r.duration}ms ${r.easing} @${r.start}`).join("; ")} vs ${read.tokens.duration}ms ${read.tokens.easing}`
   );
@@ -371,6 +346,18 @@ function checkMotion(
           `${s.f}: foot ${s.bottom.toFixed(1)}, page top ${s.pageTop.toFixed(1)}`
       )
       .join("; ")
+  );
+}
+
+/** The band's slide starts hidden under the top bar: read at its clock's 0. */
+function startsHidden(kit: Kit, name: string, entered: Read | null) {
+  const first = entered?.samples[0];
+  kit.check(
+    `${name}: the band's slide starts hidden under the top bar`,
+    first !== undefined && first.bottom <= first.clipTop + 0.5,
+    first
+      ? `band bottom ${first.bottom} at 0, clip top ${first.clipTop}`
+      : "no sample"
   );
 }
 
@@ -469,19 +456,31 @@ const bandLines = (page: Page) =>
       range.selectNodeContents(node);
       boxes.push(...range.getClientRects());
     }
-    const rows = new Map<number, { left: number; right: number }>();
-    for (const box of boxes) {
+    // A line is the boxes standing across one band of height: a box whose
+    // middle falls inside a line's top and bottom is on it. Boxes of one line
+    // need not share a top (WebKit stands MorphText's words a fraction of a
+    // pixel apart), so a top rounded to the pixel would split one line in two.
+    const rows: { bottom: number; left: number; right: number; top: number }[] =
+      [];
+    for (const box of [...boxes].sort((a, b) => a.top - b.top)) {
       if (box.width === 0) {
         continue;
       }
-      const key = Math.round(box.top);
-      const row = rows.get(key);
-      rows.set(key, {
-        left: Math.min(row?.left ?? box.left, box.left),
-        right: Math.max(row?.right ?? box.right, box.right),
-      });
+      const middle = box.top + box.height / 2;
+      const row = rows.find((one) => middle >= one.top && middle <= one.bottom);
+      if (row) {
+        row.left = Math.min(row.left, box.left);
+        row.right = Math.max(row.right, box.right);
+      } else {
+        rows.push({
+          top: box.top,
+          bottom: box.bottom,
+          left: box.left,
+          right: box.right,
+        });
+      }
     }
-    return [...rows.values()].map((row) => row.right - row.left);
+    return rows.map((row) => row.right - row.left);
   }, BAND);
 
 /** The top bar's foot: its own bottom edge's paint, read off its style. */
@@ -1112,14 +1111,7 @@ async function runLeg(
     { duration: "--dur-panel", easing: "--ease-drawer" }
   );
   checkMotion(kit, name, "enter", entered, true);
-  const first = entered?.samples[0];
-  kit.check(
-    `${name}: the band's slide starts hidden under the top bar`,
-    first !== undefined && first.bottom <= first.clipTop + 0.5,
-    first
-      ? `band bottom ${first.bottom} at 0, clip top ${first.clipTop}`
-      : "no sample"
-  );
+  startsHidden(kit, name, entered);
   await settle(page, 300);
   const down = await bandNow(page);
   kit.check(
@@ -1666,15 +1658,23 @@ interface Change {
  * Installed before the page's own scripts: every change of the band's
  * `data-open` as a MutationObserver hears it, and every frame the page's
  * top (`#main-content`) stands somewhere new, from the first frame on.
+ * Each opening's own runs (the band's slot and all in it, made by the
+ * write that opens it: `getAnimations()` in the observer's microtask makes
+ * them) are kept, and the frame they have all ended in is `probeEnded`: the
+ * page's top drawn in that frame is the opening's last.
  */
 function recordBand() {
   const w = window as unknown as {
     probeBand: Change[];
+    probeEnded: Change[];
     probeTop: Change[];
   };
   w.probeBand = [];
+  w.probeEnded = [];
   w.probeTop = [];
   let shown: boolean | null = null;
+  /** The runs of an opening that have all ended, not yet drawn: their count. */
+  let ended: number | null = null;
   const heard = () => {
     const band = document.querySelector('[data-slot="hub-band"]');
     if (!band) {
@@ -1684,6 +1684,16 @@ function recordBand() {
     if (now !== shown) {
       shown = now;
       w.probeBand.push({ at: Math.round(performance.now()), value: now });
+      if (now) {
+        const runs = (
+          band.closest('[data-slot="hub-band-slot"]') ?? band
+        ).getAnimations({ subtree: true });
+        Promise.all(runs.map((run) => run.finished.catch(() => undefined)))
+          .then(() => {
+            ended = runs.length;
+          })
+          .catch(() => undefined);
+      }
     }
   };
   new MutationObserver(heard).observe(document, {
@@ -1702,6 +1712,10 @@ function recordBand() {
         w.probeTop.push({ at: Math.round(performance.now()), value: now });
       }
     }
+    if (ended !== null) {
+      w.probeEnded.push({ at: Math.round(performance.now()), value: ended });
+      ended = null;
+    }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -1712,14 +1726,17 @@ const recorded = (page: Page) =>
   page.evaluate(() => {
     const w = window as unknown as {
       probeBand: Change[];
+      probeEnded: Change[];
       probeTop: Change[];
     };
     const out = {
       band: w.probeBand,
+      ended: w.probeEnded,
       top: w.probeTop,
       now: Math.round(performance.now()),
     };
     w.probeBand = [];
+    w.probeEnded = [];
     w.probeTop = [];
     return out;
   });
@@ -1734,21 +1751,6 @@ const listed = (changes: Change[]) =>
       return `+${c.at} ${c.value ? "open" : "shut"}`;
     })
     .join(", ") || "none";
-
-/** The page's top as runs of motion: frames of change under 100 ms apart are one run. */
-const moves = (top: Change[]) => {
-  const runs: Change[][] = [];
-  for (const change of top) {
-    const last = runs.at(-1);
-    const prev = last?.at(-1);
-    if (last && prev && change.at - prev.at < 100) {
-      last.push(change);
-    } else {
-      runs.push([change]);
-    }
-  }
-  return runs;
-};
 
 /**
  * A tab that has never had the hub, the hub refusing it from the first
@@ -1777,15 +1779,21 @@ async function neverConnected(kit: Kit, base: string) {
       !away.band.some((c) => c.value === false && c.at > openAt),
     `${socket.refused.length} tries; ${listed(away.band)}`
   );
-  // The first frame places the page; every move after it is the band's.
-  const runs = moves(away.top.slice(1));
-  const run = runs[0] ?? [];
+  // The first frame places the page; every move after it is the band's,
+  // one way, from its opening to the frame its runs have all ended in: by
+  // the opening's own end, not by gaps between frames (a loaded WebKit
+  // draws none for 100 ms and more, mid-run).
+  const run = away.top.slice(1);
+  const endedAt = away.ended[0]?.at ?? Number.NaN;
   kit.check(
     `${name}: the page's top moves once, as the band opens, and not again`,
-    runs.length === 1 &&
+    away.ended.length === 1 &&
+      Number(away.ended[0]?.value) > 0 &&
+      run.length > 0 &&
       (run[0]?.at ?? 0) >= openAt - 50 &&
+      (run.at(-1)?.at ?? Number.POSITIVE_INFINITY) <= endedAt &&
       run.every((c, i) => i === 0 || c.value >= (run[i - 1]?.value ?? 0)),
-    `${runs.length} run(s): ${runs.map((r) => `+${r[0]?.at}→+${r.at(-1)?.at} ${r[0]?.value}→${r.at(-1)?.value} (${r.length} frames)`).join("; ")}`
+    `opened +${openAt}, its ${away.ended[0]?.value ?? 0} run(s) ended in the frame at +${endedAt}; the top: ${listed(run)}`
   );
 
   // The hub answers: the next try reaches it, and the band leaves once.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
+  import { commonWords, machineLabel } from "@cawco/core";
   /**
    * Where one row has landed: "2/2 machines" on the row, and machine by
    * machine in the popover. A machine that refused it opens the full fault —
@@ -29,10 +29,10 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import type { Machine } from "../client.svelte";
+  import AddMachineLink from "../connect/AddMachineLink.svelte";
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";
   import { causeOf, type FaultScope } from "../fleet-faults";
-  import AddMachineLink from "../join/AddMachineLink.svelte";
   import { machineOs } from "../machine";
   import { appear } from "../motion/curves.svelte";
 
@@ -159,7 +159,7 @@
   >
     {#if machines.length === 0}
       <p class="type-meta py-space-3 px-space-2 text-ink-muted">
-        <AddMachineLink>No machines yet</AddMachineLink>
+        <AddMachineLink>{commonWords.noMachines}</AddMachineLink>
         — this lands on the first one that registers.
       </p>
     {/if}

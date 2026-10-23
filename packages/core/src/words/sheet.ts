@@ -1,3 +1,5 @@
+import { commonWords } from "./common";
+
 /**
  * What a sheet's pane says of its stage (live components, core stage.ts):
  * the project's own dev toolchain (Vite, Astro or Nuxt), which the daemon
@@ -52,7 +54,7 @@ export const sheetWords = {
     "It leaves the panel, with its pins. Its states file stays, and the session can open it again.",
   removeConfirm: "Remove canvas",
   removing: "Removing…",
-  tryAgain: "Try again",
+  tryAgain: commonWords.tryAgain,
   /** Try again's words while the stage starts again. */
   tryingAgain: "Starting…",
 };

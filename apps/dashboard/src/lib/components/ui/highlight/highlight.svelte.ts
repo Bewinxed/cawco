@@ -401,6 +401,7 @@ export function highlight(options: HighlightOptions) {
       watchRows();
       showOrCover();
       follow();
+      afterMoves();
     };
     /**
      * A placement taken while the list was moving (its content shifting
@@ -505,6 +506,7 @@ export function highlight(options: HighlightOptions) {
       pillBox = box;
       pillRow = row;
       watchRows();
+      afterMoves();
     };
     /** Hover becomes selection: the old selection fades where it was. */
     const fadeTrail = (from: Box) => {
@@ -1040,6 +1042,27 @@ export function highlight(options: HighlightOptions) {
     for (const type of SETTLES) {
       document.addEventListener(type, settled, true);
     }
+    /**
+     * A move on the Web Animations API sends none of those events: a Svelte
+     * transition (a Select's list scaling in on `popIn`), on the list itself
+     * or round it. Placed while one runs, the layers keep its residue (the
+     * Project select's ghost, its row's edges on the device-pixel grid of a
+     * list still scaling, drew another antialiasing on each walk of
+     * usage/project-pick-many). Each placement waits on every animation then
+     * running on the list or round it, and once it finishes the layers are
+     * aimed again at where their rows stand.
+     */
+    const awaited = new WeakSet<Animation>();
+    const afterMoves = () => {
+      for (let at: Element | null = container; at; at = at.parentElement) {
+        for (const run of at.getAnimations()) {
+          if (run.playState !== "finished" && !awaited.has(run)) {
+            awaited.add(run);
+            run.finished.then(toRealign, () => undefined);
+          }
+        }
+      }
+    };
     // A list an ancestor skips (the home board put away under a
     // conversation) has no layout to measure, and measuring it would lay it
     // out: the layers wait, and are placed afresh, without a glide, the

@@ -7,6 +7,7 @@
  * as neutral messages, with the harness's `raw` event riding along.
  */
 
+import { existsSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -18,7 +19,12 @@ import type {
   ControlResultFrame,
   DaemonPermissionRequestFrame,
   Envelope,
+  FleetAck,
+  FleetConvergeFrame,
+  FleetDelta,
+  FleetHeld,
   FleetHoldings,
+  FleetItemStatus,
   FleetReportFrame,
   FleetSyncReport,
   FramePayload,
@@ -49,6 +55,7 @@ import {
   BOUNDARY_RELAUNCH,
   CAWCO_SCRATCH_TAG,
   CLI_OUTDATED,
+  CONTAINERS_ENDED,
   CONTROL_CARRY_SESSIONS,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
@@ -60,6 +67,8 @@ import {
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
   CONTROL_SPIN_OFF_HELD,
@@ -72,14 +81,15 @@ import {
   cacheHit,
   type DeliveryMark,
   deriveTitleFromFirstMessage,
+  FLEET_DELTA,
   FLEET_STATUS,
-  FLEET_SYNC,
   GENERATE_IMAGE,
   type HarnessFailed,
   type HarnessUnanswered,
   holdingWords,
   INSTALL_SESSION_CREDENTIAL,
   isGitUrl,
+  LEAK_FOUND,
   LIMIT_REACHED,
   type LimitHolder,
   lastErrorKindOf,
@@ -94,7 +104,6 @@ import {
   PREVIEW_WEIGHT,
   promptCacheUsage,
   RATE_LIMIT_READ,
-  READ_FLEET_HOLDINGS,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   RESOLVE_PERMISSION,
@@ -108,6 +117,7 @@ import {
   SESSION_DIR_READ,
   VERIFY_SESSION_CREDENTIAL,
   WITHDRAW_PERMISSION,
+  type WorkspaceRef,
   withWorktreeLine,
   worstFleetState,
 } from "@cawco/core";
@@ -119,7 +129,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
-import { keepRoomSampled, measureMemoryRoom } from "@cawco/core/heavy-run";
+import { measureMemoryRoom } from "@cawco/core/machine-room";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -136,6 +146,7 @@ import {
   endSessionWork,
   hookArmed,
   recheckNarrowed,
+  sandboxOf,
   shellQuote,
 } from "./boundary";
 import {
@@ -154,7 +165,9 @@ import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
+import { applyFleetDenials } from "./denied-tools";
 import { placeMemoryAtLaunch } from "./fleet";
+import { FleetDesired, itemStatuses } from "./fleet-desired";
 import { writeFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -168,7 +181,8 @@ import {
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
-import { type KeeperReading, withKeepers } from "./keepers";
+import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
+import { watchLeaks } from "./leak-watch";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
 import { retireInstalls, syncInstalls } from "./mcp-install";
@@ -186,6 +200,14 @@ import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
+import {
+  beginEnding,
+  containersEndedWords,
+  endSessionContainers,
+  finishEnding,
+  openContainerDoors,
+  sessionsOwedEnding,
+} from "./session-containers";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { stopStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
@@ -201,20 +223,23 @@ import { cloneHolding, workspaceHolding } from "./workspace-records";
  * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
  */
 export interface SessiondAdoption {
+  /**
+   * Takes back the child `spec`'s session runs in. `spec` is the spawn the
+   * hub sent for it, read by the same rules as a launch's, so the session
+   * runs under every option it launched with (its mode, a lead's gate, a
+   * fence, its denials, its account).
+   */
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   adopt(
-    instanceId: string,
+    spec: SpawnPayload,
     ctx: HarnessContext,
     options: {
       /** The hub's mark as a seq in this child's ring; absent follows from `head`. */
       afterSeq?: number;
       /** The ring's last seq off the same welcome. */
       head: number;
-      sessionId: string | null;
       /** {@link turnRunning}'s answer for this child. */
       turnRunning: boolean;
-      /** The stored mode, known before the attach replays a parked ask. */
-      permissionMode?: SpawnPayload["permissionMode"];
     }
   ): Promise<HarnessSession>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
@@ -245,27 +270,33 @@ export interface SessiondAdoption {
   turnRunning(instanceId: string, head: number): Promise<boolean>;
 }
 
+/** The controls that change a session's setting: each names it as its one argument. */
+const SETTING_CONTROLS: ReadonlySet<string> = new Set([
+  CONTROL_SET_MODEL,
+  CONTROL_SET_PERMISSION_MODE,
+  CONTROL_SET_EFFORT,
+]);
+
 /** The words of whatever was thrown. */
 const errorText = (problem: unknown): string =>
   (problem instanceof Error ? problem.message : String(problem))
     .replace(/\s+/g, " ")
     .trim();
 
-/** A surviving child one reattach has claimed, and what it decided about it. */
+/**
+ * A surviving child one reattach has claimed, and what it decided about it.
+ * `spec` is the spawn the hub sent for its session (server.ts `restore`),
+ * whole: an attach runs under every option its launch ran under, from that
+ * one source ({@link SessionSupervisor.#sessionContext}, the adapter's
+ * `adopt`).
+ */
 interface Claimed {
   proc: { epoch: string; head: number; pid: number };
-  row: {
-    instanceId: string;
-    cwd: string;
-    sessionId?: string | null;
-    processGeneration?: string;
-    keepAliveTurn?: string;
-    permissionMode?: SpawnPayload["permissionMode"];
-  };
   /** Whether its turn was running when its ring was read. */
   running: boolean;
   /** Lets go of the claim, for a reattach waiting on this row. */
   settle: () => void;
+  spec: SpawnPayload;
 }
 
 /**
@@ -332,7 +363,7 @@ const warn = (message: string): void => {
  * the hub's 120 s for the whole carry (hub `CARRY_TIMEOUT_MS`), so the hub
  * always hears the machine's own reason, never "not answering". Ours.
  */
-/** How often a start waiting for memory measures the room again: the heavy-run queue's own pace (core heavy-run.ts). */
+/** How often a start waiting for memory measures the room again. Ours: the readings span 10 s, and a start held a few seconds past the room's return costs nothing. */
 const ROOM_POLL_MS = 3000;
 const CARRY_KEEPERS_MS = 15_000;
 const CARRY_STOP_MS = 30_000;
@@ -797,8 +828,12 @@ export class SessionSupervisor {
     );
     onFleetMcpMoved(() => this.#reportFleet());
     keeperLimits.on("limit", (message) => this.#limitReached(message));
-    // The Mac's readings kept a window deep, so a start reads the room at once.
-    keepRoomSampled();
+    watchLeaks({
+      targetOf: (procId, pid) => this.#touched(procId, pid),
+      sandboxOf,
+      tell: (instanceIds, id, content) =>
+        this.#leakFound(instanceIds, id, content),
+    });
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>
         warn(`the idle sweep failed: ${error}`)
@@ -929,6 +964,8 @@ export class SessionSupervisor {
    * instance id: a stop for it ends the wait ({@link dispatch}).
    */
   readonly #roomWaits = new Map<string, AbortController>();
+  /** The keepers a start's room is read under: the current one names where its children start ({@link #roomForStart}). */
+  readonly #keepers = new KeeperPool();
   /** The fleet MCP heal passes, one session after another ({@link #healFleetMcp}). */
   #healing: Promise<void> = Promise.resolve();
   /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
@@ -946,14 +983,19 @@ export class SessionSupervisor {
   readonly #spinOffs = new Map<string, SpinOff>();
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
-  /**
-   * Fleet syncs asked of this machine, counted as they arrive; each one's
-   * place in that count, by its request. Every sync carries the fleet's
-   * whole desired state, so one that a newer sync has overtaken while it
-   * waited its turn has nothing left to converge (#control).
-   */
-  #fleetSyncsAsked = 0;
-  readonly #fleetSyncTicket = new Map<string, number>();
+  /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-desired.ts). */
+  readonly #desired = new FleetDesired();
+  /** The items deltas moved since the last converge began, and whether one took any away. */
+  readonly #convergeIds = new Set<string>();
+  #convergeRemoved = false;
+  /** A person's Sync: the next converge takes every item, changed or not. */
+  #reconverge = false;
+  /** A converge is queued and not yet begun: a delta meanwhile joins it ({@link #convergeSoon}). */
+  #convergeOwed = false;
+  /** Each harness whose converge threw in the last pass, in its words: every item of that pass failed with it. */
+  #harnessFailures = new Map<HarnessKind, string>();
+  /** Each delta's write of the policy, begun as it arrived and awaited before its answer, by its request. */
+  readonly #fleetDenials = new Map<string, Promise<void>>();
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
   /** Attached sessions whose CLI runs a boundary hook that fails open, until the relaunch that replaces it ({@link BOUNDARY_RELAUNCH}). */
@@ -1205,9 +1247,11 @@ export class SessionSupervisor {
         return Promise.resolve();
       }
     }
-    if (control?.method === FLEET_SYNC && control.requestId) {
-      this.#fleetSyncsAsked += 1;
-      this.#fleetSyncTicket.set(control.requestId, this.#fleetSyncsAsked);
+    if (control?.method === FLEET_DELTA && control.requestId) {
+      this.#fleetDenials.set(
+        control.requestId,
+        this.#holdDelta(control.args?.[0] as FleetDelta)
+      );
     }
     const imageRequest =
       control?.method === GENERATE_IMAGE ? control.requestId : undefined;
@@ -1987,6 +2031,7 @@ export class SessionSupervisor {
         outcomes[request.instanceId] = {
           state: "failed",
           error: "another move is copying its conversation right now",
+          clash: true,
         };
         return false;
       }
@@ -2521,14 +2566,23 @@ export class SessionSupervisor {
 
   /**
    * A launch waits here while its machine's room on memory fails (core
-   * heavy-run.ts `measureMemoryRoom`: swap read back, swap left, memory
-   * stall or pressure), measured again every {@link ROOM_POLL_MS}. Never
-   * refused: the session's transcript says once why it waits, in the
-   * machine's readings ({@link ROOM_HELD}), and the hub waits on its start
-   * as long as that line stands. A stop ends the wait ({@link dispatch}).
+   * machine-room.ts `measureMemoryRoom`: Linux's memory available and the
+   * room under the memory limit above the cgroup the current keeper starts
+   * its children in, as its welcome names it; the Mac's pressure level),
+   * measured again every {@link ROOM_POLL_MS}. Never refused: the session's
+   * transcript says once why it waits, in the machine's readings
+   * ({@link ROOM_HELD}), and the hub waits on its start as long as that line
+   * stands. A stop ends the wait ({@link dispatch}). A keeper that cannot be
+   * reached fails the start, as its spawn would.
    */
   async #roomForStart(instanceId: string, harness: HarnessKind): Promise<void> {
-    let room = measureMemoryRoom();
+    const measure = async () =>
+      measureMemoryRoom(
+        process.platform === "linux"
+          ? (await this.#keepers.current()).cgroup
+          : undefined
+      );
+    let room = await measure();
     if (room.ok) {
       return;
     }
@@ -2563,7 +2617,7 @@ export class SessionSupervisor {
             { once: true }
           );
         });
-        room = measureMemoryRoom();
+        room = await measure();
       }
       console.info(
         `[session] ${instanceId}: starts after ${Math.round((Date.now() - began) / 1000)} s waiting for memory`
@@ -2855,18 +2909,15 @@ export class SessionSupervisor {
             );
           });
           if (proc) {
-            const row = {
-              instanceId,
-              cwd: workdir,
-              sessionId: payload.resume.sessionKey,
-              processGeneration: payload.processGeneration,
-              keepAliveTurn: payload.keepAliveTurn,
-              permissionMode: payload.permissionMode,
-            };
             const running = await candidate.turnRunning(instanceId, proc.head);
             await this.#adoptClaimed(
               candidate as Harness & SessiondAdoption,
-              { row, proc, running, settle: settleClaim },
+              {
+                spec: { ...payload, cwd: workdir },
+                proc,
+                running,
+                settle: settleClaim,
+              },
               Object.fromEntries(this.#ingested),
               stopped
             );
@@ -2958,34 +3009,16 @@ export class SessionSupervisor {
         place && !spec.reattachOnly
           ? await adapter.spill?.(spec, workdir, place.id)
           : undefined;
-      // A work item's spawn names its workspace and its project, the
-      // workspace's: its boundary reads that project's folder.
-      const boundary = await boundaryFor(
-        place,
-        spec.harness === "claude"
-          ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
-          : undefined,
-        spec.workspace ? spec.projectId : undefined,
-        spill?.dir
-      );
       const holder: { session: HarnessSession | null } = { session: null };
-      const ctx = this.#context(
-        instanceId,
+      const { boundary, ctx } = await this.#sessionContext(
+        spec,
         workdir,
         adapter,
         holder,
-        spec.processGeneration,
-        boundary && place ? { boundary, workspace: place.id } : undefined,
-        grant?.sessionCredential,
+        place,
         !!spec.reattachOnly,
-        // Its browser tool's door (browser/door.ts): its workspace's, else
-        // its own. A fenced session takes no fleet server, so has none.
-        spec.fence
-          ? undefined
-          : () =>
-              place
-                ? browserDoor(place.id)
-                : browserDoor(instanceId, spec.projectId)
+        spill?.dir,
+        grant?.sessionCredential
       );
 
       if (spec.resume) {
@@ -3172,6 +3205,71 @@ export class SessionSupervisor {
   }
 
   /**
+   * Where a session runs, read from its spawn, and the context it runs with:
+   * its workspace's boundary (a work item's, a project lead's place, or the
+   * workspace clone its folder is in) and its browser's door. One reading
+   * for a launch and for a child taken back after an agent restart
+   * ({@link #adoptClaimed}), so a session taken back is bounded as it was
+   * launched. `recovery`: a child taken back, not a launch. `spill` is a
+   * launch's own folder (`Harness.spill`); a launch passes the credential
+   * its grant gave, and an attach none (its process proves its own).
+   */
+  async #sessionContext(
+    spec: SpawnPayload,
+    workdir: string,
+    adapter: Harness,
+    holder: { session: HarnessSession | null },
+    place: WorkspaceRef | undefined,
+    recovery: boolean,
+    spill?: string,
+    sessionCredential?: string
+  ): Promise<{ boundary: Boundary | undefined; ctx: SessiondAwareContext }> {
+    // A work item's spawn names its workspace and its project, the
+    // workspace's: its boundary reads that project's folder.
+    const boundary = await boundaryFor(
+      place,
+      spec.harness === "claude"
+        ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
+        : undefined,
+      spec.workspace ? spec.projectId : undefined,
+      spill
+    );
+    // Its doors to the machine's container runtimes (session-containers.ts),
+    // so what its work starts stops with it. A workspace's boundary reaches
+    // no runtime at all: a bounded session gets none.
+    const containerEnv = boundary
+      ? undefined
+      : await openContainerDoors(spec.instanceId).catch(
+          (error: unknown): Record<string, string> => {
+            warn(
+              `${spec.instanceId}: its doors to the container runtimes did not open, so containers it starts are not stopped with it: ${errorText(error)}`
+            );
+            return {};
+          }
+        );
+    const ctx = this.#context(
+      spec.instanceId,
+      workdir,
+      adapter,
+      holder,
+      spec.processGeneration,
+      boundary && place ? { boundary, workspace: place.id } : undefined,
+      sessionCredential,
+      recovery,
+      // Its browser tool's door (browser/door.ts): its workspace's, else
+      // its own. A fenced session takes no fleet server, so has none.
+      spec.fence
+        ? undefined
+        : () =>
+            place
+              ? browserDoor(place.id)
+              : browserDoor(spec.instanceId, spec.projectId),
+      containerEnv
+    );
+    return { boundary, ctx };
+  }
+
+  /**
    * The supervisor's side of one session, built once and shared by both ways a
    * session can arrive: a fresh {@link #spawn}, and a {@link reattach} that
    * attaches to a child which outlived the agent. Shared deliberately —
@@ -3187,7 +3285,8 @@ export class SessionSupervisor {
     bounded?: { boundary: Boundary; workspace: string },
     sessionCredential?: string,
     recovery = false,
-    browser?: () => Promise<BrowserDoor>
+    browser?: () => Promise<BrowserDoor>,
+    containerEnv?: Readonly<Record<string, string>>
   ): SessiondAwareContext {
     const boundary = bounded?.boundary;
     if (!processGeneration) {
@@ -3244,6 +3343,7 @@ export class SessionSupervisor {
         : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
       ...(browser ? { browserDoor: browser } : {}),
+      ...(containerEnv ? { containerEnv } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,
@@ -3553,16 +3653,16 @@ export class SessionSupervisor {
    */
   #holdChild(
     claude: Harness & SessiondAdoption,
-    row: Claimed["row"],
+    spec: SpawnPayload,
     proc: Claimed["proc"],
     ingested: Record<string, IngestMark>
   ): void {
-    const { instanceId } = row;
+    const { instanceId } = spec;
     const stop = new AbortController();
     this.#attaching.set(instanceId, stop);
     this.#turnPending.add(instanceId);
     const job = (this.#queues.get(instanceId) ?? Promise.resolve())
-      .then(() => this.#attachHeld(claude, row, proc, ingested, stop.signal))
+      .then(() => this.#attachHeld(claude, spec, proc, ingested, stop.signal))
       .catch((problem: unknown) => {
         warn(`custody ${instanceId}: its attach failed: ${errorText(problem)}`);
       })
@@ -3584,12 +3684,12 @@ export class SessionSupervisor {
   /** {@link #holdChild}'s attach, run from the session's queue. */
   async #attachHeld(
     claude: Harness & SessiondAdoption,
-    row: Claimed["row"],
+    spec: SpawnPayload,
     proc: Claimed["proc"],
     ingested: Record<string, IngestMark>,
     stopped: AbortSignal
   ): Promise<void> {
-    const { instanceId } = row;
+    const { instanceId } = spec;
     // Started or attached by what ran ahead of it in the queue.
     if (this.#sessions.has(instanceId)) {
       return;
@@ -3610,7 +3710,7 @@ export class SessionSupervisor {
       }
       await this.#adoptClaimed(
         claude,
-        { row, proc, running, settle: claim.resolve },
+        { spec, proc, running, settle: claim.resolve },
         ingested,
         stopped
       );
@@ -3618,7 +3718,7 @@ export class SessionSupervisor {
       if (!this.#sessions.has(instanceId) && this.#busy.delete(instanceId)) {
         this.#emitPulse(instanceId, true);
       }
-      await this.#heldNotAttached(claude, row, proc, problem, stopped);
+      await this.#heldNotAttached(claude, spec, proc, problem, stopped);
     } finally {
       if (this.#adopting.get(instanceId) === claim.promise) {
         this.#adopting.delete(instanceId);
@@ -3636,12 +3736,12 @@ export class SessionSupervisor {
    */
   async #heldNotAttached(
     claude: Harness & SessiondAdoption,
-    row: Claimed["row"],
+    spec: SpawnPayload,
     proc: Claimed["proc"],
     problem: unknown,
     stopped: AbortSignal
   ): Promise<void> {
-    const { instanceId, processGeneration } = row;
+    const { instanceId, processGeneration } = spec;
     if (stopped.aborted) {
       console.info(
         `[custody] ${instanceId}: its attach let go for a stop: ${errorText(problem)}`
@@ -3714,13 +3814,13 @@ export class SessionSupervisor {
   /** {@link #attachHeld}'s attach of one held child, its turn decided. */
   async #adoptClaimed(
     claude: Harness & SessiondAdoption,
-    { row, proc, running, settle }: Claimed,
+    { spec, proc, running, settle }: Claimed,
     ingested: Record<string, IngestMark>,
     stopped?: AbortSignal
   ): Promise<void> {
-    if (!(await isDirectory(row.cwd))) {
+    if (!(await isDirectory(spec.cwd))) {
       this.#recoveryUnavailable(
-        { ...row, harness: claude.kind, reattachOnly: true },
+        { ...spec, harness: claude.kind, reattachOnly: true },
         "The recovery directory is no longer available."
       );
       return;
@@ -3732,59 +3832,56 @@ export class SessionSupervisor {
     // names lines that no longer exist, and one from an earlier process
     // under the same id names another ring. Disk transcripts cover the
     // middle.
-    const mark = ingested[row.instanceId];
+    const mark = ingested[spec.instanceId];
     const cursor = resumeCursor(procEpoch(proc.epoch, proc.pid), mark);
     if (cursor !== undefined && mark) {
-      this.#ingested.set(row.instanceId, mark);
+      this.#ingested.set(spec.instanceId, mark);
     } else {
-      this.#ingested.delete(row.instanceId);
+      this.#ingested.delete(spec.instanceId);
     }
     // A held CLI in a workspace is attached only once that workspace's hook
     // is in this build's form, which the agent writes as it starts; others'
     // are not waited for.
-    const workspace = await workspaceHolding(row.cwd);
+    const workspace = await workspaceHolding(spec.cwd);
     if (workspace) {
       await custodyProbe(hookArmed(workspace.id), stopped);
     }
     const holder: { session: HarnessSession | null } = { session: null };
-    const ctx = this.#context(
-      row.instanceId,
-      row.cwd,
+    // Placed and bounded as its launch was, from the same spawn.
+    const { ctx } = await this.#sessionContext(
+      spec,
+      spec.cwd,
       claude,
       holder,
-      row.processGeneration,
-      undefined,
-      undefined,
+      spec.workspace ?? (await cloneHolding(spec.cwd)),
       true
     );
     // Read off its keeper, never asked of the child: this ends.
-    const session = await claude.adopt(row.instanceId, ctx, {
+    const session = await claude.adopt(spec, ctx, {
       ...(cursor === undefined ? {} : { afterSeq: cursor }),
       head: proc.head,
-      sessionId: row.sessionId ?? null,
       turnRunning: running,
-      permissionMode: row.permissionMode,
     });
     holder.session = session;
     // Attached: the live child is this session's process from here, running.
-    this.#sessions.set(row.instanceId, session);
+    this.#sessions.set(spec.instanceId, session);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
-    void this.#dateActivity(row.instanceId, claude, session, row.cwd);
+    void this.#dateActivity(spec.instanceId, claude, session, spec.cwd);
     session.attached?.();
-    if (this.#busy.has(row.instanceId)) {
-      this.#emitPulse(row.instanceId, true);
+    if (this.#busy.has(spec.instanceId)) {
+      this.#emitPulse(spec.instanceId, true);
     }
-    this.#adopting.delete(row.instanceId);
+    this.#adopting.delete(spec.instanceId);
     settle();
-    console.info(`[custody] ${row.instanceId}: attached to its live process`);
+    console.info(`[custody] ${spec.instanceId}: attached to its live process`);
     // Asked of the child, which answers when it can, ahead of what is sent
     // to it ({@link #settleAttached}).
     await this.#settleAttached(
-      row.instanceId,
+      spec.instanceId,
       session,
       claude,
-      row.permissionMode,
-      row.processGeneration,
+      spec.permissionMode,
+      spec.processGeneration,
       stopped
     );
   }
@@ -3868,23 +3965,24 @@ export class SessionSupervisor {
   takeHeld(
     kind: (typeof SESSION_PROC_KINDS)[number],
     ackPayload: unknown,
-    row: Claimed["row"],
+    spec: SpawnPayload,
     proc: Claimed["proc"]
   ): "attached" | "held" {
     const adoption = this.#adoption(kind);
     if (!adoption) {
       throw new Error(`${kind} keeps no children on sessiond to take back`);
     }
-    if (row.keepAliveTurn) {
-      this.#keepAlive.set(row.instanceId, row.keepAliveTurn);
+    if (spec.keepAliveTurn) {
+      this.#keepAlive.set(spec.instanceId, spec.keepAliveTurn);
     }
-    if (this.#sessions.has(row.instanceId)) {
+    if (this.#sessions.has(spec.instanceId)) {
       return "attached";
     }
     if (!(
-      this.#adopting.has(row.instanceId) || this.#attaching.has(row.instanceId)
+      this.#adopting.has(spec.instanceId) ||
+      this.#attaching.has(spec.instanceId)
     )) {
-      this.#holdChild(adoption, row, proc, readIngested(ackPayload));
+      this.#holdChild(adoption, spec, proc, readIngested(ackPayload));
     }
     return "held";
   }
@@ -3951,29 +4049,7 @@ export class SessionSupervisor {
    */
   #limitReached(message: SessiondLimit): void {
     const proc = parseProcId(message.procId);
-    let holder: LimitHolder;
-    let instanceIds: string[];
-    switch (proc.kind) {
-      case "claude":
-      case "pi":
-        holder = "session";
-        instanceIds = [proc.instanceId];
-        break;
-      case "boundary":
-        holder = "workspace";
-        instanceIds = [...this.#placed]
-          .filter(([, placed]) => placed.boundaryPid === message.pid)
-          .map(([instanceId]) => instanceId);
-        break;
-      case "opencode-server":
-        holder = "opencode-server";
-        instanceIds =
-          this.#adapter("opencode").sessionsOn?.(message.procId) ?? [];
-        break;
-      case "judge":
-        holder = "session";
-        instanceIds = [];
-    }
+    const { holder, instanceIds } = this.#touched(message.procId, message.pid);
     const content = limitSentence(holder, message.limit, message.max);
     warn(
       `${message.procId}: ${content} (${message.group}, ${message.limit} ${message.count}; told ${instanceIds.length ? instanceIds.join(", ") : "no session"})`
@@ -3996,6 +4072,146 @@ export class SessionSupervisor {
         } as unknown as NeutralMessage,
       });
     }
+  }
+
+  /**
+   * The sessions keeper child `procId` (its process `pid`) runs: a session's
+   * own process its own (its procId names it), a workspace's boundary every
+   * session whose commands run in it (by its pid), OpenCode's server every
+   * session it holds; a judge none. With what the child is to them, and the
+   * workspace a boundary is.
+   */
+  #touched(
+    procId: string,
+    pid: number
+  ): { holder: LimitHolder; instanceIds: string[]; workspace?: string } {
+    const proc = parseProcId(procId);
+    switch (proc.kind) {
+      case "claude":
+      case "pi":
+        return { holder: "session", instanceIds: [proc.instanceId] };
+      case "boundary": {
+        const placed = [...this.#placed].filter(
+          ([, one]) => one.boundaryPid === pid
+        );
+        const workspace = placed.find(([, one]) => one.workspace)?.[1]
+          .workspace;
+        return {
+          holder: "workspace",
+          instanceIds: placed.map(([instanceId]) => instanceId),
+          ...(workspace ? { workspace } : {}),
+        };
+      }
+      case "opencode-server":
+        return {
+          holder: "opencode-server",
+          instanceIds: this.#adapter("opencode").sessionsOn?.(procId) ?? [],
+        };
+      case "judge":
+        return { holder: "session", instanceIds: [] };
+    }
+  }
+
+  /**
+   * SOMETHING A SESSION STARTED LEAKS, AND THE SESSIONS IT TOUCHED ARE TOLD
+   * (leak-watch.ts): each gets the agent's frame ({@link LEAK_FOUND}), which
+   * the hub sends it as its own word. In order with what else is owed the
+   * hub, and on the next connection when this one is down.
+   */
+  #leakFound(instanceIds: string[], id: string, content: string): void {
+    for (const instanceId of instanceIds) {
+      this.#sayGone({
+        kind: "frame",
+        instanceId,
+        harness: this.#placed.get(instanceId)?.harness ?? "claude",
+        message: {
+          type: "system",
+          subtype: LEAK_FOUND,
+          uuid: id,
+          session_id: "",
+          content,
+        } as unknown as NeutralMessage,
+      });
+    }
+  }
+
+  /**
+   * Every container session `instanceId`'s work started, stopped as it ends
+   * (session-containers.ts `endSessionContainers`), and the hub told what
+   * was done ({@link CONTAINERS_ENDED}), which tells the session that
+   * delegated it, else the session. Its ending, written down before
+   * ({@link beginEnding}), is crossed off once done; one that fails stays
+   * written down for the next agent's start, and is said.
+   */
+  #endContainers(instanceId: string, harness: HarnessKind): void {
+    endSessionContainers(instanceId)
+      .then(async (ended) => {
+        const content = containersEndedWords(ended);
+        if (content) {
+          console.info(`[containers] ${instanceId}: ${content}`);
+          this.#sayGone({
+            kind: "frame",
+            instanceId,
+            harness,
+            message: {
+              type: "system",
+              subtype: CONTAINERS_ENDED,
+              uuid: `containers-ended-${instanceId}-${Date.now()}`,
+              session_id: "",
+              content,
+            } as unknown as NeutralMessage,
+          });
+        }
+        if (ended.failed.length === 0) {
+          await finishEnding(instanceId);
+        }
+      })
+      .catch((error: unknown) =>
+        warn(
+          `${instanceId}: it ended, but the containers it started could not be read, so they were not stopped: ${errorText(error)}`
+        )
+      );
+  }
+
+  /**
+   * As the hub welcomes this agent: the containers owed an ending
+   * ({@link sessionsOwedEnding}) ended. Of a session whose ending an earlier
+   * agent wrote down and did not finish, as its stop would have; of one the
+   * hub no longer has on this machine (`instances`), only said in the log,
+   * as nobody is there to tell. A welcome naming no list is a wire error:
+   * nothing is ended.
+   */
+  sweepContainers(welcome: unknown): void {
+    const named = (welcome as { instances?: unknown } | undefined)?.instances;
+    if (!(
+      Array.isArray(named) && named.every((id) => typeof id === "string")
+    )) {
+      return;
+    }
+    sessionsOwedEnding(named)
+      .then(async ({ gone, unfinished }) => {
+        for (const instanceId of unfinished) {
+          this.#endContainers(
+            instanceId,
+            this.#placed.get(instanceId)?.harness ?? "claude"
+          );
+        }
+        await Promise.all(
+          gone.map(async (instanceId) => {
+            const content = containersEndedWords(
+              await endSessionContainers(instanceId)
+            );
+            console.info(
+              `[containers] ${instanceId}, a session this hub no longer has: ${content ?? "nothing was there"}`
+            );
+          })
+        );
+      })
+      .catch((error: unknown) =>
+        warn(
+          `the containers of ended sessions could not be read as the hub welcomed this agent: ${errorText(error)}`
+        )
+      );
   }
 
   /**
@@ -4622,6 +4838,11 @@ export class SessionSupervisor {
       // Its process is gone, and sessiond swept what it started on the host;
       // what its commands left inside its workspace's boundary goes too.
       await this.#endWork(instanceId, "stopped", cwd);
+      // And every container its work started (session-containers.ts),
+      // written down first so an agent that stops midway ends them as it
+      // starts again. The stop is not held for their stop timeouts.
+      await beginEnding(instanceId);
+      this.#endContainers(instanceId, kind);
       this.#resumable.delete(instanceId);
       this.#handed.delete(instanceId);
       forgetTaken(instanceId);
@@ -4929,25 +5150,14 @@ export class SessionSupervisor {
     method,
     args = [],
   }: ControlPayload): Promise<void> {
-    if (method === FLEET_SYNC && requestId) {
-      const ticket = this.#fleetSyncTicket.get(requestId);
-      this.#fleetSyncTicket.delete(requestId);
-      // Overtaken while it waited behind the sync before it: the newer one,
-      // queued behind this, converges the fleet as it is now and reports it.
-      // Converging this one too would only delay that (one OpenCode server
-      // that won't start costs every sync 30s, and the syncs queued in a
-      // minute of edits held the machine's report for minutes). It answers
-      // at once; the hub keeps no report from it (`isFleetReport`).
-      if (ticket !== undefined && ticket < this.#fleetSyncsAsked) {
-        this.sink({
-          kind: "control_result",
-          instanceId,
-          requestId,
-          ok: true,
-          result: { superseded: true },
-        });
-        return;
-      }
+    // A delta's policy, written as it arrived: its answer waits on it, and
+    // one that could not write it is refused in those words (NACK).
+    const denials =
+      method === FLEET_DELTA && requestId
+        ? this.#fleetDenials.get(requestId)
+        : undefined;
+    if (requestId) {
+      this.#fleetDenials.delete(requestId);
     }
     try {
       if (method === CONTROL_LIST_SESSIONS) {
@@ -4963,6 +5173,18 @@ export class SessionSupervisor {
         });
         return;
       }
+      // A setting's control names the setting. One with none is refused
+      // before the harness hears it: Claude's would set nothing and clear
+      // its session's own record of its mode (claude.ts
+      // `SessionMode.choose`), Full Send with it, while the hub's row kept
+      // the old mode (restart-rules on the host, 2026-10-23).
+      if (
+        SETTING_CONTROLS.has(method) &&
+        !(typeof args[0] === "string" && args[0])
+      ) {
+        throw new Error(`${method} names no setting`);
+      }
+      await denials;
       // An interrupted session is idle: nothing it started in its workspace
       // runs on, to end later and wake it, whether or not its process was
       // there to hear the interrupt.
@@ -5102,6 +5324,129 @@ export class SessionSupervisor {
   }
 
   /**
+   * A delta held as it arrives (fleet-desired.ts), in the order the hub sent
+   * them: its items join what this agent holds, and its policy, when it
+   * moved (or a welcome finds no list on disk), is written before anything
+   * else (denied-tools.ts `applyFleetDenials`) and before the agent answers.
+   * The items it moved wait for the next converge ({@link #convergeSoon}).
+   */
+  #holdDelta(delta: FleetDelta | undefined): Promise<void> {
+    if (!delta || typeof delta.rev !== "number") {
+      return Promise.resolve();
+    }
+    const applied = this.#desired.apply(delta);
+    for (const id of applied.changed) {
+      if (id !== "policy") {
+        this.#convergeIds.add(id);
+      }
+    }
+    this.#convergeRemoved ||= applied.removed.length > 0;
+    this.#reconverge ||= delta.reconverge === true;
+    const denied = this.#desired.deniedTools;
+    if (denied && (applied.policy || delta.welcome)) {
+      const write = applyFleetDenials(denied);
+      // Awaited by the delta's answer; a failure is said there.
+      write.catch(() => undefined);
+      return write;
+    }
+    return Promise.resolve();
+  }
+
+  /** The machine's word on items as they move (core `FleetConvergeFrame`). */
+  #converging(rev: number, items: FleetItemStatus[]): void {
+    if (items.length === 0) {
+      return;
+    }
+    this.emit({
+      verb: "frames",
+      machineId: "",
+      payload: {
+        kind: "fleet_converge",
+        rev,
+        items,
+      } satisfies FleetConvergeFrame,
+    });
+  }
+
+  /**
+   * The items deltas moved, converged in one pass once the passes before it
+   * are done ({@link #fleetTurn}): each said running as it begins and ok or
+   * failed, in the harness's words, as it ends. A delta that comes while one
+   * is queued joins it. A delta that moved nothing but the policy converges
+   * nothing; one a person asked for (`reconverge`) converges every item.
+   */
+  #convergeSoon(): void {
+    const owed =
+      this.#convergeIds.size > 0 || this.#convergeRemoved || this.#reconverge;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: set below and cleared by the queued converge, a later turn
+    if (this.#convergeOwed || !owed) {
+      return;
+    }
+    this.#convergeOwed = true;
+    this.#fleetTurn(async () => {
+      this.#convergeOwed = false;
+      const held = new Set(this.#desired.ids());
+      const ids =
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: set by a delta held after this converge was queued
+        (this.#reconverge ? [...held] : [...this.#convergeIds]).filter(
+          (id) => held.has(id) && id !== "policy"
+        );
+      this.#convergeIds.clear();
+      this.#convergeRemoved = false;
+      this.#reconverge = false;
+      const rev = this.#desired.rev ?? 0;
+      this.#converging(
+        rev,
+        ids.map((id) => ({
+          id,
+          hash: this.#desired.hashOf(id),
+          state: "running" as const,
+        }))
+      );
+      const config = this.#desired.config();
+      const started = Date.now();
+      let report: FleetSyncReport | undefined;
+      let thrown: string | undefined;
+      try {
+        report = await this.#syncFleet(config, "syncFleet");
+        if (this.#harnessFailures.size > 0) {
+          thrown = [...this.#harnessFailures]
+            .map(([harness, error]) => `${harness}: ${error}`)
+            .join("\n");
+        }
+      } catch (error) {
+        thrown = errorText(error);
+      }
+      if (thrown) {
+        warn(`the fleet's rev ${rev} did not converge: ${thrown}`);
+      }
+      this.#desired.converged(ids);
+      this.#converging(
+        rev,
+        itemStatuses(this.#desired, ids, report, Date.now() - started, thrown)
+      );
+      if (report) {
+        this.emit({
+          verb: "frames",
+          machineId: "",
+          payload: {
+            kind: "fleet_report",
+            report,
+          } satisfies FleetReportFrame,
+        });
+      }
+      this.#healFleetMcp([...this.#sessions.keys()]);
+    }).catch((error: unknown) =>
+      warn(`the fleet converge failed: ${errorText(error)}`)
+    );
+  }
+
+  /** What this agent holds of the fleet, for its register (core `FleetHeld`). */
+  fleetHeld(): FleetHeld | undefined {
+    return this.#desired.held();
+  }
+
+  /**
    * The machine's fleet report read again and sent to the hub unasked, when a
    * harness's reading of a fleet MCP server moved with no fleet change
    * ({@link onFleetMcpMoved}): the hub's row says what is true now, not what
@@ -5130,6 +5475,55 @@ export class SessionSupervisor {
     );
   }
 
+  /** Each row's launch as last resolved, by its key, with the config it was resolved for ({@link #launcherOf}). */
+  readonly #launched = new Map<
+    string,
+    {
+      asked: string;
+      launcher: Extract<
+        Awaited<ReturnType<typeof resolveMcpLauncher>>,
+        { config: unknown }
+      >;
+    }
+  >();
+
+  /**
+   * A row's launch: the last one resolved for this config, while what it
+   * launches is still on disk, else resolved now. A sync changes only what
+   * changed: one that carries a row as it was (a place added, a skill
+   * moved) resolves nothing for it again, so it runs no `npm view` for it
+   * and no npm error then disables a row that launches (`exactVersion`
+   * failing turned a working server `enabled: false` until the next sync).
+   * A row whose config changed, or whose launch failed, is resolved again;
+   * so is every row once per agent.
+   */
+  async #launcherOf(
+    key: string,
+    config: MachineFleetConfig["mcp"][number]["config"]
+  ): Promise<Awaited<ReturnType<typeof resolveMcpLauncher>>> {
+    const asked = JSON.stringify(config);
+    const kept = this.#launched.get(key);
+    const launched = kept?.launcher;
+    if (
+      kept?.asked === asked &&
+      launched &&
+      (launched.dir === undefined || existsSync(launched.dir)) &&
+      (!(
+        "command" in launched.config && launched.config.command.startsWith("/")
+      ) ||
+        existsSync(launched.config.command))
+    ) {
+      return launched;
+    }
+    const launcher = await resolveMcpLauncher(config);
+    if ("config" in launcher) {
+      this.#launched.set(key, { asked, launcher });
+    } else {
+      this.#launched.delete(key);
+    }
+    return launcher;
+  }
+
   /**
    * The fleet's MCP rows and each project's placed copies as this machine
    * launches them (mcp-launcher.ts), each npx row's package installed first
@@ -5148,7 +5542,10 @@ export class SessionSupervisor {
         rows.map(async (row) => ({
           row,
           launcher: row.enabled
-            ? await resolveMcpLauncher(row.config)
+            ? await this.#launcherOf(
+                row.placeId ? `${row.name}@${row.placeId}` : row.name,
+                row.config
+              )
             : undefined,
         }))
       );
@@ -5345,10 +5742,21 @@ export class SessionSupervisor {
           ? worstFleetState([skills[name], item])
           : item;
       }
-      Object.assign(memoryDocs, report.memoryDocs ?? {});
+      // The memory and its documents too: each harness keeps its own copy
+      // (Claude Code's CLAUDE.md, OpenCode's and pi's), and one edited on the
+      // machine is drift whatever the others say. Taken as the last harness's
+      // word, OpenCode's "applied" hid a hand-edited CLAUDE.md, so it was
+      // never offered to compare or adopt (machine-away, 2026-10-22).
+      for (const [path, item] of Object.entries(report.memoryDocs ?? {})) {
+        memoryDocs[path] = memoryDocs[path]
+          ? worstFleetState([memoryDocs[path], item])
+          : item;
+      }
       Object.assign(hooks, report.hooks ?? {});
       if (report.memory) {
-        ({ memory } = report);
+        memory = memory
+          ? worstFleetState([memory, report.memory])
+          : report.memory;
       }
       if (report.toolchain) {
         toolchain = { ...toolchain, ...report.toolchain };
@@ -5358,6 +5766,9 @@ export class SessionSupervisor {
       ...this.#mcpLauncherStates.keys(),
       ...Object.values(mcpByHarness).flatMap((rows) => Object.keys(rows ?? {})),
     ]);
+    if (which === "syncFleet") {
+      this.#harnessFailures = new Map(mcpFailures);
+    }
     for (const [kind, detail] of mcpFailures) {
       mcpByHarness[kind] = Object.fromEntries(
         [...names].map((name) => [
@@ -5480,45 +5891,43 @@ export class SessionSupervisor {
         return await probeTools();
       }
       if (method === "installTool") {
-        return await installTool(
+        const installed = await installTool(
           args[0] as string,
           args[1] as string | undefined
         );
+        // A harness CLI installed here converges what the machine holds of
+        // the fleet, as every harness already here did.
+        if (harnesses().some((adapter) => adapter.kind === args[0])) {
+          this.#reconverge = true;
+          this.#convergeSoon();
+        }
+        return installed;
       }
 
-      // Fleet sync applies to every harness that has a machine profile: the hub
-      // sends one desired state, and each harness converges the parts it
-      // understands onto its own files. Reports merge into one machine word.
-      if (method === FLEET_SYNC) {
+      // A delta, held as it arrived (#holdDelta) with its policy written:
+      // answered at once (ACK; READY for a welcome), its items converged
+      // after (#convergeSoon), each said as it moves. Only the machine's
+      // agent holds the hub's link, and so only it is sent one.
+      if (method === FLEET_DELTA) {
+        const delta = args[0] as FleetDelta;
         // What a workspace's policy reads may have moved with it (a
         // project's folder the hub moved away): every boundary this agent
-        // holds is checked for a narrowed access at once, whether or not it
-        // is the machine's agent, which alone writes the harness config.
-        recheckNarrowed("the fleet's config was synced").catch(() => undefined);
-        // Fleet sync writes machine-wide harness config (claude's, opencode's
-        // and pi's); only the machine's own agent may (see machine-agent.ts).
-        if (!(await isMachineAgent())) {
-          throw new Error(
-            "fleet sync skipped: this is not the machine's agent, so machine-wide harness config is left to the agent that is"
+        // holds is checked for a narrowed access.
+        if (delta.recheck) {
+          recheckNarrowed("a project's folder moved").catch(() => undefined);
+        }
+        if (delta.items.length > 0 || delta.reconverge) {
+          console.info(
+            `[fleet] sync from the hub: rev ${delta.rev}, ${delta.items.length} item(s)${delta.full ? " (all it holds)" : ""}${delta.welcome ? ", its welcome" : ""}${delta.reconverge ? ", converging every item" : ""}`
           );
         }
-        const config = args[0] as MachineFleetConfig;
-        const report = await this.#fleetTurn(() => {
-          console.info(
-            `[fleet] sync from the hub: ${config.mcp.length} MCP server(s)`
-          );
-          return this.#syncFleet(config, "syncFleet");
-        });
-        this.#healFleetMcp([...this.#sessions.keys()]);
-        return report;
+        this.#convergeSoon();
+        return { rev: delta.rev } satisfies FleetAck;
       }
       if (method === FLEET_STATUS) {
         return await this.#fleetTurn(() =>
           this.#syncFleet(undefined, "fleetStatus")
         );
-      }
-      if (method === READ_FLEET_HOLDINGS) {
-        return await this.#fleetHoldings();
       }
 
       if (CATALOG_METHODS.has(method)) {

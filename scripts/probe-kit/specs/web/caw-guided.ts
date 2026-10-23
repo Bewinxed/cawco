@@ -38,6 +38,10 @@
  *    (1280, 390), never under the head's actions.
  * 6. New project lands on the project's page with Caw's panel open on its
  *    Setup thread.
+ * 7. In WebKit at 1440, Caw's docked panel comes in by one animation on
+ *    itself, from its side as it fades, over --dur-panel (CawFloat,
+ *    motion/curves `appearOnMount`), never a @starting-style transition,
+ *    which WebKit sometimes skips for an element just added.
  *
  * Captures for a reviewer: round2/<width>-<theme>-<first-open|sent|filed>.png.
  *
@@ -47,7 +51,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { projectWords } from "../../../../packages/core/src/words/project";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { durOf, oneEntrance, recordRuns, runsOn } from "../../entrances";
 import { contrast, type Rgb } from "../../ink";
 import { jevMock, jevOn } from "../../jev-mock";
 import { scan } from "../../journeys/scan";
@@ -56,6 +63,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  readMotion,
   type Spec,
   settle,
   THEMES,
@@ -170,214 +178,220 @@ const legPage = async (kit: Kit, { view, width }: Leg, theme: Theme) => {
 
 /** The panel, its parts, the head and the board, as the engine lays them out. */
 const readPanel = (page: Page) =>
-  page.evaluate((panelSel) => {
-    const box = (el: Element | null | undefined) => {
-      const r = el?.getBoundingClientRect();
-      return r
-        ? {
-            left: r.left,
-            right: r.right,
-            top: r.top,
-            bottom: r.bottom,
-            width: r.width,
-            height: r.height,
-          }
-        : null;
-    };
-    const words = (el: Element | null | undefined) =>
-      el?.textContent?.replace(/\s+/g, " ").trim() ?? "";
-    /** What of `el` shows: its box cut by every ancestor that clips (a scroller, overflow hidden). */
-    const shownBox = (el: Element) => {
-      const r = el.getBoundingClientRect();
-      let { left, right, top, bottom } = r;
-      for (let at = el.parentElement; at; at = at.parentElement) {
-        const style = getComputedStyle(at);
-        if (style.overflowX !== "visible" || style.overflowY !== "visible") {
-          const c = at.getBoundingClientRect();
-          left = Math.max(left, c.left);
-          right = Math.min(right, c.right);
-          top = Math.max(top, c.top);
-          bottom = Math.min(bottom, c.bottom);
-        }
-      }
-      return right > left && bottom > top
-        ? {
-            left,
-            right,
-            top,
-            bottom,
-            width: right - left,
-            height: bottom - top,
-          }
-        : null;
-    };
-    // Computed colours as sRGB, through a canvas (ink.ts `colours`).
-    const canvas = document.createElement("canvas").getContext("2d", {
-      willReadFrequently: true,
-    }) as CanvasRenderingContext2D;
-    const rgb = (css: string): [number, number, number] => {
-      canvas.clearRect(0, 0, 1, 1);
-      canvas.fillStyle = "#000";
-      canvas.fillStyle = css;
-      canvas.fillRect(0, 0, 1, 1);
-      const [r = 0, g = 0, b = 0] = canvas.getImageData(0, 0, 1, 1).data;
-      return [r, g, b];
-    };
-    /** The fill under `el`: its own, else the nearest ancestor's that paints one. */
-    const ground = (el: Element | null) => {
-      for (let at = el; at; at = at.parentElement) {
-        const fill = getComputedStyle(at).backgroundColor;
-        if (fill !== "rgba(0, 0, 0, 0)" && fill !== "transparent") {
-          return rgb(fill);
-        }
-        const before = getComputedStyle(at, "::before");
-        if (
-          before.content !== "none" &&
-          before.backgroundColor !== "rgba(0, 0, 0, 0)"
-        ) {
-          return rgb(before.backgroundColor);
-        }
-      }
-      return rgb("#fff");
-    };
-    const panel = document.querySelector(panelSel);
-    const shell =
-      panel?.closest(
-        '[data-caw-dock], [data-slot="drawer-content"], [data-slot="popover-content"]'
-      ) ?? null;
-    const form = panel?.querySelector('form[data-slot="cin"]');
-    const room = panel?.querySelector('[data-slot="room"]');
-    const starters = [
-      ...(panel?.querySelectorAll('[data-slot="starter"]') ?? []),
-    ].map((el) => {
-      const reason = el.querySelector('[data-slot="starter-reason"]');
-      const glyph = el.querySelector("svg");
-      const view = glyph?.viewBox.baseVal;
-      const whole = (view?.width ?? 24) * (view?.height ?? 24);
-      // Its half-ink body: the largest part drawn at half opacity.
-      const body = Math.max(
-        0,
-        ...[...(glyph?.querySelectorAll("[opacity]") ?? [])]
-          .filter((part) => Number(part.getAttribute("opacity")) === 0.5)
-          .map((part) => {
-            const b = (part as SVGGraphicsElement).getBBox();
-            return (b.width * b.height) / whole;
-          })
-      );
-      const style = getComputedStyle(el);
-      const row = ground(el);
-      return {
-        box: box(el),
-        text: words(el.querySelector('[data-slot="starter-text"]')),
-        reason: words(reason),
-        body,
-        reasonContrast: reason
-          ? { ink: rgb(getComputedStyle(reason).color), row }
-          : null,
-        edge: {
-          width: Number.parseFloat(style.borderTopWidth),
-          ink: rgb(style.borderTopColor),
-          fill: row,
-          panel: ground(el.closest('[data-slot="starter-cards"]')),
-        },
-      };
-    });
-    const column = panel?.querySelector('[data-slot="starter-cards"]');
-    const active = document.activeElement;
-    const pane = document.querySelector('[data-slot="pane"]');
-    const paneStyle = pane ? getComputedStyle(pane) : null;
-    const paneBox = box(pane);
-    const before = shell ? getComputedStyle(shell, "::before") : null;
-    const grabber = shell?.querySelector(
-      ':scope > [data-slot="drawer-grabber"]'
-    );
-    const card = document.querySelector("[data-glass-card-frame]");
-    return {
-      vw: document.documentElement.clientWidth,
-      vh: document.documentElement.clientHeight,
-      panel: box(panel),
-      shell: box(shell),
-      greeting: words(
-        panel?.querySelector(
-          '[data-thread-hero] [data-slot="empty"] [data-slot="empty-title"]'
-        )
-      ),
-      starters,
-      column: box(column),
-      composer: box(form),
-      placeholder:
-        form
-          ?.querySelector("[data-placeholder]")
-          ?.getAttribute("data-placeholder") ?? "",
-      room: box(room),
-      caretInComposer: !!(form && active && form.contains(active)),
-      plainInputs: [...document.querySelectorAll("input")]
-        .filter((input) => {
-          const r = input.getBoundingClientRect();
-          return (
-            r.width > 0 &&
-            (input.placeholder === "What should this session do?" ||
-              input.closest("[data-caw-panel]"))
-          );
-        })
-        .map((input) => input.placeholder),
-      firstPrompt: document.body.innerText.includes("First prompt"),
-      empty: box(document.querySelector('[data-slot="caw-empty"]')),
-      head: box(document.querySelector('[data-slot="project-head"]')),
-      title: box(
-        document.querySelector('[data-slot="project-head"] [data-slot="name"]')
-      ),
-      act: words(document.querySelector("[data-new-session]")),
-      // Its label and its pending wording stand in one cell (DESIGN.md, Buttons).
-      spinOff: [
-        ...document.querySelectorAll('[data-slot="project-head"] button'),
-      ].some((button) => words(button).startsWith("Spin off")),
-      // Each column of the board as it shows: a column scrolled past the
-      // board's edge is cut by it.
-      columns: [...document.querySelectorAll('[data-slot="column"]')]
-        .map(shownBox)
-        .filter((each) => each !== null),
-      // The view's column: the pane less its inline padding.
-      lane:
-        paneBox && paneStyle
+  page.evaluate(
+    ([panelSel, firstPromptLabel, spinOffLabel]) => {
+      const box = (el: Element | null | undefined) => {
+        const r = el?.getBoundingClientRect();
+        return r
           ? {
-              left: paneBox.left + Number.parseFloat(paneStyle.paddingLeft),
-              right: paneBox.right - Number.parseFloat(paneStyle.paddingRight),
+              left: r.left,
+              right: r.right,
+              top: r.top,
+              bottom: r.bottom,
+              width: r.width,
+              height: r.height,
+            }
+          : null;
+      };
+      const words = (el: Element | null | undefined) =>
+        el?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      /** What of `el` shows: its box cut by every ancestor that clips (a scroller, overflow hidden). */
+      const shownBox = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        let { left, right, top, bottom } = r;
+        for (let at = el.parentElement; at; at = at.parentElement) {
+          const style = getComputedStyle(at);
+          if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+            const c = at.getBoundingClientRect();
+            left = Math.max(left, c.left);
+            right = Math.min(right, c.right);
+            top = Math.max(top, c.top);
+            bottom = Math.min(bottom, c.bottom);
+          }
+        }
+        return right > left && bottom > top
+          ? {
+              left,
+              right,
+              top,
+              bottom,
+              width: right - left,
+              height: bottom - top,
+            }
+          : null;
+      };
+      // Computed colours as sRGB, through a canvas (ink.ts `colours`).
+      const canvas = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      const rgb = (css: string): [number, number, number] => {
+        canvas.clearRect(0, 0, 1, 1);
+        canvas.fillStyle = "#000";
+        canvas.fillStyle = css;
+        canvas.fillRect(0, 0, 1, 1);
+        const [r = 0, g = 0, b = 0] = canvas.getImageData(0, 0, 1, 1).data;
+        return [r, g, b];
+      };
+      /** The fill under `el`: its own, else the nearest ancestor's that paints one. */
+      const ground = (el: Element | null) => {
+        for (let at = el; at; at = at.parentElement) {
+          const fill = getComputedStyle(at).backgroundColor;
+          if (fill !== "rgba(0, 0, 0, 0)" && fill !== "transparent") {
+            return rgb(fill);
+          }
+          const before = getComputedStyle(at, "::before");
+          if (
+            before.content !== "none" &&
+            before.backgroundColor !== "rgba(0, 0, 0, 0)"
+          ) {
+            return rgb(before.backgroundColor);
+          }
+        }
+        return rgb("#fff");
+      };
+      const panel = document.querySelector(panelSel);
+      const shell =
+        panel?.closest(
+          '[data-caw-dock], [data-slot="drawer-content"], [data-slot="popover-content"]'
+        ) ?? null;
+      const form = panel?.querySelector('form[data-slot="cin"]');
+      const room = panel?.querySelector('[data-slot="room"]');
+      const starters = [
+        ...(panel?.querySelectorAll('[data-slot="starter"]') ?? []),
+      ].map((el) => {
+        const reason = el.querySelector('[data-slot="starter-reason"]');
+        const glyph = el.querySelector("svg");
+        const view = glyph?.viewBox.baseVal;
+        const whole = (view?.width ?? 24) * (view?.height ?? 24);
+        // Its half-ink body: the largest part drawn at half opacity.
+        const body = Math.max(
+          0,
+          ...[...(glyph?.querySelectorAll("[opacity]") ?? [])]
+            .filter((part) => Number(part.getAttribute("opacity")) === 0.5)
+            .map((part) => {
+              const b = (part as SVGGraphicsElement).getBBox();
+              return (b.width * b.height) / whole;
+            })
+        );
+        const style = getComputedStyle(el);
+        const row = ground(el);
+        return {
+          box: box(el),
+          text: words(el.querySelector('[data-slot="starter-text"]')),
+          reason: words(reason),
+          body,
+          reasonContrast: reason
+            ? { ink: rgb(getComputedStyle(reason).color), row }
+            : null,
+          edge: {
+            width: Number.parseFloat(style.borderTopWidth),
+            ink: rgb(style.borderTopColor),
+            fill: row,
+            panel: ground(el.closest('[data-slot="starter-cards"]')),
+          },
+        };
+      });
+      const column = panel?.querySelector('[data-slot="starter-cards"]');
+      const active = document.activeElement;
+      const pane = document.querySelector('[data-slot="pane"]');
+      const paneStyle = pane ? getComputedStyle(pane) : null;
+      const paneBox = box(pane);
+      const before = shell ? getComputedStyle(shell, "::before") : null;
+      const grabber = shell?.querySelector(
+        ':scope > [data-slot="drawer-grabber"]'
+      );
+      const card = document.querySelector("[data-glass-card-frame]");
+      return {
+        vw: document.documentElement.clientWidth,
+        vh: document.documentElement.clientHeight,
+        panel: box(panel),
+        shell: box(shell),
+        greeting: words(
+          panel?.querySelector(
+            '[data-thread-hero] [data-slot="empty"] [data-slot="empty-title"]'
+          )
+        ),
+        starters,
+        column: box(column),
+        composer: box(form),
+        placeholder:
+          form
+            ?.querySelector("[data-placeholder]")
+            ?.getAttribute("data-placeholder") ?? "",
+        room: box(room),
+        caretInComposer: !!(form && active && form.contains(active)),
+        plainInputs: [...document.querySelectorAll("input")]
+          .filter((input) => {
+            const r = input.getBoundingClientRect();
+            return (
+              r.width > 0 &&
+              (input.placeholder === "What should this session do?" ||
+                input.closest("[data-caw-panel]"))
+            );
+          })
+          .map((input) => input.placeholder),
+        firstPrompt: document.body.innerText.includes(firstPromptLabel),
+        empty: box(document.querySelector('[data-slot="caw-empty"]')),
+        head: box(document.querySelector('[data-slot="project-head"]')),
+        title: box(
+          document.querySelector(
+            '[data-slot="project-head"] [data-slot="name"]'
+          )
+        ),
+        act: words(document.querySelector("[data-new-session]")),
+        // Its label and its pending wording stand in one cell (DESIGN.md, Buttons).
+        spinOff: [
+          ...document.querySelectorAll('[data-slot="project-head"] button'),
+        ].some((button) => words(button).startsWith(spinOffLabel)),
+        // Each column of the board as it shows: a column scrolled past the
+        // board's edge is cut by it.
+        columns: [...document.querySelectorAll('[data-slot="column"]')]
+          .map(shownBox)
+          .filter((each) => each !== null),
+        // The view's column: the pane less its inline padding.
+        lane:
+          paneBox && paneStyle
+            ? {
+                left: paneBox.left + Number.parseFloat(paneStyle.paddingLeft),
+                right:
+                  paneBox.right - Number.parseFloat(paneStyle.paddingRight),
+              }
+            : null,
+        sheet: before
+          ? {
+              top: before.top,
+              left: before.left,
+              right: before.right,
+              bottom: before.bottom,
+              topLeft: before.borderTopLeftRadius,
+              bottomLeft: before.borderBottomLeftRadius,
+              bottomRight: before.borderBottomRightRadius,
+              sides: before.borderLeftWidth,
             }
           : null,
-      sheet: before
-        ? {
-            top: before.top,
-            left: before.left,
-            right: before.right,
-            bottom: before.bottom,
-            topLeft: before.borderTopLeftRadius,
-            bottomLeft: before.borderBottomLeftRadius,
-            bottomRight: before.borderBottomRightRadius,
-            sides: before.borderLeftWidth,
-          }
-        : null,
-      grabber: box(grabber),
-      name: box(panel?.querySelector('[data-caw-head] [data-slot="name"]')),
-      // The sheet's headers: the kit's own, and Close in his head.
-      sheetHeads:
-        shell?.querySelectorAll('[data-slot="drawer-header"]').length ?? 0,
-      headClose: box(
-        panel?.querySelector('[data-caw-head] [aria-label="Close"]')
-      ),
-      // The shell's Caw card, as it stands now: shown, or at rest up behind
-      // its cut, inert (GlassCard, motion/hang).
-      glassCard: card
-        ? {
-            shown: card.hasAttribute("data-shown"),
-            inert: (card as HTMLElement).inert,
-            state: card.getAttribute("data-state"),
-            translate: getComputedStyle(card).translate,
-            box: box(card),
-          }
-        : null,
-    };
-  }, PANEL);
+        grabber: box(grabber),
+        name: box(panel?.querySelector('[data-caw-head] [data-slot="name"]')),
+        // The sheet's headers: the kit's own, and Close in his head.
+        sheetHeads:
+          shell?.querySelectorAll('[data-slot="drawer-header"]').length ?? 0,
+        headClose: box(
+          panel?.querySelector('[data-caw-head] [aria-label="Close"]')
+        ),
+        // The shell's Caw card, as it stands now: shown, or at rest up behind
+        // its cut, inert (GlassCard, motion/hang).
+        glassCard: card
+          ? {
+              shown: card.hasAttribute("data-shown"),
+              inert: (card as HTMLElement).inert,
+              state: card.getAttribute("data-state"),
+              translate: getComputedStyle(card).translate,
+              box: box(card),
+            }
+          : null,
+      };
+    },
+    [PANEL, spawnWords.firstPrompt, projectWords.spinOff] as const
+  );
 
 type PanelRead = Awaited<ReturnType<typeof readPanel>>;
 type Box = NonNullable<PanelRead["panel"]>;
@@ -1009,6 +1023,48 @@ const withSocket = async (page: Page) => {
     });
 };
 
+/**
+ * The head's and each filed card's run while the clock holds it, in the
+ * page's order: its delay, length and curve, and each card sought through
+ * its own run (its delay, then its length): its opacity at its start,
+ * middle and end.
+ */
+function uncovering(sel: string) {
+  const of = (el: Element | null) => {
+    const [run] = el?.getAnimations() ?? [];
+    const t = run?.effect?.getTiming();
+    return run && t
+      ? {
+          run,
+          delay: Number(t.delay),
+          duration: Number(t.duration),
+          easing: String(t.easing),
+        }
+      : null;
+  };
+  const head = of(document.querySelector(`${sel} [data-tasks-head]`));
+  const cards = [
+    ...document.querySelectorAll(`${sel} [data-slot=filed-task]`),
+  ].map((card) => {
+    const timed = of(card);
+    if (!timed) {
+      return null;
+    }
+    const { run, ...timing } = timed;
+    const at = (fraction: number) => {
+      run.currentTime = timing.delay + timing.duration * fraction;
+      return Number(getComputedStyle(card).opacity);
+    };
+    return { ...timing, start: at(0), middle: at(0.5), end: at(0.999) };
+  });
+  return {
+    head: head
+      ? { delay: head.delay, duration: head.duration, easing: head.easing }
+      : null,
+    cards,
+  };
+}
+
 /** 4. A reply filing three tasks, landing live: the stagger, and nothing left running after it. */
 const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
   const ids: string[] = [];
@@ -1025,15 +1081,22 @@ const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
   const reply = await withSocket(page);
   await openPanel(page, setup.url);
   await settle(page, 500);
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Animation.enable");
-  await cdp.send("Animation.setPlaybackRate", { playbackRate: 0 });
-  reply(threadId, ids);
-  await page
-    .locator(`${PANEL} [data-slot=filed-task]`)
-    .nth(2)
-    .waitFor({ timeout: 20_000 });
-  const timing = await page.evaluate((sel) => {
+  // The arrival as the kit reads motion (kit.ts `readMotion`): every run
+  // the reply starts in the panel, its delay, length and curve, the clock
+  // held while each card is sought through its own run.
+  const arrival = await readMotion(
+    page,
+    async () => {
+      reply(threadId, ids);
+      await page
+        .locator(`${PANEL} [data-slot=filed-task]`)
+        .nth(2)
+        .waitFor({ timeout: 20_000 });
+    },
+    PANEL,
+    { fractions: [0], read: () => page.evaluate(uncovering, PANEL), ms: 20_000 }
+  );
+  const step = await page.evaluate((sel) => {
     const probe = document.createElement("div");
     probe.style.transitionDuration = "var(--dur-stagger), var(--dur-cascade)";
     document.body.append(probe);
@@ -1044,31 +1107,23 @@ const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
           Number.parseFloat(each) * (each.trim().endsWith("ms") ? 1 : 1000)
       );
     probe.remove();
-    const cards0 = document.querySelectorAll(
+    const cards = document.querySelectorAll(
       `${sel} [data-slot=filed-task]`
     ).length;
-    const step = Math.min(stagger, cascade / (cards0 + 1));
-    const head = document.querySelector(`${sel} [data-tasks-head]`);
-    const cards = [
-      ...document.querySelectorAll(`${sel} [data-slot=filed-task]`),
-    ];
-    const of = (el: Element | null) => {
-      const run = el?.getAnimations()[0];
-      const t = run?.effect?.getTiming();
-      return t
-        ? {
-            delay: Number(t.delay),
-            duration: Number(t.duration),
-            easing: String(t.easing),
-          }
-        : null;
-    };
-    return { step, head: of(head), cards: cards.map(of) };
+    return Math.min(stagger, cascade / (cards + 1));
   }, PANEL);
+  const held = arrival.at[0]?.value;
+  const timing = {
+    by: arrival.by,
+    step,
+    head: held?.head ?? null,
+    cards: held?.cards ?? [],
+  };
   const steps = timing.cards.map((each) => each?.delay ?? -1);
   kit.check(
-    "filed: the head and then each card start one step apart on one clock (--dur-pop)",
+    `filed: the head and then each card start one step apart on one clock (--dur-pop; read by ${arrival.by})`,
     timing.head?.delay === 0 &&
+      steps.length === FILED.length &&
       steps.every(
         (delay, at) => Math.abs(delay - (at + 1) * timing.step) < 0.5
       ) &&
@@ -1077,37 +1132,22 @@ const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
       ),
     JSON.stringify(timing)
   );
-  // Seek each to the middle of its own run, then to its end: rising in.
-  const mid = await page.evaluate((sel) => {
-    const cards = [
-      ...document.querySelectorAll(`${sel} [data-slot=filed-task]`),
-    ];
-    return cards.map((card) => {
-      const [run] = card.getAnimations();
-      const t = run?.effect?.getTiming();
-      if (!(run && t)) {
-        return null;
-      }
-      const at = (fraction: number) => {
-        run.currentTime = Number(t.delay) + Number(t.duration) * fraction;
-        return Number(getComputedStyle(card).opacity);
-      };
-      return { start: at(0), middle: at(0.5), end: at(0.999) };
-    });
-  }, PANEL);
+  // Each card sought to its own run's start, middle and end: rising in.
+  const mid = held?.cards;
   kit.check(
     "filed: each card is uncovered (opacity 0 at its start, part-way at its middle, whole by its end)",
-    mid.every(
-      (at) =>
-        at !== null &&
-        at.start === 0 &&
-        at.middle > 0 &&
-        at.middle < 1 &&
-        at.end > 0.99
-    ),
+    mid !== undefined &&
+      mid.length === FILED.length &&
+      mid.every(
+        (at) =>
+          at !== null &&
+          at.start === 0 &&
+          at.middle > 0 &&
+          at.middle < 1 &&
+          at.end > 0.99
+      ),
     JSON.stringify(mid)
   );
-  await cdp.send("Animation.setPlaybackRate", { playbackRate: 1 });
   await settle(page, 600);
   const after = await page.evaluate((sel) => {
     const words = (el: Element | null | undefined) =>
@@ -1472,6 +1512,26 @@ const newProject = async (kit: Kit, setup: Setup) => {
   await page.close();
 };
 
+/** 7. Caw's docked panel comes in by one animation on itself, in WebKit at 1440. */
+const dockEntrance = async (kit: Kit, setup: Setup) => {
+  const page = await kit.page("desk", { engine: "webkit", theme: "light" });
+  await page.addInitScript(recordRuns);
+  await openPanel(page, setup.url);
+  await page.locator("[data-caw-dock]").waitFor();
+  await page.waitForTimeout(700);
+  const ms = await page.evaluate(durOf, "--dur-panel");
+  const dock = await page.evaluate(runsOn, {
+    selector: "[data-caw-dock]",
+    pseudo: null,
+  });
+  kit.check(
+    `7 WebKit 1440: Caw's docked panel comes in by one animation on itself over --dur-panel (${ms}ms), never @starting-style`,
+    dock.length === 1 && oneEntrance(dock[0]?.runs ?? [], ms),
+    JSON.stringify(dock)
+  );
+  await page.close();
+};
+
 const run = async (kit: Kit) => {
   const setup = await setUp(kit);
   try {
@@ -1480,6 +1540,7 @@ const run = async (kit: Kit) => {
         await leg(kit, setup, one, theme);
       }
     }
+    await dockEntrance(kit, setup);
     const threadId = await starterSends(kit, setup);
     await sentShots(kit, setup);
     const ids = await filedTasks(kit, setup, threadId);

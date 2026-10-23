@@ -28,9 +28,11 @@ import {
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
   COMMENT_LIMITS,
+  goneProblem,
   type MarkPictures,
   pinsProblem,
   type SendBody,
+  seenProblem,
 } from "@cawco/core/comments";
 import { ARTIFACT_GONE } from "@cawco/core/doc-link";
 import { inkProblem } from "@cawco/core/ink";
@@ -192,19 +194,26 @@ const filesProblem = (
     : null;
 };
 
-/** The maps a person's ink and pins write, on any artifact (core ink.ts, comments.ts). */
-const INK_MAPS = ["ink", "moved", "pins"];
+/** The maps a person's ink, pins, deleted pins and looks write, on any artifact (core ink.ts, comments.ts). */
+const INK_MAPS = ["ink", "moved", "pins", "gone", "seen"];
 
-/** Why the ink, moved groups and pins in `trial`, `doc` after a person's update, may not be kept; null when they may. */
-const inkMapsProblem = (doc: Doc, trial: Doc): string | null =>
-  inkProblem(
-    [...trial.getMap("ink").entries()],
-    [...trial.getMap("moved").entries()]
-  ) ??
-  pinsProblem(
-    new Map(doc.getMap("pins").entries()),
-    new Map(trial.getMap("pins").entries())
+/** Why the ink, moved groups, pins, deleted pins and looks in `trial`, `doc` after a person's update, may not be kept; null when they may. */
+const inkMapsProblem = (doc: Doc, trial: Doc): string | null => {
+  const gone = new Map(trial.getMap("gone").entries());
+  return (
+    inkProblem(
+      [...trial.getMap("ink").entries()],
+      [...trial.getMap("moved").entries()]
+    ) ??
+    goneProblem(new Map(doc.getMap("gone").entries()), gone) ??
+    pinsProblem(
+      new Map(doc.getMap("pins").entries()),
+      new Map(trial.getMap("pins").entries()),
+      gone
+    ) ??
+    seenProblem(new Map(trial.getMap("seen").entries()))
   );
+};
 
 /** Why `trial`, a canvas's doc after its screen's update, may not be kept; null when it may. */
 const canvasProblem = (doc: Doc, trial: Doc): string | null => {
@@ -394,7 +403,7 @@ const MARK_ID_MAX = 100;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
 
-const SEND_SHAPE = "Send takes JSON: { text? }.";
+const SEND_SHAPE = "Send takes JSON: { text?, pins? }.";
 
 const PICTURES_SHAPE = "Pictures take JSON: { pictures, url? }.";
 
@@ -412,6 +421,21 @@ const sendBodyProblem = (body: unknown): string | null => {
     !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
   ) {
     return `text is a string of at most ${CHOICE_LIMITS.note} characters.`;
+  }
+  const { pins } = body;
+  if (
+    pins !== undefined &&
+    !(
+      Array.isArray(pins) &&
+      pins.length > 0 &&
+      pins.length <= COMMENT_LIMITS.pins &&
+      pins.every(
+        (pin) =>
+          typeof pin === "string" && pin.length > 0 && pin.length <= MARK_ID_MAX
+      )
+    )
+  ) {
+    return `pins is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
   }
   return null;
 };
@@ -542,14 +566,13 @@ export const artifactSend =
     if (problem) {
       return new Response(problem, { status: 400 });
     }
-    const { text } = body as SendBody;
+    const { text, pins } = body as SendBody;
     try {
       return Response.json(
-        await send(
-          instanceId,
-          artifactId,
-          text?.trim() ? { text: text.trim() } : {}
-        )
+        await send(instanceId, artifactId, {
+          ...(text?.trim() ? { text: text.trim() } : {}),
+          ...(pins ? { pins } : {}),
+        })
       );
     } catch (error) {
       if (error instanceof ArtifactRefusal) {

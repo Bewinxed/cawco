@@ -58,12 +58,12 @@ export interface StoredJourney {
   domain: string | null;
   lan: string | null;
   liveAt: number | null;
-  lowPorts: boolean;
   machineId: string | null;
   name: string | null;
   nameState: "open" | "pointed" | "skipped";
   router: "mapped" | "refused" | null;
   routerHow: RelayMapHow | null;
+  runtimeHolds: boolean;
 }
 
 /** One device's last proof of the relay (schema.ts `streamRelayProofs`). */
@@ -190,7 +190,7 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
           cloudflareToken: row.cloudflareToken,
           router: row.router,
           routerHow: row.routerHow,
-          lowPorts: row.lowPorts,
+          runtimeHolds: row.runtimeHolds,
           certificateName: row.certificateName,
           certificateEndsAt: time(row.certificateEndsAt),
           certificateWhy: row.certificateWhy,

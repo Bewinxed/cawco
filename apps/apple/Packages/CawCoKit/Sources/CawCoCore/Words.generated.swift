@@ -12,15 +12,15 @@ public enum Words {
         n < 10 && n >= 0 ? "0\(n)" : "\(n)"
     }
 
-    /// A wait in the unit a person reads it in: "45s" up to a minute, then "3 min", rounded up.
-    public static func timeLeft(_ seconds: Int) -> String {
-        seconds > 60 ? "\((seconds + 59) / 60) min" : "\(seconds)s"
-    }
-
     public enum Configure {
         // packages/core/src/words/configure.ts `configureWords`
         /// The place, as the sidebar and a page's title name it.
         public static let title = "Configure"
+
+        /// A Configure page named in a sentence ("Configure › Accounts"), with WORDS.md's arrow: everything that points the person at a page names it through here (configurePage, by its slug, on the web and the machines).
+        public static func page(label: String) -> String {
+            "Configure › \(label)"
+        }
 
         /// A page's document title: "Accounts · Configure · CawCo".
         public static func documentTitle(title: String) -> String {
@@ -59,12 +59,8 @@ public enum Words {
 
         public static let deleting = "Deleting…"
 
-        /// The editor header's ⋯ (Delete, on a narrow page), and a row's.
+        /// The editor header's ⋯ (Delete, on a narrow page), and a row's (commonWords.moreFor names it).
         public static let more = "More"
-
-        public static func moreFor(label: String) -> String {
-            "More for \(label)"
-        }
 
         /// An editor whose row is not in the list.
         public static func gone(what: String) -> String {
@@ -257,6 +253,16 @@ public enum Words {
 
             public static let sendKey = "Send key"
 
+            /// A sign-in under way, its popover put away: one press opens it again as it was.
+            public static let openSignIn = "Open sign-in"
+
+            public static let pasteCode = "Paste code"
+
+            /// What a row says while its sign-in waits, the popover put away.
+            public static let waitingCode = "Waiting for the code"
+
+            public static let waitingPaste = "Waiting for the pasted code"
+
             /// The sign-in's label: "Sign in you@x.com on obelisk".
             public static func signInOn(verb: String, account: String, machine: String) -> String {
                 "\(verb) \(account) on \(machine)"
@@ -391,6 +397,11 @@ public enum Words {
 
         public enum Setup {
             public static let title = "Add account"
+
+            /// An account whose setup was left before it was done, on its row in the list.
+            public static func unfinished(step: String) -> String {
+                "Setup not finished · \(step)"
+            }
 
             public enum Steps {
                 public static let provider = "Provider"
@@ -732,6 +743,147 @@ public enum Words {
         }
     }
 
+    public enum Common {
+        // packages/core/src/words/common.ts `commonWords`
+        /// Asks again for what failed to be read or done.
+        public static let tryAgain = "Try again"
+
+        /// An editor's save, once what it edits exists.
+        public static let saveChanges = "Save changes"
+
+        /// Starts a session: the strip's +, the dialog's title.
+        public static let newSession = "New session"
+
+        /// Asks every source whether a newer version is out.
+        public static let checkForUpdates = "Check for updates"
+
+        /// Fetches a refused or stale copy again.
+        public static let fetchAgain = "Fetch again"
+
+        /// No machine has joined the fleet, where a page needs one.
+        public static let noMachines = "No machines yet"
+
+        /// The fleet is not read yet: the home's status line, a session's surface.
+        public static let readingTheFleet = "Reading the fleet…"
+
+        /// Copies a command to run in a terminal.
+        public static let copyCommand = "Copy command"
+
+        /// The session a thing came from, when its title isn't known.
+        public static let itsSession = "Its session"
+
+        /// A session, a task or a page waits on the person: the state word.
+        public static let needsYou = "Needs you"
+
+        /// A row's or a head's ⋯, named for what it holds.
+        public static func moreFor(label: String) -> String {
+            "More for \(label)"
+        }
+
+        /// Copies a thing's own address: a tab's menu, a sheet's head, a pin's thread.
+        public static let copyLink = "Copy link"
+
+        /// Sends again what the hub never took: a message's, a comment's line.
+        public static let sendAgain = "Send again"
+    }
+
+    public enum Transcript {
+        // packages/core/src/words/transcript.ts `transcriptWords`
+        /// A tab's details card, and the tabs of a pane's group.
+        public static let sessionDetails = "Session details"
+
+        public static let openSessions = "Open sessions in this group"
+
+        /// The transcript's landmark, as a screen reader names it.
+        public static let transcript = "Session transcript"
+
+        /// The composer's send.
+        public static let sendMessage = "Send message"
+
+        /// A message's actions, under it.
+        public static let copyMessage = "Copy message"
+
+        public static let editMessage = "Edit message"
+
+        public static let forkFromHere = "Fork from here"
+
+        /// An edit's controls.
+        public static let cancelEdit = "Cancel edit"
+
+        public static let sendEdited = "Send edited message"
+
+        /// A send the hub refused, with what it said.
+        public static let notSent = "Couldn't send that message."
+
+        /// A stored session's menu: its words carried into a new session.
+        public static let continueInNew = "Continue in new session…"
+    }
+
+    public enum Asks {
+        // packages/core/src/words/asks.ts `askWords`
+        /// The card's title, as a screen reader names it.
+        public static func permissionFrom(who: String) -> String {
+            "Permission request from \(who)"
+        }
+
+        public static func questionFrom(who: String) -> String {
+            "Question from \(who)"
+        }
+
+        public static func browserAskFrom(who: String) -> String {
+            "Browser ask from \(who)"
+        }
+
+        /// A browser ask, as Needs you names its kind.
+        public static let browserAsk = "Browser ask"
+
+        /// A browser ask's yes, and while it goes.
+        public static let takeOver = "Take over"
+
+        public static let takingOver = "Taking over…"
+
+        /// A take-over the hub refused: what it said goes between.
+        public static let cantTakeOver = "Couldn't take over."
+
+        public static let stillWaiting = "The agent is still waiting; try Take over again."
+
+        /// A question's own answer field.
+        public static let yourAnswer = "Your answer…"
+
+        public static func yourAnswerTo(question: String) -> String {
+            "Your answer to: \(question)"
+        }
+
+        /// A long command's toggle, either way.
+        public static let wholeCommand = "Show the whole command"
+
+        public static let commandOnOneLine = "Show the command on one line"
+    }
+
+    public enum Machine {
+        // packages/core/src/words/machine.ts `machineWords`
+        /// The menu's way to a Mac's login keychain, for an agent outside the desktop session.
+        public static let unlockKeychain = "Unlock keychain…"
+
+        /// The menu's pause, until a time picked.
+        public static let pauseUntil = "Pause until…"
+
+        public static let copyMachineId = "Copy machine id"
+
+        /// The unlock's field, and what it ended in.
+        public static func loginPasswordFor(host: String) -> String {
+            "Login password for \(host)"
+        }
+
+        public static func unlocked(host: String) -> String {
+            "\(host) is unlocked"
+        }
+
+        public static func cantReadLogins(host: String) -> String {
+            "\(host) cannot read its logins"
+        }
+    }
+
     public enum Sidebar {
         // packages/core/src/words/sidebar.ts `sidebarWords`
         /// The projects list is empty and no machine runs CawCo yet.
@@ -739,6 +891,16 @@ public enum Words {
 
         /// The projects list is empty while machines are joined.
         public static let noProjects = "No projects yet — name a checkout to group its sessions."
+
+        /// The phone's and narrow window's burger, which opens the sidebar over the page.
+        public static let openNavigation = "Open navigation"
+
+        /// The sessions' sort: its button, named with the order it holds, and the order by last activity.
+        public static func sortSessions(order: String) -> String {
+            "Sort sessions — currently \(order)"
+        }
+
+        public static let lastActivity = "Last activity"
     }
 
     public enum Upstream {
@@ -863,6 +1025,33 @@ public enum Words {
 
     public enum Preview {
         // packages/core/src/words/preview.ts `previewWords`
+        /// The pane's mode tabs (Preview, Comment, …), as a screen reader names them.
+        public static let previewMode = "Preview mode"
+
+        /// A preview the hub couldn't reach, and its line's end.
+        public static let cantBeReached = "This preview can't be reached"
+
+        public static let tryingAgain = "Trying again on its own."
+
+        /// Its machine, when the hub's last read couldn't reach it.
+        public static func machineNotAnswering(machine: String) -> String {
+            "\(machine) isn't answering"
+        }
+
+        /// Its server is down: the port it listened on, and the way back from its session.
+        public static func nothingOnPort(port: Int) -> String {
+            "Nothing is running on port \(port)"
+        }
+
+        public static let startFromSession = "Start it again from its session, then try again."
+
+        /// A canvas's view menu, its motion choice and its check against the design system.
+        public static let canvasView = "Canvas view"
+
+        public static let reducedMotion = "Reduced motion"
+
+        public static let verifyDesign = "Verify against the design system"
+
         /// The page's content process ended a second time for the same page (the first reloads it by itself): the system ended it, most often over its memory. The app hears it from WebKit; a browser never tells the parent page.
         public static let stoppedTitle = "This page stopped"
 
@@ -1011,7 +1200,127 @@ public enum Words {
         }
 
         /// A row's dot, for a screen reader: the person has something to do on it.
-        public static let waitingOnYou = "Waiting on you"
+        public static let waitingOnYou = "Needs you"
+
+        /// Shown and never opened: the row's line.
+        public static let notOpened = "New · not opened"
+
+        /// The same on a Files card's meta line.
+        public static let notOpenedShort = "New"
+
+        /// A decision page's picks.
+        public static func picked(made: Int, asked: Int) -> String {
+            "\(made) of \(asked) picked"
+        }
+
+        /// The same on a Files card's meta line.
+        public static func pickedShort(made: Int, asked: Int) -> String {
+            "\(made) of \(asked)"
+        }
+
+        /// Written and not sent: picks, notes, pins and ink.
+        public static func unsent(count: Int) -> String {
+            "\(count) unsent"
+        }
+
+        /// An agent's answers on open pins the person hasn't looked at.
+        public static func newAnswers(count: Int) -> String {
+            count == 1 ? "1 new answer" : "\(count) new answers"
+        }
+
+        /// The one reason, an answer on one pin: where it is.
+        public static func newAnswerOn(pin: Int) -> String {
+            "1 new answer on pin \(pin)"
+        }
+
+        /// The kind on the row's meta line, where an ask says "Question".
+        public enum KindWord {
+            public static let page = "Page"
+
+            public static let canvas = "Canvas"
+
+            public static let component = "Components"
+
+            public static let preview = "Preview"
+
+            public static let browser = "Browser"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["page": page, "canvas": canvas, "component": component, "preview": preview, "browser": browser]
+        }
+
+        /// The row's ✕: it leaves Needs you until it is raised again, and stays in Files.
+        public static let notNow = "Not now"
+
+        public static func notNowNamed(ask: String) -> String {
+            "Not now: \(ask)"
+        }
+
+        /// The row's Send, while something is written and not sent.
+        public static func sendCount(count: Int) -> String {
+            "Send \(count)"
+        }
+
+        public static func sendNamed(count: Int, ask: String) -> String {
+            "Send \(count) on \(ask)"
+        }
+
+        public static let sending = "Sending…"
+
+        /// A Send no one took: why, in the hub's words, its own sentence.
+        public static func notSent(why: String) -> String {
+            "Not sent. \(why)"
+        }
+
+        public static func openNamed(ask: String) -> String {
+            "Open \(ask)"
+        }
+
+        /// A notice: a revision with nothing asked.
+        public static func changedSince(name: String, count: Int) -> String {
+            "\(name): \(count) changed since you looked"
+        }
+
+        /// The same where its name already stands (Jump's waiting row).
+        public static func changedCount(count: Int) -> String {
+            "\(count) changed since you looked"
+        }
+
+        /// A notice: resolved pins whose closing answer is unread.
+        public static func closedAnswers(name: String, count: Int, pin: Int) -> String {
+            count == 1 ? "\(name): pin \(pin) resolved with an answer" : "\(name): \(count) pins resolved with answers"
+        }
+
+        /// A notice: its session ended with the ask unanswered.
+        public static func ended(who: String, what: String) -> String {
+            "\(who) ended; \(what)"
+        }
+
+        /// Who ended, when the hub no longer holds the session.
+        public static let itsSession = "Its session"
+
+        public static func neverOpened(name: String) -> String {
+            "\(name) never opened"
+        }
+
+        public static func neverPicked(count: Int, name: String) -> String {
+            count == 1 ? "1 pick on \(name) never made" : "\(count) picks on \(name) never made"
+        }
+
+        public static func neverSent(count: Int, name: String) -> String {
+            "\(count) unsent on \(name) never sent"
+        }
+
+        public static func neverRead(count: Int, name: String) -> String {
+            count == 1 ? "1 answer on \(name) never read" : "\(count) answers on \(name) never read"
+        }
+
+        /// A notice's ✕, for a screen reader.
+        public static func dismissNotice(name: String) -> String {
+            "Dismiss the notice on \(name)"
+        }
+
+        public static let open = "Open"
 
         /// Its skeleton rows, for a screen reader, while the pins are read past the wait's grace.
         public static let readingComments = "Reading the comments"
@@ -1245,11 +1554,46 @@ public enum Words {
         public static let tryingAgain = "Starting…"
     }
 
+    public enum Updates {
+        // packages/core/src/words/updates.ts `updatesWords`
+        /// The notice's title while a build waits.
+        public static func ready(version: String) -> String {
+            "CawCo \(version) is ready"
+        }
+
+        /// An Install now the hub refused: the notice's title, and why under a machine's row.
+        public static func notInstalled(version: String, machine: String) -> String {
+            "CawCo \(version) was not installed on \(machine)"
+        }
+
+        public static func notConnected(machine: String) -> String {
+            "\(machine) is not connected, so nothing was installed. Retry once it is back."
+        }
+
+        /// A Check for updates refused, under it.
+        public static func noNewBuilds(why: String) -> String {
+            "No new builds could be looked for: \(why). Machines keep the build they run; Try again to check."
+        }
+
+        /// A machine other than the hub's own is to install `version` (`waiting-for-hub`): the hub does not speak its wire protocol yet (`answered`, the state's `hubWait` "behind"), or did not say which it speaks (a hub mid-restart). It installs by itself once the hub runs a build that does.
+        public static func waitsForHub(version: String, answered: Bool) -> String {
+            answered ? "Waits for its hub to take \(version) first" : "Waits for its hub to answer before installing \(version)"
+        }
+
+        /// The machine's line in the notice of an install under way, while it waits for its hub.
+        public static func installLineWaitsForHub(name: String) -> String {
+            "· \(name) · waiting for its hub"
+        }
+    }
+
     public enum Connection {
         // packages/core/src/words/connection.ts `connectionWords`
-        /// The hub restarts for the update to `version` (null when unnamed), back within `seconds`.
-        public static func updating(version: String?, seconds: Int) -> String {
-            "CawCo is updating\((version ?? "").count > 0 ? " to \(version ?? "")" : "") — the hub is back within \(Words.timeLeft(seconds))."
+        /// The hub isn't answering: the band's, the home's quiet line, the status line's lead.
+        public static let unreachable = "Hub unreachable"
+
+        /// The hub restarts for the update to `version` (null when unnamed), named when it is.
+        public static func updating(version: String?) -> String {
+            "CawCo is updating\((version ?? "").count > 0 ? " to \(version ?? "")" : "")."
         }
 
         /// The hub answered again after the update it announced.
@@ -1631,6 +1975,27 @@ public enum Words {
 
         public static let cancel = "Cancel"
 
+        /// An act on a routine the hub refused, said under its row until the reader acts on it: what did not happen, then the hub's own sentence (its why and its way on).
+        public static func refusedRun(name: String, why: String) -> String {
+            "\(name) did not run. \(why)"
+        }
+
+        public static func refusedPause(name: String, why: String) -> String {
+            "\(name) was not paused. \(why)"
+        }
+
+        public static func refusedResume(name: String, why: String) -> String {
+            "\(name) was not resumed. \(why)"
+        }
+
+        public static func refusedKeep(name: String, why: String) -> String {
+            "\(name) was not kept. \(why)"
+        }
+
+        public static func refusedRemove(name: String, why: String) -> String {
+            "\(name) was not deleted. \(why)"
+        }
+
         public static let empty = "No routines yet"
 
         /// What the empty page is for: its line whether or not Caw can start.
@@ -1786,6 +2151,33 @@ public enum Words {
         }
     }
 
+    public enum CawHead {
+        // packages/core/src/words/caw-head.ts `cawHeadWords`
+        /// Something waits on the operator: how many, his label.
+        public static func needs(count: Int) -> String {
+            "Needs you, \(count)"
+        }
+
+        /// The same, his tooltip.
+        public static func needsTip(count: Int) -> String {
+            "\(count) need you"
+        }
+
+        /// Nothing waits, and the fleet is read over a live hub: the one empty answer.
+        public static let caughtUp = "All caught up"
+
+        /// The hub is live and its fleet not read yet: nothing to count from.
+        public static let reading = "Reading the fleet"
+
+        /// The hub is away, so nothing can be counted (why is the connection band's to say).
+        public static let waiting = "Waiting for the hub"
+
+        /// After what he says, while any notice stands: " · 2 notices".
+        public static func notices(count: Int) -> String {
+            " · \(count) \(count == 1 ? "notice" : "notices")"
+        }
+    }
+
     public enum Views {
         // packages/core/src/words/views.ts `viewsWords`
         /// The strip's ghost action, and the head's ⋯ on a phone, while Caw can start.
@@ -1868,11 +2260,6 @@ public enum Words {
 
     public enum Blocks {
         // packages/core/src/words/blocks.ts `blocksWords`
-        /// A block's ⋯, read out with its title.
-        public static func more(title: String) -> String {
-            "More for \(title)"
-        }
-
         public static let moveUp = "Move up"
 
         public static let moveDown = "Move down"
@@ -1978,7 +2365,16 @@ public enum Words {
             "\(service)'s sign-in is open in a new tab; this row turns signed in when you finish there."
         }
 
-        public static let signInClosed = "The sign-in tab closed before it finished."
+        public static let signInClosed = "The sign-in tab closed before it finished. Open sign-in to go on where it was, until it lapses."
+
+        /// The row's own button while its sign-in can still finish: the same page again, never another sign-in.
+        public static let openSignIn = "Open sign-in"
+
+        /// The hub still says a sign-in is under way, but it ran past its time.
+        public static let signInLapsed = "The last sign-in ran out of time before it finished. Sign in to start another."
+
+        /// A secret is never kept through a reload: the form asks for it again and says why.
+        public static let secretNotKept = "Keys and secrets are never kept when the page reloads, so paste it again to sign in."
 
         public static let blocked = "The browser blocked the sign-in tab. Allow pop-ups for this page, then try again."
 
@@ -2714,6 +3110,14 @@ public enum Words {
 
         public static let severalSkills = "That repo holds several skills. Pick the one to fetch."
 
+        /// The row a fetch went on in, once its popover is put away: one press brings it back.
+        public static let openFetch = "Open fetch"
+
+        /// A fetch the hub could not make, said in the popover in the error formula.
+        public static func fetchRefused(name: String, why: String) -> String {
+            "\(name) was not fetched: \(why). Change the source and fetch it again; its row says this until then."
+        }
+
         /// Link marketplace.
         public static let linkMarketplace = "Link marketplace"
 
@@ -2739,6 +3143,16 @@ public enum Words {
 
         public static func alreadyLinked(name: String) -> String {
             "\"\(name)\" is already linked."
+        }
+
+        /// A link with no row yet, in the marketplace list: one press brings its popover back.
+        public static let openLink = "Open link"
+
+        public static let removeLink = "Remove link"
+
+        /// A link the hub refused, said on its row and in the popover in the error formula.
+        public static func linkRefused(source: String, why: String) -> String {
+            "\(source) was not linked: \(why). Change the source and link it again, or remove this row."
         }
 
         /// On each machine.

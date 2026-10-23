@@ -4,18 +4,17 @@
  * container runtime (runtime.ts) with the hub's shared secret. With a DNS
  * name, a certbot container issues the name's Let's Encrypt certificate
  * first (`relay.certify`, the journey's certificate step), kept on the volume
- * `cawco-relay-certs`, and coturn answers TLS on its one listener, 443,
- * beside plain UDP and TCP.
+ * `cawco-relay-certs`, and coturn answers TLS on TCP 5349 beside plain UDP
+ * and TCP on 3478.
  *
  * One topology on every runtime, native Linux and VM alike: coturn's
  * container joins the runtime's media network (media-network.ts) at .2, its
- * one listener, UDP and TCP 443, published on every address of the machine
- * (a VM's forwarder carries it to the machine: a Mac lets a process bind a
- * port under 1024 on every address without root, "iOS never had this
- * restriction and we've now lifted it on macOS", Apple DTS,
- * developer.apple.com/forums/thread/674179; Colima forwards a guest's
- * 0.0.0.0 port to the host's 0.0.0.0, TCP and UDP alike). Its UDP relay range
- * stays inside its container: nothing is published for it.
+ * listeners, UDP and TCP 3478 and with a certificate TCP 5349, published on
+ * every address of the machine (a VM's forwarder carries them to the
+ * machine: Colima forwards a guest's 0.0.0.0 port to the host's 0.0.0.0, TCP
+ * and UDP alike). Every one is above 1024, so no runtime, rootless or in a
+ * VM, needs root or a sysctl to bind it. Its UDP relay range stays inside its
+ * container: nothing is published for it.
  *
  * Every relayed stream is relay to relay inside the one coturn: a viewer and a
  * browser each hold an allocation, and their pair has both relayed addresses
@@ -32,20 +31,17 @@
  * from outside ever enters a relay socket, which needs a permission for its
  * source (no `server-relay`). TCP relaying is off (`no-tcp-relay`).
  *
- * The certificate is issued by DNS at Cloudflare when the hub hands the
- * person's token (certbot's `dns-cloudflare` plugin: "The Token needed by
- * Certbot requires `Zone:DNS:Edit` permissions for only the zones you need
- * certificates for", certbot-dns-cloudflare.readthedocs.io), else over HTTP
- * on port 80: on the hub's own machine while the hub holds port 80 (hub
- * local-name.ts), certbot writes the challenge into the folder the hub
- * answers it from (`--webroot`), and elsewhere it binds the port itself
- * (`--standalone`). The token reaches certbot only as a file mounted 0600
- * for the one run, and is never logged.
+ * The certificate is issued only by DNS at Cloudflare, with the person's
+ * token the hub hands (certbot's `dns-cloudflare` plugin: "The Token needed
+ * by Certbot requires `Zone:DNS:Edit` permissions for only the zones you need
+ * certificates for", certbot-dns-cloudflare.readthedocs.io): no port of the
+ * machine is opened for it. The token reaches certbot only as a file mounted
+ * 0600 for the one run, and is never logged.
  *
  * Nothing starts where it could not run: with no runtime, on a runtime short
  * of a setting the relay needs (`relay.runtime`, the journey's runtime step:
- * a rootless Linux engine's low ports, a VM's forwarder carrying less than
- * UDP and TCP, a VM's rootless engine), or with one of its ports held by
+ * a VM's forwarder carrying less than UDP and TCP), or with one of its ports
+ * held by
  * another process, the start fails with the sentence that names the fix,
  * before any container is made. The container is the record: its labels
  * carry the settings it was made with and its DNS name, so a daemon that
@@ -69,7 +65,6 @@ import type {
   RelayCertified,
   RelayCertifyArgs,
   RelayFrame,
-  RelayNetwork,
   RelayPorts,
   RelayReach,
   RelayRenewArgs,
@@ -79,12 +74,11 @@ import type {
   RelayStartArgs,
 } from "@cawco/core/stream-relay";
 import {
-  lowPortsCommand,
   RELAY_DNS_NAME,
   RELAY_FAILURES,
-  RELAY_HTTP_PORT,
   type RelayFailure,
   STREAM_RELAY_PORT,
+  STREAM_RELAY_TLS_PORT,
 } from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
 import { browserRuntime } from "./browsers";
@@ -109,8 +103,8 @@ export const RELAY_IMAGE = "coturn/coturn:4.18.0-r0-alpine";
  * certbot's newest release on Docker Hub with its Cloudflare DNS plugin
  * ("Official build of EFF's Certbot with its plugin for doing DNS challenges
  * using Cloudflare", hub.docker.com/r/certbot/dns-cloudflare), pinned. One
- * image for every certbot run: the DNS challenge, standalone over HTTP, the
- * renewal and the certificate's read are the same certbot.
+ * image for every certbot run: the DNS challenge, the renewal and the
+ * certificate's read are the same certbot.
  */
 export const CERTBOT_IMAGE = "certbot/dns-cloudflare:v5.8.0";
 /** The relay's container on the runtime. */
@@ -130,12 +124,8 @@ const LETSENCRYPT = "/etc/letsencrypt";
  */
 const CLOUDFLARE_DIR = "/run/cawco";
 const CLOUDFLARE_INI = `${CLOUDFLARE_DIR}/cloudflare.ini`;
-/** Where certbot sees the hub's webroot inside its container: the same path at issue and at each renewal. */
-const WEBROOT_DIR = "/run/cawco-acme";
 /** How long the DNS challenge's TXT record has to reach Cloudflare's servers before Let's Encrypt asks (the plugin's default is 10 s). */
 const PROPAGATION_S = 20;
-/** The proc file a rootless runtime's low ports depend on (podman rootless.md). */
-const UNPRIVILEGED = "/proc/sys/net/ipv4/ip_unprivileged_port_start";
 
 /**
  * How long coturn has to bind its ports once started, and its runtime's
@@ -158,8 +148,8 @@ const DEPLOY_HOOK = `chmod 0755 ${LETSENCRYPT}/live ${LETSENCRYPT}/archive && ch
 const EXPIRY = /Expiry Date: (\S+ \S+)/;
 
 const NO_PORTS: RelayPorts = {
-  udp443: false,
-  tcp443: false,
+  udp: false,
+  tcp: false,
   tls: false,
 };
 
@@ -235,13 +225,6 @@ const SOCKET_LINK = /^socket:\[(\d+)\]$/;
 /** The lines of certbot's that say why it failed. */
 const CERTBOT_ERROR =
   /^(?:Detail|Type|Error|An unexpected error)|Problem|error/i;
-/** How an issued certificate met its challenge, for the log line. */
-const CHALLENGE_WORDS = {
-  dns: "DNS at Cloudflare",
-  webroot: "HTTP through the hub's port 80",
-  http: "HTTP on port 80",
-  none: "",
-} as const;
 
 /** Every socket of `proto` bound to a local port: TCP listening, UDP bound. */
 const boundSockets = async (proto: "tcp" | "udp"): Promise<BoundSocket[]> => {
@@ -300,7 +283,7 @@ const processesOf = async (
   return found;
 };
 
-/** One port held by someone, in words: "TCP 443 is held by caddy (pid 917)". */
+/** One port held by someone, in words: "TCP 3478 is held by caddy (pid 917)". */
 export interface HeldPort {
   port: number;
   proto: "tcp" | "udp";
@@ -370,51 +353,26 @@ export const logsOf = async (
   return at === 0 ? raw.toString("utf8") : parts.join("");
 };
 
-/** Port 80 published on every address of the machine, for certbot's HTTP challenge. */
-const HTTP_PUBLISHED = {
-  ExposedPorts: { [`${RELAY_HTTP_PORT}/tcp`]: {} },
-  PortBindings: {
-    [`${RELAY_HTTP_PORT}/tcp`]: [
-      { HostIp: "0.0.0.0", HostPort: String(RELAY_HTTP_PORT) },
-    ],
-  },
-};
-
-/** How certbot meets its challenge: `http` binds port 80 (standalone), `webroot` writes it into the hub's folder. */
-type Challenge = "http" | "webroot" | "dns" | "none";
-
 /**
  * `cmd` run to its end in a certbot container with the certificate volume,
- * the token's folder at {@link CLOUDFLARE_DIR} when given, and the hub's
- * webroot at {@link WEBROOT_DIR} for `webroot`: its exit code and what it
- * said. On the runtime's default network; a standalone challenge over HTTP
- * answers on port 80 published, one through the hub's webroot or by DNS
- * needs no port, and a read of the volume (`none`) neither.
+ * and the token's folder at {@link CLOUDFLARE_DIR} when given: its exit code
+ * and what it said. On the runtime's default network, no port published: the
+ * DNS challenge needs none, and a read of the volume neither.
  */
 const runCertbot = async (
   docker: Docker,
   cmd: string[],
-  challenge: Challenge,
-  mounts: { tokenDir?: string; webroot?: string } = {}
+  tokenDir?: string
 ): Promise<{ code: number; said: string }> => {
-  const http = challenge === "http";
-  const binds = [
-    // `z`: a shared SELinux label, so a rootless Podman on an enforcing
-    // host lets the container read the folder.
-    ...(mounts.tokenDir ? [`${mounts.tokenDir}:${CLOUDFLARE_DIR}:ro,z`] : []),
-    ...(challenge === "webroot" && mounts.webroot
-      ? [`${mounts.webroot}:${WEBROOT_DIR}:z`]
-      : []),
-  ];
   const container = await docker.createContainer({
     Image: CERTBOT_IMAGE,
     Cmd: cmd,
     Labels: { [RELAY_LABEL]: "certbot" },
-    ...(http ? { ExposedPorts: HTTP_PUBLISHED.ExposedPorts } : {}),
     HostConfig: {
-      ...(http ? { PortBindings: HTTP_PUBLISHED.PortBindings } : {}),
       Mounts: [{ Type: "volume", Source: CERTS_VOLUME, Target: LETSENCRYPT }],
-      ...(binds.length > 0 ? { Binds: binds } : {}),
+      // `z`: a shared SELinux label, so a rootless Podman on an enforcing
+      // host lets the container read the folder.
+      ...(tokenDir ? { Binds: [`${tokenDir}:${CLOUDFLARE_DIR}:ro,z`] } : {}),
     },
   });
   try {
@@ -425,9 +383,7 @@ const runCertbot = async (
     );
     if (ended.kind === "unanswered") {
       await container.kill().catch(() => undefined);
-      throw new RelayFailed(
-        RELAY_FAILURES.certbotSlow(CERTBOT_MS / 1000, challenge === "dns")
-      );
+      throw new RelayFailed(RELAY_FAILURES.certbotSlow(CERTBOT_MS / 1000));
     }
     return { code: ended.value.StatusCode, said: await logsOf(container) };
   } finally {
@@ -438,15 +394,12 @@ const runCertbot = async (
 /**
  * `work` with the person's Cloudflare token in a folder of its own: the ini
  * certbot's plugin reads (`dns_cloudflare_api_token = …`), 0600 in a 0700
- * folder, removed as soon as `work` ends. Without a token, `work` alone.
+ * folder, removed as soon as `work` ends.
  */
 const withToken = async <T>(
-  token: string | undefined,
-  work: (dir: string | undefined) => Promise<T>
+  token: string,
+  work: (dir: string) => Promise<T>
 ): Promise<T> => {
-  if (!token) {
-    return work(undefined);
-  }
   const dir = await mkdtemp(join(tmpdir(), "cawco-relay-dns-"));
   try {
     await chmod(dir, 0o700);
@@ -481,11 +434,11 @@ const certificateEnd = async (
   docker: Docker,
   name: string
 ): Promise<number | undefined> => {
-  const { code, said } = await runCertbot(
-    docker,
-    ["certificates", "--cert-name", name],
-    "none"
-  );
+  const { code, said } = await runCertbot(docker, [
+    "certificates",
+    "--cert-name",
+    name,
+  ]);
   const expiry = code === 0 ? EXPIRY.exec(said)?.[1] : undefined;
   return expiry ? Date.parse(expiry.replace(" ", "T")) : undefined;
 };
@@ -500,53 +453,21 @@ const certbotWords = (said: string): string => {
   return (errors.length > 0 ? errors : lines.slice(-4)).join(" ");
 };
 
-/** Port 80 free for certbot's challenge, or the failure `refusal` words, naming who holds it. */
-const port80Free = async (
-  refusal: (held: string) => RelayFailure
-): Promise<void> => {
-  const [held] = await heldPorts([{ proto: "tcp", port: RELAY_HTTP_PORT }]);
-  if (held) {
-    throw new RelayFailed(refusal(held.said));
-  }
-};
-
 /**
- * certbot's challenge flags: Cloudflare's DNS with the token's ini, else over
- * HTTP through the hub's webroot, else standalone on port 80. A renewal
- * passes the HTTP ones too, so it follows the hub's port 80 as it stands
- * now, whichever way the certificate was issued ("options provided to
- * `certbot renew` will apply to every certificate for which renewal is
- * attempted", eff-certbot.readthedocs.io/en/stable/using.html).
+ * certbot's challenge flags, at issue and at each renewal alike: Cloudflare's
+ * DNS with the token's ini. Given to `renew` too, so a renewal never falls
+ * back on whatever challenge a renewal conf names ("The same plugin and
+ * options that were used at the time the certificate was originally issued
+ * will be used for the renewal attempt, unless you specify other plugins or
+ * options", eff-certbot.readthedocs.io/en/stable/using.html).
  */
-const challengeFlags = (challenge: Challenge): string[] => {
-  switch (challenge) {
-    case "dns":
-      return [
-        "--dns-cloudflare",
-        "--dns-cloudflare-credentials",
-        CLOUDFLARE_INI,
-        "--dns-cloudflare-propagation-seconds",
-        String(PROPAGATION_S),
-      ];
-    case "webroot":
-      return ["--webroot", "--webroot-path", WEBROOT_DIR];
-    case "http":
-      return ["--standalone"];
-    case "none":
-      return [];
-  }
-};
-
-/** How a certificate for `args` meets its challenge: DNS with a token, the hub's webroot when it hands one, else standalone. */
-const challengeOf = (args: {
-  cloudflareToken?: string;
-  webroot?: string;
-}): Challenge => {
-  if (args.cloudflareToken) {
-    return "dns";
-  }
-  return args.webroot ? "webroot" : "http";
-};
+const DNS_CHALLENGE = [
+  "--dns-cloudflare",
+  "--dns-cloudflare-credentials",
+  CLOUDFLARE_INI,
+  "--dns-cloudflare-propagation-seconds",
+  String(PROPAGATION_S),
+];
 
 /**
  * Where coturn sits: its own address on the runtime's media network
@@ -560,11 +481,11 @@ export interface RelaySeat {
 }
 
 /**
- * coturn's arguments for `args` in `seat`: one listener on 443, plain UDP and
- * TCP, and with the certificate's paths TLS on that same listener
- * (turnserver.conf: "TLS & DTLS sessions can connect to the 'plain' TCP & UDP
- * port(s), too"). `tls-listening-port` keeps its default, never published nor
- * minted; without a certificate `--no-tls` starts no TLS listener at all.
+ * coturn's arguments for `args` in `seat`: its plain listener on 3478, UDP
+ * and TCP, and with the certificate's paths its TLS listener on 5349, each
+ * named though each is coturn's default (turnserver.conf: "TURN listener port
+ * for UDP and TCP (Default: 3478)", "TURN listener port for TLS (Default:
+ * 5349)"); without a certificate `--no-tls` starts no TLS listener at all.
  * The relay's public address maps to its one relay address, the only peer it
  * lets through; every range below is denied, as the module's header says.
  */
@@ -604,6 +525,7 @@ export const coturnArgs = (
   ...seat.otherPublic.map((one) => `--denied-peer-ip=${one}`),
   ...(certified && args.hostname
     ? [
+        `--tls-listening-port=${STREAM_RELAY_TLS_PORT}`,
         `--cert=${LETSENCRYPT}/live/${args.hostname}/fullchain.pem`,
         `--pkey=${LETSENCRYPT}/live/${args.hostname}/privkey.pem`,
       ]
@@ -678,28 +600,30 @@ const removeRelayContainer = async (docker: Docker): Promise<void> => {
     });
 };
 
-/** Where `runtime`'s engine runs, for the journey's runtime step's words: on the machine itself, or in a VM. */
-const networkOf = (runtime: Runtime): RelayNetwork =>
-  runtime.ownNetwork ? "host" : "published";
-
 /**
- * The relay's listener as the machine carries it now, read as a browser's
+ * The relay's listeners as the machine carries them now, read as a browser's
  * media port is (media-forwarding.ts `forwardingReader`): what is bound on
  * every address where a process forwards (a VM's forwarder, rootlesskit or
- * pasta), else a TCP connection through a rootful engine's NAT. TLS answers
- * on its TCP.
+ * pasta), else a TCP connection through a rootful engine's NAT. TLS is its
+ * own listener, read on its own port while a certificate stands.
  */
 const listenerBound = async (
   runtime: Runtime,
   tls: boolean
 ): Promise<RelayPorts> => {
-  const forwarded =
-    (await forwardingReader(runtime)?.read(STREAM_RELAY_PORT)) ?? "none";
-  const tcp = forwarded !== "none";
-  return { udp443: forwarded === "udp+tcp", tcp443: tcp, tls: tls && tcp };
+  const reader = forwardingReader(runtime);
+  const [plain, secure] = await Promise.all([
+    reader?.read(STREAM_RELAY_PORT) ?? "none",
+    tls ? (reader?.read(STREAM_RELAY_TLS_PORT) ?? "none") : "none",
+  ]);
+  return {
+    udp: plain === "udp+tcp",
+    tcp: plain !== "none",
+    tls: secure !== "none",
+  };
 };
 
-/** Waits until coturn's UDP and TCP 443 are carried on the machine, or throws with its last lines. */
+/** Waits until coturn's UDP and TCP 3478 (and with a certificate TCP 5349) are carried on the machine, or throws with its last lines. */
 const waitLive = async (
   docker: Docker,
   runtime: Runtime,
@@ -723,18 +647,18 @@ const waitLive = async (
       );
     }
     ports = await listenerBound(runtime, tls);
-    if (ports.udp443 && ports.tcp443 && (!tls || ports.tls)) {
+    if (ports.udp && ports.tcp && (!tls || ports.tls)) {
       return ports;
     }
     await Bun.sleep(LIVE_POLL_MS);
   }
   const missing = [
-    ports.udp443 ? null : `UDP ${STREAM_RELAY_PORT}`,
-    ports.tcp443 ? null : `TCP ${STREAM_RELAY_PORT}`,
-    !tls || ports.tls ? null : `TLS on ${STREAM_RELAY_PORT}`,
+    ports.udp ? null : `UDP ${STREAM_RELAY_PORT}`,
+    ports.tcp ? null : `TCP ${STREAM_RELAY_PORT}`,
+    !tls || ports.tls ? null : `TCP ${STREAM_RELAY_TLS_PORT}`,
   ].filter((port): port is string => port !== null);
   throw new RelayFailed(
-    networkOf(runtime) === "host"
+    runtime.ownNetwork
       ? RELAY_FAILURES.coturnUnbound(hostname(), missing, LIVE_MS / 1000)
       : RELAY_FAILURES.unforwarded(hostname(), missing, LIVE_MS / 1000)
   );
@@ -755,94 +679,57 @@ const relayRuntime = async (): Promise<Runtime> => {
   return found;
 };
 
-/** `ip_unprivileged_port_start` as the kernel has it now. */
-const unprivilegedStart = async (): Promise<number> =>
-  Number((await readFile(UNPRIVILEGED, "utf8")).trim());
-
-/** A VM's Podman made rootful (podman-machine-set(1): "To switch the default Podman machine from rootless to rootful: podman machine set --rootful"), restarted so its socket forwards to the rootful one. */
-const PODMAN_ROOTFUL =
-  "podman machine stop && podman machine set --rootful && podman machine start";
-
 /**
- * What the runtime must change before the relay binds `lowest` (443, or 80
- * for a certificate over HTTP), read now; null when nothing must.
- * - A rootless engine on Linux binds a port under 1024 only from
- *   `ip_unprivileged_port_start` up (podman rootless.md: "Podman can not
- *   create containers that bind to ports < 1024 … `sysctl
- *   net.ipv4.ip_unprivileged_port_start=443` allows rootless Podman
- *   containers to bind to ports >= 443").
- * - A rootless Podman in a VM is held to the VM's own start ("rootlessport
- *   cannot expose privileged port 123 …", containers/podman discussion
- *   20932), which the Mac can't set: it runs rootful instead.
- * - A VM's forwarder must carry UDP as well as TCP: Colima's ssh one carries
- *   TCP alone (media-forwarding.ts), its grpc one both.
+ * What the runtime must change before the relay runs, read now; null when
+ * nothing must. Every port it takes is above 1024, so an engine on the
+ * machine itself, rootless or rootful, carries it as it is. A VM's forwarder
+ * must carry UDP as well as TCP: Colima's ssh one carries TCP alone
+ * (media-forwarding.ts), its grpc one both.
  */
 const runtimeNeed = async (
-  runtime: Runtime,
-  lowest: number
+  runtime: Runtime
 ): Promise<RelayRuntimeNeed | null> => {
   if (runtime.ownNetwork) {
-    if (!runtime.rootless || (await unprivilegedStart()) <= lowest) {
-      return null;
-    }
-    return {
-      kind: "low-ports",
-      why: `Port ${lowest} is below the range this machine lets a rootless container runtime bind.`,
-      command: lowPortsCommand(lowest),
-    };
-  }
-  if (runtime.rootless && runtime.kind === "podman") {
-    return {
-      kind: "rootful",
-      why: `Podman runs rootless inside its VM, which publishes no port under 1024, and the stream relay listens on ${lowest}: run it rootful.`,
-      command: PODMAN_ROOTFUL,
-    };
+    return null;
   }
   const forwarding = await mediaForwarding(runtime.endpoint);
   if (forwarding.media === "udp+tcp" || !forwarding.command) {
     return null;
   }
   return {
-    kind: "forwarder",
     why: `${forwarding.runtime ?? "The container runtime"} forwards ${forwarding.media === "none" ? "no ports" : "only TCP"} from its VM, and the stream relay needs UDP and TCP ${STREAM_RELAY_PORT}: switch it to its forwarder that carries both.`,
     command: forwarding.command,
   };
 };
 
-/** The runtime's need as the start's failure: the low ports in their own words, any other in its own. */
-const needFailure = (need: RelayRuntimeNeed, lowest: number): RelayFailure =>
-  need.kind === "low-ports"
-    ? RELAY_FAILURES.lowPort(hostname(), lowest)
-    : RELAY_FAILURES.runtimeNeed(hostname(), need);
-
 /**
- * `relay.runtime`: how the runtime carries the relay and what it must change
- * first, read on each ask (the hub asks every 2 s while the journey's runtime
- * step stands). No runtime answers as the start would refuse.
+ * `relay.runtime`: whether the runtime's step applies (its engine runs in a
+ * VM) and what its forwarder must change first, read on each ask (the hub
+ * asks every 2 s while the journey's runtime step stands). No runtime
+ * answers as the start would refuse.
  */
-export const relayRuntimeRead = async (
-  lowest: number
-): Promise<RelayRuntimeRead> => {
+export const relayRuntimeRead = async (): Promise<RelayRuntimeRead> => {
   const runtime = await relayRuntime();
-  const network = networkOf(runtime);
   return {
-    network,
-    need: await runtimeNeed(runtime, lowest),
-    stepApplies: network === "published" || runtime.rootless,
+    need: await runtimeNeed(runtime),
+    stepApplies: !runtime.ownNetwork,
   };
 };
 
 /**
- * The relay's listener held by another process of the machine, as its
- * failure; undefined when UDP and TCP 443 are free, or the machine has no
- * socket tables to read (a Mac: there the runtime refuses a start whose port
- * is held, in its own words). The ports coturn opens beside it (444, 5349,
- * 5350) stay inside its container.
+ * The relay's listeners held by another process of the machine, as their
+ * failure; undefined when UDP and TCP 3478 (and with a certificate TCP 5349)
+ * are free, or the machine has no socket tables to read (a Mac: there the
+ * runtime refuses a start whose port is held, in its own words). The alt
+ * ports coturn opens beside them (3479, 5350) stay inside its container.
  */
-const portsRefusal = async (): Promise<RelayFailure | undefined> => {
+const portsRefusal = async (
+  tls: boolean
+): Promise<RelayFailure | undefined> => {
   const held = await heldPorts([
     { proto: "udp", port: STREAM_RELAY_PORT },
     { proto: "tcp", port: STREAM_RELAY_PORT },
+    ...(tls ? [{ proto: "tcp" as const, port: STREAM_RELAY_TLS_PORT }] : []),
   ]);
   if (held.length === 0) {
     return;
@@ -876,9 +763,9 @@ const readyToStart = async (args: RelayStartArgs): Promise<Runtime> => {
     throw new RelayFailed(RELAY_FAILURES.notDnsName(hostname(), args.hostname));
   }
   const runtime = await relayRuntime();
-  const need = await runtimeNeed(runtime, STREAM_RELAY_PORT);
+  const need = await runtimeNeed(runtime);
   if (need) {
-    throw new RelayFailed(needFailure(need, STREAM_RELAY_PORT));
+    throw new RelayFailed(RELAY_FAILURES.runtimeNeed(hostname(), need));
   }
   return runtime;
 };
@@ -938,9 +825,8 @@ const liveFrame = async (
 /**
  * `relay.certify`: the relay's certificate for `hostname`, issued (or kept,
  * when one stands and is not due) by DNS at Cloudflare with the person's
- * token, else over HTTP through the hub's webroot when it hands one, else
- * standalone over port 80; its end answered. The relay itself is not
- * touched: the journey's start step runs it on the certificate after.
+ * token; its end answered. The relay itself is not touched: the journey's
+ * start step runs it on the certificate after.
  */
 export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
   serial(async () => {
@@ -948,18 +834,7 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
     if (!RELAY_DNS_NAME.test(name)) {
       throw new RelayFailed(RELAY_FAILURES.notDnsName(hostname(), name));
     }
-    const challenge = challengeOf(args);
-    const dns = challenge === "dns";
-    const runtime = await relayRuntime();
-    const { docker } = runtime;
-    // Through the hub's webroot the hub holds port 80: nothing here binds it.
-    if (challenge === "http") {
-      const need = await runtimeNeed(runtime, RELAY_HTTP_PORT);
-      if (need) {
-        throw new RelayFailed(needFailure(need, RELAY_HTTP_PORT));
-      }
-      await port80Free((held) => RELAY_FAILURES.certificatePort80(name, held));
-    }
+    const { docker } = await relayRuntime();
     await pullImage(docker, CERTBOT_IMAGE, () => undefined);
     await ensureVolume(docker);
     const { code, said } = await withToken(args.cloudflareToken, (dir) =>
@@ -967,7 +842,7 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
         docker,
         [
           "certonly",
-          ...challengeFlags(challenge),
+          ...DNS_CHALLENGE,
           "--non-interactive",
           "--agree-tos",
           "--register-unsafely-without-email",
@@ -977,29 +852,25 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
           "-d",
           name,
         ],
-        challenge,
-        { tokenDir: dir, webroot: args.webroot }
+        dir
       )
     );
     if (code !== 0) {
-      const words = certbotWords(said);
       throw new RelayFailed(
-        dns
-          ? RELAY_FAILURES.certificateDns(name, words)
-          : RELAY_FAILURES.certificateHttp(name, words)
+        RELAY_FAILURES.certificateDns(name, certbotWords(said))
       );
     }
     const expiresAt = await certificateEnd(docker, name);
     if (expiresAt === undefined) {
       throw new RelayFailed(
-        RELAY_FAILURES.certificateHttp(
+        RELAY_FAILURES.certificateDns(
           name,
           "certbot exited 0 and no certificate stands in its volume"
         )
       );
     }
     console.info(
-      `[relay] certificate for ${name} stands (${CHALLENGE_WORDS[challenge]}), ends ${new Date(expiresAt).toISOString()}`
+      `[relay] certificate for ${name} stands (DNS at Cloudflare), ends ${new Date(expiresAt).toISOString()}`
     );
     return { expiresAt };
   });
@@ -1021,7 +892,7 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
         return await liveFrame(running.ports, running.tls, args.hostname);
       }
       await removeRelayContainer(docker);
-      const refused = await portsRefusal();
+      const refused = await portsRefusal(!!args.hostname);
       if (refused) {
         throw new RelayFailed(refused);
       }
@@ -1053,19 +924,32 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
   });
 
 /**
- * coturn's published listener, `port` inside its container (443) to `host`
- * on every address of the machine (443; a probe's stand-in elsewhere): UDP
- * and TCP. The relay range is never published.
+ * coturn's published listeners on every address of the machine, each to the
+ * same port inside its container: UDP and TCP 3478, and with `tls` TCP 5349.
+ * A probe names its stand-in ports (`host`). The relay range is never
+ * published.
  */
 export const listenerPublished = (
-  host: number,
-  port: number = STREAM_RELAY_PORT
+  tls: boolean,
+  host: { plain: number; tls: number } = {
+    plain: STREAM_RELAY_PORT,
+    tls: STREAM_RELAY_TLS_PORT,
+  }
 ): { exposed: Record<string, object>; bindings: Docker.PortMap } => {
-  const ports = [`${port}/udp`, `${port}/tcp`];
+  const ports: [string, number][] = [
+    [`${STREAM_RELAY_PORT}/udp`, host.plain],
+    [`${STREAM_RELAY_PORT}/tcp`, host.plain],
+    ...(tls
+      ? [[`${STREAM_RELAY_TLS_PORT}/tcp`, host.tls] as [string, number]]
+      : []),
+  ];
   return {
-    exposed: Object.fromEntries(ports.map((one) => [one, {}])),
+    exposed: Object.fromEntries(ports.map(([one]) => [one, {}])),
     bindings: Object.fromEntries(
-      ports.map((one) => [one, [{ HostIp: "0.0.0.0", HostPort: String(host) }]])
+      ports.map(([one, port]) => [
+        one,
+        [{ HostIp: "0.0.0.0", HostPort: String(port) }],
+      ])
     ),
   };
 };
@@ -1077,7 +961,7 @@ const createRelay = async (
   tls: boolean,
   seat: RelaySeat & { network: string }
 ): Promise<void> => {
-  const published = listenerPublished(STREAM_RELAY_PORT);
+  const published = listenerPublished(tls);
   const placed = onMediaNetwork(seat.network, seat.media);
   const container = await docker.createContainer({
     name: RELAY_CONTAINER,
@@ -1154,10 +1038,8 @@ export const removeRelay = (): Promise<RelayFrame> =>
  * Renews the relay's certificate when certbot says it is due (`certbot
  * renew` decides by the certificate's own lifetime), and restarts coturn on a
  * new one. Asked every day: a fixed interval does not hold as Let's Encrypt
- * shortens its certificates to 64 and then 45 days. A certificate issued by
- * DNS renews by DNS with the token the hub hands again, its ini at the path
- * the renewal conf names; one issued over HTTP renews through the hub's
- * webroot when the hub hands it, else with port 80 free.
+ * shortens its certificates to 64 and then 45 days. It renews by DNS with the
+ * token the hub hands again, its ini at the path the renewal conf names.
  */
 export const renewRelay = (args: RelayRenewArgs): Promise<RelayRenewed> =>
   serial(async () => {
@@ -1168,28 +1050,20 @@ export const renewRelay = (args: RelayRenewArgs): Promise<RelayRenewed> =>
     if (!(kept && name)) {
       throw new RelayFailed(RELAY_FAILURES.renewNone(hostname()));
     }
-    const challenge = challengeOf(args);
     const before = await certificateEnd(docker, name);
-    if (challenge === "http") {
-      await port80Free((held) =>
-        RELAY_FAILURES.renewPort80(hostname(), name, held)
-      );
-    }
     const { code, said } = await withToken(args.cloudflareToken, (dir) =>
       runCertbot(
         docker,
         [
           "renew",
+          ...DNS_CHALLENGE,
           "--non-interactive",
           "--cert-name",
           name,
           "--deploy-hook",
           DEPLOY_HOOK,
-          // DNS renews as its conf names, with the ini at the same path.
-          ...(challenge === "dns" ? [] : challengeFlags(challenge)),
         ],
-        challenge,
-        { tokenDir: dir, webroot: args.webroot }
+        dir
       )
     );
     if (code !== 0) {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { memoryWords as words } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { deleteMemory } from "#lib/cawco/config/deletes.js";
+  import { deleteMemory, notDeleted } from "#lib/cawco/config/deletes.js";
   import { drafts } from "#lib/cawco/config/drafts.svelte.js";
   import {
     byteLength,
@@ -21,9 +21,9 @@
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import { EMPTY_LINES } from "#lib/cawco/empty-asks.js";
   import { type FleetMemoryDocRow, formatBytes } from "#lib/cawco/fleet.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -46,6 +46,8 @@
   const machines = $derived(orderMachines(cawco.machines));
   let filter = $state("");
   let busy = $state<Record<string, boolean>>({});
+  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
+  const deleteKey = (id: string) => `delete:/config/memory:${id}`;
 
   const shown = $derived(
     docs.filter((doc) =>
@@ -68,11 +70,14 @@
   /** Delete: at once, with Undo in the toast (deletes.ts). */
   async function remove(path: string) {
     busy[path] = true;
+    refusals.delete(deleteKey(path));
     try {
       await deleteMemory(store, path);
       drafts.forget(fileHref(path));
     } catch (error) {
-      toast.error(message(error));
+      refusals.set(deleteKey(path), {
+        reason: notDeleted(fileLabel(path), error),
+      });
     } finally {
       delete busy[path];
     }
@@ -140,6 +145,11 @@
           {/if}
         {/snippet}
         {#snippet below()}
+          <RowFault
+            again={() => remove(MAIN)}
+            data-delete-refusal={MAIN}
+            reason={refusals.reason(deleteKey(MAIN))}
+          />
           <RowFaults key="" kind="memory" {machines} />
         {/snippet}
       </SectionRow>
@@ -178,6 +188,11 @@
           {/if}
         {/snippet}
         {#snippet below()}
+          <RowFault
+            again={() => remove(doc.path)}
+            data-delete-refusal={doc.path}
+            reason={refusals.reason(deleteKey(doc.path))}
+          />
           <RowFaults key={doc.path} kind="memoryDocs" {machines} />
         {/snippet}
       </SectionRow>

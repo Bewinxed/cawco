@@ -137,16 +137,30 @@ export interface InkChrome {
   /** The icon at `x`, `y` (the viewport's px) for the group just drawn; picks come back through `onPick`. */
   showIcon: (x: number, y: number, onPick: (pick: Pick) => void) => void;
   /** A token's value as the page computes it (a colour, a font, a length as `width` reads it). */
-  token: (
-    name: string,
-    property?:
-      | "color"
-      | "font"
-      | "transition-duration"
-      | "transition-timing-function"
-      | "width"
-  ) => string;
+  token: (name: string, property?: TokenProperty) => string;
+  /**
+   * Many tokens' values in one style pass: each asked on its own probe, all
+   * written before any is read, so the page's style is computed once for
+   * all of them, not once each ({@link InkChrome.token} in a loop).
+   */
+  tokens: <K extends string>(
+    asked: Record<K, readonly [name: string, property?: TokenProperty]>
+  ) => Record<K, string>;
 }
+
+/** A computed `transition-duration` ("150ms", "0.15s") in ms. */
+export const durationMs = (value: string): number =>
+  value.endsWith("ms")
+    ? Number.parseFloat(value)
+    : Number.parseFloat(value) * 1000;
+
+/** The property a token is read through: what makes its value computed (a colour resolved, a length in px). */
+type TokenProperty =
+  | "color"
+  | "font"
+  | "transition-duration"
+  | "transition-timing-function"
+  | "width";
 
 /** The icon, the menu and the overlay's tokens, in the overlay's shadow root. */
 export function inkChrome(shadow: ShadowRoot): InkChrome {
@@ -163,12 +177,30 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     probe.style.removeProperty(property);
     return value;
   };
-  const ms = (name: string) => {
-    const value = token(name, "transition-duration");
-    return value.endsWith("ms")
-      ? Number.parseFloat(value)
-      : Number.parseFloat(value) * 1000;
+  const tokens: InkChrome["tokens"] = (asked) => {
+    const probes = Object.entries(asked).map(([key, entry]) => {
+      const [name, property = "color"] = entry as readonly [
+        string,
+        TokenProperty?,
+      ];
+      const one = document.createElement("span");
+      one.style.cssText = probe.style.cssText;
+      one.style.setProperty(property, `var(${name})`);
+      shadow.append(one);
+      return { key, one, property };
+    });
+    const read = Object.fromEntries(
+      probes.map(({ key, one, property }) => [
+        key,
+        getComputedStyle(one).getPropertyValue(property),
+      ])
+    ) as Record<keyof typeof asked, string>;
+    for (const { one } of probes) {
+      one.remove();
+    }
+    return read;
   };
+  const ms = (name: string) => durationMs(token(name, "transition-duration"));
   /** `--ease-out`, the curve every entrance and exit here runs on. */
   const easeOut = () => token("--ease-out", "transition-timing-function");
 
@@ -500,6 +532,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
 
   return {
     token,
+    tokens,
     ms,
     showIcon,
     hideIcon: () => {

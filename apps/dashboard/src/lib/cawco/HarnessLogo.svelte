@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { HarnessKind } from "@cawco/core";
-  import ClaudeIcon from "~icons/logos/claude-icon";
+  import { LogoClaude as ClaudeIcon } from "@cawco/icons/marks";
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
   import PiLogo from "./PiLogo.svelte";
 

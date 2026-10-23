@@ -30,7 +30,8 @@
  * content changes round it or a transition ends, after a re-publish; and
  * never while nothing changes.
  * The element is found as a pin's is (core comments.ts `findAnchor`); a
- * page's group whose element is gone goes to `moved`. Its pins are pins.ts's.
+ * page's group whose element stands missing for a while (absent.ts) goes to
+ * `moved`. Its pins are pins.ts's.
  *
  * On a canvas the pen draws the canvas's own freedraw (Excalidraw), so this
  * layer stays off; the canvas's page tells the overlay where a stroke ended
@@ -38,6 +39,7 @@
  */
 import {
   type AnchorFound,
+  buryPin,
   changedAnchor,
   type PageAnchor,
   type Pin,
@@ -46,6 +48,7 @@ import {
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { getStroke } from "perfect-freehand";
 import type { Map as YMap } from "yjs";
+import { absences } from "./absent";
 import { artifact } from "./artifact";
 import { clipOf, framesOf, frameWindows, rectOf, sizesIn } from "./frames";
 import { newId } from "./id";
@@ -313,8 +316,9 @@ const pathOf = (points: Point[]): string => {
 /** The overlay's layers that hold a mark now (a stroke, a disc), each as its own draw said. */
 const holding = new Set<SVGSVGElement>();
 
-/** The overlay's own elements in the page: its host, and its ink and pin layers. */
-const OWN = "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]";
+/** The overlay's own elements in the page: its host, its ink and pin layers, and its stand-ins over frames of another origin (embeds.ts). */
+const OWN =
+  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], [data-cawco-stand-ins]";
 /** Whether `node` is the overlay's own or stands in it (a node of a frame's document included). */
 const ownNode = (node: Node | null): boolean => {
   const el =
@@ -555,7 +559,7 @@ export function startInk(deps: InkDeps): Ink {
         }
         ink.delete(id);
         for (const pin of [...pins.values()].filter((one) => one.ink === id)) {
-          pins.delete(pin.id);
+          buryPin(doc, pin.id, at);
         }
       }
     });
@@ -896,9 +900,11 @@ export function startInk(deps: InkDeps): Ink {
     (artifact.kind() === "page" || artifact.kind() === "component") &&
     document.readyState !== "loading";
 
-  /** Whether a group no anchor finds is gone, not waiting on a frame still loading. */
+  /** Whether a group no anchor finds is missing, not waiting on a frame still loading. */
   const goneFrom = (group: InkGroup) =>
     !("selector" in group.anchor && deps.waiting(group.anchor));
+  /** How long each group has stood missing: one is gone only after a while, drawn again then. */
+  const absent = absences(() => draw());
 
   function draw() {
     for (const node of [...layer.children]) {
@@ -925,9 +931,12 @@ export function startInk(deps: InkDeps): Ink {
       group,
       el: "selector" in group.anchor ? deps.locate(group.anchor)?.el : null,
     }));
-    const gone = located
-      .filter(({ group, el }) => !el && goneFrom(group))
+    // Missing for a while, not for one read of a page drawing itself again (absent.ts).
+    const missing = located.filter(({ group, el }) => !el && goneFrom(group));
+    const gone = missing
+      .filter(({ group }) => absent.missed(group.id))
       .map(({ group }) => group);
+    absent.keep(missing.map(({ group }) => group.id));
     const found: InkGroup[] = [];
     const standing = new Set<Element>();
     for (const { group, el } of located) {
@@ -1054,8 +1063,9 @@ export function startInk(deps: InkDeps): Ink {
       illustrate: () => ink.set(id, { ...group, illustration: true }),
       erase: () => {
         ink.delete(id);
+        const at = new Date().toISOString();
         for (const pin of [...pins.values()].filter((one) => one.ink === id)) {
-          pins.delete(pin.id);
+          buryPin(doc, pin.id, at);
         }
       },
     };
@@ -1108,6 +1118,22 @@ export function startInk(deps: InkDeps): Ink {
   // The window resizes or the page grows: every group stands where its element is now.
   addEventListener("resize", later);
   sizesIn(document, later)?.observe(document.documentElement);
+  // A scroll container inside the page scrolled (a decision page's cards
+  // scroll in its first row, a transcript in its pane): every group over
+  // what it holds stands where its element is now. The page's own scroll
+  // moves the layer with it, so it draws nothing again.
+  addEventListener(
+    "scroll",
+    (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target !== document.scrollingElement
+      ) {
+        later();
+      }
+    },
+    { capture: true, passive: true }
+  );
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", changed, { once: true });
   } else {

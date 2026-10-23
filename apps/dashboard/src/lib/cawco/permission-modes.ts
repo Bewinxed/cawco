@@ -4,12 +4,22 @@
  * Send confirmation all read it.
  *
  * A mode's name is the product's; what it does is its harness's, so every
- * description is written for one harness. A harness is offered the modes it
- * has a description for, in {@link ORDER}: from the one that asks the most to
- * the one that asks the least. pi reports no modes and is offered none. The
- * SDK has more (`dontAsk`, `auto`); a session that reports one is named by it.
+ * description is written for one harness. A harness with modes is offered
+ * every one of core's `PERMISSION_MODES`, the list each machine reports for
+ * it, each described for it, in {@link ORDER}: from the one that asks the
+ * most to the one that asks the least. pi reports no modes and is offered
+ * none. Claude Code has more (`dontAsk`, `auto`) that no harness here is
+ * offered; a session that reports one is named by it.
  */
-import type { HarnessKind, HarnessReport, PermissionMode } from "@cawco/core";
+import {
+  type HarnessKind,
+  type HarnessReport,
+  type OfferedMode,
+  PERMISSION_MODES,
+  type PermissionMode,
+  permissionModeNamed,
+  spawnWords,
+} from "@cawco/core";
 import { speakerName } from "./transcript/speaker";
 
 export interface PermissionModeOption {
@@ -18,61 +28,49 @@ export interface PermissionModeOption {
   value: PermissionMode;
 }
 
-const ORDER: PermissionMode[] = [
-  "default",
-  "plan",
-  "acceptEdits",
-  "bypassPermissions",
-  "fullSend",
-];
-
-const LABELS: Partial<Record<PermissionMode, string>> = {
-  default: "Ask first",
-  plan: "Plan first",
-  acceptEdits: "Accept edits",
-  bypassPermissions: "Bypass",
-  fullSend: "Full Send",
+/** Where each of core's modes stands in a picker: every one has a place. */
+const RANK: Record<OfferedMode, number> = {
+  default: 0,
+  plan: 1,
+  acceptEdits: 2,
+  bypassPermissions: 3,
+  fullSend: 4,
 };
+
+const ORDER = [...PERMISSION_MODES].sort((a, b) => RANK[a] - RANK[b]);
+
+const LABELS: Record<OfferedMode, string> = spawnWords.modes;
 
 /**
  * What each mode does on each harness that has modes, in a line the picker's
  * row holds whole. Claude Code's `default` runs reads and what your allow
  * rules cover without asking; its Bypass still stops for the CLI's own safety
- * checks, and Full Send answers those too. OpenCode's own permission settings
- * decide what it asks about; its Bypass already allows every one of them.
+ * checks. OpenCode's own permission settings decide what it asks about; its
+ * Bypass already allows every one of them. On both, Bypass still asks you
+ * before CawCo's fleet changes; Full Send approves everything but questions.
  */
-const DESCRIPTIONS: Partial<
-  Record<HarnessKind, Partial<Record<PermissionMode, string>>>
-> = {
-  claude: {
-    default: "Reads and allow-listed tools run; others ask.",
-    plan: "Read-only until you approve a plan.",
-    acceptEdits: "File edits run without asking.",
-    bypassPermissions: "Tools run unasked; safety checks still ask.",
-    fullSend: "Bypass, and safety checks are allowed too.",
-  },
-  opencode: {
-    default: "OpenCode's permission asks come to you.",
-    plan: "Runs OpenCode's plan agent.",
-    acceptEdits: "Edit asks are allowed; the rest come to you.",
-    bypassPermissions: "Every permission ask is allowed.",
-    fullSend: "The same as Bypass on OpenCode.",
-  },
-};
+const DESCRIPTIONS: Partial<Record<HarnessKind, Record<OfferedMode, string>>> =
+  {
+    claude: {
+      default: "Reads and allow-listed tools run; others ask.",
+      plan: "Read-only until you approve a plan.",
+      acceptEdits: "File edits run without asking.",
+      bypassPermissions: "Tools run unasked; safety checks still ask.",
+      fullSend: "Everything is approved; only questions ask.",
+    },
+    opencode: {
+      default: "OpenCode's permission asks come to you.",
+      plan: "Runs OpenCode's plan agent.",
+      acceptEdits: "Edit asks are allowed; the rest come to you.",
+      bypassPermissions: "Every permission ask is allowed.",
+      fullSend: "Bypass, and fleet changes are approved too.",
+    },
+  };
 
-/**
- * Modes a harness can be in but is not offered, because there they change
- * nothing. On OpenCode Full Send is Bypass under a second name, and a second
- * option that changes nothing would read as a difference. A session that is
- * in it anyway (a delegate that inherited it) still shows it, described.
- */
-const NOT_OFFERED: Partial<Record<HarnessKind, PermissionMode[]>> = {
-  opencode: ["fullSend"],
-};
-
-/** What a mode is called, including one the SDK named but the product does not offer. */
+/** What a mode is called, including one a harness named but the product does not offer. */
 export function permissionModeLabel(mode: PermissionMode): string {
-  return LABELS[mode] ?? mode;
+  const offered = permissionModeNamed(mode);
+  return offered ? LABELS[offered] : mode;
 }
 
 /** What `mode` does on `harness`; empty for a harness with no modes. */
@@ -80,26 +78,22 @@ export function permissionModeDescription(
   mode: PermissionMode,
   harness: HarnessKind | undefined
 ): string {
-  return (harness && DESCRIPTIONS[harness]?.[mode]) || "";
+  const offered = permissionModeNamed(mode);
+  return (harness && offered && DESCRIPTIONS[harness]?.[offered]) || "";
 }
 
-/**
- * The modes a person picks between on `harness`, each described for it, plus
- * `current` where the session is already in a mode that is not offered.
- */
+/** The modes a person picks between on `harness`, each described for it. */
 export function permissionModesFor(
-  harness: HarnessKind,
-  current?: PermissionMode | null
+  harness: HarnessKind
 ): PermissionModeOption[] {
-  const described = DESCRIPTIONS[harness] ?? {};
-  const hidden = NOT_OFFERED[harness] ?? [];
-  return ORDER.flatMap((value) => {
-    const description = described[value];
-    return description === undefined ||
-      (hidden.includes(value) && value !== current)
-      ? []
-      : [{ value, label: permissionModeLabel(value), description }];
-  });
+  const described = DESCRIPTIONS[harness];
+  return described
+    ? ORDER.map((value) => ({
+        value,
+        label: LABELS[value],
+        description: described[value],
+      }))
+    : [];
 }
 
 /** Whether the CLI runs in its bypass mode: Bypass, and Full Send on top of it. */
@@ -143,7 +137,11 @@ export function modeRefusal(
 
 /** What a person reads before Full Send applies, and while it stands chosen. */
 export interface FullSendCopy {
-  /** The confirmation's paragraphs: what it does beyond Bypass, what still stops, where to use it. */
+  /**
+   * The confirmation's two sentences: what it approves, and what still
+   * reaches the person. It stands inside the mode picker and fits there
+   * unscrolled at a phone's 390 px (probe-kit composer-layers).
+   */
   confirm: string[];
   /** Said under the confirmation when switching restarts a running session. */
   restarts: string;
@@ -151,21 +149,37 @@ export interface FullSendCopy {
   warning: string;
 }
 
+/** What still reaches the person in Full Send, on every harness. */
+const STILL_ASKS = "Questions still reach you; denied tools never run.";
+
+/** Said when switching into Full Send starts a running session again. */
+const RESTARTS =
+  "Switching restarts this session in place; its conversation carries over.";
+
 /**
- * Full Send's words, for the harnesses it is offered on. The safety checks
- * named are the ones Claude Code still raises in its bypass mode.
+ * Full Send's words, for the harnesses it is offered on: it approves every
+ * ask that is an approval (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS
+ * FULL SEND"), CawCo's own admin writes included (hub admin-asks.ts). The
+ * safety checks are the ones Claude Code still raises in its bypass mode.
  */
 const FULL_SEND: Partial<Record<HarnessKind, FullSendCopy>> = {
   claude: {
     confirm: [
-      "In Bypass, tools run without asking, but Claude Code still stops for its own safety checks and brings them to you: a shell -c script it cannot check, cd combined with git, a write to a protected path. Full Send answers those checks “allow” for you, so such a command runs without anyone seeing it first.",
-      "Still comes to you: questions Claude asks, plan approval, and ask rules you set in Claude Code's settings (permissions.ask). Tools your fleet denies still never run.",
-      "Use it where changed or lost files can be recovered: committed or backed-up work, or a throwaway workspace.",
+      "Approves without asking: safety checks, plan approval, your ask rules, and fleet changes like memory, skills, hooks and MCP servers.",
+      STILL_ASKS,
     ],
-    restarts:
-      "Switching restarts this session in place; its conversation carries over.",
+    restarts: RESTARTS,
     warning:
-      "Claude Code's safety checks are answered “allow” for you, so a command they would stop runs unseen. Pick Bypass to have them ask you again.",
+      "Safety checks, plan approval, your ask rules and fleet changes run without asking you. Pick Bypass to have them ask again.",
+  },
+  opencode: {
+    confirm: [
+      "Approves without asking, fleet changes like memory, skills, hooks and MCP servers included.",
+      STILL_ASKS,
+    ],
+    restarts: RESTARTS,
+    warning:
+      "Fleet changes run without asking you. Pick Bypass to have them ask again.",
   },
 };
 

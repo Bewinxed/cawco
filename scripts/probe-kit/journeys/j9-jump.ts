@@ -14,8 +14,12 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
+import { shellWords } from "../../../packages/core/src/words/shell";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
+import { exactly } from "../words";
 import {
   eventually,
   expect,
@@ -27,8 +31,8 @@ import {
 
 const SAID = "JOURNEY-SAID";
 const MORE = "JOURNEY-MORE";
-const JUMP = /^Jump to session$/;
-const OPEN_NAVIGATION = "Open navigation";
+const JUMP = exactly(shellWords.jumpToSession);
+const OPEN_NAVIGATION = sidebarWords.openNavigation;
 const SHEET_SEARCH = "Search sessions, projects, machines";
 const FIND = "Find a session, or a task, preview, decision";
 /** How many turns of the agent's words follow the line, each a long answer. */
@@ -165,7 +169,7 @@ async function walk(leg: Leg): Promise<void> {
         `opened at ${at}; the transcript holds the words in ${records.join(", ") || "no record"}`
       );
       const said = page
-        .getByRole("log", { name: "Session transcript" })
+        .getByRole("log", { name: transcriptWords.transcript })
         .getByText(nonce)
         .filter({ visible: true })
         .first();

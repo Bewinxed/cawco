@@ -1,3 +1,4 @@
+import CawCoCore
 import CawCoDesign
 import OSLog
 import UIKit
@@ -1588,7 +1589,7 @@ final class TabView: UIView {
         label.isUserInteractionEnabled = false
         status.isUserInteractionEnabled = false
         Self.dress(details, glyph: .chevronDown, side: 12, size: CGSize(width: 22, height: 24))
-        details.accessibilityLabel = "Session details"
+        details.accessibilityLabel = Words.Transcript.sessionDetails
         details.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             if chosen { onDetails() } else { onSelect() }

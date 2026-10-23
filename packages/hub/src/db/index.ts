@@ -12,6 +12,7 @@ import type {
   FleetAgent,
   FleetConfig,
   FleetHook,
+  FleetItemStatus,
   FleetMarketplace,
   FleetMcpConfig,
   FleetMcpServer,
@@ -19,6 +20,7 @@ import type {
   FleetRefresh,
   FleetScope,
   FleetSkillMeta,
+  FleetSyncOutcome,
   FleetSyncReport,
   FleetVersioned,
   FleetWatchNotice,
@@ -123,6 +125,7 @@ import {
   mergeProjectPages,
   PROJECT_PAGES_MIGRATION_WHEN,
 } from "./merge-project-pages";
+import { type MoveEndingsDb, moveEndingsDb } from "./move-endings";
 import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
 import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
 import { type PreviewsDb, previewsDb } from "./previews";
@@ -190,6 +193,8 @@ import {
   parkedAsks,
   planChanges,
   plugins,
+  presenceDevices,
+  presenceSettings,
   projectAccounts,
   projectOffers,
   projectPlaces,
@@ -1223,6 +1228,8 @@ export interface DbShape {
     raw: string
   ) => MachinePath | MachinePathRefused;
   readonly markAgentOffline: (machineId: string) => void;
+  /** The machine answered its welcome (hub fleet-sync.ts): it is online. */
+  readonly markAgentReady: (machineId: string) => void;
   /**
    * Every row back to `offline`, for the one moment it is unconditionally true:
    * hub startup. The `status` column only ever goes to `offline` from the socket
@@ -1291,6 +1298,8 @@ export interface DbShape {
   ) => number | null;
   /** The move a session started from, as {@link noteMovedHere} kept it; null when none. */
   readonly movedHereOf: (id: string) => MovedHere | null;
+  /** What each session's move ended, until it is told (move-endings.ts). */
+  readonly moveEndings: MoveEndingsDb;
   /** One project move's record (moves.ts). */
   readonly moveRow: (id: string) => MoveRow | undefined;
   /** Every project move, oldest first. */
@@ -1552,6 +1561,15 @@ export interface DbShape {
     instanceId: string,
     limit: number
   ) => PlanChangeRow[];
+  /** The person's Appear away and the machines that count toward their presence (notifications.ts). */
+  readonly presence: {
+    /** Appear away: on since when, or null while off. */
+    readonly appearAway: () => Date | null;
+    readonly setAppearAway: (on: boolean, at: Date) => void;
+    /** The machines the person opted in. */
+    readonly counted: () => Set<string>;
+    readonly setCounts: (machineId: string, counts: boolean) => void;
+  };
   /** Host mode's preview passes, one per browser (preview-access.ts). */
   readonly previewPasses: PreviewPassesDb;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
@@ -2043,6 +2061,16 @@ export interface DbShape {
   ) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
+  /** Each fleet item as the machine converges it (hub fleet-sync.ts), by item id. */
+  readonly setAgentFleetItems: (
+    machineId: string,
+    items: Record<string, FleetItemStatus>
+  ) => void;
+  /** What became of the last delta the hub sent the machine (hub fleet-sync.ts). */
+  readonly setAgentFleetSync: (
+    machineId: string,
+    outcome: FleetSyncOutcome
+  ) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
   /** Stores the document and the hash the machines compare against. */
   readonly setFleetMemory: (content: string) => {
@@ -2447,6 +2475,12 @@ export interface DbShape {
     build?: BuildInfo;
     /** The machine's home folder, absolute; absent from a daemon that does not say it. */
     home?: string;
+    /**
+     * Online at once: a seed, or an agent of an older contract. One that
+     * speaks this hub's is online once it answers its welcome
+     * ({@link markAgentReady}); until then it reads offline.
+     */
+    online?: boolean;
   }) => void;
   /** The fleet's upstream answer (schema `upstreamSettings`): null while nobody has answered. */
   readonly upstreamPosts: () => UpstreamPosts | null;
@@ -2869,6 +2903,8 @@ const JEV_SETTINGS_ID = "jev";
 const FLEET_WATCH_ID = "fleet-watch";
 /** The one {@link upstreamSettings} row's key. */
 const UPSTREAM_ID = "upstream";
+/** The one {@link presenceSettings} row's key. */
+const PRESENCE_ID = "person";
 
 /**
  * How far back a memory document, a hook or a skill can be taken, each within
@@ -4987,15 +5023,24 @@ const make = async (path: string): Promise<DbShape> => {
             .run();
         }
       }),
-    upsertAgent: ({ machineId, hostname, os, auth, build, home }) => {
+    upsertAgent: ({
+      machineId,
+      hostname,
+      os,
+      auth,
+      build,
+      home,
+      online = true,
+    }) => {
       const lastSeenAt = new Date();
+      const status = online ? "online" : "offline";
       db.insert(agents)
         .values({
           machineId,
           hostname,
           os,
           ...(auth ? { auth } : {}),
-          status: "online",
+          status,
           lastSeenAt,
           build,
           home,
@@ -5006,7 +5051,7 @@ const make = async (path: string): Promise<DbShape> => {
             hostname,
             os,
             ...(auth ? { auth } : {}),
-            status: "online",
+            status,
             lastSeenAt,
             ...(build ? { build } : {}),
             ...(home ? { home } : {}),
@@ -5016,6 +5061,12 @@ const make = async (path: string): Promise<DbShape> => {
       // A removed machine whose agent starts again is on the fleet again.
       db.delete(removedMachines)
         .where(eq(removedMachines.machineId, machineId))
+        .run();
+    },
+    markAgentReady: (machineId) => {
+      db.update(agents)
+        .set({ status: "online", lastSeenAt: new Date() })
+        .where(eq(agents.machineId, machineId))
         .run();
     },
     setAgentCapabilities: (machineId, machineCapabilities) => {
@@ -5031,9 +5082,11 @@ const make = async (path: string): Promise<DbShape> => {
         .where(and(eq(agents.machineId, machineId), ne(agents.auth, auth)))
         .returning({ machineId: agents.machineId })
         .all().length > 0,
+    // A beat says the machine is there, not that it is ready: only its
+    // register (an older contract) or its welcome's answer puts it online.
     touchAgent: (machineId) => {
       db.update(agents)
-        .set({ status: "online", lastSeenAt: new Date() })
+        .set({ lastSeenAt: new Date() })
         .where(eq(agents.machineId, machineId))
         .run();
     },
@@ -7046,6 +7099,18 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
+    setAgentFleetItems: (machineId, items) => {
+      db.update(agents)
+        .set({ fleetItems: items })
+        .where(eq(agents.machineId, machineId))
+        .run();
+    },
+    setAgentFleetSync: (machineId, outcome) => {
+      db.update(agents)
+        .set({ fleetSync: outcome })
+        .where(eq(agents.machineId, machineId))
+        .run();
+    },
     // A pause moved while it lasts keeps what it stopped already, and adds
     // what it stopped this time.
     setMachinePause: (machineId, until, stopped) => {
@@ -7086,12 +7151,15 @@ const make = async (path: string): Promise<DbShape> => {
           .map(
             ({
               fleet,
+              fleetSync,
+              fleetItems,
               build,
               home,
               machineCapabilities,
               pausedUntil,
               pauseStopped,
               ...agent
+              // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
             }) => {
               const harnesses = reports.get(agent.machineId);
               return {
@@ -7101,6 +7169,8 @@ const make = async (path: string): Promise<DbShape> => {
                 pauseStopped:
                   (pauseStopped && stoppedWords(pauseStopped)) || null,
                 ...(fleet ? { fleet } : {}),
+                ...(fleetSync ? { fleetSync } : {}),
+                ...(fleetItems ? { fleetItems } : {}),
                 ...(build ? { build } : {}),
                 ...(harnesses ? { harnesses } : {}),
                 ...(home ? { home } : {}),
@@ -9660,6 +9730,7 @@ const make = async (path: string): Promise<DbShape> => {
     artifacts: artifactsDb(db),
     find: findDb(db),
     previews: previewsDb(db),
+    moveEndings: moveEndingsDb(db),
     owedMoves: owedMovesDb(db),
     previewPasses: previewPassesDb(db),
     streamRelay: streamRelayDb(db),
@@ -10127,6 +10198,41 @@ const make = async (path: string): Promise<DbShape> => {
               : { lastError: error }
           )
           .where(eq(pushDevices.pairingId, pairingId))
+          .run();
+      },
+    },
+    presence: {
+      appearAway: () => {
+        const row = db
+          .select()
+          .from(presenceSettings)
+          .where(eq(presenceSettings.id, PRESENCE_ID))
+          .get();
+        return row?.appearAway ? (row.appearAwayAt ?? new Date(0)) : null;
+      },
+      setAppearAway: (on, at) => {
+        const set = { appearAway: on, appearAwayAt: on ? at : null };
+        db.insert(presenceSettings)
+          .values({ id: PRESENCE_ID, ...set })
+          .onConflictDoUpdate({ target: presenceSettings.id, set })
+          .run();
+      },
+      counted: () =>
+        new Set(
+          db
+            .select({ machineId: presenceDevices.machineId })
+            .from(presenceDevices)
+            .where(eq(presenceDevices.counts, true))
+            .all()
+            .map((row) => row.machineId)
+        ),
+      setCounts: (machineId, counts) => {
+        db.insert(presenceDevices)
+          .values({ machineId, counts })
+          .onConflictDoUpdate({
+            target: presenceDevices.machineId,
+            set: { counts },
+          })
           .run();
       },
     },

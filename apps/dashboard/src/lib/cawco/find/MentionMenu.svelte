@@ -58,7 +58,12 @@
     return () => clearTimeout(t);
   });
 
-  /** Grows from its bottom edge as it fades in; leaves the same way, faster. */
+  /**
+   * Grows from its bottom edge as it fades in; leaves the same way, faster.
+   * Global: MentionField's `{#if}` opens and shuts it with a snippet render
+   * between the two, and a local transition plays only when its own block
+   * comes or goes.
+   */
   function grow(
     _node: Element,
     _p: unknown,
@@ -87,7 +92,7 @@
   style:--menu-bottom="calc(100% + var(--space-2))"
   onmousedown={(event) => event.preventDefault()}
   role="presentation"
-  transition:grow
+  transition:grow|global
   {@attach morph({ rows: true })}
   {@attach phone
     ? dragToDismiss({ edge: "bottom", dismiss: ondismiss })

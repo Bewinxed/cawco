@@ -287,11 +287,21 @@ export function archiveMatches(
 }
 
 /**
+ * Each archive being fetched now, by its path: the one read every
+ * concurrent ask of it shares ({@link fetchArchive}).
+ */
+const fetching = new Map<string, Promise<string>>();
+
+/**
  * Downloads one target's archive into `root/<version>/`, verified against the
  * signed manifest, and returns its path. A file already there is trusted only
- * if it still matches.
+ * if it still matches. Asks of one archive while it is being fetched share
+ * that fetch, its download and its write: three machines of one target
+ * updating at once cost the release host one download, not three
+ * (2026-10-23: obelisk and both VPSes, linux-x64 each, drew three copies of
+ * one 120 MB archive at the same moment).
  */
-export async function fetchArchive(
+export function fetchArchive(
   release: LocatedRelease,
   target: string,
   root: string
@@ -300,11 +310,30 @@ export async function fetchArchive(
     (row) => row.target === target
   );
   if (!artifact) {
-    throw new Error(`This release has no build for ${target}`);
+    return Promise.reject(new Error(`This release has no build for ${target}`));
   }
   const dir = join(root, release.manifest.version);
-  await mkdir(dir, { recursive: true });
   const path = join(dir, artifact.archive);
+  const held = fetching.get(path);
+  if (held) {
+    return held;
+  }
+  const fetched = fetchOnce(release, target, artifact, dir, path).finally(() =>
+    fetching.delete(path)
+  );
+  fetching.set(path, fetched);
+  return fetched;
+}
+
+/** {@link fetchArchive}'s one read of `artifact`: the copy at `path` when it still matches, else the release host's. */
+async function fetchOnce(
+  release: LocatedRelease,
+  target: string,
+  artifact: ReleaseManifest["artifacts"][number],
+  dir: string,
+  path: string
+): Promise<string> {
+  await mkdir(dir, { recursive: true });
   if (
     (await Bun.file(path).exists()) &&
     (await stat(path)).size === artifact.size &&
@@ -329,8 +358,6 @@ export async function fetchArchive(
       "The downloaded archive does not match the signed manifest"
     );
   }
-  // Its temporary file is unique per request: concurrent fetches of one
-  // archive never share one.
   await writeStateFile(path, bytes);
   return path;
 }

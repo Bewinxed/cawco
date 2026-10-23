@@ -79,6 +79,7 @@
     runningIds,
   } from "./older";
   import { openTrees, type TreeList } from "./open-trees.svelte";
+  import PresenceMenu from "./PresenceMenu.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { folderOf } from "./projects";
   import { type RailSort, rail } from "./rail.svelte";
@@ -485,7 +486,7 @@
   }
 
   const SORT_LABEL: Record<RailSort, string> = {
-    recent: "Last activity",
+    recent: sidebarWords.lastActivity,
     name: "Name",
     state: "State",
   };
@@ -627,7 +628,7 @@
     const at = lastAt(row);
     return at === 0
       ? "No activity recorded"
-      : `Last activity ${formatDistanceToNow(new Date(at))}`;
+      : `${sidebarWords.lastActivity} ${formatDistanceToNow(new Date(at))}`;
   };
 
   /* ---- helpers -------------------------------------------------------- */
@@ -849,7 +850,7 @@
           type="button"
         >
           <IconSearch class="flex-none size-icon-md" />
-          <span class="overflow-clip text-ellipsis whitespace-nowrap"
+          <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
             >Search sessions, projects, machines</span
           >
         </button>
@@ -969,9 +970,9 @@
                 {#snippet child({ props })}
                   <Button
                     {...props}
-                    aria-label="Sort sessions — currently {SORT_LABEL[
-                      rail.sort
-                    ]}"
+                    aria-label={sidebarWords.sortSessions(
+                      SORT_LABEL[rail.sort]
+                    )}
                     size="icon-sm"
                     title="Sort sessions — {SORT_LABEL[rail.sort]}"
                     variant="ghost"
@@ -990,7 +991,7 @@
                     value={rail.sort}
                   >
                     <DropdownMenu.RadioItem value="recent"
-                      >Last activity</DropdownMenu.RadioItem
+                      >{sidebarWords.lastActivity}</DropdownMenu.RadioItem
                     >
                     <DropdownMenu.RadioItem value="name"
                       >Name</DropdownMenu.RadioItem
@@ -1091,7 +1092,11 @@
                   style:--fault-indent="var(--space-2)"
                   style:--fault-end="var(--space-2)"
                 >
-                  <ForgetProjectTray at={forgetAtRail(project.id)} />
+                  <ForgetProjectTray
+                    at={forgetAtRail(project.id)}
+                    parks
+                    projectId={project.id}
+                  />
                 </div>
 
                 <!-- Its sessions hang under it the way a session's delegates
@@ -1193,21 +1198,9 @@
     <div class="flex items-center gap-space-1" data-flip>
       <Sidebar.Menu aria-label="User" class="w-auto">
         <Sidebar.MenuItem>
-          <Tip label="You">
-            {#snippet children(tip)}
-              <Sidebar.MenuButton {...tip} aria-label="You" row="avatar">
-                <!-- No picture of the reader yet: Caw stands in, the brand
-                     icon as a round picture. -->
-                <img
-                  alt=""
-                  class="flex-none size-space-5 rounded-pill outline outline-image-outline -outline-offset-1"
-                  height="18"
-                  src={cawcoIcon}
-                  width="18"
-                />
-              </Sidebar.MenuButton>
-            {/snippet}
-          </Tip>
+          <!-- The reader's avatar, with their presence on its corner and its
+               menu: Appear away, and the machines that count. -->
+          <PresenceMenu />
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <!-- Configure, the theme and sound: the settings in the corner. -->

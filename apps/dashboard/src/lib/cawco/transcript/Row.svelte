@@ -459,14 +459,20 @@
      whole row, a well's step past its edges and on its radius, so a message
      in the reader's well and a line on the rail read the same. It fades in
      where it stands and out once the reader has moved on; with less motion
-     it is simply there, then gone. -->
+     it is simply there, then gone. The fade in is a keyframes animation on
+     the tint (`--mark-in`), which runs as the tint is drawn: never
+     `@starting-style`, which WebKit sometimes skips for what is just
+     added. -->
 <div
   data-slot="row"
   data-continues={continues || undefined}
-  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection data-marked:before:starting:opacity-0 marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
+  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}
+  style:--mark-in={marked
+    ? "kit-fade-in var(--dur-panel) var(--ease-out)"
+    : undefined}
   style:--rail-head={continues ? "var(--rail-body)" : undefined}
   style:--rail-gap={continues ? "0" : undefined}
 >

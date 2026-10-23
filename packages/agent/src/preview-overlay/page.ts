@@ -29,6 +29,14 @@ import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark, markOf } from "./boot";
+import { type Changes, startChanges } from "./changes";
+import {
+  answerEmbedder,
+  EMBED_ARTIFACT,
+  type Remote,
+  STAND_INS,
+  startEmbeds,
+} from "./embeds";
 import { fillFields, trackFields } from "./fields";
 import {
   deepElementAt,
@@ -144,12 +152,26 @@ let ringed = false;
  * point on it, or an ink group), the element's chain out to the page's
  * root, which of it the person chose in the composer's target chip, and the
  * press. Nothing of it is written until the host says the words
- * (`cawco:comment`); Esc, a press outside, a mode switch or a reload leave
- * nothing behind.
+ * (`cawco:comment`). Its composer closed with words in it (Esc, a press
+ * outside, a mode switch: The Work Outlives Its Surface Rule), the host parks
+ * it (`cawco:compose-park`): its hollow pill stays at its target saying it
+ * holds a draft, and one press on it opens the composer again; a reload
+ * brings it back from the host's keeping (`cawco:compose-restore`). Only the
+ * host's cancel of an empty composer, or its comment written, ends it.
  */
 let drafting: {
   chain: Element[];
   chosen: number;
+  /**
+   * Each of the chain's elements as a pin would hold it, read at the press:
+   * what the comment stands on however the page draws its element again
+   * while it is written ({@link draftEl}).
+   */
+  named: ReturnType<typeof named>[];
+  /** Its composer is closed and its words kept: the pill stays, pressable, and nothing is chosen. */
+  parked?: boolean;
+  /** Where on its first target it stands, as fractions of its box: a draft brought back after a reload keeps its place however the page lays out. */
+  point?: { x: number; y: number };
   /** An ink group's Comment: the elements it marks, and its anchor. */
   ink?: {
     anchor: PageAnchor;
@@ -160,7 +182,21 @@ let drafting: {
   y: number;
 } | null = null;
 /** A composer or a thread stands: the chosen element alone is drawn. */
-const composing = () => threadOpen || drafting !== null;
+const composing = () =>
+  threadOpen || (drafting !== null && drafting.parked !== true);
+
+/**
+ * Frames of another origin whose overlay answers (a decision page's
+ * Preview): their elements stand in this page as stand-ins (embeds.ts), and
+ * every read of an element below takes a stand-in's from what its embed
+ * answered.
+ */
+const embeds = startEmbeds({
+  changed: () => framesChanged(),
+  inUse: (el) =>
+    el === hovered || el === pinEl || !!drafting?.chain.includes(el),
+  selectorOf: (el) => selectorOf(el),
+});
 
 /**
  * Pin `el`'s element chosen, or none; `lead` says whether it leads the
@@ -186,6 +222,10 @@ const CLEAR = /^(?:transparent|rgba\(.*,\s*0\)|.*\/\s*0\))$/;
  * the offset.
  */
 function drawsBox(el: Element): boolean {
+  const standIn = embeds.read(el);
+  if (standIn) {
+    return standIn.remote.boxed;
+  }
   const own = (el.ownerDocument.defaultView ?? window).getComputedStyle(el);
   const sides = ["Top", "Right", "Bottom", "Left"] as const;
   return (
@@ -201,7 +241,8 @@ function drawsBox(el: Element): boolean {
 
 /** The one target drawn: the chosen pin's element, else the element under the pointer in Comment mode; and its label in Comment mode. */
 function paint() {
-  const drafted = drafting ? (drafting.chain[drafting.chosen] ?? null) : null;
+  // The draft's element as the page holds it now: drawn again, the one there takes its outline.
+  const drafted = drafting && !drafting.parked ? draftEl() : null;
   const pinned =
     pinEl?.isConnected && (!commenting() || composing() || pinLeads)
       ? pinEl
@@ -259,21 +300,33 @@ function outlineOver(el: Element): DOMRect {
     }
     return rect;
   }
-  const own = (doc.defaultView ?? window).getComputedStyle(el);
+  const corners = embeds.read(el)?.remote.corners ?? cornersOf(el, rect);
+  for (const [i, corner] of CORNERS.entries()) {
+    highlight.style[corner] = corners[i] ?? "";
+  }
+  return rect;
+}
+
+/**
+ * `el`'s four corners as the outline takes them, `rect` its box on screen:
+ * each its own computed radius scaled as it is drawn, `--radius-xs` its
+ * floor. An embed's overlay reads them for its parent (embeds.ts).
+ */
+function cornersOf(el: Element, rect: DOMRect): string[] {
+  const own = (el.ownerDocument.defaultView ?? window).getComputedStyle(el);
   const laidWidth = el instanceof HTMLElement ? el.offsetWidth : 0;
   const scale = laidWidth > 0 ? rect.width / laidWidth : 1;
-  for (const corner of CORNERS) {
-    // A computed corner is one or two lengths (px) or percentages; a percentage is of the box, which the highlight shares.
-    highlight.style[corner] = own[corner]
+  // A computed corner is one or two lengths (px) or percentages; a percentage is of the box, which the highlight shares.
+  return CORNERS.map((corner) =>
+    own[corner]
       .split(" ")
       .map((part) => {
         const px = part.endsWith("px") ? Number.parseFloat(part) : Number.NaN;
         const value = Number.isNaN(px) ? part : `${px * scale}px`;
         return `max(var(--radius-xs), ${value})`;
       })
-      .join(" ");
-  }
-  return rect;
+      .join(" ")
+  );
 }
 
 /** The person's pins, drawn after the ink (pins.ts). */
@@ -286,7 +339,18 @@ const pins: Pins = startPins({
   locate,
   outline,
   post,
+  redraft: () => (draftEl() ? draftTarget() : null),
+  reopenDraft: () => reopenDraft(),
   waiting,
+});
+
+/** What the latest revision changed that the person hasn't looked at, washed under the pins (changes.ts). */
+const changes: Changes = startChanges({
+  chrome,
+  interacting: () => modeNow === "interact",
+  locate,
+  outline: (el) => outline(el),
+  post,
 });
 
 /**
@@ -341,6 +405,7 @@ function framesChanged() {
   }
   framesFrame = requestAnimationFrame(() => {
     framesFrame = 0;
+    embeds.fit();
     ink.replace();
     if (!highlight.hidden) {
       paint();
@@ -364,6 +429,7 @@ addEventListener("cawco:hmr", (event) => {
   pins.draw();
   ink.replace();
   pins.keepClear();
+  changes.draw();
 });
 addEventListener(
   "scroll",
@@ -388,6 +454,7 @@ function tellLink(link: Link) {
     ...(link.error ? { error: link.error } : {}),
     ...(link.silent ? { silent: true } : {}),
   });
+  tellPagePins();
 }
 
 /** How long a burst of doc changes (typing a note) is gathered into one word to the host. Our call. */
@@ -406,7 +473,31 @@ function tellDoc() {
   docTelling = setTimeout(() => {
     docTelling = null;
     post("cawco:doc");
+    tellPagePins();
   }, DOC_TOLD_MS);
+}
+
+/**
+ * While the page's link to the hub isn't synced, the pins this page holds
+ * (`cawco:page-pins`): one written meanwhile, or given back by the device
+ * after a reload, may stand only here; and always the comments the hub
+ * refused, each with its reason (artifact.ts `refused`). The host lists
+ * each with why it isn't sent and its Try again, so the person's words are
+ * never out of reach.
+ */
+function tellPagePins() {
+  const refused = artifact.refused();
+  const linked = artifact.link().state === "synced";
+  if (!artifact.keeps() || (linked && refused.length === 0)) {
+    return;
+  }
+  post("cawco:page-pins", {
+    pins: [
+      ...(linked ? [] : Object.values(artifact.doc().getMap("pins").toJSON())),
+      // The hub refused these: each carries its reason (`notSent`).
+      ...refused,
+    ],
+  });
 }
 
 function ready() {
@@ -645,6 +736,7 @@ const kept = (node: Node): boolean =>
   node === ink.layer ||
   node === pins.layer ||
   node === pins.fixed ||
+  node === changes.layer ||
   (node instanceof Element && node.hasAttribute("data-cawco-host")) ||
   (node instanceof HTMLScriptElement &&
     OVERLAY_SRC.test(node.getAttribute("src") ?? ""));
@@ -672,6 +764,8 @@ function morphTo(html: string) {
   ink.replace();
   // The open card's pin, moved under the host's chrome, is brought out again.
   pins.keepClear();
+  // Each wash stands on its element as the revision has it.
+  changes.draw();
   if (held) {
     held.addEventListener(
       "focusout",
@@ -883,10 +977,7 @@ function navigated() {
 
 /** The pane's mode; `again` names the moved pin the next tap in Comment places again. */
 function mode(next: PreviewMode, again: string | null = null) {
-  // A mode switch leaves nothing of a comment being written.
-  if (next !== modeNow && drafting) {
-    endDraft();
-  }
+  // A mode switch closes a comment's composer; the host parks its words, or cancels an empty one.
   modeNow = next;
   placing = next === "comment" ? again : null;
   layer.classList.toggle("comment", next === "comment");
@@ -1211,8 +1302,7 @@ function elementAt(x: number, y: number): Element | null {
 }
 
 /** The overlay's own: its host, and the ink and pin layers it puts in the page. */
-const OVERLAY_OWN =
-  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed]";
+const OVERLAY_OWN = `cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed], [${STAND_INS}]`;
 
 /**
  * The page's own deepest element at each of the viewport's points, seen
@@ -1296,7 +1386,9 @@ const NEAR_WAYS = [
  */
 function contentAt(x: number, y: number): Element | null {
   const [hit = null] = elementsAt([[x, y]]);
-  if (!(hit && pageSized(hit))) {
+  // A frame of another origin is content however big it stands: what is in
+  // it is its embed's to name (embeds.ts), never this page's as a whole.
+  if (!(hit && pageSized(hit)) || (isFrame(hit) && !frameDocument(hit))) {
     return hit;
   }
   const round = NEAR_RINGS.flatMap((r) =>
@@ -1383,12 +1475,21 @@ function wordsOf(el: Element): string {
  * from one state of the page to the next and say nothing of where it stands.
  */
 function anchorOf(el: Element): PageAnchor {
+  const remote = embeds.anchorOf(el);
+  if (remote) {
+    return remote;
+  }
   const { x, y, width, height } = rectOf(el);
   const frames = frameSelectors(el);
   const doc = el.ownerDocument;
   const whole = el === doc.body || el === doc.documentElement;
+  // The artifact the nearest frame showing one shows: the one it stands in, or the frame itself.
+  const shown = [...framesOf(el), ...(isFrame(el) ? [el] : [])]
+    .findLast((frame) => frame.hasAttribute(EMBED_ARTIFACT))
+    ?.getAttribute(EMBED_ARTIFACT);
   return {
     ...(frames.length > 0 ? { frames } : {}),
+    ...(shown ? { embed: { artifact: shown } } : {}),
     selector: whole ? el.localName : selectorOf(el),
     source: sourceOf(el),
     ...(sheetChain(el) ?? {}),
@@ -1425,6 +1526,10 @@ function frameIn(within: Document, selector: string): Document | null {
  * found yet, and is not gone either.
  */
 function waiting(anchor: PageAnchor): boolean {
+  const remote = embeds.find(anchor);
+  if (remote) {
+    return remote.state === "waiting";
+  }
   let within: Document | null = document;
   for (const selector of anchor.frames ?? []) {
     let frame: Element | null = null;
@@ -1447,8 +1552,16 @@ function waiting(anchor: PageAnchor): boolean {
   return false;
 }
 
-/** Where a page's anchor stands now (core `findAnchor`: down its frames, then file:line, then selector, then text). */
+/**
+ * Where a page's anchor stands now (core `findAnchor`: down its frames, then
+ * file:line, then selector, then text); one that leads into a frame of
+ * another origin, where its embed found it (embeds.ts).
+ */
 function locate(anchor: PageAnchor) {
+  const remote = embeds.find(anchor);
+  if (remote) {
+    return remote.state === "found" ? { by: remote.by, el: remote.el } : null;
+  }
   return findAnchor<Element, Document>(anchor, {
     top: document,
     frame: frameIn,
@@ -1481,6 +1594,10 @@ function locate(anchor: PageAnchor) {
 
 /** `el` as a pin names it: its box in the top viewport and page, its styles, and the address of the document it is in. */
 function describe(el: Element): PinnedElement {
+  const remote = embeds.describe(el);
+  if (remote) {
+    return remote;
+  }
   const { x, y, width, height } = rectOf(el);
   const computed = (el.ownerDocument.defaultView ?? window).getComputedStyle(
     el
@@ -1521,6 +1638,66 @@ function describe(el: Element): PinnedElement {
 const THUMB_AREA = 200_000;
 
 /**
+ * How long a thumbnail waits for a page that has drawn nothing but its
+ * ground to draw something: an app behind a port is still starting when the
+ * overlay, in its head, says ready. Our call, inside the 15 s Files gives an
+ * unseen page (files/page-thumbs.ts `PAGE_MS`).
+ */
+const THUMB_WAIT_MS = 10_000;
+/** After the page changes, how long it settles before it is drawn again: the pane's own wait (PreviewPane `CAPTURE_AFTER_MS`). */
+const THUMB_SETTLE_MS = 1000;
+
+/** Resolves true at the page's next change outside the overlay, false once `ms` pass with none. */
+function pageChanges(ms: number): Promise<boolean> {
+  return new Promise((done) => {
+    const ours = document.querySelector("cawco-overlay");
+    const seen = new MutationObserver((records) => {
+      if (records.some((record) => !ours?.contains(record.target))) {
+        finish(true);
+      }
+    });
+    const bound = setTimeout(() => finish(false), ms);
+    function finish(changed: boolean) {
+      clearTimeout(bound);
+      seen.disconnect();
+      done(changed);
+    }
+    seen.observe(document.documentElement, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  });
+}
+
+/**
+ * The viewport's picture once the page has drawn something of its own: a
+ * crop of its bare ground is none (picture.ts), so it is drawn again each
+ * time the page changes and settles, until {@link THUMB_WAIT_MS} pass. Null
+ * when it never drew, or when a part's failure was heard (`failedYet`).
+ */
+async function pageDrawn(
+  heard: (message: string) => void,
+  failedYet: () => boolean
+): Promise<string | null> {
+  const until = performance.now() + THUMB_WAIT_MS;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: one picture at a time, each after the page's last change
+    const png = await cropPicture(
+      { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
+      heard,
+      { area: THUMB_AREA, thumbnail: true }
+    );
+    const left = until - performance.now();
+    if (png || failedYet() || left <= 0 || !(await pageChanges(left))) {
+      return png;
+    }
+    await new Promise((settle) => setTimeout(settle, THUMB_SETTLE_MS));
+  }
+}
+
+/**
  * The page's thumbnail: what stands in its viewport now, drawn by the crop
  * (picture.ts), so its work is what is on screen, never the whole document
  * (a whole tall page drawn once was 1.8 s of the dashboard's own thread,
@@ -1544,11 +1721,7 @@ async function thumbnail(): Promise<{
   const heard = (message: string) => {
     error ??= message;
   };
-  const png = await cropPicture(
-    { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
-    heard,
-    { area: THUMB_AREA, thumbnail: true }
-  );
+  const png = await pageDrawn(heard, () => error !== undefined);
   const shown = themesWithHost() ? hostTheme : null;
   if (!(png && shown)) {
     return {
@@ -1558,7 +1731,8 @@ async function thumbnail(): Promise<{
         (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
       other: null,
       single: !!png,
-      ...(png ? {} : { error: error ?? "Nothing was drawn." }),
+      // A page that drew nothing but its ground is said by no picture alone.
+      ...(png || error === undefined ? {} : { error }),
     };
   }
   // The other scheme undrawn leaves that scheme without a thumbnail, never this one's picture in its place.
@@ -1579,21 +1753,45 @@ async function thumbnail(): Promise<{
 /** The page's root's tag in Comment mode: the word the design and the commenting page use. */
 const WHOLE_PAGE = "Whole page";
 
+/** The most of an element's words its hover label quotes, characters. Our call: a button's or a heading's whole, a paragraph's start. */
+const LABEL_WORDS = 40;
+
+/** Whether `el` draws words of its own: a text node of its own that says something, not only its children's. */
+const drawsWords = (el: Element): boolean =>
+  [...el.childNodes].some(
+    (node) => node.nodeType === Node.TEXT_NODE && !!node.textContent?.trim()
+  );
+
 /**
- * What the hover label says of `el` (the page's root: {@link WHOLE_PAGE}): its tag, id, first class and dev
- * source; a frame of another origin, which cannot be read into, by its origin.
+ * What the hover label says of `el` (the page's root: {@link WHOLE_PAGE}):
+ * a canvas's story frame by its story ("Story On"); else its tag, id, first
+ * class, its own words when it draws some (two buttons one line writes read
+ * apart), and dev source; a frame of another origin, which cannot be read
+ * into, by its origin.
  */
 function labelOf(el: Element): string {
+  const standIn = embeds.read(el);
+  if (standIn) {
+    return standIn.remote.label;
+  }
   const doc = el.ownerDocument;
   if (el === doc.body || el === doc.documentElement) {
     return WHOLE_PAGE;
+  }
+  const story = el.getAttribute("data-cawco-story");
+  if (story) {
+    return `Story ${story}`;
   }
   const named = `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${el.classList[0]}` : ""}`;
   if (isFrame(el) && !frameDocument(el)) {
     return `${named} — ${frameOrigin(el)}`;
   }
+  const words = drawsWords(el) ? wordsOf(el) : "";
+  const quoted = words
+    ? ` "${words.length > LABEL_WORDS ? `${words.slice(0, LABEL_WORDS - 1).trimEnd()}…` : words}"`
+    : "";
   const source = sourceOf(el);
-  return `${named}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
+  return `${named}${quoted}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
 }
 
 /** The element under the pointer in Comment mode, drawn at rest unless a chosen one stands ({@link paint}); none clears it. */
@@ -1602,12 +1800,54 @@ function hover(el: Element | null) {
   paint();
 }
 
+/** The pointer's latest place asked of: an embed's answer for an earlier one is let go. */
+let pointing = 0;
+
+/**
+ * What the pointer at the viewport's `x`, `y` names, then `then` with it:
+ * `el`, what this page has there (`contentAt`), at once; over a frame whose
+ * embed answers (embeds.ts), its element there as the embed names it, once
+ * it has.
+ */
+function pointed(
+  el: Element | null,
+  x: number,
+  y: number,
+  then: (named: Element | null) => void
+) {
+  pointing += 1;
+  const mine = pointing;
+  if (!embeds.bridged(el)) {
+    then(el);
+    return;
+  }
+  embeds.at(el, x, y).then((inside) => {
+    if (inside && mine === pointing) {
+      then(inside);
+    }
+  });
+}
+
 window.addEventListener(
   "mousemove",
   (event) => {
-    if (commenting()) {
-      hover(contentAt(event.clientX, event.clientY));
+    if (!commenting()) {
+      return;
     }
+    const el = contentAt(event.clientX, event.clientY);
+    // Over an embed, nothing of this page's stands while its answer comes:
+    // the target its last answer named stays, or none.
+    if (
+      embeds.bridged(el) &&
+      !(hovered && embeds.read(hovered)?.frame === el)
+    ) {
+      hover(null);
+    }
+    pointed(el, event.clientX, event.clientY, (found) => {
+      if (commenting()) {
+        hover(found);
+      }
+    });
   },
   true
 );
@@ -1622,7 +1862,15 @@ function commentAt(clientX: number, clientY: number) {
     pins.open(pill);
     return;
   }
-  const el = contentAt(clientX, clientY);
+  pointed(contentAt(clientX, clientY), clientX, clientY, (el) => {
+    if (commenting()) {
+      pressedOn(el, clientX, clientY);
+    }
+  });
+}
+
+/** A Comment-mode tap named `el`: its composer opened there, or the moved pin placed again on it. */
+function pressedOn(el: Element | null, clientX: number, clientY: number) {
   if (!(el && artifact.keeps())) {
     return;
   }
@@ -1644,8 +1892,18 @@ const CHAIN_MOST = 5;
  * What a press on `el` may stand on, innermost first: `el`, its ancestors
  * that draw a box of their own (a wrapper exactly as big as what it holds
  * says nothing new), at most {@link CHAIN_MOST}, then the page as a whole.
+ * In an embed of another origin, what holds `el` there as its embed read it
+ * (embeds.ts), then its frame and what holds that here.
  */
 function chainOf(el: Element): Element[] {
+  const standIn = embeds.read(el);
+  if (standIn) {
+    const outer = chainOf(standIn.frame);
+    return [
+      ...[el, ...standIn.chain, ...outer.slice(0, -1)].slice(0, CHAIN_MOST + 1),
+      ...outer.slice(-1),
+    ];
+  }
   const doc = el.ownerDocument;
   const root = doc.body ?? doc.documentElement;
   if (el === root || el === doc.documentElement) {
@@ -1686,28 +1944,126 @@ function tellDraft() {
     return;
   }
   const { ink: inked } = drafting;
+  const point = draftTarget()?.point;
   post("cawco:compose", {
     via: "pointer",
     chosen: drafting.chosen,
     chain: inked
       ? [{ anchor: inked.anchor, elements: inked.elements, ink: true }]
-      : drafting.chain.map(named),
+      : drafting.named,
+    // What the host keeps to bring it back after a reload.
+    ...(point ? { point } : {}),
+    ...(inked ? { inkId: inked.id } : {}),
   });
 }
 
-/** The chosen target of the comment being written, as pins.ts draws its hollow pill. */
-function draftTarget(): DraftTarget | null {
+/** The parked draft's pill pressed: its composer opens again with what it held. */
+function reopenDraft() {
+  if (!drafting?.parked) {
+    return;
+  }
+  drafting.parked = false;
+  tellDraft();
+  pins.draft(draftTarget());
+  paint();
+}
+
+/**
+ * A draft the host kept across a reload (`cawco:compose-restore`): its
+ * target found again by its anchor, at the point it stood on, parked or
+ * with its composer open.
+ */
+function restoreDraft(message: HostMessage) {
+  const target = message.target as {
+    anchor?: unknown;
+    elements?: unknown;
+    inkId?: unknown;
+    point?: { x?: unknown; y?: unknown };
+  } | null;
+  const anchor = target?.anchor as PageAnchor | undefined;
+  if (!(anchor && typeof anchor.selector === "string" && artifact.keeps())) {
+    return;
+  }
+  const el = locate(anchor)?.el ?? null;
+  if (!el) {
+    return;
+  }
+  const parked = message.parked === true;
+  const group =
+    typeof target?.inkId === "string"
+      ? (artifact.doc().getMap("ink") as YMap<InkGroup>).get(target.inkId)
+      : undefined;
+  const r = el.getBoundingClientRect();
+  const fx = Number(target?.point?.x);
+  const fy = Number(target?.point?.y);
+  const chain = group ? [el] : chainOf(el);
+  drafting = {
+    chain,
+    named: group ? [] : chain.map(named),
+    chosen: 0,
+    x: r.left + (Number.isFinite(fx) ? fx : 0.5) * r.width,
+    y: r.top + (Number.isFinite(fy) ? fy : 0.5) * r.height,
+    parked,
+    ...(Number.isFinite(fx) && Number.isFinite(fy)
+      ? { point: { x: fx, y: fy } }
+      : {}),
+    ...(group
+      ? {
+          ink: {
+            anchor: group.anchor as PageAnchor,
+            elements: Array.isArray(target?.elements)
+              ? (target.elements as PinnedElement[])
+              : [],
+            id: group.id,
+          },
+        }
+      : {}),
+  };
+  if (!parked) {
+    tellDraft();
+  }
+  pins.draft(draftTarget());
+  paint();
+}
+
+/**
+ * The chosen element of the comment being written, as the page holds it
+ * now: its own while it stands in the page; once the page has drawn it
+ * again (a panel rebuilt, a list re-rendered), the one its anchor, read at
+ * the press, finds now, which takes its place; null while none stands there.
+ */
+function draftEl(): Element | null {
   const el = drafting?.chain[drafting.chosen];
   if (!(drafting && el)) {
     return null;
   }
+  if (el.isConnected || drafting.ink) {
+    return el;
+  }
+  const atPress = drafting.named[drafting.chosen];
+  const found = atPress ? (locate(atPress.anchor)?.el ?? null) : null;
+  if (found) {
+    drafting.chain[drafting.chosen] = found;
+  }
+  return found;
+}
+
+/** The chosen target of the comment being written, as pins.ts draws its hollow pill. */
+function draftTarget(): DraftTarget | null {
+  const el = draftEl();
+  if (!(drafting && el)) {
+    return null;
+  }
+  const parked = drafting.parked ? { parked: true } : {};
   if (drafting.ink) {
-    return { el, ink: drafting.ink.id };
+    return { el, ink: drafting.ink.id, ...parked };
   }
   const root = el === el.ownerDocument.body;
-  return root
-    ? { el }
-    : { el, point: pins.pointOn(el, drafting.x, drafting.y) };
+  const point =
+    drafting.point && drafting.chosen === 0
+      ? drafting.point
+      : pins.pointOn(el, drafting.x, drafting.y);
+  return root ? { el, ...parked } : { el, point, ...parked };
 }
 
 /**
@@ -1722,7 +2078,16 @@ function draftTarget(): DraftTarget | null {
  * well's corner, never beside its pill, until the page scrolled.
  */
 function startDraft(el: Element, x: number, y: number) {
-  drafting = { chain: chainOf(el), chosen: 0, x, y };
+  const chain = chainOf(el);
+  drafting = {
+    chain,
+    named: chain.map(named),
+    chosen: 0,
+    x,
+    y,
+    // Where on it the press landed, kept as its fractions: the pill stays there as the page scrolls or draws it again.
+    ...(el === el.ownerDocument.body ? {} : { point: pins.pointOn(el, x, y) }),
+  };
   tellDraft();
   pins.draft(draftTarget());
   paint();
@@ -1738,6 +2103,7 @@ function composeInk(target: DraftTarget, elements: PinnedElement[] | string[]) {
   }
   drafting = {
     chain: [target.el],
+    named: [],
     chosen: 0,
     x: 0,
     y: 0,
@@ -1760,6 +2126,34 @@ function endDraft() {
 }
 
 /**
+ * What the comment being written stands on as it is written: its element
+ * as the page holds it now ({@link draftEl}), read afresh; while the page
+ * holds none (drawing it again), as it was read at the press, which its
+ * pin's anchor finds once it is back. An ink group's Comment stands on its
+ * ink.
+ */
+function draftWritten(
+  at: NonNullable<typeof drafting>,
+  atPress: ReturnType<typeof named> | undefined
+): CommentTarget | null {
+  if (at.ink) {
+    return { anchor: at.ink.anchor, elements: at.ink.elements, ink: at.ink.id };
+  }
+  const point = at.chosen === 0 ? at.point : undefined;
+  const el = draftEl();
+  if (el) {
+    return {
+      anchor: anchorOf(el),
+      elements: [describe(el)],
+      ...(el === el.ownerDocument.body
+        ? {}
+        : { point: point ?? pins.pointOn(el, at.x, at.y) }),
+    };
+  }
+  return atPress ? { ...atPress, ...(point ? { point } : {}) } : null;
+}
+
+/**
  * The host's words for the comment being written (`cawco:comment`): its pin
  * and first entry in one write (core `commentOn`), answered as
  * `cawco:comment-result` with the pin, or the refusal's sentence, the
@@ -1772,8 +2166,9 @@ async function writeDraft(message: HostMessage) {
       ? (message.attachments as CommentAttachment[])
       : [],
   };
-  const el = drafting?.chain[drafting.chosen];
-  if (!(drafting && el)) {
+  const at = drafting;
+  const target = at && draftWritten(at, at.named[at.chosen]);
+  if (!(at && target)) {
     post("cawco:comment-result", {
       ok: false,
       error:
@@ -1786,16 +2181,6 @@ async function writeDraft(message: HostMessage) {
     return;
   }
   await artifact.whenKnown();
-  const at = drafting;
-  const target: CommentTarget = at.ink
-    ? { anchor: at.ink.anchor, elements: at.ink.elements, ink: at.ink.id }
-    : {
-        anchor: anchorOf(el),
-        elements: [describe(el)],
-        ...(el === el.ownerDocument.body
-          ? {}
-          : { point: pins.pointOn(el, at.x, at.y) }),
-      };
   const pin = commentOn(artifact.doc(), target, said);
   if (typeof pin === "string") {
     post("cawco:comment-result", { ok: false, error: pin });
@@ -2034,12 +2419,23 @@ window.addEventListener(
 const shots = new Map<string, { look: string; png: Promise<string | null> }>();
 
 /** Mark `id`'s picture, cropped to `box`; the one already drawn while its `look` is the same. */
-function shot(id: string, look: string, box: Box): Promise<string | null> {
+function shot(
+  id: string,
+  look: string,
+  box: Box,
+  el: Element | null = null
+): Promise<string | null> {
   const had = shots.get(id);
   if (had?.look === look) {
     return had.png;
   }
-  const png = cropPicture(box, (message) => post("cawco:error", { message }));
+  const undrawn = (message: string) => post("cawco:error", { message });
+  // A mark on an embed of another origin is drawn there, by its own overlay:
+  // this page cannot draw what a frame of another origin shows.
+  const png =
+    el && embeds.read(el)
+      ? embeds.picture(el, box, undrawn)
+      : cropPicture(box, undrawn);
   shots.set(id, { look, png });
   return png;
 }
@@ -2059,7 +2455,7 @@ function pinPicture(id: string): Promise<string | null> {
   if (pin?.ink) {
     return groupPicture(pin.ink);
   }
-  return crop ? shot(id, crop.look, crop.box) : Promise.resolve(null);
+  return crop ? shot(id, crop.look, crop.box, crop.el) : Promise.resolve(null);
 }
 
 /**
@@ -2092,9 +2488,9 @@ async function markPictures(): Promise<MarkPicture[]> {
 
 /**
  * How long after the person's last mark here the page draws its pictures
- * for the hub: a pause in the burst, so the Send that delivers them finds
- * them there; a Send sooner asks for them first (`cawco:pictures-now`).
- * Our call.
+ * for the hub: a pause in the burst, inside the hub's own quiet before it
+ * delivers the marks (hub artifacts/service.ts `COMMENTS_QUIET_MS`, 3 s), so
+ * the delivery finds them there. Our call.
  */
 const PICTURES_AFTER_MS = 1500;
 let picturesTimer: ReturnType<typeof setTimeout> | undefined;
@@ -2144,6 +2540,14 @@ function coveredOf(value: unknown): Box[] {
 
 const idOf = (message: HostMessage) =>
   typeof message.id === "string" ? message.id : null;
+
+/** A host's list of strings, its other entries left out; none when it is no list. Our bound: 200. */
+const strings = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value
+        .filter((one): one is string => typeof one === "string")
+        .slice(0, 200)
+    : [];
 
 /**
  * The person's write on pin `message.pin`, once the doc holds the hub's
@@ -2270,20 +2674,29 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       ),
     "cawco:delete": (message) =>
       personWrite(message, "cawco:delete-result", (pin) =>
-        deletePin(artifact.doc(), pin)
+        // One the hub refused stands only in the device's keep: it goes from there.
+        artifact.letGoRefused(pin) ? null : deletePin(artifact.doc(), pin)
       ),
-    // A Send is about to go: the pictures of what is unheard reach the hub first, answered once they have.
-    "cawco:pictures-now": async () => {
-      clearTimeout(picturesTimer);
-      if (artifact.kind() !== "canvas" && artifact.keeps()) {
-        await postPictures();
-      }
-      post("cawco:pictures-sent");
-    },
     // The composer's words: the comment written, its pin and first entry at once.
     "cawco:comment": (message) => writeDraft(message),
     // The composer closed with nothing said (Esc, a press outside, Close): nothing was written, and its pill goes.
     "cawco:compose-cancel": () => endDraft(),
+    // The composer closed with its words kept: its pill stays, saying it holds a draft, and opens it again.
+    "cawco:compose-park": () => {
+      if (drafting) {
+        drafting.parked = true;
+        pins.draft(draftTarget());
+        paint();
+      }
+    },
+    // A comment the hub refused, tried again (its Try again): written into the doc once more.
+    "cawco:resend-pin": (message) => {
+      if (typeof message.id === "string" && artifact.resend(message.id)) {
+        tellPagePins();
+      }
+    },
+    // A draft the host kept across a reload: brought back at its target.
+    "cawco:compose-restore": (message) => restoreDraft(message),
     // The composer's target chip chose another of the press's chain: its pill and outline follow.
     "cawco:compose-target": (message) => {
       const index = typeof message.index === "number" ? message.index : -1;
@@ -2321,6 +2734,15 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:reconnect": () => artifact.reconnect(),
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
+    // What the latest revision changed that the person hasn't looked at, and the pins with an answer he hasn't: washed, their stops told.
+    "cawco:changes": (message) =>
+      changes.show(strings(message.anchors), strings(message.pins)),
+    // A step of the host's tag, or a chip's decision card: brought into view and chosen.
+    "cawco:show-element": (message) => {
+      if (typeof message.selector === "string") {
+        changes.step(message.selector, message.outline === "flash");
+      }
+    },
     // The card open on a pin: its element is the one target while it stands; closed, the pointer's leads again.
     // The pointer or the keyboard on a pin's row in the host's list: its element chosen while it rests there.
     "cawco:hover-pin": (message) => pins.hover(idOf(message)),
@@ -2353,7 +2775,16 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
     // Asked as `cawco:capture`, answered as `cawco:captured`: a host in this
     // same window hears its ask and this answer, and neither is the other.
-    "cawco:capture": async () => post("cawco:captured", await thumbnail()),
+    // A picture that throws is answered too, with why: unanswered, the host
+    // waits out its bound for a picture that never comes.
+    "cawco:capture": async () =>
+      post(
+        "cawco:captured",
+        await thumbnail().catch((reason: unknown) => ({
+          png: null,
+          error: `The page's picture failed: ${reason instanceof Error ? reason.message : String(reason)}`,
+        }))
+      ),
     // Its conversation's tab off screen, and back (hold.ts): this document
     // and every same-origin frame in it, which the pane hears as `cawco:held`.
     "cawco:hold": () => holdPage(true),
@@ -2408,6 +2839,41 @@ window.addEventListener("cawco:element-press", (event) => {
  */
 window.addEventListener("cawco:sheet", (event) => {
   post("cawco:sheet", { sheet: (event as CustomEvent<object>).detail });
+});
+
+/** What this page reads of one of its elements for a page that frames it from another origin (embeds.ts). */
+function remoteOf(el: Element): Remote {
+  const rect = rectOf(el);
+  const { box: _box, ...anchor } = anchorOf(el);
+  return {
+    anchor,
+    box: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+    boxed: drawsBox(el),
+    corners: cornersOf(el, rect),
+    element: describe(el),
+    label: labelOf(el),
+  };
+}
+
+// Framed by a page of another origin (a decision page's Preview): its
+// overlay asks what stands under its pointer here, and where its pins do.
+answerEmbedder({
+  at: contentAt,
+  chain: chainOf,
+  locate,
+  own: (node) =>
+    !!(
+      node.nodeType === Node.ELEMENT_NODE
+        ? (node as Element)
+        : node.parentElement
+    )?.closest(OVERLAY_OWN),
+  // The box as this page's viewport has it, drawn from its page.
+  picture: (box, undrawn) =>
+    cropPicture(
+      { x: box.x + scrollX, y: box.y + scrollY, w: box.w, h: box.h },
+      undrawn
+    ),
+  read: remoteOf,
 });
 
 window.addEventListener("popstate", navigated);

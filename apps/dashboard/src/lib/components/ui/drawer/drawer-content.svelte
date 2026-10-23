@@ -65,6 +65,7 @@
   import { cn } from "#lib/utils.js";
   import DrawerOverlay from "./drawer-overlay.svelte";
   import DrawerPortal from "./drawer-portal.svelte";
+  import { holdStyle } from "./hold-style.js";
   import { sheetHeadVariants } from "./sheet-head.js";
 
   let {
@@ -181,16 +182,26 @@
    * The visible area as the sheet's --visible-top and --visible-height,
    * from the one measurement of it (cawco/visible-viewport); app.css places
    * a bottom sheet the kit marks `data-placed` on the visible area from the
-   * two. They reach the sheet through its `style` prop: a property written
-   * on the node is lost whenever that attribute is redrawn.
+   * two. They are written on the node one property at a time, never into
+   * its `style` prop: a changed style attribute is written whole, so each
+   * step of the keyboard closing dropped the transform vaul writes on the
+   * node while a finger drags it, and the sheet jumped. A redraw of the
+   * attribute (vaul's own snap-point height as the window changes) takes
+   * them with it, so they are written again whenever the attribute changes.
    */
-  const head = sheetHeadVariants();
+  $effect(() => {
+    const node = ref;
+    if (!node || hosted) {
+      return;
+    }
+    const placed = visible.height > 0;
+    return holdStyle(node, {
+      "--visible-top": placed ? `${visible.top}px` : null,
+      "--visible-height": placed ? `${visible.height}px` : null,
+    });
+  });
 
-  const place = $derived(
-    !hosted && visible.height > 0
-      ? `--visible-top:${visible.top}px;--visible-height:${visible.height}px;`
-      : ""
-  );
+  const head = sheetHeadVariants();
 </script>
 
 <DrawerPortal {...portalProps}>
@@ -214,7 +225,7 @@
     data-placed={hosted ? undefined : ""}
     data-safe-bottom
     data-slot="drawer-content"
-    style={`${place}${style ?? ""}`}
+    {style}
     bind:ref
     {...restProps}
   >

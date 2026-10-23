@@ -1082,6 +1082,14 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
       clearedSince: () => [],
       prune: () => undefined,
     },
+    // Nobody appears away and no machine counts: the person is away, so
+    // the person gate holds nothing.
+    presence: {
+      appearAway: () => null,
+      setAppearAway: () => undefined,
+      counted: () => new Set<string>(),
+      setCounts: () => undefined,
+    },
     getInstancesByIds: (ids: string[]) =>
       ids.map((instanceId) => ({
         id: instanceId,
@@ -1099,11 +1107,18 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
   // clear (none happen) has nobody to broadcast to.
   const notifications = createNotifications({
     db,
+    hubMachineId: () => null,
     lifetime,
-    registry: { broadcastTyped: () => undefined } as unknown as RegistryShape,
+    registry: {
+      broadcast: () => undefined,
+      broadcastTyped: () => undefined,
+    } as unknown as RegistryShape,
   });
   const attemptPush = createPush({
+    // An attempt's push only: no artifact waits on anyone here.
+    artifactWaiting: () => false,
     db,
+    desk: () => undefined,
     lifetime,
     notifications,
     task: () => Promise.resolve({ kind: "you", title: `Probe task ${tag}` }),

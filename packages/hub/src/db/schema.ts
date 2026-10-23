@@ -4,6 +4,7 @@ import type {
   AccountMove,
   AccountOverage,
   AccountProvider,
+  AccountSetupStep,
   AtLimit,
   AtPlanLimit,
   AttemptResult,
@@ -21,9 +22,11 @@ import type {
   EffortLevel,
   EndedBy,
   Envelope,
+  FleetItemStatus,
   FleetMcpConfig,
   FleetRefresh,
   FleetScope,
+  FleetSyncOutcome,
   FleetSyncReport,
   HarnessKind,
   HarnessReport,
@@ -36,6 +39,7 @@ import type {
   MemoryRole,
   ModeAsk,
   ModelInfo,
+  MoveEnded,
   MoveStage,
   NamedMoveRequest,
   NeutralUserMessage,
@@ -403,6 +407,20 @@ export const agents = sqliteTable("agents", {
    */
   fleet: text("fleet", { mode: "json" }).$type<FleetSyncReport>(),
   /**
+   * What became of the last delta the hub sent it (core
+   * `FleetSyncOutcome`), kept apart from {@link fleet}: a delta refused or
+   * unanswered leaves the last report as it was. Null until the hub has
+   * sent it one.
+   */
+  fleetSync: text("fleet_sync", { mode: "json" }).$type<FleetSyncOutcome>(),
+  /**
+   * Each fleet item as the machine's harnesses converge it (core
+   * `FleetItemStatus`), by item id. Null until the machine has said.
+   */
+  fleetItems: text("fleet_items", { mode: "json" }).$type<
+    Record<string, FleetItemStatus>
+  >(),
+  /**
    * The cawco the daemon is running (NEW.md §12), as it reported at register.
    * Null until a daemon that says so has registered once.
    */
@@ -516,6 +534,15 @@ export const sshMachines = sqliteTable(
     sshPort: integer("ssh_port"),
     /** The port on the machine's loopback carried to the hub: null until OpenSSH allocates it. */
     boxPort: integer("box_port"),
+    /**
+     * The process on the machine that holds this hub's forward on `boxPort`,
+     * as `<pid> <start>` (`ps -o lstart=`), read there each time the
+     * connection comes up: the one process the hub ends when the port is
+     * still held as it connects again (a dead hub's session, a dropped
+     * one's). Anything else holding the port is left alone (ssh-tunnels.ts
+     * `endStale`).
+     */
+    boxSession: text("box_session"),
     machineId: text("machine_id"),
     /**
      * The machine key the last add wrote to the machine (ssh-tunnels.ts
@@ -1444,6 +1471,12 @@ export interface WorkItemSubmission {
   findings?: { title: string; detail: string }[];
   /** The outcome in one or two sentences, shown whole wherever a report is glanced at. */
   headline: string;
+  /**
+   * Ship the work once it lands on main: the project's declared ship command
+   * (gate.md `Ship:`, ship.ts) runs on the hub's machine with these end-user
+   * release notes.
+   */
+  ship?: { notes: string };
   /** The full report: what was done, and the real output of every command that proves it. */
   summary: string;
 }
@@ -2272,6 +2305,8 @@ export const accounts = sqliteTable(
     email: text("email"),
     organization: text("organization"),
     orgId: text("org_id"),
+    /** Where its unfinished setup stands (core `AccountSetupStep`); null once done. */
+    setupStep: text("setup_step").$type<AccountSetupStep>(),
     createdAt: timestamp("created_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -2478,17 +2513,21 @@ export const limitHolds = sqliteTable("limit_holds", {
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
   until: timestamp("until"),
-  /**
-   * Its move to another account waits for work in flight its process holds
-   * for later (at-limit.ts `unmoved`, server.ts `waitForLater`): where it
-   * goes, what it waits for in the machine's words, and since when, the
-   * wait's bound counting from then across hub restarts. Null otherwise.
-   */
-  carry: text("carry", { mode: "json" }).$type<{
-    since: number;
-    to: string;
-    why: string;
-  }>(),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * What a move ended with a session's process (core `MoveEnded`), from its
+ * machine's answer until the session is told on its new account (server.ts
+ * `tellEndedByMove`, at its next launch): a hub restart in between keeps it.
+ */
+export const moveEndings = sqliteTable("move_endings", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  ended: text("ended", { mode: "json" }).$type<MoveEnded>().notNull(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2515,7 +2554,7 @@ export const owedMoves = sqliteTable("owed_moves", {
   byHand: integer("by_hand", { mode: "boolean" }).notNull().default(false),
   /** The line written once it lands; null for none. */
   move: text("move", { mode: "json" }).$type<AccountMove>(),
-  waits: text("waits").$type<"turn" | "machine">().notNull(),
+  waits: text("waits").$type<"turn" | "work" | "machine">().notNull(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2531,11 +2570,14 @@ export const owedMoves = sqliteTable("owed_moves", {
  */
 export const limitCompactions = sqliteTable("limit_compactions", {
   instanceId: text("instance_id").primaryKey(),
-  stage: text("stage").$type<"filing" | "compacting">().notNull(),
+  /** `carrying`: its carry-on answers the turn its limit refused, before it files anything. */
+  stage: text("stage").$type<"carrying" | "filing" | "compacting">().notNull(),
   /** The `limit_events` id of the move's line, said again as the compaction goes. */
   lineId: text("line_id").notNull(),
   /** The move's line as written, which each stage restates. */
   move: text("move", { mode: "json" }).$type<AccountMove>().notNull(),
+  /** Its carry-on's send, when its limit or sign-in stopped it: the first step. */
+  carryUuid: text("carry_uuid"),
   filingUuid: text("filing_uuid").notNull(),
   compactUuid: text("compact_uuid").notNull(),
   /** Claude Code said its compaction boundary after the `/compact` went: it compacted. */
@@ -3452,6 +3494,29 @@ export const notificationCleared = sqliteTable(
 );
 
 /**
+ * The person's Appear away (notifications.ts), one row keyed `'person'`:
+ * on until they turn it off, through a reload or the hub's restart. Only
+ * the switch and when it was turned on are kept, never a history.
+ */
+export const presenceSettings = sqliteTable("presence_settings", {
+  /** Always `'person'`. */
+  id: text("id").primaryKey(),
+  appearAway: integer("appear_away", { mode: "boolean" }).notNull(),
+  /** When Appear away was turned on; null while it is off. */
+  appearAwayAt: timestamp("appear_away_at"),
+});
+
+/**
+ * A machine whose desktop counts toward whether the person is here
+ * (notifications.ts): the person turned it on in the presence menu. No row
+ * is off: a machine's activity counts only once they opt it in.
+ */
+export const presenceDevices = sqliteTable("presence_devices", {
+  machineId: text("machine_id").primaryKey(),
+  counts: integer("counts", { mode: "boolean" }).notNull(),
+});
+
+/**
  * "Make this a project" (project-offers.ts): the one offer a plain session
  * gets when it outgrows itself. A row means it was offered, so it is never
  * offered again; `answer` stays null while the offer stands.
@@ -4068,8 +4133,10 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
   /** What the router answered "Open the ports" with; null before it was asked. */
   router: text("router").$type<"mapped" | "refused">(),
   routerHow: text("router_how").$type<"UPnP" | "NAT-PMP">(),
-  /** The machine's runtime may bind the relay's lowest port, as last read. */
-  lowPorts: integer("low_ports", { mode: "boolean" }).notNull().default(false),
+  /** The machine's runtime carries the relay's ports as it is (a VM's forwarder carries UDP and TCP), as last read. */
+  runtimeHolds: integer("runtime_holds", { mode: "boolean" })
+    .notNull()
+    .default(false),
   /** The name the certificate stands for, and when it ends. */
   certificateName: text("certificate_name"),
   certificateEndsAt: timestamp("certificate_ends_at"),
@@ -4651,6 +4718,8 @@ export const connections = sqliteTable("connections", {
   signInState: text("sign_in_state").unique(),
   signInRedirect: text("sign_in_redirect"),
   signInExpiresAt: timestamp("sign_in_expires_at"),
+  /** The page that sign-in sent the person to, so a reload returns to it. */
+  signInUrl: text("sign_in_url"),
   /** When the held access token runs out, as its token response said. */
   tokensExpireAt: timestamp("tokens_expire_at"),
   createdAt: timestamp("created_at").notNull(),

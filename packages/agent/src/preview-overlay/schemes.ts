@@ -337,23 +337,43 @@ function settleCopy(doc: Document, pairs: Pairs, scheme: Scheme) {
   }
 }
 
+/** How often a copied sheet is looked for while it loads, ms. Our call. */
+const SHEET_LOOK_MS = 25;
+
+/**
+ * Once `link`'s sheet has arrived, or at `until` (a sheet that failed never
+ * does). Read off the link itself, never heard: the copy runs no script, and
+ * WebKit delivers no event to a listener on a node of a document whose
+ * scripts are off, whoever added it, so a copied link's `load` was never
+ * heard and every copy with a sheet waited out {@link SETTLE_MS}.
+ */
+const sheetOf = (link: HTMLLinkElement, until: number) =>
+  new Promise<void>((done) => {
+    const look = () => {
+      if (link.sheet || performance.now() >= until) {
+        done();
+        return;
+      }
+      setTimeout(look, SHEET_LOOK_MS);
+    };
+    look();
+  });
+
 /**
  * The copy's sheets, images and fonts, each from the cache, within
  * {@link SETTLE_MS}. Unanswered by then, the copy is drawn as it stands: one
  * late image is a gap in a 90 px thumbnail, never a reason to draw none.
+ * Each is read by a promise or off the element ({@link sheetOf}), never by
+ * an event on the copy's nodes.
  */
 function settled(doc: Document): Promise<unknown> {
+  const until = performance.now() + SETTLE_MS;
   const waits: Promise<unknown>[] = [doc.fonts.ready];
   for (const link of doc.querySelectorAll<HTMLLinkElement>(
     'link[rel~="stylesheet"]'
   )) {
     if (!link.sheet) {
-      waits.push(
-        new Promise((done) => {
-          link.addEventListener("load", done, { once: true });
-          link.addEventListener("error", done, { once: true });
-        })
-      );
+      waits.push(sheetOf(link, until));
     }
   }
   for (const img of doc.images) {

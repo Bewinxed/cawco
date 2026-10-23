@@ -295,6 +295,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       }
       return new Response(shape, { status: 422 });
     })
+    // Every artifact the session holds: its panel's menu.
     .get("/api/instances/:id/artifacts", ({ params }) => {
       try {
         return artifacts.list(params.id);
@@ -302,6 +303,19 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // Files' list: the session's artifacts that reached the person. The
+    // dashboard's alone, so out of the app's API document.
+    .get(
+      "/api/instances/:id/artifacts/files",
+      { detail: { hide: true } },
+      ({ params }) => {
+        try {
+          return artifacts.files(params.id);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // Files' search: the session's artifacts a query matches by name or by
     // the words on their page, best first, with the words round a hit.
     .get(
@@ -646,7 +660,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       "/api/instances/:id/artifacts/comments",
       {
         query: t.Object({
-          artifact: t.Optional(t.String({ pattern: "^[0-9a-f-]{36}$" })),
+          // Its id, or (the session's comment_read) its name or handle.
+          artifact: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
           filter: t.Optional(
             t.Union([
               t.Literal("open"),
@@ -739,9 +754,9 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     .post(
       "/api/instances/:id/artifacts/:artifact/browse",
       { detail: { hide: true } },
-      ({ params }) => {
+      async ({ params }) => {
         try {
-          return artifacts.browse(params.id, params.artifact);
+          return await artifacts.browse(params.id, params.artifact);
         } catch (error) {
           return refused(error);
         }

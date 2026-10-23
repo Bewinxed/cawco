@@ -10,6 +10,8 @@
     class: className,
     sideOffset = 0,
     side = "top",
+    interactOutsideBehavior = "defer-otherwise-close",
+    escapeKeydownBehavior = "defer-otherwise-close",
     children,
     arrowClasses,
     portalProps,
@@ -20,6 +22,14 @@
   } = $props();
 </script>
 
+<!-- A press outside and Escape go to the layer it stands in
+     (`defer-otherwise-close`): bits-ui lets only the top-most layer that
+     closes or ignores answer a press outside or Escape (dismissible-layer
+     `isResponsibleLayer`, escape-layer `isResponsibleEscapeLayer`), and a
+     tooltip open over a popover or menu was that layer, so the popover
+     stayed open, its focus trap holding the page (the owner, on the usage
+     popover: "clicking outside the usage doesn't dismiss it"). Deferring, it
+     closes with the layer it stands in, and on its own when none is open. -->
 <TooltipPortal {...portalProps}>
   <TooltipPrimitive.Content
     class={cn(
@@ -33,6 +43,8 @@
       className
     )}
     data-slot="tooltip-content"
+    {escapeKeydownBehavior}
+    {interactOutsideBehavior}
     {side}
     {sideOffset}
     bind:ref

@@ -1,23 +1,8 @@
 import { configureWords, type Deleted } from "@cawco/core";
-import { failureWords, hubRefusal } from "../hub-read";
 import { toast } from "../toasts";
+import { restore } from "./unrestored.svelte";
 
 export type { Deleted } from "@cawco/core";
-
-/**
- * Undo, for every config delete: the hub's trash puts the item back whole
- * (hub db/trash.ts) and answers it as its list reads it.
- */
-async function restoreDeleted<T>(deleted: Deleted): Promise<T> {
-  const response = await fetch(`/api/trash/${deleted.restore}/restore`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    // The hub says why in a sentence: its window ran out, or its name is taken.
-    throw await hubRefusal(response);
-  }
-  return ((await response.json()) as { row: T }).row;
-}
 
 /**
  * The toast after a config item's delete, which goes through at once, with
@@ -26,26 +11,30 @@ async function restoreDeleted<T>(deleted: Deleted): Promise<T> {
  * long as it stands. The toast pauses under a pointer and in a hidden tab,
  * so it is closed when the hub's window runs out, never offering an Undo
  * the hub can no longer honour. Undo puts the item back and hands it to
- * `land`, which puts its row back where it stood; a failed Undo says why in
- * a toast of its own.
+ * `land`, which puts its row back where it stood. A refused Undo is never
+ * a toast: it is said on `where.section`, the list the row stood in
+ * (SectionFrame, unrestored.svelte.ts), with Try again, through a reload.
  */
 export function offerUndo<T>(
   id: string,
   words: string,
   deleted: Deleted,
-  land: (row: T) => void
+  land: (row: T) => void,
+  where: { section: string; name: string }
 ): void {
   const runsOut = setTimeout(() => toast.dismiss(id), deleted.restorableForMs);
   const settled = () => clearTimeout(runsOut);
+  // The one toast the dashboard keeps (DESIGN.md, The Work Outlives Its
+  // Surface Rule): it carries no failure, only the Undo of a delete that
+  // went through, and a refused Undo is said on the section.
   toast(words, {
     id,
     action: {
       label: configureWords.undo,
       onClick: () => {
         settled();
-        restoreDeleted<T>(deleted)
-          .then(land)
-          .catch((error: unknown) => toast.error(failureWords(error)));
+        // biome-ignore lint/complexity/noVoid: restore says its own refusal on the section
+        void restore(id, deleted, where, land);
       },
     },
     onDismiss: settled,

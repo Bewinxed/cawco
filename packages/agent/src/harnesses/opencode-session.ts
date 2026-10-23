@@ -31,6 +31,7 @@ import type {
   ModelInfo,
   ModelTurnUsage,
   NeutralContentBlock,
+  PermissionMode,
   PermissionResult,
   ProviderRefusal,
   SentMessage,
@@ -55,6 +56,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
+  configurePage,
   EFFORT_READ,
   INSTALL_SESSION_CREDENTIAL,
   LEAD_GATED_TOOLS,
@@ -62,6 +64,7 @@ import {
   MESSAGES_READ,
   MESSAGES_STORED,
   mcpNotConnectedLine,
+  offeredMode,
   PROVIDER_RETRY,
   pricedRequest,
   REPEATED_FAILURE,
@@ -178,7 +181,8 @@ export function messageId(): string {
 /**
  * Whether a parked permission should be auto-allowed by the daemon itself.
  * A question always routes — the parent session, or the user, answers it.
- * Full Send is bypass here: bypass answers every tool ask OpenCode raises.
+ * Full Send is bypass here: bypass answers every tool ask OpenCode raises
+ * (what Full Send adds, CawCo's admin writes, the hub approves).
  */
 export function autoAllows(
   permissionMode: string | undefined,
@@ -3057,7 +3061,7 @@ export class OpencodeSession implements HarnessSession {
         await this.#client.mcp.disconnect(target);
       } else if (verb === "auth" || verb === "login" || verb === "logout") {
         throw new Error(
-          `OpenCode 2.0 signs an MCP server in or out only on its own machine (opencode mcp ${verb === "logout" ? "logout" : "auth"} ${server}). A fleet server signs in from the dashboard: Configure → MCP servers.`
+          `OpenCode 2.0 signs an MCP server in or out only on its own machine (opencode mcp ${verb === "logout" ? "logout" : "auth"} ${server}). A fleet server signs in from the dashboard: ${configurePage("mcp")}.`
         );
       } else {
         throw new Error(`Unknown /mcp verb "${verb}". ${MCP_USAGE}`);
@@ -3197,7 +3201,7 @@ export class OpencodeSession implements HarnessSession {
         this.sayEffort();
         return;
       case CONTROL_SET_PERMISSION_MODE:
-        this.#permissionMode = args[0] as string;
+        this.#permissionMode = offeredMode(args[0] as PermissionMode);
         return;
       case CONTROL_CONTEXT_USAGE: {
         const tokens = this.#lastTokens;
@@ -3307,6 +3311,7 @@ export class OpencodeSession implements HarnessSession {
     await storeOpencodeCredential(
       this.#opencodeSessionId(),
       {
+        containerEnv: this.#ctx.containerEnv ?? {},
         credential,
         instanceId: this.instanceId,
         workspace: this.#ctx.workspace ?? null,

@@ -10,7 +10,8 @@
  * resolved, which is drawn only while its thread is open. A 2px raised ring
  * and the xs shadow lift it off the page; an open or stepped-to pin adds a
  * second ring in the focus ink; a dot on its top end says the agent is
- * working on it (pulsing) or has answered unread (still).
+ * working on it (the live dot, pulsing) or has answered and the person
+ * hasn't looked (the needs-you dot, echoing three loops, then still).
  *
  * Pins are drawn in an `<svg>` in the page's own document like the ink, so
  * they scroll with the page; a pin on the page as a whole stands at the
@@ -27,11 +28,17 @@
  *
  * Every pin is placed again from its anchor whenever the page changes (core
  * `findAnchor`: source file:line, then selector, then text). A page's pin
- * whose element none of them finds goes to the moved tray (`movedAt`) until
- * the person places it again. A pin on the page as a whole stands on its
- * body (core `wholePage`), whatever the page says now, and never goes there;
- * nor does one kept on a page-sized container (core `findAnchor`'s `page`),
- * which stands on the body again, out of the tray if it was put there.
+ * whose element none of them finds for a while (absent.ts: a page drawing
+ * a part of itself again has it back within it) goes to the moved tray
+ * (`movedAt`) until its anchor finds its element again or the person places
+ * it again. A pin on the page as a whole stands on its body (core
+ * `wholePage`), whatever the page says now, and never goes there; nor does
+ * one kept on a page-sized container (core `findAnchor`'s `page`), which
+ * stands on the body again.
+ *
+ * The comment being written follows its element the same way: when the
+ * page draws it again, its pill stands on the one its anchor, read at the
+ * press, finds now (PinsDeps `redraft`).
  *
  * Resting on a pin chooses its element (the overlay's one target) and asks
  * the host for its peek; a press on it opens its thread in the host. The
@@ -46,16 +53,18 @@ import {
   type Pin,
   type PinnedElement,
   pinUnsent,
+  goneOf as tombstonesOf,
   wholePage,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import type { Map as YMap } from "yjs";
+import { absences } from "./absent";
 import { artifact } from "./artifact";
 import { clipOf, rectOf } from "./frames";
 import { newId } from "./id";
 import { fitToPage } from "./ink";
 import { motionOk } from "./motion";
-import type { InkChrome } from "./radial";
+import { durationMs, type InkChrome } from "./radial";
 import {
   bandsAt,
   bringInto,
@@ -80,6 +89,8 @@ const PIN_REACH = { x: 960, y: 640 } as const;
 const BEHIND = 2;
 /** A finger's hit area round a pill, px. */
 const FINGER = 44;
+/** The loops a needs-you dot echoes before it stands still (DESIGN.md, Status dot). */
+const ECHOES = 3;
 
 export interface Box {
   h: number;
@@ -93,9 +104,14 @@ export interface DraftTarget {
   el: Element;
   /** The stroke group whose Comment the person picked. */
   ink?: string;
+  /** Its composer is closed with its words kept: the pill holds a draft, and a press opens it again. */
+  parked?: boolean;
   /** Where on `el` the press landed: fractions of its box. */
   point?: { x: number; y: number };
 }
+
+/** The id a parked draft's pill answers to (`data-pin-id`): a press on it opens its composer again. */
+export const DRAFT_PIN = "draft";
 
 export interface PinsDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
@@ -116,6 +132,14 @@ export interface PinsDeps {
    */
   outline: (el: Element | null, lead?: boolean) => void;
   post: (type: string, payload?: object) => void;
+  /**
+   * The comment being written, its element no longer in the page (the page
+   * drew it again): its target on the element its anchor, read at the
+   * press, finds now; null while none stands there.
+   */
+  redraft: () => DraftTarget | null;
+  /** The parked draft's pill pressed: its composer opens again. */
+  reopenDraft: () => void;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
   waiting: (anchor: PageAnchor) => boolean;
 }
@@ -125,9 +149,10 @@ export interface Pins {
   cover: (boxes: Box[]) => void;
   /**
    * Where pin `id`'s picture is cropped, the page's px, and what it shows
-   * (its look: a new one is drawn again); null when it is not on the page.
+   * (its look: a new one is drawn again), and the element it is cropped
+   * round when it stands on one; null when it is not on the page.
    */
-  cropOf: (id: string) => { box: Box; look: string } | null;
+  cropOf: (id: string) => { box: Box; el: Element | null; look: string } | null;
   /** The comment being written stands here (its hollow pill, no number yet), or none. */
   draft: (target: DraftTarget | null) => void;
   /** Pins drawn again where their elements stand now. */
@@ -364,6 +389,10 @@ export function startPins(deps: PinsDeps): Pins {
    * thread from that, and writes its words through the page (`cawco:reply`).
    */
   const open = (id: string) => {
+    if (id === DRAFT_PIN) {
+      deps.reopenDraft();
+      return;
+    }
     const pin = pinsMap().get(id);
     deps.post("cawco:pin-open", {
       id,
@@ -376,11 +405,15 @@ export function startPins(deps: PinsDeps): Pins {
   /**
    * A pin whose element is gone may be moved aside, and an anchor that reads
    * otherwise now is written again, only on a page the agent wrote or a sheet
-   * of its components (re-read after each HMR update), once it has laid out.
+   * of its components (re-read after each HMR update), once it has laid out,
+   * and once what the device kept of the doc is in (artifact.ts `stored`):
+   * the hub's embedded copy may still hold a pin the device deleted, and a
+   * write of it would stand against that deletion.
    */
   const settled = () =>
     (artifact.kind() === "page" || artifact.kind() === "component") &&
-    document.readyState !== "loading";
+    document.readyState !== "loading" &&
+    artifact.stored();
 
   /** Each placed pin: where it stands, and its pill as drawn; drawn while its frames show it. */
   const placed = new Map<string, Standing & { pill?: Pill }>();
@@ -391,6 +424,8 @@ export function startPins(deps: PinsDeps): Pins {
   let tracked: string | null = null;
   let live = new Set<string>();
   let unread = new Set<string>();
+  /** When each unread answer's dot began its echo (`performance.now()`): its three loops run from there. */
+  const echoed = new Map<string, number>();
   /** What of the page's viewport the host's chrome covers (`cawco:covered`): a phone's card or rail. */
   let covered: Box[] = [];
   /** Pins no scroll brought out from under the host's chrome when they were last revealed. */
@@ -450,10 +485,9 @@ export function startPins(deps: PinsDeps): Pins {
    * The anchors whose element is found under another selector or text now
    * (a revision moved or reworded it), written back so the next look finds
    * it by its selector. One that still reads as it was is left alone: a
-   * write here draws the pins again. A moved pin its anchor now reads as on
-   * the page as a whole (core `findAnchor`'s `page`: one kept on the
-   * page-sized container a press in the page's padding named) stands on the
-   * page again, out of the moved tray: the page is always there.
+   * write here draws the pins again. A moved pin whose anchor finds its
+   * element again (the page drew it back, a revision restored it) stands on
+   * the page again, out of the moved tray.
    */
   const reanchor = (pins: Pin[]) => {
     const moves: Pin[] = [];
@@ -462,9 +496,6 @@ export function startPins(deps: PinsDeps): Pins {
         continue;
       }
       const found = deps.locate(pin.anchor);
-      if (pin.movedAt && found?.by !== "page") {
-        continue;
-      }
       const now = found && deps.anchorOf(found.el);
       if (now && (pin.movedAt || changedAnchor(pin.anchor, now))) {
         const { movedAt: _moved, ...rest } = pin;
@@ -474,27 +505,51 @@ export function startPins(deps: PinsDeps): Pins {
     return moves;
   };
 
-  /** The tokens a pill is painted with, read once per draw: a token is the page's style, read there and then. */
-  const paintOf = () => ({
-    action: chrome.token("--action-solid"),
-    onAction: chrome.token("--on-action"),
-    raised: chrome.token("--surface-raised"),
-    recessed: chrome.token("--surface-fill-strong"),
-    muted: chrome.token("--ink-muted"),
-    focus: chrome.token("--focus-ring"),
-    shadow: chrome.token("--shadow-tint"),
-    dot: chrome.token("--status-live-glyph"),
-    font: chrome.token("--type-caps", "font"),
-    height: Number.parseFloat(chrome.token("--c-pin", "width")) || 20,
-    deck: Number.parseFloat(chrome.token("--deck-step", "width")) || 1.25,
-    gap: Number.parseFloat(chrome.token("--space-1", "width")) || 4,
-    inset: Number.parseFloat(chrome.token("--space-2", "width")) || 8,
-    dotSize: Number.parseFloat(chrome.token("--status-dot-size", "width")) || 6,
-    dotCut: Number.parseFloat(chrome.token("--status-dot-cut", "width")) || 1.5,
-    loop: chrome.ms("--dur-loop"),
-    control: chrome.ms("--dur-control"),
-    ease: chrome.token("--ease-out", "transition-timing-function"),
-  });
+  /** The tokens a pill is painted with, read once per draw in one style pass: a token is the page's style, read there and then. */
+  const paintOf = () => {
+    const read = chrome.tokens({
+      action: ["--action-solid"],
+      onAction: ["--on-action"],
+      raised: ["--surface-raised"],
+      recessed: ["--surface-fill-strong"],
+      muted: ["--ink-muted"],
+      focus: ["--focus-ring"],
+      shadow: ["--shadow-tint"],
+      dot: ["--status-live-glyph"],
+      attn: ["--status-attn-glyph"],
+      font: ["--type-caps", "font"],
+      height: ["--c-pin", "width"],
+      deck: ["--deck-step", "width"],
+      gap: ["--space-1", "width"],
+      inset: ["--space-2", "width"],
+      dotSize: ["--status-dot-size", "width"],
+      dotCut: ["--status-dot-cut", "width"],
+      loop: ["--dur-loop", "transition-duration"],
+      control: ["--dur-control", "transition-duration"],
+      ease: ["--ease-out", "transition-timing-function"],
+    });
+    return {
+      action: read.action,
+      onAction: read.onAction,
+      raised: read.raised,
+      recessed: read.recessed,
+      muted: read.muted,
+      focus: read.focus,
+      shadow: read.shadow,
+      dot: read.dot,
+      attn: read.attn,
+      font: read.font,
+      height: Number.parseFloat(read.height) || 20,
+      deck: Number.parseFloat(read.deck) || 1.25,
+      gap: Number.parseFloat(read.gap) || 4,
+      inset: Number.parseFloat(read.inset) || 8,
+      dotSize: Number.parseFloat(read.dotSize) || 6,
+      dotCut: Number.parseFloat(read.dotCut) || 1.5,
+      loop: durationMs(read.loop),
+      control: durationMs(read.control),
+      ease: read.ease,
+    };
+  };
   type Paint = ReturnType<typeof paintOf>;
 
   /** The figures' width in the pill's face, px. */
@@ -636,32 +691,83 @@ export function startPins(deps: PinsDeps): Pins {
       number.textContent = String(pin.number);
       g.append(number);
     }
-    const dot = pin && (live.has(pin.id) || unread.has(pin.id));
-    if (dot) {
-      const r = paint.dotSize / 2;
-      const cx = box.x + box.w - 1;
-      const cy = box.y + 1;
-      const cut = document.createElementNS(SVG, "circle");
-      cut.setAttribute("cx", String(cx));
-      cut.setAttribute("cy", String(cy));
-      cut.setAttribute("r", String(r + paint.dotCut));
-      cut.setAttribute("fill", paint.raised);
-      const mark = document.createElementNS(SVG, "circle");
-      mark.setAttribute("cx", String(cx));
-      mark.setAttribute("cy", String(cy));
-      mark.setAttribute("r", String(r));
-      mark.setAttribute("fill", paint.dot);
-      mark.setAttribute("data-dot", live.has(pin.id) ? "live" : "unread");
-      if (live.has(pin.id) && motionOk()) {
-        mark.animate([{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }], {
-          duration: paint.loop,
-          iterations: Number.POSITIVE_INFINITY,
-          easing: "ease-in-out",
-        });
-      }
-      g.append(cut, mark);
+    if (pin && (live.has(pin.id) || unread.has(pin.id))) {
+      g.append(...dotOf(pin.id, box, paint));
     }
     return g;
+  };
+
+  /**
+   * A pill's dot on its top end, cut round by `--status-dot-cut`: working,
+   * the live dot, pulsing; an answer unread, the needs-you dot with its
+   * echo (DESIGN.md, Status dot).
+   */
+  const dotOf = (id: string, box: Box, paint: Paint): SVGElement[] => {
+    const r = paint.dotSize / 2;
+    const cx = box.x + box.w - 1;
+    const cy = box.y + 1;
+    const cut = document.createElementNS(SVG, "circle");
+    cut.setAttribute("cx", String(cx));
+    cut.setAttribute("cy", String(cy));
+    cut.setAttribute("r", String(r + paint.dotCut));
+    cut.setAttribute("fill", paint.raised);
+    const working = live.has(id);
+    const mark = document.createElementNS(SVG, "circle");
+    mark.setAttribute("cx", String(cx));
+    mark.setAttribute("cy", String(cy));
+    mark.setAttribute("r", String(r));
+    mark.setAttribute("fill", working ? paint.dot : paint.attn);
+    mark.setAttribute("data-dot", working ? "live" : "unread");
+    if (!working) {
+      return [cut, mark, echoOf(id, cx, cy, r, paint)];
+    }
+    if (motionOk()) {
+      mark.animate([{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }], {
+        duration: paint.loop,
+        iterations: Number.POSITIVE_INFINITY,
+        easing: "ease-in-out",
+      });
+    }
+    return [cut, mark];
+  };
+
+  /**
+   * An unread answer's echo on its dot: a ring growing from it as it fades,
+   * once a `--dur-loop`, three loops from when the answer was first drawn
+   * unread and then still, however often the pill is drawn again in them.
+   */
+  const echoOf = (
+    id: string,
+    cx: number,
+    cy: number,
+    r: number,
+    paint: Paint
+  ): SVGCircleElement => {
+    const ring = document.createElementNS(SVG, "circle");
+    ring.setAttribute("cx", String(cx));
+    ring.setAttribute("cy", String(cy));
+    ring.setAttribute("r", String(r));
+    ring.setAttribute("fill", paint.attn);
+    ring.setAttribute("data-echo", "");
+    ring.style.opacity = "0";
+    ring.style.transformBox = "fill-box";
+    ring.style.transformOrigin = "center";
+    const now = performance.now();
+    const started = echoed.get(id) ?? now;
+    echoed.set(id, started);
+    const spent = now - started;
+    if (motionOk() && spent < paint.loop * ECHOES) {
+      const echo = ring.animate(
+        [
+          { opacity: 1, transform: "scale(1)" },
+          { opacity: 0, transform: "scale(2)", offset: 0.75 },
+          { opacity: 0, transform: "scale(2)" },
+        ],
+        { duration: paint.loop, iterations: ECHOES, easing: paint.ease }
+      );
+      echo.currentTime = spent;
+    }
+    return ring;
   };
 
   /** A pin's pill, pressable, at `pill`; resting on it chooses its element and asks for its peek. */
@@ -712,26 +818,36 @@ export function startPins(deps: PinsDeps): Pins {
     return g;
   };
 
-  /** Writes the pins found again by their source, text or the page, and moves aside those no anchor finds. */
-  const settle = (moves: Pin[], gone: Pin[]) => {
-    if (moves.length === 0 && gone.length === 0) {
+  /**
+   * Writes the pins found again by their source, text or the page, and moves
+   * aside those no anchor finds; never one the doc holds deleted (core
+   * `goneOf`), nor one gone from the doc since it was read.
+   */
+  const settle = (moves: Pin[], missing: Pin[]) => {
+    const pins = pinsMap();
+    const buried = tombstonesOf(artifact.doc());
+    const stillHeld = (pin: Pin) => pins.has(pin.id) && !buried.has(pin.id);
+    const found = moves.filter(stillHeld);
+    const aside = missing.filter(stillHeld);
+    if (found.length === 0 && aside.length === 0) {
       return;
     }
-    const pins = pinsMap();
     const at = new Date().toISOString();
     artifact.doc().transact(() => {
-      for (const pin of moves) {
+      for (const pin of found) {
         pins.set(pin.id, pin);
       }
-      for (const pin of gone) {
+      for (const pin of aside) {
         pins.set(pin.id, { ...pin, movedAt: at });
       }
     });
   };
 
-  /** Whether a pin no anchor finds is gone, not waiting on a frame still loading. */
+  /** Whether a pin no anchor finds is missing, not waiting on a frame still loading. */
   const goneFrom = (pin: Pin) =>
     !("selector" in pin.anchor && deps.waiting(pin.anchor));
+  /** How long each pin has stood missing: one is gone only after a while, the page drawn again then. */
+  const absent = absences(() => draw());
 
   /** Stacks the pills that meet ({@link meetingGroups}, {@link drawStack}). */
   const stack = (into: SVGSVGElement, drawn: DrawnPill[], paint: Paint) => {
@@ -750,9 +866,13 @@ export function startPins(deps: PinsDeps): Pins {
     }
   };
 
-  /** Places each pin on the page, drawing a pill for each its frames show; answers those that are gone. */
+  /**
+   * Places each pin on the page, drawing a pill for each its frames show;
+   * answers those that are gone: no anchor finds them, no frame they stand
+   * in is loading, and they have stood so for a while ({@link absences}).
+   */
   const placeAll = (all: Pin[], paint: Paint): Pin[] => {
-    const gone: Pin[] = [];
+    const missing: Pin[] = [];
     // A resolved pin stands on the page only while its thread is open.
     const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
     const drawn: DrawnPill[] = [];
@@ -760,9 +880,7 @@ export function startPins(deps: PinsDeps): Pins {
     for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
       const where = standing(pin);
       if (!where) {
-        if (goneFrom(pin)) {
-          gone.push(pin);
-        }
+        missing.push(pin);
         continue;
       }
       const pill = pillAt(where, pillWidth(String(pin.number), paint), paint);
@@ -778,7 +896,14 @@ export function startPins(deps: PinsDeps): Pins {
     }
     stack(layer, drawn, paint);
     stack(fixed, drawnFixed, paint);
-    return gone;
+    return goneOf(missing);
+  };
+
+  /** Of the pins no anchor finds now, those gone: no frame they stand in loading, and missing a while ({@link absences}). */
+  const goneOf = (missing: Pin[]): Pin[] => {
+    const waited = missing.filter(goneFrom);
+    absent.keep(waited.map((pin) => pin.id));
+    return waited.filter((pin) => absent.missed(pin.id));
   };
 
   /** The comment being written, drawn as its hollow pill with no number. */
@@ -798,8 +923,15 @@ export function startPins(deps: PinsDeps): Pins {
             shown: true,
           }
         : null;
-    } else if (drafted.el.isConnected) {
-      where = standingOn(drafted.el, drafted.point);
+    } else {
+      // The page drew its element again: the pill stands on the one there now.
+      const now = drafted.el.isConnected ? null : deps.redraft();
+      if (now) {
+        drafted = { ...now };
+      }
+      if (drafted.el.isConnected) {
+        where = standingOn(drafted.el, drafted.point);
+      }
     }
     if (!where) {
       drafted.standing = undefined;
@@ -811,7 +943,50 @@ export function startPins(deps: PinsDeps): Pins {
     drafted.pill = pill;
     const g = pillShape(null, pill, paint);
     g.setAttribute("data-pin", "new");
+    if (drafted.parked) {
+      parkedPill(g, pill, paint);
+    }
     (where.page ? fixed : layer).append(g);
+  };
+
+  /**
+   * A parked draft's pill (The Work Outlives Its Surface Rule): hollow at its
+   * target as it stood while written, an ellipsis in the action ink saying
+   * it holds words not yet sent, and one press (a finger's 44px) opens its
+   * composer again with them.
+   */
+  const parkedPill = (g: SVGGElement, pill: Pill, paint: Paint) => {
+    const { box } = pill;
+    g.setAttribute("data-parked", "");
+    g.setAttribute("data-pin-id", DRAFT_PIN);
+    g.style.pointerEvents = "auto";
+    g.style.cursor = "pointer";
+    const name = document.createElementNS(SVG, "title");
+    name.textContent = "Draft comment, not sent";
+    const dots = document.createElementNS(SVG, "text");
+    dots.setAttribute("x", String(box.x + box.w / 2));
+    dots.setAttribute("y", String(box.y + box.h / 2));
+    dots.setAttribute("text-anchor", "middle");
+    dots.setAttribute("dominant-baseline", "central");
+    dots.setAttribute("fill", paint.action);
+    dots.style.font = paint.font;
+    dots.style.userSelect = "none";
+    dots.textContent = "…";
+    const reach = Math.max(0, (FINGER - box.h) / 2);
+    const area = coarse() ? grow(box, reach) : grow(box, RING);
+    const hit = document.createElementNS(SVG, "rect");
+    hit.setAttribute("x", String(area.x));
+    hit.setAttribute("y", String(area.y));
+    hit.setAttribute("width", String(area.w));
+    hit.setAttribute("height", String(area.h));
+    hit.setAttribute("fill", "transparent");
+    g.prepend(hit);
+    g.append(name, dots);
+    g.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      open(DRAFT_PIN);
+    });
   };
 
   function draw() {
@@ -824,10 +999,16 @@ export function startPins(deps: PinsDeps): Pins {
       return;
     }
     const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
-    fitToPage(layer, all.length > 0 || !!drafted);
-    const paint = paintOf();
-    const gone = placeAll(all, paint);
-    drawDraft(paint);
+    const drawing = all.length > 0 || !!drafted;
+    fitToPage(layer, drawing);
+    // The paint is read off the page's style, which forces its style and
+    // layout there and then: a page with no pins is not made to pay for it.
+    let gone: Pin[] = [];
+    if (drawing) {
+      const paint = paintOf();
+      gone = placeAll(all, paint);
+      drawDraft(paint);
+    }
     if (settled()) {
       settle(reanchor(all), gone);
     }
@@ -996,12 +1177,16 @@ export function startPins(deps: PinsDeps): Pins {
       if (pin.ink) {
         const box = deps.groupBox(pin.ink);
         return box
-          ? { box: padded(box), look: `ink:${pin.ink}:${JSON.stringify(box)}` }
+          ? {
+              box: padded(box),
+              el: null,
+              look: `ink:${pin.ink}:${JSON.stringify(box)}`,
+            }
           : null;
       }
       if (where.page) {
         const box = viewport();
-        return { box, look: `page:${JSON.stringify(box)}` };
+        return { box, el: null, look: `page:${JSON.stringify(box)}` };
       }
       if (!where.el) {
         return null;
@@ -1009,6 +1194,7 @@ export function startPins(deps: PinsDeps): Pins {
       const box = roundPoint(pageBox(where.el), where.at);
       return {
         box: padded(box),
+        el: where.el,
         look: `pin:${JSON.stringify(box)}`,
       };
     },
@@ -1087,6 +1273,12 @@ export function startPins(deps: PinsDeps): Pins {
       }
       live = working;
       unread = answered;
+      // An answer read is done echoing: a new one on that pin echoes afresh.
+      for (const id of [...echoed.keys()]) {
+        if (!unread.has(id) || live.has(id)) {
+          echoed.delete(id);
+        }
+      }
       draw();
     },
     track: (id) => {

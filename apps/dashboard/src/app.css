@@ -120,6 +120,16 @@
   [data-vaul-drawer][data-state="closed"] {
     animation-fill-mode: forwards;
   }
+  /* The New Session sheet leaves on the house's exit (The Fast Exit Rule)
+     rather than vaul's half second. Here, on its closed state, and never in
+     its `style`: a style attribute that changes as it closes is written
+     whole, which wiped the transform vaul writes on the sheet while a finger
+     drags it, so a sheet swiped down jumped back up before it slid out
+     (spawn/NewSessionDialog, probe parked-start). */
+  [data-vaul-drawer][data-ns-dialog][data-state="closed"] {
+    animation-duration: var(--dur-exit);
+    animation-timing-function: var(--ease-out);
+  }
   /* A closing drawer and its scrim let presses through to the page, as a
      closing dialog's and sheet's do (floating-presence `pressable`): vaul
      draws both through bits-ui with `pointer-events: auto` inline, which
@@ -177,24 +187,10 @@
    class from the markup that hosts them. Each is anchored on the host's own
    hook. */
 @layer components {
-  /* A joined row's duotone glyph: its status layer at the glyph's own
-     opacity (the icon's paths carry `opacity`, which no class reaches). */
-  [data-slot="glyph"] svg[data-duo] [opacity] {
-    opacity: var(--glyph-duo-status-opacity);
-  }
-
-  /* Svelte Flow's node and handle (the decisions graph): a card new to the
-     graph fades up where it lands, and the handles the edges need stay as
-     1px points nobody can grab. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="decision-graph"] .svelte-flow__node-decision {
-      transition: opacity var(--dur-fade) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
-    }
-  }
+  /* Svelte Flow's handles (the decisions graph): the handles the edges need
+     stay as 1px points nobody can grab. A card new to the graph fades up
+     where it lands in script (DecisionNode, motion `appearOnMount`), never
+     by `@starting-style`, which WebKit sometimes skips. */
   [data-slot="decision-node"] .svelte-flow__handle {
     inline-size: 1px;
     block-size: 1px;
@@ -1045,18 +1041,13 @@
 }
 
 /* ---- The Canvas view's cards (Svelte Flow's nodes): once placed, a card
-   the layout moves eases to its new place; a card new to the canvas fades
-   in where it lands. */
+   the layout moves eases to its new place. A card new to the canvas fades in
+   where it lands in script (TaskNode, motion `appearOnMount`), never by
+   `@starting-style`, which WebKit sometimes skips. */
 @layer components {
   @media (prefers-reduced-motion: no-preference) {
     [data-slot="view-canvas"][data-settled] .svelte-flow__node {
-      transition:
-        transform var(--dur-panel) var(--ease-in-out),
-        opacity var(--dur-fade) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
+      transition: transform var(--dur-panel) var(--ease-in-out);
     }
   }
 }

@@ -4,8 +4,10 @@
  *
  * - Status: the hub and the machines, in one line.
  * - Needs you: every ask parked on the operator (a session's permission or
- *   question, a workflow run's question), longest wait first by the moment
- *   the hub parked it (`raisedAt`), so every device lists them alike.
+ *   question, a workflow run's question), every card of kind `you`, and
+ *   every artifact waiting on the operator (core artifact-needs.ts),
+ *   longest wait first by the moment the hub raised it (`raisedAt`), so
+ *   every device lists them alike.
  * - Working: sessions mid-turn, with what each is doing now.
  * - Finished: sessions whose turn ended, or that failed, since this device
  *   last opened them (the `finished` choice).
@@ -14,8 +16,11 @@
  */
 import type {
   ApprovedActionView,
+  ArtifactKind,
+  ArtifactReason,
+  ArtifactStop,
   FleetWatchNotice,
-  LocalName,
+  Install,
   NeutralSessionInfo,
   PairingRequest,
   ProjectCap,
@@ -26,8 +31,8 @@ import type {
 } from "@cawco/core";
 import {
   archiveRefusal,
-  localNameWords,
   machineLabel,
+  presenceWords,
   projectsFor,
   questionsOf,
   STREAM_RELAY_WORDS,
@@ -44,8 +49,10 @@ import {
   isFailed,
   isStale,
 } from "../client.svelte";
-import { buildConvergence } from "../convergence";
+import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
+import { buildConvergence, machineSync, syncNotice } from "../convergence";
 import { machineFaults } from "../fleet-faults";
+import { harnessWords, machineBlocksOf } from "../harness-block.svelte";
 import { hubAuth } from "../hub-auth.svelte";
 import {
   catalogTitle,
@@ -57,6 +64,8 @@ import {
 import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
+import { notices } from "../notices.svelte";
+import { asksHere, deskAsks, person } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -401,16 +410,20 @@ export interface TailnetItem {
 }
 
 /**
- * The hub's `.local` name typed in a browser, while Linux keeps port 80 from
- * the hub (core local-name.ts): one step, the command that lets it. The hub
- * tries again on its own; once the port is held the row ticks (`done`) for
- * a moment, then leaves.
+ * This browser telling CawCo when the person is at this computer (Chromium's
+ * Idle Detection) and showing what needs them as a desktop notification
+ * (presence.ts), while either is still to ask (person.svelte.ts `deskAsks`) and
+ * the row wasn't put away with Skip: its notice names the site settings it
+ * asks for and what changes, Allow asks the browser for them. Once allowed
+ * the row ticks (`done`) for a moment, then leaves. `idle` and `notify`:
+ * what it asks for.
  */
-export interface LocalNameItem {
+export interface DeskItem {
   done: boolean;
+  idle: boolean;
   key: string;
-  kind: "local-name";
-  localName: LocalName & { name: string };
+  kind: "desk";
+  notify: boolean;
   place: string;
   raisedAt: undefined;
   title: string;
@@ -459,6 +472,20 @@ export interface AdmissionItem {
 }
 
 /**
+ * An install of a machine that failed or was lost (hub installs.ts): it
+ * opens Add machine's window on its outcome, where it is acted on.
+ */
+export interface InstallItem {
+  href: string;
+  install: Install;
+  key: string;
+  kind: "install";
+  place: string;
+  raisedAt: number;
+  title: string;
+}
+
+/**
  * A project's task waiting on you, as the hub says (its stage is of kind
  * `you`, or its last session failed): it opens the task, its deliverable and
  * the way to act on it first.
@@ -480,7 +507,48 @@ export interface TaskItem {
   title: string;
 }
 
+/**
+ * An artifact waiting on you (core artifact-needs.ts): a page to pick on, a
+ * canvas or component canvas to judge, picks or comments written and not
+ * sent, an agent's answer on a pin not looked at. It opens its session with
+ * the artifact in its panel at its first pending stop; its Send sends what
+ * is unsent; its Not now puts it away until it is raised again.
+ */
+export interface ArtifactItem {
+  artifactId: string;
+  artifactKind: ArtifactKind;
+  /** Where the session runs: its mark's hue, the seed every list uses. */
+  cwd: string;
+  /** Opens its session with the artifact in its panel at `stop`. */
+  href: string;
+  /** The session whose panel holds it. */
+  instanceId: string;
+  key: string;
+  kind: "artifact";
+  /** Its machine: the name the fleet gives it and the daemon's `platform-arch` fingerprint (OsMark). */
+  machine: { name: string; os: string };
+  machineId: string;
+  /** Its name, as its panel and Files name it. */
+  name: string;
+  /** The notice id its Not now acknowledges. */
+  notNow: string;
+  /** Its reasons, strongest first. */
+  pending: ArtifactReason[];
+  place: string;
+  /** The project it runs in, named as the rail names it, with its mark's hue; null outside any. */
+  project: ProjectMarking | null;
+  raisedAt: number;
+  /** Its machine is offline: it still stands, and Send waits for it. */
+  stale: boolean;
+  stop: ArtifactStop;
+  /** Its ask: what the person does there, in their words. */
+  title: string;
+  /** What Send sends now. */
+  unsent: number;
+}
+
 export type NeedsItem =
+  | ArtifactItem
   | AskItem
   | RunItem
   | CapItem
@@ -488,10 +556,11 @@ export type NeedsItem =
   | WatchItem
   | ChoiceItem
   | TailnetItem
-  | LocalNameItem
+  | DeskItem
   | RelayItem
   | PairingItem
   | AdmissionItem
+  | InstallItem
   | TaskItem;
 
 /**
@@ -815,6 +884,21 @@ export interface MachineException {
 function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (machine.status !== "online") {
     return "unreachable";
+  }
+  // A machine that never synced, or whose last sync failed or went
+  // unanswered, says so first: until one lands it knows no fleet denials
+  // and starts nothing, whatever its harnesses say; with an older report it
+  // runs on what that report says.
+  const sync = syncNotice(machineSync(machine, clock.now), span);
+  if (sync) {
+    return sync;
+  }
+  // A harness CLI refused here: nothing of it starts on the machine until it
+  // is brought up, from its block or Configure → CLI tools. Each one said:
+  // one never hides another.
+  const blocked = machineBlocksOf(machine);
+  if (blocked.length > 0) {
+    return blocked.map(harnessWords.row).join(" · ");
   }
   // Every harness's sign-in words: one never hides another's.
   const signIn = [
@@ -1177,19 +1261,23 @@ class Home {
             },
           ]
         : [];
-    // Port 80 for the hub's `.local` name: its step while it stands, its tick a moment after.
-    const local = cawco.localName;
-    const named: NeedsItem[] =
-      local?.name &&
-      (local.state === "needs" ||
-        (local.state === "serving" && cawco.localNameTicked))
+    // This browser's presence: its step while something is still to ask,
+    // its tick a moment after; a press's refusal stands on it until Skip.
+    // While a press stands, the row says what that press asked for.
+    const ask = person.asked ?? deskAsks();
+    const desk: NeedsItem[] =
+      person.permissions &&
+      (asksHere() ||
+        person.ticked ||
+        (!person.skipped && person.refusal?.blocked))
         ? [
             {
-              kind: "local-name",
-              key: "local-name:port-80",
-              localName: { ...local, name: local.name },
-              done: local.state === "serving",
-              title: localNameWords.title(local.name),
+              kind: "desk",
+              key: "desk:this-browser",
+              idle: ask.idle,
+              notify: ask.notify,
+              done: person.ticked,
+              title: presenceWords.title(ask.idle),
               place: "Onboarding",
               raisedAt: undefined,
             },
@@ -1231,6 +1319,18 @@ class Home {
       href: "/config/devices",
       raisedAt: machine.since,
     }));
+    // An install that ended badly needs the person: its window says what to do.
+    const failedInstalls: NeedsItem[] = connect.band
+      .filter((one) => one.state === "failed" || one.state === "lost")
+      .map((one) => ({
+        kind: "install" as const,
+        key: `install:${one.id}`,
+        install: one,
+        title: one.target || one.hostname || "New machine",
+        place: "",
+        href: `?${INSTALL_PARAM}=${encodeURIComponent(one.id)}`,
+        raisedAt: one.endedAt ?? one.startedAt,
+      }));
     const waitingTasks: NeedsItem[] = cawco.projects.flatMap((project) =>
       (this.#waiting[project.id] ?? []).map((task) => ({
         kind: "task" as const,
@@ -1245,19 +1345,57 @@ class Home {
         raisedAt: task.updatedAt,
       }))
     );
+    // The artifacts waiting on you, each under its session as an ask is;
+    // one put away with Not now (the hub's `parked`, and here at once its
+    // acknowledged id) waits in Files until it is raised again.
+    const artifacts: NeedsItem[] = cawco.artifactNeeds
+      .filter((need) => !(need.parked || notices.seen.has(need.notNow)))
+      .map((need) => {
+        const row = cawco.instanceIndex.byId.get(need.instanceId);
+        const top = row ? topsIn(cawco.instanceIndex.byId)(row) : undefined;
+        const machine = cawco.machines.find(
+          (one) => one.machineId === need.machineId
+        );
+        return {
+          kind: "artifact" as const,
+          key: `artifact:${need.artifactId}`,
+          artifactId: need.artifactId,
+          artifactKind: need.artifactKind,
+          instanceId: need.instanceId,
+          machineId: need.machineId,
+          cwd: row?.cwd ?? "",
+          title: need.ask,
+          name: need.name,
+          pending: need.pending,
+          stop: need.stop,
+          unsent: need.unsent,
+          notNow: need.notNow,
+          raisedAt: need.raisedAt,
+          href: need.href,
+          place: row ? placeOfRow(row) : machineName(need.machineId),
+          project: top ? projectAt(top.machineId, top.cwd) : null,
+          machine: {
+            name: machineName(need.machineId),
+            os: machine?.os ?? "",
+          },
+          stale: machine?.status !== "online",
+        };
+      });
     // Longest wait first; an ask the hub has not stamped sorts last.
     return [
       ...asks,
+      ...artifacts,
       ...runs,
       ...caps,
       ...actions,
       ...watched,
       ...unanswered,
       ...secured,
-      ...named,
+      ...desk,
       ...relaying,
       ...pairings,
       ...admissions,
+      ...failedInstalls,
       ...waitingTasks,
     ].sort(
       (a, b) =>
@@ -1559,9 +1697,14 @@ class Home {
    * its row is on its way out.
    */
   readonly landing = $derived.by<string | null>(() => {
-    const ask = this.needs.find((item) => item.kind === "ask");
-    if (ask?.kind === "ask") {
-      return askView(ask);
+    const waiting = this.needs.find(
+      (item) => item.kind === "ask" || item.kind === "artifact"
+    );
+    if (waiting?.kind === "ask") {
+      return askView(waiting);
+    }
+    if (waiting?.kind === "artifact") {
+      return waiting.instanceId;
     }
     const cancelled = new Set(
       cawco.moves

@@ -10,14 +10,14 @@
   at once.
 -->
 <script lang="ts">
+  import { commentWords as said } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
+  import { pinName } from "@cawco/core/pin-name";
   import { IconAgent, IconPaperclip } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { frameObserver } from "../frame-observer";
   import { dur, easeOut, motionOk, numberOf } from "../motion/curves.svelte";
   import { attachedTo, lastActivity } from "./comment-rows";
-  import { commentWords as said } from "./comment-words";
-  import { pinName } from "./pin-name";
 
   let {
     pin,

@@ -26,6 +26,7 @@
    */
   import {
     CAW_NO_MACHINE,
+    connectWords,
     delegateTypesWords,
     mcpWords,
     memoryWords,
@@ -78,7 +79,11 @@
 </script>
 
 {#snippet addMachine()}
-  <Button aria-haspopup="dialog" label="Add machine" variant="outline" />
+  <Button
+    aria-haspopup="dialog"
+    label={connectWords.addMachine}
+    variant="outline"
+  />
 {/snippet}
 
 {#snippet createRoutine()}

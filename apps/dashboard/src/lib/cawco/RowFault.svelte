@@ -16,6 +16,10 @@
    * details beside the reason unfolds it under the line, in the figure
    * face, and Hide details folds it away.
    *
+   * `command`: the way out as a command to run, drawn apart from the reason
+   * in its own well with Copy (`copyLabel` names it), whole and wrapped,
+   * so it is read and copied as it is, never followed by a sentence's stop.
+   *
    * It unfolds and folds on its own `{#if}` (motion/fold, `unfold`): mounted
    * already holding a fault (a list row arriving), it stands still and the
    * list's own motion carries it.
@@ -24,10 +28,11 @@
    * row above (`--fault-indent`, `--fault-end`); a host that sets those for
    * every row inside it passes neither.
    */
-  import { configureWords } from "@cawco/core";
+  import { configureWords, shellWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   import { IconRefresh } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import { unfold } from "./motion/fold.svelte";
@@ -40,6 +45,8 @@
     class: className,
     children,
     details,
+    command,
+    copyLabel = "Copy",
     indent,
     end,
     ...rest
@@ -48,6 +55,10 @@
     reason?: string | null;
     /** What refused it, word for word, folded under Show details. */
     details?: string | null;
+    /** The command that fixes it, in its own well with Copy. */
+    command?: string | null;
+    /** Copy's name for a screen reader. */
+    copyLabel?: string;
     /** The way on: run the action again. */
     again?: () => unknown;
     againLabel?: string;
@@ -124,7 +135,7 @@
             aria-controls={detailsId}
             aria-expanded={shown}
             class="flex-none"
-            label={shown ? "Hide details" : "Show details"}
+            label={shown ? shellWords.hideDetails : shellWords.showDetails}
             onclick={() => {
               shown = !shown;
             }}
@@ -146,6 +157,24 @@
           />
         {/if}
       </div>
+      {#if command}
+        <div
+          data-slot="command"
+          class="ms-(--fault-indent) me-(--fault-end) mb-space-1 flex min-w-0 items-start gap-space-2 rounded-well border border-border-well bg-surface-well py-space-1 ps-space-3 pe-space-1"
+        >
+          <code
+            class="min-w-0 flex-1 py-space-1 font-mono type-code text-ink-strong whitespace-pre-wrap wrap-anywhere"
+            >{command}</code
+          >
+          <CopyButton
+            aria-label={copyLabel}
+            class="flex-none"
+            size="xs"
+            text={command}
+            variant="ghost">Copy</CopyButton
+          >
+        </div>
+      {/if}
       {#if details && shown}
         <p
           id={detailsId}

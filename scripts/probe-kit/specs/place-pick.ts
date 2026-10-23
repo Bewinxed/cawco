@@ -37,6 +37,7 @@ import {
   machineLabel,
   placePickWords as pickWords,
 } from "../../../packages/core/src/index";
+import { placePickWords } from "../../../packages/core/src/words/place";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   type Kit,
@@ -164,7 +165,7 @@ const pick = async (
 ) => {
   const frame = page.frameLocator('iframe[title="Preview"]');
   await pressIn(frame, "[data-pick]");
-  const form = page.getByRole("form", { name: "Pick a machine and folder" });
+  const form = page.getByRole("form", { name: placePickWords.title });
   await form.waitFor({ timeout: 15_000 });
   const select = form.locator('[data-slot="select-trigger"]');
   const opened = (await select.innerText()).trim();
@@ -181,7 +182,7 @@ const pick = async (
   await field.pressSequentially(folder, { delay: 5 });
   await settle(page);
   const trigger = (await select.innerText()).trim();
-  await form.getByRole("button", { name: "Use this place" }).click();
+  await form.getByRole("button", { name: placePickWords.use }).click();
   const held = await until(
     "the place on the hub",
     read,
@@ -228,7 +229,11 @@ const run = async (kit: Kit) => {
   const call = async (tool: string, input: object): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, { name: tool, input });
+    asks.set(marker, {
+      name: tool,
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      input: { response_format: "detailed", ...input },
+    });
     await fleet.send(session, `PROBE-CALL:${marker}`);
     return (await until(
       `the ${tool} call (${marker})`,

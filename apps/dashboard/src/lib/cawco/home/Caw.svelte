@@ -2,19 +2,9 @@
   import type { Rive } from "@rive-app/canvas";
   import riveWasm from "@rive-app/canvas/rive.wasm?url";
   import rests from "../../../../../../assets/mascot/loops/rests.json";
+  import type { CawStatus } from "./caw-status";
 
-  /** What Caw shows. Each status is its own file, assets/mascot/caw/<status>.riv. */
-  export type CawStatus =
-    | "ready"
-    | "working"
-    | "needs-you"
-    | "idle"
-    | "done"
-    | "trying"
-    | "loading"
-    | "reconnecting"
-    | "sleeping"
-    | "compacted";
+  export type { CawStatus } from "./caw-status";
 
   /**
    * A New project template card's Caw, with the template's prop: a rest,

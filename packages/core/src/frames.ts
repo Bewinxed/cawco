@@ -784,17 +784,6 @@ export interface TailnetHttpsFrame {
 }
 
 /**
- * Hub-originated: the hub's `.local` name typed in a browser changed state
- * (hub local-name.ts): port 80 came to need the person, they let it, or the
- * name came or went. Its onboarding row in Needs you follows.
- */
-export interface LocalNameFrame {
-  instanceId?: undefined;
-  kind: "local.name";
-  localName: import("./local-name").LocalName;
-}
-
-/**
  * Hub-originated: a download at the hub began (`fetching`) or landed. A fetch
  * runs after the request that asked for it has answered, so this is how
  * every dashboard learns what came of it. Exactly one of the four is set:
@@ -814,7 +803,10 @@ export interface FleetFetchFrame {
   link?: MarketplaceLink;
   marketplace?: MarketplaceRead;
   plugin?: FleetPlugin;
-  /** The row was removed while it was fetched; its `error` says so. */
+  /**
+   * The row was removed while it was fetched; its `error` says so. With
+   * `link`: a refused link was let go, and leaves the list.
+   */
   removed?: boolean;
   skill?: FleetSkillMeta;
 }

@@ -1092,7 +1092,7 @@ export function patchFiles(patch: string): FileChange[] {
   return files;
 }
 
-/** What a fleet memory call answered with, read off the hub's JSON. */
+/** What a fleet memory call answered with, read off the hub's JSON or its words. */
 export type MemoryResult =
   | {
       kind: "doc";
@@ -1105,6 +1105,11 @@ export type MemoryResult =
       kind: "docs";
       docs: { content: string; path: string; updatedAt?: string }[];
     }
+  /**
+   * A listing in words: the documents by path alone. What each held at the
+   * call is the hub's record of versions (the card reads it by the call's time).
+   */
+  | { kind: "listed"; paths: string[] }
   /** A write's answer: what it saved, by hash and time, never the text back. */
   | { kind: "saved"; hash: string; updatedAt?: string }
   | { kind: "none" };
@@ -1136,14 +1141,85 @@ function memoryDoc(value: unknown): MemoryResult {
   };
 }
 
-/** `get` answers `{memory}`, `list_docs` `{docs}`, and `set`/`set_doc` what they saved (`{hash, updatedAt, lines, bytes}`). */
+const plural = (n: number, one: string): string =>
+  `${n} ${one}${n === 1 ? "" : "s"}`;
+
+/**
+ * What an agent reads from an `admin_memory_read` get (hub
+ * presenters/fleet-settings.ts): this head, then the document whole. The
+ * memory card reads the document back from the same words.
+ */
+export const memoryReadHead = (docs: number, handle: string): string =>
+  `The fleet's CLAUDE.md, ${plural(docs, "linked document")}; a write's expectedHash takes ${handle}:`;
+
+/** What an agent reads from a memory write: what it kept, and the handle the next write takes. */
+export const memoryKeptWords = (kept: {
+  bytes: number;
+  handle: string;
+  lines: number;
+  path: string;
+}): string =>
+  `Kept ${kept.path}: ${plural(kept.lines, "line")}, ${kept.bytes} bytes; the next write's expectedHash takes ${kept.handle}.`;
+
+/** What an agent reads from a `list_docs` that found none. */
+export const NO_MEMORY_DOCS = "No memory documents.";
+
+/**
+ * What an agent reads from a `list_docs`: one line per document, its path
+ * first, then what the hub says of it (`about`). The card reads the paths.
+ */
+export const memoryListWords = (
+  docs: readonly { about: readonly string[]; path: string }[]
+): string =>
+  docs.length === 0
+    ? NO_MEMORY_DOCS
+    : [
+        `${plural(docs.length, "document")}; set_doc and remove_doc take the path:`,
+        ...docs.map((doc) => [`- ${doc.path}`, ...doc.about].join(" · ")),
+      ].join("\n");
+
+const MEMORY_READ =
+  /^The fleet's CLAUDE\.md, \d+ linked documents?; a write's expectedHash takes ([0-9a-f]+):(?:\n([\s\S]*))?$/;
+const MEMORY_KEPT =
+  /^Kept [^\n]+: \d+ lines?, \d+ bytes; the next write's expectedHash takes ([0-9a-f]+)\.$/;
+const MEMORY_LISTED =
+  /^\d+ documents?; set_doc and remove_doc take the path:((?:\n- [^\n]+)+)$/;
+const LISTED_LINE = /^- (.+?)(?: · |$)/;
+
+/** A memory call's answer in the words its agent read (`memoryReadHead`, `memoryListWords`, `memoryKeptWords`). */
+function memoryWords(text: string): MemoryResult {
+  const got = MEMORY_READ.exec(text);
+  if (got?.[1]) {
+    return { kind: "doc", content: got[2] ?? "", hash: got[1] };
+  }
+  if (text === NO_MEMORY_DOCS) {
+    return { kind: "listed", paths: [] };
+  }
+  const listed = MEMORY_LISTED.exec(text);
+  if (listed?.[1]) {
+    return {
+      kind: "listed",
+      paths: listed[1]
+        .split("\n")
+        .flatMap((line) => LISTED_LINE.exec(line)?.[1] ?? []),
+    };
+  }
+  const kept = MEMORY_KEPT.exec(text);
+  return kept?.[1] ? { kind: "saved", hash: kept[1] } : { kind: "none" };
+}
+
+/**
+ * `get` answers `{memory}`, `list_docs` `{docs}`, and `set`/`set_doc` what
+ * they saved (`{hash, updatedAt, lines, bytes}`), as JSON when the call asked
+ * for the detailed form; in words otherwise (`memoryWords`).
+ */
 export function memoryResult(raw: unknown): MemoryResult {
   let value: unknown = raw;
   if (typeof raw === "string") {
     try {
       value = JSON.parse(raw);
     } catch {
-      return { kind: "none" };
+      return memoryWords(raw);
     }
   }
   if (!isRecord(value)) {
@@ -1246,7 +1322,12 @@ function factOf(
     }
     case "memory-docs": {
       const parsed = memoryResult(output);
-      return parsed.kind === "docs" ? `${parsed.docs.length} docs` : undefined;
+      if (parsed.kind === "docs") {
+        return `${parsed.docs.length} docs`;
+      }
+      return parsed.kind === "listed"
+        ? `${parsed.paths.length} docs`
+        : undefined;
     }
     default:
       return undefined;
@@ -1542,8 +1623,13 @@ export function hasBody(
           return true;
         case "get":
           return memoryResult(raw).kind === "doc";
-        case "list_docs":
-          return memoryResult(raw).kind === "docs";
+        case "list_docs": {
+          const listed = memoryResult(raw);
+          return (
+            listed.kind === "docs" ||
+            (listed.kind === "listed" && listed.paths.length > 0)
+          );
+        }
         default:
           return false;
       }

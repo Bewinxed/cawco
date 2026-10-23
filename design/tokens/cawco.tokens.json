@@ -1298,6 +1298,20 @@
         }
       }
     },
+    "c-change-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.74976, -0.049533, 0.094227],
+        "alpha": 0.4
+      },
+      "$description": "The overlay's see-through done wash over what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): status-done-bg at 40%, never the opaque chip fill and never coral; drawn by the overlay over the element, not under it, so the element's words read through it.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.status-done-bg} 40%, transparent)"
+        }
+      }
+    },
     "brand-ink": {
       "$type": "color",
       "$value": "{color.coral-11}"
@@ -1799,7 +1813,7 @@
         "components": [0.993, 0.004, 85],
         "alpha": 0.6
       },
-      "$description": "The band of raised surface that crosses a skeleton once per loop.",
+      "$description": "The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse).",
       "$extensions": {
         "dev.cawco": {
           "css": "oklch(from {color.surface-raised} l c h / 0.6)"
@@ -4402,6 +4416,53 @@
       },
       "$description": "The New Session form as a popover at its trigger (the session strip's \"+\", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it (\"Opus 5.5 claude-opus-5-5\"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own."
     },
+    "c-step-rail-x": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "Add machine's step rail (connect/RunningStep): the connector's line stands on the middle of a step's 16px glyph.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.icon-md} / 2)"
+        }
+      }
+    },
+    "c-step-rail-top": {
+      "$type": "dimension",
+      "$value": {
+        "value": 23,
+        "unit": "px"
+      },
+      "$description": "Add machine's step rail: from a step's row top to its glyph's foot (the row's 30px, its glyph centred), where the connector to the next step starts.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc(({size.c-btn-h-sm} + {size.icon-md}) / 2)"
+        }
+      }
+    },
+    "c-step-rail-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 7,
+        "unit": "px"
+      },
+      "$description": "Add machine's step rail: from a step's foot to the next step's glyph top, where the connector ends (the room above a glyph centred in its 30px row).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc(({size.c-btn-h-sm} - {size.icon-md}) / 2)"
+        }
+      }
+    },
+    "c-connect-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 480,
+        "unit": "px"
+      },
+      "$description": "Add machine's raised body on the desk (the kit dialog's `connect` width, its tray's padding round it) and its output sheet: the width at which the command route's longest address row (a Tailscale name and \"anywhere on the tailnet\") and the install's one line stand on one line each in the label and code roles, so no step of the window wraps a row and its height ladder holds."
+    },
     "c-panel-w": {
       "$type": "dimension",
       "$value": {
@@ -4860,7 +4921,11 @@
       "$type": "dimension",
       "$value": "{size.c-row-mark}",
       "$description": "An inline chip's line (ui/chip `inline`): its label's line-height, the mark's own height, so no mark beside the label is taller than the label's line. Web only: the dashboard's inline chip recipe.",
-      "$extensions": { "dev.cawco": { "platforms": ["web"] } }
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
     },
     "c-inline-chip-pad": {
       "$type": "dimension",
@@ -4869,7 +4934,22 @@
         "unit": "px"
       },
       "$description": "An inline chip's fill past its line, above and below, given back by an equal negative margin: the chip draws 22px tall and lays out as its 18px line, inside any line of text from 13px up. Web only.",
-      "$extensions": { "dev.cawco": { "platforms": ["web"] } }
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "c-inline-chip-max-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 256,
+        "unit": "px"
+      },
+      "$description": "The most an inline chip's label stands across (a session, a pin, a decision card, an artifact, a task, a plan, any thing named in running text): past it the label ends in an ellipsis, its whole name in the chip's accessible name and its peek or card. An absolute length, never a percentage, so it bounds the chip's min-content too: in an auto-sized grid or flex track a percentage counts for nothing, and a long name claimed its whole nowrap width (a 390 page scrolled 660px sideways). 32ch: the most a line of chat reads as one name. Web only.",
+      "$extensions": {
+        "dev.cawco": { "platforms": ["web"], "css": "32ch" }
+      }
     },
     "c-peek-glyph": {
       "$type": "dimension",
@@ -7357,11 +7437,6 @@
   },
   "layer": {
     "$description": "The page's stacking roles, bottom to top (DESIGN.md, Elevation & Depth: Stacking). A role is used as `z-(--layer-<role>)`. Each stands 10 over the one under it, so a role can go between two without renumbering. Order inside one component (1 to 6, or -1) stays a plain number and is not a role.",
-    "layer-sticky": {
-      "$type": "number",
-      "$value": 10,
-      "$description": "A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome."
-    },
     "layer-band": {
       "$type": "number",
       "$value": 20,
@@ -7395,7 +7470,7 @@
     "layer-sheet": {
       "$type": "number",
       "$value": 80,
-      "$description": "The phone's preview sheet host (SideSheet): over every page layer, under the floating surfaces."
+      "$description": "A phone's sheet that is part of the page, holding nothing (no scrim, the page above it live): the preview sheet host (SideSheet) and Caw's panel on a project's page (CawFloat). Over every page layer, under the floating surfaces, so a menu or a sheet opened from the page stands over it."
     },
     "layer-sheet-stage": {
       "$type": "number",
@@ -7530,7 +7605,7 @@
     "ease-crossfade": {
       "$type": "cubicBezier",
       "$value": [0.42, 0, 0.58, 1],
-      "$description": "Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
+      "$description": "Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
     },
     "ease-arrive": {
       "$type": "cubicBezier",
@@ -7744,6 +7819,22 @@
       },
       "$description": "One turn of an ambient loop: spinner, pulse, ping."
     },
+    "dur-skeleton-pulse": {
+      "$type": "duration",
+      "$value": {
+        "value": 1000,
+        "unit": "ms"
+      },
+      "$description": "One pulse of a skeleton while it waits: its opacity from 1 down to --skeleton-pulse-floor and back, on --ease-crossfade, looping until what it stands for arrives. transitions.dev Skeleton loader and reveal, --pulse-dur: 1000ms (the owner's pick: \"transitions.dev exactly\")."
+    },
+    "dur-skeleton-reveal": {
+      "$type": "duration",
+      "$value": {
+        "value": 400,
+        "unit": "ms"
+      },
+      "$description": "A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms."
+    },
     "c-500": {
       "$type": "duration",
       "$value": {
@@ -7809,11 +7900,6 @@
       "$value": 0.8,
       "$description": "The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1)."
     },
-    "glyph-duo-status-opacity": {
-      "$type": "number",
-      "$value": 0.57,
-      "$description": "The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5."
-    },
     "account-week-mix": {
       "$type": "number",
       "$value": 0.32,
@@ -7846,6 +7932,19 @@
         "unit": "px"
       },
       "$description": "How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr."
+    },
+    "skeleton-pulse-floor": {
+      "$type": "number",
+      "$value": 0.5,
+      "$description": "The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5."
+    },
+    "skeleton-reveal-blur": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px."
     },
     "transition-control": {
       "$type": "transition",

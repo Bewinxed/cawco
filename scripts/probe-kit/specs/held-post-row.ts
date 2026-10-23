@@ -19,6 +19,9 @@
  *    `flex-shrink: 1`, the machine's OS mark lies inside the meta's box and
  *    the meta does not overflow (scrollWidth ≤ clientWidth + 1); at 320 the
  *    asker ellipsizes (scrollWidth > clientWidth).
+ * 3. Budget, a project past its daily cap: the row says "Reached its daily
+ *    budget · Caw paused", and nothing in it is a currency sign or a money
+ *    figure.
  *
  *   bun scripts/probe-kit/run.ts held-post-row
  */
@@ -34,6 +37,8 @@ const APP = join(ROOT, "apps/dashboard");
 const STORIES = "src/lib/cawco/home/NeedsCard.stories.ts";
 const LONG_TARGET =
   "some-organisation-with-a-long-name/an-equally-long-repository-name#98765";
+/** A currency sign, its code, or a figure with cents. */
+const MONEY = /[$€£¥]|\bUSD\b|\d+\.\d{2}\b/;
 
 /** A port nothing holds now. */
 const freePort = async (): Promise<number> => {
@@ -82,6 +87,7 @@ const readRow = (story: string) => {
     metaBox: box(meta),
     markBox: box(mark),
     metaScroll: meta ? meta.scrollWidth - meta.clientWidth : -1,
+    all: (row.textContent ?? "").replace(/\s+/g, " ").trim(),
   };
 };
 
@@ -190,6 +196,15 @@ const spec: Spec = {
           JSON.stringify(row)
         );
       }
+
+      // 3. A project past its budget says so in words, never the amount.
+      const budget = await read("Budget");
+      kit.check(
+        '3: Budget: the cap\'s row reads "Reached its daily budget · Caw paused", with no currency sign or money figure anywhere in the row',
+        budget?.want === "Reached its daily budget · Caw paused" &&
+          !MONEY.test(budget.all),
+        JSON.stringify(budget)
+      );
     } finally {
       stage.kill("SIGTERM");
     }

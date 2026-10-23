@@ -42,6 +42,8 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
+import { commonWords } from "../../../packages/core/src/words/common";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type Fleet, type Reply, until } from "../../scratch-fleet";
@@ -81,7 +83,7 @@ const WORDS = {
   refused: "Outbox probe refused by the hub",
 };
 /** The refused row's line (TurnViews.swift), in the hub's words. */
-const REFUSED_LINE = `Couldn't send that message. ${CLAUDE_CONVERSATION_GONE}`;
+const REFUSED_LINE = `${transcriptWords.notSent} ${CLAUDE_CONVERSATION_GONE}`;
 /** Long enough for the app to reconnect, and for a send it would make by itself to show. */
 const SETTLE_MS = 20_000;
 
@@ -446,7 +448,7 @@ async function refused(p: Probe): Promise<void> {
     },
     (all) =>
       all.some((label) => label.includes(REFUSED_LINE)) &&
-      all.includes("Send again"),
+      all.includes(commonWords.sendAgain),
     30_000
   ).catch(() => undefined);
   if (!says) {

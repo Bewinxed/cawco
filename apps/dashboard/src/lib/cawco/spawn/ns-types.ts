@@ -33,6 +33,8 @@ export interface MachineItem {
 export interface ProjectItem {
   hue: string;
   id: string;
+  /** The machine's name, when the list is every machine's (no machine chosen yet). */
+  machine?: string;
   machineId: string;
   name: string;
   path: string;

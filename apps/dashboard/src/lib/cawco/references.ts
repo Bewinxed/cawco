@@ -6,21 +6,57 @@
  * that list, so a kind without its entry fails the type check.
  *
  * What a written link draws as (`referenceOf`): a known kind naming
- * something the dashboard holds or the hub names is that kind's element; a
- * `cawco:` link of any other kind, or naming nothing (or while the hub is
- * asked), is its label alone; any other destination is a link.
+ * something the dashboard holds or the hub names is that kind's element,
+ * given the link's written label (what it falls back to while the doc it
+ * reads isn't held); a `cawco:` link of any other kind, or naming nothing
+ * (or while the hub is asked), is its label alone; any other destination is
+ * a link.
  */
-import { parseReference, type ReferenceKind } from "@cawco/core";
+import {
+  decisionReference,
+  parseReference,
+  pinReference,
+  type ReferenceKind,
+} from "@cawco/core";
 import type { Component } from "svelte";
+import ArtifactReference from "./ArtifactReference.svelte";
+import { artifactNamed } from "./artifact-names.svelte";
+import DecisionReference from "./DecisionReference.svelte";
+import PinReference from "./PinReference.svelte";
+import { type ThingKind, thingNamed } from "./reference-things.svelte";
 import SessionReference from "./SessionReference.svelte";
 import { sessionNamed } from "./session-names.svelte";
+import ThingReference from "./ThingReference.svelte";
+
+/** What an element is given: the id `find` answered, its kind, and the link's written label. */
+interface ElementProps {
+  id: string;
+  kind: ReferenceKind;
+  label?: string;
+}
 
 interface ReferenceElement {
-  /** What draws it, given the id `find` answered. */
-  readonly element: Component<{ id: string }>;
+  /** What draws it. */
+  readonly element: Component<ElementProps>;
   /** The id as the dashboard holds it, or null when it holds none by that id. */
   find: (id: string) => string | null;
 }
+
+/**
+ * A task, a to-do, a plan, a step, a routine, a workflow or its run, a
+ * project or a machine (reference-things.svelte.ts): drawn as its chip
+ * (ThingReference) once the dashboard holds it or the hub named it.
+ */
+const thing = (kind: ThingKind): ReferenceElement => ({
+  find: (id) => (thingNamed(kind, id) ? id : null),
+  get element() {
+    return ThingReference as unknown as Component<ElementProps>;
+  },
+});
+
+/** An id whose artifact part the dashboard holds or the hub names; null while it is asked, and when it names none. */
+const ofArtifact = (id: string, artifact: string | undefined): string | null =>
+  artifact && artifactNamed(artifact) ? id : null;
 
 export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
   /**
@@ -38,7 +74,43 @@ export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
       return SessionReference;
     },
   },
+  /** A pin, by its artifact and number (`<artifact>/<number>`): its artifact held or named (artifact-names.svelte.ts). */
+  pin: {
+    find: (id) => ofArtifact(id, pinReference(id)?.artifact),
+    get element() {
+      return PinReference;
+    },
+  },
+  /** A decision card, by its artifact and id (`<artifact>/<card>`). */
+  decision: {
+    find: (id) => ofArtifact(id, decisionReference(id)?.artifact),
+    get element() {
+      return DecisionReference;
+    },
+  },
+  /** An artifact, by its id. */
+  artifact: {
+    find: (id) => ofArtifact(id, id),
+    get element() {
+      return ArtifactReference;
+    },
+  },
+  task: thing("task"),
+  todo: thing("todo"),
+  plan: thing("plan"),
+  step: thing("step"),
+  routine: thing("routine"),
+  workflow: thing("workflow"),
+  project: thing("project"),
+  machine: thing("machine"),
 };
+
+/** A backslash escape in a link's label (core `referenceLink` writes them). */
+const ESCAPED = /\\([\\[\]])/g;
+
+/** A link's label as written, its escapes read: what an element falls back to. */
+export const writtenLabel = (text: string | undefined): string =>
+  (text ?? "").replace(ESCAPED, "$1");
 
 const isKind = (kind: string): kind is ReferenceKind =>
   Object.hasOwn(REFERENCE_ELEMENTS, kind);
@@ -46,7 +118,12 @@ const isKind = (kind: string): kind is ReferenceKind =>
 export type Drawn =
   | { draw: "link" }
   | { draw: "label" }
-  | { draw: "element"; element: Component<{ id: string }>; id: string };
+  | {
+      draw: "element";
+      element: Component<ElementProps>;
+      id: string;
+      kind: ReferenceKind;
+    };
 
 /** What a written link whose destination is `href` draws as. */
 export function referenceOf(href: string): Drawn {
@@ -60,6 +137,6 @@ export function referenceOf(href: string): Drawn {
   const entry = REFERENCE_ELEMENTS[reference.kind];
   const id = entry.find(reference.id);
   return id
-    ? { draw: "element", element: entry.element, id }
+    ? { draw: "element", element: entry.element, id, kind: reference.kind }
     : { draw: "label" };
 }

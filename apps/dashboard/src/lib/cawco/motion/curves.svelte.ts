@@ -103,6 +103,8 @@ const TOKENS = [
   "--dur-ghost",
   "--dur-stagger",
   "--dur-cascade",
+  "--dur-skeleton-reveal",
+  "--skeleton-reveal-blur",
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
@@ -302,6 +304,93 @@ export function appear(_node: Element) {
   };
 }
 
+/** One way an element comes in: its length and curve, and whether it rises from its side. */
+export interface Arrival {
+  easing?: `--ease-${string}`;
+  over: `--dur-${string}`;
+  /** It comes in from beside where it stands, by --pop-rise along x, as a sheet from its side. */
+  rise?: "x";
+}
+
+/**
+ * An element's entrance, attached: as it mounts it comes in by one Web
+ * Animation on the element itself (`appear` by default: --dur-fade on
+ * ease-out, opacity only). Never by `@starting-style` (Tailwind's
+ * `starting:`), which WebKit sometimes skips for an element just added
+ * (bugs.webkit.org 275184, comment 8, "transitions are sometimes not
+ * applied when adding elements"). An attachment, so it runs as the element
+ * mounts whichever block mounts it (a Svelte Flow node, an `{#if}`).
+ *
+ * `motion` is how it comes in with motion, `reduced` with reduced motion,
+ * each an `Arrival` or `false` (it stands at once): the stylesheet's own
+ * `motion-safe:` and `motion-reduce:` split, kept site by site. `when` says
+ * whether this mount is an arrival at all (the Canvas view's first layout,
+ * a decision card landing in one frame); read off the page, never off
+ * state, so the entrance runs once.
+ */
+export function appearOnMount({
+  when = () => true,
+  motion = { over: "--dur-fade" },
+  reduced = false,
+}: {
+  motion?: Arrival | false;
+  reduced?: Arrival | false;
+  when?: (node: HTMLElement) => boolean;
+} = {}): (node: HTMLElement) => void {
+  return (node) => {
+    const arrival = motionOk.current ? motion : reduced;
+    if (!(arrival && when(node))) {
+      return;
+    }
+    const from: Keyframe = { opacity: 0 };
+    const to: Keyframe = { opacity: 1 };
+    if (arrival.rise === "x") {
+      const by = Number.parseFloat(
+        getComputedStyle(node).getPropertyValue("--pop-rise")
+      );
+      from.translate = `${by}px 0`;
+      to.translate = "0 0";
+    }
+    node.animate([from, to], {
+      duration: dur(arrival.over),
+      easing: arrival.easing ? ease(arrival.easing) : CURVE.out,
+    });
+  };
+}
+
+/**
+ * An entrance by the element's own transition, for one whose transition
+ * also carries its exit (a decided line's Change, which a turn caught
+ * mid-way fades back from where it stands): drawn with `data-entering`,
+ * which its classes draw at its starting look (`data-entering:opacity-0`),
+ * the mark is taken off once its first style is drawn, and its transition
+ * runs from there. A style change WebKit always plays, never
+ * `@starting-style`, which it sometimes skips for an element just added
+ * (bugs.webkit.org 275184). A CSS transition, so a turn back mid-way runs
+ * from where it stands, which a script's animation under it would not.
+ * `when` false (its card lands in one frame, or it is not moving): the
+ * mark goes with the transition held off, and it is simply there.
+ */
+export function enterByStyle(
+  when: (node: HTMLElement) => boolean = () => true
+): (node: HTMLElement) => void {
+  return (node) => {
+    const play = when(node);
+    if (!play) {
+      node.style.transition = "none";
+    }
+    // Its first style, at its starting look, before the mark goes.
+    // biome-ignore lint/complexity/noVoid: the read draws its first style, so taking the mark off is a change its transition runs on
+    void getComputedStyle(node).opacity;
+    node.removeAttribute("data-entering");
+    if (!play) {
+      // biome-ignore lint/complexity/noVoid: the read draws it standing, with the transition still held off
+      void getComputedStyle(node).opacity;
+      node.style.removeProperty("transition");
+    }
+  };
+}
+
 /**
  * A floating tag coming and going over the transcript's foot ("Jump to
  * latest", the catch-up): it rises 8px and grows from .96 as it fades in,
@@ -321,8 +410,8 @@ export function rise(_node: Element, token: "--dur-panel" | "--dur-exit") {
 }
 
 /**
- * One view handing its place to another — a skeleton to what it stood in
- * for, a document to the next, a reader to its editor: the two cross-fade
+ * One view handing its place to another — a document to the next, a reader
+ * to its editor (a skeleton hands its place by `reveal`/`revealOut`): the two cross-fade
  * over --dur-control. The one leaving is taken out of the flow as it starts,
  * pinned where it stands (its parent is `position: relative`), so the box is only ever the size of
  * what arrives and a height morph around it has one change to follow.
@@ -334,6 +423,72 @@ export function crossIn(_node: Element) {
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   };
+}
+
+/** `--ease-crossfade` (CSS ease-in-out): a skeleton's pulse and its reveal. */
+export const easeCrossfade = bezier(0.42, 0, 0.58, 1);
+
+/**
+ * The reveal (transitions.dev Skeleton loader and reveal, DESIGN.md
+ * Skeleton): a skeleton handing its place to what it stood for. Both layers
+ * run on one clock, --dur-skeleton-reveal on --ease-crossfade: the content
+ * fades up out of a --skeleton-reveal-blur blur while the skeleton fades out
+ * into one. Every swap from a skeleton to its content takes it: `in:reveal`
+ * on what arrives, and `out:revealOut` on the skeleton where it leaves the
+ * flow, or `out:reveal` where the two already share one cell. With reduced
+ * motion the swap is at once, as the recipe's guard has it.
+ */
+export function reveal(_node?: Element): TransitionConfig {
+  if (!motionOk.current) {
+    return { duration: 0 };
+  }
+  const blur = numberOf("--skeleton-reveal-blur");
+  return {
+    duration: dur("--dur-skeleton-reveal"),
+    easing: easeCrossfade,
+    css: (t) => `opacity: ${t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`,
+  };
+}
+
+/**
+ * {@link reveal}'s arrival on an element already standing, unveiled where a
+ * skeleton beside it in its cell goes (`out:reveal`): one Web Animation on
+ * it, the same keyframes on the same clock. At once with reduced motion.
+ */
+export function revealHere(node: Element): void {
+  const { duration } = reveal();
+  if (!duration) {
+    return;
+  }
+  const blur = numberOf("--skeleton-reveal-blur");
+  node.animate(
+    [
+      { opacity: 0, filter: `blur(${blur}px)` },
+      { opacity: 1, filter: "blur(0px)" },
+    ],
+    { duration, easing: ease("--ease-crossfade") }
+  );
+}
+
+/**
+ * A skeleton leaving by its {@link reveal}, taken out of the flow where it
+ * stands as it starts (pinned there, as {@link crossOut} pins), so the box
+ * is only ever the size of what arrives. One leaving where nothing is
+ * rendered goes at once, as with reduced motion.
+ */
+export function revealOut(node: HTMLElement): TransitionConfig {
+  return revealOutWith(node, pinned(node));
+}
+
+/** {@link revealOut} lifted by its own `lift` (pinned over its parent's whole box, held at a height). */
+export function revealOutWith(
+  node: HTMLElement,
+  lift: () => Record<string, string>
+): TransitionConfig {
+  if (!(motionOk.current && node.checkVisibility())) {
+    return { duration: 0 };
+  }
+  return lifting(node, lift, reveal());
 }
 
 /**

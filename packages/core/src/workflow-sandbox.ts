@@ -10,6 +10,7 @@ import { runtimeTree, standalone } from "./runtime";
 import { writeStateFileSync } from "./state-file";
 import type { Problem, WorkflowGraph, WorkflowInput } from "./workflow";
 import { compileWorkflow, inputsFromZodShape } from "./workflow-compile";
+import { WORKFLOW_LIB_LOCATION } from "./workflow-lib";
 import type { WorkerOut, WorkerStart } from "./workflow-worker";
 
 /** The one module a program may import. */
@@ -99,6 +100,11 @@ function importsOf(program: string): string[] {
 
 let cachedHost: ts.CompilerHost | undefined;
 
+/**
+ * One set of options wherever the hub runs. `zod` resolves as any package
+ * does, from the node_modules above the program (programDir); the binary
+ * publishes it at workflow/node_modules/zod, beside workflow/programs.
+ */
 const COMPILER_OPTIONS: ts.CompilerOptions = {
   target: ts.ScriptTarget.ESNext,
   module: ts.ModuleKind.ESNext,
@@ -108,13 +114,30 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
   skipLibCheck: true,
   allowImportingTsExtensions: true,
   types: [],
-  ...(standalone ? { baseUrl: runtimeTree("workflow") } : {}),
 };
+
+/**
+ * The words a check whose own setup is broken answers with, before what the
+ * compiler said. Such a check can find no program sound, and none clean.
+ */
+const SPACES = /\s+/g;
+
+export const BROKEN_CHECKER =
+  "The hub's workflow checker is broken, not this program, so nothing can be checked until the hub is fixed. The compiler said:";
 
 /**
  * Typechecks a program in the sandbox's module context. Diagnostics come back
  * as Problems carrying the 1-based line so the caller can pin them onto nodes
  * through `compileWorkflow`'s line map.
+ *
+ * A diagnostic tied to no file is about the check itself: lib files that
+ * cannot be read ("Cannot find global type 'Array'"), a compiler option the
+ * compiler refuses. Then the program's own diagnostics mean nothing, and the
+ * answer is that one problem, in words. Both the default lib and every
+ * `/// <reference lib>` inside it resolve from `WORKFLOW_LIB_LOCATION`:
+ * TypeScript reads the references from the host's `getDefaultLibLocation`,
+ * which on its own points beside the executing file, inside $bunfs in the
+ * binary.
  */
 export function typecheckProgram(program: string): Problem[] {
   const refusals = importsOf(program).filter(
@@ -130,12 +153,9 @@ export function typecheckProgram(program: string): Problem[] {
   cachedHost ??= ts.createCompilerHost(COMPILER_OPTIONS, true);
   const host: ts.CompilerHost = {
     ...cachedHost,
-    ...(standalone
-      ? {
-          getDefaultLibFileName: () =>
-            join(runtimeTree("workflow"), "lib", "lib.esnext.d.ts"),
-        }
-      : {}),
+    getDefaultLibLocation: () => WORKFLOW_LIB_LOCATION,
+    getDefaultLibFileName: (options) =>
+      join(WORKFLOW_LIB_LOCATION, ts.getDefaultLibFileName(options)),
     getSourceFile: (fileName, languageVersion, onError, shouldCreate) =>
       fileName === entry
         ? ts.createSourceFile(fileName, program, languageVersion, true)
@@ -154,8 +174,24 @@ export function typecheckProgram(program: string): Problem[] {
         : (cachedHost as ts.CompilerHost).readFile(fileName),
   };
   const created = ts.createProgram([AMBIENT, entry], COMPILER_OPTIONS, host);
-  return ts
-    .getPreEmitDiagnostics(created)
+  const diagnostics = ts.getPreEmitDiagnostics(created);
+  const setup = [
+    ...new Set(
+      diagnostics
+        .filter((diagnostic) => !diagnostic.file)
+        .map((diagnostic) =>
+          ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")
+        )
+    ),
+  ];
+  if (setup.length) {
+    return [
+      {
+        message: `${BROKEN_CHECKER} ${setup.join(" ").replace(SPACES, " ")}`,
+      },
+    ];
+  }
+  return diagnostics
     .filter((diagnostic) => diagnostic.file?.fileName === entry)
     .map((diagnostic) => {
       const line =

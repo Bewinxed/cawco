@@ -45,7 +45,21 @@
  * - **The gate** (notifications.ts): every push about a session is offered
  *   there and dropped when a client had that session in front at any moment
  *   since the item landed, so nothing the owner saw there reaches a device
- *   afterwards. Every visible push carries the
+ *   afterwards.
+ * - **The person gate**: while the person is here at a desk (notifications.ts
+ *   `person`, the device in use not the phone) and a tab there can show a
+ *   desktop notification, an item about to go out goes to that tab instead
+ *   (`desk_alert`) and is held. When the person goes away (the away clock, a
+ *   lock, Appear away), each held item that still needs them and landed at
+ *   most {@link HELD_RECENT_MS} before their last input goes to the phone as
+ *   it would have; an older one waits on the board (the owner's pick: "only
+ *   items from the last 10 min"). The device in use being the phone, or no
+ *   desk tab able to show it, the push goes as before. The tab answers each
+ *   desk alert (`POST /api/presence/desk-ack`); one silent for
+ *   {@link DESK_ACK_MS} or unable to show it is no longer an alert target,
+ *   and the item goes on: to the next tab that can show it, else to the
+ *   phone while it is under {@link HELD_RECENT_MS} old.
+ *   Every visible push carries the
  *   last day's cleared collapse ids (`cawco.cleared`), and each clear queues
  *   one background push per device, at most one per device every
  *   {@link BACKGROUND_GAP_MS}, carrying the whole set: APNs keeps only the
@@ -55,12 +69,20 @@
  * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run.
  */
 import {
+  type ArtifactNeed,
   BROWSER_ASK_TOOL,
+  causeLine,
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
+  DESK_ACK_MS,
+  type DeskAlertFrame,
   type Envelope,
   type FleetWatchNotice,
   type HarnessKind,
+  HELD_RECENT_MS,
+  type Install,
+  type InstanceRow,
+  installName,
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
   type PairingRequest,
@@ -79,7 +101,9 @@ import { hidden } from "./hidden";
 import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
+  artifactCollapseId,
   askCollapseId,
+  installCollapseId,
   messageCollapseId,
   type Notifications,
   needsCollapseId,
@@ -201,6 +225,19 @@ export type PushData =
       projectId: string | null;
     }
   | {
+      /**
+       * A turn of a session the owner started left an artifact waiting on
+       * them (core artifact-needs.ts): Open opens the session with it in its
+       * panel at its first pending stop. The app opens the board for a kind
+       * it does not know.
+       */
+      kind: "artifact";
+      artifactId: string;
+      instanceId: string;
+      machineId: string;
+      projectId: string | null;
+    }
+  | {
       kind: "task";
       /** The session of the task's newest attempt, which Reply writes to; null before any. */
       instanceId: string | null;
@@ -264,6 +301,11 @@ export type PushData =
       /** A device asks to pair: Approve and Deny answer it by its code. */
       kind: "pairing";
       userCode: string;
+    }
+  | {
+      /** An install of a machine ended: opens its window on its outcome. */
+      kind: "install";
+      installId: string;
     }
   | { kind: "test" };
 
@@ -596,7 +638,15 @@ export interface PushOutcome {
 }
 
 export interface PushServices {
+  /**
+   * Whether artifact `id`, raised at `raisedAt`, still waits on the person
+   * and has not been looked at since: a look at the artifact clears its
+   * push, never a look at its session.
+   */
+  readonly artifactWaiting: (id: string, raisedAt: number) => boolean;
   readonly db: DbShape;
+  /** Shows an item on the desk tab the person uses, in place of a phone push. */
+  readonly desk: (frame: DeskAlertFrame) => void;
   readonly lifetime: HubLifetimeShape;
   /** The one gate every push about a session goes through. */
   readonly notifications: Notifications;
@@ -783,7 +833,9 @@ const removeDevice = async (
 };
 
 export const createPush = ({
+  artifactWaiting,
   db,
+  desk,
   lifetime,
   notifications,
   task,
@@ -800,6 +852,8 @@ export const createPush = ({
   const backgroundAt = new Map<string, number>();
   /** By pairing: the background push waiting out its gap. */
   const queued = new Map<string, HubTimer>();
+  /** Installs whose outcome the person acted on: their item no longer needs them. */
+  const settledInstalls = new Set<string>();
 
   /** Records what Cawrier said for a device: taken, pairing gone (the device goes) or refused. */
   const settle = (
@@ -982,6 +1036,7 @@ export const createPush = ({
   const answered = (requestId: string): void => {
     const id = askCollapseId(requestId);
     open?.items.delete(id);
+    settleAtDesk(id);
     const [shownId, cover] =
       [...covers].find(([, one]) => one.burst.lead === id) ?? [];
     if (!(shownId && cover)) {
@@ -1052,10 +1107,190 @@ export const createPush = ({
     if (ask && !live.includes(ask)) {
       return;
     }
-    if (live.length > 0) {
-      show(burst, live);
+    const going = holdAtDesk(burst, live, shown);
+    if (going.length > 0) {
+      show(burst, going);
     }
   };
+
+  /**
+   * Items held while the person was at a desk, by collapse id: shown there
+   * as a desktop notification, and sent to the phone only if they leave
+   * while it still needs them ({@link releaseFromDesk}).
+   */
+  const atDesk = new Map<string, Arrival>();
+
+  /**
+   * THE PERSON GATE: with the person here at a desk and a tab there that can
+   * show it, each item the device doesn't show yet goes to that tab and is
+   * held, leaving its burst; what is left goes on to the phone. The phone in
+   * use, or no tab able to show it, holds nothing.
+   */
+  const holdAtDesk = (
+    burst: Burst,
+    live: readonly Arrival[],
+    shown: ReadonlySet<string>
+  ): Arrival[] => {
+    const person = notifications.person();
+    if (person.state !== "here" || person.inUse?.kind === "ios") {
+      return [...live];
+    }
+    const tab = notifications.deskTab();
+    if (!tab) {
+      if (live.some((item) => !shown.has(idOf(item)))) {
+        console.log(
+          `[notify] push ${burst.id}: the person is at a desk, but no tab there can show a desktop notification, so it goes to the phone`
+        );
+      }
+      return [...live];
+    }
+    const going: Arrival[] = [];
+    for (const item of live) {
+      const id = idOf(item);
+      if (shown.has(id)) {
+        going.push(item);
+        continue;
+      }
+      burst.items.delete(id);
+      atDesk.set(id, item);
+      alertDesk(tab, item);
+      console.log(
+        `[notify] push ${id}: held, the person is at a desk; shown on tab ${tab.slice(0, 8)}`
+      );
+    }
+    return going;
+  };
+
+  /** Each desk alert waiting on its tab's answer, by collapse id: the tab, and the deadline's timer. */
+  const unanswered = new Map<string, { tab: string; timer: HubTimer }>();
+
+  /**
+   * Shows a held item on `tab` and waits {@link DESK_ACK_MS} for its answer:
+   * a tab that says nothing is gone, and the item goes on ({@link deskOn}).
+   */
+  const alertDesk = (tab: string, item: Arrival): void => {
+    const id = idOf(item);
+    const { sealed } = item.notification;
+    lifetime.cancel(unanswered.get(id)?.timer);
+    unanswered.set(id, {
+      tab,
+      timer: lifetime.after(DESK_ACK_MS, () => {
+        unanswered.delete(id);
+        console.log(
+          `[notify] push ${id}: tab ${tab.slice(0, 8)} did not answer its desk alert in ${DESK_ACK_MS / 1000} s; it is no longer an alert target`
+        );
+        notifications.dropDeskTab(tab);
+        deskOn(id);
+      }),
+    });
+    desk({
+      kind: "desk_alert",
+      to: tab,
+      collapseId: id,
+      title: sealed.title,
+      body: sealed.subtitle
+        ? `${sealed.subtitle} · ${sealed.body}`
+        : sealed.body,
+      session: item.instanceId,
+    });
+  };
+
+  /**
+   * A held item whose tab is gone or refused it, sent to the next place: the
+   * next tab that can show it, while the person is still at the desk; else
+   * the phone, as long as it landed within {@link HELD_RECENT_MS}; else it
+   * waits on the board.
+   */
+  const deskOn = (id: string): void => {
+    const item = atDesk.get(id);
+    if (!item) {
+      return;
+    }
+    const person = notifications.person();
+    const tab =
+      person.state === "here" && person.inUse?.kind !== "ios"
+        ? notifications.deskTab()
+        : undefined;
+    if (tab) {
+      console.log(
+        `[notify] push ${id}: shown on tab ${tab.slice(0, 8)} instead`
+      );
+      alertDesk(tab, item);
+      return;
+    }
+    atDesk.delete(id);
+    const age = Date.now() - item.landedAt.getTime();
+    if (age > HELD_RECENT_MS) {
+      console.log(
+        `[notify] push ${id}: no tab can show it and it landed ${(age / 60_000).toFixed(1)} min ago; it waits on the board`
+      );
+      return;
+    }
+    console.log(
+      `[notify] push ${id}: no tab at the desk can show it, so it goes to the phone`
+    );
+    arrive(item, false);
+  };
+
+  /** A tab's answer: taken, or refused (it can't show one), which sends the item on at once. */
+  notifications.onDeskAck(({ clientId, collapseId, how }) => {
+    const waiting = unanswered.get(collapseId);
+    if (waiting?.tab !== clientId) {
+      return;
+    }
+    lifetime.cancel(waiting.timer);
+    unanswered.delete(collapseId);
+    if (how !== "refused") {
+      return;
+    }
+    console.log(
+      `[notify] push ${collapseId}: tab ${clientId.slice(0, 8)} can't show a desktop notification; it is no longer an alert target`
+    );
+    notifications.dropDeskTab(clientId);
+    deskOn(collapseId);
+  });
+
+  /** A held item that is over: its tab's answer is no longer waited on. */
+  const settleAtDesk = (id: string): void => {
+    atDesk.delete(id);
+    lifetime.cancel(unanswered.get(id)?.timer);
+    unanswered.delete(id);
+  };
+
+  /**
+   * The person left the desk: each held item that still needs them and
+   * landed at most {@link HELD_RECENT_MS} before their last input goes to
+   * the phone, through a burst as it would have; older ones wait on the board.
+   */
+  const releaseFromDesk = (lastInputAt: number): void => {
+    const floor = lastInputAt - HELD_RECENT_MS;
+    for (const [id, item] of atDesk) {
+      settleAtDesk(id);
+      const landed = item.landedAt.getTime();
+      if (landed < floor) {
+        console.log(
+          `[notify] push ${id}: held at the desk, not sent: it landed ${((lastInputAt - landed) / 60_000).toFixed(1)} min before the person stopped`
+        );
+        continue;
+      }
+      console.log(
+        `[notify] push ${id}: the person is away, so what was held at the desk goes to the phone`
+      );
+      arrive(item, false);
+    }
+  };
+
+  notifications.onPerson((now, before) => {
+    if (now.state === "away" && before.state === "here") {
+      releaseFromDesk(now.lastInputAt ?? Date.now());
+    }
+  });
+
+  notifications.onCleared((ids) => {
+    for (const id of ids) {
+      settleAtDesk(id);
+    }
+  });
 
   /**
    * An item that needs you joins the open burst, or opens one; the burst
@@ -1107,6 +1342,56 @@ export const createPush = ({
   };
 
   /** Nobody has looked at the session since `at`: what it pushed about then still needs you. */
+  /**
+   * The turn's push when it left an artifact waiting on the person: the
+   * artifact's ask as its sealed body, under the artifact's own collapse id
+   * so a revision's push replaces it, Open only (`CAWCO_TASK_OPEN`, the
+   * Open-only category every installed app registers). About no session for the
+   * gate: a look at the artifact clears it (`still`), never a look at its
+   * session, and its own work running does not hold it, since the artifact
+   * waits on the person whatever else runs.
+   */
+  const artifactLeft = (
+    row: InstanceRow,
+    left: ArtifactNeed,
+    endedAt: Date
+  ): boolean => {
+    // Answered or looked at within the grace: the turn is an ordinary one.
+    if (!artifactWaiting(left.artifactId, left.raisedAt)) {
+      return false;
+    }
+    const project = projectName(row.projectId ?? null);
+    arrive(
+      {
+        ask: false,
+        instanceId: null,
+        landedAt: endedAt,
+        still: () => artifactWaiting(left.artifactId, left.raisedAt),
+        notification: {
+          shown: alertOf(sessionName(row.id) ?? "A session", project),
+          sealed: alertOf(
+            boardTitle(row),
+            project,
+            firstLine(left.ask) ?? NEEDS_YOU
+          ),
+          // Open only, the category every installed app registers so.
+          category: PUSH_CATEGORIES.taskOpenOnly,
+          collapseId: artifactCollapseId(left.artifactId),
+          threadId: row.projectId ?? row.id,
+          data: {
+            kind: "artifact",
+            artifactId: left.artifactId,
+            instanceId: row.id,
+            machineId: row.machineId,
+            projectId: row.projectId ?? null,
+          },
+        },
+      },
+      false
+    );
+    return true;
+  };
+
   const unseenSince = (instanceId: string, at: Date): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
     return !(row?.seenAt && row.seenAt.getTime() >= at.getTime());
@@ -1360,7 +1645,8 @@ export const createPush = ({
       instanceId: string,
       reply: string | undefined,
       endedAt: Date,
-      wakes: TurnWakes | undefined
+      wakes: TurnWakes | undefined,
+      left?: ArtifactNeed
     ): void {
       if (stopped.delete(instanceId)) {
         return;
@@ -1374,9 +1660,14 @@ export const createPush = ({
           row.workflowStepId ||
           row.workItemId ||
           row.kind === "summariser" ||
-          row.role === "lead" ||
-          !unseenSince(instanceId, endedAt)
+          row.role === "lead"
         ) {
+          return;
+        }
+        if (left && artifactLeft(row, left, endedAt)) {
+          return;
+        }
+        if (!unseenSince(instanceId, endedAt)) {
           return;
         }
         if (own) {
@@ -1850,6 +2141,48 @@ export const createPush = ({
         threadId: "pairing",
         data: { kind: "pairing", userCode: request.userCode },
       });
+    },
+
+    /**
+     * An install of a machine ended while nobody may be watching (installs.ts):
+     * its outcome in its band row's own line (core install.ts `causeLine`:
+     * where it failed and why), the machine as the title. It arrives as any
+     * item does, so the burst and the person gate decide where it goes (the
+     * owner: "the notification primitive is who decides where the
+     * notification goes based on activity and presence"). The person's act
+     * on the outcome makes it over and takes it down ({@link installSettled}).
+     */
+    install(install: Install): void {
+      const collapseId = installCollapseId(install.id);
+      const alert = alertOf(installName(install), null, causeLine(install));
+      settledInstalls.delete(install.id);
+      console.log(
+        `[push] install ${install.id} ${install.state}: arrives as ${collapseId}`
+      );
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: new Date(),
+        // Acted on before its burst went out, or while held at a desk: over.
+        still: () => !settledInstalls.has(install.id),
+        notification: {
+          shown: alert,
+          sealed: alert,
+          category: PUSH_CATEGORIES.needs,
+          collapseId,
+          threadId: "install",
+          data: { kind: "install", installId: install.id },
+        },
+      });
+    },
+
+    /** The person acted on that install's outcome, here or anywhere: it is over, and its push comes down. */
+    installSettled(id: string): void {
+      settledInstalls.add(id);
+      const collapseId = installCollapseId(id);
+      open?.items.delete(collapseId);
+      settleAtDesk(collapseId);
+      notifications.clear([collapseId], "settled");
     },
 
     /** That pairing was answered, here or anywhere, or expired: its push comes down. */

@@ -29,6 +29,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
@@ -247,7 +248,7 @@ const run = async (kit: Kit) => {
         true &&
       aLines[1]?.startsWith("- bun run lint:changed: pass (exit 0") === true &&
       aLines[2]?.startsWith("- bun run typecheck: pass (exit 0") === true &&
-      result.includes("Landed on main at") &&
+      result.includes(`${workWords.landedOn("main")} at`) &&
       !result.includes("Checks:"),
     `${aRow.state} ${aRow.error ?? ""}\n${result.slice(0, 1500)}`
   );
@@ -319,7 +320,7 @@ const run = async (kit: Kit) => {
       pLines[0]?.startsWith("- uv sync: pass (exit 0") === true &&
       pLines[1]?.startsWith("- uv run pytest -q: pass (exit 0") === true &&
       !pResult.includes("bun ") &&
-      pResult.includes("Landed on main at"),
+      pResult.includes(`${workWords.landedOn("main")} at`),
     `${pRow.state} ${pRow.error ?? ""}\n${pResult.slice(0, 1500)}`
   );
 
@@ -336,7 +337,7 @@ const run = async (kit: Kit) => {
     "N: a project with no gate.md lands, its report saying it landed with no checks because it declares none",
     nRow.state === "done" &&
       nResult.includes(`Landing gate, run by the hub:\n${NO_CHECKS}`) &&
-      nResult.includes("Landed on main at"),
+      nResult.includes(`${workWords.landedOn("main")} at`),
     `${nRow.state} ${nRow.error ?? ""}\n${nResult.slice(0, 1500)}`
   );
   const afterN = await none.mainLog();

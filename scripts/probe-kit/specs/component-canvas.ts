@@ -78,8 +78,8 @@
  *
 
  * Captures of the canvas (desk and phone, light and dark, its move's
- * timeline and its dials open) go to `$TMPDIR/caps/` and the clone's
- * `caps/` for a reviewer; this spec never reads them.
+ * timeline and its dials open) go to the run's output folder (`kit.out`)
+ * for a reviewer; this spec never reads them.
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -100,12 +100,13 @@ import type {
   FrameRender,
   RenderReport,
 } from "../../../packages/core/src/stage";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { type Kit, ROOT, type Spec, specOut } from "../kit";
 
 const FIXTURES = join(ROOT, "scripts/probe-kit/fixtures/component-canvas");
 const SCRATCH = join(process.env.TMPDIR ?? "/tmp", "component-canvas");
-const CAPS = [join(process.env.TMPDIR ?? "/tmp", "caps"), join(ROOT, "caps")];
+const CAPS = specOut("component-canvas");
 
 type Framework = "svelte" | "react" | "vue" | "solid";
 
@@ -250,11 +251,8 @@ function errorsOf(page: Page): string[] {
 }
 
 async function capture(page: Page, name: string): Promise<void> {
-  for (const dir of CAPS) {
-    mkdirSync(dir, { recursive: true });
-    // biome-ignore lint/performance/noAwaitInLoops: one file per folder
-    await page.screenshot({ path: join(dir, `${name}.png`) });
-  }
+  mkdirSync(CAPS, { recursive: true });
+  await page.screenshot({ path: join(CAPS, `${name}.png`) });
 }
 
 /** A timeline clip's duration key in DialKit's store: `<clip>.duration`. */
@@ -1156,10 +1154,10 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
   // The details' toggle event is a task after the press: its words follow it.
   await broken
     .waitForFunction(
-      () =>
+      (hide) =>
         document.querySelector(".cawco-section-failed summary")?.textContent ===
-        "Hide details",
-      null,
+        hide,
+      shellWords.hideDetails,
       { timeout: 2000 }
     )
     .catch(() => undefined);
@@ -1199,12 +1197,12 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
     "15: a section that didn't load says so in its place, named by its component, its error and place under Show details, the report holding the page error, no skeleton left",
     before.title === "Badge" &&
       before.line === "Badge didn't load, so none of its stories are drawn." &&
-      before.summary === "Show details" &&
+      before.summary === shellWords.showDetails &&
       !before.open &&
       before.role === "alert" &&
       before.left === 0 &&
       details.height > 0 &&
-      details.summary === "Hide details" &&
+      details.summary === shellWords.hideDetails &&
       details.marker === "none" &&
       details.text.includes("The states file's helper broke as it loaded") &&
       details.place.includes("src/broken.js:2:") &&

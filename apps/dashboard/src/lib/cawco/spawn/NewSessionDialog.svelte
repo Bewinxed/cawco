@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * The New Session form on a phone: the kit drawer's bottom sheet under
    * 640px (DESIGN.md: "the new-session dialog becomes a bottom sheet"). A
@@ -8,7 +9,7 @@
    */
   import { untrack } from "svelte";
   import { Drawer, DrawerContent } from "#lib/components/ui/drawer/index.js";
-  import type { ContinueSource, SessionDraft } from "../continue.svelte";
+  import type { ContinueSource } from "../continue.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
   import type { SpawnPrefill } from "./new-session.svelte";
 
@@ -16,7 +17,6 @@
     open,
     prefill,
     continueFrom,
-    restore,
     anchor = null,
     onclose,
     onexitcontinue,
@@ -28,8 +28,6 @@
      * of this one. Mutually exclusive with `prefill`: the source says where.
      */
     continueFrom?: ContinueSource;
-    /** Continue mode: the form a failed continuation was submitted with, opened as it was. */
-    restore?: SessionDraft;
     /** The trigger it was opened from, which the focus goes back to as it closes. */
     anchor?: HTMLElement | null;
     onclose: () => void;
@@ -61,6 +59,11 @@
   {open}
   shouldScaleBackground={false}
 >
+  <!-- Its exit is the house's (--dur-exit on --ease-out), set on its closed
+       state in app.css by `data-ns-dialog`, never through `style`: a changed
+       style attribute is written whole, which wiped the transform vaul writes
+       on the node while a finger drags it, and a sheet swiped down jumped
+       back up before it slid out. -->
   <DrawerContent
     data-session-card
     data-ns-dialog
@@ -80,8 +83,8 @@
         card?.focus({ preventScroll: true });
       }
     }}
-    style={`--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))${open ? "" : "; animation-duration: var(--dur-exit); animation-timing-function: var(--ease-out)"}`}
-    title={form?.title() ?? "New session"}
+    style="--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))"
+    title={form?.title() ?? commonWords.newSession}
     bind:ref={card}
   >
     <NewSessionForm
@@ -90,7 +93,6 @@
       {onexitcontinue}
       {open}
       {prefill}
-      {restore}
       sheet
       bind:this={form}
     />

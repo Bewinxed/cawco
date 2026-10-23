@@ -29,6 +29,7 @@ import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { SOCAT_BACKLOG } from "@cawco/core/socat";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
 import { listeners, workspaceNetworks } from "./boundary";
@@ -78,6 +79,10 @@ const BRIDGE_START_MS = 3000;
 
 /** The most of a bridge's stderr kept, to say why it did not start. */
 const STDERR_KEPT = 2000;
+
+/** The bridge's own end, on `socket`: socat's listen address, a child per connection, queued past socat's own 5 (core `SOCAT_BACKLOG`). */
+export const bridgeListen = (socket: string): string =>
+  `UNIX-LISTEN:${socket},fork,backlog=${SOCAT_BACKLOG}`;
 
 /** A workspace's id, or a place's (core `isPlace`): a sheet's stage runs in either. */
 const WORKSPACE_ID = new RegExp(
@@ -299,7 +304,7 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
       String(inner),
       tool("nsenter"),
       tool("socat"),
-      `UNIX-LISTEN:${socket},fork`,
+      bridgeListen(socket),
       `TCP:127.0.0.1:${port}`,
     ],
     {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commonWords } from "@cawco/core";
   /**
    * A component canvas's Map mode (canvas-view.svelte.ts `map`), over the
    * page in the panel's well, the page staying loaded under it: the
@@ -329,7 +330,7 @@
         {#snippet action()}
           <Button
             icon={IconRefresh}
-            label="Try again"
+            label={commonWords.tryAgain}
             onclick={() => {
               asked += 1;
             }}

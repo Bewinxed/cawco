@@ -25,7 +25,11 @@
  *   does not resolve are unreachable by the hub's own TCP connect's errno, a
  *   host key the hub knows otherwise is `host-key` by ssh-keyscan against
  *   ssh-keygen -F, and a refused sign-in is the sign-in step, ssh's words
- *   under it. A scratch hub, a real loopback sshd.
+ *   under it. A scratch hub, a real loopback sshd. Over a second one with
+ *   OpenSSH's PerSourcePenalties as it ships, ten retried adds never earn
+ *   the hub's address a penalty (its pre-check costs one connection that
+ *   never signs in), and an add once the address is held back is
+ *   `penalized`, by OpenSSH's own refusal line.
  * - G, a Claude credential: `authentication_failed` signs the account out
  *   whatever its words; `server_error` is no sign-out and no race re-send.
  * - H, a failed session's kind: A's conversation gone carries
@@ -58,11 +62,11 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The German words a translated git says for what these legs make it say. */
 const GERMAN_GIT = String.raw`#!/bin/sh
@@ -144,12 +148,21 @@ const signalled = async (kit: Kit): Promise<void> => {
       lastErrorKindOf?: (error: unknown) => string | undefined;
     };
   let listener:
-    | { exit?: (code: number | null, signal: NodeJS.Signals | null) => void }
+    | {
+        exit?: (
+          code: number | null,
+          signal: NodeJS.Signals | null,
+          pid: number | undefined
+        ) => void;
+      }
     | undefined;
   let reaped: unknown;
+  /** What the bridge let go once it read its child's end (sessiond-client.ts `release`). */
+  const released: [string, number | undefined][] = [];
   // sessiond's socket, stood in for: the spawn is acked, the bridge
   // subscribes and lists the keeper's children for its own pid (none here),
-  // which is all it asks of sessiond before an end.
+  // which is all it asks of sessiond before an end; once it has read the
+  // end, it lets the dead child go.
   const client = {
     list: () => Promise.resolve({ procs: [] }),
     spawnProc: () => Promise.resolve(),
@@ -159,6 +172,9 @@ const signalled = async (kit: Kit): Promise<void> => {
     write: () => Promise.resolve(),
     stdinEnd: () => Promise.resolve(),
     signal: () => Promise.resolve(),
+    release: (procId: string, pid: number | undefined) => {
+      released.push([procId, pid]);
+    },
   };
   sessiondBridge(
     client as never,
@@ -175,8 +191,14 @@ const signalled = async (kit: Kit): Promise<void> => {
   const child = Bun.spawn(["sleep", "30"]);
   child.kill("SIGKILL");
   await child.exited;
-  listener?.exit?.(child.exitCode, child.signalCode as NodeJS.Signals | null);
-  kit.note(`A: the bridge handed over ${JSON.stringify(reaped)}`);
+  listener?.exit?.(
+    child.exitCode,
+    child.signalCode as NodeJS.Signals | null,
+    child.pid
+  );
+  kit.note(
+    `A: the bridge handed over ${JSON.stringify(reaped)}, and let go ${JSON.stringify(released)}`
+  );
   let died: string | undefined;
   let failed: unknown;
   const ctx = {
@@ -512,13 +534,14 @@ const trailerless = async (kit: Kit, scratch: string): Promise<void> => {
 };
 
 /**
- * ssh, its stderr in German, and its known hosts read from
- * `PROBE_KNOWN_HOSTS` alone: a stand-in for an ssh with a German catalog
- * (OpenSSH has none) under a hub user whose known_hosts is the probe's.
+ * ssh, its stderr in German, its known hosts read from `PROBE_KNOWN_HOSTS`
+ * alone and its key `PROBE_IDENTITY`: a stand-in for an ssh with a German
+ * catalog (OpenSSH has none) under a hub user whose known_hosts and key are
+ * the probe's (OpenSSH reads `~` from the password database, never $HOME).
  */
 const GERMAN_SSH = String.raw`#!/bin/sh
 err=$(mktemp)
-/usr/bin/ssh -o UserKnownHostsFile="$PROBE_KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null "$@" 2>"$err"
+/usr/bin/ssh -o UserKnownHostsFile="$PROBE_KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null -o IdentityFile="$PROBE_IDENTITY" -o IdentitiesOnly=yes "$@" 2>"$err"
 code=$?
 sed -e 's/Connection refused/Verbindung abgelehnt/' \
   -e 's/Could not resolve hostname/Hostname konnte nicht aufgelöst werden/' \
@@ -578,6 +601,21 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       `ssh-keygen -q -t ed25519 -N '' -f '${key}'`
     );
   }
+  // The hub first: the sshd's port, an ephemeral one, is the kernel's to hand to
+  // anyone until sshd holds it, so sshd starts once the hub is up.
+  const identity = join(dir, "hub_key");
+  await shell(
+    dir,
+    process.env as Record<string, string>,
+    `ssh-keygen -q -t ed25519 -N '' -f '${identity}'`
+  );
+  const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
+  fleet.launch("hub", [], {
+    PATH: `${bin}:${fleet.env.PATH}`,
+    PROBE_KNOWN_HOSTS: knownHosts,
+    PROBE_IDENTITY: identity,
+  });
+  await fleet.hubUp();
   const port = closedPort();
   await writeFile(
     join(dir, "sshd_config"),
@@ -589,13 +627,36 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       "UsePAM no",
       "StrictModes no",
       "AuthorizedKeysFile none",
+      // Every connection here is the loopback's: the leg's own keyscans and
+      // the hub's pre-checks, none of which signs in, would otherwise earn
+      // the source a penalty ("Not allowed at this time", OpenSSH 9.8+
+      // PerSourcePenalties) before the adds it measures.
+      "PerSourcePenaltyExemptList 127.0.0.1",
       "",
     ].join("\n")
   );
+  const sshdLog = join(dir, "sshd.log");
   const server = Bun.spawn(
     ["/usr/sbin/sshd", "-D", "-e", "-f", join(dir, "sshd_config")],
-    { stdout: "ignore", stderr: "ignore" }
+    { stdout: "ignore", stderr: Bun.file(sshdLog) }
   );
+  /** sshd's state and its last words, for a check that fails. */
+  const sshdSaid = async (): Promise<string> => {
+    const ended =
+      server.exitCode === null && server.signalCode === null
+        ? "running"
+        : `ended (${server.exitCode ?? server.signalCode})`;
+    const said = (
+      await Bun.file(sshdLog)
+        .text()
+        .catch(() => "")
+    )
+      .trim()
+      .split("\n")
+      .slice(-4)
+      .join(" | ");
+    return `sshd ${ended}: ${said}`;
+  };
   try {
     await until(
       "F: sshd listening",
@@ -608,12 +669,6 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       Boolean,
       10_000
     );
-    const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
-    fleet.launch("hub", [], {
-      PATH: `${bin}:${fleet.env.PATH}`,
-      PROBE_KNOWN_HOSTS: knownHosts,
-    });
-    await fleet.hubUp();
     /** One add through the hub's route, polled until it is not running. */
     const add = async (target: string, at: number) => {
       const started = await fleet.api<SshJoinJob>("/api/machines/ssh", {
@@ -657,7 +712,7 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
     kit.check(
       "F: an SSH add whose machine offers none of the host keys the hub knows it by is host-key, by ssh-keyscan against ssh-keygen -F",
       changed.problem?.kind === "host-key",
-      `${JSON.stringify(changed.problem)}; ssh said ${said(changed)}`
+      `${JSON.stringify(changed.problem)}; ssh said ${said(changed)}; ${await sshdSaid()}`
     );
 
     await writeFile(knownHosts, "");
@@ -667,7 +722,138 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
       denied.problem?.kind === "step" &&
         denied.problem.step === "signing in over SSH" &&
         denied.lines.some((line) => line.includes("Zugriff verweigert")),
-      `${JSON.stringify(denied.problem)}; ssh said ${said(denied)}`
+      `${JSON.stringify(denied.problem)}; ssh said ${said(denied)}; ${await sshdSaid()}`
+    );
+    await penalties(kit, fleet, { dir, bin, hostKey, identity, knownHosts });
+  } finally {
+    server.kill();
+    await server.exited;
+  }
+};
+
+/**
+ * F, held back: a second real sshd with OpenSSH's PerSourcePenalties as it
+ * ships (no exemption: `noauth` 1s for each connection that never signs in,
+ * enforced from 15s, sshd_config(5)), taking the hub's key and refusing its
+ * forward (`AllowTcpForwarding no`), so each add ends after connections that
+ * signed in, and its pre-check is the only one that never does. Its host key
+ * is in the hub's known hosts from the start, so every add scans it: the
+ * pre-check that cost a connection per key type and one more for its port.
+ * Ten adds retried back to back never earn the hub's address a penalty;
+ * then the address is held back on purpose (bare scans of every key type),
+ * and an add is `penalized`, by the line OpenSSH turns it away with.
+ */
+const penalties = async (
+  kit: Kit,
+  fleet: KitFleet,
+  at: {
+    dir: string;
+    bin: string;
+    hostKey: string;
+    identity: string;
+    knownHosts: string;
+  }
+): Promise<void> => {
+  const port = closedPort();
+  const authorized = join(at.dir, "authorized_keys");
+  await writeFile(authorized, await Bun.file(`${at.identity}.pub`).text());
+  await writeFile(
+    join(at.dir, "sshd_held_config"),
+    [
+      `Port ${port}`,
+      "ListenAddress 127.0.0.1",
+      `HostKey ${at.hostKey}`,
+      "PidFile none",
+      "UsePAM no",
+      "StrictModes no",
+      `AuthorizedKeysFile ${authorized}`,
+      "PasswordAuthentication no",
+      "KbdInteractiveAuthentication no",
+      "AllowTcpForwarding no",
+      "",
+    ].join("\n")
+  );
+  const log = join(at.dir, "sshd-held.log");
+  const server = Bun.spawn(
+    ["/usr/sbin/sshd", "-D", "-e", "-f", join(at.dir, "sshd_held_config")],
+    { stdout: "ignore", stderr: Bun.file(log) }
+  );
+  const heard = () =>
+    Bun.file(log)
+      .text()
+      .catch(() => "");
+  const held = async () =>
+    (await heard()).split("\n").filter((line) => line.includes("activating"));
+  try {
+    const listening = await until(
+      "F, held back: sshd listening",
+      async () => (await heard()).includes(`port ${port}`),
+      Boolean,
+      10_000
+    ).catch(() => false);
+    const key = (await Bun.file(`${at.hostKey}.pub`).text())
+      .trim()
+      .split(" ")
+      .slice(0, 2)
+      .join(" ");
+    await writeFile(at.knownHosts, `[127.0.0.1]:${port} ${key}\n`);
+    /** One add through the hub's route, read as the hub's install once it ends. */
+    const add = async () => {
+      // This user: a sshd not run as root signs in its own user alone.
+      const started = await fleet.api<SshJoinJob>("/api/machines/ssh", {
+        target: `${userInfo().username}@127.0.0.1`,
+        port,
+      });
+      return await until(
+        "F, held back: the add",
+        async () =>
+          (
+            await fleet.api<{
+              installs: {
+                id: string;
+                state: string;
+                problem: { kind: string } | null;
+              }[];
+            }>("/api/installs")
+          ).installs.find((one) => one.id === started.id),
+        (install) => install !== undefined && install.state !== "running",
+        60_000
+      );
+    };
+    const kinds: string[] = [];
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: retried one after another, as a person retries
+      const install = await add();
+      kinds.push(install?.problem?.kind ?? "none");
+    }
+    const after = await held();
+    kit.check(
+      "F, held back: ten SSH adds retried back to back never earn the hub's address OpenSSH's penalty: each ends at the forward its sshd refuses, and sshd activates no penalty",
+      listening &&
+        kinds.length === 10 &&
+        kinds.every((kind) => kind === "forwarding") &&
+        after.length === 0,
+      `adds ${JSON.stringify(kinds)}; sshd's penalties ${JSON.stringify(after)}`
+    );
+    // Held back on purpose: bare scans of every key type, none signing in.
+    const scanned = await until(
+      "F, held back: the hub's address held back",
+      async () => {
+        await shell(
+          at.dir,
+          process.env as Record<string, string>,
+          `'${join(at.bin, "ssh-keyscan")}' -T 2 -p ${port} 127.0.0.1`
+        );
+        return (await held()).length > 0 ? await held() : undefined;
+      },
+      Boolean,
+      60_000
+    ).catch(() => undefined);
+    const penalized = await add();
+    kit.check(
+      "F, held back: an SSH add while sshd holds the hub's address back is penalized, by the line OpenSSH turns it away with",
+      scanned !== undefined && penalized?.problem?.kind === "penalized",
+      `sshd: ${JSON.stringify(scanned)}; the add ${JSON.stringify(penalized?.problem)}`
     );
   } finally {
     server.kill();
@@ -952,22 +1138,23 @@ exit $code
  * connection is the download, by curl's exit status, never its words: the
  * hub's own install command (`installCommand`) run by `sh` against a port
  * nothing listens on, with a German curl first on PATH, its lines read by the
- * hub's `problemOf`.
+ * hub's `problemOf` (installs.ts).
  */
 const curlExit = async (kit: Kit, scratch: string): Promise<void> => {
   const join_ = (await import("../../../packages/hub/src/join")) as {
     installCommand?: (hubUrl: string) => string;
+  };
+  const installs_ = (await import("../../../packages/hub/src/installs")) as {
     problemOf?: (
       lines: readonly string[],
-      exitCode: number,
-      machineId: string | null
+      exitCode: number
     ) => { kind: string };
   };
-  if (!(join_.installCommand && join_.problemOf)) {
+  if (!(join_.installCommand && installs_.problemOf)) {
     kit.check(
       "L: an install whose curl cannot reach the hub is the download, by curl's exit status, whatever curl says",
       false,
-      "hub join.ts exports no installCommand and problemOf"
+      "hub join.ts exports no installCommand, or installs.ts no problemOf"
     );
     return;
   }
@@ -984,7 +1171,7 @@ const curlExit = async (kit: Kit, scratch: string): Promise<void> => {
     join_.installCommand(`http://127.0.0.1:${closedPort()}`)
   );
   const lines = `${ran.stdout}${ran.stderr}`.split("\n").filter(Boolean);
-  const problem = join_.problemOf(lines, ran.exitCode, null);
+  const problem = installs_.problemOf(lines, ran.exitCode);
   kit.check(
     "L: an install whose curl cannot reach the hub is the download, by curl's exit status, whatever curl says",
     problem.kind === "download",

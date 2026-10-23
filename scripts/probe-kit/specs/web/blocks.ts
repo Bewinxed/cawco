@@ -38,6 +38,9 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one step at a time
 import type { Page } from "playwright-core";
+import { blocksWords } from "../../../../packages/core/src/words/blocks";
+import { commonWords } from "../../../../packages/core/src/words/common";
+import { routinesWords } from "../../../../packages/core/src/words/routines";
 import { Clock } from "../../anim";
 import { frames, type Kit, open, type Spec, settle } from "../../kit";
 
@@ -72,21 +75,19 @@ const blocksOf = (page: Page) =>
         : 0,
       blocks: [
         ...document.querySelectorAll<HTMLElement>(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         ),
-      ]
-        .filter((block) => !block.hasAttribute("data-reflow-ghost"))
-        .map((block) => {
-          const box = block.getBoundingClientRect();
-          return {
-            id: block.dataset.block ?? "",
-            span: Number(block.dataset.span ?? 0),
-            width: block.matches("[data-wide]") ? "wide" : "narrow",
-            left: Math.round(box.left),
-            top: Math.round(box.top),
-            w: Math.round(box.width),
-          };
-        }),
+      ].map((block) => {
+        const box = block.getBoundingClientRect();
+        return {
+          id: block.dataset.block ?? "",
+          span: Number(block.dataset.span ?? 0),
+          width: block.matches("[data-wide]") ? "wide" : "narrow",
+          left: Math.round(box.left),
+          top: Math.round(box.top),
+          w: Math.round(box.width),
+        };
+      }),
     };
   });
 const orderOf = async (page: Page) =>
@@ -99,7 +100,7 @@ const orderOf = async (page: Page) =>
  */
 async function pick(page: Page, title: string, item: string) {
   await page.mouse.move(1, 1);
-  await page.getByRole("button", { name: `More for ${title}` }).focus();
+  await page.getByRole("button", { name: commonWords.moreFor(title) }).focus();
   await page.keyboard.press("Enter");
   const menu = page.getByRole("menu");
   await menu.waitFor();
@@ -140,7 +141,7 @@ async function columns(kit: Kit, page: Page, phone: Page, url: string) {
   await open(
     phone,
     url,
-    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+    '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
   );
   await settle(phone);
   const read = await blocksOf(phone);
@@ -168,15 +169,15 @@ async function throughHub(
   await open(
     other,
     url,
-    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+    '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
   );
   await settle(other);
-  await pick(page, "Approved actions", "Move up");
+  await pick(page, routinesWords.actions, "Move up");
   await page.waitForFunction(
     () =>
       [
         ...document.querySelectorAll(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         ),
       ]
         .map((b) => (b as HTMLElement).dataset.block)
@@ -194,7 +195,7 @@ async function throughHub(
       () =>
         [
           ...document.querySelectorAll(
-            '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+            '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
           ),
         ]
           .map((b) => (b as HTMLElement).dataset.block)
@@ -278,7 +279,7 @@ async function motion(kit: Kit, page: Page) {
   const was = before.blocks.find((b) => b.id === "sources");
   const clock = await Clock.on(page);
   await clock.catchRuns(
-    () => pick(page, "Approved actions", "Move down"),
+    () => pick(page, routinesWords.actions, blocksWords.moveDown),
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
   );
   const moved = await scrub(
@@ -310,7 +311,7 @@ async function motion(kit: Kit, page: Page) {
   const narrow = (await blocksOf(page)).blocks.find((b) => b.id === "sources");
   const wideClock = await Clock.on(page);
   await wideClock.catchRuns(
-    () => pick(page, "Event sources", "Wide"),
+    () => pick(page, routinesWords.sources, "Wide"),
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
   );
   const grown = await scrub(
@@ -332,7 +333,7 @@ async function motion(kit: Kit, page: Page) {
     `narrow ${narrow?.w}, wide ${wide?.w}, drawn ${grown.map((g) => g.w.toFixed(1)).join(" → ")}`
   );
   // Back to narrow for what follows.
-  await pick(page, "Event sources", "Narrow");
+  await pick(page, routinesWords.sources, "Narrow");
   await page.waitForSelector(
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-narrow][data-block='sources']"
   );
@@ -348,7 +349,7 @@ async function motion(kit: Kit, page: Page) {
  */
 async function dragOnto(page: Page, from: string, to: string) {
   const title = page.locator(
-    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${from}'] [data-slot="block-head"] [data-slot="title"]`
+    `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='${from}'] [data-slot="block-head"] [data-slot="title"]`
   );
   await title.evaluate((el) =>
     el.scrollIntoView({ behavior: "instant", block: "nearest" })
@@ -357,7 +358,7 @@ async function dragOnto(page: Page, from: string, to: string) {
   const head = await title.boundingBox();
   const target = await page
     .locator(
-      `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${to}']`
+      `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='${to}']`
     )
     .boundingBox();
   if (!(head && target)) {
@@ -384,10 +385,10 @@ async function dragOnto(page: Page, from: string, to: string) {
     .waitForFunction(
       () =>
         document.querySelector(
-          ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-dragging]'
+          ":is([data-block], [data-field-separator-block], [data-switch-block])[data-dragging]"
         ) !== null &&
         document.querySelector(
-          ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
+          ':is([data-block], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
         ) !== null,
       null,
       { timeout: 2000 }
@@ -396,16 +397,16 @@ async function dragOnto(page: Page, from: string, to: string) {
   const mid = await page.evaluate(() => ({
     slot:
       document.querySelector<HTMLElement>(
-        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-dragging]'
+        ":is([data-block], [data-field-separator-block], [data-switch-block])[data-dragging]"
       )?.dataset.block ?? null,
     drop: document
       .querySelector(
-        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
+        ':is([data-block], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
       )
       ?.getAttribute("data-edge"),
     on:
       document.querySelector<HTMLElement>(
-        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]):has(> :is([data-drop], [data-slot="drop"]))'
+        ':is([data-block], [data-field-separator-block], [data-switch-block]):has(> :is([data-drop], [data-slot="drop"]))'
       )?.dataset.block ?? null,
   }));
   await page.mouse.up();
@@ -419,7 +420,7 @@ async function deskDrag(kit: Kit, page: Page, base: string, projectId: string) {
     () =>
       document
         .querySelector<HTMLElement>(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         )
         ?.getAttribute("data-block") === "sources",
     null,
@@ -452,12 +453,12 @@ async function phoneDrag(
   await open(
     phone,
     url,
-    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+    '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
   );
   await settle(phone);
   const head = await phone.evaluate(() => {
     const el = document.querySelector<HTMLElement>(
-      ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block=\'actions\'] [data-slot="block-head"]'
+      ":is([data-block], [data-field-separator-block], [data-switch-block])[data-block='actions'] [data-slot=\"block-head\"]"
     );
     const styles = el ? getComputedStyle(el) : null;
     return {
@@ -486,7 +487,7 @@ async function phoneDrag(
     () =>
       document
         .querySelector<HTMLElement>(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         )
         ?.getAttribute("data-block") === "actions",
     null,
@@ -559,10 +560,10 @@ async function tabAndBlock(
   await settle(page);
   const strip = await stripOf(page);
   await page.getByRole("button", { name: "More for Spend" }).click();
-  await page.getByRole("menuitem", { name: "Place on a page" }).click();
+  await page.getByRole("menuitem", { name: blocksWords.placeOnPage }).click();
   await page.getByRole("menuitem", { name: "Routines", exact: true }).click();
   await page.waitForSelector(
-    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
+    `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
   );
   await settle(page);
   const placed = {
@@ -582,7 +583,7 @@ async function tabAndBlock(
   );
   const reached = await other
     .waitForSelector(
-      `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`,
+      `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`,
       { timeout: 10_000 }
     )
     .then(() => true)
@@ -592,11 +593,11 @@ async function tabAndBlock(
     reached,
     await orderOf(other)
   );
-  await pick(page, "Spend", "Show as a tab");
+  await pick(page, "Spend", blocksWords.showAsTab);
   await page.waitForFunction(
     (block) =>
       !document.querySelector(
-        `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
+        `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
       ),
     `view:${VIEW}`
   );
@@ -615,10 +616,10 @@ async function tabAndBlock(
   // filling the pane above the view.
   await openView(page, base, hub, projectId);
   await page.getByRole("button", { name: "More for Spend" }).click();
-  await page.getByRole("menuitem", { name: "Place on a page" }).click();
+  await page.getByRole("menuitem", { name: blocksWords.placeOnPage }).click();
   await page.getByRole("menuitem", { name: "Board", exact: true }).click();
   await page.waitForSelector(
-    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
+    `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
   );
   await settle(page);
   const board = await page.evaluate(() => {
@@ -653,7 +654,7 @@ async function tabAndBlock(
       board: Math.round(stages?.getBoundingClientRect().height ?? 0),
       order: [
         ...document.querySelectorAll(
-          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
         ),
       ]
         .map((b) => (b as HTMLElement).dataset.block)
@@ -670,11 +671,11 @@ async function tabAndBlock(
       board.board > 0,
     JSON.stringify(board)
   );
-  await pick(page, "Spend", "Show as a tab");
+  await pick(page, "Spend", blocksWords.showAsTab);
   await page.waitForFunction(
     (block) =>
       !document.querySelector(
-        `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
+        `:is([data-block], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
       ),
     `view:${VIEW}`
   );
@@ -723,7 +724,7 @@ const spec: Spec = {
     await open(
       page,
       url,
-      '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+      '[data-slot="blocks"] > :is([data-block], [data-field-separator-block], [data-switch-block])'
     );
     await settle(page);
     kit.check(

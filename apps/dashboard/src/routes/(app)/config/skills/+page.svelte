@@ -16,9 +16,14 @@
     deletePlugin,
     deleteSkill,
   } from "#lib/cawco/config/deletes.js";
-  import FetchSkillPopover from "#lib/cawco/config/FetchSkillPopover.svelte";
+  import FetchSkillPopover, {
+    fetchParkedOn,
+    reopenFetch,
+  } from "#lib/cawco/config/FetchSkillPopover.svelte";
   import { hubDown } from "#lib/cawco/config/hub.svelte.js";
-  import LinkMarketplacePopover from "#lib/cawco/config/LinkMarketplacePopover.svelte";
+  import LinkMarketplacePopover, {
+    reopenLink,
+  } from "#lib/cawco/config/LinkMarketplacePopover.svelte";
   import PreviousVersions, {
     type ListedVersion,
   } from "#lib/cawco/config/PreviousVersions.svelte";
@@ -33,6 +38,7 @@
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import {
     checkForUpdates,
+    dropMarketplaceLink,
     formatBytes,
     installPlugin,
     marketplaceCatalog,
@@ -48,7 +54,9 @@
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
   import { clock } from "#lib/cawco/home/home-state.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import MachineAway from "#lib/cawco/MachineAway.svelte";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
+  import { MachineWait } from "#lib/cawco/machine-wait.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -80,6 +88,8 @@
   const fleet = $derived(store.fleet.value);
   const skills = $derived(fleet?.skills ?? []);
   const marketplaces = $derived(fleet?.config.marketplaces ?? []);
+  /** Links with no row yet: under way, or refused and not let go. */
+  const links = $derived(fleet?.links ?? []);
   const plugins = $derived(fleet?.config.plugins ?? []);
   const machines = $derived(orderMachines(cawco.machines));
   const hubBroken = $derived(
@@ -196,6 +206,37 @@
   }
 
   /**
+   * A skill row the fetch popover heard: the hub's answer to its ask (the
+   * row `fetching`, older than a frame that already landed it), or the row
+   * once landed.
+   */
+  function fetchedSkill(row: FleetSkillMeta) {
+    if (fleet && store.answered(`skill:${row.name}`, row)) {
+      landedSkill(row);
+    }
+  }
+
+  /** The row a press came from, which the popover opens beside. */
+  const rowAt = (event: MouseEvent) =>
+    (event.currentTarget as HTMLElement).closest<HTMLElement>(
+      "[data-row-name]"
+    );
+
+  /** Why letting a refused link go was itself refused, by source. */
+  let dropFailed = $state<Record<string, string>>({});
+  async function dropLink(source: string) {
+    busy[source] = true;
+    delete dropFailed[source];
+    try {
+      await dropMarketplaceLink(source);
+    } catch (err) {
+      dropFailed[source] = message(err);
+    } finally {
+      delete busy[source];
+    }
+  }
+
+  /**
    * A plugin row a request answered with. An install or a switch answers
    * while its fetch is still under way; the `fleet.fetch` frame that lands it
    * may come first, and then the answer is the older of the two.
@@ -235,12 +276,17 @@
     }
   }
 
+  /** A fetch whose source machine went away (an adopted skill): said in place, asked again once it is back. */
+  const waits = new MachineWait();
+
   async function refetchSkill(row: FleetSkillMeta) {
     busy[row.name] = true;
     delete rowFaults[row.name];
     try {
       // A fetch the hub could not make stands on the row as its hub fault.
-      landedSkill(await refreshSkill(row.name));
+      landedSkill(
+        await waits.run(`skill:${row.name}`, () => refreshSkill(row.name))
+      );
     } catch (err) {
       refusedOn(row.name, err, () => refetchSkill(row));
     } finally {
@@ -297,7 +343,7 @@
         const next =
           fault.scope === "skills"
             ? // biome-ignore lint/performance/noAwaitInLoops: one at a time, so the count is right
-              await refreshSkill(fault.key)
+              await waits.run("all", () => refreshSkill(fault.key))
             : await refreshPlugin(fault.key);
         if (next.error) {
           still += 1;
@@ -469,19 +515,17 @@
 {/snippet}
 
 <!-- Link marketplace: the toolbar's, and the empty groups' one action. -->
-{#snippet linkMarketplace()}
+{#snippet linkMarketplace(where: string)}
   <LinkMarketplacePopover
     down={hubDown()}
-    onsaved={(row) => {
-      if (fleet) {
-        upsert(
-          fleet.config.marketplaces,
-          row,
-          (other) => other.name === row.name
-        );
+    links={fleet ? links : null}
+    marketplaces={fleet ? marketplaces : null}
+    onlinked={(link) => {
+      if (fleet && !marketplaces.some((row) => row.source === link.source)) {
+        upsert(fleet.links, link, (other) => other.source === link.source);
       }
     }}
-    taken={marketplaces.map((row) => row.name)}
+    {where}
   />
 {/snippet}
 
@@ -494,8 +538,9 @@
   {#snippet actions(down)}
     <FetchSkillPopover
       {down}
-      onsaved={landedSkill}
-      taken={skills.map((row) => row.name)}
+      onasking={(name) => store.asking(`skill:${name}`)}
+      onsaved={fetchedSkill}
+      skills={fleet ? skills : null}
     />
   {/snippet}
   {#snippet toolbar()}
@@ -517,6 +562,7 @@
       />
     {/if}
     <RowFault again={refetchAll} reason={refetchProblem} />
+    <MachineAway away={waits.away("all")} />
     {#if skills.length + plugins.length > 0}
       <Button
         disabled={hubDown() !== null}
@@ -532,7 +578,7 @@
       />
       <RowFault again={checkUpdates} reason={checkProblem} />
     {/if}
-    {@render linkMarketplace()}
+    {@render linkMarketplace("head")}
   {/snippet}
 
   <div data-slot="group" class="flex flex-col gap-space-2">
@@ -546,8 +592,10 @@
         {#snippet action()}
           <FetchSkillPopover
             down={hubDown()}
-            onsaved={landedSkill}
-            taken={skills.map((row) => row.name)}
+            onasking={(name) => store.asking(`skill:${name}`)}
+            onsaved={fetchedSkill}
+            skills={fleet ? skills : null}
+            where="empty"
           />
         {/snippet}
       </EmptyState>
@@ -613,6 +661,20 @@
                 what={row.name}
               />
             {/snippet}
+            {#snippet trailing()}
+              <!-- The fetch popover put away while it follows this row's
+                   fetch: one press opens it again, as it was. -->
+              {#if fetchParkedOn() === row.name}
+                <Button
+                  aria-label="{words.openFetch} {row.name}"
+                  data-open-fetch
+                  label={words.openFetch}
+                  onclick={(event: MouseEvent) => reopenFetch(rowAt(event))}
+                  size="sm"
+                  variant="outline"
+                />
+              {/if}
+            {/snippet}
             {#snippet below()}
               {#if row.updateAvailable && !oneShot(row.source)}
                 {@render update(
@@ -625,6 +687,7 @@
                 again={rowFaults[row.name]?.again}
                 reason={rowFaults[row.name]?.reason}
               />
+              <MachineAway away={waits.away(`skill:${row.name}`)} />
               <RowFaults
                 hub={hubBroken.filter(
                   (fault) => fault.scope === "skills" && fault.key === row.name
@@ -672,18 +735,63 @@
     class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
   >
     <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
-    {#if marketplaces.length === 0}
+    {#if marketplaces.length + links.length === 0}
       <EmptyState
         icon={IconShop}
         line={words.noMarketplaces}
         title="No marketplaces yet"
       >
         {#snippet action()}
-          {@render linkMarketplace()}
+          {@render linkMarketplace("empty")}
         {/snippet}
       </EmptyState>
     {:else}
       <RowList label={words.marketplaces}>
+        <!-- A link with no row yet stands here under its source: under
+             way, or refused until it is linked again or let go. Its
+             popover, put away, comes back from Open link. -->
+        {#each links as link (link.source)}
+          <SectionRow
+            actions={link.error
+              ? [
+                  {
+                    label: words.removeLink,
+                    icon: IconTrash,
+                    destructive: true,
+                    disabled: busy[link.source] === true,
+                    onselect: () => dropLink(link.source),
+                  },
+                ]
+              : []}
+            hue={HUE}
+            icon={IconShop}
+            name={link.source}
+            note={link.error
+              ? {
+                  tone: "fail",
+                  text: words.linkRefused(link.source, link.error),
+                }
+              : { tone: "busy", text: words.readingManifest }}
+          >
+            {#snippet trailing()}
+              <Button
+                aria-label="{words.openLink} {link.source}"
+                data-open-link
+                label={words.openLink}
+                onclick={(event: MouseEvent) =>
+                  reopenLink(link.source, rowAt(event))}
+                size="sm"
+                variant="outline"
+              />
+            {/snippet}
+            {#snippet below()}
+              <RowFault
+                again={() => dropLink(link.source)}
+                reason={dropFailed[link.source]}
+              />
+            {/snippet}
+          </SectionRow>
+        {/each}
         {#each marketplaces as row (row.name)}
           <SectionRow
             actions={[
@@ -847,7 +955,7 @@
               variant="outline"
             />
           {:else}
-            {@render linkMarketplace()}
+            {@render linkMarketplace("plugins")}
           {/if}
         {/snippet}
       </EmptyState>

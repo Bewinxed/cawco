@@ -17,9 +17,10 @@
  *
  * It runs under node and serves only on the listening sockets its service
  * manager hands it — `cawco-dashboard.socket` under systemd, the `Sockets`
- * entry of the LaunchAgent under launchd (packages/cli/src/service.ts): the
- * network's address, and this computer's loopback at the dashboard's
- * loopback port (`http://localhost:3455`). The manager holds those sockets
+ * entry of the LaunchAgent under launchd (packages/cli/src/service.ts), all on
+ * the dashboard's one port (3455): the network's address, and each loopback
+ * address that one does not answer, so `http://localhost:3455` is this
+ * dashboard by either family. The manager holds those sockets
  * across a restart of this process, so a page load
  * that lands while a deploy restarts the dashboard waits in the listen backlog
  * for the new process instead of being refused. It never binds the port
@@ -488,8 +489,8 @@ function collectWanted(name) {
 }
 
 // One descriptor per address the units and the plist name (cli service.ts
-// `dashboardSockets`): where the network reaches it, required, and this
-// computer's loopback at the dashboard's loopback port, wanted.
+// `dashboardSockets`): where the network reaches it, required, and the
+// loopback addresses that one does not answer, wanted.
 const fds = [
   ...sockets.collect("dashboard"),
   ...collectWanted("dashboard-local"),

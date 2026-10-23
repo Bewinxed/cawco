@@ -111,6 +111,16 @@ export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
     Bun.serve<PreviewSocket>({
       hostname: "127.0.0.1",
       port: 0,
+      // No idle limit of its own: a request waits here as long as the hub
+      // takes to answer it, and the hub's own server times it (its
+      // `idleTimeout`, and the routes that lift it). At Bun's 10 s default
+      // the door cut a build's download while the hub fetched the archive
+      // from its release host ("Bun.serve() timed out a request after 10
+      // seconds"); the machine's fetch then sent the request again with the
+      // same proof, which the hub had taken already, and it was refused as
+      // anonymous (2026-10-23, both VPSes added over SSH: "The hub could not
+      // supply the build: 401").
+      idleTimeout: 0,
       websocket: previewWebSocket,
       async fetch(request, door) {
         const url = new URL(request.url);

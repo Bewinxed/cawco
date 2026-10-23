@@ -15,7 +15,8 @@
  *    (`border-well`).
  * 3. The frame in view is said by its label row (`selected-bg`,
  *    `selected-ink`, 4.5:1); the inspector's story by one solid
- *    `focus-ring` ring that meets neither its label nor its status.
+ *    `border-button-outline` ring (never the focus ring, which is focus's
+ *    alone) that meets neither its label nor its status.
  * 4. A pressed ghost is `surface-pressed`, the current outline row
  *    `selected-bg` with `selected-ink`.
  * 5. The state chips are 30px at `radius-sm` with a 44px touch area under a
@@ -112,9 +113,9 @@
  * (`CANVAS_DESIGN=desk` alone): at session-sheet leg 18's 523px desk pane
  * that box is under 640 and Comments' word is not drawn.
  *
- * Captures for a second review (never read here) go to `$TMPDIR/caps/`:
- * `canvas-{390,523,desk}-{light,dark}.png`, the panel's pane at 2×, and
- * `map-{desk,phone}-{light,dark}.png` (also to the clone's `caps/`).
+ * Captures for a second review (never read here) go to the run's output
+ * folder (`kit.out`): `canvas-{390,523,desk}-{light,dark}.png`, the panel's
+ * pane at 2×, and `map-{desk,phone}-{light,dark}.png`.
  */
 import { Database } from "bun:sqlite";
 import { type ChildProcess, spawn } from "node:child_process";
@@ -128,9 +129,14 @@ import type {
   StageError,
   StageState,
 } from "../../../packages/core/src/stage";
+import { commentWords } from "../../../packages/core/src/words/comments";
+import { commonWords } from "../../../packages/core/src/words/common";
+import { previewWords } from "../../../packages/core/src/words/preview";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
-import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
+import { type Kit, open as openPage, ROOT, type Spec, specOut } from "../kit";
+import { shaped } from "../words";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
 /** The artifact's live doc on the dashboard's own origin (artifact-doc.ts `joinArtifact`). */
@@ -139,7 +145,7 @@ const ARTIFACT_SOCKET = /\/ws\/artifact\//;
 const MORE_COUNT = /^More, Comments [1-9]\d* open$/;
 /** The crumb's words: which frame of how many. */
 const FRAME_COUNT = /^Frame \d+ of \d+$/;
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
+const CAPS = specOut("canvas-design");
 /** A states file of the probe's own, in the stage's git-ignored folder: one story with no doc comment. */
 const UNNAMED_FILE = ".cawco/probe/Unnamed.stories.ts";
 const FILES = [
@@ -353,7 +359,12 @@ interface PageRead {
   } | null;
   pressed: [string, string];
   repeats: string[];
-  ring: { clear: boolean; style: string; color: [string, string] } | null;
+  ring: {
+    clear: boolean;
+    style: string;
+    color: [string, string];
+    focus: string;
+  } | null;
   row: { bg: [string, string]; ink: [string, string] } | null;
   sectionFile: {
     color: string;
@@ -445,8 +456,9 @@ async function readCanvas(page: Page): Promise<PageRead> {
         style: style.outlineStyle,
         color: [
           w.__rgb(style.outlineColor),
-          w.__token("--focus-ring", body, "color"),
+          w.__token("--border-button-outline", body, "color"),
         ],
+        focus: w.__token("--focus-ring", body, "color"),
       };
     }
     const chips = [...root.querySelectorAll<HTMLElement>(".chip")];
@@ -636,11 +648,12 @@ async function canvasLeg(
     JSON.stringify(read.current)
   );
   kit.check(
-    `3b: ${leg}: the inspector's story wears one solid focus-ring ring clear of its label and status`,
+    `3b: ${leg}: the inspector's story wears one solid border-button-outline ring, never the focus ring, clear of its label and status`,
     !!read.ring &&
       read.ring.clear &&
       read.ring.style === "solid" &&
-      same(read.ring.color),
+      same(read.ring.color) &&
+      read.ring.color[0] !== read.ring.focus,
     JSON.stringify(read.ring)
   );
   kit.check(
@@ -1689,7 +1702,7 @@ async function openView(page: Page): Promise<void> {
     await page.locator("[data-bench-pane] [data-slot=more]").click();
     await page
       .locator("[data-slot=dropdown-menu-sub-trigger]", {
-        hasText: "Canvas view",
+        hasText: previewWords.canvasView,
       })
       .click();
   }
@@ -1866,13 +1879,10 @@ async function mapLeg(
       `${JSON.stringify(read)}; live canvas drew ${drewLive} sections`
     );
   }
-  for (const dir of [CAPS, join(ROOT, "caps")]) {
-    mkdirSync(dir, { recursive: true });
-    // biome-ignore lint/performance/noAwaitInLoops: one file per folder
-    await page.locator("[data-bench-pane]").screenshot({
-      path: join(dir, `map-${phone ? "phone" : "desk"}-${theme}.png`),
-    });
-  }
+  mkdirSync(CAPS, { recursive: true });
+  await page.locator("[data-bench-pane]").screenshot({
+    path: join(CAPS, `map-${phone ? "phone" : "desk"}-${theme}.png`),
+  });
   kit.note(
     `capture: ${join(CAPS, `map-${phone ? "phone" : "desk"}-${theme}.png`)}`
   );
@@ -1911,7 +1921,7 @@ async function mapLeg(
     );
     await openView(page);
     await page
-      .getByRole("menuitem", { name: "Verify against the design system" })
+      .getByRole("menuitem", { name: previewWords.verifyDesign })
       .click();
     const toasted = await page
       .locator("[data-sonner-toast]", { hasText: VERIFY_SAID })
@@ -2189,11 +2199,11 @@ async function stageDownLeg(
       folded.title === "The stage for apps/dashboard didn't start" &&
       folded.line ===
         "Vite stopped before it served the canvas. Try again starts it again." &&
-      folded.button === "Show details" &&
+      folded.button === shellWords.showDetails &&
       folded.expanded === "false" &&
       folded.details === null &&
       !folded.said &&
-      open.button === "Hide details" &&
+      open.button === shellWords.hideDetails &&
       open.expanded === "true" &&
       open.details === NIGHTLY_ERROR &&
       open.inside,
@@ -2359,7 +2369,7 @@ async function refusedLeg(
       `${leg}: ${theme}: ${what} says so within ${REFUSED_MS / 1000}s in the error formula's line, the stage's own words under Show details on a ground recessed from its card${place ? ", its place whole on one line and Vite's code frame under them" : ""}, and the pane never says "Compiling…"`,
       !seen.compiling &&
         !!seen.failed &&
-        seen.failed.summary === "Show details" &&
+        seen.failed.summary === shellWords.showDetails &&
         seen.failed.line === line &&
         said(seen.failed.details) &&
         seen.failed.ground !== seen.failed.card &&
@@ -2861,25 +2871,30 @@ async function unreachedLeg(
   );
   const card = page.locator('[data-bench-pane] [data-slot="down"]').first();
   await card.waitFor({ timeout: REFUSED_MS }).catch(() => undefined);
+  // The words go in as the read's argument: it runs in the page, where
+  // nothing of this module's scope is.
   const said = await card
-    .evaluate((el) => ({
-      text: el.textContent?.replace(/\s+/g, " ").trim() ?? "",
-      unreached:
-        el
-          .querySelector('[data-slot="unreached"]')
-          ?.textContent?.replace(/\s+/g, " ")
-          .trim() ?? null,
-      retry: [...el.querySelectorAll("button")].some(
-        (one) =>
-          one.getAttribute("aria-label") === "Try again" ||
-          !!one.textContent?.trim().startsWith("Try again")
-      ),
-    }))
+    .evaluate(
+      (el, again) => ({
+        text: el.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        unreached:
+          el
+            .querySelector('[data-slot="unreached"]')
+            ?.textContent?.replace(/\s+/g, " ")
+            .trim() ?? null,
+        retry: [...el.querySelectorAll("button")].some(
+          (one) =>
+            one.getAttribute("aria-label") === again ||
+            !!one.textContent?.trim().startsWith(again)
+        ),
+      }),
+      commonWords.tryAgain
+    )
     .catch(() => null);
   kit.check(
     `15: ${theme}: a canvas whose stage the hub's last read couldn't reach says so where the page would be: the machine isn't answering, since when and why, and Try again`,
     !!said &&
-      said.text.includes("isn't answering") &&
+      shaped(previewWords.machineNotAnswering).test(said.text) &&
       said.retry &&
       !!said.unreached?.startsWith("Not reached since ") &&
       said.unreached.endsWith(`: ${UNREACHED_WHY}`),
@@ -3055,7 +3070,7 @@ async function readMore(page: Page) {
   if (opened) {
     await page
       .locator('[data-slot="comment-rail"]')
-      .getByRole("button", { name: "Close comments" })
+      .getByRole("button", { name: commentWords.closeComments })
       .click();
   } else {
     await page.keyboard.press("Escape");

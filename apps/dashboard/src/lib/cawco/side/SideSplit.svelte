@@ -2,29 +2,27 @@
   /**
    * A conversation and the surface beside it (PRD §5.2): the transcript in
    * one side of the resizable split (Split), and on the other, inset on the
-   * preview sheet's recipe, what the conversation has to show — its plan,
-   * its preview, a task one of its cards opened, or more than one under a
-   * switch. On a desk and at an iPad's regular width it is the split. On a
-   * phone, or in a desk's pane under 900px (layoutPolicy.sideDrawer), each
-   * rises on its own: the preview as a sheet standing on the composer
-   * (SideSheet), so the reader can write while it is up; the plan as the house bottom sheet
-   * (the kit Drawer), from the screen's foot over the composer, as tall as
-   * what it holds. A task there is its own page (the project page's
+   * preview sheet's recipe, what the conversation has to show — its
+   * preview, a task one of its cards opened, or both under a switch. On a
+   * desk and at an iPad's regular width it is the split. On a phone, or in
+   * a desk's pane under 900px (layoutPolicy.sideDrawer), the preview rises
+   * as a sheet standing on the composer (SideSheet), so the reader can
+   * write while it is up. A task there is its own page (the project page's
    * `?task=`), never a sheet: the thread's cards link to it, as a thread's
-   * file chips link to the page's `?file=`. A session and
-   * a thread (whose plan is its project's lead's) draw it alike.
+   * file chips link to the page's `?file=`. A session and a thread draw it
+   * alike. The plan is not here: its ring is the composer's, so it opens
+   * as a layer of the composer over the transcript (plan/PlanPane), never
+   * beside it.
    *
    * The split opens when there is something to show and the reader or the
-   * agent asked for it: an agent showing a preview opens it on Preview, the
-   * plan's ring (`openPlan`) opens it on Plan, a task card on the task. Each
+   * agent asked for it: an agent showing a preview opens it on Preview, a
+   * task card on the task. Each
    * pane closes its own content; with nothing left the split collapses. Its
    * width and expansion are the conversation's own, kept across visits.
    */
   import { sideWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import {
     TabItem,
     Tabs,
@@ -33,17 +31,15 @@
   import { cawco } from "../client.svelte";
   import { floatingPanel } from "../files/files.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
-  import PlanPane, { planShows, planTitle } from "../plan/PlanPane.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SideSheet from "./SideSheet.svelte";
   import Split from "./Split.svelte";
 
-  type Shown = "plan" | "preview" | "task";
+  type Shown = "preview" | "task";
 
   let {
     viewId,
-    planOf,
     previewOf,
     visible,
     active,
@@ -55,8 +51,6 @@
   }: {
     /** The conversation: its preview, and the key its width is kept under. */
     viewId: string;
-    /** The session whose plan shows here; null when the conversation has none. */
-    planOf: string | null;
     /**
      * The session whose preview shows here, when it is not the conversation
      * itself: a thread shows its project's lead's (his setup page).
@@ -102,23 +96,17 @@
     cawco.previews[previewId]?.state === "open" &&
       (phone || !floatingPanel(previewId))
   );
-  const plan = $derived(planOf ? cawco.planOf(planOf) : undefined);
-  const hasPlan = $derived(planShows(plan));
-  /** The reader asked for the plan (its ring) and has not closed it. */
-  let planAsked = $state(false);
-  const planOpen = $derived(planAsked && hasPlan);
   const taskShown = $derived(taskOpen && !!task && phone === false);
-  const open = $derived(previewOpen || planOpen || taskShown);
+  const open = $derived(previewOpen || taskShown);
   /** What is open, in the switch's order. */
   const opened = $derived<Shown[]>([
-    ...(planOpen ? (["plan"] as const) : []),
     ...(previewOpen ? (["preview"] as const) : []),
     ...(taskShown ? (["task"] as const) : []),
   ]);
-  let tab = $state<Shown>("plan");
+  let tab = $state<Shown>("preview");
   /** The one on show: the one chosen while it is open, else the newest there is. */
   const shown = $derived<Shown>(
-    opened.includes(tab) ? tab : (opened.at(-1) ?? "plan")
+    opened.includes(tab) ? tab : (opened.at(-1) ?? "preview")
   );
   // An agent showing a preview brings it to the front; so does a task card.
   let previewWas = untrack(() => previewOpen);
@@ -137,17 +125,6 @@
     }
     taskWas = now;
   });
-
-  /** Opens the surface on the plan: the plan's ring. */
-  export function openPlan(): void {
-    planAsked = true;
-    tab = "plan";
-  }
-
-  /** The plan is on show beside the conversation (its ring is pressed). */
-  export function planShowing(): boolean {
-    return planOpen && (phone || shown === "plan");
-  }
 
   /** The surface beside the transcript, on screen or not: a measured pane that splits. */
   const desktopOpen = $derived(open && phone === false);
@@ -175,7 +152,6 @@
   });
 
   const LABEL: Record<Shown, string> = {
-    plan: sideWords.plan,
     preview: sideWords.preview,
     task: sideWords.task,
   };
@@ -202,14 +178,6 @@
   {@const switched = opened.length > 1 ? switcher : undefined}
   {#if shown === "task" && taskShown && task}
     {@render task(switched)}
-  {:else if shown === "plan" && planOf && planOpen}
-    <PlanPane
-      instanceId={planOf}
-      onclose={() => {
-        planAsked = false;
-      }}
-      switcher={switched}
-    />
   {:else if previewOpen}
     <PreviewPane
       instanceId={previewId}
@@ -247,32 +215,6 @@
         />
       </RegionBoundary>
     </SideSheet>
-  {/if}
-  {#if phone && visible && active && planOf && hasPlan}
-    <!-- The plan is read beside the conversation it plans, so it holds
-         nothing (DESIGN.md, The Open Page Rule): no scrim, no focus trap,
-         and a press on the page lands there while the plan waits (vaul lets
-         a press outside a sheet that is not modal through). Close, Esc and
-         the grabber put it away. -->
-    <Drawer.Root
-      modal={false}
-      onOpenChange={(next) => {
-        planAsked = next;
-      }}
-      open={planAsked}
-    >
-      <Drawer.Content modal={false} title={planTitle(plan)} trapFocus={false}>
-        <RegionBoundary region="plan">
-          <PlanPane
-            instanceId={planOf}
-            onclose={() => {
-              planAsked = false;
-            }}
-            sheet
-          />
-        </RegionBoundary>
-      </Drawer.Content>
-    </Drawer.Root>
   {/if}
 {/snippet}
 

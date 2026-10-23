@@ -43,22 +43,35 @@
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
    */
-  import { machineLabel, viewsWords } from "@cawco/core";
-  import type { UpstreamPosts } from "@cawco/core/upstream-guard";
+  import {
+    commonWords,
+    machineLabel,
+    projectWords,
+    viewsWords,
+  } from "@cawco/core";
+  import {
+    UPSTREAM_WORDS,
+    type UpstreamPosts,
+    upstreamPostsWords,
+  } from "@cawco/core/upstream-guard";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import { cawco, editProject } from "#lib/cawco/client.svelte.js";
   import ForgetProjectTray from "#lib/cawco/ForgetProjectTray.svelte";
   import { forgetHost, forgetProject } from "#lib/cawco/forget.svelte.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import {
+    failureClause,
+    failureWords as message,
+  } from "#lib/cawco/hub-read.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import UpstreamMenu from "#lib/cawco/project/UpstreamMenu.svelte";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
+  import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
@@ -114,7 +127,16 @@
   const touch = new MediaQuery(
     "(hover: none), (pointer: coarse), (max-width: 640px)"
   );
-  let cawOpen = $state(false);
+  /**
+   * Caw's settings stand open: open again after a reload while his off
+   * tray stands in them (stop-work.svelte.ts), so it comes back where it was.
+   */
+  let cawOpen = $state(
+    untrack(() => {
+      const off = stopWork.of("caw-off", project.id);
+      return off?.open === true && off.at === cawOffAt(project.id);
+    })
+  );
   let more = $state<HTMLElement | null>(null);
   /** The place a forget asked from this head's `⋯` stands (forget.svelte.ts). */
   const forgetAt = $derived(`head:${project.id}`);
@@ -152,6 +174,11 @@
   function openDetails(atPlaces: boolean): void {
     if (forgetHost.at === forgetAt) {
       forgetHost.close();
+    }
+    // A forget's tray standing here gives way too; stops under way park.
+    const forgetting = stopWork.of("forget", project.id);
+    if (forgetting?.open && forgetting.at === forgetAt) {
+      stopWork.dismiss(forgetting);
     }
     const asked = details?.placesAsked ?? 0;
     standing.set(project.id, { placesAsked: atPlaces ? asked + 1 : asked });
@@ -232,12 +259,25 @@
     }
   }
 
+  /**
+   * What the hub refused of the upstream choice, said under the head where
+   * the ⋯ that asked stands, with Try again; never a toast (DESIGN.md, The
+   * Work Outlives Its Surface Rule).
+   */
+  const upstreamKey = $derived(`upstream:${project.id}`);
+  const upstreamFault = $derived(refusals.get(upstreamKey));
+
   /** The project's own upstream answer, or null for the fleet's (UpstreamMenu). */
   async function setUpstream(posts: UpstreamPosts | null): Promise<void> {
+    refusals.delete(upstreamKey);
     try {
       await editProject(project.id, { upstreamPosts: posts });
     } catch (error) {
-      toast.error(message(error));
+      const asked = posts ? upstreamPostsWords(posts) : UPSTREAM_WORDS.inherit;
+      refusals.set(upstreamKey, {
+        reason: `${UPSTREAM_WORDS.title} was not set to “${asked}”: ${failureClause(error)}. It stays as it was.`,
+        asked: posts,
+      });
     }
   }
 
@@ -343,6 +383,13 @@
       </h1>
       <!-- A rename the hub refused, under the name, in its words. -->
       <RowFault again={commitName} reason={renameFault} />
+      <!-- The upstream choice the hub refused, under the head its ⋯ is on. -->
+      <RowFault
+        again={() =>
+          setUpstream((upstreamFault?.asked as UpstreamPosts | null) ?? null)}
+        data-upstream-refusal
+        reason={upstreamFault?.reason}
+      />
       <!-- Words change by MorphText. The line is one ellipsized line as wide
            as its column, with nothing standing after it on its row: its box
            neither grows nor narrows, so there is no size for morph() to
@@ -435,7 +482,7 @@
         aria-haspopup="dialog"
         layout="wide"
         press="pressable"
-        label="Spin off"
+        label={projectWords.spinOff}
         onclick={(event) => spinOff(event.currentTarget)}
         variant="outline"
       />
@@ -445,7 +492,7 @@
         {#snippet child({ props })}
           <Button
             {...props}
-            aria-label="More for {project.name}"
+            aria-label={commonWords.moreFor(project.name)}
             class="max-desk:ms-auto max-desk:me-(--more-bleed)"
             size="icon"
             style="--more-bleed: calc((var(--c-btn-h) - var(--icon-md)) / -2)"
@@ -472,7 +519,7 @@
           {#if primary}
             <DropdownMenu.Item onSelect={() => spinOff(more)}>
               <IconFork />
-              <span>Spin off</span>
+              <span>{projectWords.spinOff}</span>
             </DropdownMenu.Item>
           {/if}
           <DropdownMenu.Item onSelect={onnewtask}>
@@ -512,12 +559,12 @@
             }}
           >
             <IconColumns />
-            <span>Pick stages…</span>
+            <span>{projectWords.pickStages}</span>
           </DropdownMenu.Item>
         {/if}
         <DropdownMenu.Item onSelect={() => openDetails(false)}>
           <IconInfo />
-          <span>Project details…</span>
+          <span>{projectWords.projectDetails}</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() => {
@@ -525,7 +572,7 @@
           }}
         >
           <IconSettings />
-          <span>Caw settings…</span>
+          <span>{projectWords.cawSettings}</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() =>
@@ -550,7 +597,7 @@
           variant="destructive"
         >
           <IconTrash />
-          <span>Forget project…</span>
+          <span>{projectWords.forgetProject}</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu.Root>
@@ -600,9 +647,14 @@
 <!-- A forget asked from `⋯`, under the head, from where its title starts. -->
 <!-- The tray on the page's gutters: 25px in at the start (18 under the desk
      line, DESIGN.md L643) and 18 at the end, so it never meets the screen. -->
-<div class="contents" style:--ask-end="var(--space-5)">
+<div
+  data-slot="project-forget"
+  class="contents"
+  style:--ask-end="var(--space-5)"
+>
   <ForgetProjectTray
     at={forgetAt}
+    projectId={project.id}
     class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
   />
 </div>

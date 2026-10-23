@@ -113,7 +113,12 @@
     {@attach nested ? nestFrom('[data-slot="plan-mark"]') : undefined}
   >
     {#each nodes as node (node.id)}
-      <li data-flip data-status={node.status}>
+      <li
+        class="rounded-sm transition-[background-color] duration-(--dur-fade) ease-out data-linked:bg-selected-bg"
+        data-flip
+        data-plan-row={node.id}
+        data-status={node.status}
+      >
         <span
           data-slot="row"
           class="flex items-start gap-space-2 min-w-0 type-label text-ink-strong"

@@ -29,6 +29,7 @@
    * no canvas to draw, so it can't be chosen.
    */
   import { FORMS } from "@cawco/core/stage";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { cn } from "#lib/utils.js";
   import MapThumb from "./MapThumb.svelte";
 
@@ -57,7 +58,11 @@
   const shortFile = $derived(node.file.split("/").slice(-2).join("/"));
   /** The live page's room: the tablet form's width at the view's 16:10, scaled to the card's width. */
   const LIVE = { w: FORMS.tablet, h: (FORMS.tablet * 10) / 16 };
+  /** The view's width, which the live page scales to: read as it mounts, and a change in the next frame (frameSize). */
   let viewWidth = $state(0);
+  const measureView = frameSize<HTMLElement>((view) => {
+    viewWidth = view.clientWidth;
+  });
 </script>
 
 <div
@@ -98,7 +103,7 @@
   </button>
   <div
     class="relative aspect-16/10 overflow-hidden rounded-md bg-surface-recess"
-    bind:clientWidth={viewWidth}
+    {@attach measureView}
   >
     {#if chosen && live}
       <iframe

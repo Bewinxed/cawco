@@ -2,12 +2,11 @@
 
 Every UI and fleet proof runs here, read from the engine, not the picture
 (the fleet's rule 7): state and geometry first (`geom.ts`), motion by seeking
-the clock (`anim.ts`), a changed look caught by pixel diff against an
-approved baseline and handed to review, never failing a run (`diff.ts`), ink
-(`ink.ts`) only for what drawing alone decides.
+the clock (`anim.ts`), regressions by pixel diff against an approved baseline
+(`diff.ts`), ink (`ink.ts`) only for what drawing alone decides.
 
 ```sh
-bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]   # specs/web/
+bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review]   # specs/web/
 bun scripts/probe-kit/run.ts <spec>…                                                       # specs/<spec>.ts, each in order
 ```
 
@@ -46,7 +45,7 @@ nightly release, not per change.
 | `j4-caw-asks` | Caw asks | two asks at once: “1 of 2” answered by click, “2 of 2” by its number key; Caw's next turn carries both answers |
 | `j5-task-review` | task review | a task needing a Mac waits, never fails, while none is free (apple-gate's protection), then lands through the gate's build on the Mac; approve; send back, and the next attempt is given your words |
 | `j6-decisions` | decisions | picks kept on the hub; I'm done picking sends the page in place and tells its writer |
-| `j7-comments` | previews and comments | a comment on the session's page reaches the session on Send, with the line it was written on |
+| `j7-comments` | previews and comments | a comment on the session's page reaches the session by itself, with the line it was written on |
 | `j8-routines` | routines | create by hand: the form's schedule read back by the hub, the routine listed as filled, its test run started once; run now: one more run, its delegate given the instruction; pause: off on the hub, Paused on its row |
 | `j9-jump` | Jump | a word of what was said finds the moment; it opens the conversation at the machine's own record of that line, in view |
 | `j10-rules` | 5, rules | a template is live on the next session; an edit's words go out next; delete, then undo |
@@ -55,6 +54,37 @@ nightly release, not per change.
 J4, J5 and J8 start Caw's session or delegates, which run inside workspace
 boundaries: those journeys run only where a boundary can start (the host,
 outside every workspace), as `apple-gate` and `caw-asks` do.
+
+## Motion on every engine, and a hand
+
+`readMotion(page, action, within, { fractions, read })` (kit.ts) reads the
+enter or exit `action` starts inside `within` on a held clock, on any engine:
+each run held at its start, sought to each fraction with `read` taken there,
+then let go to play out (`ended`). Chromium holds it through the DevTools
+Animation domain (`anim.ts` `Clock`); WebKit and Firefox, which Playwright
+gives none, hold it in the page: a MutationObserver catches a transition's
+write before any frame and sets its `playbackRate` to 0, `Element.animate`
+is wrapped so a Web Animation starts at 0, and once every run has started
+they are paused, sought and played on. A spec never waits frames for a run to
+begin or polls `getAnimations()` for one to end: on a slow frame the whole
+motion is over before the poll sees it.
+
+A read begins on a still surface: before the action, `readMotion` waits
+until nothing inside `within` has run for two frames (`stillWithin`), so the
+last motion there (a menu's exit WebKit started 173ms late) is never held as
+the action's, and a run made before the read is never its own. A read of
+boxes (an overflow sweep) waits on `stillWithin` too, and on the boxes it
+reads standing for three frames: WebKit has told a transition finished while
+its box still moved.
+
+`handOn(page)` is a finger and a resting mouse cursor: raw touch through CDP
+on Chromium, PointerEvents made in the page elsewhere (Playwright drives no
+touch drag in WebKit), the finger's capture kept by the hand. A boundary
+event it sends never names its own target as its related target: WebKit
+delivers such a `pointerout` to no listener.
+
+`PROBE_ENGINE=webkit` (or `firefox`) runs every page a spec does not pin to
+an engine on that engine.
 
 ## A pinned WebKit
 
@@ -66,6 +96,20 @@ WebKit 2359, which hangs its web process on a transitioned blur as the
 owner's iPhone Safari does (`safari-long-ask`, `safari-blurs`); it is
 read from Playwright's browser cache, installed with
 `bunx playwright-core@1.63.0 install webkit`.
+
+## A browser leaves nothing behind
+
+Every browser the kit or a spec launches runs with `launchEnv()`
+(`browser-leftovers.ts`) as its environment, which tags it. Once a spec's
+own browsers have closed, and once the run's shared ones have, the kit
+checks that no process carrying the tag is left (`… leaves no process of its
+own behind`), a `chrome_crashpad_handler` above all: Crashpad starts it
+through a `setsid()` and a double fork, so it is no part of the browser's
+process tree. A spec that launches a browser itself passes `launchEnv(env)`.
+The kit's Chromium pages run the headless shell, which starts no crash
+reporter; full Chromium (`channel: "chromium"`, a hand-spawned
+`chromium.executablePath()`) always starts one, and no switch stops it
+without breaking its renderers.
 
 ## Approving a baseline
 
@@ -80,21 +124,26 @@ scratch copy, to prove an approve on.
 
 ## Showing the owner what changed
 
-A capture that differs from its baseline is a NOTE, never a FAIL: UI is
-judged by its look and its correctness against DESIGN.md, not by sameness with
-older screens. `--review <dir>` (say `.probe-review/<spec>`) writes the
-owner's review page when a capture differs from its baseline: one phone page, one decision per
-surface, "Approved look" or "New look" on the same cropped pictures
-(`review.ts`, `scripts/probe-review/README.md`). The run prints the
-`--approve` command each "New look" pick runs; the manifest carries it too.
-Open the folder with `artifact_create(kind: "preview", dir)`.
+A capture that differs from its approved baseline FAILs the run.
+`--review` also writes the owner's review page into a folder outside the
+repository, `$XDG_CACHE_HOME/cawco/probe-review/<specs>-<head>` (`~/.cache`
+when unset), or the folder `PROBE_REVIEW_DIR=<dir>` names; the run prints it.
+A review run is build output, never source: nothing of it is committed. It
+holds the new captures as candidate baselines under `<dir>/candidates/`, apart
+from the approved set, and one page grouped by surface, each capture as its
+approved baseline, its new capture and the crop of what changed, with one
+Approve or Reject per surface (`review.ts`, `scripts/probe-review/README.md`).
+The orchestrator opens it with `artifact_create(kind: "preview", dir: <dir>)`; the page's
+`artifact_read` answer, saved as JSON, goes to
+`bun scripts/probe-kit/approve-review.ts <dir> <picks.json>`, which moves only
+the approved surfaces' candidates over the approved baselines.
 
 ## The style snapshot and the hub tape
 
 ```sh
 bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] [--approve]   # computed styles, boxes, overflow, forced states
 bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b] [--approve surfaces]   # the same surfaces' pixels
-bun scripts/probe-kit/run.ts style-snapshot --coverage                      # style-snapshot-coverage.json
+bun scripts/probe-kit/run.ts style-snapshot --coverage [--surfaces=a,b]     # style-snapshot-coverage.json: the states that render each .svelte file
 bun scripts/probe-kit/run.ts style-snapshot --record                        # the hub tape, again (on the host)
 bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate     # in a workspace: no delegate
 ```
@@ -148,6 +197,13 @@ workspace (`CAWCO_WORKSPACE` set), it is not run; the run prints
 HERE`, and exits 3 when nothing failed. A spec that starts a boundary in one
 leg only and words that leg's refusal (comment-delivery) carries no `host`.
 
+The other way round, a spec that reads what a workspace's boundary gives a
+command (its proxy, its tool door) says so in its `workspace` field
+(boundary-proxy). Run outside every workspace (`CAWCO_WORKSPACE` unset), it is
+not run; the run prints `WORKSPACE <spec>: runs inside a workspace's boundary
+…` with its command, lists it under `NOT RUN HERE`, and exits 3 when nothing
+failed.
+
 Such a spec runs outside every boundary: from the shell of a session the
 person started, on a checkout of the delegate's commit. A delegate that
 writes one lists it under "Not run:" in its finish_item report, with the
@@ -196,4 +252,8 @@ workspace and on the host, with no wrapper.
 Logs, journal excerpts and transcripts a spec's delegate needs go in the
 `delegate` call's `inputs` (absolute paths on the parent's machine): they are
 copied into the delegate's `$TMPDIR/inputs/` before its first turn. Credential
-stores, secret files and the host's logs are refused; 64 MiB in all.
+stores, secret files and the host's logs are refused; 64 MiB in all. What the
+hub already holds goes by name, with no file written for it (core
+handed-input.ts): `{ report }`, `{ artifact }`, `{ pins }`, `{ find }`,
+`{ attachment }`, `{ assets }`, `{ text, name }`, `{ blob, name }`
+(`handed-inputs` proves each).

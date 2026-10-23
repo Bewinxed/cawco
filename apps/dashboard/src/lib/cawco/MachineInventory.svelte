@@ -17,6 +17,8 @@
   import type { Machine } from "./client.svelte";
   import NoMachines from "./config/NoMachines.svelte";
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
+  import MachineAway from "./MachineAway.svelte";
+  import { MachineWait } from "./machine-wait.svelte";
   import OsMark from "./OsMark.svelte";
   import RowFault from "./RowFault.svelte";
 
@@ -41,6 +43,8 @@
   let busy = $state<Record<string, boolean>>({});
   /** Why an adopt was refused, by row: said under that row. */
   let adoptFailed = $state<Record<string, string>>({});
+  /** Reads and adopts whose machine went away: said in place, asked again once it is back. */
+  const waits = new MachineWait();
   const keyOf = (machineId: string, scope: string, name: string) =>
     `${machineId}:${scope}:${name}`;
 
@@ -56,7 +60,9 @@
     reading[machine.machineId] = true;
     delete unread[machine.machineId];
     try {
-      found[machine.machineId] = await inspectMachine(machine.machineId);
+      found[machine.machineId] = await waits.run(machine.machineId, () =>
+        inspectMachine(machine.machineId)
+      );
     } catch (error) {
       unread[machine.machineId] = message(error);
     } finally {
@@ -84,7 +90,9 @@
     busy[key] = true;
     delete adoptFailed[key];
     try {
-      onskill?.(await adoptSkill(row.name, machine.machineId));
+      onskill?.(
+        await waits.run(key, () => adoptSkill(row.name, machine.machineId))
+      );
     } catch (error) {
       adoptFailed[key] = message(error);
     } finally {
@@ -151,7 +159,9 @@
             </span>
           </button>
           {#if open[machine.machineId]}
-            {#if reading[machine.machineId]}
+            {#if waits.away(machine.machineId)}
+              <MachineAway away={waits.away(machine.machineId)} />
+            {:else if reading[machine.machineId]}
               <p
                 data-slot="note"
                 class="mark-line flex max-w-c-measure items-center gap-space-2 type-meta text-ink-muted"
@@ -231,6 +241,11 @@
                       >
                     {/if}
                     <RowFault class="basis-full" reason={adoptFailed[key]} />
+                    {#if waits.away(key)}
+                      <div class="basis-full">
+                        <MachineAway away={waits.away(key)} />
+                      </div>
+                    {/if}
                   </li>
                 {/each}
               </ul>

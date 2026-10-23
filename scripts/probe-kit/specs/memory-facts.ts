@@ -61,6 +61,7 @@
  *   bun scripts/probe-kit/run.ts memory-facts
  */
 import { createHash } from "node:crypto";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type JevAsked, type JevCall, jevMock, jevOn } from "../jev-mock";
 import type { Kit, Spec } from "../kit";
@@ -432,27 +433,12 @@ const standUp = async (kit: Kit, jevUrl: string) => {
     name: string,
     args: object
   ) => {
-    const response = await fetch(`${fleet.base}/api/delegation/call/${as.id}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${as.credential}`,
-      },
-      body: JSON.stringify({ name, arguments: args }),
-    });
-    const raw = await response.text();
-    try {
-      const result = JSON.parse(raw) as {
-        content?: { text?: string }[];
-        isError?: boolean;
-      };
-      return {
-        refused: !response.ok || result.isError === true,
-        text: (result.content ?? []).map((block) => block.text ?? "").join(""),
-      };
-    } catch {
-      return { refused: true, text: `${response.status} ${raw}` };
-    }
+    const said = await toolWords(
+      { base: fleet.base, id: as.id, credential: as.credential },
+      name,
+      args as Record<string, unknown>
+    );
+    return { refused: said.refused, text: said.text };
   };
   return {
     fleet,
@@ -1016,7 +1002,8 @@ interface Caller {
   id: string;
 }
 
-const NOTED_ID = /"id":"(n-[^"]+)"/;
+/** A note's id in memory_note's words: "Noted in the inbox as n-20261022-075232-7b9e3c." */
+const NOTED_ID = /\b(n-\d{8}-\d{6}-[0-9a-f]+)\b/;
 
 /** The card that appears after `before` (a set of request ids) whose files include `path`. */
 const newCard = (

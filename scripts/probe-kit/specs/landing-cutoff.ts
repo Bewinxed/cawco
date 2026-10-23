@@ -72,6 +72,7 @@ import {
   listedPid,
   type Pid,
 } from "../../../packages/core/src/signal";
+import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -598,7 +599,8 @@ const run = async (kit: Kit) => {
     const a = await delegate("A");
     check(
       "A: the item is done, its report saying it landed on main",
-      a.row.state === "done" && a.result.includes("Landed on main at"),
+      a.row.state === "done" &&
+        a.result.includes(`${workWords.landedOn("main")} at`),
       a.said
     );
     const aMain = await onMain("A");
@@ -639,7 +641,7 @@ const run = async (kit: Kit) => {
     check(
       "B: the cut-off push is reported, not retried: main read once after it, the item done saying it landed when main held its commit, else failed saying the push was cut off and main does not hold it",
       (b.row.state === "done" &&
-        b.result.includes("Landed on main at") &&
+        b.result.includes(`${workWords.landedOn("main")} at`) &&
         bMain.ok) ||
         (b.row.state === "failed" &&
           `${b.row.error ?? ""}${b.result}`.includes(
@@ -669,7 +671,8 @@ const run = async (kit: Kit) => {
     const d = await delegate("D");
     check(
       "D: the item is done, its report saying it landed on main",
-      d.row.state === "done" && d.result.includes("Landed on main at"),
+      d.row.state === "done" &&
+        d.result.includes(`${workWords.landedOn("main")} at`),
       d.said
     );
     const dMain = await onMain("D");

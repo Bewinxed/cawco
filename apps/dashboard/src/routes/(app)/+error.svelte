@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shellWords } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconMapPoint, IconWarningTriangle } from "#lib/icons.js";
@@ -13,7 +14,7 @@
 
 <svelte:head
   ><title>
-    {missing ? "Page not found" : "Something went wrong"}
+    {missing ? shellWords.pageNotFound : shellWords.somethingWentWrong}
     · CawCo
   </title></svelte:head
 >
@@ -24,7 +25,7 @@
     line={missing
       ? `Nothing is at ${page.url.pathname}.`
       : `${page.error?.message}`}
-    title={missing ? "Page not found" : "Something went wrong"}
+    title={missing ? shellWords.pageNotFound : shellWords.somethingWentWrong}
   >
     {#snippet action()}
       <Button href="/session" label="Go to sessions" />

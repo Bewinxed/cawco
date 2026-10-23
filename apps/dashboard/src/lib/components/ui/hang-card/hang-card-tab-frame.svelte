@@ -11,6 +11,7 @@
    * under the phone's screen.
    */
   // bits-ui's own popover, as PaneTabs hangs it: its bare content in one portal.
+  import { transcriptWords } from "@cawco/core";
   import { Popover } from "bits-ui";
   import { cardWidthIn, placeUnder } from "#lib/cawco/workspace/hang-place.js";
   import {
@@ -105,7 +106,7 @@
           align="start"
           alignOffset={place.offset}
           {anchor}
-          aria-label="Session details"
+          aria-label={transcriptWords.sessionDetails}
           as={Popover.Content}
           class="z-(--layer-float) w-(--hang-width)"
           collisionPadding={12}

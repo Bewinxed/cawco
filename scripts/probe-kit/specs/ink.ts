@@ -32,9 +32,9 @@
  *    opened at the viewport's edge stays inside it.
  * 4e. The pen's eraser removes the whole strokes it crosses (CDP's mouse has
  *    no eraser button, so these are the page's own PointerEvents, button 5).
- * 5. Nothing of the ink or its pins reaches the session before Send; one
- *    press of the head's Send delivers them (the hub's `deliverMarks`), and
- *    every pin and group has `sentAt`.
+ * 5. The ink and its pins go to the session by themselves, with no Send
+ *    (the hub's `personMarked`, `deliverMarks`): it hears the paragraph's
+ *    and the second paragraph's pins, and every pin and group has `sentAt`.
  * 6. On a canvas a pen stroke is Excalidraw's freedraw (the overlay's layer
  *    draws nothing), the icon stands at its end, and Annotate pins the
  *    element under it by id.
@@ -63,6 +63,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressAt,
   pressIn,
   type Spec,
   settle,
@@ -145,14 +146,14 @@ const loopAround = (box: Rect, count: number, gap = 18): Pt[] => {
 };
 
 /** The browser's mouse drawing a loop round `box` (the screen's px) over `ms`, one move a frame; when it lifted, `Date.now()`. */
-export const mouseLoop = async (desk: Page, box: Rect, ms = 2000) => {
+export const mouseLoop = async (frame: Frame, box: Rect, ms = 2000) => {
+  const desk = frame.page();
   const points = loopAround(box, Math.round(ms / FRAME_MS));
   const [first] = points;
   if (!first) {
     return Date.now();
   }
-  await desk.mouse.move(first.x, first.y);
-  await desk.mouse.down();
+  await pressAt(frame, first, { how: "down" });
   for (const p of points.slice(1)) {
     // biome-ignore lint/performance/noAwaitInLoops: a stroke's moves, one a frame
     await desk.mouse.move(p.x, p.y);
@@ -491,8 +492,7 @@ export const dragFromIcon = async (
     return;
   }
   const a = (angle * Math.PI) / 180;
-  await on.page.mouse.move(at.x, at.y);
-  await on.page.mouse.down();
+  await pressAt(frame, at, { how: "down" });
   await on.page.mouse.move(at.x + r * Math.cos(a), at.y + r * Math.sin(a), {
     steps: 8,
   });
@@ -515,7 +515,11 @@ const setUp = async (kit: Kit): Promise<On> => {
   const call = async (tool: string, input: object): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, { name: tool, input });
+    asks.set(marker, {
+      name: tool,
+      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+      input: { response_format: "detailed", ...input },
+    });
     await fleet.send(session, `PROBE-CALL:${marker}`);
     return (await until(
       `the ${tool} call (${marker})`,
@@ -622,8 +626,8 @@ const strokeChecks = async (on: On, frame: Frame) => {
   const pen = await paths();
   // A mouse drag and a touch drag across the second paragraph.
   const b = await screenBox(on, frame, "#second");
-  await on.page.mouse.move(b.x + 10, b.y + b.h / 2);
-  await on.page.mouse.down();
+  // The touch drag starts where the mouse's did, a point pressAt found uncovered.
+  await pressAt(frame, { x: b.x + 10, y: b.y + b.h / 2 }, { how: "down" });
   await on.page.mouse.move(b.x + b.w - 10, b.y + b.h / 2, { steps: 10 });
   await on.page.mouse.up();
   await on.cdp.send("Input.dispatchTouchEvent", {
@@ -715,8 +719,7 @@ const menuChecks = async (on: On, frame: Frame) => {
   const at = await until("the icon", () => iconPoint(on, frame), Boolean, 5000);
   // Open by a drag that rests over the top sector, reading the menu before release.
   if (at) {
-    await on.page.mouse.move(at.x, at.y);
-    await on.page.mouse.down();
+    await pressAt(frame, at, { how: "down" });
     await on.page.mouse.move(at.x, at.y - 36, { steps: 6 });
     await on.page.waitForTimeout(200);
   }
@@ -809,9 +812,9 @@ const menuChecks = async (on: On, frame: Frame) => {
     5000
   );
   if (tap) {
-    await on.page.mouse.click(tap.x, tap.y);
+    await pressAt(frame, tap);
     await on.page.waitForTimeout(350);
-    await on.page.mouse.click(tap.x, tap.y + 40);
+    await pressAt(frame, { x: tap.x, y: tap.y + 40 });
     await on.page.waitForTimeout(350);
   }
   doc = await docOf(frame);
@@ -873,7 +876,7 @@ const edgeChecks = async (on: On, frame: Frame) => {
   await on.page.waitForTimeout(350);
   const at = await until("the icon", () => iconPoint(on, frame), Boolean, 5000);
   if (at) {
-    await on.page.mouse.click(at.x, at.y);
+    await pressAt(frame, at);
     await on.page.waitForTimeout(400);
   }
   const seen = await frame.evaluate(() => {
@@ -913,7 +916,7 @@ const edgeChecks = async (on: On, frame: Frame) => {
     // A tap on the centre closes it.
     const now = await iconPoint(on, frame);
     if (now) {
-      await on.page.mouse.click(now.x, now.y);
+      await pressAt(frame, now);
     }
     await on.page.waitForTimeout(300);
   }
@@ -1203,22 +1206,11 @@ const placeChecks = async (
 };
 
 /**
- * 5. The ink and its pins wait for Send (DESIGN.md, Sending comments): by
- * now the old quiet period has long passed and the session has heard
- * neither pin; one press of the head's Send (artifacts/service.ts
- * `deliverMarks`) and it hears the paragraph's and the second paragraph's
- * pins, and the hub stamps every pin and group.
+ * 5. The ink and its pins go by themselves (DESIGN.md, How comments reach
+ * the session): with no Send, the session hears the paragraph's and the
+ * second paragraph's pins, and the hub stamps every pin and group.
  */
 const deliveredChecks = async (on: On, frame: Frame) => {
-  const marked = (text: string) =>
-    SECTION.test(text) && (text.includes("#para") || text.includes("#second"));
-  const early = heard.filter(marked).length;
-  const before = heard.length;
-  await on.page
-    .locator(
-      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
-    )
-    .click({ timeout: 10_000 });
   const stamped = await until(
     "sentAt on the doc, from the hub's delivery",
     () => docOf(frame),
@@ -1227,15 +1219,14 @@ const deliveredChecks = async (on: On, frame: Frame) => {
       Object.values(doc.ink).every((group) => !!group.sentAt),
     60_000
   ).catch(() => docOf(frame));
-  const told = heard.slice(before).filter((text) => SECTION.test(text));
+  const told = heard.filter((text) => SECTION.test(text));
   on.kit.check(
-    "5: nothing of the ink or its pins reaches the session before Send; the head's Send delivers them (it hears #para's and #second's pins) and every pin and group is stamped sentAt",
-    early === 0 &&
-      told.some((text) => text.includes("#para")) &&
+    "5: with no Send, the ink and its pins go by themselves (the session hears #para's and #second's pins) and every pin and group is stamped sentAt",
+    told.some((text) => text.includes("#para")) &&
       told.some((text) => text.includes("#second")) &&
       Object.values(stamped.pins).every((pin) => !!pin.sentAt) &&
       Object.values(stamped.ink).every((group) => !!group.sentAt),
-    `before Send ${early}; heard ${told.length} delivery message(s) after; pins ${Object.values(
+    `heard ${told.length} delivery message(s); pins ${Object.values(
       stamped.pins
     )
       .map((pin) => !!pin.sentAt)
@@ -1363,7 +1354,7 @@ const reducedChecks = async (on: On) => {
     5000
   );
   if (at) {
-    await on.page.mouse.click(at.x, at.y);
+    await pressAt(frame as Frame, at);
     await on.page.waitForTimeout(60);
   }
   const opening = await chromeOf(frame as Frame);
@@ -1394,7 +1385,7 @@ const tracedLoop = async (
   let lifted = 0;
   const main = await traceMain(on.page, async () => {
     await mark("loop-down");
-    lifted = await mouseLoop(on.page, box);
+    lifted = await mouseLoop(frame, box);
     await mark("loop-up");
     // The picture goes once the marks pause (page.ts PICTURES_AFTER_MS).
     await until(

@@ -12,8 +12,9 @@
  *   the read-denied home dir, `/tmp` and `/run` among them, fails at once
  *   with EROFS: `srtSettings` in boundary-policy.ts), sees and signals only
  *   the workspace's processes (its own pid namespace), and reaches the
- *   network only through srt's proxy: any public host, none of the owner's
- *   machines. Every host socket is out of sight.
+ *   network only through srt's proxy, by way of the srt host's relay, which
+ *   presents srt's token for every client (proxy-relay.ts): any public
+ *   host, none of the owner's machines. Every host socket is out of sight.
  * - macOS: one `sandbox-exec` runner per workspace, under a Seatbelt profile
  *   written from the same policy: the home dir read-denied but for what the
  *   policy reads back, writes only where it writes. Seatbelt keeps its
@@ -108,7 +109,7 @@ import {
   KEEPERS_ASK_AGAIN_MS,
   type ListedWorkspace,
 } from "@cawco/core/handover";
-import { HEAVY_RUN_HELD_ENV } from "@cawco/core/heavy-run";
+import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import {
   currentEndpoint,
   currentKeeper,
@@ -195,7 +196,6 @@ import { runtimeSockets } from "./browser/runtime";
 import { bunNodeShim } from "./bun-node-shim";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
-import { cawcoCommand } from "./git-credential";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import {
   closeGitDoor,
@@ -205,6 +205,7 @@ import {
   guardedPushParameters,
   openGitDoor,
 } from "./hub-git";
+import { hubPreviewsPath } from "./hub-previews";
 import { type HeldProc, KeeperPool } from "./keepers";
 import { logRelay } from "./log-relay";
 import {
@@ -215,6 +216,8 @@ import {
   judgeProcId,
   parseProcId,
 } from "./proc-id";
+import { RELAY_STEP } from "./proxy-relay";
+import { endSandbox } from "./sandbox-end";
 import type { SessiondClient } from "./sessiond-client";
 import {
   hasLeftDirs,
@@ -228,6 +231,7 @@ import {
   socketPlace,
   toolDoorOf,
 } from "./tool-door";
+import { SYSTEM_PATH, workspaceNeeds } from "./workspace-needs";
 import { workspaceRecords } from "./workspace-records";
 
 /** A running boundary, as a harness uses it. */
@@ -381,15 +385,45 @@ const readPlace = async (
   return { outer, inner, idle };
 };
 
+/**
+ * What runs in workspace `workspace`'s boundary whose keeper child is `host`
+ * (the current generation's or a retiring one's), for a reading of what its
+ * commands left (agent leak-watch.ts). Linux: its sandbox, its init and every
+ * process it held when its runner was ready; every process of the sandbox
+ * descends from that init. macOS: of `pids`, every process that answers to
+ * that generation's name ({@link answering}), wherever it moved. Undefined
+ * when no generation of the workspace has that host.
+ */
+export const sandboxOf = async (
+  workspace: string,
+  host: number,
+  pids: readonly number[]
+): Promise<
+  | { idle: readonly number[]; inner: number }
+  | { members: readonly number[] }
+  | undefined
+> => {
+  const generations = [
+    await readHeld(workspace).catch(() => undefined),
+    ...(await readRetiring(workspace)),
+  ];
+  const held = generations.find((one) => one?.pid === host);
+  if (!held) {
+    return;
+  }
+  if (process.platform === "darwin") {
+    return {
+      members: answering(
+        inBoundaries(pids.map((pid) => ({ pid }))),
+        membershipName(workspace, held.gen)
+      ),
+    };
+  }
+  return await readPlace(workspace, held.gen);
+};
+
 export const shellQuote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
-
-/**
- * The PATH the executor, the hook and the host find their own tools on:
- * the system's dirs alone, which nothing inside a workspace writes. The
- * command itself runs with its caller's PATH.
- */
-const SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
 
 /** A session's `command`, as it runs inside the boundary (pi's bash tool): `--session`, so it shows the workspace's notice first. */
 export const boundaryCommand = (boundary: Boundary, command: string): string =>
@@ -848,17 +882,6 @@ const watchHost = async (
  *   workspace's build runs them inside the boundary. It runs with a home of its own
  *   ({@link writeXcodeHome}), so what Foundation puts under `~/Library/Caches`
  *   (SwiftPM's manifest cache among it) lands in the workspaces' cache.
- * - A compile through either (`swift build`, `test` or `run`; an xcodebuild
- *   `build`, `build-for-testing`, `test`, `archive`, `analyze` or `install`)
- *   is one of the machine's heavy runs: it runs under the agent's own
- *   `cawco heavy-run` (core heavy-run.ts), which starts it once a slot is
- *   free and the machine has room, unless a run it is under already holds
- *   one (`CAWCO_HEAVY_RUN_HELD`). `test-without-building` compiles nothing:
- *   Maestro's runner, on a simulator whose slot holds the run.
- * - `xcrun simctl boot` is a heavy run too, as a simulator mac-slot.sh boots
- *   is: on 2026-10-19 the Mac had a third simulator booted outside
- *   mac-slot.sh while it paged at a load of 800. Every other `xcrun` call
- *   runs as it is.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
@@ -943,10 +966,6 @@ const writeShims = async (id: string, runtime: string): Promise<void> => {
   const { port, token } = logRelay();
   const cache = workspaceCacheDir();
   const swiftpm = shellQuote(join(cache, "swiftpm"));
-  // A compile is one of the machine's heavy runs (core heavy-run.ts), held by
-  // this agent's `cawco heavy-run` until it ends; one under a run already held
-  // (build-both.sh, mac-slot.sh, a probe kit run) takes none.
-  const heavyRunLine = `[ -n "\${${HEAVY_RUN_HELD_ENV}:-}" ] || exec ${cawcoCommand("heavy-run").map(shellQuote).join(" ")} "$(printf '%q ' "\${run[@]}")"`;
   await Promise.all([
     writeWhole(
       join(bin, "swift"),
@@ -963,9 +982,7 @@ case "\${1:-}" in
       *" --scratch-path"* | *" --build-path"*) ;;
       *) scratch=(--scratch-path ${swiftpm}/build/"$(/sbin/md5 -q -s "$PWD")") ;;
     esac
-    run=("$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@")
-    ${heavyRunLine}
-    exec "\${run[@]}"
+    exec "$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@"
     ;;
 esac
 exec "$swift" "$@"
@@ -980,7 +997,6 @@ exec "$swift" "$@"
 xcodebuild=$(/usr/bin/xcrun --find xcodebuild) || exit 1
 flags=
 builds=
-compiles=
 packages=
 args=()
 for arg in "$@"; do
@@ -992,7 +1008,6 @@ for arg in "$@"; do
     build | build-for-testing | test | archive | analyze | install)
       args+=("$arg")
       builds=1
-      compiles=1
       ;;
     test-without-building | clean | installsrc | -resolvePackageDependencies)
       args+=("$arg")
@@ -1011,28 +1026,13 @@ done
 # A home of its own, whose Caches, Logs and org.swift.swiftpm are the workspaces' cache.
 mkdir -p ${XCODE_OWN_LIBRARY.map((name) => shellQuote(join(xcodeLibraryCache(), name))).join(" ")} || exit 1
 export CFFIXED_USER_HOME=${shellQuote(xcodeHomeOf(id))}
-run=("$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData.noindex"))} "\${args[@]}")
-[ -z "$compiles" ] || ${heavyRunLine}
-exec "\${run[@]}"
+exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData.noindex"))} "\${args[@]}"
 `,
       0o755
     ),
-    // A simulator boot is one of the machine's heavy runs, as mac-slot.sh's
-    // are: it waits for a slot and the machine's room (memory and swap
-    // among it), then the boot runs and the slot goes once it returns.
-    writeWhole(
-      join(bin, "xcrun"),
-      `#!/bin/bash
-# CawCo workspace ${id}: xcrun, a simulator boot waiting for the machine's room.
-if [ "\${1:-}" = simctl ] && [ "\${2:-}" = boot ]; then
-  run=(/usr/bin/xcrun "$@")
-  ${heavyRunLine}
-  exec "\${run[@]}"
-fi
-exec /usr/bin/xcrun "$@"
-`,
-      0o755
-    ),
+    // The xcrun a build before this one wrote, which waited on a heavy-run
+    // slot through a `cawco heavy-run` that no longer exists.
+    rm(join(bin, "xcrun"), { force: true }),
     writeWhole(
       join(bin, "log"),
       `#!/bin/sh
@@ -1950,27 +1950,8 @@ const refusal = (id: string, why: string): Error =>
   new Error(
     isPlace(id)
       ? `place ${id} cannot be bounded on this machine: ${why}`
-      : `workspace ${id} cannot run a delegate on this machine: ${why}`
+      : `workspace ${id.slice(0, 8)} cannot run a delegate on this machine: ${why}`
   );
-
-/**
- * What a Linux machine runs a boundary with, each by the package that ships
- * it: srt's own dependencies (its README, "Platform-Specific Dependencies").
- * Its ripgrep is the one this build ships ({@link ripgrep}).
- */
-const HOST_TOOLS = [
-  ["bwrap", "bubblewrap"],
-  ["socat", "socat"],
-] as const;
-
-/** The host tools this machine lacks, each named with its package; none off Linux. */
-const missingHostTools = (): string[] =>
-  process.platform === "linux"
-    ? HOST_TOOLS.filter(
-        ([tool]) =>
-          !SYSTEM_PATH.split(":").some((dir) => existsSync(join(dir, tool)))
-      ).map(([tool, pkg]) => `${tool} (install the ${pkg} package)`)
-    : [];
 
 /**
  * macOS: why this process can start no boundary at all, asked once: a
@@ -1985,13 +1966,11 @@ const nestedSeatbelt = (): string | undefined => {
   return seatbeltNested.reason;
 };
 
-/** Says, as the agent starts, what this machine needs before it can hold a workspace boundary. */
+/** Says, as the agent starts, what this machine needs before it can hold a delegate's workspace (workspace-needs.ts). */
 export const checkBoundaryHost = (): void => {
-  const missing = missingHostTools();
-  if (missing.length > 0) {
-    console.warn(
-      `[workspace] this machine refuses workspace work until it has ${missing.join(" and ")}`
-    );
+  const needs = workspaceNeeds();
+  if (!needs.available) {
+    console.warn(`[workspace] ${needs.reason}`);
   }
 };
 
@@ -2150,9 +2129,10 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
       `workspace boundaries run on Linux and macOS, and this machine runs ${process.platform}`
     );
   }
-  const missing = missingHostTools();
-  if (missing.length > 0) {
-    throw refusal(ref.id, `this machine has no ${missing.join(" and no ")}`);
+  // Its walls' tools; a workspace's checkout is refused before it is cut (workspace.ts).
+  const walls = workspaceNeeds(undefined, "walls");
+  if (!walls.available) {
+    throw refusal(ref.id, walls.reason ?? "");
   }
   const nested = process.platform === "darwin" ? nestedSeatbelt() : undefined;
   if (nested) {
@@ -2390,14 +2370,18 @@ const behindGate = async <T>(
  * KILL 4 s later, from inside, where the pid it wrote names it (on Linux the
  * executor, outside the sandbox's pid namespace, cannot). The FIFO is opened
  * read-only (it lies where a command cannot write) and reopened after each
- * writer closes it. Linux: srt's own plumbing for the sandbox (its proxy, the
- * proxy credential git presents) is read once as the runner starts and set
- * again over each request's environment, which the executor writes on the
- * host, so no caller's environment can drop it. Yarn 2 and later read no
+ * writer closes it. Linux: the runner first bridges the srt host's proxy
+ * relay into the sandbox and points srt's proxy URLs at it, with no
+ * credential (proxy-relay.ts `RELAY_STEP`), so every client gets out the
+ * same way, a Chromium that drops a proxy URL's userinfo among them. srt's
+ * own plumbing for the sandbox (its proxy, now the relay's address) is read
+ * once as the runner starts and set again over each request's environment,
+ * which the executor writes on the host, so no caller's environment can
+ * drop it. Yarn 2 and later read no
  * `HTTPS_PROXY`, only their own `httpsProxy` and `httpProxy` settings, so
  * each install went direct and failed ("YN0001: Error
  * [ERR_SOCKET_CLOSED_BEFORE_CONNECTION]: Socket closed before the connection
- * was established", 2026-10-18): the runner gives them srt's proxy as
+ * was established", 2026-10-18): the runner gives them that proxy as
  * `YARN_HTTPS_PROXY` and `YARN_HTTP_PROXY` ("most settings can also be
  * defined through environment variables … `YARN_CACHE_FOLDER` will set the
  * cache folder", yarnpkg.com/configuration/yarnrc). They override a
@@ -2502,6 +2486,7 @@ const LAUNCH = [
  * never saying why.
  */
 const RUNNER = `fifo=$1
+${RELAY_STEP}
 [ -n "\${HTTPS_PROXY:-}" ] && export YARN_HTTPS_PROXY=$HTTPS_PROXY
 [ -n "\${HTTP_PROXY:-}" ] && export YARN_HTTP_PROXY=$HTTP_PROXY
 CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|YARN_HTTPS?_PROXY|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
@@ -2666,7 +2651,7 @@ const runtimePlaces = (id: string, allowRead: readonly string[]): string[] => {
   return allowRead.filter((path) => path.startsWith(`${runtime}/`));
 };
 
-/** The host's bwrap: the first on the system PATH, where `missingHostTools` looks for it. */
+/** The host's bwrap: the first on the system PATH, where workspace-needs.ts looks for it. */
 const hostBwrap = (): string =>
   SYSTEM_PATH.split(":")
     .map((dir) => join(dir, "bwrap"))
@@ -2694,10 +2679,10 @@ const hostScript = (): string =>
 
 /**
  * What the host script runs, for the form: a change to it is a change of
- * form. A build's script bundles srt; a checkout's imports it, so srt's
- * module that writes the sandbox's mounts (each read-deny tmpfs among them,
- * which the bwrap it runs makes read-only, {@link bwrapLauncherOf}) is read
- * beside it.
+ * form. A build's script bundles srt and the proxy relay; a checkout's
+ * imports them, so the relay (proxy-relay.ts) and srt's module that writes
+ * the sandbox's mounts (each read-deny tmpfs among them, which the bwrap it
+ * runs makes read-only, {@link bwrapLauncherOf}) are read beside it.
  */
 const readHostText = async (host: string): Promise<string> => {
   if (standalone) {
@@ -2707,9 +2692,11 @@ const readHostText = async (host: string): Promise<string> => {
     Bun.resolveSync("@anthropic-ai/sandbox-runtime", dirname(host))
   );
   const texts = await Promise.all(
-    [host, join(srt, "sandbox", "linux-sandbox-utils.js")].map((file) =>
-      Bun.file(file).text()
-    )
+    [
+      host,
+      join(dirname(host), "proxy-relay.ts"),
+      join(srt, "sandbox", "linux-sandbox-utils.js"),
+    ].map((file) => Bun.file(file).text())
   );
   return texts.join("\0");
 };
@@ -2917,6 +2904,9 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         TMPDIR: srtTmp,
         CLAUDE_CODE_TMPDIR: policy.scratch,
         CAWCO_WORKSPACE: id,
+        // The hub's preview origins, which the relay dials from here
+        // (proxy-relay.ts): a file of the agent's that no sandbox reads.
+        [HUB_PREVIEWS_ENV]: hubPreviewsPath(),
         PATH: SYSTEM_PATH,
         // A place is a person's own folder: srt resolves its own
         // mandatory names against the host's working directory and makes a
@@ -4004,8 +3994,8 @@ const AGENT_LOOK_MS = 200;
 /**
  * macOS: {@link endSessionWork} in workspace `workspace`. What was born
  * before the earliest of the agent's own commands running there is ended at
- * once, a leftover holding the heavy-run slot a landing gate's step waits
- * for among it, so the gate runs. What was born since may be one of those
+ * once, so a landing gate's step finds nothing of the session's running
+ * beside it. What was born since may be one of those
  * commands' own, moved out of its tree ({@link agentWork}): it is ended once
  * the commands running then have, a landing's push and gate step run to
  * their end, and so on while the agent's commands come. Meanwhile the
@@ -4063,8 +4053,7 @@ const stillRunning = async (ones: readonly Worker[]): Promise<Worker[]> => {
  * command it cuts off by killing its own shell, which reaches the executor
  * and never the command inside the boundary, and a background command
  * outlived the interrupt that was to stop it (two delegates on the Mac,
- * 2026-10-20, holding its one heavy-run slot: a slot is a `flock`, let go as
- * its holder ends).
+ * 2026-10-20).
  *
  * Each is told to end (SIGTERM), so a keeper's trap frees what it holds,
  * and given {@link WORK_GRACE_MS}; then everything of the session's still
@@ -4523,7 +4512,7 @@ let narrowAgain: { readonly why: string } | undefined;
  *   ({@link setProject}, written by those and a browser door's);
  * - its project's folder on the hub (`projectFolder`): moved away only by
  *   the hub (a project's delete or merge), which then syncs every machine's
- *   fleet config; the sync checks (session.ts `FLEET_SYNC`);
+ *   fleet config; the delta's `recheck` checks (session.ts `FLEET_DELTA`);
  * - what the fleet sync writes (`fleetSyncedPaths`, the user layer under
  *   Claude Code's home): the sync checks;
  * - this machine's accounts and the credential stores they make
@@ -6634,14 +6623,16 @@ const endMembers = async (
 
 /**
  * Stops the boundary of workspace `id` that `held` names, as sessiond holds
- * it, with every process in it. Linux: SIGKILL to the outer bwrap ends the
- * sandbox's pid namespace; srt then sees its child exit, and its host removes
- * srt's proxy, socat bridges and mount points and exits (killing the host
- * instead would leave those behind, REPORT.md §5e). An anchor from before
- * srt goes with the `unshare` sessiond holds (`--kill-child`). macOS: the
- * runner, then everything that answers to its generation's name, which
- * outlives the runner there ({@link killAnswering}). On whichever keeper
- * holds it: the current one, or a retiring one.
+ * it, with every process in it. Linux: its init, then its outer bwrap
+ * (sandbox-end.ts `endSandbox`, as its host ends one itself). srt
+ * then sees its child exit, and its host removes srt's proxy, socat bridges
+ * and mount points and exits (killing the host instead would leave those
+ * behind, REPORT.md §5e), and its keeper ends what is left in its cgroup
+ * (sessiond server.ts `#sweep`). An anchor from before srt goes with the
+ * `unshare` sessiond holds (`--kill-child`). macOS: the runner, then
+ * everything that answers to its generation's name, which outlives the
+ * runner there ({@link killAnswering}). On whichever keeper holds it: the
+ * current one, or a retiring one.
  */
 const stopBoundary = async (
   id: string,
@@ -6650,7 +6641,7 @@ const stopBoundary = async (
   const procId = boundaryProcId(id, held.gen);
   const place = await readPlace(id, held.gen);
   if (place && (await isBwrap(place.outer))) {
-    signalPid(listedPid(place.outer), "SIGKILL");
+    endSandbox(place, () => signalPid(listedPid(place.outer), "SIGKILL"));
     const deadline = Date.now() + STOP_TIMEOUT_MS;
     while (
       // biome-ignore lint/performance/noAwaitInLoops: polls one process until its host has cleaned up, or the deadline passes

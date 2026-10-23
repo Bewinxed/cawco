@@ -32,10 +32,12 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import {
   type CallerKind,
+  connectWords,
   type DeviceKind,
   type HubAuthFrame,
   type HubAuthMode,
   type HubAuthState,
+  INSTALL_CODE_HEADER,
   MACHINE_PROOF_HEADER,
   MACHINE_PROOF_SKEW_MS,
   type OwnerDevice,
@@ -53,6 +55,9 @@ import { Elysia, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import { HUB_SELF_HEADER, isHubSelf } from "./hub-self";
 import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
+
+/** A machine's own row, which its join wait reads (cli await-joined.ts). */
+const AGENT_ROW = /^\/api\/agents\/([^/]+)$/;
 
 /** What a request is, once its credential is read. */
 export type Caller =
@@ -81,6 +86,8 @@ type Access = "open" | "tool" | "session" | "machine" | "machine-proof";
 const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/health$/, "open"],
   ["GET", /^\/install\.sh$/, "open"],
+  // A command route's installer says how it ended; its one-time code is its credential.
+  ["POST", /^\/api\/installs\/code\/[^/]+\/ended$/, "open"],
   ["GET", /^\/api\/auth$/, "open"],
   ["POST", /^\/api\/pair$/, "open"],
   ["POST", /^\/api\/pair\/poll$/, "open"],
@@ -105,6 +112,9 @@ const RULES: readonly [string, RegExp, Access][] = [
   ],
   ["GET", /^\/api\/binary-updates\/artifacts\/[^/]+\/[^/]+$/, "machine"],
   ["POST", /^\/api\/binary-updates\/hub-fence$/, "machine"],
+  // A release just published on a machine (scripts/release.ts): the hub looks
+  // at its release host now, not when its cached release ages out.
+  ["POST", /^\/api\/binary-updates\/check$/, "machine"],
   ["PUT", /^\/api\/binary-updates\/machines\/[^/]+\/state$/, "machine"],
   // A file a reader attached, by the hash a send names: the session's
   // machine fetches it (agent attachments.ts).
@@ -175,8 +185,6 @@ const POLL_INTERVAL_S = 5;
 const PAIRINGS_HELD = 20;
 /** How often a device's last use is written, at most. */
 const TOUCH_EVERY_MS = 60_000;
-/** What a machine the person refused hears, then and at every register after. */
-const MACHINE_REFUSED = "The person refused this machine.";
 /** How long one approved CLI run may act as the person. */
 const CLI_RUN_MS = 15 * 60_000;
 
@@ -256,6 +264,12 @@ export interface HubAuthHooks {
   readonly changed: (frame: HubAuthFrame) => void;
   /** A device was removed: its open sockets close. */
   readonly deviceRemoved: (deviceId: string) => void;
+  /**
+   * A machine's join wait named an install's one-time code (cli
+   * await-joined.ts): the install hears it, ties the machine to itself and
+   * admits it when it waits (installs.ts `heard`).
+   */
+  readonly installCode: (code: string, machineId: string) => void;
   /**
    * Pairing was just turned on: every machine connected now is admitted and
    * handed its key, and every dashboard socket without a device closes, so
@@ -603,6 +617,13 @@ export const createHubAuth = ({
   const gate = (request: Request, address: string | null) => {
     const path = new URL(request.url).pathname;
     const header: Headers = (name) => request.headers.get(name);
+    // A command route's join wait asks after its own row with its install's
+    // code, admitted or not: the code is heard before anything is refused.
+    const code = request.method === "GET" ? header(INSTALL_CODE_HEADER) : null;
+    const asked = code ? AGENT_ROW.exec(path)?.[1] : undefined;
+    if (code && asked) {
+      hooks?.installCode(code, decodeURIComponent(asked));
+    }
     const caller = classify(
       header,
       request.method,
@@ -855,11 +876,34 @@ export const createHubAuth = ({
       return false;
     }
     waiting.delete(machineId);
-    refusals.set(machineId, MACHINE_REFUSED);
-    entry.refuse(MACHINE_REFUSED);
+    refusals.set(machineId, connectWords.machineRefused);
+    entry.refuse(connectWords.machineRefused);
     console.log(`[hub-auth] machine ${machineId} refused`);
     changed();
     return true;
+  };
+
+  /** Whether the hub holds anything that admits or holds `machineId`: its key, a connection held for it, the person's refusal. */
+  const holdsMachine = (machineId: string): boolean =>
+    Boolean(db.machineKey(machineId)) ||
+    waiting.has(machineId) ||
+    refusals.has(machineId);
+
+  /**
+   * A removed machine: its key, a connection held for it and the person's
+   * refusal of it go, whether or not the fleet ever listed it (one admitted
+   * whose agent never proved the key was listed nowhere, and its key stood).
+   * If it comes back, it is admitted, or added over SSH, as a new one.
+   */
+  const forgetMachine = (machineId: string): void => {
+    db.forgetMachineKey(machineId);
+    refusals.delete(machineId);
+    const held = waiting.get(machineId);
+    if (held) {
+      waiting.delete(machineId);
+      held.close("This machine was removed.");
+    }
+    changed();
   };
 
   /** The words the person refused `machineId` in, while that refusal stands. */
@@ -1073,12 +1117,16 @@ export const createHubAuth = ({
       );
 
   return {
+    /** Admits a machine that waits to be admitted, as an Admit click does: an install's code is the person's say-so. */
+    admit,
     allows,
     callerOf,
     classify,
+    forgetMachine,
     frame,
     gate,
     hold,
+    holdsMachine,
     mintMachineKey,
     mode,
     modeFor,

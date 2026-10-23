@@ -423,6 +423,7 @@ const LET_GO = {
   signInState: null,
   signInRedirect: null,
   signInExpiresAt: null,
+  signInUrl: null,
   tokensExpireAt: null,
 } as const;
 
@@ -725,6 +726,17 @@ export const createConnections = (deps: ConnectionsDeps) => {
       ...(r.header ? { header: r.header } : {}),
       state: r.state,
       ...(r.reason ? { reason: r.reason } : {}),
+      ...(r.signInUrl &&
+      r.signInState &&
+      r.signInExpiresAt &&
+      r.signInExpiresAt.getTime() > Date.now()
+        ? {
+            signIn: {
+              url: r.signInUrl,
+              expiresAt: r.signInExpiresAt.getTime(),
+            },
+          }
+        : {}),
       hasSecret: Boolean(sealed.key || sealed.tokens || sealed.app),
       projects: db.projectsOf(r.id),
       ...(tools ? { tools: tools.map((tool) => tool.name) } : {}),
@@ -1614,6 +1626,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       signInState: state,
       signInRedirect: redirect,
       signInExpiresAt: new Date(Date.now() + SIGN_IN_MS),
+      signInUrl: started.authorizationUrl.toString(),
       tokensExpireAt: null,
     });
     drop(r.id);
@@ -1684,6 +1697,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (!authorizationUrl) {
       return problem(`${name}'s server asked for no sign-in.`);
     }
+    db.update(r.id, { signInUrl: authorizationUrl.toString() });
     setState(r, "needs-sign-in", connectionsWords.saidUnderWay);
     console.info(`[connections] ${name}: sign-in started`);
     return { authorizationUrl: authorizationUrl.toString() };
@@ -1702,7 +1716,11 @@ export const createConnections = (deps: ConnectionsDeps) => {
       );
     }
     // Spent before the exchange: a second redirect with the same state finds nothing.
-    db.update(r.id, { signInState: null, signInExpiresAt: null });
+    db.update(r.id, {
+      signInState: null,
+      signInExpiresAt: null,
+      signInUrl: null,
+    });
     if (r.auth === "app") {
       await exchangeApp(r, code);
     } else {
