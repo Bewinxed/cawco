@@ -16,7 +16,7 @@
     "roles:check": "bun scripts/role-budgets.ts",
     "skills:check": "bun scripts/skills-check.ts",
     "start": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@cawco/auth": "workspace:*",

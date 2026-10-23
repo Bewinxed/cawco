@@ -43,7 +43,7 @@
     "build": "tsdown",
     "lint": "oxlint src",
     "format": "oxfmt src bench",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b",
     "bench": "bun bench/bench.ts"
   },
   "devDependencies": {

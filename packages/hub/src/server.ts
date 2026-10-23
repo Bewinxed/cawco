@@ -936,7 +936,7 @@ type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
  * 20261018 can be installed, though no app reads it; it goes in the change
  * that expires them (bash apps/apple/scripts/testflight.sh --expire 20261018).
  */
-interface BridgedHeldPlace {
+export interface BridgedHeldPlace {
   heldAt: string;
   holds: string;
   instanceId: string;
@@ -1440,7 +1440,7 @@ class MachineAway extends Error {
     this.machineId = machineId;
   }
 }
-interface ContinueOutcome {
+export interface ContinueOutcome {
   /** Whether the source had been compacted: its live context starts at a summary. */
   compacted: boolean;
   /** Messages read: the live chain, the whole transcript, and the live scope. */

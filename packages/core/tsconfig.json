@@ -1,9 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../../tsconfig.base.json",
+  // A library: its checked declarations go to .tsbuild, and every project
+  // that references it reads those instead of re-checking this source.
   "compilerOptions": {
-    "types": ["bun"]
+    "types": ["bun"],
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "../../.tsbuild/packages/core"
   },
   "include": ["**/*", "src/**/*.json"],
-  "exclude": ["node_modules", "dist"]
+  // scripts/ imports the repository's scripts/fmt.ts, outside this rootDir:
+  // its own project (scripts/tsconfig.json).
+  "exclude": ["node_modules", "dist", "scripts"]
 }

@@ -2,6 +2,8 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./.tsbuild/root.tsbuildinfo",
     // golar.config.ts runs under Node, which loads a module by its own name.
     "allowImportingTsExtensions": true,
     "types": ["bun"]
@@ -9,6 +11,7 @@
   "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
   "exclude": [
     "**/node_modules",
+    ".tsbuild",
     "**/dist",
     "**/build",
     "**/.svelte-kit",
@@ -17,5 +20,9 @@
     "packages",
     "scripts",
     "site"
+  ],
+  "references": [
+    { "path": "./packages/agent" },
+    { "path": "./packages/core" }
   ]
 }

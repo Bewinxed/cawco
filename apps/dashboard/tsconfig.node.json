@@ -2,8 +2,14 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "../../.tsbuild/apps/dashboard/node.tsbuildinfo",
     "allowImportingTsExtensions": true,
     "types": ["bun"]
   },
-  "include": ["*.ts", "scripts/**/*.ts"]
+  "include": ["*.ts", "scripts/**/*.ts"],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/hub" }
+  ]
 }

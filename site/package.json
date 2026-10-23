@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "node scripts/build.mjs",
     "check": "bun ../scripts/fmt.ts --check . && biome check . && tsc --noEmit",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b",
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {

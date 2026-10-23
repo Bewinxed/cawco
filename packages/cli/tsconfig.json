@@ -3,8 +3,20 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "../../.tsbuild/packages/cli"
   },
   "include": ["**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../agent" },
+    { "path": "../auth" },
+    { "path": "../core" },
+    { "path": "../hub" },
+    { "path": "../jsonl-parser" },
+    { "path": "../sessiond" }
+  ]
 }

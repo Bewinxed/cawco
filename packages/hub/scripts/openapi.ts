@@ -215,6 +215,7 @@ const program = ts.createProgram([routesFile, ...frameFiles], {
   ...config.options,
   composite: false,
   declaration: false,
+  emitDeclarationOnly: false,
   noEmit: true,
   // TypeScript 6 defaults an unset rootDir to the tsconfig directory. This
   // no-emit program also owns generated aliases under tmpdir(), so its root
