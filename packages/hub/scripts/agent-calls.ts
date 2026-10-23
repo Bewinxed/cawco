@@ -55,6 +55,16 @@ export const NOT_HUB: { file: string; pattern: string; why: string }[] = [
     why: "the agent's own local MCP route (mcp-host.ts), served on this machine",
   },
   {
+    file: "packages/agent/src/mcp-gate.ts",
+    pattern: "/mcp/gate/**",
+    why: "a workspace session's MCP gate, on the agent's own gateway port (mcp-gate.ts `GATE_PREFIX`)",
+  },
+  {
+    file: "packages/agent/src/mcp-gate.ts",
+    pattern: "/mcp/gate/*/**",
+    why: "a gate's server path, on the agent's own gateway port (mcp-gate.ts `gatePath`)",
+  },
+  {
     file: "packages/agent/src/browser/shield.ts",
     pattern: "/*",
     why: "neko's REST, on the browser container's loopback port",
