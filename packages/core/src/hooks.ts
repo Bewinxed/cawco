@@ -444,8 +444,9 @@ export interface HookToolName {
 /**
  * Each harness's tools by Claude Code's names, which a fleet hook's matcher
  * and its `tool_name` read, so `Bash` and `Edit|Write` mean the same on
- * every harness. OpenCode 2.0's `shell`, `read`, `write`, `edit` (its
- * `filePath`, `oldString`, `newString`, `replaceAll`), `patch`, `glob`,
+ * every harness. OpenCode 2.0.29's `shell`, `read`, `write` and `edit` (their
+ * `path`, and `edit`'s `oldString`, `newString`, `replaceAll`: the schemas
+ * its binary defines, `o({path:…,content:…})` for `write`), `patch`, `glob`,
  * `grep`, `webfetch`, `websearch`, `subagent` and `skill`; pi 1.3.0's `bash`,
  * `powershell`, `read`, `write` and `edit` (their `path`, and `edit`'s
  * `edits` kept as they are), `ls`, `find` and `grep`. A tool not named here
@@ -454,12 +455,12 @@ export interface HookToolName {
 export const HOOK_TOOL_NAMES = {
   opencode: {
     shell: { name: "Bash" },
-    read: { name: "Read", input: { filePath: "file_path" } },
-    write: { name: "Write", input: { filePath: "file_path" } },
+    read: { name: "Read", input: { path: "file_path" } },
+    write: { name: "Write", input: { path: "file_path" } },
     edit: {
       name: "Edit",
       input: {
-        filePath: "file_path",
+        path: "file_path",
         oldString: "old_string",
         newString: "new_string",
         replaceAll: "replace_all",
