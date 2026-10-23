@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import type { AddressTray } from "../tray.svelte";
   /**
    * The word address in Configure › Devices (beside Require paired
    * devices and the paired devices: how your devices reach the dashboard,
@@ -7,9 +10,7 @@
    * started, Open after). The only way in on a network that can't carry
    * the word, and where it is seen later once live.
    */
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import type { AddressTray } from "../tray.svelte";
+  import Words from "../Words.svelte";
   import { rowLine } from "../words";
 
   let {
@@ -47,7 +48,7 @@
       {#if line.live}
         <span class="mark-cell"><LiveDot /></span>
       {/if}
-      <span class="mark-text min-w-0 wrap-anywhere">{line.text}</span>
+      <span class="mark-text min-w-0"><Words text={line.text} /></span>
     </span>
   </div>
   <span

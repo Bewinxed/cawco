@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { encode } from "uqr";
   /**
    * The phone step's object on a desk: a QR of the address the phone opens
    * once (the given name, slash and all), and beside it the three things in
    * order, numbered as they are done. The QR is drawn from its modules in
    * the ink of the page, on the raised surface, with its quiet zone.
    */
-  import { encode } from "uqr";
+  import Words from "./Words.svelte";
 
   let {
     address,
@@ -70,8 +71,8 @@
             aria-hidden="true">{index + 1}</span
           >
         </span>
-        <span class="mark-text min-w-0 wrap-anywhere text-ink-strong"
-          >{step}</span
+        <span class="mark-text min-w-0 text-ink-strong"
+          ><Words text={step} /></span
         >
       </li>
     {/each}

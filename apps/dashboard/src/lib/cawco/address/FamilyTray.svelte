@@ -1,19 +1,4 @@
 <script lang="ts">
-  /**
-   * Direction A: the Family tray, with Caw peeking over its top edge
-   * (design 6ddc57c4, Option A). One thing per tray, replaced in place: the
-   * title and the button's words morph in their held box (MorphText), the
-   * state's words and object cross in under them (`arrive`/`depart`), and
-   * the tray's height tweens to the new state's over --dur-pop on the drawer
-   * curve (morph), from wherever it is drawn. Caw keeps his spot on the
-   * edge in every state; only a failure brings him down into the tray at
-   * 80px, the house's failure shape (PairingScreen, MachinesEmpty).
-   *
-   * Desk: the dialog's recess tray holding its raised body (18px, 6px, 12px:
-   * concentric). Phone: the drawer's bottom sheet, full-bleed, its grabber,
-   * its actions full width at 44px with the primary last. ‹ stands only on
-   * an optional station reached from another; × on every state.
-   */
   import { LEDGE_LINE } from "#lib/cawco/home/Caw.svelte";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -33,6 +18,22 @@
   import TrayCaw from "./TrayCaw.svelte";
   import TrayDetails from "./TrayDetails.svelte";
   import type { AddressTray } from "./tray.svelte";
+  /**
+   * Direction A: the Family tray, with Caw peeking over its top edge
+   * (design 6ddc57c4, Option A). One thing per tray, replaced in place: the
+   * title and the button's words morph in their held box (MorphText), the
+   * state's words and object cross in under them (`arrive`/`depart`), and
+   * the tray's height tweens to the new state's over --dur-pop on the drawer
+   * curve (morph), from wherever it is drawn. Caw keeps his spot on the
+   * edge in every state; only a failure brings him down into the tray at
+   * 80px, the house's failure shape (PairingScreen, MachinesEmpty).
+   *
+   * Desk: the dialog's recess tray holding its raised body (18px, 6px, 12px:
+   * concentric). Phone: the drawer's bottom sheet, full-bleed, its grabber,
+   * its actions full width at 44px with the primary last. ‹ stands only on
+   * an optional station reached from another; × on every state.
+   */
+  import Words from "./Words.svelte";
   import { type Form, factsFor, rawFor, stateWords } from "./words";
 
   let {
@@ -146,7 +147,9 @@
               out:depart
             >
               {#each words.lines as line (line)}
-                <p class="m-0 type-body text-pretty text-ink-muted">{line}</p>
+                <p class="m-0 type-body text-pretty text-ink-muted">
+                  <Words text={line} />
+                </p>
               {/each}
               <StateObject {form} {tray} />
               {#if words.meta}

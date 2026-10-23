@@ -63,7 +63,7 @@
 {#if tray.step === "found"}
   <NetworkStrip
     domain={tray.facts.domain}
-    name={tray.name}
+    taken={tray.nameTaken}
     network={tray.facts.name}
   />
 {:else if tray.step === "admin"}
@@ -72,7 +72,7 @@
       class="m-0 flex flex-wrap items-baseline gap-x-space-2 type-meta text-ink-muted"
     >
       <span>Auth ID</span>
-      <code class="type-code wrap-anywhere text-ink-strong select-all"
+      <code class="type-code whitespace-nowrap text-ink-strong select-all"
         >hskey-auth-7f3a9c2e</code
       >
     </p>
@@ -82,7 +82,7 @@
       </div>
     {:else}
       <code
-        class="block min-w-0 rounded-md border border-border-control bg-surface-hover px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong select-all"
+        class="block min-w-0 rounded-md border border-border-control bg-surface-hover px-space-3 py-space-2 type-code whitespace-pre-wrap text-ink-strong select-all"
         >{command}</code
       >
     {/if}
@@ -113,7 +113,7 @@
       aria-label="Secure"
       class="size-icon-md flex-none text-status-done-ink"
     />
-    <code class="min-w-0 type-code wrap-anywhere text-ink-strong select-all"
+    <code class="min-w-0 type-code whitespace-nowrap text-ink-strong select-all"
       >https://{tray.long}</code
     >
   </p>

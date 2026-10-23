@@ -4,14 +4,19 @@
    * runs on, the one device CawCo adds to it (new, in the brand's ink), and
    * the person's phone, each by its mark and name, under the network's
    * name. Nothing of the computer changes; the device is CawCo's own.
+   *
+   * It asks for cawco. Where a device of that name is already on the
+   * network (the hub's computer sees its peers), one line says so before
+   * anything joins: the name it gets comes from the network as it joins,
+   * and the next state names it.
    */
   import { IconLaptop, IconPhone, IconPlus } from "#lib/icons.js";
 
   let {
     network,
     domain,
-    name,
-  }: { network: string; domain: string; name: string } = $props();
+    taken,
+  }: { network: string; domain: string; taken: boolean } = $props();
 </script>
 
 <figure class="m-0 grid gap-space-2" data-slot="network-strip">
@@ -31,7 +36,7 @@
       class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-brand-solid bg-brand-wash px-space-2 py-space-1 type-meta text-brand-ink"
     >
       <IconPlus aria-hidden="true" class="size-icon-sm" />
-      <span class="min-w-0 wrap-anywhere">{name}</span>
+      <span class="whitespace-nowrap">cawco</span>
     </li>
     <li
       class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-border-control bg-surface-raised px-space-2 py-space-1 type-meta text-ink-strong"
@@ -40,7 +45,16 @@
       <span class="min-w-0 wrap-anywhere">your phone</span>
     </li>
   </ul>
-  <figcaption class="type-meta text-center text-ink-muted wrap-anywhere">
-    {network} · {domain}
+  <figcaption
+    class="grid gap-space-1 type-meta text-center text-pretty text-ink-muted"
+  >
+    <span>{network} · <span class="whitespace-nowrap">{domain}</span></span>
+    {#if taken}
+      <span class="text-ink-strong" data-slot="taken"
+        >A device named cawco is already on <span class="whitespace-nowrap"
+          >{domain}</span
+        >, so this one gets another name as it joins.</span
+      >
+    {/if}
   </figcaption>
 </figure>

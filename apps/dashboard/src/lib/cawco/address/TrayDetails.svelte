@@ -1,17 +1,4 @@
 <script lang="ts">
-  /**
-   * The particulars, one press away (gradual revelation): a fold that
-   * opens inside the tray under its actions (`unfold`), holding Facts and
-   * Raw as one segmented switch (fluid-tabs). Facts are a few drawn facts,
-   * each by its mark; Raw is what the hub holds, word for word, in a well
-   * that scrolls and selects whole, with Copy where the clipboard exists.
-   * Its foot ends the work: Stop while it sets up, Remove once live, each
-   * asked in place, its cost named before the press (WORDS.md, Destructive
-   * confirm).
-   *
-   * `look`: Family's chevron row ("Details"), or RowFault's text link
-   * ("Show details" / "Hide details").
-   */
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
@@ -28,6 +15,20 @@
     IconSuccess,
   } from "#lib/icons.js";
   import type { AddressTray, Fact } from "./tray.svelte";
+  /**
+   * The particulars, one press away (gradual revelation): a fold that
+   * opens inside the tray under its actions (`unfold`), holding Facts and
+   * Raw as one segmented switch (fluid-tabs). Facts are a few drawn facts,
+   * each by its mark; Raw is what the hub holds, word for word, in a well
+   * that scrolls and selects whole, with Copy where the clipboard exists.
+   * Its foot ends the work: Stop while it sets up, Remove once live, each
+   * asked in place, its cost named before the press (WORDS.md, Destructive
+   * confirm).
+   *
+   * `look`: Family's chevron row ("Details"), or RowFault's text link
+   * ("Show details" / "Hide details").
+   */
+  import Words from "./Words.svelte";
 
   let {
     tray,
@@ -133,8 +134,8 @@
                   />
                 {/if}
               </span>
-              <span class="mark-text min-w-0 wrap-anywhere text-ink-strong"
-                >{fact.text}</span
+              <span class="mark-text min-w-0 text-ink-strong"
+                ><Words text={fact.text} /></span
               >
             </li>
           {/each}

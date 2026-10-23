@@ -8,8 +8,9 @@
    * one button, and Show details under it. The card never rearranges: only
    * its words (MorphText), its object and its button change, and only the
    * slot changes height, which morph carries over --dur-pop on the drawer
-   * curve. A second way on (Skip, Open Setup Keys) is a text action in the
-   * meta line, so the card keeps its one button. Caw never moves; a failure
+   * curve. A second way on (Skip, Open Setup Keys) is a text action in its
+   * own place under the button, so the card keeps its one button and the
+   * meta line only ever says what it waits on. Caw never moves; a failure
    * keeps him at the top in his needs-you pose. × only, never ‹.
    */
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -25,6 +26,7 @@
   import TrayCaw from "./TrayCaw.svelte";
   import TrayDetails from "./TrayDetails.svelte";
   import type { AddressTray } from "./tray.svelte";
+  import Words from "./Words.svelte";
   import { type Form, factsFor, rawFor, stateWords } from "./words";
 
   let {
@@ -102,7 +104,7 @@
               <p
                 class="m-0 max-w-c-page-line type-body text-pretty text-ink-muted"
               >
-                {line}
+                <Words text={line} />
               </p>
             {/each}
           </div>
@@ -123,48 +125,33 @@
           </div>
         </div>
       {/if}
-      {#if words.meta || words.secondary}
+      {#if words.meta}
+        <!-- What it waits on, alone on its line: a status, never an action. -->
         <p
           class="mark-line m-0 flex min-w-0 flex-wrap items-start justify-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
           data-slot="meta"
         >
-          {#if words.meta}
-            <span class="mark-cell">
-              {#if words.meta.live}
-                <LiveDot />
-              {:else}
-                <IconSuccess
-                  aria-hidden="true"
-                  class="size-icon-sm text-status-done-ink"
-                />
-              {/if}
-            </span>
-            <span class="mark-text min-w-0"
-              ><MorphText text={words.meta.text} /></span
-            >
-            {#if words.meta.action}
-              <Button
-                data-box
-                label={words.meta.action.label}
-                onclick={words.meta.action.act}
-                size="xs"
-                variant="link"
+          <span class="mark-cell">
+            {#if words.meta.live}
+              <LiveDot />
+            {:else}
+              <IconSuccess
+                aria-hidden="true"
+                class="size-icon-sm text-status-done-ink"
               />
             {/if}
-          {/if}
-          {#if words.secondary}
+          </span>
+          <span class="mark-text min-w-0"
+            ><MorphText text={words.meta.text} /></span
+          >
+          {#if words.meta.action}
             <Button
               data-box
-              data-icon={words.secondary.away ? "inline-end" : undefined}
-              onclick={words.secondary.act}
+              label={words.meta.action.label}
+              onclick={words.meta.action.act}
               size="xs"
               variant="link"
-            >
-              <MorphText text={words.secondary.label} />
-              {#if words.secondary.away}
-                <IconExternal aria-hidden="true" class="size-icon-sm" />
-              {/if}
-            </Button>
+            />
           {/if}
         </p>
       {/if}
@@ -182,6 +169,23 @@
             <MorphText text={words.primary.label} />
             {#if words.primary.away}
               <IconExternal aria-hidden="true" />
+            {/if}
+          </Button>
+        </span>
+      {/if}
+      {#if words.secondary}
+        <!-- The second way on, a text action in its own place under the
+             card's one button, so the card keeps one button. -->
+        <span class="flex justify-center" data-slot="secondary">
+          <Button
+            data-icon={words.secondary.away ? "inline-end" : undefined}
+            onclick={words.secondary.act}
+            size="xs"
+            variant="link"
+          >
+            <MorphText text={words.secondary.label} />
+            {#if words.secondary.away}
+              <IconExternal aria-hidden="true" class="size-icon-sm" />
             {/if}
           </Button>
         </span>

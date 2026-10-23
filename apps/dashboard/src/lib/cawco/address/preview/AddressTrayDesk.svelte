@@ -10,6 +10,7 @@
    * row says where it stands.
    */
   import { onDestroy, untrack } from "svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import type { NeedsItem } from "#lib/cawco/home/home-state.svelte.js";
   import NeedsCardSheet from "#lib/cawco/home/NeedsCardSheet.svelte";
   import { closeTo, openFrom, type Source } from "../motion";
@@ -58,6 +59,8 @@
   let opening: Source | null = null;
   /** Where the open tray came from, for its close. */
   let came: Source | null = null;
+  /** The floating tray's height, laid out: the room the page keeps under it. */
+  let floatHeight = $state(0);
   /** The set-up was begun once (Settings says Open after). */
   let started = $state(false);
 
@@ -145,7 +148,15 @@
   <div bind:this={controlEl} class="mx-auto w-full max-w-c-measure">
     <JumpControl {tray} />
   </div>
-  <main class="mx-auto grid w-full max-w-c-measure content-start gap-space-5">
+  <!-- The floating tray stands over the page, not in its flow: the page
+       keeps room under it for as tall as it is, so its foot never falls
+       past the page's. -->
+  <main
+    class="mx-auto grid w-full max-w-c-measure content-start gap-space-5 pb-(--float-room)"
+    style:--float-room={tray.open && tray.source === "settings"
+      ? `${floatHeight}px`
+      : "0px"}
+  >
     {#if tray.source === "needs"}
       <section aria-labelledby="address-needs-head" class="grid gap-space-2">
         <h2
@@ -156,7 +167,14 @@
         </h2>
         <div class="grid gap-space-1">
           {#if !tray.stopped}
-            <div data-slot="address-slot">
+            <!-- Open, the tray stands one group step (the list's gap and
+                 this margin, --space-3 in all) off the row under it, the
+                 same in every state; closed, the row is a row among rows. -->
+            <div
+              class="data-open:mb-space-2"
+              data-open={tray.open || undefined}
+              data-slot="address-slot"
+            >
               {#if tray.open}
                 <TrayView bind:ref={trayEl} {direction} form="desk" {tray} />
               {:else}
@@ -199,6 +217,9 @@
             />
             {#if tray.open}
               <div
+                {@attach frameSize<HTMLElement>((node) => {
+                  floatHeight = node.offsetHeight;
+                })}
                 class="absolute end-0 top-0 z-1 w-c-address-tray-w max-w-full"
                 data-slot="address-float"
               >

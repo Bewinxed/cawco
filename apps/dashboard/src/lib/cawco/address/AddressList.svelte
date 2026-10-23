@@ -50,7 +50,7 @@
           />
         {/if}
         <code
-          class="min-w-0 type-code wrap-anywhere text-ink-strong select-all data-waits:text-ink-muted"
+          class="min-w-0 type-code whitespace-nowrap text-ink-strong select-all data-waits:text-ink-muted"
           data-waits={row.waits ? "" : undefined}>{row.address}</code
         >
       </span>

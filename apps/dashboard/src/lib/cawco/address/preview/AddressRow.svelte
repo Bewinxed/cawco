@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import { IconLink, IconSuccess } from "#lib/icons.js";
+  import type { AddressTray } from "../tray.svelte";
   /**
    * The address's onboarding row in Needs you, in NeedsCard's own recipe
    * (its mark column, the title and its wait, what it wants, the kind and
@@ -7,9 +10,7 @@
    * with the live dot), so the work it parked is seen here. The whole row
    * opens the tray where the set-up stands.
    */
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import { IconLink, IconSuccess } from "#lib/icons.js";
-  import type { AddressTray } from "../tray.svelte";
+  import Words from "../Words.svelte";
   import { rowLine } from "../words";
 
   let {
@@ -65,13 +66,13 @@
   >
   <span
     data-box
-    class="mark-line pointer-events-none relative col-start-2 col-end-4 row-2 flex min-w-0 items-start gap-space-2 type-body wrap-anywhere text-ink-strong"
+    class="mark-line pointer-events-none relative col-start-2 col-end-4 row-2 flex min-w-0 items-start gap-space-2 type-body text-ink-strong"
     data-slot="want"
   >
     {#if line.live}
       <span class="mark-cell"><LiveDot /></span>
     {/if}
-    <span class="mark-text min-w-0">{line.text}</span>
+    <span class="mark-text min-w-0"><Words text={line.text} /></span>
   </span>
   <span
     class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
