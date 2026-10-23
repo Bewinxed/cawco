@@ -25265,6 +25265,16 @@ export const createServer = (
    * A leak its machine found in what a session started (core `LEAK_FOUND`):
    * the session is told in the hub's word ({@link tellSession}), once per
    * leak. One from a machine that does not run the session is nobody's.
+   *
+   * A delegate whose work item has ended takes no word but its parent's
+   * (work-items.ts `refusal`), and a leak is mostly found once its commands
+   * have ended: a leftover by its nature, often after `finish_item`. Then
+   * the session that delegated it is told instead, naming the delegate and
+   * its item, so the leak is someone's to end: on 2026-10-23 the notices of
+   * a failed delegate's leftover and leaking process in its workspace were
+   * refused ("Leak in a workspace (85634c62) is failed. Only the reader, the
+   * session that delegated it, or its project's lead can continue it.") and
+   * reached no one.
    */
   const tellLeak = (
     machineId: string,
@@ -25288,6 +25298,23 @@ export const createServer = (
     const [oldest] = leaksTold;
     if (leaksTold.size > LEAKS_KEPT && oldest !== undefined) {
       leaksTold.delete(oldest);
+    }
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    const parent = item?.parentInstanceId;
+    if (
+      item &&
+      parent &&
+      inputRefusal(row.id, { kind: "system", name: LEAK_ORIGIN })
+    ) {
+      console.warn(
+        `[leak] ${row.id} (its item ${item.id} is ${item.state}), told to ${parent}: ${said.content}`
+      );
+      tellSession(
+        parent,
+        `Your delegate ${item.title} (work item ${item.id.slice(0, 8)}, ${item.state}) left this behind in workspace ${item.workspaceId.slice(0, 8)}, and it takes no message now: ${said.content}`,
+        LEAK_ORIGIN
+      );
+      return;
     }
     console.warn(`[leak] ${row.id}: ${said.content}`);
     tellSession(row.id, said.content, LEAK_ORIGIN);
