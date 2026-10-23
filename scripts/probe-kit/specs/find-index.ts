@@ -29,16 +29,27 @@
  *    words ("comment to a canvas"); no mark inside a word, no query word
  *    left unmarked.
  * f. The person's "we literally removed the slot pool yesterday" is the top
- *    hit for those words, its excerpt the phrase; an agent's turn that
- *    quotes it amid a brief full of "the" ranks below it, and its excerpt
- *    is the quote, not a window of "the" alone.
+ *    hit for those words, its excerpt the phrase; an agent's session that
+ *    quotes it (a brief full of "the", and two turns quoting it again)
+ *    ranks below it, and its excerpt is the quote, not a window of "the"
+ *    alone. As live: the person's turn and session ten hours old
+ *    (find-names.ts `rankOf` recency) and their session asleep, as one idle
+ *    that long is; the agent's minutes old and working on a turn when asked.
  *
  *   bun scripts/probe-kit/run.ts find-index
  */
+
+import { Database } from "bun:sqlite";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { toolRecord } from "../../lib/tool-call";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  type Fleet,
+  MACHINE,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 /** A made-up password, password-shaped (secret-filter.ts `passwordShaped`): never a real one. */
@@ -59,6 +70,7 @@ interface Hit {
   id: string;
   ref?: string;
   title?: string;
+  when?: string | null;
   who?: string;
 }
 interface Answer {
@@ -84,10 +96,30 @@ const BRIEF_ASK = "PROBE-IDX-BRIEF write the brief";
 const FILLER =
   "Paths under the clone mean the same path in your clone; there the scratch dir is the one temp files go to, and the host's caches are read-only. ";
 const BRIEF = `${FILLER.repeat(8)}He wrote "${SLOT_QUERY}" in my session. ${FILLER.repeat(8)}`;
+/** Two asks the agent answers by quoting the person again, each its own turn. */
+const QUOTES: Record<string, string> = {
+  "PROBE-IDX-QUOTE-ONE what did he say": `He said: ${SLOT_QUERY}.`,
+  "PROBE-IDX-QUOTE-TWO say it again": `Quoting the owner once more: "${SLOT_QUERY}".`,
+};
+/** An ask the agent answers slowly: its session is working while find is asked. */
+const WORK_ASK = "PROBE-IDX-WORK keep going";
+/** How long the person's turn and session are made old, as live. */
+const PERSON_AGE_MS = 10 * 3_600_000;
 
 const respond = (request: Seen): Reply => {
   if (request.last.includes(BRIEF_ASK)) {
     return { everyMs: 1, words: [BRIEF] };
+  }
+  for (const [ask, quote] of Object.entries(QUOTES)) {
+    if (request.last.includes(ask)) {
+      return { everyMs: 1, words: [quote] };
+    }
+  }
+  if (request.last.includes(WORK_ASK)) {
+    return {
+      everyMs: 1000,
+      words: Array.from({ length: 120 }, () => "working "),
+    };
   }
   return {
     everyMs: 5,
@@ -198,6 +230,10 @@ const run = async (kit: Kit) => {
   await say(canvas.id, CANVAS);
   await say(slot.id, SLOT);
   await say(brief.id, BRIEF_ASK);
+  for (const ask of Object.keys(QUOTES)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one turn after the other
+    await say(brief.id, ask);
+  }
   const find = async (args: Record<string, unknown>) => {
     const read = await toolRecord<Answer>(
       { base: fleet.base, id: asker.id, credential: asker.credential },
@@ -324,7 +360,7 @@ const run = async (kit: Kit) => {
   );
 
   await highlightLegs(kit, find, canvas.id);
-  await phraseLeg(kit, find, slot.id, brief.id);
+  await phraseLeg(kit, fleet, find, slot.id, brief.id);
 };
 
 /** One `find` call as the asker, its record read. */
@@ -356,14 +392,78 @@ const highlightLegs = async (kit: Kit, find: FindCall, canvasId: string) => {
 const plain = (excerpt: string | undefined) =>
   (excerpt ?? "").replace(/[「」]/g, "");
 
-/** f: the phrase, and whose saying of it ranks first. */
+/** The rank's parts besides the match (find-names.ts `rankOf`), as the probe reads a result: what the detail says each scored. */
+const rankParts = (result: FindRouteResult, now: number) => {
+  const hours = Math.max(0, now - (result.lastActivity ?? now)) / 3_600_000;
+  const state: Record<string, number> = {
+    "needs-you": 22,
+    working: 20,
+    idle: 10,
+    sleeping: 6,
+    unknown: 3,
+    ended: 0,
+  };
+  const recency = 30 * Math.exp(-hours / 36);
+  const live = state[result.state ?? ""] ?? 0;
+  return `score ${result.score.toFixed(1)} = the match's part (and whose words) ${(result.score - recency - live - 6).toFixed(1)} + recency ${recency.toFixed(1)} (${hours.toFixed(1)} h) + ${result.state} ${live} + parentage 6`;
+};
+
+/** A result of `GET /api/find`, as leg f reads its rank. */
+interface FindRouteResult {
+  id: string;
+  kind: string;
+  lastActivity: number | null;
+  score: number;
+  state?: string;
+  title: string;
+}
+
+/**
+ * Makes the person's line and its session ten hours old, as live: asleep,
+ * as a session idle past its half hour is put to sleep (hub server.ts
+ * `sleepFinished`: "rather than at the end of an idle half hour"); the
+ * machine's index dates the turn then, and the session's row last moved then.
+ * The row is written beside the hub, then renamed through the hub, which
+ * re-reads it for find and keeps its age ("A rename alone is not the session
+ * moving").
+ */
+const ageThePerson = async (fleet: Fleet, slotId: string) => {
+  await fleet.control(slotId, "sleep");
+  await until(
+    "the person's session asleep",
+    () => fleet.instance(slotId)?.status,
+    (status) => status === "sleeping",
+    60_000
+  ).catch(() => undefined);
+  const then = Date.now() - PERSON_AGE_MS;
+  const index = new Database(
+    join(fleet.home, ".local", "share", "cawco", "transcript-index.db")
+  );
+  try {
+    index.exec("PRAGMA busy_timeout = 15000");
+    index
+      .query("UPDATE docs SET ts = ? WHERE text = ?")
+      .run(new Date(then).toISOString(), SLOT);
+  } finally {
+    index.close();
+  }
+  fleet.write("UPDATE instances SET updated_at = ? WHERE id = ?", then, slotId);
+  await fetch(`${fleet.base}/api/instances/${slotId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title: "Slot pool line" }),
+  });
+};
+
+/** f: the phrase, and whose saying of it ranks first, the agent's session working and the person's ten hours old. */
 const phraseLeg = async (
   kit: Kit,
+  fleet: Fleet,
   find: FindCall,
   slotId: string,
   briefId: string
 ) => {
-  const phrase = await until(
+  await until(
     "the slot pool line and the brief quoting it",
     () => find({ query: SLOT_QUERY, project: "all", limit: 20 }),
     ({ answer }) =>
@@ -372,11 +472,32 @@ const phraseLeg = async (
       ),
     HELD_MS
   ).catch(() => undefined);
-  const slotHits = phrase?.answer.hits ?? [];
+  await ageThePerson(fleet, slotId);
+  await fleet.send(briefId, WORK_ASK);
+  await until(
+    "the brief writer working on a turn",
+    () => fleet.instance(briefId)?.turn_open_at,
+    (open) => open !== null && open !== undefined,
+    60_000
+  ).catch(() => undefined);
+  const phrase = await find({ query: SLOT_QUERY, project: "all", limit: 20 });
+  const route = (await (
+    await fetch(
+      `${fleet.base}/api/find?${new URLSearchParams({ q: SLOT_QUERY, limit: "50" })}`
+    )
+  ).json()) as { results: FindRouteResult[] };
+  const now = Date.now();
+  const parts = [slotId, briefId].map((id) => {
+    const result = route.results.find((each) => each.id === id);
+    return result
+      ? `${result.title}: ${rankParts(result, now)}`
+      : `${id}: no result`;
+  });
+  const slotHits = phrase.answer.hits ?? [];
   const spoken = slotHits.find((hit) => hit.id === slotId);
   const quoted = slotHits.find((hit) => hit.id === briefId);
   kit.check(
-    "f: the person's words are the top hit for them, their excerpt the phrase; the agent's turn quoting them ranks below, its excerpt the quote",
+    "f: with the agent's session minutes old and working and the person's ten hours old and asleep, the person's words are the top hit for them, their excerpt the phrase; the agent's quoting them ranks below, its excerpt the quote",
     slotHits[0]?.id === slotId &&
       spoken?.who === "person" &&
       plain(spoken.excerpt).includes(SLOT_QUERY) &&
@@ -385,7 +506,7 @@ const phraseLeg = async (
       plain(quoted.excerpt).includes(SLOT_QUERY) &&
       highlightFault(spoken.excerpt ?? "", SLOT_QUERY) === null &&
       highlightFault(quoted.excerpt ?? "", SLOT_QUERY) === null,
-    `${JSON.stringify(slotHits.map((hit) => [hit.title, hit.who]))}\nperson: ${spoken?.excerpt}\nagent: ${quoted?.excerpt}`
+    `${JSON.stringify(slotHits.map((hit) => [hit.title, hit.who, hit.when]))}\n${parts.join("\n")}\nperson: ${spoken?.excerpt}\nagent: ${quoted?.excerpt}`
   );
 };
 
