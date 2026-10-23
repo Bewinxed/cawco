@@ -408,6 +408,7 @@ import {
   DOWN_WORDS,
   downOf,
   type FolderWeight,
+  isFolderGone,
   RELAY_HEADER,
 } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
@@ -11421,6 +11422,20 @@ export const createServer = (
    * start is the generation's one start: a request that comes meanwhile
    * waits on it (reachPreview).
    */
+  /**
+   * What a preview's start says of its folder, kept on the artifact: its
+   * machine's words that it is gone (core preview-proxy `isFolderGone`) take
+   * it out of Needs you; a start that reached it says it is there again.
+   * Any other failure says nothing of the folder.
+   */
+  const folderSeen = (id: string, started: ListenerStart): void => {
+    if (started.ok) {
+      artifacts.sourceSeen(id, null);
+    } else if (isFolderGone(started.error)) {
+      artifacts.sourceSeen(id, started.error);
+    }
+  };
+
   const openPreview = async (
     instanceId: string,
     machineId: string,
@@ -11459,6 +11474,7 @@ export const createServer = (
       if (reaching.get(instanceId)?.reach === reach) {
         reaching.delete(instanceId);
       }
+      folderSeen(artifact.id, started);
       if (!started.ok) {
         return { ok: false, code: started.code, error: started.error };
       }
@@ -11536,6 +11552,7 @@ export const createServer = (
         target.source,
         generation
       );
+      folderSeen(target.artifact.id, started);
       const now = targets.get(instanceId);
       if (!now) {
         return {

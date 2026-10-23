@@ -736,6 +736,12 @@ const HELD_NEXT = artifactToolWords.heldAsNext;
 /** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
 const HANDED = "handed";
 
+/** The doc meta key of a preview whose folder its machine said is gone at its last start, with the daemon's words (service `sourceSeen`). */
+const SOURCE_GONE = "sourceGone";
+
+/** The doc meta key of an option's media whose decision page went: the page's id (service `discard`). */
+const MEDIA_OF = "mediaOf";
+
 /** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
 const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/;
 
@@ -2346,6 +2352,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const next = db.heldOf(row.id);
     if (next) {
       discard(next);
+    }
+    // Its Canvases and Previews stay its pictures once it is gone (needs.ts).
+    for (const id of mediaOf(row)) {
+      if (db.get(id)?.instanceId === row.instanceId) {
+        docs.transact(id, "hub", (doc) =>
+          doc.getMap("meta").set(MEDIA_OF, row.id)
+        );
+      }
     }
     letGoHeadless(row.id);
     docs.drop(row.id);
@@ -5047,7 +5061,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         .filter((pin) => pin.resolvedAt && newAnswer(pin))
         .map((pin) => ({ pin: pin.number, at: answeredOn(pin) })),
       draft: meta.get("draft") === true,
+      gone: (meta.get(SOURCE_GONE) as { why: string } | undefined)?.why ?? null,
       lookedAt: (meta.get("lookedAt") as string | undefined) ?? null,
+      // Its page gone; one standing now is read beside the facts (mediaNow).
+      media: meta.has(MEDIA_OF),
       revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
       handed: meta.get(HANDED) === true,
       unsent: unsentChoices(state, sentAt),
@@ -5090,7 +5107,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** What `row` waits on the person for now; null when nothing. */
   const pendingFor = (row: ArtifactRow): ArtifactPending | null => {
-    const facts = factsOf(row);
+    const facts = withMedia(row, factsOf(row));
     if (!mayWait(row, facts)) {
       return null;
     }
@@ -5154,6 +5171,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : readKept(program).artifacts.map((media) => media.id);
     mediaKept.set(row.id, { at, ids });
     return ids;
+  };
+
+  /**
+   * `row`'s facts with whether it is an option's media now: a Canvas or
+   * Preview piece of a decision page among `pages` (its session's, read
+   * here when not given), or of one that went (`facts.media`).
+   */
+  const withMedia = (
+    row: ArtifactRow,
+    facts: ArtifactFacts,
+    pages?: readonly ArtifactRow[]
+  ): ArtifactFacts => {
+    if (facts.media || row.instanceId === null || row.kind === "page") {
+      return facts;
+    }
+    const shownOn = (
+      pages ??
+      db.ofInstance(row.instanceId).filter((one) => one.kind === "page")
+    ).some((page) => mediaOf(page).includes(row.id));
+    return shownOn ? { ...facts, media: true } : facts;
   };
 
   /**
@@ -5309,8 +5346,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           factsKept.delete(id);
         }
       }
+      // Each session's pages, whose Canvases and Previews ask nothing of their own.
+      const pages = Map.groupBy(
+        rows.filter((row) => row.kind === "page"),
+        (row) => row.instanceId
+      );
       for (const row of rows) {
-        const kept = factsOf(row);
+        const kept = withMedia(
+          row,
+          factsOf(row),
+          pages.get(row.instanceId) ?? []
+        );
         if (!mayWait(row, kept)) {
           continue;
         }
@@ -5336,6 +5382,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /** Whether the person had artifact `id` on screen at or after `at` (ms epoch). */
+    /**
+     * What artifact `id`'s machine said of its folder at its preview's last
+     * start (server.ts `openPreview`, `reachPreview`): `gone`, the daemon's
+     * words that it isn't there (core preview-proxy `isFolderGone`), takes it
+     * out of Needs you and keeps it in Files; null, it was there.
+     */
+    sourceSeen: (id: string, gone: string | null): void => {
+      const row = db.get(id);
+      if (!row) {
+        return;
+      }
+      const meta = docs.doc(id).getMap("meta");
+      const was = (meta.get(SOURCE_GONE) as { why: string } | undefined)?.why;
+      if ((was ?? null) === gone) {
+        return;
+      }
+      docs.transact(id, "hub", () => {
+        if (gone === null) {
+          meta.delete(SOURCE_GONE);
+        } else {
+          meta.set(SOURCE_GONE, { at: new Date().toISOString(), why: gone });
+        }
+      });
+      deps.needsMoved();
+    },
+
     lookedSince: (id: string, at: number): boolean => {
       const row = db.get(id);
       const looked = row ? factsOf(row).lookedAt : null;

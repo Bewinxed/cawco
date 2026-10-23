@@ -12,6 +12,7 @@ import {
   causeOf,
   downResponse,
   type FolderWeight,
+  folderGone,
   folderKey,
   folderWeight,
   IMMUTABLE,
@@ -586,14 +587,26 @@ const portSource = (
   ...(parts.serve === undefined ? {} : { serve: parts.serve }),
 });
 
-/** A folder preview's folder, its links resolved; refused when it is no absolute path to a folder. */
+/** The system's codes for a path that is not there, or not a folder on the way to it. */
+const NOT_THERE = new Set(["ENOENT", "ENOTDIR"]);
+
+/**
+ * A folder preview's folder, its links resolved; refused when it is no
+ * absolute path to a folder, and in core's `folderGone` words when the
+ * folder is not there, so the hub records the preview's source gone.
+ */
 async function folderRoot(dir: string): Promise<string> {
   if (!isAbsolute(dir)) {
     throw new Error("Directory must be an absolute path.");
   }
-  const root = await realpath(dir);
+  const root = await realpath(dir).catch((error: unknown) => {
+    const code = (error as { code?: unknown } | null)?.code;
+    throw typeof code === "string" && NOT_THERE.has(code)
+      ? new Error(folderGone(causeOf(error)))
+      : error;
+  });
   if (!(await stat(root)).isDirectory()) {
-    throw new Error("Directory does not exist.");
+    throw new Error(folderGone(`${dir} is not a folder`));
   }
   return root;
 }

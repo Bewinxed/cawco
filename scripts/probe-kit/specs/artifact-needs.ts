@@ -16,6 +16,9 @@
  * - a judge canvas with an ask and a pick page with an ask stand in both;
  *   the pick page leaves once its picks are sent; Caw's head counts the
  *   rows his panel lists; in Chromium and WebKit.
+ * - a decision page whose options show two judge canvases is one row, not
+ *   three; a preview whose folder is deleted leaves the lane at its next
+ *   start, still in Files.
  *
  * Reasons, each with its row line:
  * - not opened: a judge page shown and never opened is "New · not opened";
@@ -60,7 +63,7 @@
  *
  *   bun scripts/probe-kit/run.ts artifact-needs
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
@@ -1089,6 +1092,111 @@ const onlyOpenAsks = async (at: At, session: string) => {
   await page.close();
 };
 
+/** A decision page whose two options each show a canvas to judge, by id. */
+const mediaProgram = (flat: string, raised: string) =>
+  `root = Decisions("The tray's look", [look])
+look = Decision("look", "Which tray look ships?", [flatLook, raisedLook], "Each look is drawn on a canvas.")
+flatLook = Option("flat", "Flat", "It sits in the bar.", true, [flatPic], "Less depth.")
+raisedLook = Option("raised", "Raised", "It floats above the bar.", false, [raisedPic], "More weight.")
+flatPic = Canvas("${flat}", "The flat tray")
+raisedPic = Canvas("${raised}", "The raised tray")`;
+
+/**
+ * Two more that ask nothing of their own: a decision page's option media
+ * (two judge canvases, each with its ask) give one row, the page's; and a
+ * preview whose folder is deleted leaves the lane once its machine says so
+ * at its next start, still listed in Files.
+ */
+const mediaAndGone = async (at: At, session: string) => {
+  const { fleet, kit, base } = at;
+  const flat = await create(fleet, session, {
+    kind: "canvas",
+    does: "judge",
+    ask: "Judge the flat tray",
+    name: "tray-flat",
+  });
+  const raised = await create(fleet, session, {
+    kind: "canvas",
+    does: "judge",
+    ask: "Judge the raised tray",
+    name: "tray-raised",
+  });
+  const page = await create(fleet, session, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the tray's look",
+    name: "tray-look",
+    program: mediaProgram(flat, raised),
+  });
+  const pageLine = await lineIs(fleet, page, "0 of 1 picked");
+  const listed = (await lane(fleet)).needs.map((need) => need.artifactId);
+  kit.check(
+    "option media, the hub's lane: a decision page whose two options show judge canvases is one row, the page's ('0 of 1 picked'); neither canvas is its own",
+    pageLine === "0 of 1 picked" &&
+      listed.includes(page) &&
+      !(listed.includes(flat) || listed.includes(raised)),
+    JSON.stringify({ pageLine, listed, page, flat, raised })
+  );
+  for (const engine of ["chromium", "webkit"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
+    const view = await kit.page("desk", { engine });
+    await open(view, `${base}/session`, "[data-needs-caw]");
+    await cawPanel(view);
+    const read = await until(
+      "Caw's panel listing the page",
+      () => panelRead(view),
+      (now) => now.artifacts.includes(page),
+      LANE_MS
+    ).catch(() => panelRead(view));
+    const ours = read.artifacts.filter((id) =>
+      [page, flat, raised].includes(id)
+    );
+    kit.check(
+      `option media, Caw's panel (${engine}): one row a person sees for the page and its two canvases, not three; the head counts the rows`,
+      ours.length === 1 &&
+        ours[0] === page &&
+        read.label.startsWith(cawHeadWords.needs(read.rows)) &&
+        read.arcs === read.rows,
+      JSON.stringify({ ours, read })
+    );
+    await view.close();
+  }
+
+  const folder = join(fleet.repo, "probe-gone-preview");
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(
+    join(folder, "index.html"),
+    judgePage("Gone preview", ["A line that goes."])
+  );
+  const gone = await create(fleet, session, {
+    kind: "preview",
+    does: "judge",
+    ask: "Judge the preview that goes",
+    name: "gone-preview",
+    dir: folder,
+  });
+  const before = await lineIs(fleet, gone, artifactWords.notOpened);
+  rmSync(folder, { recursive: true, force: true });
+  // Its next start, as the person's open of it starts it: the machine says the folder is gone.
+  const shown = await fleet
+    .api(`/api/instances/${session}/artifacts/${gone}/show`, {})
+    .then((answer) => JSON.stringify(answer))
+    .catch((error: unknown) => String(error));
+  const after = await lineIs(fleet, gone, null);
+  const files = await fleet.api<{ id: string; waiting: boolean }[]>(
+    `/api/instances/${session}/artifacts/files`
+  );
+  const filed = files.find((one) => one.id === gone);
+  kit.check(
+    "a gone source: a judge preview with its ask stands ('New · not opened'); its folder deleted, its next start fails on the machine's words and it leaves the lane, still in Files, not waiting",
+    before === artifactWords.notOpened &&
+      shown.includes(": 503 ") &&
+      after === null &&
+      filed?.waiting === false,
+    JSON.stringify({ before, shown, after, filed })
+  );
+};
+
 const countAndArcs = async (at: At) => {
   const { fleet, kit, base } = at;
   const page = await kit.page("desk");
@@ -1315,6 +1423,8 @@ const run = async (kit: Kit) => {
   const showing = await fleet.spawn("claude", "Showing", fleet.repo);
 
   await onlyOpenAsks(at, showing);
+  const media = await fleet.spawn("claude", "Media", fleet.repo);
+  await mediaAndGone(at, media);
 
   const judge = await notOpened(at, judging);
   // One item, at every width and in both engines.

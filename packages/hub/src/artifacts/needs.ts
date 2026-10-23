@@ -10,7 +10,10 @@
  * a canvas to judge with its ask line set (the panel's head, `artifacts.ask`;
  * a row made before asks were kept has none), and is its session's to put
  * to the person: not a draft, not handed up to a parent that hasn't opened
- * it, not a maker's change held for one. Its ask is open while (a reason
+ * it, not a maker's change held for one, not an option's media on a
+ * decision page (the page asks, its Canvases and Previews are its
+ * pictures, before and after it is answered or gone), not a preview whose
+ * folder is gone from its machine. Its ask is open while (a reason
  * each, strongest first) a canvas to judge was never opened; a decision
  * page has a card not picked; picks and notes are written and not sent
  * (comments go by themselves). An agent's answer on an open pin newer than
@@ -81,10 +84,14 @@ export interface ArtifactFacts {
   draft: boolean;
   /** The first decision, in page order, not picked. */
   firstUnpicked: string | null;
+  /** Its folder isn't on its machine any more, in the daemon's words (core preview-proxy `folderGone`); null while it was there at its last start. */
+  gone: string | null;
   /** Handed up to a parent session that hasn't opened it, or a maker's change held for it: not the person's yet. */
   handed: boolean;
   /** When the person last had it on screen (a view's word), ISO. */
   lookedAt: string | null;
+  /** An option's media on a decision page of its session (its Canvas or Preview piece), now or before that page went. */
+  media: boolean;
   picks: { asked: number; made: number } | null;
   /** When its session last published or changed it (`meta.revisedAt`), ISO. */
   revisedAt: string | null;
@@ -116,7 +123,13 @@ const ms = (iso: string | null | undefined): number => {
 const asks = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   (row.does === "pick" || row.does === "judge") &&
   row.ask.trim() !== "" &&
-  !(facts.draft || facts.handed || row.heldFor !== null);
+  !(
+    facts.draft ||
+    facts.handed ||
+    facts.media ||
+    facts.gone !== null ||
+    row.heldFor !== null
+  );
 
 /** A canvas to judge no view has had on screen yet (rule 6). */
 const unjudged = (row: ArtifactRow): boolean =>

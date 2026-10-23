@@ -184,6 +184,21 @@ export const DOWN_WORDS: Record<PreviewDown, string> = {
     "This preview is closed: its session shows something else now, or has ended. Open its session to show it again.",
 };
 
+/**
+ * A folder preview's folder is not on its machine any more (removed, or its
+ * workspace archived with it): the daemon refuses its start with these words
+ * first, its system's own after them, and the hub records the artifact's
+ * source gone (hub artifacts/needs.ts: it asks nothing of the person).
+ */
+const FOLDER_GONE = "The preview's folder isn't on its machine any more";
+
+/** {@link FOLDER_GONE} with the system's own words for it ("ENOENT: no such file or directory, …"). */
+export const folderGone = (why: string): string => `${FOLDER_GONE}: ${why}`;
+
+/** Whether a daemon's refusal of a preview's start says its folder is gone. */
+export const isFolderGone = (error: string): boolean =>
+  error.startsWith(FOLDER_GONE);
+
 const HTML_ESCAPES: Record<string, string> = {
   "&": "&amp;",
   '"': "&quot;",
