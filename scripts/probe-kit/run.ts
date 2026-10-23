@@ -256,7 +256,12 @@ try {
     }
   }
 } finally {
+  const failuresBefore = run.failures;
   await run.close();
+  // Closing the run's shared browsers is checked too: one left a process behind.
+  if (run.failures > failuresBefore) {
+    failedSpecs.push("the run's browsers");
+  }
 }
 if (review !== null) {
   if (run.changed.length === 0) {

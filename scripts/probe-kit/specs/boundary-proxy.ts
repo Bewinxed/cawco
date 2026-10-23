@@ -61,6 +61,7 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid, signalGroup } from "../../../packages/core/src/signal";
 import { SOCAT_BACKLOG } from "../../../packages/core/src/socat";
 import { until } from "../../scratch-fleet";
+import { launchEnv } from "../browser-leftovers";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 type Env = Record<string, string | undefined>;
@@ -251,7 +252,7 @@ const browseLeg = async (kit: Kit, env: Env) => {
   const { url } = await tool<{ url: string }>("artifact_browse", {
     id: page.id,
   });
-  const browser = await chromium.launch({ env });
+  const browser = await chromium.launch({ env: launchEnv(env) });
   try {
     const tab = await browser.newPage();
     const answered: { path: string; status: number }[] = [];

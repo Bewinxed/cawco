@@ -97,6 +97,20 @@ owner's iPhone Safari does (`safari-long-ask`, `safari-blurs`); it is
 read from Playwright's browser cache, installed with
 `bunx playwright-core@1.63.0 install webkit`.
 
+## A browser leaves nothing behind
+
+Every browser the kit or a spec launches runs with `launchEnv()`
+(`browser-leftovers.ts`) as its environment, which tags it. Once a spec's
+own browsers have closed, and once the run's shared ones have, the kit
+checks that no process carrying the tag is left (`… leaves no process of its
+own behind`), a `chrome_crashpad_handler` above all: Crashpad starts it
+through a `setsid()` and a double fork, so it is no part of the browser's
+process tree. A spec that launches a browser itself passes `launchEnv(env)`.
+The kit's Chromium pages run the headless shell, which starts no crash
+reporter; full Chromium (`channel: "chromium"`, a hand-spawned
+`chromium.executablePath()`) always starts one, and no switch stops it
+without breaking its renderers.
+
 ## Approving a baseline
 
 Only after the owner has approved what it shows. `--approve <spec>` writes

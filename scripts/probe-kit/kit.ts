@@ -42,6 +42,12 @@ import {
   scratchFleet,
   until,
 } from "../scratch-fleet";
+import {
+  launchEnv,
+  leftBehind,
+  tagOf,
+  takeLaunches,
+} from "./browser-leftovers";
 
 export const ROOT = resolve(import.meta.dir, "../..");
 
@@ -873,6 +879,27 @@ export class Run {
   /** The descriptor holding the checkout's build shared while this run serves it. */
   private output: number | null = null;
   private readonly browsers = new Map<string, Promise<Browser>>();
+  /** The launch tags of {@link browsers}: they stay open across specs and are checked as the run closes. */
+  private readonly sharedLaunches = new Set<string>();
+
+  /**
+   * Fails `what` when a process carrying one of `tags` outlives its closed
+   * browser (browser-leftovers.ts): a `chrome_crashpad_handler` most of all.
+   */
+  private async noneLeft(
+    tags: readonly string[],
+    check: (assertion: string, ok: boolean, detail?: string) => void
+  ): Promise<void> {
+    if (tags.length === 0) {
+      return;
+    }
+    const left = await leftBehind(tags);
+    check(
+      `every browser closed leaves no process of its own behind (no chrome_crashpad_handler among the run's processes; ${tags.length} launch(es))`,
+      left.length === 0,
+      left.join("; ")
+    );
+  }
 
   /**
    * The checkout's build of this tree, the first time a spec needs it, held
@@ -931,10 +958,12 @@ export class Run {
     if (known) {
       return known;
     }
-    const env =
+    const env = launchEnv(
       process.platform === "linux"
         ? { ...process.env, FONTCONFIG_FILE: FONTS_CONF }
-        : process.env;
+        : process.env
+    );
+    this.sharedLaunches.add(tagOf(env));
     // `PROBE_WEBKIT` names a WebKit build to run (its `pw_run.sh`) where the
     // one this playwright-core expects is not installed; a page's own
     // `webkit` revision names one in Playwright's browser cache.
@@ -1217,6 +1246,8 @@ export class Run {
         // biome-ignore lint/performance/noAwaitInLoops: fleets stop one at a time, by PID
         await end().catch((error) => console.log(`  cleanup: ${error}`));
       }
+      // The browsers the spec launched itself (launchEnv) are closed by now.
+      await this.noneLeft(takeLaunches(this.sharedLaunches), kit.check);
       console.log(
         `  ${spec.name}: ${((performance.now() - started) / 1000).toFixed(0)}s`
       );
@@ -1228,6 +1259,14 @@ export class Run {
       // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
       await (await browser).close().catch(() => undefined);
     }
+    await this.noneLeft(takeLaunches(), (assertion, ok, detail) => {
+      const line = `${ok ? "PASS" : "FAIL"} the run's browsers: ${assertion}${detail ? ` (${detail})` : ""}`;
+      console.log(line);
+      if (!ok) {
+        this.failures += 1;
+        this.failed.push(line.slice(0, 600));
+      }
+    });
     (await this.devServer)?.stop();
     (await this.builtServer)?.stop();
     if (this.output !== null) {

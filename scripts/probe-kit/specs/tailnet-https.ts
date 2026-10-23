@@ -46,6 +46,7 @@ import { connect } from "node:tls";
 import { chromium, type Page } from "playwright-core";
 import { tailnetWords } from "../../../packages/core/src/words/tailnet";
 import { leasePortRange, until } from "../../scratch-fleet";
+import { launchEnv } from "../browser-leftovers";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
 export const NAME = "probe-box.tail0000.ts.net";
@@ -801,10 +802,12 @@ const run = async (kit: Kit) => {
   // reach the name (measured: 407, ERR_TUNNEL_CONNECTION_FAILED).
   const browser = await chromium.launch({
     headless: true,
-    env: Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] =>
-          !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
+    env: launchEnv(
+      Object.fromEntries(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] =>
+            !PROXY_VARIABLE.test(entry[0]) && entry[1] !== undefined
+        )
       )
     ),
     args: ["--no-sandbox", `--host-resolver-rules=MAP ${NAME} [::1]`],

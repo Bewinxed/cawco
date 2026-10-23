@@ -20,6 +20,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { until } from "../scratch-fleet";
+import { launchEnv } from "./browser-leftovers";
 
 /** How long a hidden tab stands before its chained timers wake once a minute, s (Chromium's own is 5 minutes). */
 export const GRACE_S = 10;
@@ -108,12 +109,12 @@ async function standUp(
       "about:blank",
     ],
     {
-      env: {
+      env: launchEnv({
         ...process.env,
         XDG_RUNTIME_DIR: runtime,
         WAYLAND_DISPLAY: socket,
         DISPLAY: "",
-      },
+      }),
       stdout: "ignore",
       stderr: Bun.file(join(dir, "chrome.log")),
     }
