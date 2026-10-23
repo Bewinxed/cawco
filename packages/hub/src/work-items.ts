@@ -1076,12 +1076,12 @@ export interface WorkItemDeps {
   };
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
-  readonly untellYou: (instanceId: string) => void;
   /**
    * Item `instanceId`'s block is over: what was kept at the hub for its
    * session goes now, waking it (server.ts `releaseOwed`).
    */
   readonly unblocked: (instanceId: string) => void;
+  readonly untellYou: (instanceId: string) => void;
   /** A workspace was settled on its machine, archived or held: the dashboards draw it so. */
   readonly workspaceChanged?: (workspace: WorkspaceRow) => void;
 }
@@ -8840,7 +8840,6 @@ export const createWorkItems = ({
 
     /** {@link blockIfMissing}: the block `row`'s item has as its session is to start again, or nothing. */
     blockIfMissing,
-
 
     /** Whether `instanceId`'s live item is blocked ({@link blockIfMissing}): what it is sent waits at the hub. */
     blockedFor(instanceId: string): boolean {

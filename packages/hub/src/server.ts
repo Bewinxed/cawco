@@ -364,6 +364,7 @@ import {
   type WorkInFlight,
   withMovedLine,
   withPresenceLine,
+  workWords,
 } from "@cawco/core";
 import { readTrial } from "@cawco/core/binary-installation";
 import {
@@ -10380,7 +10381,7 @@ export const createServer = (
    */
   const endedByMoveWords = (ended: MoveEnded): string =>
     [
-      `You were moved to another account. Claude Code doesn't bring back background work when it resumes a session, so the move ended what your old process was still running. Each was interrupted, its outcome unknown: it may or may not have finished what it started.`,
+      `You were moved to another account. Claude Code doesn't bring back background work when it resumes a session, so the move ended what your old process was still running. ${workWords.interrupted}`,
       ...ended.tasks.map((task) =>
         [
           `- Background task ${task.taskId} (${task.type}): ${task.description}.`,
@@ -10408,7 +10409,7 @@ export const createServer = (
    */
   const cutTasksWords = (how: string, cut: readonly EndedTask[]): string =>
     [
-      `${how}, which ended ${cut.length === 1 ? "the background task" : `the ${cut.length} background tasks`} it was running; Claude Code doesn't bring them back. Each was interrupted, its outcome unknown: it may or may not have finished what it started.`,
+      `${how}, which ended ${cut.length === 1 ? "the background task" : `the ${cut.length} background tasks`} it was running; Claude Code doesn't bring them back. ${workWords.interrupted}`,
       ...cut.map((task) =>
         [
           `- Background task ${task.taskId} (${task.type}): ${task.description}.`,

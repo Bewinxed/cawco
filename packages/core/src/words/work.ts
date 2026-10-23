@@ -20,6 +20,13 @@ export const workWords = {
    * its session starts with is missing (`blockIfMissing`).
    */
   blockedTitle: (title: string) => `${title} is blocked`,
+  /**
+   * What a session is told of each background task a move, a restart or a
+   * kill ended with its process (hub server.ts `endedByMoveWords`,
+   * `cutTasksWords`).
+   */
+  interrupted:
+    "Each was interrupted, its outcome unknown: it may or may not have finished what it started.",
   /** Why an item is blocked: its delegate type was deleted (hub work-items.ts `blockIfMissing`). */
   missingType: (name: string) =>
     `Its delegate type “${name}” was deleted, so its session isn't started again without it. Put the type back, or stop the item.`,
