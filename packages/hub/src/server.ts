@@ -19,6 +19,7 @@ import type {
   CompactStage,
   ContinuationJob,
   ControlPayload,
+  CutCommand,
   DelegateEvent,
   DeliveryMark,
   EndedTask,
@@ -1295,6 +1296,21 @@ const restartedWords = (restartedAt: Date): string =>
 /** What a session whose process a signal killed is told of the turn that kill cut. */
 /** A sentence's closing full stop, taken off to set it inside another. */
 const CLOSING_STOP = /\.$/;
+
+/**
+ * Each shell command a death or a server's stop cut, said interrupted: with
+ * what it had printed when its harness kept that, else that none was kept
+ * (core `CutCommand`, workWords.commandInterrupted).
+ */
+const cutCommandsWords = (cut: readonly CutCommand[] | undefined): string =>
+  (cut ?? [])
+    .map((one) =>
+      workWords.commandInterrupted(
+        one.command,
+        one.unkept ? undefined : one.output
+      )
+    )
+    .join("\n\n");
 
 const killedWords = (signal: string, killedAt: Date): string =>
   `Your process was killed (${signal}) at ${utcClock(killedAt)} while your turn was running, and CawCo started it again. ${CARRY_ON_CUT}`;
@@ -25812,7 +25828,12 @@ export const createServer = (
    * stopped ({@link cutTurnOf}). A turn so cut that is not handed back ends
    * there, as the turn that result closes.
    */
-  const resumeCutTurn = (instanceId: string, serverStopped?: Date): void => {
+  const resumeCutTurn = (
+    instanceId: string,
+    serverStopped?: Date,
+    /** The commands the stop cut, in words ({@link cutCommandsWords}). */
+    cutWords = ""
+  ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     tellCutAtLaunch(row, serverStopped);
     const cut = row
@@ -25829,7 +25850,10 @@ export const createServer = (
     const sent = handTurnBack(
       row,
       String(cut),
-      askAgain(row.id, restartedWords(restartedAt))
+      askAgain(
+        row.id,
+        `${restartedWords(restartedAt)}${cutWords ? `\n\n${cutWords}` : ""}`
+      )
     );
     if (sent.state === "failed") {
       turnOver(row.id);
@@ -25903,10 +25927,7 @@ export const createServer = (
     const [row] = db.getInstancesByIds([instanceId]);
     const last = signalDeaths.get(instanceId);
     const now = Date.now();
-    // Each command the death cut, interrupted, with what it had printed.
-    const cutWords = (died.cut ?? [])
-      .map((one) => workWords.commandInterrupted(one.command, one.output))
-      .join("\n\n");
+    const cutWords = cutCommandsWords(died.cut);
     if (
       !row ||
       row.kind === "summariser" ||
@@ -33703,7 +33724,10 @@ export const createServer = (
                     // back once this result is taken in like any other.
                     const cutId = message.instanceId;
                     const stoppedAt = new Date();
-                    lifetime.after(0, () => resumeCutTurn(cutId, stoppedAt));
+                    const cutWords = cutCommandsWords(neutral.cut);
+                    lifetime.after(0, () =>
+                      resumeCutTurn(cutId, stoppedAt, cutWords)
+                    );
                   } else {
                     turnOver(message.instanceId);
                   }

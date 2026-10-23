@@ -205,6 +205,11 @@ export class PiRemoteSession implements HarnessSession {
   /** Its host's pid as its keeper listed it: the process a refusal of its input is about. */
   readonly #pid: number;
 
+  /** Its host's process: what its commands run under (agent left-running.ts). */
+  processId(): Promise<number | undefined> {
+    return Promise.resolve(this.#pid);
+  }
+
   constructor(
     client: SessiondClient,
     ctx: HarnessContext,
@@ -274,6 +279,14 @@ export class PiRemoteSession implements HarnessSession {
         reset: (nextSeq) =>
           ctx.failed(new Error(`pi replay window lost: next line ${nextSeq}`)),
         exit: (code, signal) => {
+          // Killed from outside (nothing of this agent's stopped it): a death
+          // the supervisor hands back, the turn and the commands it cut.
+          if (signal && !this.#exited) {
+            ctx.died?.(
+              signal,
+              new Error(`pi's host process was ended by ${signal}`)
+            );
+          }
           for (const pending of this.#pending.values()) {
             pending.reject(new Error(`pi host exited: ${code ?? signal}`));
           }

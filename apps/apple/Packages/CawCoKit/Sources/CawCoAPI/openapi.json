@@ -55231,6 +55231,13 @@
             "description": "pi and OpenCode: the tokens the turn's last request sent (uncached input\nplus cache reads and writes, as the harness reports that request's\nusage), which is the session's context as it stood. Claude's is read off\n{@link promptCacheUsage}.",
             "type": "number"
           },
+          "cut": {
+            "description": "With {@link serverStopped}: the shell commands the turn was running as\nits server stopped, read off the session's own tool calls (agent\nsession.ts `#shells`), each said interrupted in the turn handed back.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CutCommand"
+            }
+          },
           "errors": {
             "type": "array",
             "items": {
@@ -55311,6 +55318,28 @@
           "is_error",
           "subtype",
           "type"
+        ]
+      },
+      "CutCommand": {
+        "description": "A shell command a session's process was running when it died: the command\nas the model asked it, and the end of what it had printed by then, when\nits harness kept any (Claude Code spools a running command's output:\nagent claude.ts `cutCommands`; pi and OpenCode keep none, and their\ncommands are read off the session's own tool calls: agent session.ts\n`#shells`). The hub says each one interrupted, with that output or that\nnone was kept, in the turn it hands back and in the item's report when\nthe death fails it.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "output": {
+            "description": "What it printed: empty when it printed nothing, or when none was kept ({@link unkept}).",
+            "type": "string"
+          },
+          "unkept": {
+            "description": "Its harness keeps no output of a running command (pi, OpenCode).",
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "command",
+          "output"
         ]
       },
       "ModelTurnUsage": {
@@ -57927,22 +57956,6 @@
         "required": [
           "instanceId",
           "kind"
-        ]
-      },
-      "CutCommand": {
-        "description": "A shell command a session's process was running when it died: the command\nas the model asked it, and the end of what it had printed by then (agent\nclaude.ts `cutCommands`, from the CLI's own spool of the command's\noutput). The hub says each one interrupted, with that output, in the turn\nit hands back and in the item's report when the death fails it.",
-        "type": "object",
-        "properties": {
-          "command": {
-            "type": "string"
-          },
-          "output": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "command",
-          "output"
         ]
       },
       "RecoveryUnavailableFrame": {

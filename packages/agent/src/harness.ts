@@ -281,6 +281,13 @@ export interface HarnessSession {
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
   outdated?(): Promise<{ uuid: string; words: string } | undefined>;
+  /**
+   * The process the session's commands run under: its CLI's (Claude Code,
+   * pi's host) or its server's (OpenCode). Undefined while there is none
+   * (agent left-running.ts).
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
+  processId?(): Promise<number | undefined>;
   /** Settle a parked permission by its `requestId`. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   resolvePermission(requestId: string, result: PermissionResult): void;

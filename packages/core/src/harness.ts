@@ -1281,6 +1281,12 @@ export interface NeutralResultMessage {
    * {@link promptCacheUsage}.
    */
   contextTokens?: number;
+  /**
+   * With {@link serverStopped}: the shell commands the turn was running as
+   * its server stopped, read off the session's own tool calls (agent
+   * session.ts `#shells`), each said interrupted in the turn handed back.
+   */
+  cut?: import("./frames").CutCommand[];
   errors?: string[];
   /**
    * The sends this error failed, set by the hub: read, and answered by nothing

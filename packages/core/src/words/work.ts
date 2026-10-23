@@ -107,9 +107,15 @@ export const workWords = {
   providerRetryEnded: (message: string, deadline: string, next?: string) =>
     `Its provider refused the turn and kept retrying ("${message}"), so the item ended at its deadline for a provider's retry, ${deadline}${next ? `: the provider's next attempt was at ${next}, past it` : ""}. Delegate the work again once the provider answers.`,
   /**
-   * A command a crash cut (hub server.ts, agent `cutCommands`): the
-   * command, as it was asked, and what it had printed by then.
+   * A command a crash cut (hub server.ts, core `CutCommand`): the command,
+   * as it was asked, and what it had printed by then; `output` undefined
+   * when its harness keeps no output of a running command.
    */
-  commandInterrupted: (command: string, output: string) =>
-    `The command \`${command}\` was interrupted when its process went; it had printed ${output.trim() ? `this before it was cut:\n\`\`\`\n${output.trimEnd()}\n\`\`\`` : "nothing yet."}`,
+  commandInterrupted: (command: string, output: string | undefined) => {
+    const cut = `The command \`${command}\` was interrupted when its process went`;
+    if (output === undefined) {
+      return `${cut}; its harness keeps no output of a running command, so what it printed was not kept.`;
+    }
+    return `${cut}; it had printed ${output.trim() ? `this before it was cut:\n\`\`\`\n${output.trimEnd()}\n\`\`\`` : "nothing yet."}`;
+  },
 };

@@ -5200,6 +5200,8 @@ export class OpencodeHarness implements Harness {
             slot.owner.active?.procId),
       readActivity: () =>
         this.#sessionBusy(sessionId, this.#sessionOwners.get(ctx.instanceId)),
+      serverPid: () =>
+        (this.#sessionOwners.get(ctx.instanceId) ?? identity).pid,
       prepareDispatch: () => this.#prepareDispatch(session),
     });
     this.#sessionOwners.set(ctx.instanceId, identity);

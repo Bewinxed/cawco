@@ -582,14 +582,20 @@ export interface AsleepFrame {
 
 /**
  * A shell command a session's process was running when it died: the command
- * as the model asked it, and the end of what it had printed by then (agent
- * claude.ts `cutCommands`, from the CLI's own spool of the command's
- * output). The hub says each one interrupted, with that output, in the turn
- * it hands back and in the item's report when the death fails it.
+ * as the model asked it, and the end of what it had printed by then, when
+ * its harness kept any (Claude Code spools a running command's output:
+ * agent claude.ts `cutCommands`; pi and OpenCode keep none, and their
+ * commands are read off the session's own tool calls: agent session.ts
+ * `#shells`). The hub says each one interrupted, with that output or that
+ * none was kept, in the turn it hands back and in the item's report when
+ * the death fails it.
  */
 export interface CutCommand {
   command: string;
+  /** What it printed: empty when it printed nothing, or when none was kept ({@link unkept}). */
   output: string;
+  /** Its harness keeps no output of a running command (pi, OpenCode). */
+  unkept?: true;
 }
 
 export interface RecoveryUnavailableFrame {

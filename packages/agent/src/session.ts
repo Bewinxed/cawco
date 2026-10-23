@@ -18,6 +18,7 @@ import type {
   CarrySessionRequest,
   ControlPayload,
   ControlResultFrame,
+  CutCommand,
   DaemonPermissionRequestFrame,
   Envelope,
   FleetAck,
@@ -189,6 +190,7 @@ import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
+import { createLeftRunning } from "./left-running";
 import { inFlight } from "./loop-watch";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpGateOf, mcpHost } from "./mcp-host";
@@ -353,6 +355,45 @@ export type FrameSink = (
  * them, so the hub keeps each for the account that launch runs on and drops
  * one from a process its row has since replaced.
  */
+/**
+ * A main-thread message's shell calls, kept in `running` by tool use until
+ * their results; answers whether one started.
+ */
+const shellCallsOf = (
+  message: NeutralMessage,
+  running: Map<string, string>
+): boolean => {
+  if (
+    (message.type !== "assistant" && message.type !== "user") ||
+    message.parent_tool_use_id ||
+    !Array.isArray(message.message.content)
+  ) {
+    return false;
+  }
+  let started = false;
+  for (const block of message.message.content) {
+    const command =
+      block.type === "tool_use" && SHELL_CALLS.has(block.name)
+        ? (block.input as { command?: unknown } | undefined)?.command
+        : undefined;
+    if (block.type === "tool_use" && typeof command === "string") {
+      running.set(block.id, command);
+      started = true;
+    } else if (block.type === "tool_result") {
+      running.delete(block.tool_use_id);
+    }
+  }
+  return started;
+};
+
+/** The shell tools of every harness: Claude Code's, pi's and OpenCode's. */
+const SHELL_CALLS: ReadonlySet<string> = new Set([
+  "Bash",
+  "PowerShell",
+  "bash",
+  "shell",
+]);
+
 const accountReading = (message: NeutralMessage): boolean =>
   message.type === "system" &&
   (message.subtype === ACCOUNT_READ ||
@@ -893,6 +934,10 @@ export class SessionSupervisor {
    * its own.
    */
   readonly #ending = new WeakSet<HarnessSession>();
+  /** Each session's shell calls running now, by tool use: their commands, off its own frames ({@link #noteShell}). */
+  readonly #shells = new Map<string, Map<string, string>>();
+  /** Each session's command trees, recorded as they start, ended when its harness process dies (left-running.ts). */
+  readonly #leftRunning = createLeftRunning();
   readonly #generations = new Map<string, string>();
   /**
    * Each session's harness, and the pid and workspace of the boundary its
@@ -3439,6 +3484,7 @@ export class SessionSupervisor {
         this.#line.set(instanceId, { srcEpoch, srcSeq });
       },
       frame: (message) => {
+        this.#noteShell(instanceId, holder, message);
         this.#noteFailOpen(instanceId, message);
         this.#noteRead(instanceId, message);
         const ping = this.#keepAlive.get(instanceId);
@@ -3576,9 +3622,14 @@ export class SessionSupervisor {
         this.#gone(instanceId, processGeneration, {
           signal,
           error: `its process was ended by ${signal} from outside CawCo`,
-          // The commands it cut, with what they printed: the hub says each
-          // one interrupted in the turn it hands back.
-          ...(cut?.length ? { cut } : {}),
+          // The commands it cut, with what they printed when its harness
+          // kept that (Claude Code), else as its tool calls named them: the
+          // hub says each one interrupted in the turn it hands back.
+          ...(() => {
+            const tracked = this.#cutShells(instanceId);
+            const said = cut?.length ? cut : tracked;
+            return said.length > 0 ? { cut: said } : {};
+          })(),
         });
       },
       // Refused for good (its boundary hook, its credential): no longer one
@@ -4525,11 +4576,90 @@ export class SessionSupervisor {
    * never read, which wakes it now. `died`: a signal killed it, and the hub
    * starts it again with the turn it cut.
    */
+  /**
+   * The session's shell calls, off its own frames: each one running is kept
+   * by its tool use ({@link #shells}) until its result, and the tree its
+   * command runs in is recorded under its harness process
+   * (left-running.ts). An OpenCode turn its server's stop cut carries the
+   * commands it was running (`cut`), and is that process gone.
+   */
+  #noteShell(
+    instanceId: string,
+    holder: { session: HarnessSession | null },
+    message: NeutralMessage
+  ): void {
+    const running = this.#shells.get(instanceId) ?? new Map<string, string>();
+    this.#shells.set(instanceId, running);
+    if (message.type === "result") {
+      if (message.serverStopped) {
+        if (running.size > 0) {
+          message.cut = [...running.values()].map((command) => ({
+            command,
+            output: "",
+            unkept: true,
+          }));
+        }
+        this.#leftGone(instanceId);
+      }
+      running.clear();
+      return;
+    }
+    if (shellCallsOf(message, running)) {
+      this.#recordShell(instanceId, holder);
+    }
+  }
+
+  /** The tree a session's command runs in, recorded under its harness process (left-running.ts). */
+  #recordShell(
+    instanceId: string,
+    holder: { session: HarnessSession | null }
+  ): void {
+    holder.session
+      ?.processId?.()
+      .then((pid) => {
+        if (pid !== undefined) {
+          this.#leftRunning.commandStarted(instanceId, pid);
+        }
+      })
+      .catch((error: unknown) =>
+        warn(
+          `${instanceId}: its harness process could not be read for its command: ${errorText(error)}`
+        )
+      );
+  }
+
+  /**
+   * The shell commands session `instanceId` was running when its process
+   * died, off its own tool calls ({@link #shells}): what its harness keeps no
+   * output of says so (core `CutCommand` with no `output`).
+   */
+  #cutShells(instanceId: string): CutCommand[] {
+    const running = this.#shells.get(instanceId);
+    this.#shells.delete(instanceId);
+    return [...(running?.values() ?? [])].map((command) => ({
+      command,
+      output: "",
+      unkept: true as const,
+    }));
+  }
+
+  /** The session's harness process went: what its commands left running ends (left-running.ts). */
+  #leftGone(instanceId: string): void {
+    this.#leftRunning
+      .processGone(instanceId)
+      .catch((error: unknown) =>
+        warn(
+          `${instanceId}: what its dead harness process left running could not be read, so it was not ended: ${errorText(error)}`
+        )
+      );
+  }
+
   #gone(
     instanceId: string,
     processGeneration: string | undefined,
     died?: NonNullable<AsleepFrame["died"]>
   ): void {
+    this.#leftGone(instanceId);
     this.#sayGone({
       kind: "asleep",
       instanceId,
@@ -4552,12 +4682,14 @@ export class SessionSupervisor {
    * its harness's word on the way out is only logged, never a failure.
    */
   #endedHere(instanceId: string, error: unknown): void {
+    this.#leftGone(instanceId);
     console.info(
       `[session] ${instanceId}: its process ended as this agent stopped it (${error instanceof Error ? error.message : String(error)}); not a failure`
     );
   }
 
   #fail(instanceId: string, error: unknown, processGeneration?: string): void {
+    this.#leftGone(instanceId);
     // Its process was refused its input, and that said why it failed
     // ({@link #refusedInput}): the harness's stream ending on it is the same
     // failure, said once.

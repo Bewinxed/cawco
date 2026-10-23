@@ -685,6 +685,8 @@ export interface OpencodeSessionOptions {
    */
   ready: Promise<McpNotConnected[]>;
   registerChild: (childId: string, callID: string) => void;
+  /** The pid of the server the session runs on now: what its commands run under. */
+  serverPid: () => number | undefined;
   sessionId: string;
   /**
    * A turn ended on `provider` (its last model step's): refused by it with
@@ -697,6 +699,11 @@ export interface OpencodeSessionOptions {
 export class OpencodeSession implements HarnessSession {
   attached?: () => void;
   readonly harness = "opencode" as const;
+
+  /** Its server's process: what its commands run under (agent left-running.ts). */
+  processId(): Promise<number | undefined> {
+    return Promise.resolve(this.#serverPid());
+  }
   sessionId: string | null;
   readonly instanceId: string;
   /** The CawCo account this session runs on, whose own server it runs in; undefined: the machine's. */
@@ -728,6 +735,7 @@ export class OpencodeSession implements HarnessSession {
   readonly #onRelease: () => void;
   readonly #isConfigGateHeld: (joinsTurn?: boolean) => boolean;
   readonly #readActivity: () => Promise<boolean>;
+  readonly #serverPid: () => number | undefined;
   readonly #prepareDispatch: () => Promise<void>;
   readonly #lifetime = new AbortController();
   /** The MCP servers that did not connect, by name, said for this start of the session. */
@@ -837,6 +845,7 @@ export class OpencodeSession implements HarnessSession {
     this.#onRelease = options.onRelease;
     this.#isConfigGateHeld = options.isConfigGateHeld;
     this.#readActivity = options.readActivity;
+    this.#serverPid = options.serverPid;
     // No prompt or command reaches the server before its location is ready:
     // a location whose plugin is missing or whose CawCo MCP server does not
     // connect fails the session with why, and every send it was handed fails

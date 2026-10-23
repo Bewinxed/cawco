@@ -3286,6 +3286,18 @@ class ClaudeSession implements HarnessSession {
     }
   }
 
+  /** The CLI's process, as its keeper lists it now: what its commands run under (agent left-running.ts). */
+  async processId(): Promise<number | undefined> {
+    const ring = this.#sessiond;
+    if (!ring) {
+      return undefined;
+    }
+    const listed = await ring.client.list().catch(() => undefined);
+    return listed?.procs.find(
+      (proc) => proc.procId === ring.procId && proc.alive
+    )?.pid;
+  }
+
   /**
    * An attach that met a turn already running: the turn is this session's
    * from here, and busy as it was before the agent went away.
