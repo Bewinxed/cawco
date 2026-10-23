@@ -6,15 +6,19 @@
  * over them and over what the hub holds of its sessions (their plans, their
  * turns, whether they ended).
  *
- * What counts (a reason each, strongest first): shown and never opened, for
- * a page or canvas to pick on or judge; a decision page's picks not made;
- * picks and notes written and not sent (comments go by themselves); an agent's answer on an
- * open pin newer than the person's look at it (core comments.ts
- * `newAnswer`). Never: a `try` preview, a `draw` canvas with nothing
- * pinned, a draft, and one the person can't act on yet: handed up to a
- * parent that hasn't opened it, or a maker's change held for it. Picks sent
- * that the session hasn't read yet are its move, and ask nothing more of
- * the person; what is still unpicked is still theirs (rule 1).
+ * Only an open ask counts. An artifact asks when it is a page to pick on or
+ * a canvas to judge with its ask line set (the panel's head, `artifacts.ask`;
+ * a row made before asks were kept has none), and is its session's to put
+ * to the person: not a draft, not handed up to a parent that hasn't opened
+ * it, not a maker's change held for one. Its ask is open while (a reason
+ * each, strongest first) a canvas to judge was never opened; a decision
+ * page has a card not picked; picks and notes are written and not sent
+ * (comments go by themselves). An agent's answer on an open pin newer than
+ * the person's look (core comments.ts `newAnswer`) joins an open ask's
+ * line, and asks nothing by itself. Never: a `try` preview, a `draw`
+ * canvas, a page or preview with no ask, an answered one. Picks sent that
+ * the session hasn't read yet are its move, and ask nothing more of the
+ * person; what is still unpicked is still theirs (rule 1).
  *
  * How it leaves, by rule:
  * 1. Answered: its reasons go as they are answered, a partial answer
@@ -30,10 +34,8 @@
  *    ended; …".
  * 5. Not now: the person's ✕, a notice id the item carries
  *    (`notNow`), acknowledged; a new `raisedAt` makes it another.
- * 6. A look: opening it clears "not opened" and the notices, and so does a
- *    pick made on it wherever it was made (the project's Decisions tab draws
- *    a page in a frame of its own, with no pane to say it was shown); only
- *    an answer clears picks or unsent.
+ * 6. A look: opening a canvas to judge clears "not opened", and opening
+ *    anything clears its notices; only an answer clears picks or unsent.
  */
 import {
   type ArtifactNeed,
@@ -84,8 +86,6 @@ export interface ArtifactFacts {
   /** When the person last had it on screen (a view's word), ISO. */
   lookedAt: string | null;
   picks: { asked: number; made: number } | null;
-  /** Pins on it, open or resolved. */
-  pins: number;
   /** When its session last published or changed it (`meta.revisedAt`), ISO. */
   revisedAt: string | null;
   /** What Send sends now: picks and notes since the last Send. */
@@ -109,24 +109,22 @@ const ms = (iso: string | null | undefined): number => {
   return Number.isNaN(at) ? 0 : at;
 };
 
-/** Whether `row` asks anything of the person at all. */
-const asks = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
-  !(
-    facts.draft ||
-    facts.handed ||
-    row.heldFor !== null ||
-    row.does === "try" ||
-    (row.does === "draw" && facts.pins === 0)
-  );
-
 /**
- * Whether a page or canvas to pick on or judge is shown and never opened
- * (rule 6): no view has said it had it on screen, and no pick was made on it.
+ * Whether `row` carries an ask: a page to pick on or a canvas to judge, its
+ * ask line set, its session's to put to the person.
  */
-const unopened = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
+const asks = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   (row.does === "pick" || row.does === "judge") &&
-  row.openedRevision === null &&
-  (facts.picks?.made ?? 0) === 0;
+  row.ask.trim() !== "" &&
+  !(facts.draft || facts.handed || row.heldFor !== null);
+
+/** A canvas to judge no view has had on screen yet (rule 6). */
+const unjudged = (row: ArtifactRow): boolean =>
+  row.does === "judge" && row.openedRevision === null;
+
+/** A decision page with a card not picked. */
+const unpicked = (facts: ArtifactFacts): boolean =>
+  facts.picks !== null && facts.picks.made < facts.picks.asked;
 
 /**
  * Whether `row` could wait on the person or notice them at all, read from
@@ -137,10 +135,8 @@ export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   !facts.draft &&
   row.heldFor === null &&
   row.does !== "try" &&
-  (unopened(row, facts) ||
-    (facts.picks !== null && facts.picks.made < facts.picks.asked) ||
-    facts.unsent > 0 ||
-    facts.answers.length > 0 ||
+  ((asks(row, facts) &&
+    (unjudged(row) || unpicked(facts) || facts.unsent > 0)) ||
     facts.closed.length > 0 ||
     (facts.changes !== null &&
       facts.changes.count > 0 &&
@@ -170,7 +166,7 @@ export const movedOn = (
   return asked.step !== undefined || asked.movedAt !== undefined;
 };
 
-/** What `row` waits on the person for, its rules 1, 2 and 6 applied; strongest first. */
+/** What `row`'s open ask waits on the person for, its rules 1, 2 and 6 applied; strongest first, none when its ask is answered or it has none. */
 export const reasonsOf = (
   row: ArtifactRow,
   facts: ArtifactFacts,
@@ -181,14 +177,17 @@ export const reasonsOf = (
   }
   const retired = movedOn(row.id, facts.asked, steps);
   const reasons: ArtifactReason[] = [];
-  if (!retired && unopened(row, facts)) {
+  if (!retired && unjudged(row)) {
     reasons.push({ kind: "unopened" });
   }
-  if (!retired && facts.picks && facts.picks.made < facts.picks.asked) {
+  if (!retired && facts.picks && unpicked(facts)) {
     reasons.push({ kind: "picks", ...facts.picks });
   }
   if (facts.unsent > 0) {
     reasons.push({ kind: "unsent", count: facts.unsent });
+  }
+  if (reasons.length === 0) {
+    return reasons;
   }
   const [pin] = facts.answers;
   if (pin !== undefined) {
@@ -268,7 +267,7 @@ export const needOf = (
     machineId: sessions.machineId,
     project: row.projectId,
     name: row.name,
-    ask: row.ask || row.name,
+    ask: row.ask,
     link: artifactLink(row.id, row.name),
     pending,
     raisedAt,

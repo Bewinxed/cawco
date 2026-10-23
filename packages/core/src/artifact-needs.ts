@@ -7,9 +7,11 @@
  * (hub artifacts/needs.ts), and serves the lane with every other item:
  * `GET /api/artifact-needs`, the `artifact.needs` frame, and `/api/pending`.
  *
- * One item per artifact, its reasons strongest first: not opened, picks not
- * made, marks written and not sent, an agent's answer on an open pin the
- * person hasn't looked at. A revision with nothing asked, a resolved pin's
+ * One item per artifact with an open ask (a page to pick on or a canvas to
+ * judge, its ask line set, its session not ended), its reasons strongest
+ * first: not opened, picks not made, marks written and not sent, and with
+ * any of those an agent's answer on an open pin the person hasn't looked
+ * at. A page or preview with no ask is never one. A revision with nothing asked, a resolved pin's
  * closing answer and a session that ended with its ask unanswered are
  * notices, never needs: a notice never outranks an ask.
  */
@@ -20,7 +22,7 @@ import { artifactWords } from "./words/artifacts";
 
 /** Why an artifact waits on the person, one reason each. */
 export type ArtifactReason =
-  /** Shown, and never opened: a page to pick on or a canvas to judge. */
+  /** A canvas or page to judge, shown and never opened. */
   | { kind: "unopened" }
   /** A decision page's picks: `made` of `asked`. */
   | { asked: number; kind: "picks"; made: number }

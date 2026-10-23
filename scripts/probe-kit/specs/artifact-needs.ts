@@ -7,19 +7,28 @@
  * (`/api/artifact-needs`, `/api/pending`, a session's plan and artifacts,
  * the push the phone got), the dashboard's DOM and its boxes:
  *
+ * Only open asks: an artifact is in Needs you only while it carries an ask
+ * (a page to pick on or a canvas to judge, its ask line set), that ask is
+ * still open, and the session that made it hasn't ended.
+ * - a plain preview with no ask (a row made before asks were kept, as the
+ *   live pile's were) and a `try` preview never stand in the lane or in
+ *   Caw's panel, and Files still lists them;
+ * - a judge canvas with an ask and a pick page with an ask stand in both;
+ *   the pick page leaves once its picks are sent; Caw's head counts the
+ *   rows his panel lists; in Chromium and WebKit.
+ *
  * Reasons, each with its row line:
  * - not opened: a judge page shown and never opened is "New · not opened";
  *   `/api/pending` carries it in its `artifact.needs` envelope.
- * - picks unmade: a decision page opened is "0 of 3 picked".
+ * - picks unmade: a decision page is "0 of 3 picked", opened or not.
  * - unsent: a pick not sent is "1 of 3 picked · 1 unsent", Send counting 1;
- *   a pin written and not sent is "1 unsent".
- * - new answer: the agent's reply on a pin the person sent is "1 new answer
- *   on pin 1".
+ *   a pin goes by itself and asks nothing.
+ * - an agent's reply on a pin of a page already answered asks nothing: it
+ *   stays out of Needs you.
  *
  * Retirement:
  * - answered: a partial Send leaves the picks not made, once the session
- *   has read it; every pick sent, it leaves; a pin sent leaves; a look at
- *   the pin's answer leaves.
+ *   has read it; every pick sent, it leaves.
  * - the writer moved on: artifact_create of a pick page makes the session's
  *   current step wait on it (its plan's `waitsOn`); ticking that step takes
  *   it out. One made with no step in progress stands past its own turn's
@@ -31,8 +40,9 @@
  *   notice, "Claude Code ended; 2 picks on … never made".
  * - Not now: the row's notice id acknowledged, it leaves the lane and its
  *   Files list still says it waits; a revision brings it back.
- * - a look: opening clears "not opened"; a revision with nothing asked is
- *   the notice "… changed since you looked", and opening it clears it.
+ * - a look: opening a judge page clears "not opened"; a revision with
+ *   nothing asked is the notice "… changed since you looked", and opening it
+ *   clears it.
  *
  * Surfaces:
  * - Caw's head says the count of Needs you's rows and his rim draws as many
@@ -50,7 +60,7 @@
  *
  *   bun scripts/probe-kit/run.ts artifact-needs
  */
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
@@ -66,6 +76,7 @@ import {
 } from "../../../packages/core/src/artifact-needs";
 import type { Envelope } from "../../../packages/core/src/index";
 import { artifactWords } from "../../../packages/core/src/words/artifacts";
+import { cawHeadWords } from "../../../packages/core/src/words/caw-head";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import {
   HARNESSES,
@@ -432,12 +443,13 @@ const picks = async (at: At, session: string) => {
     name: "home-tile",
     html: kitPage("The home tile", ["shape", "color", "label"]),
   });
-  const before = await lineIs(fleet, id, "New · not opened · 0 of 3 picked");
+  const before = await lineIs(fleet, id, "0 of 3 picked");
   const page = await ownTab(at, id);
+  await settle(page, 1500);
   const looked = await lineIs(fleet, id, "0 of 3 picked");
   kit.check(
-    "reason picks unmade: a decision page opened reads '0 of 3 picked'; rule 6, the look took 'New · not opened' away",
-    before === "New · not opened · 0 of 3 picked" && looked === "0 of 3 picked",
+    "reason picks unmade: a decision page reads '0 of 3 picked' before and after a look: a pick page's ask is its cards, never 'not opened'",
+    before === "0 of 3 picked" && looked === "0 of 3 picked",
     `before the look: ${before}; after: ${looked}`
   );
   const frame = page.frameLocator(FRAME);
@@ -470,7 +482,7 @@ const picks = async (at: At, session: string) => {
   await page.close();
 };
 
-/** A pin: unsent, sent (answered), answered by the agent, looked at; then a revision with nothing asked. */
+/** A pin on a judged page, then the agent's answer on it: neither asks anything; then a revision with nothing asked. */
 const pins = async (at: At, session: string, id: string) => {
   const { fleet, kit } = at;
   let page = await ownTab(at, id);
@@ -503,41 +515,25 @@ const pins = async (at: At, session: string, id: string) => {
       })
     );
   });
-  const unsent = await lineIs(fleet, id, "1 unsent");
+  // Comments go to the session by themselves after their quiet: no Send, nothing unsent.
+  await Bun.sleep(4500);
+  const pinned = await lineOf(fleet, id);
   kit.check(
-    "reason unsent: a pin written and not sent reads '1 unsent'",
-    unsent === "1 unsent",
-    String(unsent)
-  );
-  await fleet.api(`/api/instances/${session}/artifacts/${id}/send`, {});
-  const sent = await lineIs(fleet, id, null);
-  kit.check(
-    "rule 1, answered: the pin sent, it leaves Needs you",
-    sent === null,
-    String(sent)
+    "a pin on a judged page goes by itself and asks nothing: it stays out of Needs you",
+    pinned === null,
+    String(pinned)
   );
   await fleet.api(
     `/api/instances/${session}/artifacts/comments/probe-pin-1/reply`,
     { text: "It runs at nine, every weekday." }
   );
-  const answer = await lineIs(fleet, id, "1 new answer on pin 1");
+  // The reply is in the doc once its call answers; the lane is read past its move.
+  await Bun.sleep(1500);
+  const answer = await lineOf(fleet, id);
   kit.check(
-    "reason new answer: the agent's reply on the pin reads '1 new answer on pin 1'",
-    answer === "1 new answer on pin 1",
+    "only open asks: the agent's reply on a pin of a page already answered asks nothing, it stays out of Needs you",
+    answer === null,
     String(answer)
-  );
-  await inDoc(page, (doc) => {
-    const held = doc.getMap("pins");
-    const pin = held.get("probe-pin-1");
-    doc.transact(() =>
-      held.set("probe-pin-1", { ...pin, seenAt: new Date().toISOString() })
-    );
-  });
-  const read = await lineIs(fleet, id, null);
-  kit.check(
-    "rule 6, a look at the answer: the pin's thread seen, it leaves Needs you",
-    read === null,
-    String(read)
   );
   await page.close();
   // Its pane's link to the doc gone with the tab: a revision now is one nobody has on screen.
@@ -618,7 +614,7 @@ const movedOn = async (at: At, session: string) => {
     steps: { id: string; waitsOn?: { artifactId: string; card?: string } }[];
   }>(`/api/instances/${session}/plan`);
   const wait = plan.steps.find((step) => step.id === "head")?.waitsOn;
-  const standing = await lineIs(fleet, id, "New · not opened · 0 of 2 picked");
+  const standing = await lineIs(fleet, id, "0 of 2 picked");
   kit.check(
     "rule 2: artifact_create of a pick page makes the session's current step wait on it (waitsOn, no card) and it stands in Needs you",
     wait?.artifactId === id && wait.card === undefined && standing !== null,
@@ -655,12 +651,12 @@ const movedOn = async (at: At, session: string) => {
     (end) => end > calledAt,
     60_000
   );
-  const after = await lineIs(fleet, nextId, "New · not opened · 0 of 1 picked");
+  const after = await lineIs(fleet, nextId, "0 of 1 picked");
   await fleet.send(session, "PROBE-NEXT go on with something else");
   const turned = await lineIs(fleet, nextId, null, 120_000);
   kit.check(
     "rule 2, the writer moved on: with no step waiting it stands past its own turn's end, and leaves once the session's next turn ends",
-    after === "New · not opened · 0 of 1 picked" && turned === null,
+    after === "0 of 1 picked" && turned === null,
     `after its own turn: ${after}; after the next: ${turned}`
   );
 };
@@ -676,13 +672,13 @@ const supersededAndNotNow = async (at: At, session: string) => {
     html: kitPage("The presence page", cards),
   });
   const id = await create(fleet, session, page(["layout", "tone"]));
-  const first = await lineIs(fleet, id, "New · not opened · 0 of 2 picked");
+  const first = await lineIs(fleet, id, "0 of 2 picked");
   const again = await create(
     fleet,
     session,
     page(["layout", "tone", "density"])
   );
-  const second = await lineIs(fleet, id, "New · not opened · 0 of 3 picked");
+  const second = await lineIs(fleet, id, "0 of 3 picked");
   const named = (await lane(fleet)).needs.filter(
     (one) => one.name === "presence-page"
   );
@@ -690,7 +686,7 @@ const supersededAndNotNow = async (at: At, session: string) => {
     "rule 3, superseded: a same-name create is the same item, one row, its line changed in place",
     again === id &&
       first !== null &&
-      second === "New · not opened · 0 of 3 picked" &&
+      second === "0 of 3 picked" &&
       named.length === 1 &&
       named[0]?.artifactId === id,
     `ids ${id} ${again}; lines ${first} → ${second}; rows ${named.length}`
@@ -709,10 +705,10 @@ const supersededAndNotNow = async (at: At, session: string) => {
     `line ${parked}; files ${JSON.stringify(files.find((one) => one.id === id))}`
   );
   await create(fleet, session, page(["layout", "tone", "density", "motion"]));
-  const back = await lineIs(fleet, id, "New · not opened · 0 of 4 picked");
+  const back = await lineIs(fleet, id, "0 of 4 picked");
   kit.check(
     "rule 5, Not now: a revision raises it again, back in Needs you",
-    back === "New · not opened · 0 of 4 picked" &&
+    back === "0 of 4 picked" &&
       ((await needOf(fleet, id))?.raisedAt ?? 0) > need.raisedAt,
     String(back)
   );
@@ -854,7 +850,7 @@ const onHarness = async (
     (end) => end > calledAt,
     60_000
   ).catch(() => 0);
-  const stands = await lineIs(fleet, id, "New · not opened · 0 of 1 picked");
+  const stands = await lineIs(fleet, id, "0 of 1 picked");
   const push = await until(
     `the ${harness} artifact's push`,
     () => phone.pushed.find((one) => one.collapseId === `artifact-${id}`),
@@ -863,8 +859,8 @@ const onHarness = async (
   ).catch(() => undefined);
   const sealed = push?.payload.e ? await phone.open(push.payload.e) : null;
   kit.check(
-    `${harness}: the turn that made it ended and it stands ('New · not opened · 0 of 1 picked')`,
-    stands === "New · not opened · 0 of 1 picked",
+    `${harness}: the turn that made it ended and it stands ('0 of 1 picked')`,
+    stands === "0 of 1 picked",
     String(stands)
   );
   kit.check(
@@ -883,7 +879,6 @@ const onHarness = async (
       sealed,
     })
   );
-  let expected = "New · not opened · 0 of 1 picked";
   if (harness === "claude") {
     const page = await ownTab(at, id);
     const cleared = await until(
@@ -900,14 +895,13 @@ const onHarness = async (
         : "no `cleared (look)` line for it in the hub's log"
     );
     await page.close();
-    expected = "0 of 1 picked";
   }
   const before = await lineOf(fleet, id);
   await fleet.send(session, "PROBE-NEXT go on with something else");
   const turned = await lineIs(fleet, id, null, 120_000);
   kit.check(
     `${harness}, rule 2, the writer moved on: with no step waiting on it, it leaves Needs you once the session's next turn ends`,
-    before === expected && turned === null,
+    before === "0 of 1 picked" && turned === null,
     `before the next turn: ${before}; after it: ${turned}`
   );
 };
@@ -921,6 +915,180 @@ const cawPanel = async (page: Page): Promise<void> => {
   await settle(page, 400);
 };
 
+/** Caw's Needs-you rows as the page draws them: his label, his arcs, the rows and the artifacts among them, each row's box. */
+const panelRead = (page: Page) =>
+  page.evaluate(() => {
+    const button = document.querySelector("[data-needs-caw]");
+    const rows = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[aria-labelledby="caw-needs"] [data-slot="row"]'
+      ),
+    ];
+    return {
+      label: button?.getAttribute("aria-label") ?? "",
+      arcs: Number(
+        document
+          .querySelector('[data-needs-caw] svg[data-slot="rim"]')
+          ?.getAttribute("data-count") ?? -1
+      ),
+      rows: rows.length,
+      artifacts: rows
+        .filter((row) => {
+          const box = row.getBoundingClientRect();
+          return box.width > 0 && box.height > 0;
+        })
+        .map((row) => row.dataset.artifact)
+        .filter((id): id is string => !!id),
+    };
+  });
+
+/** A folder a preview serves: one page with a line on it. */
+const previewFolder = (fleet: KitFleet): string => {
+  const folder = join(fleet.repo, "probe-plain-preview");
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(
+    join(folder, "index.html"),
+    judgePage("Plain preview", ["A line to look at."])
+  );
+  return folder;
+};
+
+/**
+ * The invariant, as the person sees it: a plain preview with no ask (a row
+ * made before asks were kept: judge, its ask empty, as the live pile's) and
+ * a try preview never stand in Needs you, and Files still lists them; a
+ * judge canvas and a pick page, each with its ask, stand in the lane and in
+ * Caw's panel, whose head counts its rows; the pick page leaves once its
+ * picks are sent. Caw's panel read in Chromium and WebKit.
+ */
+const onlyOpenAsks = async (at: At, session: string) => {
+  const { fleet, kit, base } = at;
+  const folder = previewFolder(fleet);
+  const plain = await create(fleet, session, {
+    kind: "preview",
+    does: "judge",
+    ask: "Judge the plain preview",
+    name: "plain-preview",
+    dir: folder,
+  });
+  fleet.write("UPDATE artifacts SET ask = '' WHERE id = ?", plain);
+  const tried = await create(fleet, session, {
+    kind: "preview",
+    does: "try",
+    ask: "Try the plain preview's page",
+    name: "tried-preview",
+    dir: folder,
+  });
+  const canvas = await create(fleet, session, {
+    kind: "canvas",
+    does: "judge",
+    ask: "Judge the tray's flow",
+    name: "tray-flow",
+  });
+  const pick = await create(fleet, session, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the tray's chip",
+    name: "tray-chip",
+    html: kitPage("The tray chip", ["chip"]),
+  });
+  const canvasLine = await lineIs(fleet, canvas, artifactWords.notOpened);
+  const pickLine = await lineIs(fleet, pick, "0 of 1 picked");
+  const listed = (await lane(fleet)).needs.map((need) => need.artifactId);
+  kit.check(
+    "only open asks, the hub's lane: a plain preview with no ask and a try preview are never in it; a judge canvas with its ask reads 'New · not opened', a pick page with its ask '0 of 1 picked'",
+    !(listed.includes(plain) || listed.includes(tried)) &&
+      canvasLine === artifactWords.notOpened &&
+      pickLine === "0 of 1 picked",
+    JSON.stringify({ listed, plain, tried, canvasLine, pickLine })
+  );
+  const files = await fleet.api<{ id: string; waiting: boolean }[]>(
+    `/api/instances/${session}/artifacts/files`
+  );
+  const filed = (id: string) => files.find((one) => one.id === id);
+  kit.check(
+    "only open asks, Files: the plain preview and the try preview are still listed, neither waiting on the person",
+    filed(plain)?.waiting === false && filed(tried)?.waiting === false,
+    JSON.stringify({ plain: filed(plain), tried: filed(tried) })
+  );
+  for (const engine of ["chromium", "webkit"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
+    const page = await kit.page("desk", { engine });
+    await open(page, `${base}/session`, "[data-needs-caw]");
+    await cawPanel(page);
+    const read = await until(
+      "Caw's panel listing the canvas and the pick page",
+      () => panelRead(page),
+      (now) => now.artifacts.includes(canvas) && now.artifacts.includes(pick),
+      LANE_MS
+    ).catch(() => panelRead(page));
+    kit.check(
+      `only open asks, Caw's panel (${engine}): the judge canvas and the pick page are rows a person sees, the plain preview and the try are not; his label says 'Needs you, N' and his rim N arcs, N the rows listed`,
+      read.artifacts.includes(canvas) &&
+        read.artifacts.includes(pick) &&
+        !read.artifacts.includes(plain) &&
+        !read.artifacts.includes(tried) &&
+        read.label.startsWith(cawHeadWords.needs(read.rows)) &&
+        read.arcs === read.rows,
+      JSON.stringify({ read, canvas, pick, plain, tried })
+    );
+    await page.close();
+  }
+  // The plain preview's Files card stands in the session's Files, no dot on it.
+  const filesPage = await kit.page("desk");
+  await open(filesPage, `${base}/session/${session}`, "[data-needs-caw]");
+  await filesPage.getByRole("button", { name: FILES_ITEM }).first().click();
+  const card = filesPage.locator(`[data-files-card][data-artifact="${plain}"]`);
+  const drawn = await card
+    .waitFor({ timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  const cardRead = drawn
+    ? await card.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return {
+          width: box.width,
+          height: box.height,
+          dot: !!node.querySelector('[data-slot="needs-dot"]'),
+        };
+      })
+    : null;
+  kit.check(
+    "only open asks, Files on screen: the plain preview's card is drawn in the session's Files, with no needs-you dot",
+    !!cardRead && cardRead.width > 0 && cardRead.height > 0 && !cardRead.dot,
+    JSON.stringify(cardRead)
+  );
+  await filesPage.close();
+  // The pick page answered: its pick made and sent, it leaves the lane and the panel.
+  const pickPage = await ownTab(at, pick);
+  const frame = pickPage.frameLocator(FRAME);
+  await frame.locator('[data-option="chip-a"]').waitFor({ timeout: 60_000 });
+  await pressIn(frame, '[data-option="chip-a"]');
+  await lineIs(fleet, pick, "1 unsent");
+  await pressIn(frame, "[data-dp-send]");
+  const sent = await lineIs(fleet, pick, null);
+  await pickPage.close();
+  const page = await kit.page("desk", { engine: "webkit" });
+  await open(page, `${base}/session`, "[data-needs-caw]");
+  await cawPanel(page);
+  const after = await until(
+    "Caw's panel without the pick page",
+    () => panelRead(page),
+    (now) => !now.artifacts.includes(pick) && now.artifacts.includes(canvas),
+    LANE_MS
+  ).catch(() => panelRead(page));
+  kit.check(
+    "only open asks: the pick page's picks sent, it leaves the lane and Caw's panel; the judge canvas stays, and the head still counts the rows",
+    sent === null &&
+      !after.artifacts.includes(pick) &&
+      after.artifacts.includes(canvas) &&
+      after.label.startsWith(cawHeadWords.needs(after.rows)) &&
+      after.arcs === after.rows,
+    JSON.stringify({ sent, after })
+  );
+  await page.close();
+};
+
 const countAndArcs = async (at: At) => {
   const { fleet, kit, base } = at;
   const page = await kit.page("desk");
@@ -931,27 +1099,7 @@ const countAndArcs = async (at: At) => {
   await cawPanel(page);
   const read = await until(
     "Caw's panel listing the lane's artifacts",
-    () =>
-      page.evaluate(() => {
-        const button = document.querySelector("[data-needs-caw]");
-        const rows = [
-          ...document.querySelectorAll<HTMLElement>(
-            '[aria-labelledby="caw-needs"] [data-slot="row"]'
-          ),
-        ];
-        return {
-          label: button?.getAttribute("aria-label") ?? "",
-          arcs: Number(
-            document
-              .querySelector('[data-needs-caw] svg[data-slot="rim"]')
-              ?.getAttribute("data-count") ?? -1
-          ),
-          rows: rows.length,
-          artifacts: rows
-            .map((row) => row.dataset.artifact)
-            .filter((id): id is string => !!id),
-        };
-      }),
+    () => panelRead(page),
     (now) => expected.every((id) => now.artifacts.includes(id)),
     LANE_MS
   ).catch(() => null);
@@ -959,7 +1107,7 @@ const countAndArcs = async (at: At) => {
     "the home count and Caw's arcs include it: his label says 'Needs you, N' and his rim N arcs, N the panel's Needs-you rows, every artifact the hub lists among them",
     !!read &&
       read.artifacts.length === expected.length &&
-      read.label.startsWith(`Needs you, ${read.rows}`) &&
+      read.label.startsWith(cawHeadWords.needs(read.rows)) &&
       read.arcs === read.rows &&
       read.rows >= expected.length,
     JSON.stringify({ read, expected })
@@ -1164,6 +1312,9 @@ const run = async (kit: Kit) => {
   const at: At = { base, fleet, kit, call };
   const judging = await fleet.spawn("claude", "Judging", fleet.repo);
   const picking = await fleet.spawn("claude", "Picking", fleet.repo);
+  const showing = await fleet.spawn("claude", "Showing", fleet.repo);
+
+  await onlyOpenAsks(at, showing);
 
   const judge = await notOpened(at, judging);
   // One item, at every width and in both engines.

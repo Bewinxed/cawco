@@ -5048,7 +5048,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         .map((pin) => ({ pin: pin.number, at: answeredOn(pin) })),
       draft: meta.get("draft") === true,
       lookedAt: (meta.get("lookedAt") as string | undefined) ?? null,
-      pins: pins.length,
       revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
       handed: meta.get(HANDED) === true,
       unsent: unsentChoices(state, sentAt),
@@ -5105,42 +5104,40 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /* ── Files: what reached the person ─────────────────────────────────── */
 
   /**
-   * Whether `row` waits on the person now: Needs you raises it (a pick or a
-   * judgement asked and not moved on from, picks or pins owed, while its
-   * session can act: needs.ts `needOf`), or it is a try its session put in
-   * front of them, not handed up and not ended.
+   * Whether `row`'s session put it in front of the person: not handed up
+   * and not held for a parent; a try only while its session can still run
+   * it (not ended, not moved on from), since a try nobody saw is nothing to
+   * keep. Whether it asks anything is Needs you's rule (needs.ts), not this.
    */
-  const waitsOnPerson = (row: ArtifactRow): boolean => {
+  const putBeforePerson = (row: ArtifactRow): boolean => {
     const kept = factsOf(row);
-    const facts = { ...kept, asked: askOf(row, kept) };
-    const sessions = sessionsOf(row, kept);
-    if (row.does === "try") {
-      return !(
-        facts.draft ||
-        facts.handed ||
-        row.heldFor !== null ||
-        sessions.ended ||
-        movedOn(row.id, facts.asked, sessions.steps)
-      );
+    if (kept.draft || kept.handed || row.heldFor !== null) {
+      return false;
     }
-    return mayWait(row, kept) && needOf(row, facts, sessions) !== null;
+    if (row.does !== "try") {
+      return true;
+    }
+    const sessions = sessionsOf(row, kept);
+    return !(
+      sessions.ended || movedOn(row.id, askOf(row, kept), sessions.steps)
+    );
   };
 
   /**
    * Whether `row` reached the person, so Files lists it: a view of theirs
-   * had it on screen at least once (`openedRevision`, `shownAt`), it waits
-   * on them ({@link waitsOnPerson}), or they made it (their composer canvas,
-   * the one create that writes `meta.draft`). A browser is a tool, never a
-   * file. Nothing is deleted by it: the panel's menu ({@link Artifacts.list})
-   * and `artifact_list` keep every artifact, and one that reaches the person
-   * later is listed from then on.
+   * had it on screen at least once (`openedRevision`, `shownAt`), its
+   * session put it in front of them ({@link putBeforePerson}), or they made
+   * it (their composer canvas, the one create that writes `meta.draft`). A
+   * browser is a tool, never a file. Nothing is deleted by it: the panel's
+   * menu ({@link Artifacts.list}) and `artifact_list` keep every artifact,
+   * and one that reaches the person later is listed from then on.
    */
   const reachedPerson = (row: ArtifactRow): boolean =>
     row.kind !== "browser" &&
     (row.openedRevision !== null ||
       row.shownAt !== null ||
       docs.doc(row.id).getMap("meta").has("draft") ||
-      waitsOnPerson(row));
+      putBeforePerson(row));
 
   /** The artifacts each decision page's Canvas and Preview pieces show, by the page's id, read once per change of it. */
   const mediaKept = new Map<string, { at: number; ids: string[] }>();

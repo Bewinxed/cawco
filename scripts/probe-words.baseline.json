@@ -42,9 +42,6 @@
     "project only": 1,
     "sessions in": 1
   },
-  "scripts/probe-kit/specs/artifact-needs.ts": {
-    "Needs you,": 1
-  },
   "scripts/probe-kit/specs/artifact-orphan-delete.ts": {
     "Discarded workspace": 1,
     "its workspace": 1
