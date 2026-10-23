@@ -40,6 +40,11 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { heldSkills, skillDrift, skillRecords } from "../fleet";
+import {
+  hookStatesInSet,
+  hookStatesOn,
+  readFleetHarnessSet,
+} from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
@@ -196,7 +201,7 @@ export const PI_CAPABILITIES: HarnessCapabilities = {
   thinking: true,
   images: true,
   handoff: true,
-  hooks: false,
+  hooks: true,
   plugins: false,
   fleet: true,
 };
@@ -789,6 +794,13 @@ export class PiProfile {
       marketplaces: {},
       plugins: {},
       skills: {},
+      // CawCo's inline extension runs the fleet's hooks from the harness
+      // set (pi-runtime.ts `FleetHooks`); what it cannot run is said
+      // unsupported here.
+      hooks: hookStatesOn(
+        "pi",
+        config.hooks.filter((hook) => hook.enabled)
+      ),
       at: Date.now(),
     };
     const enabled = config.mcp.filter((row) => row.enabled);
@@ -846,6 +858,7 @@ export class PiProfile {
       marketplaces: {},
       plugins: {},
       skills: {},
+      hooks: hookStatesInSet("pi", await readFleetHarnessSet()),
       at: Date.now(),
     };
     const set = await readFleetMcpSet();

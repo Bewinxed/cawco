@@ -38,7 +38,7 @@ import type {
   MachineMemorySet,
   SkillFile,
 } from "@cawco/core";
-import { hookProblem, memoryDocProblem } from "@cawco/core";
+import { hookMatchTest, hookProblem, memoryDocProblem } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
@@ -2675,6 +2675,7 @@ const syncHooks = async (
       event: hook.event,
       handler,
       ...(hook.matcher ? { matcher: hook.matcher } : {}),
+      test: hookMatchTest(hook.matcher, hook.event),
     };
     if (!placedHook(hook)) {
       set.hooks[hook.id] = one;

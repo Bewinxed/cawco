@@ -5724,6 +5724,11 @@ export class SessionSupervisor {
     // reported them and a hub that had nowhere to read them from.
     const memoryDocs: Record<string, State> = {};
     const hooks: Record<string, State> = {};
+    // Each harness's word on each hook: Claude Code's registration, and
+    // whether OpenCode and pi run it at all (fleet-harness-set.ts
+    // `hookStatesOn`), merged below as MCP servers are.
+    const hooksByHarness: Partial<Record<HarnessKind, Record<string, State>>> =
+      {};
     let memory: FleetSyncReport["memory"];
     // Merged the same way, and it has to be: the toolchain is what attributes a
     // CLI failure to a binary, and a field this rebuild does not name is a field
@@ -5797,7 +5802,9 @@ export class SessionSupervisor {
           ? worstFleetState([memoryDocs[path], item])
           : item;
       }
-      Object.assign(hooks, report.hooks ?? {});
+      if (report.hooks) {
+        hooksByHarness[adapter.kind] = report.hooks;
+      }
       if (report.memory) {
         memory = memory
           ? worstFleetState([memory, report.memory])
@@ -5806,6 +5813,29 @@ export class SessionSupervisor {
       if (report.toolchain) {
         toolchain = { ...toolchain, ...report.toolchain };
       }
+    }
+    // A hook's row is the worst of its harnesses' words, each harness's
+    // said in its detail: one OpenCode or pi cannot run is unsupported for
+    // that harness on this machine, never left out.
+    for (const id of new Set(
+      Object.values(hooksByHarness).flatMap((rows) => Object.keys(rows ?? {}))
+    )) {
+      const readings = Object.entries(hooksByHarness).flatMap(([kind, rows]) =>
+        rows?.[id] ? [{ kind, item: rows[id] }] : []
+      );
+      const [only] = readings;
+      hooks[id] =
+        readings.length === 1 && only
+          ? only.item
+          : {
+              ...worstFleetState(readings.map(({ item }) => item)),
+              detail: readings
+                .map(
+                  ({ kind, item }) =>
+                    `${kind}: ${item.state}${item.detail ? ` — ${item.detail}` : ""}`
+                )
+                .join("\n"),
+            };
     }
     const names = new Set([
       ...this.#mcpLauncherStates.keys(),

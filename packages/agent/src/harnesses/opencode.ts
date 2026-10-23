@@ -88,6 +88,11 @@ import {
   opencodeDenyRules,
   sessionFleetDenials,
 } from "../denied-tools";
+import {
+  hookStatesInSet,
+  hookStatesOn,
+  readFleetHarnessSet,
+} from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import { GATE_FORM_ENV, gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
@@ -1083,7 +1088,7 @@ export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   thinking: true,
   images: true,
   handoff: true,
-  hooks: false,
+  hooks: true,
   plugins: true,
   fleet: true,
 };
@@ -5453,6 +5458,12 @@ export class OpencodeHarness implements Harness {
       marketplaces: {},
       plugins: {},
       skills: {},
+      // CawCo's plugin runs the fleet's hooks from the harness set; what it
+      // cannot run is said unsupported here.
+      hooks: hookStatesOn(
+        "opencode",
+        config.hooks.filter((hook) => hook.enabled)
+      ),
       at: Date.now(),
     };
     const serversBefore = canonicalizeJson(
@@ -5540,6 +5551,7 @@ export class OpencodeHarness implements Harness {
       marketplaces: {},
       plugins: {},
       skills: {},
+      hooks: hookStatesInSet("opencode", await readFleetHarnessSet()),
       at: Date.now(),
     };
     if (sidecar.memory !== undefined) {
