@@ -1,10 +1,11 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { 
+import {
   type AccountIdentity,
   type AccountKind,
   type AccountSigninResult,
-  accountsWords,configurePage,
+  accountsWords,
+  configurePage,
   sameIdentity,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";

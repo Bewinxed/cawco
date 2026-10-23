@@ -51,6 +51,8 @@
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
+import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 import { MACHINE, type Reply, type Seen } from "../../../scratch-fleet";
 import {
   handOn,
@@ -60,8 +62,6 @@ import {
   type Spec,
   settle,
 } from "../../kit";
-import { transcriptWords } from "../../../../packages/core/src/words/transcript";
-import { spawnWords } from "../../../../packages/core/src/words/spawn";
 
 /** The form on a desk: the popover. */
 const DESK_FORM = "[data-ns-popover]";

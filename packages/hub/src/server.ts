@@ -104,7 +104,7 @@ import type {
   UsageSpend,
   WorkspaceRef,
 } from "@cawco/core";
-import { 
+import {
   ACCOUNT_HUES,
   ACCOUNT_KINDS,
   ACCOUNT_MOVE,
@@ -217,7 +217,8 @@ import {
   type CommandRun,
   type ContinuationRead,
   CUSTODY_HELD,
-  clockWords,configurePage,
+  clockWords,
+  configurePage,
   connectWords,
   contextFitRefusal,
   continuedInWords,

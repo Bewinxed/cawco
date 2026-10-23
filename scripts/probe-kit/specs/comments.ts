@@ -843,7 +843,7 @@ const commentChecks = async (on: On, frame: Frame) => {
     }))
     .catch(() => null);
   on.kit.check(
-    'pick 5, the composer at the element: a press opens the chat composer beside a hollow pill with no number, its field focused, the target chip naming the paragraph, the field saying commentWords.composeHint.full, the send glyph labelled Comment and off while empty; the doc holds no pin',
+    "pick 5, the composer at the element: a press opens the chat composer beside a hollow pill with no number, its field focused, the target chip naming the paragraph, the field saying commentWords.composeHint.full, the send glyph labelled Comment and off while empty; the doc holds no pin",
     opened.shown &&
       opened.focused &&
       provisional?.state === "provisional" &&
@@ -1663,7 +1663,9 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   await card.waitFor({ timeout: 5000 }).catch(() => undefined);
   const notice = card.locator('[data-slot="gone"]');
   const said = (await notice.textContent().catch(() => null))?.trim() ?? null;
-  await notice.getByRole("button", { name: commentWords.placeElsewhere }).click();
+  await notice
+    .getByRole("button", { name: commentWords.placeElsewhere })
+    .click();
   await pageInComment(frame, true);
   const during = await commentButton.getAttribute("aria-selected");
   const placingSaid =
@@ -4261,7 +4263,7 @@ const targetChecks = async (on: On) => {
     JSON.stringify(root)
   );
   on.kit.check(
-    '7c: at rest the page\'s root shows its label, which reads commentWords.wholePage',
+    "7c: at rest the page's root shows its label, which reads commentWords.wholePage",
     !!root && root.root && root.label === commentWords.wholePage,
     JSON.stringify(root)
   );
@@ -6414,7 +6416,9 @@ const railUseChecks = async (
     JSON.stringify({ order, ys })
   );
   await railNow.getByRole("button", { name: "Sort" }).click();
-  await on.page.getByRole("menuitemradio", { name: commentWords.newestFirst }).click();
+  await on.page
+    .getByRole("menuitemradio", { name: commentWords.newestFirst })
+    .click();
 
   // The pointer rests on a pill: its peek stands; then a row opens another
   // comment's thread, and no peek stands while it does.
@@ -8747,7 +8751,8 @@ const refusedChecks = async (on: On) => {
   ).catch(() => notSentRow(on, 1));
   on.kit.check(
     "refused: Send again writes it once more; refused again, it is still kept with why and Send again",
-    !!again.said?.startsWith(`${commentWords.notSentHead} `) && again.send === commonWords.sendAgain,
+    !!again.said?.startsWith(`${commentWords.notSentHead} `) &&
+      again.send === commonWords.sendAgain,
     JSON.stringify(again)
   );
   // Its thread's Delete lets it go from the device.

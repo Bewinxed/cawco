@@ -7,11 +7,12 @@
     RuleTiming,
     RuleWatch,
   } from "@cawco/core";
-  import { 
+  import {
     commonWords,
     HARNESSES,
     ruleProblem,
-    ruleSentence,rulesWords,
+    ruleSentence,
+    rulesWords,
   } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import {

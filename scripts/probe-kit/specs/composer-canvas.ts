@@ -85,6 +85,7 @@
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import {
@@ -106,7 +107,6 @@ import {
   VIEWS,
 } from "../kit";
 import { emulateMotion } from "../motion";
-import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 const PILL = 'form[data-slot="cin"]';
 const FIELD = COMPOSER;
@@ -787,7 +787,9 @@ const swapCheck = async (on: On, clock: Clock) => {
         };
       }, SEND);
     const settledNow = (seen: Awaited<ReturnType<typeof button>>) =>
-      seen.label === transcriptWords.sendMessage && seen.busy === null && seen.leaving === 0;
+      seen.label === transcriptWords.sendMessage &&
+      seen.busy === null &&
+      seen.leaving === 0;
     const ready = await until(
       "the last press settled",
       button,

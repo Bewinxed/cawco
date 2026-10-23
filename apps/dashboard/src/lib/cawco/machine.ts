@@ -1,5 +1,10 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
-import { type AgentRow, configurePage, machineLabel, machineWords } from "@cawco/core";
+import {
+  type AgentRow,
+  configurePage,
+  machineLabel,
+  machineWords,
+} from "@cawco/core";
 
 /**
  * Splits the daemon's `platform-arch` fingerprint into something readable.

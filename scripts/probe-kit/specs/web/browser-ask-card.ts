@@ -718,8 +718,7 @@ async function taking(
   const words = (await line.textContent())?.trim() ?? "";
   kit.check(
     `${name}: a refused take-over reads "${words}" and the peers do not move`,
-    words ===
-      `${askWords.cantTakeOver} ${REFUSAL} ${askWords.stillWaiting}` &&
+    words === `${askWords.cantTakeOver} ${REFUSAL} ${askWords.stillWaiting}` &&
       !!before &&
       !!after &&
       same(before.take, after.take) &&

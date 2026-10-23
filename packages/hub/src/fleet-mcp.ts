@@ -1,5 +1,6 @@
-import { 
-  CAWCO_OAUTH_URL,configurePage,
+import {
+  CAWCO_OAUTH_URL,
+  configurePage,
   type FleetMcpServer,
   type MachineFleetConfig,
 } from "@cawco/core";

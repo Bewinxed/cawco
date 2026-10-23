@@ -40,6 +40,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person takes them
 import type { Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
+import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { scan } from "../../journeys/scan";
 import {
@@ -52,7 +53,6 @@ import {
   settle,
   type View,
 } from "../../kit";
-import { transcriptWords } from "../../../../packages/core/src/words/transcript";
 
 const ONE = "hello";
 const LONG =
@@ -656,13 +656,24 @@ const spec: Spec = {
     }
 
     const findings: string[] = [];
-    const full = [transcriptWords.copyMessage, transcriptWords.editMessage, transcriptWords.forkFromHere];
+    const full = [
+      transcriptWords.copyMessage,
+      transcriptWords.editMessage,
+      transcriptWords.forkFromHere,
+    ];
     const queued = [transcriptWords.copyMessage, transcriptWords.editMessage];
     for (const leg of LEGS) {
       const page = await sessionPage(kit, base, source, leg);
       // The session's first message has no answer above it to rewind to or
       // branch from: Copy alone.
-      await rowLeg(kit, page, leg.label, ONE, [transcriptWords.copyMessage], leg.touch);
+      await rowLeg(
+        kit,
+        page,
+        leg.label,
+        ONE,
+        [transcriptWords.copyMessage],
+        leg.touch
+      );
       await rowLeg(kit, page, leg.label, LONG, full, leg.touch);
       await rowLeg(kit, page, leg.label, AFTER, full, leg.touch);
       await copyEditLeg(kit, page, leg.label, leg.touch);
@@ -843,10 +854,16 @@ async function rewindLeg(
   });
   await reveal(page, LONG, false);
   const turnRow = byId(page, await idOf(page, LONG));
-  await turnRow.getByRole("button", { name: transcriptWords.editMessage }).click();
-  const field = turnRow.getByRole("textbox", { name: transcriptWords.editMessage });
+  await turnRow
+    .getByRole("button", { name: transcriptWords.editMessage })
+    .click();
+  const field = turnRow.getByRole("textbox", {
+    name: transcriptWords.editMessage,
+  });
   await field.fill(EDITED);
-  await turnRow.getByRole("button", { name: transcriptWords.sendEdited }).click();
+  await turnRow
+    .getByRole("button", { name: transcriptWords.sendEdited })
+    .click();
   const read = () =>
     page.evaluate(() =>
       [

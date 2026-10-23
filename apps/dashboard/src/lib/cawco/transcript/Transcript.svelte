@@ -29,7 +29,7 @@
 </script>
 
 <script lang="ts">
-  import { transcriptWords, commonWords } from "@cawco/core";
+  import { commonWords, transcriptWords } from "@cawco/core";
   /**
    * The scrolling transcript: the folded rows, virtualized. The live tail rides
    * as rows of its own (see `buildRowsFrom`), so streaming text, an open reasoning

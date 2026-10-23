@@ -247,7 +247,9 @@ async function walk(leg: Leg): Promise<void> {
         }
       })();
       try {
-        await page.getByRole("button", { name: commonWords.moreFor(ID) }).click();
+        await page
+          .getByRole("button", { name: commonWords.moreFor(ID) })
+          .click();
         await page
           .getByRole("menuitem", { name: skillsWords.fetchAgain })
           .click();

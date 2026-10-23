@@ -93,7 +93,11 @@ interface Health {
 }
 
 /** Connect a machine's rows that name no interface (hub join.ts). */
-const OWN_ROWS = new Set(["Tailscale", "Tailscale DNS", connectWords.onThisNetwork]);
+const OWN_ROWS = new Set([
+  "Tailscale",
+  "Tailscale DNS",
+  connectWords.onThisNetwork,
+]);
 
 /** The number a held name carries: `cawco.local` is the first. */
 const numberOf = (name: string): number => Number(HELD.exec(name)?.[1] ?? 1);
@@ -664,7 +668,8 @@ const nameChecks = async (
     kit.check(
       `Connect a machine on :${port} lists "On this network · ${row}"`,
       listed.some(
-        (address) => address.label === connectWords.onThisNetwork && address.url === row
+        (address) =>
+          address.label === connectWords.onThisNetwork && address.url === row
       ),
       JSON.stringify(listed)
     );

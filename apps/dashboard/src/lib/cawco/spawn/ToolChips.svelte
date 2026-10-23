@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
-  import { spawnWords, accountsWords } from "@cawco/core";
+  import { accountsWords, spawnWords } from "@cawco/core";
 
   /** Why the effort chip offers no level, in the chip's words and its title's. */
   export interface EffortOff {

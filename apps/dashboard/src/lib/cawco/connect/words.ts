@@ -6,8 +6,10 @@
  * what was left on the machine. A fix with a command carries it whole, to
  * copy.
  */
-import { 
-  CHECK_WORDS,configurePage,connectWords, 
+import {
+  CHECK_WORDS,
+  configurePage,
+  connectWords,
   type Install,
   type InstallProblem,
   installerRan,

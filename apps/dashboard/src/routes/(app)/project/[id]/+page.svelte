@@ -27,11 +27,12 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
-  import { 
+  import {
     BLOCK_PAGE_TITLES,
     BLOCK_PAGES,
     type BlockPage as BlockPageId,
-    blocksWords,commonWords,
+    blocksWords,
+    commonWords,
     madeWords,
     type ProjectView,
     viewOfBlock,

@@ -498,9 +498,7 @@ const componentLegs = async (
   });
   kit.check(
     "2c: artifact_create(kind: component) whose ask names a file is refused in the person's words",
-    bare.includes(
-      artifactToolWords.askInTheirWords
-    ),
+    bare.includes(artifactToolWords.askInTheirWords),
     short(bare)
   );
 
@@ -895,7 +893,10 @@ async function panelLegs(
   await desk.evaluate(() => {
     (window as unknown as { __stayed: boolean }).__stayed = true;
   });
-  await desk.getByRole("button", { name: shellWords.lightMode }).first().click();
+  await desk
+    .getByRole("button", { name: shellWords.lightMode })
+    .first()
+    .click();
   await desk.waitForFunction(() =>
     document.documentElement.classList.contains("dark")
   );

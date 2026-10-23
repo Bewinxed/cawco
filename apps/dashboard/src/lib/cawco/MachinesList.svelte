@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { connectWords,
+  import {
+    connectWords,
     machineLabel,
     workspaceNeedsDetails,
     workspaceNeedsReason,

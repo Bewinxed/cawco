@@ -722,7 +722,9 @@ const openKeychain = async (page: Page) => {
     .getByText(STUDIO_HOST, { exact: true })
     .first()
     .click({ button: "right" });
-  await page.getByRole("menuitem", { name: machineWords.unlockKeychain }).click();
+  await page
+    .getByRole("menuitem", { name: machineWords.unlockKeychain })
+    .click();
 };
 
 /** What a Mac answers its keychain's unlock with (core `AuthState`). */
@@ -2265,7 +2267,10 @@ const EDITORS: Record<string, State[]> = {
       name: "editor",
       route: () => "/config/rules/new",
       root: "body",
-      ready: { shows: field(rulesWords.ruleName), path: at("/config/rules/new") },
+      ready: {
+        shows: field(rulesWords.ruleName),
+        path: at("/config/rules/new"),
+      },
     },
     // The scene's rule: what it has caught.
     {
@@ -3820,7 +3825,9 @@ export const SURFACES: Surface[] = [
       {
         name: "insert",
         act: inSheet(async (page) => {
-          await page.getByRole("textbox", { name: spawnWords.firstPrompt }).click();
+          await page
+            .getByRole("textbox", { name: spawnWords.firstPrompt })
+            .click();
           await page.keyboard.type("/");
         }),
         root: "body",
@@ -3835,7 +3842,9 @@ export const SURFACES: Surface[] = [
         name: "chip",
         act: inSheet(async (page) => {
           // The prompt's draft is kept across the sheet's openings: emptied first.
-          await page.getByRole("textbox", { name: spawnWords.firstPrompt }).click();
+          await page
+            .getByRole("textbox", { name: spawnWords.firstPrompt })
+            .click();
           await page.keyboard.press("ControlOrMeta+a");
           await page.keyboard.press("Delete");
           await page.keyboard.type("/");

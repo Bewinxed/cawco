@@ -62,13 +62,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { blocksWords } from "../../../packages/core/src/words/blocks";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { viewsWords } from "../../../packages/core/src/words/views";
 import { seedDecisions } from "../../decisions-preview/seed";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
-import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 const AXE = "/opt/homebrew/bin/axe";
 /** The paired captures of the board's page with a view placed on it, by device. */

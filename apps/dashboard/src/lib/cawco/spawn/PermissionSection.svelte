@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { spawnWords } from "@cawco/core";
   import type { HarnessKind, PermissionMode } from "@cawco/core";
+  import { spawnWords } from "@cawco/core";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**

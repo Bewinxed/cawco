@@ -284,7 +284,8 @@ async function backLate({ announce, fleet, heard, kit, read }: Round) {
   );
   const outFrom = heard.length;
   const outAt = () =>
-    said(outFrom).find((l) => l.words.startsWith(connectionWords.unreachable))?.at;
+    said(outFrom).find((l) => l.words.startsWith(connectionWords.unreachable))
+      ?.at;
   await within(() => outAt() !== undefined, 15_000);
   const out = outAt();
   kit.check(
@@ -303,7 +304,10 @@ async function backLate({ announce, fleet, heard, kit, read }: Round) {
   const late = said(lateFrom);
   kit.check(
     "back past its deadline: the app reads the hub, and says no update",
-    lateRead && !late.some((l) => l.words.startsWith(connectionWords.updated("").slice(0, -1))),
+    lateRead &&
+      !late.some((l) =>
+        l.words.startsWith(connectionWords.updated("").slice(0, -1))
+      ),
     `${lateRead ? "read" : "not read"}: ${show(late)}`
   );
 }

@@ -43,7 +43,12 @@
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
    */
-  import { commonWords, machineLabel, projectWords, viewsWords } from "@cawco/core";
+  import {
+    commonWords,
+    machineLabel,
+    projectWords,
+    viewsWords,
+  } from "@cawco/core";
   import {
     UPSTREAM_WORDS,
     type UpstreamPosts,

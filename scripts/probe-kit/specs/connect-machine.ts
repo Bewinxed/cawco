@@ -135,8 +135,7 @@ const CODE_IN = /code=([A-Z0-9]+)/;
 const OPEN_NAVIGATION = sidebarWords.openNavigation;
 const OUTPUT = "[data-connect-output]";
 /** What the forced failure left: the installer undid itself; the key the add gave the machine stays. */
-const MACHINE_KEY_LEFT =
-  `${connectWords.installerUndoes}. 127.0.0.1 keeps its CawCo key in ~/.config/cawco/machine-key.`;
+const MACHINE_KEY_LEFT = `${connectWords.installerUndoes}. 127.0.0.1 keeps its CawCo key in ~/.config/cawco/machine-key.`;
 /** What a password add refused its forward left: the hub's key it planted, and no installer run. */
 const HUB_KEY_LEFT =
   "Then Retry. The installer never ran. 127.0.0.1 keeps the hub's SSH key in ~/.ssh/authorized_keys.";
@@ -635,28 +634,31 @@ async function walk(
     opensOn === connectWords.overSsh && !noKey.text.includes("Can the hub"),
     `${opensOn}; ${noKey.text.slice(0, 120)}`
   );
-  const waits = await page.evaluate(([win, add]) => {
-    const button = [
-      ...document.querySelectorAll<HTMLButtonElement>(`${win} button`),
-    ].find((one) => one.textContent?.trim().startsWith(add));
-    const said = button?.getAttribute("aria-describedby");
-    const words = said ? document.getElementById(said) : null;
-    const a = button?.getBoundingClientRect();
-    const b = words?.getBoundingClientRect();
-    return {
-      disabled: button?.disabled ?? false,
-      title: button?.getAttribute("title") ?? null,
-      words: words?.textContent?.trim() ?? "",
-      shown: Boolean(b && b.width > 0 && b.height > 0),
-      // Beside it: on its line, ending before it starts.
-      beside: Boolean(
-        a &&
-        b &&
-        Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) <= 1 &&
-        b.right <= a.left
-      ),
-    };
-  }, [WINDOW, connectWords.addMachine] as const);
+  const waits = await page.evaluate(
+    ([win, add]) => {
+      const button = [
+        ...document.querySelectorAll<HTMLButtonElement>(`${win} button`),
+      ].find((one) => one.textContent?.trim().startsWith(add));
+      const said = button?.getAttribute("aria-describedby");
+      const words = said ? document.getElementById(said) : null;
+      const a = button?.getBoundingClientRect();
+      const b = words?.getBoundingClientRect();
+      return {
+        disabled: button?.disabled ?? false,
+        title: button?.getAttribute("title") ?? null,
+        words: words?.textContent?.trim() ?? "",
+        shown: Boolean(b && b.width > 0 && b.height > 0),
+        // Beside it: on its line, ending before it starts.
+        beside: Boolean(
+          a &&
+          b &&
+          Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) <= 1 &&
+          b.right <= a.left
+        ),
+      };
+    },
+    [WINDOW, connectWords.addMachine] as const
+  );
   kit.check(
     `${leg}: (9) with no hub key, Add machine is disabled and says why in words beside it, no title`,
     waits.disabled &&
@@ -983,7 +985,10 @@ async function walk(
 
   // B: by a command.
   await pickTab(page, connectWords.byCommand);
-  note("reach-command", await settled(page, "reach", connectWords.reachesHubAt));
+  note(
+    "reach-command",
+    await settled(page, "reach", connectWords.reachesHubAt)
+  );
 
   // (14) and (10): the window reads the hub's addresses once per opening, as Reach shows;
   // a read that fails says so, and the window reads them again on its own.
@@ -1195,11 +1200,7 @@ async function walk(
   await page.waitForSelector(
     `${WINDOW} [data-ask="stop-install"] [data-ask-cancel]`
   );
-  const asking = await settled(
-    page,
-    "running",
-    connectWords.partWayIn
-  );
+  const asking = await settled(page, "running", connectWords.partWayIn);
   note("running-stop", asking);
   await page.locator(`${WINDOW} [data-ask-cancel]`).click();
   await settled(page, "running", "Fetching the signed build");
@@ -2212,7 +2213,9 @@ async function entryTabs(
         await settled(
           page,
           "reach",
-          way === connectWords.overSsh ? connectWords.reachItAt : connectWords.reachesHubAt
+          way === connectWords.overSsh
+            ? connectWords.reachItAt
+            : connectWords.reachesHubAt
         ).catch(async (error: Error) => {
           const seen = await page.evaluate(() => ({
             url: location.href,
@@ -2440,7 +2443,10 @@ async function tabsFit(
                 url: "http://build-hub.example-tailnet.ts.net:7777",
               },
               { label: "eth0", url: "http://192.168.1.20:7777" },
-              { label: connectWords.onThisNetwork, url: "http://build-hub.local:7777" },
+              {
+                label: connectWords.onThisNetwork,
+                url: "http://build-hub.local:7777",
+              },
             ],
           },
         });

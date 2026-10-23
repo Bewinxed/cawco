@@ -220,7 +220,9 @@
       where: "not for a Mac",
       missing: ["No network address", "the hub's machine has none"],
       match: (label: string) =>
-        !["Tailscale", "Tailscale DNS", connectWords.onThisNetwork].includes(label),
+        !["Tailscale", "Tailscale DNS", connectWords.onThisNetwork].includes(
+          label
+        ),
     },
     {
       kind: "local",
@@ -361,7 +363,8 @@
             <div class="flex items-center gap-space-2">
               <label
                 for="connect-target"
-                class="flex-none type-body text-ink-strong">{connectWords.reachItAt}</label
+                class="flex-none type-body text-ink-strong"
+                >{connectWords.reachItAt}</label
               >
               <input
                 bind:this={targetField}

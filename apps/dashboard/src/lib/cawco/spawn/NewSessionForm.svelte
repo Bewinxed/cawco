@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { spawnWords, 
+  import {
     type AccountProvider,
     accountNameAmong,
     CLAUDE_PROVIDER,
-    commonWords,configurePage,
+    commonWords,
+    configurePage,
     contextFitRefusal,
     type EffortLevel,
     HARNESSES,
@@ -16,6 +17,7 @@
     repoPath,
     SUMMARISER_OUTPUT_RESERVE_TOKENS,
     moveSize as sizeWords,
+    spawnWords,
     TARGET_HEADROOM_TOKENS,
   } from "@cawco/core";
   import type { Bounded } from "@cawco/core/bounded";

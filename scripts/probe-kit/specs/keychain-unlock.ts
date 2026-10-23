@@ -358,9 +358,9 @@ async function machineMenu(page: Page): Promise<string[]> {
     .first();
   await row.waitFor();
   await row.click({ button: "right" });
-  const menu = page
-    .getByRole("menu")
-    .filter({ has: page.getByRole("menuitem", { name: machineWords.copyMachineId }) });
+  const menu = page.getByRole("menu").filter({
+    has: page.getByRole("menuitem", { name: machineWords.copyMachineId }),
+  });
   const opened = await menu
     .first()
     .waitFor({ timeout: 5000 })

@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { CAW_NO_MACHINE, connectWords, routinesWords as words } from "@cawco/core";
+  import {
+    CAW_NO_MACHINE,
+    connectWords,
+    routinesWords as words,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
   import BlockPage, {

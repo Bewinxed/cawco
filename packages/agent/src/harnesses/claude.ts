@@ -64,7 +64,7 @@ import type {
   UserQuestionAnswered,
   UserQuestionResult,
 } from "@cawco/core";
-import { 
+import {
   ACCOUNT_READ,
   ASK_USER_QUESTION,
   BOUNDARY_RELAUNCH,
@@ -84,7 +84,8 @@ import {
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
-  CONTROL_WITHDRAW_SEND,configurePage,
+  CONTROL_WITHDRAW_SEND,
+  configurePage,
   conversationGone,
   EFFORT_READ,
   INSPECT_CONFIG,

@@ -178,214 +178,220 @@ const legPage = async (kit: Kit, { view, width }: Leg, theme: Theme) => {
 
 /** The panel, its parts, the head and the board, as the engine lays them out. */
 const readPanel = (page: Page) =>
-  page.evaluate(([panelSel, firstPromptLabel, spinOffLabel]) => {
-    const box = (el: Element | null | undefined) => {
-      const r = el?.getBoundingClientRect();
-      return r
-        ? {
-            left: r.left,
-            right: r.right,
-            top: r.top,
-            bottom: r.bottom,
-            width: r.width,
-            height: r.height,
-          }
-        : null;
-    };
-    const words = (el: Element | null | undefined) =>
-      el?.textContent?.replace(/\s+/g, " ").trim() ?? "";
-    /** What of `el` shows: its box cut by every ancestor that clips (a scroller, overflow hidden). */
-    const shownBox = (el: Element) => {
-      const r = el.getBoundingClientRect();
-      let { left, right, top, bottom } = r;
-      for (let at = el.parentElement; at; at = at.parentElement) {
-        const style = getComputedStyle(at);
-        if (style.overflowX !== "visible" || style.overflowY !== "visible") {
-          const c = at.getBoundingClientRect();
-          left = Math.max(left, c.left);
-          right = Math.min(right, c.right);
-          top = Math.max(top, c.top);
-          bottom = Math.min(bottom, c.bottom);
-        }
-      }
-      return right > left && bottom > top
-        ? {
-            left,
-            right,
-            top,
-            bottom,
-            width: right - left,
-            height: bottom - top,
-          }
-        : null;
-    };
-    // Computed colours as sRGB, through a canvas (ink.ts `colours`).
-    const canvas = document.createElement("canvas").getContext("2d", {
-      willReadFrequently: true,
-    }) as CanvasRenderingContext2D;
-    const rgb = (css: string): [number, number, number] => {
-      canvas.clearRect(0, 0, 1, 1);
-      canvas.fillStyle = "#000";
-      canvas.fillStyle = css;
-      canvas.fillRect(0, 0, 1, 1);
-      const [r = 0, g = 0, b = 0] = canvas.getImageData(0, 0, 1, 1).data;
-      return [r, g, b];
-    };
-    /** The fill under `el`: its own, else the nearest ancestor's that paints one. */
-    const ground = (el: Element | null) => {
-      for (let at = el; at; at = at.parentElement) {
-        const fill = getComputedStyle(at).backgroundColor;
-        if (fill !== "rgba(0, 0, 0, 0)" && fill !== "transparent") {
-          return rgb(fill);
-        }
-        const before = getComputedStyle(at, "::before");
-        if (
-          before.content !== "none" &&
-          before.backgroundColor !== "rgba(0, 0, 0, 0)"
-        ) {
-          return rgb(before.backgroundColor);
-        }
-      }
-      return rgb("#fff");
-    };
-    const panel = document.querySelector(panelSel);
-    const shell =
-      panel?.closest(
-        '[data-caw-dock], [data-slot="drawer-content"], [data-slot="popover-content"]'
-      ) ?? null;
-    const form = panel?.querySelector('form[data-slot="cin"]');
-    const room = panel?.querySelector('[data-slot="room"]');
-    const starters = [
-      ...(panel?.querySelectorAll('[data-slot="starter"]') ?? []),
-    ].map((el) => {
-      const reason = el.querySelector('[data-slot="starter-reason"]');
-      const glyph = el.querySelector("svg");
-      const view = glyph?.viewBox.baseVal;
-      const whole = (view?.width ?? 24) * (view?.height ?? 24);
-      // Its half-ink body: the largest part drawn at half opacity.
-      const body = Math.max(
-        0,
-        ...[...(glyph?.querySelectorAll("[opacity]") ?? [])]
-          .filter((part) => Number(part.getAttribute("opacity")) === 0.5)
-          .map((part) => {
-            const b = (part as SVGGraphicsElement).getBBox();
-            return (b.width * b.height) / whole;
-          })
-      );
-      const style = getComputedStyle(el);
-      const row = ground(el);
-      return {
-        box: box(el),
-        text: words(el.querySelector('[data-slot="starter-text"]')),
-        reason: words(reason),
-        body,
-        reasonContrast: reason
-          ? { ink: rgb(getComputedStyle(reason).color), row }
-          : null,
-        edge: {
-          width: Number.parseFloat(style.borderTopWidth),
-          ink: rgb(style.borderTopColor),
-          fill: row,
-          panel: ground(el.closest('[data-slot="starter-cards"]')),
-        },
-      };
-    });
-    const column = panel?.querySelector('[data-slot="starter-cards"]');
-    const active = document.activeElement;
-    const pane = document.querySelector('[data-slot="pane"]');
-    const paneStyle = pane ? getComputedStyle(pane) : null;
-    const paneBox = box(pane);
-    const before = shell ? getComputedStyle(shell, "::before") : null;
-    const grabber = shell?.querySelector(
-      ':scope > [data-slot="drawer-grabber"]'
-    );
-    const card = document.querySelector("[data-glass-card-frame]");
-    return {
-      vw: document.documentElement.clientWidth,
-      vh: document.documentElement.clientHeight,
-      panel: box(panel),
-      shell: box(shell),
-      greeting: words(
-        panel?.querySelector(
-          '[data-thread-hero] [data-slot="empty"] [data-slot="empty-title"]'
-        )
-      ),
-      starters,
-      column: box(column),
-      composer: box(form),
-      placeholder:
-        form
-          ?.querySelector("[data-placeholder]")
-          ?.getAttribute("data-placeholder") ?? "",
-      room: box(room),
-      caretInComposer: !!(form && active && form.contains(active)),
-      plainInputs: [...document.querySelectorAll("input")]
-        .filter((input) => {
-          const r = input.getBoundingClientRect();
-          return (
-            r.width > 0 &&
-            (input.placeholder === "What should this session do?" ||
-              input.closest("[data-caw-panel]"))
-          );
-        })
-        .map((input) => input.placeholder),
-      firstPrompt: document.body.innerText.includes(firstPromptLabel),
-      empty: box(document.querySelector('[data-slot="caw-empty"]')),
-      head: box(document.querySelector('[data-slot="project-head"]')),
-      title: box(
-        document.querySelector('[data-slot="project-head"] [data-slot="name"]')
-      ),
-      act: words(document.querySelector("[data-new-session]")),
-      // Its label and its pending wording stand in one cell (DESIGN.md, Buttons).
-      spinOff: [
-        ...document.querySelectorAll('[data-slot="project-head"] button'),
-      ].some((button) => words(button).startsWith(spinOffLabel)),
-      // Each column of the board as it shows: a column scrolled past the
-      // board's edge is cut by it.
-      columns: [...document.querySelectorAll('[data-slot="column"]')]
-        .map(shownBox)
-        .filter((each) => each !== null),
-      // The view's column: the pane less its inline padding.
-      lane:
-        paneBox && paneStyle
+  page.evaluate(
+    ([panelSel, firstPromptLabel, spinOffLabel]) => {
+      const box = (el: Element | null | undefined) => {
+        const r = el?.getBoundingClientRect();
+        return r
           ? {
-              left: paneBox.left + Number.parseFloat(paneStyle.paddingLeft),
-              right: paneBox.right - Number.parseFloat(paneStyle.paddingRight),
+              left: r.left,
+              right: r.right,
+              top: r.top,
+              bottom: r.bottom,
+              width: r.width,
+              height: r.height,
+            }
+          : null;
+      };
+      const words = (el: Element | null | undefined) =>
+        el?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      /** What of `el` shows: its box cut by every ancestor that clips (a scroller, overflow hidden). */
+      const shownBox = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        let { left, right, top, bottom } = r;
+        for (let at = el.parentElement; at; at = at.parentElement) {
+          const style = getComputedStyle(at);
+          if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+            const c = at.getBoundingClientRect();
+            left = Math.max(left, c.left);
+            right = Math.min(right, c.right);
+            top = Math.max(top, c.top);
+            bottom = Math.min(bottom, c.bottom);
+          }
+        }
+        return right > left && bottom > top
+          ? {
+              left,
+              right,
+              top,
+              bottom,
+              width: right - left,
+              height: bottom - top,
+            }
+          : null;
+      };
+      // Computed colours as sRGB, through a canvas (ink.ts `colours`).
+      const canvas = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      const rgb = (css: string): [number, number, number] => {
+        canvas.clearRect(0, 0, 1, 1);
+        canvas.fillStyle = "#000";
+        canvas.fillStyle = css;
+        canvas.fillRect(0, 0, 1, 1);
+        const [r = 0, g = 0, b = 0] = canvas.getImageData(0, 0, 1, 1).data;
+        return [r, g, b];
+      };
+      /** The fill under `el`: its own, else the nearest ancestor's that paints one. */
+      const ground = (el: Element | null) => {
+        for (let at = el; at; at = at.parentElement) {
+          const fill = getComputedStyle(at).backgroundColor;
+          if (fill !== "rgba(0, 0, 0, 0)" && fill !== "transparent") {
+            return rgb(fill);
+          }
+          const before = getComputedStyle(at, "::before");
+          if (
+            before.content !== "none" &&
+            before.backgroundColor !== "rgba(0, 0, 0, 0)"
+          ) {
+            return rgb(before.backgroundColor);
+          }
+        }
+        return rgb("#fff");
+      };
+      const panel = document.querySelector(panelSel);
+      const shell =
+        panel?.closest(
+          '[data-caw-dock], [data-slot="drawer-content"], [data-slot="popover-content"]'
+        ) ?? null;
+      const form = panel?.querySelector('form[data-slot="cin"]');
+      const room = panel?.querySelector('[data-slot="room"]');
+      const starters = [
+        ...(panel?.querySelectorAll('[data-slot="starter"]') ?? []),
+      ].map((el) => {
+        const reason = el.querySelector('[data-slot="starter-reason"]');
+        const glyph = el.querySelector("svg");
+        const view = glyph?.viewBox.baseVal;
+        const whole = (view?.width ?? 24) * (view?.height ?? 24);
+        // Its half-ink body: the largest part drawn at half opacity.
+        const body = Math.max(
+          0,
+          ...[...(glyph?.querySelectorAll("[opacity]") ?? [])]
+            .filter((part) => Number(part.getAttribute("opacity")) === 0.5)
+            .map((part) => {
+              const b = (part as SVGGraphicsElement).getBBox();
+              return (b.width * b.height) / whole;
+            })
+        );
+        const style = getComputedStyle(el);
+        const row = ground(el);
+        return {
+          box: box(el),
+          text: words(el.querySelector('[data-slot="starter-text"]')),
+          reason: words(reason),
+          body,
+          reasonContrast: reason
+            ? { ink: rgb(getComputedStyle(reason).color), row }
+            : null,
+          edge: {
+            width: Number.parseFloat(style.borderTopWidth),
+            ink: rgb(style.borderTopColor),
+            fill: row,
+            panel: ground(el.closest('[data-slot="starter-cards"]')),
+          },
+        };
+      });
+      const column = panel?.querySelector('[data-slot="starter-cards"]');
+      const active = document.activeElement;
+      const pane = document.querySelector('[data-slot="pane"]');
+      const paneStyle = pane ? getComputedStyle(pane) : null;
+      const paneBox = box(pane);
+      const before = shell ? getComputedStyle(shell, "::before") : null;
+      const grabber = shell?.querySelector(
+        ':scope > [data-slot="drawer-grabber"]'
+      );
+      const card = document.querySelector("[data-glass-card-frame]");
+      return {
+        vw: document.documentElement.clientWidth,
+        vh: document.documentElement.clientHeight,
+        panel: box(panel),
+        shell: box(shell),
+        greeting: words(
+          panel?.querySelector(
+            '[data-thread-hero] [data-slot="empty"] [data-slot="empty-title"]'
+          )
+        ),
+        starters,
+        column: box(column),
+        composer: box(form),
+        placeholder:
+          form
+            ?.querySelector("[data-placeholder]")
+            ?.getAttribute("data-placeholder") ?? "",
+        room: box(room),
+        caretInComposer: !!(form && active && form.contains(active)),
+        plainInputs: [...document.querySelectorAll("input")]
+          .filter((input) => {
+            const r = input.getBoundingClientRect();
+            return (
+              r.width > 0 &&
+              (input.placeholder === "What should this session do?" ||
+                input.closest("[data-caw-panel]"))
+            );
+          })
+          .map((input) => input.placeholder),
+        firstPrompt: document.body.innerText.includes(firstPromptLabel),
+        empty: box(document.querySelector('[data-slot="caw-empty"]')),
+        head: box(document.querySelector('[data-slot="project-head"]')),
+        title: box(
+          document.querySelector(
+            '[data-slot="project-head"] [data-slot="name"]'
+          )
+        ),
+        act: words(document.querySelector("[data-new-session]")),
+        // Its label and its pending wording stand in one cell (DESIGN.md, Buttons).
+        spinOff: [
+          ...document.querySelectorAll('[data-slot="project-head"] button'),
+        ].some((button) => words(button).startsWith(spinOffLabel)),
+        // Each column of the board as it shows: a column scrolled past the
+        // board's edge is cut by it.
+        columns: [...document.querySelectorAll('[data-slot="column"]')]
+          .map(shownBox)
+          .filter((each) => each !== null),
+        // The view's column: the pane less its inline padding.
+        lane:
+          paneBox && paneStyle
+            ? {
+                left: paneBox.left + Number.parseFloat(paneStyle.paddingLeft),
+                right:
+                  paneBox.right - Number.parseFloat(paneStyle.paddingRight),
+              }
+            : null,
+        sheet: before
+          ? {
+              top: before.top,
+              left: before.left,
+              right: before.right,
+              bottom: before.bottom,
+              topLeft: before.borderTopLeftRadius,
+              bottomLeft: before.borderBottomLeftRadius,
+              bottomRight: before.borderBottomRightRadius,
+              sides: before.borderLeftWidth,
             }
           : null,
-      sheet: before
-        ? {
-            top: before.top,
-            left: before.left,
-            right: before.right,
-            bottom: before.bottom,
-            topLeft: before.borderTopLeftRadius,
-            bottomLeft: before.borderBottomLeftRadius,
-            bottomRight: before.borderBottomRightRadius,
-            sides: before.borderLeftWidth,
-          }
-        : null,
-      grabber: box(grabber),
-      name: box(panel?.querySelector('[data-caw-head] [data-slot="name"]')),
-      // The sheet's headers: the kit's own, and Close in his head.
-      sheetHeads:
-        shell?.querySelectorAll('[data-slot="drawer-header"]').length ?? 0,
-      headClose: box(
-        panel?.querySelector('[data-caw-head] [aria-label="Close"]')
-      ),
-      // The shell's Caw card, as it stands now: shown, or at rest up behind
-      // its cut, inert (GlassCard, motion/hang).
-      glassCard: card
-        ? {
-            shown: card.hasAttribute("data-shown"),
-            inert: (card as HTMLElement).inert,
-            state: card.getAttribute("data-state"),
-            translate: getComputedStyle(card).translate,
-            box: box(card),
-          }
-        : null,
-    };
-  }, [PANEL, spawnWords.firstPrompt, projectWords.spinOff] as const);
+        grabber: box(grabber),
+        name: box(panel?.querySelector('[data-caw-head] [data-slot="name"]')),
+        // The sheet's headers: the kit's own, and Close in his head.
+        sheetHeads:
+          shell?.querySelectorAll('[data-slot="drawer-header"]').length ?? 0,
+        headClose: box(
+          panel?.querySelector('[data-caw-head] [aria-label="Close"]')
+        ),
+        // The shell's Caw card, as it stands now: shown, or at rest up behind
+        // its cut, inert (GlassCard, motion/hang).
+        glassCard: card
+          ? {
+              shown: card.hasAttribute("data-shown"),
+              inert: (card as HTMLElement).inert,
+              state: card.getAttribute("data-state"),
+              translate: getComputedStyle(card).translate,
+              box: box(card),
+            }
+          : null,
+      };
+    },
+    [PANEL, spawnWords.firstPrompt, projectWords.spinOff] as const
+  );
 
 type PanelRead = Awaited<ReturnType<typeof readPanel>>;
 type Box = NonNullable<PanelRead["panel"]>;

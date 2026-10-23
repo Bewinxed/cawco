@@ -59,10 +59,12 @@
    * and the first line's ✕ is Not now: it leaves Needs you, stays in Files
    * with its dot, and comes back when it is raised again.
    */
-  import { 
+  import {
     type ArtifactKind,
-    artifactWords,askWords,
-    causeLine,connectWords, 
+    artifactWords,
+    askWords,
+    causeLine,
+    connectWords,
     pairingWords,
     presenceWords,
     questionsOf,
@@ -1312,7 +1314,9 @@
           onclick={() => answer("allow")}
           {onkeydown}
           pending={answering && pressed === "allow"}
-          pendingLabel={item.request.browserAsk ? askWords.takingOver : "Approving…"}
+          pendingLabel={item.request.browserAsk
+            ? askWords.takingOver
+            : "Approving…"}
           size="sm"
           variant="secondary"
         />

@@ -11,7 +11,8 @@
 </script>
 
 <script lang="ts">
-  import { askWords,
+  import {
+    askWords,
     damagedWords,
     getToolGlance,
     machineLabel,

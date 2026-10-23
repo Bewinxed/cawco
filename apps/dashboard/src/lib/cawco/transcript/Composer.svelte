@@ -52,7 +52,12 @@
 </script>
 
 <script lang="ts">
-  import { transcriptWords, type AvailableCommand, commonWords, questionsOf } from "@cawco/core";
+  import {
+    type AvailableCommand,
+    commonWords,
+    questionsOf,
+    transcriptWords,
+  } from "@cawco/core";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
    * and send controls. A parked permission or question is the composer
@@ -3855,7 +3860,8 @@
             data-slot="stop"
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
-            aria-label={action ?? (stops ? "Stop the agent" : transcriptWords.sendMessage)}
+            aria-label={action ??
+              (stops ? "Stop the agent" : transcriptWords.sendMessage)}
             class={sendVariants({ class: "group/stop select-none touch-hit" })}
             title={action}
             disabled={!(

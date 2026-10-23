@@ -354,9 +354,7 @@ const sendCount = async (page: Page) =>
 const sendNow = async (page: Page, note = "") => {
   if (note) {
     const rail = await rowsOf(page);
-    await rail
-      .getByRole("textbox", { name: commentWords.note })
-      .fill(note);
+    await rail.getByRole("textbox", { name: commentWords.note }).fill(note);
     const at = Date.now();
     await rail.locator('[data-slot="rail-send"]').click();
     return at;
@@ -1043,7 +1041,8 @@ const endedWriterChecks = async (
     async () => ({
       pin: numbered((await docOf(frame)).pins, 1),
       nested: (await hubLines()).find(
-        (line) => shaped(artifactToolWords.marksOwed).test(line) && NESTED.test(line)
+        (line) =>
+          shaped(artifactToolWords.marksOwed).test(line) && NESTED.test(line)
       ),
     }),
     (now) =>

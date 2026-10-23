@@ -970,7 +970,9 @@
                 {#snippet child({ props })}
                   <Button
                     {...props}
-                    aria-label={sidebarWords.sortSessions(SORT_LABEL[rail.sort])}
+                    aria-label={sidebarWords.sortSessions(
+                      SORT_LABEL[rail.sort]
+                    )}
                     size="icon-sm"
                     title="Sort sessions — {SORT_LABEL[rail.sort]}"
                     variant="ghost"

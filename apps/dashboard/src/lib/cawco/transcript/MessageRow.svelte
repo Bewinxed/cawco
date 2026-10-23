@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { transcriptWords } from "@cawco/core";
   import type { HarnessKind, PermissionMode } from "@cawco/core";
+  import { transcriptWords } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { failureWords } from "#lib/cawco/hub-read.js";

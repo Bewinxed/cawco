@@ -12,12 +12,13 @@ import {
 import { platform, userInfo } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { 
+import {
   type AccountIdentity,
   type AccountKind,
   type AccountProbe,
   type AccountReport,
-  type AuthState,configurePage,
+  type AuthState,
+  configurePage,
   identityOf,
   type MachineHarnessReport,
   type ModelInfo,

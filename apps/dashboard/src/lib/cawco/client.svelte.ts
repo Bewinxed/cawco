@@ -109,9 +109,10 @@ import type {
   WorkItemSummary,
   WorkspaceHolding,
 } from "@cawco/core";
-import { 
+import {
   ASK_USER_QUESTION,
-  accountsWords,askWords,
+  accountsWords,
+  askWords,
   CAWCO_SCRATCH_TAG,
   CONTROL_SUPPORTED_COMMANDS,
   capHolds,

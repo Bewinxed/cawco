@@ -15,7 +15,7 @@
  */
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
-import { 
+import {
   type AgentRow,
   ARTIFACT_NAME,
   type ArtifactChoices,
@@ -32,7 +32,8 @@ import {
   artifactCommentsNotice,
   artifactErrorsNotice,
   artifactLink,
-  artifactSavesNotice,artifactToolWords,
+  artifactSavesNotice,
+  artifactToolWords,
   type ChoiceEntry,
   choiceEntryProblem,
   DESK_CAPTURE_WIDTH,
@@ -2212,10 +2213,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return { pin, row };
       }
     }
-    throw new ArtifactRefusal(
-      404,
-      artifactToolWords.noPin(pinId)
-    );
+    throw new ArtifactRefusal(404, artifactToolWords.noPin(pinId));
   };
 
   /**
@@ -3446,9 +3444,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       attachments,
     });
     if (!outcome.ok) {
-      console.warn(
-        artifactToolWords.marksOwed(id, outcome.reason)
-      );
+      console.warn(artifactToolWords.marksOwed(id, outcome.reason));
       notSent(id, owed, outcome.reason);
       return outcome;
     }

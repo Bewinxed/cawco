@@ -71,11 +71,11 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { freshApp } from "../../lib/apple-app";
 import { macSim } from "../../lib/mac-sim";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
-import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 const AXE = "/opt/homebrew/bin/axe";
 /**

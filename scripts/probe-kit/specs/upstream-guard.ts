@@ -895,7 +895,11 @@ const run = async (kit: Kit) => {
     turned.status === 200 && projectPosts() === null && letGo("Y", "I"),
     `PUT ${turned.status}; exit ${exitOf("I")}; said:\n${said("Y", "I")}`
   );
-  await open(pages.desk, projectUrl, `[aria-label="${commonWords.moreFor(NAME)}"]`);
+  await open(
+    pages.desk,
+    projectUrl,
+    `[aria-label="${commonWords.moreFor(NAME)}"]`
+  );
   await settle(pages.desk, 400);
   const named = await openUpstream(pages.desk, "desk");
   await dismiss(pages.desk);

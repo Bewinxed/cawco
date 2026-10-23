@@ -499,7 +499,8 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
     .click();
   const notice = '[data-slot="update-card-card"]';
   const refusedHere = await until(
-    async () => shaped(updatesWords.notInstalled).test(await textOf(page, notice)),
+    async () =>
+      shaped(updatesWords.notInstalled).test(await textOf(page, notice)),
     10_000
   );
   const words = await textOf(page, notice);
@@ -1288,7 +1289,11 @@ const faultOf = (page: Page, selector: string) =>
       };
     },
     // Try again's and Show details' words go in as the read's argument: it runs in the page.
-    { sel: selector, again: commonWords.tryAgain, showDetails: shellWords.showDetails }
+    {
+      sel: selector,
+      again: commonWords.tryAgain,
+      showDetails: shellWords.showDetails,
+    }
   );
 
 /** Toasts on screen now: none may be, after any refusal. */
@@ -1360,8 +1365,9 @@ async function configDeleteLeg(
     said.text.includes(refusal) &&
       said.text.includes(`${name} stays as it was`) &&
       said.again &&
-      (await page.getByRole("button", { name: commonWords.moreFor(name) }).count()) ===
-        1 &&
+      (await page
+        .getByRole("button", { name: commonWords.moreFor(name) })
+        .count()) === 1 &&
       (await toastsNow(page)) === 0,
     JSON.stringify({ made, said })
   );
@@ -1377,8 +1383,9 @@ async function configDeleteLeg(
   await page.locator(`${line} [data-again]`).click();
   const deleted = await until(
     async () =>
-      (await page.getByRole("button", { name: commonWords.moreFor(name) }).count()) ===
-      0,
+      (await page
+        .getByRole("button", { name: commonWords.moreFor(name) })
+        .count()) === 0,
     10_000
   );
   kit.check(
@@ -1801,7 +1808,9 @@ async function copyLeg(
       });
     }
   });
-  const item = page.getByRole("menuitem", { name: commonWords.copyLink }).first();
+  const item = page
+    .getByRole("menuitem", { name: commonWords.copyLink })
+    .first();
   await openTabMenu(page, pass, item);
   await item.click();
   const line = "[data-copy-refused]";

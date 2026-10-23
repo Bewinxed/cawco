@@ -50,10 +50,14 @@ const PROJECT_CHIP = /^Project:/;
 const SESSION_TABS = transcriptWords.openSessions;
 const MODE_FLAG = "--permission-mode";
 const PERMISSION_MODE = startsWith(spawnWords.permissionModeHead);
-const IN_FULL_SEND = startsWith(spawnWords.permissionMode(spawnWords.modes.fullSend));
+const IN_FULL_SEND = startsWith(
+  spawnWords.permissionMode(spawnWords.modes.fullSend)
+);
 const FULL_SEND = startsWith(spawnWords.modes.fullSend);
 const ASK_FIRST = startsWith(spawnWords.modes.default);
-const IN_ASK_FIRST = startsWith(spawnWords.permissionMode(spawnWords.modes.default));
+const IN_ASK_FIRST = startsWith(
+  spawnWords.permissionMode(spawnWords.modes.default)
+);
 const SPACES = /\s+/;
 const REGEX_SIGNS = /[.*+?^${}()|[\]\\]/g;
 /** What the new session says to its first message. */
@@ -330,7 +334,9 @@ async function walk(leg: Leg): Promise<void> {
     async () => {
       await card.getByRole("button", { name: PERMISSION_MODE }).click();
       await page.getByRole("radio", { name: FULL_SEND }).click();
-      await page.getByRole("button", { name: spawnWords.switchToFullSend }).click();
+      await page
+        .getByRole("button", { name: spawnWords.switchToFullSend })
+        .click();
     },
     async () => {
       await eventually(

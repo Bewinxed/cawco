@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { 
-    artifactWords,commentWords, 
+  import {
+    artifactWords,
+    commentWords,
     commonWords,
     hostModeDomain,
     machineLabel,
@@ -11,7 +12,8 @@
     previewWords,
     projectPagePlace,
     type ShownFailure,
-    sheetWords, shellWords
+    sheetWords,
+    shellWords,
   } from "@cawco/core";
   import {
     type ChangedItem,
@@ -3579,7 +3581,9 @@
                 data-details
                 aria-controls={stageDetailsId}
                 aria-expanded={stageDetails}
-                label={stageDetails ? shellWords.hideDetails : shellWords.showDetails}
+                label={stageDetails
+                  ? shellWords.hideDetails
+                  : shellWords.showDetails}
                 onclick={() => {
                   stageDetails = !stageDetails;
                 }}
@@ -3640,7 +3644,9 @@
                 data-details
                 aria-controls={stageDetailsId}
                 aria-expanded={stageDetails}
-                label={stageDetails ? shellWords.hideDetails : shellWords.showDetails}
+                label={stageDetails
+                  ? shellWords.hideDetails
+                  : shellWords.showDetails}
                 onclick={() => {
                   stageDetails = !stageDetails;
                 }}

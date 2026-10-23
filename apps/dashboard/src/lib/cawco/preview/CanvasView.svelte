@@ -8,8 +8,8 @@
    * waits while it is on); Verify last, a design system round whose verdict
    * goes to the session.
    */
-import { previewWords } from "@cawco/core";
-    // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
+  import { previewWords } from "@cawco/core";
+  // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconLayers } from "#lib/icons.js";
   import {
@@ -90,7 +90,8 @@ import { previewWords } from "@cawco/core";
 {#if as === "sub"}
   <DropdownMenu.Sub>
     <DropdownMenu.SubTrigger
-      ><IconLayers /><span>{previewWords.canvasView}</span></DropdownMenu.SubTrigger
+      ><IconLayers /><span>{previewWords.canvasView}</span
+      ></DropdownMenu.SubTrigger
     >
     <DropdownMenu.SubContent width="regular"
       >{@render entries()}</DropdownMenu.SubContent

@@ -1,4 +1,4 @@
-import { 
+import {
   type Account,
   type AccountBench,
   type AccountMove,
@@ -7,7 +7,8 @@ import {
   type AtLimit,
   accountNameAmong,
   accountsWords,
-  clockWords,configurePage,
+  clockWords,
+  configurePage,
   type HeldReason,
   keepsGoingOnExtraUsage,
   type LimitWindow,

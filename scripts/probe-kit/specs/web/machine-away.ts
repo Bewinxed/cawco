@@ -37,6 +37,7 @@ import { CLAUDE_DIR_NAME } from "../../../../packages/core/src/claude-dirs";
 import { HOOK_TEMPLATES } from "../../../../packages/core/src/hooks";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { skillsWords } from "../../../../packages/core/src/words/skills";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { MACHINE } from "../../../scratch-fleet";
 import {
   type Engine,
@@ -46,7 +47,6 @@ import {
   type Spec,
   type View,
 } from "../../kit";
-import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { literal } from "../../words";
 
 /** The New Session form: the desk's popover, the phone's bottom sheet. */

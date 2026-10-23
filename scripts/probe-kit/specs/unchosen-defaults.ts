@@ -53,6 +53,7 @@ import {
   ARTIFACT_SESSION_PATH,
 } from "../../../packages/core/src/frames";
 import { PAIRING_REQUIRED } from "../../../packages/core/src/hub-auth";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
 import {
   MACHINE,
   MODEL,
@@ -69,7 +70,6 @@ import {
   type Spec,
   settle,
 } from "../kit";
-import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { startsWith } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";

@@ -39,6 +39,7 @@
  * row and the question's buttons stand inside the picker and the viewport.
  */
 import type { Page } from "playwright-core";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { durOf, oneEntrance, recordRuns, runsOn } from "../../entrances";
 import {
   COMPOSER,
@@ -53,7 +54,6 @@ import {
   settle,
   type View,
 } from "../../kit";
-import { spawnWords } from "../../../../packages/core/src/words/spawn";
 
 const BENCH = "/motion/delegate-tray";
 const LOG = '[data-slot="tr"][role="log"]';

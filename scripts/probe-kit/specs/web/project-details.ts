@@ -349,8 +349,12 @@ const leg = async (
   await page.locator(`${TRAY} [data-details-done]`).focus();
   await page.keyboard.press("Escape");
   await page.locator(TRAY).waitFor({ state: "detached" });
-  await page.locator(`[aria-label="${commonWords.moreFor(project.name)}"]`).click();
-  await page.getByRole("menuitem", { name: projectWords.projectDetails }).click();
+  await page
+    .locator(`[aria-label="${commonWords.moreFor(project.name)}"]`)
+    .click();
+  await page
+    .getByRole("menuitem", { name: projectWords.projectDetails })
+    .click();
   await page.locator(TRAY).waitFor();
   await settle(page, 300);
   kit.check(

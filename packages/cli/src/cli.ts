@@ -9,10 +9,11 @@ import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
 import type { AgentRow } from "@cawco/core";
-import { 
+import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
-  CAWCO_MDNS_TYPE,configurePage,
+  CAWCO_MDNS_TYPE,
+  configurePage,
   pinnedTools,
   readEnv,
 } from "@cawco/core";
