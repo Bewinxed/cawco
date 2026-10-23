@@ -249,11 +249,90 @@ const programKey = (body: string): string => {
   );
 };
 
+/** `new_page`, then `take_screenshot` into `shot` of the page it selected, by the tools' names as offered. */
+const directCapture = (
+  step: Step,
+  page: string,
+  screenshot: string,
+  shot: string
+): Reply | undefined => {
+  if (!step.made.has(PAGE_NAME)) {
+    step.made.add(PAGE_NAME);
+    return call(page, { url: "about:blank" });
+  }
+  const opened = step.results.findLast((one) => SELECTED.test(one.text));
+  if (opened && !step.made.has(SHOT_NAME)) {
+    step.made.add(SHOT_NAME);
+    return call(screenshot, {
+      filePath: shot,
+      pageId: Number(SELECTED.exec(opened.text)?.[1]),
+    });
+  }
+  return undefined;
+};
+
+/**
+ * The same through OpenCode's Code Mode, in one program: the server's tools
+ * under its name, in bracket notation (its own search names
+ * `tools["chrome-devtools"].take_screenshot`).
+ */
+const codeModeCapture = (
+  step: Step,
+  request: Seen,
+  shot: string
+): Reply | undefined => {
+  if (step.made.has("execute")) {
+    return undefined;
+  }
+  step.made.add("execute");
+  return call("execute", {
+    [programKey(request.body)]: [
+      `const space = tools["chrome-devtools"];`,
+      `const opened = await space.${PAGE_NAME}({ url: "about:blank" });`,
+      String.raw`const pageId = Number(JSON.stringify(opened).match(/(\d+): [^\\"]*\[selected\]/)?.[1]);`,
+      `return await space.${SHOT_NAME}({ filePath: ${JSON.stringify(shot)}, pageId });`,
+    ].join("\n"),
+  });
+};
+
+/**
+ * The search that loads chrome-devtools' deferred tools: Claude Code's
+ * ToolSearch takes both by name at once; pi's `tool_search` loads what its
+ * query ranks first, so one search for each tool not offered yet. None once
+ * searched.
+ */
+const searchDevtools = (step: Step, request: Seen): Reply | undefined => {
+  if (request.toolNames.includes("ToolSearch")) {
+    if (step.made.has("search")) {
+      return undefined;
+    }
+    step.made.add("search");
+    return call("ToolSearch", {
+      query: `select:mcp__chrome-devtools__${PAGE_NAME},mcp__chrome-devtools__${SHOT_NAME}`,
+      max_results: 2,
+    });
+  }
+  if (!request.toolNames.includes("tool_search")) {
+    return undefined;
+  }
+  const wanted = [PAGE_NAME, SHOT_NAME].find(
+    (name) =>
+      !(
+        offered(request, name, "chrome-devtools") ||
+        step.made.has(`search ${name}`)
+      )
+  );
+  if (!wanted) {
+    return undefined;
+  }
+  step.made.add(`search ${wanted}`);
+  return call("tool_search", { query: `chrome-devtools ${wanted}` });
+};
+
 /**
  * chrome-devtools' `new_page` then `take_screenshot` into `shot`, as the
  * harness offers them: declared, behind Claude Code's ToolSearch or pi's
- * `tool_search`, or through OpenCode's Code Mode (`execute`), whose program
- * finds the namespace holding take_screenshot by its own keys.
+ * `tool_search`, or through OpenCode's Code Mode (`execute`).
  */
 const capture =
   (shot: string) =>
@@ -271,45 +350,11 @@ const capture =
     const page = offered(request, PAGE_NAME, "chrome-devtools");
     const screenshot = offered(request, SHOT_NAME, "chrome-devtools");
     if (page && screenshot) {
-      if (!step.made.has(PAGE_NAME)) {
-        step.made.add(PAGE_NAME);
-        return call(page, { url: "about:blank" });
-      }
-      const opened = step.results.findLast((one) => SELECTED.test(one.text));
-      if (opened && !step.made.has(SHOT_NAME)) {
-        step.made.add(SHOT_NAME);
-        return call(screenshot, {
-          filePath: shot,
-          pageId: Number(SELECTED.exec(opened.text)?.[1]),
-        });
-      }
-      return undefined;
+      return directCapture(step, page, screenshot, shot);
     }
-    if (step.made.has("search")) {
-      return undefined;
-    }
-    step.made.add("search");
-    if (request.toolNames.includes("execute")) {
-      return call("execute", {
-        [programKey(request.body)]: [
-          `const space = Object.keys(tools).find((name) => tools[name] && typeof tools[name].${SHOT_NAME} === "function");`,
-          "if (!space) return { spaces: Object.keys(tools) };",
-          `const opened = await tools[space].${PAGE_NAME}({ url: "about:blank" });`,
-          String.raw`const pageId = Number(JSON.stringify(opened).match(/(\d+): [^\\"]*\[selected\]/)?.[1]);`,
-          `return await tools[space].${SHOT_NAME}({ filePath: ${JSON.stringify(shot)}, pageId });`,
-        ].join("\n"),
-      });
-    }
-    if (request.toolNames.includes("ToolSearch")) {
-      return call("ToolSearch", {
-        query: `select:mcp__chrome-devtools__${PAGE_NAME},mcp__chrome-devtools__${SHOT_NAME}`,
-        max_results: 2,
-      });
-    }
-    if (request.toolNames.includes("tool_search")) {
-      return call("tool_search", { query: `chrome-devtools ${SHOT_NAME}` });
-    }
-    return undefined;
+    return request.toolNames.includes("execute")
+      ? codeModeCapture(step, request, shot)
+      : searchDevtools(step, request);
   };
 
 /** The repository's `.mcp.json` server's `whereami`, declared or behind ToolSearch. */
@@ -365,7 +410,8 @@ const repository = async (
   dir: string,
   settings: Record<string, unknown>,
   home: string,
-  gate: string
+  gate: string,
+  local: Record<string, unknown> = {}
 ) => {
   await mkdir(projectClaudeDir(dir), { recursive: true });
   await mkdir(join(dir, ".probe"), { recursive: true });
@@ -377,7 +423,7 @@ const repository = async (
   );
   await writeFile(
     projectClaudeDir(dir, "settings.local.json"),
-    JSON.stringify(approved)
+    JSON.stringify({ ...local, ...approved })
   );
   await writeFile(
     join(dir, ".mcp.json"),
@@ -402,6 +448,8 @@ type Mark = Awaited<ReturnType<KitFleet["logMark"]>>;
 interface Delegate {
   clone: string;
   id: string;
+  /** Its workspace's id, which its gate and its door are named by. */
+  workspace: string;
 }
 
 /** This process's pid namespace (Linux), which a command inside a boundary has another of. */
@@ -420,13 +468,18 @@ const askLines = async (mark: Mark) =>
     .filter((line) => line.includes("[claude] permission asked: Bash"));
 
 /** The agent's start of chrome-devtools for a gate since `mark`, launched through a door. */
-const gateLine = async (mark: Mark) =>
-  (await mark.since())
+/**
+ * The agent's start of chrome-devtools for workspace `workspace`'s gate,
+ * launched through that workspace's door: at a session's first handshake
+ * (no listing kept yet) or its first call, whichever came first.
+ */
+const gateLine = async (fleet: KitFleet, workspace: string) =>
+  (await fleet.logs("agent"))
     .split("\n")
     .find(
       (line) =>
         line.includes("[mcp-host] chrome-devtools: started pid") &&
-        line.includes("browser-mcp.json")
+        line.includes(`/${workspace}/browser-mcp.json`)
     );
 
 const exists = async (path: string) => await Bun.file(path).exists();
@@ -509,9 +562,10 @@ const standUp = async (kit: Kit) => {
   const emptiedRepo = join(fleet.sandbox, "emptied");
   await repository(
     emptiedRepo,
-    { env: { CLAUDE_CODE_SHELL_PREFIX: "" } },
+    { env: { [SHELL_PREFIX]: "" } },
     home,
-    gateUrl
+    gateUrl,
+    { env: { [SHELL_PREFIX]: "" } }
   );
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Workspace bash rules",
@@ -551,7 +605,12 @@ const standUp = async (kit: Kit) => {
         "SELECT cwd FROM instances WHERE id = ?",
         id
       )[0]?.cwd ?? cwd;
-    return { id, clone };
+    const workspace =
+      fleet.query<{ workspace_id: string }>(
+        "SELECT workspace_id FROM work_items WHERE instance_id = ?",
+        id
+      )[0]?.workspace_id ?? "";
+    return { id, clone, workspace };
   };
   return { fleet, repo, emptiedRepo, delegate };
 };
@@ -623,7 +682,15 @@ const ruleLegs = async (kit: Kit, fleet: KitFleet, claude: Delegate) => {
       "pwd",
     ])
   );
-  const said = moved.results.map((one) => one.text.trim());
+  // Each call's own line, the path: the CLI may add its own words to a
+  // result (a working directory that moved is said in an environment update).
+  const said = moved.results.map(
+    (one) =>
+      one.text
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.startsWith("/")) ?? ""
+  );
   kit.check(
     "w4: the working directory follows `cd sub` into the next call, and a failing `cd / && false` leaves it there",
     said[0]?.endsWith("/sub") === true &&
@@ -683,9 +750,8 @@ const browserLeg = async (
   key: string
 ) => {
   const shot = join(session.clone, `wbr-${harness}.png`);
-  const mark = await fleet.logMark("agent");
   const step = await runStep(fleet, session.id, key, capture(shot));
-  const line = await gateLine(mark);
+  const line = await gateLine(fleet, session.workspace);
   const captured = await exists(shot);
   kit.check(
     `w7: ${harness}: chrome-devtools in a workspace lists its tools and takes a screenshot through the workspace's gate`,
@@ -715,20 +781,48 @@ const run = async (kit: Kit) => {
     "pi-1"
   );
 
-  // ── An emptied prefix ────────────────────────────────────────────────
-  const emptied = await delegate("claude", emptiedRepo, "Emptied delegate");
-  const refused = await runStep(
+  await emptiedLeg(
+    kit,
+    fleet,
+    await delegate("claude", emptiedRepo, "Emptied delegate")
+  );
+};
+
+/**
+ * w8: a repository whose settings (project and local) empty the CLI's
+ * shell prefix never has a command run outside the boundary. Where the CLI
+ * takes the setting, the hook hands the judge the empty prefix and the
+ * judge refuses the call (claude-prefix p10). Where it keeps the variable
+ * its host set (a delegate's CLI on the host, r175: the judge allowed the
+ * call, which it does only for the workspace's own prefix), the call goes
+ * through the workspace's prefix and runs inside.
+ */
+const emptiedLeg = async (kit: Kit, fleet: KitFleet, emptied: Delegate) => {
+  const ran = await runStep(
     fleet,
     emptied.id,
     "emptied-1",
-    shell("Bash", ["touch probe-emptied"])
+    shell("Bash", [
+      "touch probe-emptied; readlink /proc/self/ns/pid 2>/dev/null; printf 'ws=%s\\n' \"$CAWCO_WORKSPACE\"",
+    ])
   );
+  const [result] = ran.results;
+  const text = result?.text ?? "";
+  const refused =
+    result?.failed === true &&
+    text.includes(SHELL_PREFIX) &&
+    !(await exists(join(emptied.clone, "probe-emptied")));
+  const namespace = NAMESPACE.exec(text)?.[0] ?? "";
+  const inside =
+    result?.failed === false &&
+    WORKSPACE.exec(text)?.[1] === emptied.workspace &&
+    (process.platform !== "linux" ||
+      (namespace !== "" && namespace !== hostNamespace()));
+  const how = refused ? "the judge refused it" : "it ran inside";
   kit.check(
-    "w8: a repository whose settings empty CLAUDE_CODE_SHELL_PREFIX: the judge refuses the Bash call, and nothing runs",
-    refused.results[0]?.failed === true &&
-      (refused.results[0]?.text.includes(SHELL_PREFIX) ?? false) &&
-      !(await exists(join(emptied.clone, "probe-emptied"))),
-    JSON.stringify(refused.results)
+    "w8: a repository whose settings empty CLAUDE_CODE_SHELL_PREFIX runs no command outside the boundary: the judge refuses the call where the CLI takes the setting, and the call runs inside where it keeps the workspace's prefix",
+    refused || inside,
+    `${refused || inside ? how : "neither"}; workspace ${emptied.workspace}; host ${hostNamespace()}; ${JSON.stringify(ran.results)}`
   );
 };
 
