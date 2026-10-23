@@ -183,20 +183,11 @@ const drawnBy = (tab: Page, label: string): Promise<Drawn> =>
     30_000
   ).catch(() => drawnIn(tab));
 
-/** The person's press on `option` in the page: Change first, when a pick on the other route folded the card. */
+/** The person's press on `option` in the page. */
 const pickIn = async (tab: Page, option: string): Promise<string> => {
   const frame = await pageFrame(tab);
   if (!frame) {
     return "no page frame";
-  }
-  const change = frame.locator("#decision-leave [data-change]", {
-    hasText: "Change",
-  });
-  if ((await change.count()) > 0) {
-    await change
-      .first()
-      .click({ timeout: 10_000 })
-      .catch(() => undefined);
   }
   return await frame
     .locator(`[data-option="${option}"]`)

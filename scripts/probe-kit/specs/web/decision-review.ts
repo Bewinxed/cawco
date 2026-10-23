@@ -20,8 +20,9 @@
  *    round, raised), the fill recess-deep with the lifted knob, names on one
  *    inset, names and values at 4.5:1 and up.
  * 7. The foot stands at the window's foot on a short page.
- * 8. The tool name in the offline band in the code face; a decided chip's
- *    label and keycap, and the page head's title and Caw, on one middle.
+ * 8. The tool name in the offline band in the code face; a picked option
+ *    chip's label and keycap, and the page head's title and Caw, on one
+ *    middle.
  * 9. The note's field takes the house focus ring.
  * 10. Under a finger every option chip reaches 44px.
  *
@@ -45,7 +46,7 @@ const VIEWS = [
 /** 1. Each open card's first options row: its chips' tops, and whether a badge wrapped under its chip. */
 const chipRows = (page: Page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll("[data-slot=decision]:not([data-decided])")]
+    [...document.querySelectorAll("[data-slot=decision]")]
       .map((card) => {
         const cells = [...card.querySelectorAll("[data-slot=option-cell]")];
         const first = cells[0]?.getBoundingClientRect().top ?? 0;
@@ -262,14 +263,16 @@ const footOf = (page: Page) =>
     };
   });
 
-/** 8. The code face in the offline band, a decided chip's label against its keycap, and the head's title against Caw. */
+/** 8. The code face in the offline band, a picked option chip's label against its keycap (any option's where none is picked), and the head's title against Caw. */
 const linesOf = (page: Page) =>
   page.evaluate(() => {
     const mid = (el: Element | null | undefined) => {
       const r = el?.getBoundingClientRect();
       return r ? r.top + r.height / 2 : Number.NaN;
     };
-    const chip = document.querySelector("[data-slot=decided] [data-pick]");
+    const chip =
+      document.querySelector("[data-option][data-cawco-picked]") ??
+      document.querySelector("[data-option]");
     const head = document.querySelector("[data-slot=page-head]");
     const code = document.querySelector("[data-slot=alert] code");
     return {
@@ -279,7 +282,7 @@ const linesOf = (page: Page) =>
         Math.round(
           Math.abs(
             mid(chip?.querySelector("[data-slot=kbd]")) -
-              mid(chip?.querySelector("span:not([data-slot])"))
+              mid(chip?.querySelector("[data-slot=option-label]"))
           ) * 10
         ) / 10,
       head:
@@ -300,9 +303,12 @@ const linesOf = (page: Page) =>
 
 /** 9. The note's field, focused from the keyboard: its outline, offset and shadow, and the house ring's colour. */
 const ringOf = async (page: Page) => {
-  const card = page.locator("[data-slot=decision]:not([data-decided])").first();
-  await card.locator("[data-slot=note] button").first().click();
+  const card = page.locator("[data-slot=decision]").first();
   const field = card.locator("[data-slot=note] textarea:not([aria-hidden])");
+  // A card holding a note stands its field open already.
+  if (!(await field.isVisible())) {
+    await card.locator("[data-slot=note] button").first().click();
+  }
   await field.waitFor();
   await field.focus();
   await settle(page, 300);
@@ -342,7 +348,7 @@ async function readView(
   );
   const lines = await linesOf(page);
   kit.check(
-    `${label}: a decided chip's label on its keycap's middle (${lines.chip}px off) and the page head's title on Caw's (${lines.head}px off), The Mark Line Rule`,
+    `${label}: a picked option chip's label on its keycap's middle (${lines.chip}px off) and the page head's title on Caw's (${lines.head}px off), The Mark Line Rule`,
     lines.chip <= 0.5 && lines.head <= 0.5,
     JSON.stringify(lines)
   );

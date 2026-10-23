@@ -966,8 +966,6 @@ public enum Size {
     public static let cDecisionNodeH: Double = 56
     /// A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between.
     public static let cDecisionPageW: Double = 920
-    /// The least a decision card's question takes beside its decided line before that line wraps under it.
-    public static let cDecisionQuestionBasis: Double = 240
     /// The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked".
     public static let cDecisionMeterW: Double = 120
     /// The narrowest a decision card's option column stands before the options stand one under another.

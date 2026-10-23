@@ -488,8 +488,9 @@ a {
   }
 }
 
-/* Send, at the page's foot: the page's coral action once no card stands
-   open, its outline while any does (the coral action's look, above). */
+/* Send, at the page's foot: the page's one coral action and its only Send
+   (the coral action's look, above). A card has no Continue or Done: a pick
+   is kept at once and the card stays open. */
 .dp-done {
   display: flex;
   justify-content: flex-end;

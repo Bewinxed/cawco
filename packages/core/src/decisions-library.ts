@@ -215,7 +215,7 @@ export const decisionLibrary = <C>(
   );
   const Decision = define(
     "Decision",
-    "One question the person picks on: a card with its options and a note. Once picked and the person presses Continue, it folds to one line.",
+    "One question the person picks on: a card with its options and a note. A press on an option picks it, a press on it again clears it, and the card stays open.",
     z.object({
       id: z
         .string()

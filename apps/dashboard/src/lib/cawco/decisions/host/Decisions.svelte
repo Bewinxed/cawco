@@ -20,20 +20,18 @@
   on its keycaps. Sending, Send runs the kit's pending: its label stays, the
   spinner stands over its start and a check holds once the hub has it
   (Buttons, Pending). The page's one polite live region says what a card's
-  pick and Continue did (Decision.svelte), the count with Continue.
-
-  At any moment one coral action shows, the next act (the owner's ruling
-  on primary and secondary): while any card stands open Send is the kit's
-  outline button, and the open card the person is working in has its
-  Continue coral (Decision.svelte); once the last open card is decided Send
-  turns coral where it stands. Change takes it back the same way.
+  pick did (Decision.svelte). Send is the page's one coral action: a card
+  has no Continue (the owner: "The done and continue are useless buttons
+  that break the flow of how this form should work"), and it is the page's
+  only Send, the panel's head and Needs you standing none for a decision
+  page (his pick, "Only the page's own Send").
 -->
 <script lang="ts">
   import { pickMade, readProgram } from "@cawco/core/decisions";
   import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { MediaQuery, SvelteSet } from "svelte/reactivity";
+  import { MediaQuery } from "svelte/reactivity";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
@@ -196,27 +194,10 @@
   });
   /** What the page's live region says now. */
   let said = $state("");
-  /** The cards standing open, by id: any one keeps Send quiet. */
-  const opened = new SvelteSet<string>();
-  /** The card the person is working in: its Continue is the coral one. */
-  let working = $state("");
   setContext("decision-page", {
     say: (words: string) => {
       said = words;
     },
-    tally: () => `${count} of ${ids.length} picked`,
-    stand: (card: string, open: boolean) => {
-      if (open) {
-        opened.add(card);
-      } else {
-        opened.delete(card);
-      }
-    },
-    work: (card: string) => {
-      working = card;
-    },
-    working: () => working,
-    scroller: () => scroller ?? null,
   });
 
   /** Under a finger: Send is the large button (DESIGN.md, The 44 Touch Rule). */
@@ -344,7 +325,6 @@
         onclick={() => send("page-send")}
         pending={sending}
         size={coarse.current ? "lg" : "default"}
-        variant={opened.size > 0 ? "outline" : "default"}
         ><PendingContent
           icon={spent ? IconTick : IconSend}
           label={sendLabel}

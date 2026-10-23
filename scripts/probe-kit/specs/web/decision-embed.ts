@@ -547,9 +547,7 @@ function readLayout() {
   const scroller = document.querySelector<HTMLElement>(
     "[data-slot=page-scroll]"
   );
-  const card = document.querySelector<HTMLElement>(
-    "[data-slot=decision]:not([data-decided])"
-  );
+  const card = document.querySelector<HTMLElement>("[data-slot=decision]");
   const cells = [...(card?.querySelectorAll("[data-slot=option-cell]") ?? [])];
   const first = cells[0]?.getBoundingClientRect().top ?? 0;
   const row = cells.filter(
@@ -2643,7 +2641,7 @@ const spec: Spec = {
           );
           if (view === "phone") {
             // The note as a finger opens it: "Add a note" pressed, the field it
-            // opens read, then Done folds it back as it was.
+            // opens read, then left empty it folds back as it was (no Done).
             await page
               .locator("#decision-ledger [data-slot=note] button")
               .first()
@@ -2656,11 +2654,7 @@ const spec: Spec = {
                   ?.getBoundingClientRect().height ?? 0
               )
             );
-            await page
-              .locator("#decision-ledger [data-slot=note] button", {
-                hasText: "Done",
-              })
-              .click();
+            await page.locator("#decision-ledger h2").first().click();
             await settle(page, 600);
             kit.check(
               `${leg}: under a finger "Add a note" reaches ${said.noteAdd}px, the note it opens stands ${field}px tall and Send picks ${said.send.h}px, 44px and up`,

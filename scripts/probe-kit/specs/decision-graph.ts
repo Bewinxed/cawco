@@ -24,8 +24,8 @@
  *     its problems say the broken `after`s with their page and card, and
  *     both orphaned picks.
  * (g) The page drawn on its session's origin: the card whose picked option
- *     went stands open, its head its question alone, never folded to an empty "Decided:";
- *     a pick on an option it offers folds it to "Decided: Per machine".
+ *     went stands open, its head its question alone, nothing marked; a pick on
+ *     an option it offers marks it, the card open.
  * (d) artifact_delete of a project's page takes its page.oui out of the
  *     folder with it, and the graph draws none of its cards.
  * (e) A project's page outlives its writing session: the session deleted,
@@ -88,22 +88,25 @@ ship = Option("ship", "Ship it", "Goes out this week.", true, [], "Less time to 
 hold = Option("hold", "Hold it", "Waits for the next release.", false, [], "The waitlist waits.")`;
 
 /**
- * A card's head as the page draws it: its decided line's name ("Decided:
- * <option>", none while it stands open, when its head is its question
- * alone), how many things stand in it beside the question, and whether it
- * folded.
+ * A card as the page draws it: how many things stand in its head beside
+ * the question (a card's head is its question alone), whether it stands
+ * open (every option showing: a card never folds), and its options marked.
  */
 const cardHead = (page: Page, id: string) =>
   page.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
     const head = root?.querySelector("header");
+    const options = [
+      ...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? []),
+    ];
     return {
-      line:
-        head
-          ?.querySelector("[data-slot=decided]")
-          ?.getAttribute("aria-label") ?? "",
       beside: head ? head.children.length - 1 : -1,
-      decided: !!root?.hasAttribute("data-decided"),
+      open:
+        options.length > 0 &&
+        options.every((one) => one.checkVisibility({ opacityProperty: true })),
+      marked: options
+        .filter((one) => one.hasAttribute("data-cawco-picked"))
+        .map((one) => one.dataset.option ?? ""),
     };
   }, id);
 
@@ -323,8 +326,8 @@ const run = async (kit: Kit) => {
   await tab.waitForSelector("#decision-shape header h2");
   const goneHead = await cardHead(tab, "shape");
   kit.check(
-    '(g) the card whose picked option went stands open, its head its question alone (no "Not picked", no decided line), never folded to an empty "Decided:"',
-    goneHead.line === "" && goneHead.beside === 0 && !goneHead.decided,
+    '(g) the card whose picked option went stands open, its head its question alone (no "Not picked"), nothing marked',
+    goneHead.beside === 0 && goneHead.open && goneHead.marked.length === 0,
     JSON.stringify(goneHead)
   );
   const repicked = await fetch(`${fleet.base}${at(writer)}/${pricing.id}`, {
@@ -344,20 +347,13 @@ const run = async (kit: Kit) => {
   await tab.reload();
   await tab.waitForSelector("#decision-shape header h2");
   const pickedHead = await cardHead(tab, "shape");
-  // A folded card names its pick on its decided line, the chosen options'
-  // group (Decision.svelte `aria-label={`Decided: ${decidedLine}`}`).
-  const decidedLine = await tab.evaluate(
-    () =>
-      document
-        .querySelector(
-          "#decision-shape header :is([data-slot=decided], .dp-picks)"
-        )
-        ?.getAttribute("aria-label") ?? ""
-  );
   kit.check(
-    '(g) a pick on an option the card offers folds it to "Decided: Per machine"',
-    repicked.ok && decidedLine === "Decided: Per machine" && pickedHead.decided,
-    JSON.stringify({ ...pickedHead, decidedLine })
+    "(g) a pick on an option the card offers marks it, the card open, its head its question alone",
+    repicked.ok &&
+      pickedHead.open &&
+      pickedHead.beside === 0 &&
+      JSON.stringify(pickedHead.marked) === '["machine"]',
+    JSON.stringify(pickedHead)
   );
   await tab.close();
 
