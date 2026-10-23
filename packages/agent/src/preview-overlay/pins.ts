@@ -168,7 +168,8 @@ export interface Pins {
   /** The layer fixed to the viewport, where pins on the page as a whole stand. */
   fixed: SVGSVGElement;
   /** The pin the host focused (J, K, its row), outlined and brought into view out from under the host's chrome; or none. */
-  focus: (id: string | null, scroll: boolean) => void;
+  /** Pin `id` focused, and with `scroll` brought into view: in one step with `instant` (a thread opening, whose card stands where the pill lands), else a glide. */
+  focus: (id: string | null, scroll: boolean, instant?: boolean) => void;
   /** The pin whose row in the host's list the pointer or the keyboard rests on, its element chosen; none gives the focused pin's back. */
   hover: (id: string | null) => void;
   /** After a re-publish or an HMR update: the open thread's pin, if it now stands under the host's chrome, brought out again. */
@@ -1122,10 +1123,10 @@ export function startPins(deps: PinsDeps): Pins {
    * (scrollers.ts `bringInto`). A pin already standing there stays where the
    * person is looking.
    */
-  const reveal = (id: string) => {
+  const reveal = (id: string, instant = false) => {
     const where = placed.get(id);
     if (where && !where.page) {
-      bringOut(where, id);
+      bringOut(where, id, instant);
     }
   };
 
@@ -1139,7 +1140,11 @@ export function startPins(deps: PinsDeps): Pins {
    * and lifted into it; the room stays while `owner`'s pill is the one kept
    * clear ({@link staleInset}).
    */
-  const bringOut = (where: Standing & { pill?: Pill }, owner: string) => {
+  const bringOut = (
+    where: Standing & { pill?: Pill },
+    owner: string,
+    instant = false
+  ) => {
     const r = (where.pill?.box.h ?? 20) / 2;
     const x = where.at[0] - scrollX;
     const y = where.at[1] - scrollY;
@@ -1156,7 +1161,7 @@ export function startPins(deps: PinsDeps): Pins {
     // Out from under nothing (nothing round it takes room): at least in the viewport.
     const moves = landed ?? bringInto(chain, y, bandsAt(x, [], r));
     if (moves) {
-      scrollMoves(moves, motionOk() ? "smooth" : "auto");
+      scrollMoves(moves, motionOk() && !instant ? "smooth" : "auto");
     }
   };
 
@@ -1350,13 +1355,13 @@ export function startPins(deps: PinsDeps): Pins {
       });
       open(id);
     },
-    focus: (id, scroll) => {
+    focus: (id, scroll, instant = false) => {
       const before = focused;
       focused = id;
       const stale = staleInset();
       const el: Element | null = id ? (placed.get(id)?.el ?? null) : null;
       if (scroll && id) {
-        reveal(id);
+        reveal(id, instant);
       }
       deps.outline(el, true);
       if (before !== id || stale) {

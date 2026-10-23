@@ -562,7 +562,7 @@ public enum Size {
     public static let cPinGoneRing: Double = 1
     /// The Comments rail beside the page (DESIGN.md, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot.
     public static let cCommentsW: Double = 320
-    /// A comment's composer and its thread, each beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin): one width for both, so a card never changes width as it goes from composer to thread. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph.
+    /// A pin's peek and a chip's peek at most (DESIGN.md, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph.
     public static let cPinCardW: Double = 280
     /// The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule).
     public static let cTargetStroke: Double = 1

@@ -4223,7 +4223,34 @@
         "value": 280,
         "unit": "px"
       },
-      "$description": "A comment's composer and its thread, each beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin): one width for both, so a card never changes width as it goes from composer to thread. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph."
+      "$description": "A pin's peek and a chip's peek at most (DESIGN.md, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph."
+    },
+    "c-pin-card-reading-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 280,
+        "unit": "px"
+      },
+      "$description": "A comment's composer and its thread beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin; the owner's pick \"Beside the comment\", comment-card-sizing): one width for both, so a card never changes width as it goes from composer to thread. Two fifths of the well (the pin room is the size container), held between 280px and 480px: 415px at a 1357px pane with the 320px rail open, about 50 characters a line (Google Docs: 35 to 50; Radix Themes maxWidth 480). Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"],
+          "css": "clamp(280px, 40cqi, 480px)"
+        }
+      }
+    },
+    "c-pin-card-reading-room": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "The room from where a thread beside its pin stands to the well's foot under which it stops hanging from the pill and takes the well's height, its foot on the well's (DESIGN.md, A thread beside its pin). Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
     },
     "c-target-stroke": {
       "$type": "dimension",

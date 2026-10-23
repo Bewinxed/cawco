@@ -11,7 +11,7 @@
  *    a hollow pill with no number, writing nothing (pick 5); Comment writes
  *    pin 1 and its first entry at once, with its selector, source and text,
  *    its pill hollow (until it reaches the session). A press on the pill opens its thread as the
- *    280px card beside it (pick 2); Esc closes it, Esc again leaves the
+ *    card beside it, as wide as its composer (pick 2); Esc closes it, Esc again leaves the
  *    mode; a press on the page closes nothing.
  * 2. A pen stroke's radial Comment opens the composer on the ink; Comment
  *    writes pin 2 on it, with the ink's box; the rail shows two rows; J and
@@ -182,7 +182,8 @@
  * And the commenting redesign's picks (DESIGN.md, Placing a comment, A
  * pin's pill, The Comments rail, A thread beside its pin, How comments
  * reach the session), each a leg:
- * - The 280px card: the composer at the element 280px wide, its field 178px
+ * - The reading card: the composer at the element `c-pin-card-reading-w`
+ *   wide (two fifths of the well, 280 to 480px), its field 178px
  *   or wider, the hint commentWords.composeHint.full uncut, its pill one line.
  * - The attachment pill: one pill for every kind, a file's name and size on
  *   one baseline (0.5px), every ✕ centred on its pill (0.5px).
@@ -246,6 +247,16 @@
  *   whose scroll container scrolls too little, lifted into room under the
  *   container's foot; each sheet closed, the page's and the container's
  *   scroll are their own, the container's children and styles as they were.
+ * And the owner's picks on how a comment opens (comment-card-sizing:
+ * "Beside the comment", "At the reply's first line", a touch tablet's
+ * comment always a drawer), at 390, 820 under a finger, 820 with a mouse
+ * and Comments open, 1440 and 1920, in Chromium and WebKit:
+ * - sizing: with a mouse the thread is a card beside its pill, never on
+ *   it, two fifths of the well between 280 and 480px, inside the well and
+ *   down to its foot; under a finger the well's foot sheet, its pill above
+ *   it; its head and reply still while the long reply scrolls; the reply
+ *   opened at its first line; nothing spilling sideways, the sweep's total
+ *   zero.
  * And the overlay's own Yjs kept out of the page (its doc in a worker of
  * its own, preview-overlay doc-worker.ts):
  * y1. The page artifact, which imports no Yjs, runs none: Yjs's word in its
@@ -258,7 +269,8 @@
  *    it, and goes to the session by itself.
  *
  *   bun scripts/probe-kit/run.ts comments
- *   bun scripts/probe-kit/run.ts comments --leg yjs   # y1 and y2 alone
+ *   bun scripts/probe-kit/run.ts comments --leg yjs      # y1 and y2 alone
+ *   bun scripts/probe-kit/run.ts comments --leg sizing   # the sizing leg alone
  */
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync } from "node:fs";
@@ -285,6 +297,7 @@ import {
   pressAt as pressFramePoint,
   type Spec,
   settle,
+  VIEWS,
 } from "../kit";
 import {
   docOf,
@@ -503,6 +516,23 @@ const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const RAIL = '[data-slot="comment-rail"]';
 /** The composer a press on the page opens beside its hollow pill (DESIGN.md, Placing a comment). */
 const COMPOSE = '[data-slot="pin-composer"]';
+/**
+ * The width a composer or a thread beside its pill takes in `screen`'s
+ * pane, px: `--c-pin-card-reading-w`, two fifths of the pin room held
+ * between 280px and 480px, never past the room less `--space-2` each side
+ * (PinFloat; the owner's pick "Beside the comment"). In the page.
+ */
+const readingWidth = (screen: Page) =>
+  screen.evaluate(() => {
+    const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
+    const gap =
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--space-2")
+      ) || 7;
+    const w = room?.clientWidth ?? 0;
+    return Math.min(Math.max(280, Math.min(0.4 * w, 480)), w - 2 * gap);
+  });
+
 /** The head's Comments, the rail's toggle. */
 const COMMENTS_TOGGLE =
   ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]';
@@ -676,7 +706,7 @@ const near = (
 
 /** What Yjs logs when a second copy of it loads into a realm (yjs src/index.js). */
 const YJS_TWICE = /Yjs was already imported/;
-/** `--leg yjs`: y1 and y2 alone. */
+/** `--leg yjs`: y1 and y2 alone; `--leg sizing`: the sizing, switch and edges legs; `--leg switch`: the switch and edges legs. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
   : undefined;
@@ -876,6 +906,18 @@ const runOn = async (kit: Kit, on: On) => {
     await ownYjsChecks(on);
     return;
   }
+  if (ONLY_LEG === "sizing") {
+    await sizingChecks(on);
+    return;
+  }
+  if (ONLY_LEG === "switch") {
+    const sized = await sizingPin(on);
+    if (sized) {
+      await switchChecks(on, sized);
+    }
+    await edgeChecks(on);
+    return;
+  }
 
   const one = await commentChecks(on, frame);
   const two = await inkCommentChecks(on, frame);
@@ -928,6 +970,8 @@ const runOn = async (kit: Kit, on: On) => {
     () => longNameChecks(on),
     // On a phone, the foot sheet never covers what the comment is about.
     () => footSheetChecks(on),
+    // The owner's picks on how a comment opens, at every window.
+    () => sizingChecks(on),
     // Nothing of the person's is lost: a refused write, a hub restart before its delivery.
     () => refusedChecks(on),
     () => restartChecks(on),
@@ -1037,6 +1081,7 @@ const commentChecks = async (on: On, frame: Frame) => {
     }))
     .catch(() => null);
   const written = Object.keys((await docOf(frame)).pins).length;
+  const wanted = await readingWidth(on.page);
   const parts = await composer
     .evaluate((el) => ({
       width: Math.round(el.getBoundingClientRect().width),
@@ -1051,18 +1096,18 @@ const commentChecks = async (on: On, frame: Frame) => {
     }))
     .catch(() => null);
   on.kit.check(
-    "pick 5, the composer at the element: a press opens the chat composer beside a hollow pill with no number, its field focused, the target chip naming the paragraph, the field saying commentWords.composeHint.full, the send glyph labelled Comment and off while empty; the doc holds no pin",
+    "pick 5, the composer at the element: a press opens the chat composer, c-pin-card-reading-w wide, beside a hollow pill with no number, its field focused, the target chip naming the paragraph, the field saying commentWords.composeHint.full, the send glyph labelled Comment and off while empty; the doc holds no pin",
     opened.shown &&
       opened.focused &&
       provisional?.state === "provisional" &&
       provisional.figure === null &&
       written === 0 &&
-      parts?.width === 280 &&
-      parts.chip === "Hero · A paragraph to comment on, long enough to tap." &&
+      Math.abs((parts?.width ?? 0) - wanted) <= 1 &&
+      parts?.chip === "Hero · A paragraph to comment on, long enough to tap." &&
       parts.hint === commentWords.composeHint.full &&
       parts.send === "Comment" &&
       parts.sendOff === true,
-    `opened ${JSON.stringify(opened)}; pill ${JSON.stringify(provisional)}; pins in the doc ${written}; composer ${JSON.stringify(parts)}`
+    `opened ${JSON.stringify(opened)}; pill ${JSON.stringify(provisional)}; pins in the doc ${written}; composer ${JSON.stringify(parts)}, wanted ${wanted}px wide`
   );
   await composer.getByRole("combobox").fill("Bolder, perhaps.");
   const sendOn = await composer
@@ -1120,8 +1165,10 @@ const commentChecks = async (on: On, frame: Frame) => {
     .boundingBox({ timeout: 2000 })
     .catch(() => null);
   const side = await card.getAttribute("data-side").catch(() => null);
-  // `--space-2` (7px) from the pill: its end side, else its start side, else below it.
-  const GAP = 7;
+  // `--space-2` (7px) from the pill as drawn, past its 2px focus ring 2px
+  // out (PinFloat `clear`): its end side, else its start side, else below
+  // or over it.
+  const GAP = 7 + 4;
   const beside =
     !!cardBox &&
     !!mark &&
@@ -1130,11 +1177,14 @@ const commentChecks = async (on: On, frame: Frame) => {
       (side === "start" &&
         Math.abs(cardBox.x + cardBox.width - (mark.x - GAP)) <= 3) ||
       (side === "below" &&
-        Math.abs(cardBox.y - (mark.y + mark.height + GAP)) <= 3));
+        Math.abs(cardBox.y - (mark.y + mark.height + GAP)) <= 3) ||
+      (side === "above" &&
+        Math.abs(cardBox.y + cardBox.height - (mark.y - GAP)) <= 3));
+  const cardWanted = await readingWidth(on.page);
   on.kit.check(
-    "pick 2, where a thread opens: a press on pin 1's pill opens its thread as a 280px card beside the pill, --space-2 from it",
-    !!cardBox && Math.round(cardBox.width) === 280 && beside,
-    `card ${JSON.stringify(cardBox)} on side ${side}; pill ${JSON.stringify(mark)}`
+    "pick 2, where a thread opens: a press on pin 1's pill opens its thread as a card as wide as its composer (c-pin-card-reading-w) beside the pill, --space-2 from it",
+    !!cardBox && Math.abs(cardBox.width - cardWanted) <= 1 && beside,
+    `card ${JSON.stringify(cardBox)} on side ${side}, wanted ${cardWanted}px wide; pill ${JSON.stringify(mark)}`
   );
   const head = await headOf(card);
   on.kit.check(
@@ -1622,11 +1672,32 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   // it, and rowsOf brings it back with the card's Close.
   const rows = await rowsOf(on);
   let live = false;
-  // Polls the list while the agent's turn runs.
+  /** What the card said of who has the comment while the turn ran: its status line, and any speaker line under the entries. */
+  const status: { line: string; speaker: boolean; working: boolean } = {
+    line: "",
+    working: false,
+    speaker: false,
+  };
+  // Polls the list and the card while the agent's turn runs.
   const watch = setInterval(async () => {
     if ((await rows.locator('[data-dot="live"]').count()) > 0) {
       live = true;
     }
+    const said = await card
+      .evaluate((el) => ({
+        line:
+          el.querySelector('[data-slot="sent-to"]')?.textContent?.trim() ?? "",
+        working: !!el.querySelector(
+          '[data-slot="sent-to"] [data-slot="working"]'
+        ),
+        speaker: !!el.querySelector('[data-pin-room] > [data-slot="turn"]'),
+      }))
+      .catch(() => null);
+    if (said?.working) {
+      status.line = said.line;
+      status.working = true;
+    }
+    status.speaker ||= !!said?.speaker;
   }, 100);
   slow.add(String(Number(lastMarker) + 1));
   await on.call(REPLY, {
@@ -1663,6 +1734,22 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     "4: comment_reply on pin 1 is in its thread within 2 s, the pill's live dot showing on its row while the agent's turn runs",
     shown - done <= 2000 && live,
     `in the card ${shown - done} ms after the tool answered; live dot seen ${live}`
+  );
+  const settled = await card
+    .evaluate(
+      (el) =>
+        el.querySelector('[data-slot="sent-to"]')?.textContent?.trim() ?? ""
+    )
+    .catch(() => "");
+  on.kit.check(
+    `4: who has the comment reads as its status, never a reply: the card's one status line said "${status.line}" while the session worked, then "${settled}", and no speaker line stood under the entries`,
+    status.working &&
+      status.line.startsWith(commentWords.sentTo) &&
+      status.line.endsWith(commentWords.workingOnIt) &&
+      settled.startsWith(commentWords.sentTo) &&
+      !settled.includes(commentWords.workingOnIt) &&
+      !status.speaker,
+    JSON.stringify({ status, settled })
   );
 
   // The thread in the transcript's two voices (MessageRow): the person's two
@@ -3915,6 +4002,18 @@ const roomChecks = async (on: On) => {
             scroll: room.scrollHeight,
             height: room.clientHeight,
             atEnd: room.scrollTop + room.clientHeight >= room.scrollHeight - 1,
+            // The newest entry's first line from the room's top, px.
+            newest: (() => {
+              const last = room.querySelector(
+                '[data-slot="thread"] > li:last-child'
+              );
+              return last
+                ? Math.round(
+                    last.getBoundingClientRect().top -
+                      room.getBoundingClientRect().top
+                  )
+                : null;
+            })(),
           }
         : null,
       entries: el.querySelectorAll('[data-slot="entry"]').length,
@@ -3944,11 +4043,13 @@ const roomChecks = async (on: On) => {
     part.x + part.w <= seen.card.x + seen.card.w + 1 &&
     part.y + part.h <= seen.card.y + seen.card.h + 1;
   on.kit.check(
-    "f: with a thread longer than the card's cap, only the thread scrolls (its room overflows, the card does not), opened at its newest entry, and Resolve, the Reply glyph and the reply's field stand inside the card's box",
+    "f: with a thread longer than the card's cap, only the thread scrolls (its room overflows, the card does not), opened at its newest entry's first line (at the room's top, or the room at its end where that entry is shorter than the room), and Resolve, the Reply glyph and the reply's field stand inside the card's box",
     seen.entries > replies &&
       !!seen.room &&
       seen.room.scroll > seen.room.height &&
-      seen.room.atEnd &&
+      seen.room.newest !== null &&
+      (Math.abs(seen.room.newest) <= 1 ||
+        (seen.room.atEnd && seen.room.newest > 0)) &&
       !seen.cardScrolls &&
       inside(seen.resolve) &&
       inside(seen.reply) &&
@@ -4016,9 +4117,22 @@ const titleFits = (card: Locator) =>
     if (!(name && text)) {
       return null;
     }
+    // A title of two lines at most is clamped in its inner span: what shows
+    // is that span's box, its lines past the second cut there by design.
+    const clamp = name.querySelector<HTMLElement>(":scope > .line-clamp-2");
     const range = document.createRange();
     range.selectNodeContents(name);
-    const glyphs = range.getBoundingClientRect();
+    const whole = range.getBoundingClientRect();
+    const shown = clamp?.getBoundingClientRect();
+    const glyphs = shown
+      ? {
+          top: Math.max(whole.top, shown.top),
+          bottom: Math.min(whole.bottom, shown.bottom),
+          height:
+            Math.min(whole.bottom, shown.bottom) -
+            Math.max(whole.top, shown.top),
+        }
+      : whole;
     const clip = name.getBoundingClientRect();
     const probe = document.createElement("span");
     probe.className = "type-label";
@@ -4036,6 +4150,12 @@ const titleFits = (card: Locator) =>
       lineHeight: Number.parseFloat(style.lineHeight),
       role,
       overflow: style.overflowY,
+      // The clamp cuts between lines, never through one: its height whole lines.
+      lines: shown
+        ? Math.round(
+            (shown.height / Number.parseFloat(style.lineHeight)) * 100
+          ) / 100
+        : 1,
     };
   });
 type TitleRead = Awaited<ReturnType<typeof titleFits>>;
@@ -4045,7 +4165,9 @@ const titleWhole = (read: TitleRead) =>
   read.glyphs <= read.clip + 0.5 &&
   read.top >= -0.5 &&
   read.bottom >= -0.5 &&
-  read.lineHeight >= read.role - 0.01;
+  read.lineHeight >= read.role - 0.01 &&
+  Math.abs(read.lines - Math.round(read.lines)) <= 0.05 &&
+  read.lines <= 2;
 
 /**
  * Entry `index` of a thread as its words wrap: its words' \`text-wrap\`, its
@@ -4135,6 +4257,957 @@ const headOf = (card: Locator) =>
       shown: "",
       pictures: -1,
     }));
+
+/** The sizing leg's long reply: a person's question answered at length, taller than any card's room. */
+const SIZING_ANSWER = `Good catch. The 30 second ceiling came from the hub's restart time, not from what you see on a bad network. Here's what happens today, and what I'd change.
+
+**Today**
+
+- The daemon retries with \`backoff(1s, ×2, max 30s)\`, so after five misses it waits 30 seconds between tries, forever.
+- The dashboard keeps showing the machine as **Connected** until \`lastSeen\` is older than \`STALE_AFTER\` (90 seconds), so a dead link can look healthy for a minute and a half.
+- Nothing tells you it is retrying; the only trace is \`reconnect attempt 7\` in \`~/.cawco/daemon.log\`.
+
+**What I'd change**
+
+- Cap the wait at 10 seconds and stop after six tries (about 40 seconds in all), then mark the machine **Unreachable** with the reason the last try gave, for example \`ECONNREFUSED 100.88.4.2:7421\`.
+- Show "Reconnecting, try 3 of 6" on the machine's row while it retries, so the state is visible instead of implied.
+- Keep a slow probe every 60 seconds after giving up, so it comes back on its own when the tailnet does, without you pressing anything.
+- Move the numbers into \`reconnect.ts\` as named constants (\`RETRY_CAP\`, \`RETRY_TRIES\`, \`PROBE_EVERY\`) so the doc and the code can't drift.
+
+**What it costs**
+
+- A hub restart that takes longer than 40 seconds shows **Unreachable** briefly before the probe finds it again.
+- Two more strings in \`words/machines.ts\`, and the row's status line needs a third state.
+
+Want me to make the change in \`packages/agent/src/reconnect.ts\` and update this paragraph to match?`;
+
+/** The sizing leg's page: a document of headed paragraphs, the commented one near its top. */
+const SIZING_PAGE = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 17px/1.6 system-ui; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 24px 1200px; }
+  h1 { font-size: 28px; margin: 0 0 12px; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  p { margin: 0 0 12px; }
+</style></head>
+<body><main>
+  <h1>Reconnecting to the hub</h1>
+  <p id="lead">What a machine does when its link to the hub drops, and what the dashboard says while it does.</p>
+  <h2>Retry policy</h2>
+  <p id="retry">After a failed reconnect the daemon waits a second, then doubles the wait each time, up to 30 seconds between tries.</p>
+  <p>Each try is written to the daemon's log. The machine's row shows it as connected until it has been silent for 90 seconds.</p>
+  <h2>When it gives up</h2>
+  <p>It never does today. A machine that can't reach the hub keeps trying at the longest wait until it is stopped.</p>
+  <h2>What the dashboard says</h2>
+  <p>The machine's row keeps its last status until the hub hears from it again.</p>
+</main></body></html>`;
+
+/** The windows the sizing leg reads, each with how its thread is opened and where it should stand. */
+const SIZING_VIEWS = [
+  { name: "phone 390", view: "phone", width: 390, list: true, sheet: true },
+  {
+    name: "touch tablet 820",
+    view: "tablet820",
+    width: 820,
+    list: true,
+    sheet: true,
+  },
+  {
+    name: "narrow mouse window 820, Comments open",
+    view: "narrow820",
+    width: 820,
+    list: true,
+    sheet: false,
+  },
+  {
+    name: "desk 1440, Comments open",
+    view: "desk",
+    width: 1440,
+    list: true,
+    sheet: false,
+  },
+  {
+    name: "desk 1920, Comments shut",
+    view: "desk",
+    width: 1920,
+    list: false,
+    sheet: false,
+  },
+] as const;
+
+/** A box, px. */
+interface SizingBox {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+}
+
+/**
+ * The open thread in `screen` as a person sees it, read from the engine:
+ * its box, the well's (the pin room), its head's and its reply's boxes
+ * before and after its replies are scrolled to their middle, the newest
+ * entry's first line from the room's top as it opened, and whether it is
+ * the foot sheet. In the page.
+ */
+const sizingRead = (screen: Page, number: number) =>
+  screen.evaluate(async (n) => {
+    const boxOf = (el: Element | null | undefined) => {
+      const r = el?.getBoundingClientRect();
+      return r
+        ? { top: r.top, bottom: r.bottom, left: r.left, right: r.right }
+        : null;
+    };
+    const card = document.querySelector<HTMLElement>(
+      `[data-slot="pin-card"][data-pin-card="${n}"]`
+    );
+    const room = card?.querySelector<HTMLElement>("[data-pin-room]");
+    const head = card?.querySelector('[data-slot="head"]');
+    const foot = card?.querySelector('[data-slot="foot"]');
+    const newest = room?.querySelector('[data-slot="thread"] > li:last-child');
+    const opensAt =
+      room && newest
+        ? newest.getBoundingClientRect().top - room.getBoundingClientRect().top
+        : null;
+    const before = { head: boxOf(head), foot: boxOf(foot) };
+    let after = before;
+    if (room) {
+      const kept = room.scrollTop;
+      room.scrollTop = (room.scrollHeight - room.clientHeight) / 2;
+      await new Promise<void>((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => done()))
+      );
+      after = { head: boxOf(head), foot: boxOf(foot) };
+      room.scrollTop = kept;
+    }
+    return {
+      card: boxOf(card),
+      well: boxOf(document.querySelector('[data-slot="pin-room"]')),
+      sheet: card?.dataset.sheet !== undefined,
+      side: card?.dataset.side ?? null,
+      maxHeight: card ? getComputedStyle(card).maxHeight : "",
+      cardScrolls: card ? card.scrollHeight > card.clientHeight + 1 : false,
+      room: room
+        ? {
+            client: room.clientHeight,
+            scroll: room.scrollHeight,
+            top: room.scrollTop,
+          }
+        : null,
+      opensAt,
+      before,
+      after,
+    };
+  }, number);
+
+/**
+ * Everything on the page that spills sideways as the person would see it:
+ * the page scrolling sideways, a scroller (`overflow-x` auto or scroll)
+ * holding more than its width, a box painted past the window's edges. One
+ * no one sees (folded shut, or outside a box that clips it) is no spill,
+ * nor words a box cuts by design (a truncated line ending in its ellipsis,
+ * a screen reader's words): neither scrolls. In the page.
+ */
+const sideSpills = (): string[] => {
+  const spills: string[] = [];
+  const name = (el: Element) =>
+    `${el.localName}${el.getAttribute("data-slot") ? `[${el.getAttribute("data-slot")}]` : ""}.${(el.getAttribute("class") ?? "").split(" ").slice(0, 3).join(".")}`;
+  const clipped = (el: Element, box: DOMRect) => {
+    for (let up = el.parentElement; up; up = up.parentElement) {
+      const outer = up.getBoundingClientRect();
+      const misses = box.right <= outer.left || box.left >= outer.right;
+      if (misses && getComputedStyle(up).overflowX !== "visible") {
+        return true;
+      }
+    }
+    return false;
+  };
+  const root = document.documentElement;
+  const wide = root.clientWidth;
+  if (root.scrollWidth > wide + 1) {
+    spills.push(`the page: ${root.scrollWidth} in ${wide}`);
+  }
+  for (const el of document.body.querySelectorAll<HTMLElement>("*")) {
+    const box = el.getBoundingClientRect();
+    if (
+      !(
+        box.width > 0 &&
+        el.checkVisibility({ opacityProperty: true, visibilityProperty: true })
+      ) ||
+      clipped(el, box)
+    ) {
+      continue;
+    }
+    const scrolls = ["auto", "scroll"].includes(getComputedStyle(el).overflowX);
+    if (scrolls && el.scrollWidth > el.clientWidth + 1) {
+      spills.push(`${name(el)}: holds ${el.scrollWidth} in ${el.clientWidth}`);
+    }
+    if (box.right > wide + 1 || box.left < -1) {
+      spills.push(
+        `${name(el)}: ${Math.round(box.left)} to ${Math.round(box.right)} in a ${wide}px window`
+      );
+    }
+  }
+  return spills;
+};
+
+/** Two boxes share no area. */
+const apart = (one: SizingBox, two: SizingBox): boolean =>
+  one.right <= two.left + 0.5 ||
+  one.left >= two.right - 0.5 ||
+  one.bottom <= two.top + 0.5 ||
+  one.top >= two.bottom - 0.5;
+/** `inner` stands inside `outer`, to half a pixel. */
+const boxInside = (inner: SizingBox | null, outer: SizingBox | null): boolean =>
+  !!inner &&
+  !!outer &&
+  inner.top >= outer.top - 0.5 &&
+  inner.bottom <= outer.bottom + 0.5 &&
+  inner.left >= outer.left - 0.5 &&
+  inner.right <= outer.right + 0.5;
+/** How far a part moved, px; -1 when it wasn't read. */
+const movedBy = (one: SizingBox | null, two: SizingBox | null) =>
+  one && two ? Math.abs(two.top - one.top) : -1;
+
+/**
+ * The owner's picks on comment-card-sizing ("Beside the comment"; "At the
+ * reply's first line"; a touch tablet's comment always a drawer at the
+ * bottom), on a page whose comment the agent answered at length, from the
+ * artifact's own tab, on Chromium and WebKit, at 390 (a phone), 820 under
+ * a finger (a touch tablet), 820 with a mouse and Comments open, 1440 with
+ * Comments open and 1920 with them shut. For each, its thread opened:
+ * - with a mouse, a card beside its pill, never on it, two fifths of the
+ *   well held between 280px and 480px, inside the well, running down to
+ *   the well's foot (its foot `--space-2` from it) where it stands beside
+ *   the pill;
+ * - under a finger, the well's foot sheet, the well's whole width, its
+ *   pill wholly above it;
+ * - its head and its reply inside it and still to the pixel while the
+ *   replies scroll to their middle, the card itself not scrolling;
+ * - the long reply opened at its first line, at the top of the room its
+ *   replies scroll in;
+ * - and nothing on the page spilling sideways, the sweep's total zero.
+ */
+const sizingChecks = async (on: On) => {
+  const made = await sizingPin(on);
+  if (!made) {
+    return;
+  }
+  const { origin } = new URL(on.page.url());
+  let spillsAll = 0;
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const want of SIZING_VIEWS) {
+      const tag = `sizing (${engine}, ${want.name})`;
+      // biome-ignore lint/performance/noAwaitInLoops: one window after another
+      const screen = await on.kit.page(want.view, { engine });
+      if (want.width !== VIEWS[want.view].width) {
+        await screen.setViewportSize({ width: want.width, height: 1080 });
+      }
+      try {
+        const seen = await sizingOpen(
+          screen,
+          `${origin}/artifact/${made.id}`,
+          made,
+          want.list,
+          tag
+        );
+        if (seen) {
+          spillsAll += await sizingHold(on, screen, tag, want.sheet, seen);
+        } else {
+          on.kit.check(`${tag}: the page and its thread`, false, "not shown");
+        }
+      } finally {
+        await screen.close();
+      }
+    }
+  }
+  on.kit.check(
+    `sizing: the overflow sweep totals ${spillsAll} across every window and engine`,
+    spillsAll === 0
+  );
+  await switchChecks(on, made);
+  await edgeChecks(on);
+};
+
+/** The sizing leg's page made, commented on, and its comment answered at length: its id and the pin's. */
+const sizingPin = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "sizing",
+    html: SIZING_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1];
+  if (!id) {
+    on.kit.check("sizing: the page is made", false, made.slice(0, 300));
+    return null;
+  }
+  const frame = (await until(
+    "the sizing page in the pane",
+    async () => {
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("#retry")
+        .count()
+        .catch(() => 0)) === 1
+        ? shown
+        : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
+  await pageInComment(frame, true);
+  const para = await screenBox(on, frame, "#retry");
+  await commentAt(
+    on,
+    frame,
+    para.x + para.w * 0.6,
+    para.y + para.h / 2,
+    "Why does it back off all the way to 30 seconds? On a flaky tailnet I'd rather it gave up sooner and told me."
+  );
+  const pinned = async (count: number) =>
+    (await until(
+      `${count} sizing pin(s) in the doc`,
+      async () =>
+        Object.values((await docOf(frame)).pins) as {
+          id: string;
+          number: number;
+        }[],
+      (pins) => pins.length >= count,
+      10_000
+    ).catch(() => [])) as { id: string; number: number }[];
+  const [pin] = await pinned(1);
+  // A second comment above it, for the switch from one thread to another.
+  const lead = await screenBox(on, frame, "#lead");
+  await commentAt(
+    on,
+    frame,
+    lead.x + lead.w * 0.3,
+    lead.y + lead.h / 2,
+    "Say what the person sees, not what the daemon does."
+  );
+  const second = (await pinned(2)).find((one) => one.id !== pin?.id);
+  await interactTab(on).click();
+  if (!(pin && second)) {
+    on.kit.check("sizing: the pins are written", false, "none");
+    return null;
+  }
+  await on.fleet.api(
+    `/api/instances/${on.session}/artifacts/comments/${pin.id}/reply`,
+    { text: SIZING_ANSWER }
+  );
+  return { id, number: pin.number, second: second.number };
+};
+
+/**
+ * Pin `n`'s pill on the page as drawn, its rings included and the finger's
+ * transparent hit area left out, on screen.
+ */
+const pillDrawn = async (
+  frame: Frame,
+  n: number
+): Promise<SizingBox | null> => {
+  const inner = await frame
+    .evaluate((pin) => {
+      const g = document.querySelector(
+        `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin="${pin}"]`
+      );
+      const parts = [...(g?.querySelectorAll("*") ?? [])].filter(
+        (part) =>
+          !(
+            part.localName === "rect" &&
+            part.getAttribute("fill") === "transparent"
+          )
+      );
+      const boxes = parts
+        .map((part) => part.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0);
+      return boxes.length
+        ? {
+            top: Math.min(...boxes.map((r) => r.top)),
+            bottom: Math.max(...boxes.map((r) => r.bottom)),
+            left: Math.min(...boxes.map((r) => r.left)),
+            right: Math.max(...boxes.map((r) => r.right)),
+          }
+        : null;
+    }, n)
+    .catch(() => null);
+  const outer = await (await frame.frameElement()).boundingBox();
+  return inner && outer
+    ? {
+        top: inner.top + outer.y,
+        bottom: inner.bottom + outer.y,
+        left: inner.left + outer.x,
+        right: inner.right + outer.x,
+      }
+    : null;
+};
+
+/** Until pin `n`'s card has stood still for five drawn frames. */
+const cardStill = (screen: Page, n: number) =>
+  screen
+    .waitForFunction(
+      (pin) => {
+        const r = document
+          .querySelector(`[data-slot="pin-card"][data-pin-card="${pin}"]`)
+          ?.getBoundingClientRect();
+        const now = r ? `${r.left},${r.top},${r.width},${r.height}` : "";
+        const held = window as unknown as {
+          stillAt?: string;
+          stillN?: number;
+        };
+        held.stillN = held.stillAt === now ? (held.stillN ?? 0) + 1 : 0;
+        held.stillAt = now;
+        return now !== "" && held.stillN >= 5;
+      },
+      n,
+      { polling: "raf", timeout: 10_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+
+/** Pin `n`'s thread opened from its row in Comments, the list opened first where it is shut. */
+const openFromRow = async (screen: Page, n: number) => {
+  const toggle = screen.locator(COMMENTS_TOGGLE);
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+    await settle(screen, 400);
+  }
+  await screen
+    .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="${n}"]`)
+    .click();
+  await screen
+    .locator(`[data-slot="pin-card"][data-pin-card="${n}"]`)
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  return cardStill(screen, n);
+};
+
+/**
+ * Every drawn frame's cards, from now until `ms` later, recorded in the
+ * page: each card's pin, its box on screen (`getBoundingClientRect`) and its
+ * own laid-out box in the room (its offsets, which no transform moves).
+ */
+const recordCards = (screen: Page, ms: number) =>
+  screen.evaluate((upTo) => {
+    const frames: {
+      cards: {
+        n: string;
+        rect: { b: number; l: number; r: number; t: number };
+        laid: string;
+      }[];
+      t: number;
+    }[] = [];
+    (window as unknown as { cardFrames: typeof frames }).cardFrames = frames;
+    const start = performance.now();
+    const read = () => {
+      const t = performance.now() - start;
+      frames.push({
+        t,
+        cards: [
+          ...document.querySelectorAll<HTMLElement>('[data-slot="pin-card"]'),
+        ]
+          // What the person sees: a card on the screen.
+          .filter((card) => card.checkVisibility())
+          .map((card) => {
+            const r = card.getBoundingClientRect();
+            return {
+              n: card.dataset.pinCard ?? "",
+              rect: { l: r.left, t: r.top, r: r.right, b: r.bottom },
+              laid: `${card.offsetLeft},${card.offsetTop},${card.offsetWidth}`,
+            };
+          }),
+      });
+      if (t < upTo) {
+        requestAnimationFrame(read);
+      }
+    };
+    requestAnimationFrame(read);
+  }, ms);
+
+type CardFrames = {
+  cards: {
+    laid: string;
+    n: string;
+    rect: { b: number; l: number; r: number; t: number };
+  }[];
+  t: number;
+}[];
+
+/** What the recorded frames say of a switch from pin `a`'s card to pin `b`'s. */
+const switchRead = (frames: CardFrames, a: number, b: number) => {
+  const of = (frame: CardFrames[number], n: number) =>
+    frame.cards.find((card) => card.n === String(n));
+  const withB = frames.filter((frame) => of(frame, b));
+  const last = withB.at(-1);
+  const final = last ? of(last, b) : undefined;
+  const firstAt = withB[0]?.t ?? -1;
+  const firstIndex = withB[0] ? frames.indexOf(withB[0]) : -1;
+  const strays = withB.filter((frame) => {
+    const card = of(frame, b);
+    return (
+      !(card && final) ||
+      card.laid !== final.laid ||
+      card.rect.l < final.rect.l - 0.5 ||
+      card.rect.t < final.rect.t - 0.5 ||
+      card.rect.r > final.rect.r + 0.5 ||
+      card.rect.b > final.rect.b + 0.5
+    );
+  });
+  const both = frames.filter((frame) => of(frame, a) && of(frame, b)).length;
+  const aAfter =
+    firstIndex < 0
+      ? 0
+      : frames.slice(firstIndex).filter((f) => of(f, a)).length;
+  return {
+    frames: frames.length,
+    withB: withB.length,
+    firstAt: Math.round(firstAt),
+    strays: strays.length,
+    both,
+    aAfter,
+    final: final?.laid ?? null,
+    first: withB[0] ? (of(withB[0], b)?.laid ?? null) : null,
+  };
+};
+
+/**
+ * The owner's report (2026-10-23: "clicking between comments flashes the
+ * comment popover from where it was in the previously opened comment to
+ * where it was in the new one and it jumps between them before it
+ * settles"), on the sizing page in Chromium and WebKit, at the desk and on
+ * a phone: pin A's thread open, a press on pin B's pill, and every drawn
+ * frame from the press until 900ms after read. B's card is laid out where
+ * it stays from its first frame (its offsets never change, its box only
+ * ever inside its last, the entrance's scale), and no frame draws it and
+ * A's at once nor A's after it. Only cards on the screen count
+ * (`checkVisibility`).
+ */
+const switchChecks = async (
+  on: On,
+  made: { id: string; number: number; second: number }
+) => {
+  const { origin } = new URL(on.page.url());
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["desk", "phone"] as const) {
+      const tag = `switch (${engine}, ${view})`;
+      // biome-ignore lint/performance/noAwaitInLoops: one window after another
+      const screen = await on.kit.page(view, { engine });
+      try {
+        await open(screen, `${origin}/artifact/${made.id}`, PANE);
+        const frame = await frameHolding(screen, made.id, `${tag}: the page`);
+        if (!frame) {
+          on.kit.check(`${tag}: the page`, false, "not shown");
+          continue;
+        }
+        await frame.waitForSelector("#retry");
+        await settle(screen, 600);
+        await openFromRow(screen, made.number);
+        if (view === "phone") {
+          // A's pill lifted clear of its drawer leaves B's above it at the
+          // well's top edge: the page brought down a little, as a person
+          // scrolls to the pill they mean to tap.
+          await frame.evaluate(() => scrollBy(0, -96));
+          await settle(screen, 400);
+        }
+        // The pane at rest first: a bar over the page still folding away
+        // (the changes bar, as the page loaded) moves the whole well.
+        await screen
+          .waitForFunction(
+            () => {
+              const top = document
+                .querySelector('[data-slot="pin-room"]')
+                ?.getBoundingClientRect().top;
+              const held = window as unknown as {
+                roomAt?: number;
+                roomN?: number;
+              };
+              held.roomN = held.roomAt === top ? (held.roomN ?? 0) + 1 : 0;
+              held.roomAt = top;
+              return top !== undefined && held.roomN >= 10;
+            },
+            undefined,
+            { polling: "raf", timeout: 10_000 }
+          )
+          .catch(() => undefined);
+        const pill = await frame
+          .locator(
+            `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin="${made.second}"] [data-face]`
+          )
+          .first()
+          .boundingBox()
+          .catch(() => null);
+        if (!pill) {
+          on.kit.check(`${tag}: pin B's pill on screen`, false, "none");
+          continue;
+        }
+        await recordCards(screen, 900);
+        await pressFramePoint(
+          frame,
+          { x: pill.x + pill.width / 2, y: pill.y + pill.height / 2 },
+          { how: view === "phone" ? "tap" : "click" }
+        );
+        await screen.waitForTimeout(1100);
+        const frames = (await screen.evaluate(
+          () => (window as unknown as { cardFrames: CardFrames }).cardFrames
+        )) as CardFrames;
+        const read = switchRead(frames, made.number, made.second);
+        on.kit.check(
+          `${tag}: pin B's card stands where it stays from its first frame (${read.withB} of ${read.frames} frames hold it, from ${read.firstAt}ms; ${read.strays} off its last place), never beside pin A's card (${read.both}) nor followed by it (${read.aAfter})`,
+          read.withB > 0 &&
+            read.strays === 0 &&
+            read.both === 0 &&
+            read.aAfter === 0,
+          JSON.stringify({
+            ...read,
+            seen: frames
+              .map((f) => f.cards.map((c) => `${c.n}:${c.laid}`).join("|"))
+              .filter((one, at, all) => one !== all[at - 1]),
+          })
+        );
+      } finally {
+        await screen.close();
+      }
+    }
+  }
+};
+
+/** The edges leg's page: four marked boxes, one in each corner of the window. */
+const EDGES_PAGE = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  main { position: relative; height: 100vh; }
+  .corner { position: absolute; width: 96px; padding: 8px; background: #ece7df; }
+  #tl { top: 12px; left: 12px; } #tr { top: 12px; right: 12px; }
+  #bl { bottom: 12px; left: 12px; } #br { bottom: 12px; right: 12px; }
+</style></head>
+<body><main>
+  <p class="corner" id="tl">Top left</p>
+  <p class="corner" id="tr">Top right</p>
+  <p class="corner" id="bl">Bottom left</p>
+  <p class="corner" id="br">Bottom right</p>
+</main></body></html>`;
+const CORNERS = ["tl", "tr", "bl", "br"] as const;
+
+/**
+ * The owner's report (2026-10-23: "the comment icon is overtaking the panel
+ * with no regards to layout or padding"): a comment in each corner of a
+ * page, each thread opened from its row at 390, 680 and 1440, in Chromium
+ * and WebKit. The pin's pill (its whole drawing, its rings included) and
+ * the card never share a pixel; beside the pill, the card's head doesn't
+ * draw the pill again.
+ */
+const edgeChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "edges",
+    html: EDGES_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1];
+  if (!id) {
+    on.kit.check("edges: the page is made", false, made.slice(0, 300));
+    return;
+  }
+  const frame = (await until(
+    "the edges page in the pane",
+    async () => {
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("#br")
+        .count()
+        .catch(() => 0)) === 1
+        ? shown
+        : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
+  await pageInComment(frame, true);
+  for (const corner of CORNERS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one comment after another
+    await frame.evaluate(
+      (sel) =>
+        document.querySelector(sel)?.scrollIntoView({ block: "nearest" }),
+      `#${corner}`
+    );
+    const box = await screenBox(on, frame, `#${corner}`);
+    await commentAt(
+      on,
+      frame,
+      box.x + box.w / 2,
+      box.y + box.h / 2,
+      `The ${corner} corner.`
+    );
+  }
+  const numbers = await until(
+    "the four corner pins",
+    async () =>
+      Object.values((await docOf(frame)).pins).map((pin) => Number(pin.number)),
+    (all) => all.length === CORNERS.length,
+    10_000
+  ).catch(() => [] as number[]);
+  await interactTab(on).click();
+  const { origin } = new URL(on.page.url());
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const view of ["phone", "narrowDesk", "desk"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one window after another
+      const screen = await on.kit.page(view, { engine });
+      try {
+        await edgesOn(on, screen, `${origin}/artifact/${id}`, id, numbers, {
+          engine,
+          width: VIEWS[view].width,
+        });
+      } finally {
+        await screen.close();
+      }
+    }
+  }
+};
+
+/** The edges leg in one window: each corner's thread opened, read, and closed. */
+const edgesOn = async (
+  on: On,
+  screen: Page,
+  url: string,
+  id: string,
+  numbers: number[],
+  at: { engine: string; width: number }
+) => {
+  const tag = `edges (${at.engine}, ${at.width})`;
+  await open(screen, url, PANE);
+  const frame = await frameHolding(screen, id, `${tag}: the page`);
+  if (!frame) {
+    on.kit.check(`${tag}: the page`, false, "not shown");
+    return;
+  }
+  await frame.waitForSelector("#br");
+  await settle(screen, 600);
+  for (const n of numbers) {
+    // biome-ignore lint/performance/noAwaitInLoops: one thread at a time
+    const still = await openFromRow(screen, n);
+    const card = screen.locator(`[data-slot="pin-card"][data-pin-card="${n}"]`);
+    const read = await card
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          rect: { top: r.top, bottom: r.bottom, left: r.left, right: r.right },
+          sheet: el.dataset.sheet !== undefined,
+          side: el.dataset.side ?? null,
+          headPill: !!el.querySelector('[data-slot="head-pill"]'),
+        };
+      })
+      .catch(() => null);
+    // The page lifts a pill out from under a drawer with a glide: read once it stands.
+    let pill = await pillDrawn(frame, n);
+    for (let tries = 0; tries < 20; tries += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: a read each tenth of a second until the pill stands
+      await screen.waitForTimeout(100);
+      const now = await pillDrawn(frame, n);
+      if (now && pill && Math.abs(now.top - pill.top) < 0.5) {
+        break;
+      }
+      pill = now;
+    }
+    const beside = !!read && !read.sheet;
+    on.kit.check(
+      `${tag}: pin ${n}'s pill and its card share no pixel (card ${read?.sheet ? "the drawer" : `on the pill's ${read?.side} side`})${beside ? ", the card's head not drawing the pill again" : ""}`,
+      still &&
+        !!read &&
+        !!pill &&
+        apart(pill, read.rect) &&
+        !(beside && read.headPill),
+      JSON.stringify({ pill, card: read, still })
+    );
+    await card
+      .getByRole("button", { name: commentWords.close, exact: true })
+      .click()
+      .catch(() => undefined);
+    await card
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => undefined);
+    await settle(screen, 300);
+  }
+};
+
+/**
+ * The sizing page at `url` in `screen`, its comment's thread opened from
+ * its row in Comments (the list shut again unless `list`), read: the
+ * thread, and its pill's box on screen.
+ */
+const sizingOpen = async (
+  screen: Page,
+  url: string,
+  made: { id: string; number: number },
+  list: boolean,
+  tag: string
+) => {
+  await open(screen, url, PANE);
+  const shown = await frameHolding(screen, made.id, `${tag}: the page`);
+  if (!shown) {
+    return null;
+  }
+  await shown.waitForSelector("#retry");
+  await settle(screen, 600);
+  const toggle = screen.locator(COMMENTS_TOGGLE);
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+  await settle(screen, 400);
+  await screen
+    .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="${made.number}"]`)
+    .click();
+  const card = screen.locator(
+    `[data-slot="pin-card"][data-pin-card="${made.number}"]`
+  );
+  await card.waitFor({ timeout: 5000 });
+  await until(
+    `${tag}: the answer in the thread`,
+    () => card.locator('[data-slot="entry"]').count(),
+    (count) => count >= 2,
+    15_000
+  ).catch(() => 0);
+  if (!list) {
+    await toggle.click();
+  }
+  await settle(screen, 700);
+  // The card follows its pill as the well takes the rail's room back and
+  // the page lays out again: read once its box has stood for five frames.
+  await screen.waitForFunction(
+    (n) => {
+      const r = document
+        .querySelector(`[data-slot="pin-card"][data-pin-card="${n}"]`)
+        ?.getBoundingClientRect();
+      const now = r ? `${r.left},${r.top},${r.width},${r.height}` : "";
+      const held = window as unknown as { sizingAt?: string; sizingN?: number };
+      held.sizingN = held.sizingAt === now ? (held.sizingN ?? 0) + 1 : 0;
+      held.sizingAt = now;
+      return now !== "" && held.sizingN >= 5;
+    },
+    made.number,
+    { polling: "raf", timeout: 10_000 }
+  );
+  const read = await sizingRead(screen, made.number);
+  const pill = await shown
+    .locator(
+      `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin="${made.number}"] [data-face]`
+    )
+    .first()
+    .boundingBox()
+    .catch(() => null);
+  const pillBox: SizingBox | null = pill
+    ? {
+        top: pill.y,
+        bottom: pill.y + pill.height,
+        left: pill.x,
+        right: pill.x + pill.width,
+      }
+    : null;
+  return { read, pill: pillBox };
+};
+
+/** Where the thread stands: the drawer under a finger, else a card beside its pill. */
+const sizingPlace = async (
+  on: On,
+  screen: Page,
+  tag: string,
+  sheet: boolean,
+  { read, pill }: { pill: SizingBox | null; read: SizingRead }
+) => {
+  const cardW = read.card ? read.card.right - read.card.left : 0;
+  const wellW = read.well ? read.well.right - read.well.left : 0;
+  const boxes = JSON.stringify({
+    card: read.card,
+    well: read.well,
+    pill,
+    max: read.maxHeight,
+  });
+  if (sheet) {
+    on.kit.check(
+      `${tag}: the thread is the drawer at the well's foot, the well's whole width (${Math.round(cardW)} of ${Math.round(wellW)}px), its pill wholly above it`,
+      read.sheet &&
+        Math.abs(cardW - wellW) <= 1 &&
+        !!read.card &&
+        !!read.well &&
+        Math.abs(read.card.bottom - read.well.bottom) <= 1 &&
+        !!pill &&
+        pill.bottom <= read.card.top + 0.5,
+      boxes
+    );
+    return;
+  }
+  const wanted = await readingWidth(screen);
+  const beside = read.side === "end" || read.side === "start";
+  const footDown =
+    !(beside && read.card && read.well) ||
+    read.card.bottom >= read.well.bottom - 7 - 1.5;
+  on.kit.check(
+    `${tag}: the thread is a card ${Math.round(cardW)}px wide (two fifths of the ${Math.round(wellW)}px well held between 280 and 480: ${Math.round(wanted)}px) on the pill's ${read.side} side, clear of its pill and inside the well${beside ? ", its foot at the well's" : ""}`,
+    !read.sheet &&
+      Math.abs(cardW - wanted) <= 1 &&
+      !!pill &&
+      !!read.card &&
+      apart(pill, read.card) &&
+      boxInside(read.card, read.well) &&
+      footDown,
+    boxes
+  );
+};
+
+type SizingRead = Awaited<ReturnType<typeof sizingRead>>;
+
+/** One window's checks on its open thread; the number of sideways spills it found. */
+const sizingHold = async (
+  on: On,
+  screen: Page,
+  tag: string,
+  sheet: boolean,
+  seen: { pill: SizingBox | null; read: SizingRead }
+) => {
+  const { read } = seen;
+  await sizingPlace(on, screen, tag, sheet, seen);
+  const headMoved = movedBy(read.before.head, read.after.head);
+  const footMoved = movedBy(read.before.foot, read.after.foot);
+  on.kit.check(
+    `${tag}: its head and its reply stand inside it and hold still while the long reply scrolls between them (head moved ${headMoved}px, reply ${footMoved}px; ${read.room?.client} of ${read.room?.scroll}px shown), the card itself not scrolling`,
+    !!read.room &&
+      read.room.scroll > read.room.client + 1 &&
+      boxInside(read.before.head, read.card) &&
+      boxInside(read.before.foot, read.card) &&
+      headMoved === 0 &&
+      footMoved === 0 &&
+      !read.cardScrolls,
+    JSON.stringify(read)
+  );
+  on.kit.check(
+    `${tag}: the long reply opens at its first line, ${read.opensAt === null ? "unread" : `${Math.round(read.opensAt)}px`} from the top of the room it scrolls in`,
+    read.opensAt !== null && Math.abs(read.opensAt) <= 1,
+    JSON.stringify(read.room)
+  );
+  const spills = await screen.evaluate(sideSpills);
+  on.kit.check(
+    `${tag}: nothing on the page spills sideways (${spills.length})`,
+    spills.length === 0,
+    spills.slice(0, 8).join(" | ")
+  );
+  return spills.length;
+};
 
 /**
  * 7. A pin on an element with no text, written in a component: its card's
@@ -6394,16 +7467,17 @@ interface RailRig {
 }
 type Box4 = { x: number; y: number; w: number; h: number } | null;
 
-/** The composer's 280px card, the attachment pills, a picture alone, and the pill's tails. */
+/** The composer's reading card, the attachment pills, a picture alone, and the pill's tails. */
 const pickChecks = async (on: On, rig: RailRig) => {
   const { frame, numberOn, pinsNow, pressOn, submit } = rig;
   // The composer at the element, measured before a word (addendum §3).
   await pressOn("#a");
   await settle(on.page, 300);
   const empty = await composerRead(on.page);
+  const emptyWanted = await readingWidth(on.page);
   on.kit.check(
-    `the 280px card: the composer at the element is ${empty.card?.w}px wide, its field ${empty.field?.w}px (178px or wider), its hint commentWords.composeHint.full uncut, its pill ${empty.pill?.h}px at one line (about 87px), Attach the ghost paperclip`,
-    Math.round(empty.card?.w ?? 0) === 280 &&
+    `the reading card: the composer at the element is ${empty.card?.w}px wide (c-pin-card-reading-w, ${emptyWanted}px here), its field ${empty.field?.w}px (178px or wider), its hint commentWords.composeHint.full uncut, its pill ${empty.pill?.h}px at one line (about 87px), Attach the ghost paperclip`,
+    Math.abs((empty.card?.w ?? 0) - emptyWanted) <= 1 &&
       (empty.field?.w ?? 0) >= 178 &&
       empty.hint === commentWords.composeHint.full &&
       empty.hintFits &&
@@ -9056,7 +10130,8 @@ const writePin = (frame: Frame, number: number, text: string) =>
           };
         }
       ).cawcoArtifact;
-      const id = `probe-refused-${n}`;
+      // A pin's id as the overlay mints one (a UUID): the pane hears only those (wire.ts `previewPinId`).
+      const id = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
       const at = new Date().toISOString();
       doc.getMap("pins").set(id, {
         id,

@@ -101,7 +101,7 @@
     <button data-bench="rest" onclick={bench.rest} type="button">Rest</button>
   </header>
   <div
-    class="relative min-h-0 flex-auto bg-surface-raised"
+    class="@container relative min-h-0 flex-auto bg-surface-raised"
     data-slot="pin-room"
     {@attach measureRoom}
   >

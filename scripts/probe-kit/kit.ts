@@ -75,6 +75,10 @@ export const VIEWS = {
   /** An iPad mini's portrait: the journeys' tablet. */
   tabletPortrait: { width: 768, height: 1024, touch: true },
   phone: { width: 390, height: 844, touch: true },
+  /** A touch tablet's portrait, an iPad Air's 820: a finger, whatever the width (comment-card-sizing). */
+  tablet820: { width: 820, height: 1180, touch: true },
+  /** A desk's window drawn as narrow as that tablet: a mouse. */
+  narrow820: { width: 820, height: 1180, touch: false },
   /** A desk panel as narrow as the phone: a mouse, its scrollbars a desk's. */
   deskPanel: { width: 390, height: 844, touch: false },
   /** Past the phone's line and under the drawer's: the rail is a sheet, the bar is the desk's. */

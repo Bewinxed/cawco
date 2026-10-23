@@ -460,7 +460,11 @@
     let frame = 0;
     let tries = 0;
     const land = () => {
-      el.focus();
+      // Never scrolled to: a comment's card took the focus as it opened and
+      // the browser scrolled what held the pane, moving the card under the
+      // eye after its first frame (the owner: "it jumps between them before
+      // it settles"). The field stands where its surface puts it.
+      el.focus({ preventScroll: true });
       if (
         document.activeElement !== el &&
         el.isConnected &&

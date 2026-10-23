@@ -1560,6 +1560,15 @@
   let openPin = $state<string | null>(null);
   /** Its pill in the page's viewport, as the page tells it while it scrolls. */
   let pinAt = $state<PreviewPinAt | null>(null);
+  /**
+   * The pin the page has told where it stands since its thread opened (its
+   * pill, or that it stands nowhere on the page). Beside its pill, a card
+   * stands only once this is its own, so its first frame is where it stays,
+   * never the last pin's place nor the well's corner.
+   */
+  let pinHeard = $state<string | null>(null);
+  /** How the open card goes: at once when another pin's card takes its place (PinFloat `exit`). */
+  const cardExit: { at: "fade" | "cut" } = { at: "fade" };
   /** The pin J and K stand on. */
   let focusedPin = $state<string | null>(null);
   /** The moved pin a tap places again, and the mode the pane goes back to once it is placed. */
@@ -1927,7 +1936,7 @@
       cancelComposer();
     }
     if (openPin && openPin !== id) {
-      closeCard();
+      closeCard(true);
     }
     // A key or a press inside the page, which the host never hears: the page's last input is it.
     lastInput.current = via;
@@ -1935,15 +1944,25 @@
     focusedPin = id;
     cardError = null;
     pinAt = null;
+    pinHeard = null;
     cardParent = null;
     post({ type: "cawco:track-pin", id });
-    post({ type: "cawco:focus-pin", id, scroll: true });
+    // Brought into view in one step, not a glide: its card stands where its
+    // pill lands, and the page tells that place once.
+    post({ type: "cawco:focus-pin", id, scroll: true, instant: true });
   }
-  /** The thread closes: its Close, Esc, another row or pin opened. Its reply's words stay with its pin. */
-  function closeCard() {
+  /**
+   * The thread closes: its Close, Esc, another row or pin opened (`swap`:
+   * its card goes at once, so no frame shows it beside the next). Its
+   * reply's words stay with its pin.
+   */
+  function closeCard(swap = false) {
+    // Said before anything else here, so whatever draws the close reads it.
+    cardExit.at = swap ? "cut" : "fade";
     const id = openPin;
     openPin = null;
     pinAt = null;
+    pinHeard = null;
     cardError = null;
     replying = false;
     cardParent = null;
@@ -2646,8 +2665,9 @@
         cancelComposer();
         break;
       case "cawco:pin-at": {
-        if (previewPinId(message.id) === openPin) {
+        if (openPin && previewPinId(message.id) === openPin) {
           pinAt = previewPinAt(message);
+          pinHeard = openPin;
         }
         break;
       }
@@ -3948,9 +3968,10 @@
   <!-- What stands over the page beside a pill (the frame fills the well):
        the composer while a comment is written, the thread once it is, and
        the peek while the pointer rests on one. -->
+  <!-- The size container a card's width reads (`--c-pin-card-reading-w`, two fifths of the well). -->
   <div
     data-slot="pin-room"
-    class="absolute inset-0 pointer-events-none"
+    class="@container absolute inset-0 pointer-events-none"
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     bind:this={pinRoom}
     {@attach measureRoom}
@@ -3986,52 +4007,60 @@
         />
       </PinFloat>
     {/if}
-    {#if cardPin && kit && replyDraft}
+    <!-- A card beside its pill waits for the page to say where the pill
+         stands (`pinHeard`), unless no page answers; each pin's card is its
+         own, so another's never moves to it. -->
+    {#if cardPin && kit && replyDraft && (floatSheet || !connected || pinHeard === cardPin.id)}
       {@const Card = kit.PinCard}
-      <PinFloat
-        label={`Comment ${cardPin.number}`}
-        mark={pinAt?.mark ?? null}
-        pin={cardPin.number}
-        room={{ w: roomW, h: roomH }}
-        sheet={floatSheet}
-        slot="pin-card"
-        bind:float={cardFloat}
-      >
-        <Card
-          agentName={owner ? ownerName : "The session"}
-          draft={replyDraft}
-          link={pinLink(cardPin.number)}
-          live={live.has(cardPin.id)}
-          name={cardPin.movedAt ? commentWords.elementGone : pinName(cardPin)}
-          onclose={closeCard}
-          ondelete={deleteOpenPin}
-          ondraft={() => {
-            if (cardPin) {
-              drafts?.changed(cardPin.id);
-            }
-          }}
-          onfind={() => {
-            if (cardPin) {
-              post({ type: "cawco:focus-pin", id: cardPin.id, scroll: true });
-            }
-          }}
-          onplace={placeElsewhere}
-          onreply={(text) => reply(text)}
-          onresolve={(resolved) => resolvePin(resolved)}
-          onretry={() => {
-            if (cardPin) {
-              retryPin(cardPin.id);
-            }
-          }}
-          parent={cardParent?.id === cardPin.id ? cardParent.name : null}
-          pin={cardPin}
-          placing={placing === cardPin.id}
-          problem={cardError}
-          sending={replying}
-          retrying={pinsRetrying.has(cardPin.id)}
-          whyNotSent={notSentWhy(cardPin)}
-        />
-      </PinFloat>
+      {#key cardPin.id}
+        <PinFloat
+          exit={cardExit}
+          label={`Comment ${cardPin.number}`}
+          mark={pinAt?.mark ?? null}
+          pin={cardPin.number}
+          room={{ w: roomW, h: roomH }}
+          sheet={floatSheet}
+          slot="pin-card"
+          bind:float={cardFloat}
+        >
+          <Card
+            agentName={owner ? ownerName : "The session"}
+            marked={!!pinAt?.mark}
+            session={owner ? instanceId : null}
+            draft={replyDraft}
+            link={pinLink(cardPin.number)}
+            live={live.has(cardPin.id)}
+            name={cardPin.movedAt ? commentWords.elementGone : pinName(cardPin)}
+            onclose={() => closeCard()}
+            ondelete={deleteOpenPin}
+            ondraft={() => {
+              if (cardPin) {
+                drafts?.changed(cardPin.id);
+              }
+            }}
+            onfind={() => {
+              if (cardPin) {
+                post({ type: "cawco:focus-pin", id: cardPin.id, scroll: true });
+              }
+            }}
+            onplace={placeElsewhere}
+            onreply={(text) => reply(text)}
+            onresolve={(resolved) => resolvePin(resolved)}
+            onretry={() => {
+              if (cardPin) {
+                retryPin(cardPin.id);
+              }
+            }}
+            parent={cardParent?.id === cardPin.id ? cardParent.name : null}
+            pin={cardPin}
+            placing={placing === cardPin.id}
+            problem={cardError}
+            sending={replying}
+            retrying={pinsRetrying.has(cardPin.id)}
+            whyNotSent={notSentWhy(cardPin)}
+          />
+        </PinFloat>
+      {/key}
     {/if}
     {#if peekPin && peekAt}
       <PinPeek mark={peekAt.mark} pin={peekPin} room={{ w: roomW, h: roomH }} />

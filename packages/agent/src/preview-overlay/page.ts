@@ -2762,7 +2762,11 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     // The host's Try again on a lost link: the doc's socket opened again now.
     "cawco:reconnect": () => artifact.reconnect(),
     "cawco:focus-pin": (message) =>
-      pins.focus(idOf(message), message.scroll === true),
+      pins.focus(
+        idOf(message),
+        message.scroll === true,
+        message.instant === true
+      ),
     // What the latest revision changed that the person hasn't looked at, and the pins with an answer he hasn't: washed, their stops told.
     "cawco:changes": (message) =>
       changes.show(strings(message.anchors), strings(message.pins)),
