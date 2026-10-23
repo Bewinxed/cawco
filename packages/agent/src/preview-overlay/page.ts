@@ -310,7 +310,7 @@ function outlineOver(el: Element): DOMRect {
  */
 function cornersOf(el: Element, rect: DOMRect): string[] {
   const own = (el.ownerDocument.defaultView ?? window).getComputedStyle(el);
-  const laidWidth = el instanceof HTMLElement ? el.offsetWidth : 0;
+  const laidWidth = layoutWidth(el, own);
   const scale = laidWidth > 0 ? rect.width / laidWidth : 1;
   // A computed corner is one or two lengths (px) or percentages; a percentage is of the box, which the highlight shares.
   return CORNERS.map((corner) =>
@@ -322,6 +322,35 @@ function cornersOf(el: Element, rect: DOMRect): string[] {
         return `max(var(--radius-xs), ${value})`;
       })
       .join(" ")
+  );
+}
+
+/**
+ * `el`'s border box width as laid out, before any transform or frame scales
+ * it: its computed width with what the box sizing leaves out. `offsetWidth`
+ * rounds to a whole px, and WebKit lays the box out fractionally: the
+ * rounding read as a scale of 0.995, and a pill's 9999px corner drew 9948px.
+ */
+function layoutWidth(el: Element, own: CSSStyleDeclaration): number {
+  const width = own.width.endsWith("px")
+    ? Number.parseFloat(own.width)
+    : Number.NaN;
+  if (Number.isNaN(width)) {
+    return el instanceof HTMLElement ? el.offsetWidth : 0;
+  }
+  if (own.boxSizing === "border-box") {
+    return width;
+  }
+  const sum = (...parts: string[]) =>
+    parts.reduce((all, part) => all + (Number.parseFloat(part) || 0), 0);
+  return (
+    width +
+    sum(
+      own.paddingLeft,
+      own.paddingRight,
+      own.borderLeftWidth,
+      own.borderRightWidth
+    )
   );
 }
 

@@ -304,7 +304,8 @@ const respond = (request: Seen): Reply => {
 
 export interface On {
   call: (tool: string, input: object) => Promise<string>;
-  cdp: CDPSession;
+  /** The DevTools session: Chromium's alone, null on every other engine. */
+  cdp: CDPSession | null;
   fleet: KitFleet;
   kit: Kit;
   page: Page;
@@ -317,19 +318,122 @@ interface Pt {
   y: number;
 }
 
-/** The browser's own pen: down at `from`, through `steps` moves, up at `to`; `force` from `p0` to `p1`. */
+/** The DevTools session of a leg only CDP can drive (a touch, a held pen): Chromium's. */
+export const cdpOf = (on: Pick<On, "cdp">): CDPSession => {
+  if (!on.cdp) {
+    throw new Error("this leg drives the browser through CDP: Chromium only");
+  }
+  return on.cdp;
+};
+
+/**
+ * The frame under the page's point `p` and the point in it: each iframe
+ * stepped into by its content box, as a press there lands.
+ */
+const frameAt = async (
+  screen: Page,
+  p: Pt
+): Promise<{ frame: Frame; p: Pt }> => {
+  let frame = screen.mainFrame();
+  let at = p;
+  for (let depth = 0; depth < 4; depth += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: one frame inside the next
+    const handle = await frame.evaluateHandle(
+      ({ x, y }) => document.elementFromPoint(x, y),
+      at
+    );
+    const el = handle.asElement();
+    const inner = el ? await el.contentFrame() : null;
+    if (!(el && inner)) {
+      break;
+    }
+    const box = await el.evaluate((one) => {
+      const r = one.getBoundingClientRect();
+      const s = getComputedStyle(one);
+      return {
+        x:
+          r.x +
+          Number.parseFloat(s.borderLeftWidth) +
+          Number.parseFloat(s.paddingLeft),
+        y:
+          r.y +
+          Number.parseFloat(s.borderTopWidth) +
+          Number.parseFloat(s.paddingTop),
+      };
+    });
+    at = { x: at.x - box.x, y: at.y - box.y };
+    frame = inner;
+  }
+  return { frame, p: at };
+};
+
+/** A pen's event made in the frame, on what stands under its point: an engine with no DevTools input (WebKit, Firefox). */
+const madePen = (
+  frame: Frame,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  p: Pt,
+  force: number
+) =>
+  frame.evaluate(
+    ({ kind, x, y, pressure }) => {
+      const target = document.elementFromPoint(x, y) ?? document.body;
+      target.dispatchEvent(
+        new PointerEvent(kind, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 7,
+          pointerType: "pen",
+          isPrimary: true,
+          button: kind === "pointermove" ? -1 : 0,
+          buttons: kind === "pointerup" ? 0 : 1,
+          pressure: kind === "pointerup" ? 0 : pressure,
+          clientX: x,
+          clientY: y,
+        })
+      );
+    },
+    { kind: type, x: p.x, y: p.y, pressure: force }
+  );
+
+/**
+ * A pen: down at `from`, through `steps` moves, up at `to`; `force` from
+ * `p0` to `p1`. On Chromium the browser's own (CDP, `pointerType: "pen"`);
+ * elsewhere PointerEvents made in the frame under the point, which the
+ * overlay takes as it takes any pen (its points the event's own, as an
+ * untrusted event carries no coalesced ones).
+ */
 export const penStroke = async (
-  cdp: CDPSession,
+  on: Pick<On, "cdp" | "page">,
   from: Pt,
   to: Pt,
   { p0 = 0.5, p1 = 0.5, steps = 24, lift = true } = {}
 ) => {
-  const at = (
+  const { cdp } = on;
+  const made = cdp ? null : await frameAt(on.page, from);
+  const at = async (
     type: "mousePressed" | "mouseMoved" | "mouseReleased",
     p: Pt,
     force: number
-  ) =>
-    cdp.send("Input.dispatchMouseEvent", {
+  ) => {
+    if (!cdp) {
+      const shift = made
+        ? { x: made.p.x - from.x, y: made.p.y - from.y }
+        : { x: 0, y: 0 };
+      const kind = {
+        mousePressed: "pointerdown",
+        mouseMoved: "pointermove",
+        mouseReleased: "pointerup",
+      } as const;
+      await madePen(
+        made?.frame ?? on.page.mainFrame(),
+        kind[type],
+        { x: p.x + shift.x, y: p.y + shift.y },
+        force
+      );
+      return;
+    }
+    await cdp.send("Input.dispatchMouseEvent", {
       type,
       x: p.x,
       y: p.y,
@@ -339,6 +443,7 @@ export const penStroke = async (
       pointerType: "pen",
       force,
     });
+  };
   await at("mousePressed", from, p0);
   for (let step = 1; step <= steps; step += 1) {
     const t = step / steps;
@@ -388,7 +493,7 @@ export const strokeOver = async (
   const b = await screenBox(on, frame, selector);
   const from = { x: b.x + b.w * 0.2, y: b.y + b.h / 2 };
   const to = { x: b.x + b.w * 0.8, y: b.y + b.h / 2 + 4 };
-  await penStroke(on.cdp, from, to, options);
+  await penStroke(on, from, to, options);
   return { from, to };
 };
 
@@ -630,15 +735,15 @@ const strokeChecks = async (on: On, frame: Frame) => {
   await pressAt(frame, { x: b.x + 10, y: b.y + b.h / 2 }, { how: "down" });
   await on.page.mouse.move(b.x + b.w - 10, b.y + b.h / 2, { steps: 10 });
   await on.page.mouse.up();
-  await on.cdp.send("Input.dispatchTouchEvent", {
+  await cdpOf(on).send("Input.dispatchTouchEvent", {
     type: "touchStart",
     touchPoints: [{ x: b.x + 10, y: b.y + b.h / 2 }],
   });
-  await on.cdp.send("Input.dispatchTouchEvent", {
+  await cdpOf(on).send("Input.dispatchTouchEvent", {
     type: "touchMove",
     touchPoints: [{ x: b.x + b.w - 10, y: b.y + b.h / 2 }],
   });
-  await on.cdp.send("Input.dispatchTouchEvent", {
+  await cdpOf(on).send("Input.dispatchTouchEvent", {
     type: "touchEnd",
     touchPoints: [],
   });
@@ -692,7 +797,7 @@ const iconChecks = async (
   const held = await strokeOver(on, frame, "#fifth", { lift: false });
   await on.page.waitForTimeout(250);
   const gone = !(await chromeOf(frame)).icon;
-  await on.cdp.send("Input.dispatchMouseEvent", {
+  await cdpOf(on).send("Input.dispatchMouseEvent", {
     type: "mouseReleased",
     x: held.to.x,
     y: held.to.y,
@@ -869,7 +974,7 @@ const edgeChecks = async (on: On, frame: Frame) => {
   const b = await screenBox(on, frame, "#fourth");
   const right = outer.x + outer.width;
   await penStroke(
-    on.cdp,
+    on,
     { x: right - 70, y: b.y + b.h / 2 },
     { x: right - 4, y: b.y + b.h / 2 }
   );
@@ -936,8 +1041,8 @@ const eraserChecks = async (on: On, frame: Frame) => {
   const b = await screenBox(on, frame, "#third");
   const y = b.y + b.h / 2;
   // Two strokes, end to end within two breaths: one group.
-  await penStroke(on.cdp, { x: b.x + 20, y }, { x: b.x + 120, y });
-  await penStroke(on.cdp, { x: b.x + 120, y }, { x: b.x + 220, y });
+  await penStroke(on, { x: b.x + 20, y }, { x: b.x + 120, y });
+  await penStroke(on, { x: b.x + 120, y }, { x: b.x + 220, y });
   await on.page.waitForTimeout(300);
   const outer = (await on.page.locator(FRAME).boundingBox()) as Pt;
   const rub = (x: number) =>
@@ -1273,7 +1378,7 @@ const canvasChecks = async (on: On) => {
   };
   const to = { x: well.x + well.width * 0.6, y: well.y + well.height * 0.55 };
   await penStroke(
-    on.cdp,
+    on,
     { x: well.x + well.width * 0.4, y: well.y + well.height * 0.45 },
     to
   );

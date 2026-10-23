@@ -926,16 +926,89 @@ const drawnWhole = (el: Element, at: Box, box: Box) =>
 
 /**
  * Whether `el` is left out of a picture: one {@link SKIPPED}, or an `<svg>`
- * standing at `at` with an empty box, which draws nothing ("A value of zero
- * disables rendering of the element", SVG 1.1 struct.html, `width` and
- * `height`); walked into, its shapes would be parts, and the library draws a
- * lone shape bare.
+ * standing at `at` with an empty box that the engine draws nothing of ("A
+ * value of zero disables rendering of the element", SVG 1.1 struct.html,
+ * `width` and `height`; one it draws is {@link overflowPainted}'s); walked
+ * into, its shapes would be parts, and the library draws a lone shape bare.
  */
 const leftOut = (el: Element, at: Box) =>
   el.matches(SKIPPED) ||
   (el.namespaceURI === SVG_NS &&
     el.localName === "svg" &&
     (at.w === 0 || at.h === 0));
+
+/** The shapes an `<svg>` paints itself, none inside what only others draw (`<defs>`, a marker, a pattern). */
+const SVG_SHAPES =
+  "path, rect, circle, ellipse, line, polyline, polygon, text, image, use";
+const SVG_UNPAINTED = "defs, marker, pattern, symbol, clipPath, mask";
+
+/**
+ * An `<svg>` with an empty box that the engine paints anyway: the box its
+ * shapes paint, from its own origin, so a picture draws it as the page
+ * does; null where the page draws none of it. Engines part here: Chromium
+ * draws nothing of it ("A value of zero disables rendering of the element",
+ * SVG 1.1), WebKit draws what overflows it when its `overflow` is
+ * `visible`. So the page is asked: a shape is painted when a hit at its
+ * box's middle finds it (`elementsFromPoint`, which tests what is painted).
+ */
+function overflowPainted(el: Element, at: Box): Box | null {
+  if (!(
+    el.namespaceURI === SVG_NS &&
+    el.localName === "svg" &&
+    (at.w === 0 || at.h === 0)
+  )) {
+    return null;
+  }
+  const doc = el.ownerDocument;
+  if (doc.defaultView?.getComputedStyle(el).overflowX !== "visible") {
+    return null;
+  }
+  const origin = el.getBoundingClientRect();
+  let right = origin.left;
+  let bottom = origin.top;
+  let painted = false;
+  for (const shape of el.querySelectorAll(SVG_SHAPES)) {
+    if (shape.closest(SVG_UNPAINTED)) {
+      continue;
+    }
+    const r = shape.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) {
+      continue;
+    }
+    right = Math.max(right, r.right);
+    bottom = Math.max(bottom, r.bottom);
+    painted ||= doc
+      .elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      .includes(shape);
+  }
+  return painted
+    ? { x: at.x, y: at.y, w: right - origin.left, h: bottom - origin.top }
+    : null;
+}
+
+/**
+ * Whether the walk passes `el` by, standing at `at`: one {@link leftOut},
+ * or an empty-boxed `<svg>` the engine paints ({@link overflowPainted}),
+ * drawn whole at what it paints where the crop meets it and room is left;
+ * and how many wholes that took.
+ */
+const outOfWalk = (
+  steps: Step[],
+  el: Element,
+  at: Box,
+  box: Box,
+  wholes: number
+): { skip: boolean; wholes: number } => {
+  const painted = overflowPainted(el, at);
+  if (!painted) {
+    return { skip: leftOut(el, at), wholes: 0 };
+  }
+  if (wholes >= PARTS_MAX || !meets(painted, box)) {
+    return { skip: true, wholes: 0 };
+  }
+  steps.push({ el, box: painted, whole: true });
+  return { skip: true, wholes: 1 };
+};
 
 /** What of the page in `doc` the crop `box` shows, from the body down. */
 function stepsIn(doc: Document, box: Box): Step[] {
@@ -944,7 +1017,9 @@ function stepsIn(doc: Document, box: Box): Step[] {
   const walk = (parent: Element) => {
     for (const child of parent.children) {
       const at = boxOf(child);
-      if (leftOut(child, at)) {
+      const out = outOfWalk(steps, child, at, box, wholes);
+      wholes += out.wholes;
+      if (out.skip) {
         continue;
       }
       // `display: contents` and its like: no box of its own, its children stand for it.

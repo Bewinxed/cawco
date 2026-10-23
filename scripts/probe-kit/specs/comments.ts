@@ -270,6 +270,7 @@ import { traceMain } from "../frames";
 import {
   COMPOSER,
   type Kit,
+  onChromium,
   open,
   pressAt as pressFramePoint,
   type Spec,
@@ -454,7 +455,10 @@ const setUp = async (kit: Kit): Promise<On> => {
     }
   });
   await open(desk, `${base}/session/${session}`, COMPOSER);
-  const cdp = await desk.context().newCDPSession(desk);
+  // The DevTools session, Chromium's alone: a leg that needs it says where it ran.
+  const cdp = onChromium(desk)
+    ? await desk.context().newCDPSession(desk)
+    : null;
   return { call, cdp, fleet, kit, page: desk, said, session };
 };
 
@@ -1349,7 +1353,9 @@ const breathChecks = async (on: On, frame: Frame) => {
             ?.getAttribute("fill") ?? "",
         ink:
           document
-            .querySelector("svg[data-cawco-ink] path:not([data-live])")
+            .querySelector(
+              "svg[data-cawco-ink] g[data-ink-group] path[data-stroke]"
+            )
             ?.getAttribute("fill") ?? "",
       }),
       number
@@ -1405,8 +1411,13 @@ const breathChecks = async (on: On, frame: Frame) => {
   );
   // Less motion: nothing breathes, on the page nor in the rail.
   await screen.emulateMedia({ reducedMotion: "reduce" });
-  await screen.waitForTimeout(300);
-  const still = await readBoth();
+  // Each document hears the change and draws again (the overlay its pills).
+  const still = await until(
+    "no breath under reduced motion",
+    readBoth,
+    (now) => now.pill?.runs === 0 && now.row?.runs === 0,
+    3000
+  ).catch(readBoth);
   on.kit.check(
     `4b (reduced motion): pin ${number}'s live dot stands still on the page and in its rail row: no breath runs`,
     still.pill?.runs === 0 && still.row?.runs === 0,
@@ -1442,12 +1453,22 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   // it, and rowsOf brings it back with the card's Close.
   const rows = await rowsOf(on);
   let live = false;
-  // Polls the list while the agent's turn runs.
+  // Polls the list and the thread while the agent's turn runs: its row's
+  // pill wears the live dot, its open thread the agent's working mark.
   const watch = setInterval(async () => {
-    if ((await rows.locator('[data-dot="live"]').count()) > 0) {
+    const seen =
+      (await rows.locator('[data-dot="live"]').count()) +
+      (await card.locator('[data-slot="working"]').count());
+    if (seen > 0) {
       live = true;
     }
   }, 100);
+  // Pin 1's thread open before the agent answers, so the reply's time is
+  // the thread's alone, not the press that opens it as well.
+  if ((await card.count()) === 0) {
+    await rows.locator('[data-slot="pin-row"][data-pin-row="1"]').click();
+    await card.waitFor({ timeout: 5000 }).catch(() => undefined);
+  }
   slow.add(String(Number(lastMarker) + 1));
   await on.call(REPLY, {
     pin: one,
@@ -1455,10 +1476,6 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     files: ["src/Hero.svelte"],
   });
   const done = answeredAt.get(lastMarker) ?? Date.now();
-  if ((await card.count()) === 0) {
-    // Stacked: pin 1's card opens from its row.
-    await rows.locator('[data-slot="pin-row"][data-pin-row="1"]').click();
-  }
   const shown = await until(
     "the agent's reply in the card",
     () => card.locator('[data-slot="entry"][data-by="agent"]').count(),
@@ -1480,7 +1497,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   ).catch(() => undefined);
   clearInterval(watch);
   on.kit.check(
-    "4: comment_reply on pin 1 is in its thread within 2 s, the pill's live dot showing on its row while the agent's turn runs",
+    "4: comment_reply on pin 1 is in its thread within 2 s, the live state showing while the agent's turn runs (its row's live dot, or its open thread's working mark)",
     shown - done <= 2000 && live,
     `in the card ${shown - done} ms after the tool answered; live dot seen ${live}`
   );
@@ -1949,6 +1966,9 @@ const innerFrameOf = async (outer: Frame): Promise<Frame> =>
  * the outer's own).
  */
 const innerOverlay = async (on: On, preview: Frame) => {
+  if (!onChromium(on.page)) {
+    return await innerOverlayHere(preview);
+  }
   // The preview is an origin of its own, in a process of its own (the
   // dashboard sends Origin-Agent-Cluster): its frames are read through its
   // own DevTools session, never the dashboard page's.
@@ -2028,6 +2048,31 @@ const innerOverlay = async (on: On, preview: Frame) => {
   } finally {
     await cdp.detach();
   }
+};
+
+/**
+ * The inner frame's overlay on an engine with no DevTools protocol (WebKit,
+ * Firefox), read in the frame itself: its boot mark, its overlay elements and
+ * globals. Its listeners only the protocol can list: `foreign` stays empty
+ * and `outerScripts` is the outer page's overlay host, each said in a NOTE.
+ */
+const innerOverlayHere = async (preview: Frame) => {
+  const inner = await innerFrameOf(preview);
+  const state = await inner.evaluate(() => ({
+    marked:
+      typeof (window as unknown as { __cawcoOverlay?: unknown })
+        .__cawcoOverlay === "object",
+    elements: document.querySelectorAll(
+      "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]"
+    ).length,
+    globals: ["cawco", "cawcoArtifact"].filter((name) => name in window).length,
+  }));
+  return {
+    ...state,
+    outerScripts: await preview.locator("cawco-overlay").count(),
+    watched: "",
+    foreign: [] as string[],
+  };
 };
 
 /** The inner button's box in the outer page's viewport: the frame's content box plus the button's own. */
@@ -2111,7 +2156,9 @@ const rootlessFrameCheck = async (on: On, outer: Frame) => {
     doc?.write("<!doctype html><p>Written later.</p>");
     doc?.close();
     phase = "written";
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // The written frame's first layout heard (each document's watch reports
+    // once as it starts; WebKit's came past 300 ms): rest begins after it.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     phase = "idle after";
     // At rest, a pin standing in the inner frame: the pin layer draws no disc again.
     const layer = document.querySelector("svg[data-cawco-pins]");
@@ -2203,6 +2250,11 @@ const frameChecks = async (on: On) => {
     await innerFrameOf(outer);
     await settle(on.page, 600);
     const standing = await innerOverlay(on, outer);
+    if (!onChromium(on.page)) {
+      on.kit.note(
+        "b: on this engine the inner frame's event listeners go unlisted (DevTools' DOMDebugger.getEventListeners, Chromium only): its mark, elements and globals are read in the frame"
+      );
+    }
     const outerHost = await outer.locator("cawco-overlay").count();
     on.kit.check(
       "b: the preview runs one overlay: the inner frame loaded the script (its mark) but holds no cawco-overlay element, layer or global, and every listener on its window and document is the outer overlay's; the outer page holds its own",
@@ -3545,6 +3597,10 @@ const dismissChecks = async (on: On) => {
   const left: Record<string, { composer: number; pins: number }> = {};
   const after = async (how: string) => {
     await settle(on.page, 300);
+    // The composer goes as the pane hears the page (a round trip of messages).
+    await composer
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => undefined);
     left[how] = {
       composer: await composer.count(),
       pins: (await pinsNow()) - held,
@@ -3785,28 +3841,46 @@ const roomChecks = async (on: On) => {
     room?.style.setProperty("height", "110px");
   });
   await settle(on.page, 400);
-  const squeezed = await card.evaluate((el) => {
-    const room = el.querySelector("[data-pin-room]");
-    return {
-      whole: room?.matches(':is([data-slot="whole"], [data-whole])') ?? false,
-      room: room
-        ? { scroll: room.scrollHeight, height: room.clientHeight }
-        : null,
-      cardScrolls: el.scrollHeight > el.clientHeight + 1,
-    };
-  });
+  const squeezedNow = () =>
+    card.evaluate((el) => {
+      const room = el.querySelector("[data-pin-room]");
+      return {
+        whole: room?.matches(':is([data-slot="whole"], [data-whole])') ?? false,
+        room: room
+          ? { scroll: room.scrollHeight, height: room.clientHeight }
+          : null,
+        cardScrolls: el.scrollHeight > el.clientHeight + 1,
+      };
+    });
+  // The card answers its new size a frame or two after each resize it hears
+  // (frameObserver): read once it has.
+  const squeezeAt = Date.now();
+  const squeezed = await until(
+    "the squeezed card keeping its thread whole",
+    squeezedNow,
+    (now) => now.whole,
+    2000
+  ).catch(squeezedNow);
+  const squeezeMs = Date.now() - squeezeAt;
   await on.page.evaluate(() => {
     const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
     room?.style.removeProperty("bottom");
     room?.style.removeProperty("height");
   });
   await settle(on.page, 400);
-  const unsqueezed = await card.evaluate(
-    (el) =>
-      el
-        .querySelector("[data-pin-room]")
-        ?.matches(':is([data-slot="whole"], [data-whole])') ?? true
-  );
+  const wholeNow = () =>
+    card.evaluate(
+      (el) =>
+        el
+          .querySelector("[data-pin-room]")
+          ?.matches(':is([data-slot="whole"], [data-whole])') ?? true
+    );
+  const unsqueezed = await until(
+    "the card's thread scrolling alone again",
+    wholeNow,
+    (whole) => !whole,
+    2000
+  ).catch(wholeNow);
   on.kit.check(
     "f: squeezed below its head and foot, the card keeps the thread whole (none of it clipped) and scrolls itself; with its room back, the thread scrolls alone again",
     squeezed.whole &&
@@ -3814,7 +3888,7 @@ const roomChecks = async (on: On) => {
       squeezed.room.height >= squeezed.room.scroll - 1 &&
       squeezed.cardScrolls &&
       !unsqueezed,
-    `${JSON.stringify(squeezed)}; after, whole ${unsqueezed}`
+    `${JSON.stringify(squeezed)} after ${squeezeMs} ms; after, whole ${unsqueezed}`
   );
   await on.page.keyboard.press("Escape");
 };
@@ -4898,12 +4972,16 @@ const mapPressChecks = async (on: On) => {
     const before = new Set(Object.keys((await docOf(frame)).pins));
     const mark = (name: string) =>
       frame.evaluate((n) => performance.mark(n), name);
-    const main = await traceMain(on.page, async () => {
+    const act = async () => {
       await mark("press");
       await pressFramePoint(frame, { x: outer.x + x, y: outer.y + y });
       await on.page.waitForTimeout(2000);
       await mark("press-after");
-    });
+    };
+    // The main thread's tasks are read through DevTools tracing (Chromium only).
+    const main = onChromium(on.page)
+      ? await traceMain(on.page, act)
+      : await act().then(() => ({ marks: [], tasks: [] }));
     // The press opened its composer, writing nothing; Comment writes the pin, and its picture goes to the hub.
     await on.page
       .locator(COMPOSE)
@@ -4959,11 +5037,17 @@ const mapPressChecks = async (on: On) => {
       onText.names.intro && inPadding.names.intro,
       `on the text: ${onText.names.tag} ${onText.selector}; in the padding: ${inPadding.names.tag} ${inPadding.selector}`
     );
-    on.kit.check(
-      `g: each press finishes, its picture drawn, with no task of the page's past ${LONG_TASK_MS}ms`,
-      onText.over.length === 0 && inPadding.over.length === 0,
-      `longest ${onText.longest.toFixed(1)}ms and ${inPadding.longest.toFixed(1)}ms; over: ${[...onText.over, ...inPadding.over].join(", ") || "none"}`
-    );
+    if (onChromium(on.page)) {
+      on.kit.check(
+        `g: each press finishes, its picture drawn, with no task of the page's past ${LONG_TASK_MS}ms`,
+        onText.over.length === 0 && inPadding.over.length === 0,
+        `longest ${onText.longest.toFixed(1)}ms and ${inPadding.longest.toFixed(1)}ms; over: ${[...onText.over, ...inPadding.over].join(", ") || "none"}`
+      );
+    } else {
+      on.kit.note(
+        `g: the presses' main-thread tasks go unread on this engine (DevTools tracing, Chromium only): no ${LONG_TASK_MS}ms task check`
+      );
+    }
     const crop = {
       w: intro.w + 2 * CROP_PAD,
       h: intro.h + 2 * CROP_PAD,
@@ -5137,9 +5221,6 @@ const readSvgPicture = async (
 ): Promise<SvgPicture | null> => {
   await settle(on.page, 400);
   await frame.evaluate(() => scrollTo(0, 0));
-  // The page's own rendering of the label, before any of the overlay's layers stand over it.
-  const ownLabel = PNG.sync.read(await frame.locator("#label").screenshot());
-  const own = inkSpan(ownLabel, 0, ownLabel.height - 1, 0);
   const svg = await pageBoxIn(frame, "#graph");
   const label = await pageBoxIn(frame, "#label");
   if (!(svg && label)) {
@@ -5147,6 +5228,20 @@ const readSvgPicture = async (
     return null;
   }
   const outer = await on.page.locator(FRAME).boundingBox();
+  // The page's own rendering of the label, before any of the overlay's
+  // layers stand over it: the desk's screen at the label's box (an element
+  // shot of an SVG <text> inside a frame came back blank on WebKit).
+  const ownLabel = PNG.sync.read(
+    await on.page.screenshot({
+      clip: {
+        x: (outer?.x ?? 0) + label.x,
+        y: (outer?.y ?? 0) + label.y,
+        width: Math.max(1, label.w),
+        height: Math.max(1, label.h),
+      },
+    })
+  );
+  const own = inkSpan(ownLabel, 0, ownLabel.height - 1, 0);
   // The page's own rendering of the graph's area, as the desk shows it.
   const ownGraph = PNG.sync.read(
     await on.page.screenshot({
@@ -7021,11 +7116,23 @@ const switchTheme = async (screen: Page, to: "dark" | "light") => {
     if (dark === (to === "dark")) {
       return;
     }
+    // The switch's own click handler, as a click event: WebKit's driver
+    // held a real click past 5 s in "performing click action" here, its
+    // input waiting on the theme's view transition over a page with a
+    // frame it captures, which finishes once the page is drawn.
     await screen
       .getByRole("button", { name: label })
       .or(screen.getByRole("button", { name: "System" }))
       .first()
-      .click({ timeout: 5000 });
+      .dispatchEvent("click", undefined, { timeout: 5000 });
+    await screen
+      .waitForFunction(
+        (wanted) =>
+          document.documentElement.classList.contains("dark") === wanted,
+        to === "dark",
+        { timeout: 5000 }
+      )
+      .catch(() => undefined);
     await screen.waitForTimeout(400);
   }
 };
@@ -7273,9 +7380,15 @@ const pointChecks = async (
       },
       { pinId: `${id}/2`, decisionId: `${did}/reach`, pageId: did }
     );
-  const chips = await readChips();
-  const [chipDot] = await srgbOf(on.page, [chips.dot ?? ""]);
   const wanted = pinName(pin2);
+  // The chip names its pin once the pane holds the page's doc.
+  const chips = await until(
+    "the pin chip naming its pin",
+    readChips,
+    (now) => now.label === wanted && now.dot !== null,
+    10_000
+  ).catch(readChips);
+  const [chipDot] = await srgbOf(on.page, [chips.dot ?? ""]);
   on.kit.check(
     "chip: the agent's `[When](cawco:pin/<artifact>/2)` draws as the pin chip: its pill numbered 2, its label what the pin stands on, its name with its state (Pin 2 on …, New answer), the needs-you dot while the answer is unread; a bare \"pin 2\" stays words; the artifact's and the card's links draw as their chips; no cawco: link is an anchor",
     chips.inLine === 1 &&
@@ -7386,7 +7499,7 @@ const pointChecks = async (
     (now) => now.dot !== null,
     15_000
   ).catch(() => null);
-  await on.page.locator(`[data-pin-chip="${id}/2"]`).first().click();
+  await on.page.locator(`[data-pin-chip="${id}/2"]:visible`).first().click();
   const pinned = await frameHolding(on.page, id, "the pin's page in the pane");
   const thread = on.page.locator('[data-slot="pin-card"][data-pin-card="2"]');
   const opened = await thread
@@ -8116,7 +8229,22 @@ const draftChecks = async (on: On) => {
     (now) => now?.words === DRAFT_WORDS && now.chips === 1,
     15_000
   ).catch(() => null);
-  const pillBack = back ? await draftPillOf(back) : null;
+  // Read once it stands still: the page lays out again as its faces load.
+  let pillBack = back ? await draftPillOf(back) : null;
+  for (let read = 0; back && read < 10; read += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: one read after the other until two agree
+    await on.page.waitForTimeout(200);
+    const now = await draftPillOf(back);
+    const still =
+      !!now?.face &&
+      !!pillBack?.face &&
+      Math.abs(now.face.x - pillBack.face.x) < 0.5 &&
+      Math.abs(now.face.y - pillBack.face.y) < 0.5;
+    pillBack = now;
+    if (still) {
+      break;
+    }
+  }
   const pinsAfterReload = back
     ? Object.keys((await docOf(back)).pins).length
     : -1;
@@ -8328,12 +8456,31 @@ const redrawChecks = async (on: On) => {
   await frame.waitForSelector(REDRAWN);
   await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
   await pageInComment(frame, true);
-  // Pressed while it stands, then written over three of its redraws.
+  // Pressed while it stands, then written over three of its redraws: right
+  // after a redraw puts it back, never in the two frames it is gone.
   const value = await until(
     "the second row's value drawn",
     () => screenBox(on, frame, REDRAWN).catch(() => undefined),
     Boolean,
     5000
+  );
+  await frame.evaluate(
+    (sel) =>
+      new Promise<void>((done) => {
+        const panel = document.getElementById("panel");
+        if (!panel) {
+          done();
+          return;
+        }
+        const watch = new MutationObserver(() => {
+          if (document.querySelector(sel)) {
+            watch.disconnect();
+            done();
+          }
+        });
+        watch.observe(panel, { childList: true });
+      }),
+    REDRAWN
   );
   await commentAt(
     on,
@@ -8774,6 +8921,37 @@ const pageOnlyChecks = async (on: On, id: string) => {
   // The link back: Try again takes it to the hub, then to the session.
   link.down = false;
   const rail = await rowsOf(there);
+  const DIAG_SEL =
+    'li:has([data-slot="pin-row"][data-pin-row="3"]) [data-slot="pin-retry"]';
+  const diag = await there.page
+    .evaluate(async (sel) => {
+      const el = document.querySelector(`[data-slot="comment-rail"] ${sel}`);
+      const rects: string[] = [];
+      for (let i = 0; i < 12; i += 1) {
+        await new Promise((d) => requestAnimationFrame(d));
+        const r = el?.getBoundingClientRect();
+        rects.push(
+          r
+            ? `${r.x.toFixed(1)},${r.y.toFixed(1)},${r.width.toFixed(1)}x${r.height.toFixed(1)}`
+            : "none"
+        );
+      }
+      const runs = document
+        .getAnimations()
+        .filter((a) => a.playState === "running")
+        .map((a) => {
+          const n = a as Animation & {
+            animationName?: string;
+            transitionProperty?: string;
+          };
+          const t = (a.effect as KeyframeEffect | null)
+            ?.target as HTMLElement | null;
+          return `${n.animationName ?? n.transitionProperty ?? a.id} on ${t?.dataset?.slot ?? t?.localName ?? "?"}`;
+        });
+      return { rects: [...new Set(rects)], runs: runs.slice(0, 20) };
+    }, DIAG_SEL)
+    .catch((e) => ({ error: String(e) }));
+  on.kit.note(`DIAG pin-retry ${JSON.stringify(diag)}`);
   await rail
     .locator(
       'li:has([data-slot="pin-row"][data-pin-row="3"]) [data-slot="pin-retry"]'

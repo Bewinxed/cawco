@@ -172,10 +172,16 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
   probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none";
   shadow.append(probe);
 
+  // Each read on a probe of its own, as `tokens` reads: on WebKit one probe
+  // set, read and cleared again answered colours no token holds (a change
+  // wash read as near-black at 94%, a stroke as a pale grey).
   const token: InkChrome["token"] = (name, property = "color") => {
-    probe.style.setProperty(property, `var(${name})`);
-    const value = getComputedStyle(probe).getPropertyValue(property);
-    probe.style.removeProperty(property);
+    const one = document.createElement("span");
+    one.style.cssText = probe.style.cssText;
+    one.style.setProperty(property, `var(${name})`);
+    shadow.append(one);
+    const value = getComputedStyle(one).getPropertyValue(property);
+    one.remove();
     return value;
   };
   const tokens: InkChrome["tokens"] = (asked) => {

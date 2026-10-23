@@ -1,0 +1,52 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index cd4cebcb2c33a84959cb94ce1048c9c16a2f6e7b..1e9101af597a886c417a40dcf9fce612215e5884 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -577,7 +577,21 @@ function cloneCanvas(canvas, context) {
+   return cloned;
+ }
+ 
++function isCrossOriginIframe(iframe) {
++  const src = iframe.getAttribute("src");
++  if (!src || src.startsWith("about:") || iframe.hasAttribute("srcdoc"))
++    return false;
++  try {
++    return new URL(src, iframe.ownerDocument.baseURI).origin !== new URL(iframe.ownerDocument.URL).origin;
++  } catch {
++    return false;
++  }
++}
+ function cloneIframe(iframe, context) {
++  // A frame of another origin is never reached into: WebKit reports the
++  // reach (`contentDocument`) as the page's error, caught or not.
++  if (isCrossOriginIframe(iframe))
++    return iframe.cloneNode(false);
+   try {
+     if (iframe?.contentDocument?.documentElement) {
+       return cloneNode(iframe.contentDocument.documentElement, context);
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 4ebba57d5736e55f55f569e182635de71bcd26c0..2c71b17a21acd3465b44de3dc0986808567945d3 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -575,7 +575,21 @@ function cloneCanvas(canvas, context) {
+   return cloned;
+ }
+ 
++function isCrossOriginIframe(iframe) {
++  const src = iframe.getAttribute("src");
++  if (!src || src.startsWith("about:") || iframe.hasAttribute("srcdoc"))
++    return false;
++  try {
++    return new URL(src, iframe.ownerDocument.baseURI).origin !== new URL(iframe.ownerDocument.URL).origin;
++  } catch {
++    return false;
++  }
++}
+ function cloneIframe(iframe, context) {
++  // A frame of another origin is never reached into: WebKit reports the
++  // reach (`contentDocument`) as the page's error, caught or not.
++  if (isCrossOriginIframe(iframe))
++    return iframe.cloneNode(false);
+   try {
+     if (iframe?.contentDocument?.documentElement) {
+       return cloneNode(iframe.contentDocument.documentElement, context);

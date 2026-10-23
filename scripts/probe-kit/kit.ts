@@ -1979,7 +1979,7 @@ export interface MotionOptions<T> {
 const clocks = new WeakMap<Page, Promise<import("./anim").Clock>>();
 
 /** Whether a page is drawn by Chromium, the one engine with the Animation domain. */
-const onChromium = (page: Page) =>
+export const onChromium = (page: Page) =>
   page.context().browser()?.browserType().name() === "chromium";
 
 /**

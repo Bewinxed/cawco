@@ -31,8 +31,31 @@ export function frameWindows(doc: Document): Window[] {
   );
 }
 
+/**
+ * Whether a frame's `src` names another origin than its document's. Read
+ * before its document is: WebKit reports every reach into another origin's
+ * frame as the page's error ("Blocked a frame with origin … from accessing a
+ * frame with origin …"), caught or not. A frame with no `src`, `about:` or
+ * `srcdoc` shares its parent's origin.
+ */
+const otherOrigin = (frame: FrameElement): boolean => {
+  const src = frame.getAttribute("src");
+  if (!src || src.startsWith("about:") || frame.hasAttribute("srcdoc")) {
+    return false;
+  }
+  try {
+    const own = new URL(frame.ownerDocument.URL).origin;
+    return new URL(src, frame.ownerDocument.baseURI).origin !== own;
+  } catch {
+    return false;
+  }
+};
+
 /** A frame's document when it is of this origin; null for another origin's. */
 export const frameDocument = (frame: FrameElement): Document | null => {
+  if (otherOrigin(frame)) {
+    return null;
+  }
   try {
     return frame.contentDocument;
   } catch {

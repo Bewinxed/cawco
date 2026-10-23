@@ -51,7 +51,17 @@ export const here: {
 
 /** The same-origin parent's mark; null at the top, under another origin, or where no overlay was loaded. */
 export function parentMark(): OverlayMark | null {
-  return window.parent === window ? null : markOf(window.parent);
+  if (window.parent === window) {
+    return null;
+  }
+  // Another origin's parent is never reached into: WebKit reports the reach
+  // as the page's error, caught or not. Its origin is said without touching
+  // it (`ancestorOrigins`, where the engine keeps it).
+  const above = location.ancestorOrigins?.[0];
+  if (above && above !== location.origin) {
+    return null;
+  }
+  return markOf(window.parent);
 }
 
 /**

@@ -91,7 +91,8 @@
     "golar@0.1.11": "patches/golar@0.1.11.patch",
     "@shadcn/lint@0.2.3": "patches/@shadcn%2Flint@0.2.3.patch",
     "openai@7.19.0": "patches/openai@7.19.0.patch",
-    "@anthropic-ai/sdk@0.129.0": "patches/@anthropic-ai%2Fsdk@0.129.0.patch"
+    "@anthropic-ai/sdk@0.129.0": "patches/@anthropic-ai%2Fsdk@0.129.0.patch",
+    "modern-screenshot@4.7.0": "patches/modern-screenshot@4.7.0.patch"
   },
   "trustedDependencies": [
     "socket-activation"
