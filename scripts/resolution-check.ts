@@ -184,7 +184,7 @@ const leaksUnder = async (
   projects: string[]
 ): Promise<Leak[]> => {
   const folders = await insides(root);
-  // One project at a time: the Golar fork 0.1.11-cawco.1 crashed its Go
+  // One project at a time: the Golar fork (0.1.11-cawco.1 to .3, one Go build) crashed its Go
   // runtime with several traces at once (exit 134, "fatal error: traceback
   // did not unwind completely", "sweep increased allocation count", "fault";
   // 4 of 25 runs of this check at four or twenty at once), and never in 100
