@@ -62,13 +62,41 @@
   let tag = $state<HTMLSpanElement>();
   /** Where the tag stands in the layer, once placed. */
   let spot = $state<{ x: number; y: number } | null>(null);
-  /** The text the picture draws, in the layer's terms: the tag keeps off it. */
-  let words: DOMRect[] = [];
+  /**
+   * The glyph runs drawn in `scope` (a range over each text, line by line,
+   * not the boxes holding them: a full-width title leaves room beside its
+   * words), in the terms of a box at `at`; the tree's own tag left out.
+   */
+  function glyphs(scope: Element, at: DOMRect): DOMRect[] {
+    const range = document.createRange();
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+    const runs: DOMRect[] = [];
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.textContent?.trim() || layer?.contains(text)) {
+        continue;
+      }
+      range.selectNodeContents(text);
+      for (const line of range.getClientRects()) {
+        if (line.width > 0 && line.height > 0) {
+          runs.push(
+            new DOMRect(
+              line.left - at.left,
+              line.top - at.top,
+              line.width,
+              line.height
+            )
+          );
+        }
+      }
+    }
+    return runs;
+  }
 
   /**
    * The tag's place for box `box`: above it, then below it, each at its
-   * start and then its end, clamped inside the layer; the first that covers
-   * no text, else the one that covers least.
+   * start and then its end, clamped inside the picture (as DevTools keeps
+   * its tooltip inside the viewport); the first that covers no glyph and
+   * stays off the box, else the one that covers least.
    */
   function place(box: Box) {
     if (!(tag && layer)) {
@@ -77,6 +105,7 @@
     const gap = numberOf("--space-2") || 8;
     const { width: w, height: h } = tag.getBoundingClientRect();
     const room = layer.getBoundingClientRect();
+    const words = root ? glyphs(root, room) : [];
     const clamp = (value: number, most: number) =>
       Math.max(0, Math.min(value, Math.max(0, most)));
     const tries = [
@@ -88,12 +117,26 @@
       x: clamp(x, room.width - w),
       y: clamp(y, room.height - h),
     }));
+    const area = (
+      x: number,
+      y: number,
+      r: { left: number; right: number; top: number; bottom: number }
+    ) => {
+      const across = Math.min(x + w, r.right) - Math.max(x, r.left);
+      const down = Math.min(y + h, r.bottom) - Math.max(y, r.top);
+      return across > 0 && down > 0 ? across * down : 0;
+    };
+    const own = {
+      left: box.x,
+      right: box.x + box.w,
+      top: box.y,
+      bottom: box.y + box.h,
+    };
+    // Text covered, and the box's own room (a spot clamped onto the box is
+    // inside it): the tag stands outside its box wherever it can.
     const covers = ({ x, y }: { x: number; y: number }) =>
-      words.reduce((sum, word) => {
-        const across = Math.min(x + w, word.right) - Math.max(x, word.left);
-        const down = Math.min(y + h, word.bottom) - Math.max(y, word.top);
-        return sum + (across > 0 && down > 0 ? across * down : 0);
-      }, 0);
+      words.reduce((sum, word) => sum + area(x, y, word), 0) +
+      area(x, y, own) * w * h;
     let best = tries.at(0) ?? { x: 0, y: 0 };
     let least = Number.POSITIVE_INFINITY;
     for (const one of tries) {
@@ -152,22 +195,6 @@
       root,
       ...root.querySelectorAll<HTMLElement>("[data-node]"),
     ].filter((node) => node.dataset.node && shown(node));
-    words = [...root.querySelectorAll<HTMLElement>("*")]
-      .filter((el) =>
-        [...el.childNodes].some(
-          (child) => child.nodeType === 3 && child.textContent?.trim()
-        )
-      )
-      .map((el) => {
-        const box = el.getBoundingClientRect();
-        return new DOMRect(
-          box.left - at.left,
-          box.top - at.top,
-          box.width,
-          box.height
-        );
-      })
-      .filter((box) => box.width > 0 && box.height > 0);
     boxes = nodes.map((node, id) => {
       const box = node.getBoundingClientRect();
       if (node.hasAttribute("data-node-picked") && chosen === null) {

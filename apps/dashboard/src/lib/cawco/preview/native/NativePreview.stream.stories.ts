@@ -29,3 +29,9 @@ export const Hover = {
   args: { hover: "Pair the phone by QR" },
   parameters: { viewport: 720 },
 };
+
+/** Desk: the pointer over the top row's More button: no room above it inside the screen, so its class is named below it, clear of the page's title. */
+export const HoverTop = {
+  args: { hover: "More" },
+  parameters: { viewport: 720 },
+};
