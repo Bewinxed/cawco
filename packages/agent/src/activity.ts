@@ -418,12 +418,44 @@ const lockedHint = async (session: string): Promise<boolean | undefined> => {
 };
 
 /**
+ * The tether `gdbus monitor` runs under, as `sh -c TETHER sh gdbus …`. gdbus
+ * reads no stdin, so it cannot watch the agent itself; the shell does. It
+ * starts gdbus in the background and hands its own stdout to it alone
+ * (`exec … >/dev/null`, so the pipe the agent reads closes when gdbus
+ * exits). A background `cat` reads the shell's stdin, the agent's end of a
+ * pipe, until end of file, which is when the agent is gone however it ended
+ * (a SIGKILL included); the shell waits on it, then ends gdbus. The stdin
+ * goes to `cat` as fd 3 because dash(1): "If the shell is not interactive,
+ * the standard input of an asynchronous command is set to /dev/null". `cat`
+ * runs in the background so a signal to the shell ends gdbus at once:
+ * POSIX `wait`: "When the shell is waiting, by means of the wait utility,
+ * for asynchronous commands to complete, the reception of a signal for
+ * which a trap has been set shall cause the wait utility to return
+ * immediately with an exit status >128, immediately after which the trap
+ * associated with that signal shall be taken"
+ * (pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html §2.12).
+ *
+ * Not `setpriv --pdeathsig`: PR_SET_PDEATHSIG(2const) "will be sent when
+ * that thread terminates …, rather than after all of the threads in the
+ * parent process terminate", the thread that forked the child, which the
+ * agent's runtime chooses and does not promise to be its main one.
+ */
+const TETHER = `trap 'kill "$monitor" "$reader" 2>/dev/null; exit 0' HUP INT TERM
+"$@" </dev/null & monitor=$!
+exec 3<&0 >/dev/null
+cat <&3 >/dev/null & reader=$!
+wait "$reader"
+kill "$monitor" 2>/dev/null`;
+
+/**
  * logind's `PrepareForSleep` as it is announced, through `gdbus monitor` on
  * the system bus: `going` true as the machine goes to sleep, false as it
  * wakes. `listening` once gdbus says it monitors logind; never when gdbus
- * is not there or the bus refuses it.
+ * is not there or the bus refuses it. gdbus runs under {@link TETHER}, so it
+ * ends with the agent; when it ends first, the agent closes the tether's
+ * stdin and the tether ends too.
  */
-const hearSleep = (
+export const hearSleep = (
   onSleep: (going: boolean) => void,
   listening: () => void
 ): void => {
@@ -432,8 +464,12 @@ const hearSleep = (
     return;
   }
   const child = spawn(
-    gdbus,
+    "/bin/sh",
     [
+      "-c",
+      TETHER,
+      "sh",
+      gdbus,
       "monitor",
       "--system",
       "--dest",
@@ -441,9 +477,15 @@ const hearSleep = (
       "--object-path",
       "/org/freedesktop/login1",
     ],
-    { env: toolEnv(), stdio: ["ignore", "pipe", "ignore"] }
+    {
+      env: toolEnv(),
+      // stdin is the agent's end of the pipe whose close ends the listener.
+      stdio: ["pipe", "pipe", "ignore"],
+    }
   );
   child.unref();
+  child.stdin.on("error", () => undefined);
+  child.stdout.on("end", () => child.stdin.end());
   let carry = "";
   child.stdout.on("data", (chunk: Buffer) => {
     const lines = (carry + chunk.toString("utf8")).split("\n");
