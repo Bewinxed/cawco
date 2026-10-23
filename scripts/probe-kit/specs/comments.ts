@@ -380,8 +380,7 @@ const respond = (request: Seen): Reply => {
   }
   if (issued.has(marker)) {
     if (!answered.has(marker)) {
-      // Its whole answer: a delivery may join at the tool's boundary.
-      answered.set(marker, request.final);
+      answered.set(marker, request.last);
       answeredAt.set(marker, Date.now());
     }
     if (long.has(marker)) {

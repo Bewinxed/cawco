@@ -94,6 +94,36 @@ const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const NAME = "comment-delivery";
+/**
+ * The tool's result a request answers, whole, as the harness sent it: its
+ * newest message's `tool_result` blocks, read as the fleet reads a message
+ * (scratch-fleet.ts `textOf`: each block's text, joined by a space).
+ */
+const toolResultOf = (request: Seen): string => {
+  const body = JSON.parse(request.body) as {
+    messages?: { content?: unknown }[];
+  };
+  const newest = body.messages?.at(-1)?.content;
+  if (!Array.isArray(newest)) {
+    return "";
+  }
+  const textOf = (content: unknown): string => {
+    if (typeof content === "string") {
+      return content;
+    }
+    return Array.isArray(content)
+      ? content
+          .map((part: { content?: unknown; text?: string }) =>
+            typeof part.text === "string" ? part.text : textOf(part.content)
+          )
+          .join(" ")
+      : "";
+  };
+  return (newest as { content?: unknown; type?: string }[])
+    .filter((block) => block.type === "tool_result")
+    .map((block) => textOf(block.content))
+    .join(" ");
+};
 /** The comments notice (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
   /\[CawCo\] The person commented on the page "comment-delivery" \(artifact [0-9a-f-]{36}\)\./;
@@ -303,8 +333,7 @@ const respond = (request: Seen): Reply => {
   }
   if (issued.has(marker)) {
     if (!answered.has(marker)) {
-      // Its whole answer: a delivery may join at the tool's boundary.
-      answered.set(marker, request.final);
+      answered.set(marker, request.last);
     }
     return text("done");
   }
@@ -1213,6 +1242,19 @@ const busyDecisionChecks = async (
       rows.length === 1 &&
       rows[0].state !== "failed",
     `busy ${String(busy)}; Send ${String(offered)}; boundary ${boundary ? `${boundary.at - pinnedAt} ms after the pin, ${firstEnds - boundary.at} ms before the command's end, afterTool ${boundary.afterTool}, command backgrounded ${boundary.body.includes("backgrounded")}` : "never"}; rows ${JSON.stringify(rows)}; heard ${boundary?.last.slice(0, 500) ?? "-"}`
+  );
+  // What the scratch fleet records of that request (Seen.last) is the
+  // tool's whole answer, the words that joined it beside it: a spec that
+  // records a tool's answer reads all of it, whatever joined mid-turn.
+  const answer = boundary ? toolResultOf(boundary) : "";
+  kit.check(
+    "12: the request at the boundary, as the fleet records it, holds the tool's whole answer and the words that joined it mid-turn",
+    !!boundary &&
+      boundary.lastMidTurn &&
+      answer !== "" &&
+      boundary.last.includes(answer) &&
+      boundary.last.includes(BUSY_NOTICE),
+    `midTurn ${String(boundary?.lastMidTurn)}; tool's answer ${JSON.stringify(answer.slice(0, 200))}; last ${JSON.stringify(boundary?.last.slice(0, 600) ?? null)}`
   );
   // The service's line names the pin and its session; the send path's, the session and the message it went as.
   const carriedLines = await hubSaid(pinned?.id ?? "-", decider);

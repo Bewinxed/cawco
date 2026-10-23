@@ -139,18 +139,14 @@ export interface Seen {
   /** The request's body as sent: where a catalog tool (OpenCode's Code Mode) is named. */
   body: string;
   /**
-   * The newest message's whole text: a tool's result with the words read
-   * mid-turn beside it, where {@link last} keeps only those words. What a
-   * tool answered, when a delivery joined at its boundary.
-   */
-  final: string;
-  /**
-   * What started this request: the last user message's text, or, when the
-   * newest message carries words read mid-turn, those words from
-   * {@link MID_TURN} on (then {@link lastMidTurn}).
+   * What started this request: the newest user message's text, whole. A
+   * tool's result is all of it, with the words read mid-turn beside it when
+   * a delivery joined at the tool's boundary (then {@link lastMidTurn}): a
+   * spec that records a tool's answer gets the whole answer, whatever
+   * joined it.
    */
   last: string;
-  /** `last` is words read mid-turn, opening with {@link MID_TURN}. */
+  /** `last` carries words read mid-turn, from {@link MID_TURN} on. */
   lastMidTurn: boolean;
   /**
    * {@link afterTool}, and the tool's result was an error: Anthropic's
@@ -553,14 +549,13 @@ const textOf = (content: unknown): string => {
     .join(" ");
 };
 
-/** What a request's newest message says: its words from `MID_TURN` on when it carries any ({@link Seen.last}), and whole ({@link Seen.final}). */
+/** What a request's newest message says, whole ({@link Seen.last}), and whether words read mid-turn joined it. */
 const newestOf = (
-  words: { midTurn: boolean; said: string; text: string }[]
-): Pick<Seen, "final" | "last" | "lastMidTurn"> => {
+  words: { midTurn: boolean; text: string }[]
+): Pick<Seen, "last" | "lastMidTurn"> => {
   const newest = words.at(-1);
   return {
-    last: newest?.said ?? "",
-    final: newest?.text ?? "",
+    last: newest?.text ?? "",
     lastMidTurn: newest?.midTurn === true,
   };
 };
@@ -1719,21 +1714,17 @@ async function standUp(
       }
       // The person's words, in order: user messages, and the system
       // messages that carry words read mid-turn; never another system
-      // message (a chat completion's system prompt). `text` is the whole
-      // message, for `all`; `said` is what `last` reads: from `MID_TURN` on
-      // when the message carries words read mid-turn.
+      // message (a chat completion's system prompt). Each whole, for `all`
+      // and `last`; `midTurn` when it carries words read mid-turn.
       const words = (body.messages ?? []).flatMap((message) => {
         if (message.role !== "user" && message.role !== "system") {
           return [];
         }
         const text = textOf(message.content);
-        const at = text.indexOf(MID_TURN);
-        if (at >= 0) {
-          return [{ text, said: text.slice(at), midTurn: true }];
+        if (text.includes(MID_TURN)) {
+          return [{ text, midTurn: true }];
         }
-        return message.role === "user"
-          ? [{ text, said: text, midTurn: false }]
-          : [];
+        return message.role === "user" ? [{ text, midTurn: false }] : [];
       });
       const final = answeredOf(body.messages ?? []);
       const one: Seen = {
