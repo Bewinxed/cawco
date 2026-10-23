@@ -44,14 +44,33 @@ export interface PlacedSetHook extends SetHook {
   cwd: string;
 }
 
+/** One project's skill as the sync placed it in one of its folders here: `<cwd>/.claude/skills/<name>`. */
+export interface PlacedSetSkill {
+  cwd: string;
+  /** The skill's directory, its `SKILL.md` inside. */
+  dir: string;
+  name: string;
+}
+
 export interface FleetHarnessSet {
   /** The fleet's own hooks, by id. */
   hooks: Record<string, SetHook>;
   /** Each project's placed copies, by `<id>@<place id>`. */
   placedHooks: Record<string, PlacedSetHook>;
+  /**
+   * Each project's skills placed in its folders, by `<name>@<place id>`:
+   * Claude Code and OpenCode read them in the folder themselves; pi, which
+   * reads no `.claude/skills`, takes them from here (pi-runtime.ts,
+   * `additionalSkillPaths`).
+   */
+  placedSkills: Record<string, PlacedSetSkill>;
 }
 
-const EMPTY: FleetHarnessSet = { hooks: {}, placedHooks: {} };
+const EMPTY: FleetHarnessSet = {
+  hooks: {},
+  placedHooks: {},
+  placedSkills: {},
+};
 
 /** The set the last sync wrote; none before the first, or when it cannot be read (said on the log). */
 export const readFleetHarnessSet = async (): Promise<FleetHarnessSet> => {

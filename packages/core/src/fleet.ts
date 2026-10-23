@@ -942,7 +942,8 @@ export interface MachineFleetConfig extends FleetConfig {
    * Project-bound skills, one copy per place as {@link placedMcp}, files
    * always inline. Written into `<cwd>/.claude/skills/<name>/`, which Claude
    * Code and OpenCode both read, and kept out of the checkout's status
-   * through its `info/exclude`.
+   * through its `info/exclude`; pi, which reads no `.claude/skills`, is
+   * handed each one's directory as it launches (agent fleet-harness-set.ts).
    */
   placedSkills: FleetSkillPayload[];
 }

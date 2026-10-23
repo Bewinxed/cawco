@@ -2858,7 +2858,15 @@ const converge = async (
   const hooks = await syncHooks(config.hooks, managed.hooks, hookStates);
   // What every CawCo session on this machine takes as it starts, written
   // whole after the files it names (fleet-harness-set.ts).
-  await writeFleetHarnessSet({ ...hooks.set });
+  await writeFleetHarnessSet({
+    ...hooks.set,
+    placedSkills: Object.fromEntries(
+      Object.entries(placedSkills).map(([key, { cwd, name }]) => [
+        key,
+        { cwd, name, dir: join(placedSkillsDir(cwd), name) },
+      ])
+    ),
+  });
   // The denials are the sync's own write, made as it arrived (denied-tools.ts
   // `applyFleetDenials`): kept as the sidecar holds them now, in the same
   // turn of its writes, so a newer sync's list is never written back over.
