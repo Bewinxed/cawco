@@ -12,16 +12,14 @@
   attached. No `/` and no `@`.
 
   Its pill stands in its host's flow (`flush`), as tall as it lays out,
-  the card's width (`--c-composer-w`). Its ring is
-  the keyboard's alone (The One Target Rule): what focused it is told
-  (`onring`), so the page's target drops its line while the ring shows.
+  the card's width (`--c-composer-w`). Its caret is its focus (The Caret
+  Rule): no ring is drawn round it, so the page's target keeps its line.
 -->
 <script lang="ts">
   import { untrack } from "svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu, as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { IconChevronDown, IconLayers } from "#lib/icons.js";
   import type { SendExtras } from "../client.svelte";
   import Composer from "../transcript/Composer.svelte";
@@ -39,7 +37,6 @@
     focus = false,
     onsubmit,
     onchange,
-    onring,
   }: {
     draft: ComposerDraft;
     /** What the send glyph does here, as its label and tooltip. */
@@ -61,8 +58,6 @@
     onsubmit: (text: string, extras: SendExtras) => void;
     /** The draft's words or chips moved: the pane keeps them. */
     onchange?: () => void;
-    /** The keyboard's ring shows on the pill, or goes. */
-    onring?: (shown: boolean) => void;
   } = $props();
 
   // The field is asked for once, as the composer opens.
@@ -80,8 +75,6 @@
     untrack(() => onchange?.());
   });
 
-  let host = $state<HTMLDivElement>();
-
   /** ↑ in an empty field walks the target out a step (comment design §3). */
   function outward(event: KeyboardEvent) {
     if (
@@ -97,8 +90,6 @@
       onchoose(chosen + 1);
     }
   }
-
-  $effect(() => () => onring?.(false));
 </script>
 
 {#snippet lead()}
@@ -135,18 +126,11 @@
   </DropdownMenu.Root>
 {/snippet}
 
-<!-- svelte-ignore a11y_no_static_element_interactions: the keys and focus are the composer's field's, heard as they pass -->
+<!-- svelte-ignore a11y_no_static_element_interactions: the keys are the composer's field's, heard as they pass -->
 <div
-  bind:this={host}
   class="relative w-full"
   data-slot="comment-composer"
   data-action={action}
-  onfocusin={() => onring?.(lastInput.current === "key")}
-  onfocusout={(event) => {
-    if (!host?.contains(event.relatedTarget as Node | null)) {
-      onring?.(false);
-    }
-  }}
   onkeydowncapture={outward}
 >
   <Composer

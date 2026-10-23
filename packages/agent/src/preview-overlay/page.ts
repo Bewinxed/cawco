@@ -132,9 +132,7 @@ const chrome = inkChrome(shadow);
  * rested on, stepped to with J and K) it adds a 1px `brand-solid` line on its
  * border box (`c-target-stroke`), `c-target-gap` outside a bare element, and no label; the page's root takes a 1px dashed line
  * `space-1` inside its edge, and no tint. While a composer stands, the
- * pointer's tint is off and the chosen element alone is drawn; while the
- * composer's field shows its keyboard ring, the target drops its line and
- * keeps its tint.
+ * pointer's tint is off and the chosen element alone is drawn.
  */
 /** The element under the pointer in Comment mode. */
 let hovered: Element | null = null;
@@ -144,8 +142,6 @@ let pinEl: Element | null = null;
 let pinLeads = false;
 /** The host's thread card stands open on a pin (`cawco:track-pin`). */
 let threadOpen = false;
-/** The composer's field shows its keyboard ring (`cawco:composer-ring`). */
-let ringed = false;
 
 /**
  * The comment being written: what the press chose (an element and the
@@ -261,7 +257,7 @@ function paint() {
   const rect = outlineOver(target);
   highlight.toggleAttribute("data-root", root);
   highlight.toggleAttribute("data-bare", !(root || drawsBox(target)));
-  highlight.toggleAttribute("data-rest", !root && (!chosen || ringed));
+  highlight.toggleAttribute("data-rest", !(root || chosen));
   if (label.hidden) {
     return;
   }
@@ -2751,7 +2747,6 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       threadOpen = id !== null;
       if (!composing()) {
         pinLeads = false;
-        ringed = false;
       }
       pins.track(id);
       paint();
@@ -2764,11 +2759,6 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       if (id && el) {
         post("cawco:pin-chain", { id, chain: chainOf(el).map(named) });
       }
-    },
-    // The card's field shows its keyboard ring: the target drops its line and keeps its tint.
-    "cawco:composer-ring": (message) => {
-      ringed = message.on === true;
-      paint();
     },
     // What the host's chrome covers of the page (its Comments list, a
     // phone's card): a pin it opens is brought out from under it.

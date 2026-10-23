@@ -375,7 +375,7 @@
                 spellcheck="false"
                 aria-describedby="connect-said"
                 aria-invalid={said ? "true" : undefined}
-                class="h-c-input-h min-w-0 flex-1 rounded-md border border-border-control bg-surface-raised px-space-3 font-mono type-body text-ink-strong shadow-xs outline-none transition-control placeholder:text-ink-subtle focus-inset aria-invalid:border-error-9"
+                class="field-edge h-c-input-h min-w-0 flex-1 rounded-md border border-border-control bg-surface-raised px-space-3 font-mono type-body text-ink-strong shadow-xs transition-control placeholder:text-ink-subtle aria-invalid:border-error-9"
                 placeholder="deploy@build-01.example.net"
                 maxlength={DRAFT_LIMITS.target}
                 value={connect.fields.target}
@@ -396,7 +396,7 @@
                     aria-label="Port"
                     inputmode="numeric"
                     autocomplete="off"
-                    class="num col-start-1 row-start-1 h-c-input-h w-full min-w-0 rounded-md border border-border-control bg-surface-raised px-space-2 text-center type-body text-ink-strong shadow-xs outline-none transition-control placeholder:text-ink-subtle focus-inset"
+                    class="field-edge num col-start-1 row-start-1 h-c-input-h w-full min-w-0 rounded-md border border-border-control bg-surface-raised px-space-2 text-center type-body text-ink-strong shadow-xs transition-control placeholder:text-ink-subtle"
                     placeholder="22"
                     maxlength={DRAFT_LIMITS.port}
                     value={connect.fields.port}

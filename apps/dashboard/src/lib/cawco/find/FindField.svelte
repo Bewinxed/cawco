@@ -6,7 +6,9 @@
    * (the Files panel). On a phone's sheet (`phone`) it stands above the
    * keyboard: 52px, its hairline on top, the words at 16px so iOS does not
    * zoom, Clear a 44px target. Everything else the input takes (its label,
-   * its combobox roles, its keys) is the caller's.
+   * its combobox roles, its keys) is the caller's. The strip is the whole
+   * surface, with no frame of its own: its caret is its focus, and
+   * nothing is drawn round it (DESIGN.md, The Caret Rule).
    */
   import type { HTMLInputAttributes } from "svelte/elements";
   import { IconClose, IconSearch as SearchIcon } from "#lib/icons.js";
@@ -30,7 +32,7 @@
 
 <div
   data-slot="finder-field"
-  class="group/field field-shell flex items-center flex-none gap-space-2 h-c-row-h ps-space-3 pe-space-1 border-b border-b-border-hairline data-phone:h-c-find-phone-h data-phone:border-b-none data-phone:border-t data-phone:border-t-border-hairline"
+  class="group/field flex items-center flex-none gap-space-2 h-c-row-h ps-space-3 pe-space-1 border-b border-b-border-hairline data-phone:h-c-find-phone-h data-phone:border-b-none data-phone:border-t data-phone:border-t-border-hairline"
   data-phone={phone || undefined}
 >
   <SearchIcon
@@ -41,7 +43,7 @@
   <input
     bind:this={input}
     {value}
-    class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-ink-strong caret-brand-solid outline-off placeholder:text-ink-subtle placeholder:text-ellipsis"
+    class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-ink-strong caret-brand-solid placeholder:text-ink-subtle placeholder:text-ellipsis"
     {...rest}
   />
   {#if value}

@@ -19,7 +19,7 @@
  * property to different values on the element itself (or on one of its
  * pseudo-elements) are a trap when the winner wins on weight and:
  *  - the winner's weight is its variants', not its own utility's (press-tint
- *    and field-shell outweigh by their own selectors on purpose);
+ *    and field-edge outweigh by their own selectors on purpose);
  *  - the winner is not a press under way, nor a hide (a held control takes
  *    the step past every look; a hidden element draws none);
  *  - the loser holds a state the winner's variants don't: not a media range,

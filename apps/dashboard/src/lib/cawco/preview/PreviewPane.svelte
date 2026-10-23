@@ -1831,7 +1831,6 @@
     text: string
   ) => ({ text, attachments: commentAttachments(draft.unsent?.files ?? []) });
 
-  /** How the open thread was opened: a key's draws its field's ring, a press's none (The One Target Rule). */
   /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
   function openCard(id: string, via: "key" | "pointer" = "pointer") {
     loadKit();
@@ -1842,6 +1841,7 @@
     if (openPin && openPin !== id) {
       closeCard();
     }
+    // A key or a press inside the page, which the host never hears: the page's last input is it.
     lastInput.current = via;
     openPin = id;
     focusedPin = id;
@@ -1884,7 +1884,6 @@
       post({ type: "cawco:compose-cancel" });
       keepDraftAt(null);
     }
-    post({ type: "cawco:composer-ring", on: false });
   }
   /**
    * Where the next comment's draft stands, kept on this device per artifact
@@ -1972,7 +1971,6 @@
         focusedPin = (pin as Pin).id;
       }
       drafts?.discard(NEXT_COMMENT);
-      post({ type: "cawco:composer-ring", on: false });
       return;
     }
     const draft = nextDraft;
@@ -2469,7 +2467,7 @@
         }
         loadKit();
         dropPeek();
-        // The press was the page's: the composer's field draws no ring.
+        // The press was the page's, which the host never hears: the page's last input is it.
         lastInput.current = message.via === "key" ? "key" : "pointer";
         composing = {
           at: composing?.at ?? null,
@@ -3799,7 +3797,6 @@
           focus
           onchange={() => drafts?.changed(NEXT_COMMENT)}
           onchoose={(index) => post({ type: "cawco:compose-target", index })}
-          onring={(on) => post({ type: "cawco:composer-ring", on })}
           onsubmit={(text) => comment(text)}
           placeholder={commentWords.composeHint}
           sendError={composing.error}
@@ -3839,7 +3836,6 @@
           onplace={placeElsewhere}
           onreply={(text) => reply(text)}
           onresolve={(resolved) => resolvePin(resolved)}
-          onring={(on) => post({ type: "cawco:composer-ring", on })}
           onretry={() => {
             if (cardPin) {
               retryPin(cardPin.id);

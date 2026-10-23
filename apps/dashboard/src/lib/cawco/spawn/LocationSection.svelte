@@ -214,7 +214,7 @@
        popover past a phone's edge. -->
   <div
     data-slot="location-section-field"
-    class="field-shell min-w-0 overflow-clip rounded-md border border-border-control bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
+    class="field-edge min-w-0 overflow-clip rounded-md border border-border-control bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
     data-locked={locked || undefined}
   >
     <div
@@ -229,7 +229,7 @@
         aria-invalid={reading && !informational ? true : undefined}
         aria-label="Directory"
         autocapitalize="off"
-        class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong outline-off placeholder:text-ink-muted"
+        class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong placeholder:text-ink-muted"
         id="session-dir"
         oninput={(event) => ondir(event.currentTarget.value)}
         onkeydown={commitOnEnter}
@@ -424,7 +424,7 @@
       >
         <div
           data-slot="location-section-field"
-          class="overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-xs transition-control"
+          class="field-edge overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-xs transition-control"
         >
           <div
             data-slot="row"
@@ -434,7 +434,7 @@
             <input
               aria-label="Repository"
               autocapitalize="off"
-              class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong outline-off placeholder:text-ink-muted"
+              class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong placeholder:text-ink-muted"
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
               onkeydown={commitOnEnter}

@@ -2360,7 +2360,7 @@
       "refersTo": "input",
       "description": "A 36px field on the raised surface; focus turns its own border into the ring.",
       "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search sessions…\" aria-label=\"Search sessions\">",
-      "css": ".ds-input { height: 36px; width: 240px; padding: 0 12px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink-strong); box-shadow: var(--shadow-xs); font: var(--type-body); caret-color: var(--brand-solid); transition: var(--transition-control); } .ds-input::placeholder { color: var(--ink-subtle); } .ds-input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }"
+      "css": ".ds-input { height: 36px; width: 240px; padding: 0 12px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink-strong); box-shadow: var(--shadow-xs); font: var(--type-body); caret-color: var(--brand-solid); transition: var(--transition-control); } .ds-input::placeholder { color: var(--ink-subtle); } .ds-input:focus-visible { outline: none; border-color: var(--border-control-strong); }"
     },
     {
       "name": "Stat Tile",

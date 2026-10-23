@@ -157,6 +157,7 @@
   --color-border-card: var(--border-card);
   --color-border-button-outline: var(--border-button-outline);
   --color-border-row-outline: var(--border-row-outline);
+  --color-border-control-strong: var(--border-control-strong);
   --color-input: var(--input);
   --color-ink-strong: var(--ink-strong);
   --color-ink-row: var(--ink-row);

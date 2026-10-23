@@ -83,9 +83,10 @@
   const looks = $derived(
     inputVariants({ face, text, field: kind, measure, flex })
   );
-  /** The field's own look, the same for a file picker and a text field. */
+  /** The field's own look, the same for a file picker and a text field.
+      Typed in, its edge steps up (`field-edge`): the caret is its focus. */
   const own = [
-    "rounded-md shadow-xs transition-control",
+    "field-edge rounded-md shadow-xs transition-control",
     "h-c-input-h w-full min-w-0 border border-border-control",
     "bg-surface-raised px-3 text-ink-strong",
     "text-body file:inline-flex file:h-7",

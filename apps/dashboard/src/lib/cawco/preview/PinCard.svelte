@@ -91,7 +91,6 @@
     onplace,
     onclose,
     onfind,
-    onring,
     ondraft,
   }: {
     pin: Pin;
@@ -128,7 +127,6 @@
     onclose: () => void;
     /** Its name pressed: the page scrolls to the pin and lights its element. */
     onfind: () => void;
-    onring?: (shown: boolean) => void;
     ondraft?: () => void;
   } = $props();
 
@@ -579,13 +577,12 @@
     indent="var(--space-3)"
     reason={linkRefused ? copyRefused("Link") : null}
   />
-  <!-- The reply takes the keyboard as the thread opens: ringed when a key opened it, quiet after a press (The One Target Rule). -->
+  <!-- The reply takes the keyboard as the thread opens; its caret is its focus (The Caret Rule). -->
   <CommentComposer
     action="Reply"
     {draft}
     focus
     onchange={ondraft}
-    {onring}
     onsubmit={onreply}
     {placeholder}
     sendError={problem ?? ""}

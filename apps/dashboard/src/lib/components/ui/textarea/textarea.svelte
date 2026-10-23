@@ -5,7 +5,7 @@
   /** Its callers' looks, each as they drew it: the mono face, a text size, a
       tall editor's least height, the page's fill, and a note written
       straight into a composer (no field of its own: the composer's shell is
-      the field, DESIGN.md Inputs and fields, Field shell). A phone's 16px
+      the field, DESIGN.md Inputs and fields, Field frame). A phone's 16px
       floor is the base layer's, for every field. */
   export const textareaVariants = tv({
     variants: {
@@ -72,13 +72,13 @@
       "rounded-md shadow-xs transition-control motion-safe:transition-control-grow",
       "flex min-h-16 w-full resize-none py-2",
       "border border-border-control",
+      // Typed in, its edge steps up: the caret is its focus. A note has no
+      // edge of its own (the composer's pill is its field).
+      look !== "note" && "field-edge",
       "bg-surface-raised px-3 text-ink-strong",
       "text-body placeholder:text-ink-muted",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "aria-invalid:border-error-9",
-      // Focused by a pointer (its caller says so: a browser matches
-      // :focus-visible on any focus of a text field), it draws no ring.
-      "data-pointer-focus:outline-off",
       "dark:aria-invalid:border-error-9/50",
       textareaVariants({ face, text, height, resize, fill, look }),
       placement

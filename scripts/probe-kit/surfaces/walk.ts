@@ -453,8 +453,12 @@ export async function passPage(
   // Every page focused, as a person's one window is: two passes side by side
   // share one browser, where only one page would hold its focus, and what
   // styles itself on focus (an editor's active line) read either way.
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  // Chromium's alone: another engine (`PROBE_ENGINE=webkit`) walks one pass
+  // at a time (`PROBE_PARALLEL=1`), its one page the focused one.
+  if (page.context().browser()?.browserType().name() === "chromium") {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  }
   await page.clock.install({ time: at - CLOCK_LEAD_MS });
   await page.clock.pauseAt(at);
   // Date stands at the tape's moment whatever stretches the timers are run

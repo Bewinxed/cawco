@@ -468,8 +468,8 @@
                  or repeat, thumbnail or not. Closing, the pane shrinks back
                  into this row (PreviewPane.svelte). The button is the whole
                  card (its ::after), so the card is what focus lights: the
-                 card's own border takes the ring, as a field frame's does
-                 (app.css field-shell), and the button draws nothing. Neither
+                 card's own border takes the keyboard's ring, and the button
+                 draws nothing. Neither
                  line sets the card's width, so the card fits any row it
                  stands in. -->
             <div

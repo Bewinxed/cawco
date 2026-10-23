@@ -240,6 +240,8 @@
       color-mix(in oklab, var(--neutral-8), var(--neutral-9) 50%),
       color-mix(in oklab, var(--neutral-9), var(--neutral-11) 10%)
     );
+    /* The strong control edge: a framed text field's own border while its text has focus (DESIGN.md, The Caret Rule). The row outline's value, 3:1 against the raised fill it frames and the recess or raised ground round it, by day and at night (WCAG 1.4.11), where the control edge it steps up from holds 1.36:1. */
+    --border-control-strong: var(--border-row-outline);
     --input: light-dark(
       var(--neutral-7),
       oklch(from var(--neutral-12) l c h / 0.14)

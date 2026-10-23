@@ -1211,6 +1211,11 @@
         }
       }
     },
+    "border-control-strong": {
+      "$type": "color",
+      "$value": "{color.border-row-outline}",
+      "$description": "The strong control edge: a framed text field's own border while its text has focus (DESIGN.md, The Caret Rule). The row outline's value, 3:1 against the raised fill it frames and the recess or raised ground round it, by day and at night (WCAG 1.4.11), where the control edge it steps up from holds 1.36:1."
+    },
     "input": {
       "$type": "color",
       "$value": "{color.neutral-7}"

@@ -19,9 +19,10 @@
   }
 </script>
 
-<!-- The frame is the field (DESIGN.md, Inputs and fields, Field shell), so
-     it carries the field's touch area (The 44 Touch Rule): its own field
-     draws none. -->
+<!-- The frame is the field (DESIGN.md, Inputs and fields, Field frame), so
+     it carries the field's touch area (The 44 Touch Rule), and its edge
+     steps up while its text has focus (`field-edge`): its own field draws
+     none. -->
 <!-- biome-ignore lint/a11y/useSemanticElements: <fieldset> carries browser-default border/padding this design resets everywhere it's used; keeping the div avoids a visual regression -->
 <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the frame's touch area focuses its field; a keyboard reaches the field itself. -->
 <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the frame's area. -->
@@ -30,7 +31,7 @@
     "touch-hit [--hit-edge:1px]",
     "relative flex h-9 w-full min-w-0 items-center rounded-md",
     "border border-border-control",
-    "field-shell bg-surface-raised shadow-xs",
+    "field-edge bg-surface-raised shadow-xs",
     "[transition:var(--transition-control)]",
     "has-[>[data-align=block-end]]:h-auto",
     "has-[>[data-align=block-start]]:h-auto",

@@ -84,10 +84,10 @@
       backgroundColor: "var(--code-syntax-background)",
       fontSize: "var(--text-label)",
     },
-    "&.cm-focused": {
-      outline: "var(--focus-ring-width) solid var(--focus-ring)",
-      outlineOffset: "var(--focus-ring-inset)",
-    },
+    // An editor's focus is its caret (DESIGN.md, The Caret Rule): the
+    // view draws no outline (CodeMirror's own is a dotted one), and the
+    // host's frame steps its edge (`field-edge`).
+    "&.cm-focused": { outline: "none" },
     ".cm-scroller": {
       fontFamily: "var(--font-mono)",
       lineHeight: "var(--leading-body)",
@@ -247,6 +247,6 @@
 <section
   aria-label={label}
   data-slot="code-view"
-  class="h-full min-h-0 bg-(color:--code-syntax-background) border border-border-well rounded-md overflow-hidden"
+  class="field-edge transition-control h-full min-h-0 bg-(color:--code-syntax-background) border border-border-well rounded-md overflow-hidden"
   bind:this={host}
 ></section>

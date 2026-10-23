@@ -192,11 +192,11 @@
       >
         <label
           data-slot="search"
-          class="touch-hit hit-edge-hair field-shell mx-0 mt-space-1 mb-space-2 flex h-c-input-h items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 text-ink-muted"
+          class="touch-hit hit-edge-hair field-edge transition-control mx-0 mt-space-1 mb-space-2 flex h-c-input-h items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 text-ink-muted"
         >
           <IconSearch aria-hidden="true" class="size-icon-md flex-none" />
           <input
-            class="min-w-0 flex-auto border-none border-current bg-transparent type-body text-ink-strong outline-off"
+            class="min-w-0 flex-auto border-none border-current bg-transparent type-body text-ink-strong"
             aria-label="Search recent sessions"
             oninput={() => {
               recentShown = RECENT_PAGE;

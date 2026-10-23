@@ -932,7 +932,7 @@
   bind:this={editor}
   data-phone={phone || undefined}
   class={cn(
-    "type-body wrap-anywhere no-scrollbar relative max-h-c-textarea-max-h min-h-c-composer-field overflow-y-auto whitespace-pre-wrap py-space-2 text-ink-strong leading-ui caret-brand-solid outline-off data-mention-field-empty:before:pointer-events-none data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:content-placeholder",
+    "type-body wrap-anywhere no-scrollbar relative max-h-c-textarea-max-h min-h-c-composer-field overflow-y-auto whitespace-pre-wrap py-space-2 text-ink-strong leading-ui caret-brand-solid data-mention-field-empty:before:pointer-events-none data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:content-placeholder",
     className
   )}
   aria-activedescendant={mention.open && mention.active

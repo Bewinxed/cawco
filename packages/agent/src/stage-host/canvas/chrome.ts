@@ -250,7 +250,7 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 .cawco-section-failed-place > span:last-child { flex: none; }
 .cawco-grid { display: grid; grid-auto-columns: max-content; gap: var(--space-6) var(--space-6); align-items: start; justify-content: start; }
 .cawco-colhead { font: var(--type-meta); color: var(--ink-muted); text-transform: none; }
-/* The gap clears the selected ring (2px at a 2px offset) of the label above and the status below. */
+/* The gap clears the label's focus ring (2px at a 2px offset) and the selected frame's 1px edge. */
 .cawco-frame { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); min-inline-size: 0; position: relative; }
 .cawco-frame-label { all: unset; box-sizing: border-box; display: grid; gap: var(--space-row); max-inline-size: 360px; cursor: grab; border-radius: var(--radius-xs);
   padding: var(--space-row) var(--space-1); }
@@ -262,8 +262,11 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 /* The frame in view is said by its label row, in the selected pair. */
 .cawco-frame[data-cawco-current] > .cawco-frame-label { background: var(--selected-bg); }
 .cawco-frame[data-cawco-current] > .cawco-frame-label :is(.cawco-frame-words, .cawco-frame-small) { color: var(--selected-ink); }
-/* The inspector's story: one solid neutral edge round its frames (3:1); the focus ring is for focus alone. */
-.cawco-frame[data-cawco-selected] > .cawco-frame-body { outline: var(--focus-ring-width) solid var(--border-button-outline); outline-offset: var(--focus-ring-offset); }
+/* The inspector's story, in DESIGN.md's selected marks, never the focus ring's shape: its label's words in the selected ink, and
+   a 1px edge in the strong control edge (3:1) flush on the frame's own box, a hairline that moves nothing (a box-shadow, never
+   the outline the ring is). */
+.cawco-frame[data-cawco-selected] > .cawco-frame-label :is(.cawco-frame-words, .cawco-frame-small) { color: var(--selected-ink); }
+.cawco-frame[data-cawco-selected] > .cawco-frame-body { box-shadow: 0 0 0 var(--border-width) var(--border-control-strong); }
 .cawco-frame[data-cawco-edited] .cawco-frame-small::after { content: " · edited"; }
 .cawco-frame-body { position: relative; min-inline-size: 24px; min-block-size: 16px; }
 .cawco-frame-status { font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }

@@ -186,6 +186,8 @@ public enum Palette {
     public static let borderButtonOutline = Palette.named("border-button-outline")
     /// A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess (surface-recess, #F7F4EE) and 3.47:1 on raised (surface-raised, #FEFDFA) by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.49:1 on the recess (#1D1B18) and 3.26:1 on raised (#23211E). Figures from bun scripts/token-contrast-check.ts --table.
     public static let borderRowOutline = Palette.named("border-row-outline")
+    /// The strong control edge: a framed text field's own border while its text has focus (DESIGN.md, The Caret Rule). The row outline's value, 3:1 against the raised fill it frames and the recess or raised ground round it, by day and at night (WCAG 1.4.11), where the control edge it steps up from holds 1.36:1.
+    public static let borderControlStrong = Palette.named("border-control-strong")
     public static let input = Palette.named("input")
     /// Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised.
     public static let inkStrong = Palette.named("ink-strong")

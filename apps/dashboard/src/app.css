@@ -625,7 +625,7 @@
     --crepe-shadow-1: var(--shadow-tile);
     --crepe-shadow-2: var(--shadow-overlay);
 
-    /* Its host field draws the frame (the field shell's raised surface and
+    /* Its host field draws the frame (the field frame's raised surface and
        control edge, MemoryEditor); the editor draws none of its own, so it
        fills the field to its foot. */
     background: transparent;
@@ -721,15 +721,27 @@
     border: 1px solid var(--border-control);
     box-shadow: var(--shadow-tile);
   }
-  /* Crepe's own focus styles give way to the app's one ring. */
+  /* Crepe's own focus styles give way to the app's: its controls take the
+     house ring, and its text entry (the document, a link's field) none, its
+     caret being its focus (DESIGN.md, The Caret Rule); the host's frame
+     steps its edge (MemoryEditor, `field-edge`). */
   [data-slot="crepe-host"] .milkdown :focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
   }
   [data-slot="crepe-host"]
     .milkdown
-    :is(input, [contenteditable]):focus-visible {
-    outline-offset: var(--focus-ring-inset);
+    :is(
+      input,
+      textarea,
+      [contenteditable]:not([contenteditable="false"])
+    ):focus-visible {
+    outline-style: none;
+
+    @media (forced-colors: active) {
+      outline: var(--focus-ring-width) solid transparent;
+      outline-offset: var(--focus-ring-inset);
+    }
   }
   [data-slot="crepe-host"] .milkdown :is(button, [role="button"]):active {
     background: var(--surface-fill);

@@ -355,12 +355,12 @@
     }
   }
 
-  /* The one focus indicator (tokens: --focus-ring*). An outline, so it
-     tracks each element's own radius and survives forced colours; never a
-     box-shadow ring, a border-colour change or a background on focus as
-     well. Pointer focus shows nothing: only :focus-visible draws it, and
-     the browser matches that on a click only for text entry, whose ring
-     is its border. */
+  /* The control's focus ring (tokens: --focus-ring*; DESIGN.md, The One
+     Ring Rule): a button, tab, row or handle reached by the keyboard. An
+     outline, so it tracks each element's own radius and survives forced
+     colours. Pointer focus shows nothing: :focus-visible is "when it has
+     been focused using the keyboard" (tailwindcss.com/docs/hover-focus-
+     and-other-states). */
   :focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
@@ -369,7 +369,26 @@
     scroll-margin: calc(var(--focus-ring-offset) + var(--focus-ring-width));
   }
 
-  /* Text entry and rows: the ring sits on the element's own border box. */
+  /* A select and the rows: the ring sits on the element's own border box. */
+  :is(
+    select,
+    [role="option"],
+    [role="tab"],
+    [role="treeitem"],
+    [role="row"],
+    [role="gridcell"]
+  ):focus-visible {
+    outline-offset: var(--focus-ring-inset);
+  }
+
+  /* Text entry draws no ring (DESIGN.md, The Caret Rule): its focus
+     indicator is its caret ("When text fields receive focus, a vertical
+     bar is displayed in the field", WCAG 2.2 Understanding 2.4.7), and a
+     browser matches :focus-visible on any focus of a text field, a click
+     as much as a key, so a ring here stood the whole time it was typed in.
+     A field with a frame of its own steps that frame's edge instead
+     (`field-edge`, below). Tailwind's `outline-hidden`: no outline, and
+     under forced colours a transparent one the system paints. */
   :is(
     input:not(
       [type="checkbox"],
@@ -383,17 +402,14 @@
       [type="image"]
     ),
     textarea,
-    select,
-    [contenteditable]
-  ):focus-visible,
-  :is(
-    [role="option"],
-    [role="tab"],
-    [role="treeitem"],
-    [role="row"],
-    [role="gridcell"]
+    [contenteditable]:not([contenteditable="false"])
   ):focus-visible {
-    outline-offset: var(--focus-ring-inset);
+    outline-style: none;
+
+    @media (forced-colors: active) {
+      outline: var(--focus-ring-width) solid transparent;
+      outline-offset: var(--focus-ring-inset);
+    }
   }
 
   /* Icons come in three sizes: 12 (beside meta text), 16 (controls and
@@ -1465,33 +1481,23 @@
   line-clamp: --value(integer);
 }
 
-/* A field that frames a borderless editor with its own controls beside it
-   (a composer, a search box with an icon): the frame is the text field. Its
-   border takes the ring while the text inside has focus, not while one of
-   its chips does, and the editor itself draws nothing. */
-@utility field-shell {
-  &:has(:is(input, textarea, select, [contenteditable]):focus-visible) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  & :is(input, textarea, select, [contenteditable]):focus-visible {
-    outline: none;
-  }
-}
-
-/* The same for a search strip whose only border is the rule under it: the
-   rule takes the ring's colour and weight. The strip's own border is a
-   utility (`border-b-border-hairline`, ModelSection), and this selector
-   outweighs it ((0,2,1) to (0,1,0)) in the same layer. */
-@utility field-underline {
-  &:has(:is(input, textarea, [contenteditable]):focus-visible) {
-    border-bottom-color: var(--focus-ring);
-    box-shadow: inset 0
-      calc(-1 * (var(--focus-ring-width) - var(--border-width))) 0
-      var(--focus-ring);
-  }
-  & :is(input, textarea, [contenteditable]):focus-visible {
-    outline: none;
+/* A text field with a frame of its own (DESIGN.md, The Caret Rule): while
+   its text has focus the frame's border steps up to the strong control
+   edge, on the frame's own radius, and nothing else is drawn. On the field
+   itself (the kit's Input and Textarea) or on a frame round a borderless
+   editor with its own controls beside it (a search with an icon, a path
+   with Browse): the frame steps for the text inside, not for one of its
+   chips or buttons, which keep their own ring. A field marked invalid keeps
+   its error edge. This selector outweighs the field's own border utility
+   (`border-border-control`) on purpose (scripts/specificity-trap.ts).
+   A field that is the whole surface (Find's strip, the composer) carries
+   none: its caret is the whole indicator. */
+@utility field-edge {
+  &:is(
+      :focus-visible,
+      :has(:is(input, textarea, [contenteditable]):focus-visible)
+    ):not([aria-invalid="true"], :has([aria-invalid="true"])) {
+    border-color: var(--border-control-strong);
   }
 }
 

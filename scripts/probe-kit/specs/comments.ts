@@ -167,8 +167,9 @@
  *    the press with no ring; the
  *    pointer moved elsewhere leaves it the one target. With the composer
  *    open, the frame's every outline, border and box-shadow holds exactly one
- *    coral mark, the target's, 1px. Tab onto the composer's field draws its
- *    inset ring, and the target drops its line and keeps its tint. The line's
+ *    coral mark, the target's, 1px. Tab onto the composer's field draws no
+ *    ring either (its caret is its focus: The Caret Rule), and the target
+ *    keeps its line and its tint. The line's
  *    contrast on the page field and on raised, by day and by night, is read
  *    and said. A bare text element chosen takes its line 2px outside, 2px or
  *    more from its glyphs.
@@ -4292,7 +4293,7 @@ const targetChecks = async (on: On) => {
     5000
   ).catch(() => targetOf(frame));
   // The one composer or thread open at a time: its field, and the chat
-  // composer's pill (`field-shell`), which draws the field's ring.
+  // composer's pill (`cin`), which draws no ring round its field.
   const field = on.page
     .locator(':is([data-slot="pin-composer"], [data-slot="pin-card"])')
     .getByRole("combobox");
@@ -4300,7 +4301,7 @@ const targetChecks = async (on: On) => {
     holder = ':is([data-slot="pin-composer"], [data-slot="pin-card"])'
   ) =>
     on.page
-      .locator(`${holder} .field-shell`)
+      .locator(`${holder} form[data-slot="cin"]`)
       .first()
       .evaluate((el) => {
         const style = getComputedStyle(el);
@@ -4312,10 +4313,10 @@ const targetChecks = async (on: On) => {
         const active = document.activeElement as HTMLElement | null;
         return {
           focused: !!active?.isContentEditable && el.contains(active),
-          quiet: el.hasAttribute("data-pointer-focus"),
+          // The field and its pill: neither draws the focus ring.
           style: style.outlineStyle,
-          width: style.outlineWidth,
-          offset: style.outlineOffset,
+          field: active ? getComputedStyle(active).outlineStyle : null,
+          shadow: style.boxShadow.includes(ring),
           color: style.outlineColor,
           ring,
         };
@@ -4337,11 +4338,12 @@ const targetChecks = async (on: On) => {
     JSON.stringify({ opened, chosen })
   );
   on.kit.check(
-    "7c: the composer opened by a press shows no ring (its field focused, quiet)",
+    "7c: the composer opened by a press shows no ring (its field focused, its caret its focus)",
     !!pointerRing &&
       pointerRing.focused &&
-      pointerRing.quiet &&
-      pointerRing.style === "none",
+      pointerRing.style === "none" &&
+      pointerRing.field === "none" &&
+      !pointerRing.shadow,
     JSON.stringify(pointerRing)
   );
 
@@ -4375,36 +4377,31 @@ const targetChecks = async (on: On) => {
   await on.page.keyboard.press("Shift+Tab");
   await on.page.keyboard.press("Tab");
   const keyRing = await until(
-    "the field's keyboard ring",
+    "the field focused from the keyboard",
     () => readRing(),
-    (seen) => seen.focused && !seen.quiet,
+    (seen) => seen.focused,
     3000
   ).catch(() => readRing());
-  const dropped = await until(
-    "the target's line dropped",
-    () => targetOf(frame),
-    (seen) => !!seen?.rest,
-    3000
-  ).catch(() => targetOf(frame));
+  await settle(on.page, 150);
+  const kept = await targetOf(frame);
   on.kit.check(
-    "7c: Tab onto the composer's field draws its ring, 2px focus-ring inset on its own box (offset -2px)",
+    "7c: Tab onto the composer's field draws no ring on the field or its pill (its caret is its focus)",
     keyRing.focused &&
-      !keyRing.quiet &&
-      keyRing.style === "solid" &&
-      keyRing.width === "2px" &&
-      keyRing.offset === "-2px" &&
-      keyRing.color === keyRing.ring,
+      keyRing.style === "none" &&
+      keyRing.field === "none" &&
+      !keyRing.shadow,
     JSON.stringify(keyRing)
   );
   on.kit.check(
-    "7c: while the composer's ring shows, the target drops its line and keeps its tint",
-    !!dropped &&
-      dropped.shown &&
-      dropped.rest &&
-      dropped.style === "none" &&
-      dropped.background === dropped.tint &&
-      near(dropped.box, own, 1),
-    JSON.stringify(dropped)
+    "7c: with the field focused from the keyboard, the target keeps its 1px line and its tint",
+    !!kept &&
+      kept.shown &&
+      !kept.rest &&
+      kept.style === "solid" &&
+      kept.width === "1px" &&
+      kept.background === kept.tint &&
+      near(kept.box, own, 1),
+    JSON.stringify(kept)
   );
 
   const contrast = await lineContrast(on);
@@ -4505,7 +4502,7 @@ const targetChecks = async (on: On) => {
     JSON.stringify({ rowHovered, rowLeft })
   );
 
-  // Opened from the keyboard (Enter on its row), the card's field draws its ring; opened by a press, none.
+  // Opened from the keyboard (Enter on its row) or by a press, the card's field takes the focus and draws no ring.
   await row.focus();
   await on.page.keyboard.press("Enter");
   // Read on the thread's own field: a composer still going out is not it.
@@ -4516,13 +4513,12 @@ const targetChecks = async (on: On) => {
     5000
   ).catch(() => null);
   on.kit.check(
-    "7c: a thread opened from the keyboard (Enter on its row) focuses its reply with the ring (2px focus-ring, inset)",
+    "7c: a thread opened from the keyboard (Enter on its row) focuses its reply, no ring (its caret is its focus)",
     !!keyOpened &&
       keyOpened.focused &&
-      !keyOpened.quiet &&
-      keyOpened.style === "solid" &&
-      keyOpened.width === "2px" &&
-      keyOpened.color === keyOpened.ring,
+      keyOpened.style === "none" &&
+      keyOpened.field === "none" &&
+      !keyOpened.shadow,
     JSON.stringify(keyOpened)
   );
   await on.page.keyboard.press("Escape");
@@ -4537,8 +4533,9 @@ const targetChecks = async (on: On) => {
     "7c: the same thread opened by a press on its row focuses its reply with no ring",
     !!pressOpened &&
       pressOpened.focused &&
-      pressOpened.quiet &&
-      pressOpened.style === "none",
+      pressOpened.style === "none" &&
+      pressOpened.field === "none" &&
+      !pressOpened.shadow,
     JSON.stringify(pressOpened)
   );
   await on.page.keyboard.press("Escape");
@@ -5347,8 +5344,8 @@ const mintedIdChecks = async (on: On) => {
 };
 
 /**
- * 7g. A thread opened from the keyboard ends with its reply focused and
- * ringed, whatever the timing: Enter on a rail row is the row's own (the
+ * 7g. A thread opened from the keyboard ends with its reply focused (its
+ * caret its focus, no ring drawn), whatever the timing: Enter on a rail row is the row's own (the
  * pane's Enter, the pin J and K stand on, only where no control has the
  * focus), a comment whose Esc came before the page's answer is still the
  * one J and K stand on, and the focus request holds until it lands. Read
@@ -5410,10 +5407,10 @@ const keyOpenChecks = async (on: On) => {
   ).catch(() => 0);
   await settle(on.page, 600);
 
-  /** Pin `n`'s thread's reply field: focused, and how its ring draws; null while it isn't drawn. */
+  /** Pin `n`'s thread's reply field: focused, and whether any ring draws; null while it isn't drawn. */
   const ringRead = async (n: number) => {
     const shell = on.page.locator(
-      `[data-slot="pin-card"][data-pin-card="${n}"] .field-shell`
+      `[data-slot="pin-card"][data-pin-card="${n}"] form[data-slot="cin"]`
     );
     try {
       return await shell.evaluate(
@@ -5427,10 +5424,10 @@ const keyOpenChecks = async (on: On) => {
           const active = document.activeElement as HTMLElement | null;
           return {
             focused: !!active?.isContentEditable && el.contains(active),
-            quiet: el.hasAttribute("data-pointer-focus"),
-            style: style.outlineStyle,
-            width: style.outlineWidth,
-            ringed: style.outlineColor === ring,
+            ringed:
+              style.outlineStyle !== "none" ||
+              style.boxShadow.includes(ring) ||
+              (!!active && getComputedStyle(active).outlineStyle !== "none"),
           };
         },
         undefined,
@@ -5449,12 +5446,7 @@ const keyOpenChecks = async (on: On) => {
       5000
     ).catch(() => ringRead(n));
   const keyed = (seen: Awaited<ReturnType<typeof ringOf>>) =>
-    !!seen &&
-    seen.focused &&
-    !seen.quiet &&
-    seen.style === "solid" &&
-    seen.width === "2px" &&
-    seen.ringed;
+    !!seen && seen.focused && !seen.ringed;
   /** Enter on pin `n`'s row, the row itself holding the focus. */
   const enterOn = async (n: number) => {
     const row = (await rowsOf(on)).locator(
@@ -5488,17 +5480,17 @@ const keyOpenChecks = async (on: On) => {
     .count();
   await closeThread();
   on.kit.check(
-    "7g: a comment Esc'd before the page's answer is written all the same; after a fresh load (the comment kit and MessageBody not loaded), Enter on its row opens its thread with the reply focused and ringed",
+    "7g: a comment Esc'd before the page's answer is written all the same; after a fresh load (the comment kit and MessageBody not loaded), Enter on its row opens its thread with the reply focused, no ring",
     written === 2 && keyed(first),
     JSON.stringify({ written, first })
   );
   on.kit.check(
-    "7g: reopened from the keyboard, the thread focuses its reply with the ring again",
+    "7g: reopened from the keyboard, the thread focuses its reply again, no ring",
     keyed(again),
     JSON.stringify(again)
   );
   on.kit.check(
-    "7g: Enter on a row is that row's: pin 1's row opens pin 1's thread, focused and ringed, while J and K stand on pin 2",
+    "7g: Enter on a row is that row's: pin 1's row opens pin 1's thread, its reply focused, while J and K stand on pin 2",
     keyed(other) && wrongCard === 0,
     JSON.stringify({ other, wrongCard })
   );
@@ -5821,7 +5813,7 @@ const composerRead = (screen: Page) =>
     });
     return {
       card: box(el),
-      pill: box(el.querySelector(".field-shell")),
+      pill: box(el.querySelector(`form[data-slot="cin"]`)),
       field: box(fieldBox),
       hint,
       hintFits: !!canvas && canvas.measureText(hint).width <= room + 0.5,

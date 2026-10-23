@@ -14,9 +14,11 @@
  * 2. The page is the well (`surface-well`), the head's foot its edge
  *    (`border-well`).
  * 3. The frame in view is said by its label row (`selected-bg`,
- *    `selected-ink`, 4.5:1); the inspector's story by one solid
- *    `border-button-outline` ring (never the focus ring, which is focus's
- *    alone) that meets neither its label nor its status.
+ *    `selected-ink`, 4.5:1); the inspector's story by DESIGN.md's
+ *    selected marks, never the focus ring's shape: its label's words in
+ *    `selected-ink` and a 1px `border-control-strong` edge flush on its
+ *    box (a box-shadow; no outline), meeting neither its label nor its
+ *    status.
  * 4. A pressed ghost is `surface-pressed`, the current outline row
  *    `selected-bg` with `selected-ink`.
  * 5. The state chips are 30px at `radius-sm` with a 44px touch area under a
@@ -361,9 +363,10 @@ interface PageRead {
   repeats: string[];
   ring: {
     clear: boolean;
-    style: string;
-    color: [string, string];
-    focus: string;
+    outline: string;
+    shadow: string;
+    edge: string;
+    ink: [string, string];
   } | null;
   row: { bg: [string, string]; ink: [string, string] } | null;
   sectionFile: {
@@ -439,9 +442,8 @@ async function readCanvas(page: Page): Promise<PageRead> {
     if (selected) {
       const body = selected.querySelector(".cawco-frame-body") as HTMLElement;
       const style = getComputedStyle(body);
-      const reach =
-        Number.parseFloat(style.outlineWidth) +
-        Number.parseFloat(style.outlineOffset);
+      // The edge is a 1px box-shadow flush on the body's box.
+      const reach = 1;
       const r = body.getBoundingClientRect();
       const top = r.top - reach;
       const bottom = r.bottom + reach;
@@ -451,14 +453,19 @@ async function readCanvas(page: Page): Promise<PageRead> {
       const st = (
         selected.querySelector(".cawco-frame-status") as Element
       ).getBoundingClientRect();
+      const named = selected.querySelector(".cawco-frame-words") as Element;
       ring = {
         clear: l.bottom <= top + 0.01 && st.top >= bottom - 0.01,
-        style: style.outlineStyle,
-        color: [
-          w.__rgb(style.outlineColor),
-          w.__token("--border-button-outline", body, "color"),
+        outline: style.outlineStyle,
+        // Its colour, the lengths taken out; then its lengths alone.
+        shadow: `${w.__rgb(
+          style.boxShadow.replace(/\s*-?[\d.]+px/g, "").trim()
+        )} ${(style.boxShadow.match(/-?[\d.]+px/g) ?? []).join(" ")}`,
+        edge: `${w.__token("--border-control-strong", body, "color")} 0px 0px 0px 1px`,
+        ink: [
+          w.__rgb(getComputedStyle(named).color),
+          w.__token("--selected-ink", named, "color"),
         ],
-        focus: w.__token("--focus-ring", body, "color"),
       };
     }
     const chips = [...root.querySelectorAll<HTMLElement>(".chip")];
@@ -648,12 +655,12 @@ async function canvasLeg(
     JSON.stringify(read.current)
   );
   kit.check(
-    `3b: ${leg}: the inspector's story wears one solid border-button-outline ring, never the focus ring, clear of its label and status`,
+    `3b: ${leg}: the inspector's story wears the selected marks (its label's words in selected-ink, a 1px border-control-strong edge flush on its box), no outline in the focus ring's shape, clear of its label and status`,
     !!read.ring &&
       read.ring.clear &&
-      read.ring.style === "solid" &&
-      same(read.ring.color) &&
-      read.ring.color[0] !== read.ring.focus,
+      read.ring.outline === "none" &&
+      read.ring.shadow === read.ring.edge &&
+      same(read.ring.ink),
     JSON.stringify(read.ring)
   );
   kit.check(

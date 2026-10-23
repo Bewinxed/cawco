@@ -574,12 +574,13 @@
         </div>
       </div>
     {/if}
-    <!-- The editor is a field (DESIGN.md, Inputs and fields, Field shell):
+    <!-- The editor is a field (DESIGN.md, Inputs and fields, Field frame):
          the input's raised surface, control edge and extra-small shadow,
-         and its border takes the ring while the text inside has focus. -->
+         and its border steps to the strong control edge while the text
+         inside has focus (`field-edge`). -->
     <div
       data-slot="field"
-      class="field-shell min-h-c-editor-well-min rounded-md border border-border-control bg-surface-raised px-space-2 py-space-1 shadow-xs"
+      class="field-edge transition-control min-h-c-editor-well-min rounded-md border border-border-control bg-surface-raised px-space-2 py-space-1 shadow-xs"
     >
       <!-- Crepe reads its text once, when it is made: it waits for a draft
            kept for this file to be back. -->

@@ -347,7 +347,7 @@
     <div data-slot="pick" class="grid min-w-0">
       <label
         data-slot="search"
-        class="field-underline flex h-c-row-h items-center gap-space-2 border-b border-b-border-hairline px-space-3"
+        class="flex h-c-row-h items-center gap-space-2 border-b border-b-border-hairline px-space-3"
       >
         <Search
           data-model-section-lead

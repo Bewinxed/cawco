@@ -346,7 +346,7 @@
             aria-label="Project name"
             autocomplete="off"
             autofocus
-            class="focus-inset block w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out read-only:text-ink-muted"
+            class="field-edge block w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-control read-only:text-ink-muted"
             onblur={() => {
               // Left after a refusal, it stays as typed, the reason under
               // it; Enter or Try again sends it.

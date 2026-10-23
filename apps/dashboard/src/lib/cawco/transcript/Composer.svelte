@@ -102,7 +102,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "#lib/components/ui/command/index.js";
   import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
-  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -3023,13 +3022,6 @@
    * --dur-control.
    */
   let focused = $state(false);
-  /**
-   * How the field took the focus, read as it does (the page's last input,
-   * a key or a pointer): its ring is for the keyboard's focus alone, and a
-   * field focused by a press, or opened by one, draws none (DESIGN.md,
-   * The One Target Rule).
-   */
-  let focusBy = $state<"key" | "pointer">("pointer");
   const folds = (whole: number) => !focused && whole > floor + 0.5;
   const folded = $derived(folds(natural));
 
@@ -3525,10 +3517,10 @@
          touches. -->
       <!-- One shape, always. --radius-lg outside, --space-2 of inset, and the
            controls inside carry (panel − inset − edge) so the curves are concentric
-           rather than two unrelated roundings stacked. The shell is the text
-           field (app.css field-shell): keyboard focus in the textarea draws
-           the ring over the shell's own border, an outline that moves
-           nothing, and the textarea itself draws none. Its one-line box is
+           rather than two unrelated roundings stacked. The pill is the
+           whole surface of its text field: its caret is its focus, and
+           nothing is drawn round it (DESIGN.md, The Caret Rule); its chips
+           and buttons keep the keyboard's ring. Its one-line box is
            the app's composer tokens (app.css `--c-composer-*`), which every
            transcript keeps clear. It is the panel material (app.css
            `--material-*`, its shell the kit's ui/dock-shell), so the
@@ -3536,8 +3528,7 @@
            is turned down. The pill's box is what grows out of it shares: the
            grown shape is drawn behind the pill and its rows over it. While
            it is grown, the grown shape is the composer: the pill's own
-           surface steps aside, and its edge is the control border, never the
-           ring. The wheel's shape stays the composer until it has folded back
+           surface steps aside. The wheel's shape stays the composer until it has folded back
            into the pill's outline, so the pill's edge never comes back
            across the rows folding with it. Keyboard down, a touch screen's
            pill is a control to hold, so the page does not pan from it; typed
@@ -3549,7 +3540,6 @@
         data-grown={!!edit || askOpen || canvasUp || undefined}
         data-hint-back={!!hintBack || undefined}
         data-lead={!!lead || undefined}
-        data-pointer-focus={(focused && focusBy === "pointer") || undefined}
         data-recalling={!!recall || undefined}
         data-settling={(!!recall && !wheeling) || undefined}
         data-wheeling={wheeling || undefined}
@@ -3559,7 +3549,7 @@
         aria-label={FIELD_LABEL}
         class={dockShellVariants({
           class:
-            "group/cin field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown],[data-pointer-focus]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none",
+            "group/cin relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none not-focus-within:touch-none not-focus-within:touch-callout-none",
         })}
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
@@ -3740,7 +3730,6 @@
             {ondrop}
             onfocus={() => {
               focused = true;
-              focusBy = lastInput.current;
             }}
             oninput={noteCaret}
             {onkeydown}
