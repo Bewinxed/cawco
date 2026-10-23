@@ -136,11 +136,50 @@ export const runtimeSockets = async (): Promise<string[]> => {
   ];
 };
 
+/**
+ * The variables docker-modem reads as it is made (5.0.7 lib/modem.js
+ * `defaultOpts`): with `DOCKER_HOST` naming a TCP endpoint it sets `host`,
+ * and a modem with a host drops the socket it was given ("var opts =
+ * Object.assign({}, optDefaults, options); this.host = opts.host; if
+ * (!this.host) { this.socketPath = opts.socketPath; }"), dialling that
+ * endpoint instead, with the certificates `DOCKER_CERT_PATH` names.
+ */
+const MODEM_ENV = [
+  "DOCKER_HOST",
+  "DOCKER_TLS_VERIFY",
+  "DOCKER_CERT_PATH",
+  "DOCKER_PATH_PREFIX",
+  "DOCKER_CLIENT_TIMEOUT",
+] as const;
+
+/**
+ * A client of the runtime at `socketPath` and nowhere else: made with
+ * {@link MODEM_ENV} out of the environment for the moment it is made (the
+ * modem reads it then, and never after), so nothing the environment says
+ * reaches it. The one way a Docker client is made (`bun run lint`,
+ * scripts/docker-client-check.ts).
+ */
+export const dockerAt = (socketPath: string, timeout?: number): Docker => {
+  const held = MODEM_ENV.map((name) => [name, process.env[name]] as const);
+  for (const [name] of held) {
+    Reflect.deleteProperty(process.env, name);
+  }
+  try {
+    return new Docker({ socketPath, ...(timeout ? { timeout } : {}) });
+  } finally {
+    for (const [name, value] of held) {
+      if (value !== undefined) {
+        process.env[name] = value;
+      }
+    }
+  }
+};
+
 /** Asks the runtime at `socketPath` who it is: `/_ping`, `/version`, `/info`. */
 export const probeEndpoint = async (
   socketPath: string
 ): Promise<EndpointAnswer> => {
-  const docker = new Docker({ socketPath, timeout: PING_MS });
+  const docker = dockerAt(socketPath, PING_MS);
   try {
     await docker.ping();
   } catch (error) {
@@ -171,7 +210,7 @@ export const probeEndpoint = async (
     (info as { OperatingSystem?: string }).OperatingSystem !== "Docker Desktop";
   return {
     runtime: {
-      docker: new Docker({ socketPath }),
+      docker: dockerAt(socketPath),
       endpoint: socketPath,
       kind: podman ? "podman" : "docker",
       version: version.Version,

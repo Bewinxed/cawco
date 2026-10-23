@@ -88,6 +88,7 @@ const checks: Check[] = [
   bun("scripts/style-greps.ts"),
   bun("scripts/tool-answer-check.ts"),
   bun("scripts/icon-imports-check.ts"),
+  bun("scripts/docker-client-check.ts"),
   bun("scripts/border-width-check.ts"),
   bun("scripts/token-contrast-check.ts"),
   bun("scripts/page-imports-check.ts"),
