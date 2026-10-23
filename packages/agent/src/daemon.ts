@@ -104,6 +104,7 @@ import {
   REGISTER_ACK_MS,
 } from "@cawco/core/handover";
 import { machineEndpoint } from "@cawco/core/keepers";
+import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineKeyPath,
@@ -3078,6 +3079,35 @@ const attach = (
     return yield* closed(socket, url);
   });
 
+/** How often the agent looks at the size of every CawCo job's log on macOS (our call). */
+const LAUNCHD_LOG_CARE_MS = 5 * 60_000;
+
+/**
+ * Every CawCo job's log in `~/Library/Logs` within its cap (core launchd.ts
+ * `capLaunchdLogs`), and at `start` first each one whose service CawCo no
+ * longer has removed (`sweepLaunchdLogs`). Never rejects: what fails is said,
+ * and the next look tries again.
+ */
+const careForLaunchdLogs = async (start: boolean): Promise<void> => {
+  try {
+    if (start) {
+      const swept = await sweepLaunchdLogs();
+      if (swept.length > 0) {
+        console.info(
+          `[agent] removed ${swept.length} log(s) of services CawCo no longer has: ${swept.join(", ")}`
+        );
+      }
+    }
+    for (const path of await capLaunchdLogs()) {
+      console.info(`[agent] ${path} passed its cap; it is in ${path}.1 now`);
+    }
+  } catch (error) {
+    console.warn(
+      `[agent] the service logs could not be looked after: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
+
 /**
  * Runs until interrupted: connect, register, heartbeat, reconnect on loss.
  * Nothing on the way to the first register starts a harness's CLI: each
@@ -3116,6 +3146,20 @@ export const startDaemon = (rediscover = false) =>
     if (deadLinks.length > 0) {
       console.info(
         `[agent] removed ${deadLinks.length} short name(s) in the socket root whose target is gone: ${deadLinks.join(", ")}`
+      );
+    }
+    // macOS: launchd appends each job's output to its own file, which nothing
+    // else bounds (Linux's units log to journald, which keeps itself within
+    // its limits). A log whose service CawCo no longer has goes at start, and
+    // each live one is capped now and on a timer (core launchd.ts).
+    if (process.platform === "darwin") {
+      yield* Effect.promise(() => careForLaunchdLogs(true));
+      const logCare = setInterval(
+        () => careForLaunchdLogs(false),
+        LAUNCHD_LOG_CARE_MS
+      );
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => clearInterval(logCare))
       );
     }
     const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;

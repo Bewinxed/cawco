@@ -19,7 +19,10 @@ import {
   forgetLaunchdStart,
   launchdEnded,
   launchdJob,
+  launchdLog,
+  launchdLogsDir,
   launchdProgram,
+  removeLaunchdLog,
 } from "@cawco/core/launchd";
 import { hubDbPath } from "@cawco/core/paths";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
@@ -112,8 +115,6 @@ const socketPath = (base: string): string =>
   join(SYSTEMD_DIR, socketName(base));
 const launchAgentPath = (name: string): string =>
   join(homedir(), "Library", "LaunchAgents", `${label(name)}.plist`);
-const launchAgentLog = (name: string): string =>
-  join(homedir(), "Library", "Logs", `cawco-${name}.log`);
 
 /**
  * The node the dashboard's server runs under, found on the installing shell's
@@ -756,7 +757,7 @@ export const awaitFirstMachineReady = async (
       // A build's keeper is `sessiond-<version>`: the pattern names it too.
       const logs =
         platform() === "darwin"
-          ? `tail -n 50 "${join(dirname(launchAgentLog(serviceId)), `cawco-${serviceId}`)}"*.log`
+          ? `tail -n 50 "${join(launchdLogsDir(), `cawco-${serviceId}`)}"*.log`
           : `journalctl --user -u 'cawco-${serviceId}*' -n 50`;
       throw new ServiceError(
         `${serviceId} did not become ready within ${READY_TIMEOUT_MS / 1000}s (${last}). Read why with: ${logs}`
@@ -1321,9 +1322,9 @@ ${environment(spec)
   <key>WorkingDirectory</key>
   <string>${xml(spec.workingDirectory)}</string>
   <key>StandardOutPath</key>
-  <string>${xml(launchAgentLog(spec.name))}</string>
+  <string>${xml(launchdLog(spec.name))}</string>
   <key>StandardErrorPath</key>
-  <string>${xml(launchAgentLog(spec.name))}</string>
+  <string>${xml(launchdLog(spec.name))}</string>
 </dict>
 </plist>
 `;
@@ -1489,7 +1490,7 @@ export const installLaunchAgents = async (
   note: (line: string) => void
 ): Promise<void> => {
   // launchd opens stdout/stderr before any process can create its log folder.
-  await mkdir(dirname(launchAgentLog("hub")), { recursive: true });
+  await mkdir(launchdLogsDir(), { recursive: true });
 
   for (const [index, spec] of specs.entries()) {
     if (index > 0) {
@@ -1518,7 +1519,7 @@ export const installLaunchAgents = async (
 
     await loadLaunchAgent(spec, note);
 
-    note(`logs ${launchAgentLog(spec.name)}`);
+    note(`logs ${launchdLog(spec.name)}`);
     if (spec.launchAgentNote) {
       note("");
       for (const line of spec.launchAgentNote) {
@@ -1543,6 +1544,9 @@ const uninstallLaunchAgents = async (
         // best effort: the plist may already be gone
       });
     note(`removed ${path}`);
+    // Its log goes with it (core launchd.ts `removeLaunchdLog`).
+    await removeLaunchdLog(spec.name);
+    note(`removed ${launchdLog(spec.name)}`);
   }
 };
 
@@ -2218,7 +2222,7 @@ const launchAgentStatus = async (
   if (live) {
     note(`live     ${live}`);
   }
-  note(`logs     ${launchAgentLog(spec.name)}`);
+  note(`logs     ${launchdLog(spec.name)}`);
 };
 
 const systemdStatus = async (
@@ -2269,7 +2273,7 @@ const launchAgentLogs = async (
   spec: ServiceSpec,
   follow: boolean
 ): Promise<void> => {
-  const path = launchAgentLog(spec.name);
+  const path = launchdLog(spec.name);
   if (!(await Bun.file(path).exists())) {
     throw new ServiceError(`no log yet at ${path} — is the service installed?`);
   }

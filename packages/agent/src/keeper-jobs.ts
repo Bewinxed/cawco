@@ -44,6 +44,7 @@ import {
   launchdEnded,
   launchdJob,
   launchdJobs,
+  removeLaunchdLog,
 } from "@cawco/core/launchd";
 import { commandLine, processLineage } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -381,6 +382,8 @@ const launchdKeeperJob = (service: string): KeeperJob => {
       await run(["launchctl", "bootout", target]);
       await rm(plist, { force: true });
       await forgetLaunchdStart(label);
+      // Its log and its rotated copy go with it (core launchd.ts).
+      await removeLaunchdLog(service);
     },
   };
 };
