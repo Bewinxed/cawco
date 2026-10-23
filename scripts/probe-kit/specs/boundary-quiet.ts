@@ -29,8 +29,12 @@
  *    leaves them as they are. W's is given an older form too.
  * 2. After `QUIET_CLOSE_MS` (and a sweep's minute), every idle workspace's
  *    boundary and judge are closed, each said in the agent's log, its clone,
- *    state dir and scratch dir standing. P's stays up and its preview still
- *    serves the page.
+ *    state dir and scratch dir standing. P's closes with them: since the
+ *    restart no listener of this agent serves its preview (a register starts
+ *    none, hub server.ts `reconcilePreviews`), and only a served one holds a
+ *    boundary (agent boundary.ts `liveWhy`). Its preview's next request
+ *    starts its boundary and its server again (agent preview.ts `staged`)
+ *    and serves the page, in the time said.
  * 3. The footprint, before and after: boundary and judge processes with
  *    everything under them, and the inotify instances they hold.
  * 4. A message to I0's sleeping session: it wakes, its boundary starts again
@@ -663,7 +667,7 @@ const firstRestart = async (
   );
 };
 
-/** 2: the idle ones close once quiet, their clones and state standing; P, previewed, stays. */
+/** 2: the idle ones close once quiet, their clones and state standing; P's too, nothing serving its preview since the restart, and its next request opens it again. */
 const quietCloses = async (
   kit: Kit,
   fleet: Fleet,
@@ -711,12 +715,24 @@ const quietCloses = async (
     rows.length === IDLE && missing.length === 0,
     missing.map((row) => row.id).join(", ") || `${rows.length} stand`
   );
-  const up = held.some((proc) => isBoundaryOf(proc.procId, p.workspaceId));
+  // P's quiet time began with the restart too: no listener serves it since.
+  const pOpen = await until(
+    "P's boundary closed",
+    () => stillOpen(fleet, [p]),
+    (left) => left.length === 0,
+    CLOSE_SLACK_MS
+  ).catch(() => stillOpen(fleet, [p]));
+  const asked = performance.now();
   const serves = await serving(fleet, p.instanceId, "P");
+  const tookMs = Math.round(performance.now() - asked);
+  const reopened = await boundariesOf(fleet, p.workspaceId);
   kit.check(
-    "2: P, with its preview shown, keeps its boundary, and the preview still serves its page",
-    up && serves.ok,
-    `boundary ${up ? "up" : "closed"}; ${serves.last}`
+    "2: P's boundary closes with the idle ones, nothing serving its preview since the restart; its preview's next request starts its boundary and server again and serves the page",
+    pOpen.length === 0 && serves.ok && reopened.length === 1,
+    `boundary ${pOpen.length === 0 ? "closed" : "still up"}; next request answered in ${tookMs} ms, ${serves.last}; boundary now ${reopened.join(",") || "none"}`
+  );
+  kit.note(
+    `2: P's preview, its boundary closed, answered its next request in ${tookMs} ms`
   );
 };
 
@@ -928,7 +944,7 @@ const run = async (kit: Kit) => {
   await firstRestart(kit, fleet, home, idle, w);
   await quietCloses(kit, fleet, home, idle, p);
 
-  // 3. The footprint, before and after: P's boundary and W's stay.
+  // 3. The footprint, before and after: W's boundary, and P's its request started again.
   const after = await footprint(fleet);
   // Whose each boundary still running is: a delegate's tag, or its proc id.
   const left = (await fleet.heldProcs())
