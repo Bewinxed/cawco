@@ -94,6 +94,21 @@ export const drainLine = (socket: HubSocket): void => {
   lines.get(socket.id)?.outbox.drained();
 };
 
+/**
+ * Resolves once every frame the socket `socketId` has handed the hub so far
+ * has been read through its inbox: what a deadline waits for before it says
+ * no answer came, since an answer that arrived in time may wait there behind
+ * the frames before it (a transcript's parts, a turn's budget at a time).
+ * At once for a socket that is gone or holds nothing unread.
+ */
+export const readThrough = (socketId: string): Promise<void> => {
+  const line = lines.get(socketId);
+  if (!line) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => line.inbox.push(0, resolve));
+};
+
 /** The socket closed: its queue and any half-received message go with it. */
 export const closeLine = (socket: HubSocket): void => {
   lines.get(socket.id)?.outbox.close();

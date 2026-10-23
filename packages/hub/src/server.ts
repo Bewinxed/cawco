@@ -883,6 +883,7 @@ import {
   drainLine,
   type HubSocket,
   openLine,
+  readThrough,
   receiveFrame,
   sendFrame as writeFrame,
 } from "./wire-socket";
@@ -9525,8 +9526,51 @@ export const createServer = (
   };
   /** Who hears a running command's slot waits, by the run id it was sent with. */
   const commandQueues = new Map<string, (queue: CommandQueue | null) => void>();
+  /**
+   * The hub's own calls whose deadline passed unanswered, by request id
+   * ({@link awaitReply}): their callers were told no answer came, and an
+   * answer that comes later is that call's, said as late
+   * ({@link lateAnswer}), never as a reply nobody asked for.
+   */
+  const lapsed = new Map<
+    string,
+    { machineId: string; sentAt: number; timeoutMs: number; what?: string }
+  >();
+  const noteLapsed = (
+    requestId: string,
+    call: {
+      machineId: string;
+      sentAt: number;
+      timeoutMs: number;
+      what?: string;
+    }
+  ): void => {
+    lapsed.set(requestId, call);
+    if (lapsed.size > UNROUTED_REPLY_LIMIT) {
+      const oldest = lapsed.keys().next().value;
+      if (oldest !== undefined) {
+        lapsed.delete(oldest);
+      }
+    }
+  };
+  /** Whether `message` answers a call of the hub's that lapsed: said once, as late, when it does. */
+  const lateAnswer = (message: Envelope): boolean => {
+    const requestId = message.requestId ?? peek(message.payload, "requestId");
+    const call = requestId ? lapsed.get(requestId) : undefined;
+    if (!(requestId && call)) {
+      return false;
+    }
+    lapsed.delete(requestId);
+    console.warn(
+      `[hub] ${machineName(call.machineId)} answered ${call.what ?? "a request"} (request ${requestId}) ${Date.now() - call.sentAt - call.timeoutMs} ms past its ${call.timeoutMs / 1000} s deadline; its caller had been told no answer came`
+    );
+    return true;
+  };
   const unroutedReplies = new Set<string>();
   const logUnroutedReply = (message: Envelope): void => {
+    if (lateAnswer(message)) {
+      return;
+    }
     const requestId = message.requestId ?? peek(message.payload, "requestId");
     const instanceId =
       message.instanceId ?? peek(message.payload, "instanceId");
@@ -9652,26 +9696,19 @@ export const createServer = (
     timeoutMs: number,
     send: () => Envelope | undefined
   ): Promise<Bounded<ControlResult>> => {
-    let awayAtDeadline = false;
+    let answered: ControlResult | undefined;
+    const forget = () => {
+      waiting.delete(requestId);
+      waitingMachines.delete(requestId);
+    };
+    const sentAt = Date.now();
     const reply = await readWithin(
       timeoutMs,
-      (signal) =>
+      () =>
         new Promise<ControlResult>((resolve) => {
-          const forget = () => {
-            waiting.delete(requestId);
-            waitingMachines.delete(requestId);
-          };
-          signal.addEventListener(
-            "abort",
-            () => {
-              awayAtDeadline =
-                waitingMachines.get(requestId)?.socketId === undefined;
-              forget();
-            },
-            { once: true }
-          );
           waitOn(requestId, machineId);
           waiting.set(requestId, (frame) => {
+            answered = frame;
             forget();
             resolve(frame);
           });
@@ -9688,9 +9725,36 @@ export const createServer = (
           }
         })
     );
-    return reply.kind === "unanswered" &&
-      reply.reason === "timeout" &&
-      awayAtDeadline
+    if (reply.kind === "answered") {
+      return reply;
+    }
+    if (reply.reason !== "timeout") {
+      forget();
+      return reply;
+    }
+    // The deadline passed. What the machine's socket already handed the hub
+    // is read first: an answer that came in time can wait in its inbox
+    // behind the frames before it, and a timer that came due meanwhile runs
+    // before the inbox's next turn (2026-10-23, three machines' answers to
+    // one configure logged as unrouted in the same second, while twenty
+    // transcript reads came in).
+    const call = waitingMachines.get(requestId);
+    if (call?.socketId) {
+      await readThrough(call.socketId);
+    }
+    if (answered) {
+      return { kind: "answered", value: answered };
+    }
+    const awayAtDeadline =
+      waitingMachines.get(requestId)?.socketId === undefined;
+    forget();
+    noteLapsed(requestId, {
+      machineId,
+      what: peek(call?.again?.payload, "method") ?? call?.again?.verb,
+      sentAt,
+      timeoutMs,
+    });
+    return awayAtDeadline
       ? {
           kind: "answered",
           value: {

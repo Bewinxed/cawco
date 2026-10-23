@@ -6,6 +6,9 @@
  * on. A hub's archive download, held so, is a release host taking that long
  * to answer.
  *
+ * It counts what each host sent back through it, so a spec reads how many
+ * copies of a download the hub drew (TLS hides the requests themselves).
+ *
  * Each CONNECT goes on through the proxy this process itself was given
  * (`https_proxy`, `HTTPS_PROXY`: a workspace boundary's), else straight to
  * its host.
@@ -13,6 +16,8 @@
 import net from "node:net";
 
 export interface HeldProxy {
+  /** The bytes each `host:port` has sent back through the proxy so far, in all its tunnels. */
+  carried: () => Record<string, number>;
   /** Holds every tunnel's answer from now (true), or lets each go on (false). */
   hold: (held: boolean) => void;
   stop: () => void;
@@ -24,6 +29,7 @@ export interface HeldProxy {
 interface Tunnel {
   client: net.Socket;
   kept: Buffer[];
+  target: string;
 }
 
 /** Where this process itself goes out: its own proxy's host and port, if it has one. */
@@ -39,11 +45,16 @@ const upstreamProxy = (): { host: string; port: number } | undefined => {
 export async function heldProxy(): Promise<HeldProxy> {
   const tunnels = new Set<Tunnel>();
   const targets: string[] = [];
+  const carried = new Map<string, number>();
   let held = false;
   const upstream = upstreamProxy();
 
   /** The far end's bytes to the client: kept while held, else passed on. */
   const toClient = (tunnel: Tunnel, chunk: Buffer) => {
+    carried.set(
+      tunnel.target,
+      (carried.get(tunnel.target) ?? 0) + chunk.length
+    );
     if (held) {
       tunnel.kept.push(chunk);
       return;
@@ -62,7 +73,7 @@ export async function heldProxy(): Promise<HeldProxy> {
       }
       targets.push(target);
       const at = target.lastIndexOf(":");
-      const tunnel: Tunnel = { client, kept: [] };
+      const tunnel: Tunnel = { client, kept: [], target };
       tunnels.add(tunnel);
       const rest = head.subarray(
         Buffer.byteLength(text.slice(0, end + 4), "latin1")
@@ -122,6 +133,7 @@ export async function heldProxy(): Promise<HeldProxy> {
     );
   });
   return {
+    carried: () => Object.fromEntries(carried),
     hold: (next) => {
       held = next;
       if (next) {
