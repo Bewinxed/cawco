@@ -108,13 +108,6 @@ const PAIRS: Pair[] = [
     made: true,
   },
   {
-    name: "drawer closing",
-    on: "body",
-    old: 'body:has(> [data-slot="drawer-content"][data-state="closed"])',
-    now: 'body[data-drawer~="closed"]',
-    made: true,
-  },
-  {
     name: "session card",
     on: "wrapper",
     old: `${WRAPPER}:has(> [data-session-details-popover])`,

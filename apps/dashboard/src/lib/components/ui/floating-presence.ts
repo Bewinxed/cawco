@@ -15,9 +15,11 @@
  * be, open or still closing (`shouldRender`, which bits-ui hands a forceMount
  * child among its props), so the close plays as before.
  *
- * A dialog, alert dialog or sheet needs no forceMount: bits-ui's dialog
- * content mounts its lock only while open when it is drawn through `child`,
- * and takes `restoreScrollDelay`, which the kit sets to 0.
+ * A dialog, alert dialog, sheet or drawer needs no forceMount: bits-ui's
+ * dialog content mounts its lock only while open when it is drawn through
+ * `child` (vaul-svelte's drawer is patched to hand its `child` on), and
+ * takes `restoreScrollDelay`, which the kit sets to 0. Each draws its
+ * content and scrim with `pressable`, so a closing one blocks no press.
  */
 
 /**

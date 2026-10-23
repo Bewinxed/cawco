@@ -59,6 +59,7 @@
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
   import { mirror } from "#lib/cawco/page-marks.js";
   import { visible } from "#lib/cawco/visible-viewport.svelte.js";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconClose } from "#lib/icons.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
@@ -83,9 +84,10 @@
     titleHidden = false,
     ownHead = false,
     actions,
+    restoreScrollDelay = 0,
     children,
     ...restProps
-  }: DrawerPrimitive.ContentProps &
+  }: WithoutChildrenOrChild<DrawerPrimitive.ContentProps> &
     DrawerContentLooks & {
       /**
        * The sheet's name. The kit draws the recipe's one header with it
@@ -117,6 +119,7 @@
       hosted?: boolean;
       /** As its root's `modal`: false, the page under it stays live, to a screen reader too. */
       modal?: boolean;
+      children?: Snippet;
     } = $props();
 
   /**
@@ -146,15 +149,14 @@
   /**
    * What the sheet is, said for the page around it (page-marks): a bottom
    * sheet the kit places on the screen's foot is the bottom edge
-   * (ScreenEdges), and while one closes the body takes presses again
-   * (app.css).
+   * (ScreenEdges).
    */
   $effect(() => {
     const node = ref;
     if (!node) {
       return;
     }
-    const foot = mirror(
+    return mirror(
       node,
       "root",
       "data-kit-sheet",
@@ -165,17 +167,6 @@
           ? ["bottom"]
           : []
     );
-    const closing = mirror(
-      node,
-      "body",
-      "data-drawer",
-      ["data-state"],
-      (sheet) => (sheet.dataset.state === "closed" ? ["closed"] : [])
-    );
-    return () => {
-      foot();
-      closing();
-    };
   });
 
   /**
@@ -225,59 +216,72 @@
     data-placed={hosted ? undefined : ""}
     data-safe-bottom
     data-slot="drawer-content"
+    {restoreScrollDelay}
     {style}
     bind:ref
     {...restProps}
   >
-    {#if !hosted}
-      <div
-        data-slot="drawer-grabber"
-        class={cn(
-          grabberVariants(),
-          "hidden group-data-[vaul-drawer-direction=bottom]/drawer-content:block"
-        )}
-      ></div>
-    {/if}
-    {#if hosted || ownHead}
-      <DrawerPrimitive.Title class="sr-only" data-slot="drawer-title"
-        ><MorphText text={title} wrap /></DrawerPrimitive.Title
-      >
-    {:else}
-      <div class={head.head()} data-slot="drawer-header">
-        <DrawerPrimitive.Title
-          class={cn(head.title(), titleHidden && "sr-only")}
-          data-slot="drawer-title"
-          ><MorphText text={title} wrap /></DrawerPrimitive.Title
-        >
-        <div class="ms-auto flex flex-none items-center gap-space-2">
-          {@render actions?.()}
-          <DrawerPrimitive.Close
-            aria-label="Close"
-            class={head.close()}
-            title="Close"
-          >
-            <IconClose aria-hidden="true" />
-          </DrawerPrimitive.Close>
-        </div>
+    <!-- Drawn through `child` (vaul-svelte patched to hand it on): bits-ui
+         then holds the body's lock only while the sheet is open, and lets it
+         go at once; closing, the sheet lets presses through to the page
+         (floating-presence `pressable`). -->
+    {#snippet child({ props, open })}
+      <div {...props} style:pointer-events={pressable(open)}>
+        {@render body()}
       </div>
-    {/if}
-    <!-- vaul takes pointer capture on every press in the sheet, which leaves
-         a text field without iOS's hold-to-select and Paste callout: a press
-         that starts in a field never reaches it. -->
-    <div
-      class="contents"
-      onpointerdown={(event) => {
-        if (
-          (event.target as HTMLElement).closest(
-            "input, textarea, select, [contenteditable]"
-          )
-        ) {
-          event.stopPropagation();
-        }
-      }}
-      role="presentation"
-    >
-      {@render children?.()}
-    </div>
+    {/snippet}
   </DrawerPrimitive.Content>
 </DrawerPortal>
+
+{#snippet body()}
+  {#if !hosted}
+    <div
+      data-slot="drawer-grabber"
+      class={cn(
+        grabberVariants(),
+        "hidden group-data-[vaul-drawer-direction=bottom]/drawer-content:block"
+      )}
+    ></div>
+  {/if}
+  {#if hosted || ownHead}
+    <DrawerPrimitive.Title class="sr-only" data-slot="drawer-title"
+      ><MorphText text={title} wrap /></DrawerPrimitive.Title
+    >
+  {:else}
+    <div class={head.head()} data-slot="drawer-header">
+      <DrawerPrimitive.Title
+        class={cn(head.title(), titleHidden && "sr-only")}
+        data-slot="drawer-title"
+        ><MorphText text={title} wrap /></DrawerPrimitive.Title
+      >
+      <div class="ms-auto flex flex-none items-center gap-space-2">
+        {@render actions?.()}
+        <DrawerPrimitive.Close
+          aria-label="Close"
+          class={head.close()}
+          title="Close"
+        >
+          <IconClose aria-hidden="true" />
+        </DrawerPrimitive.Close>
+      </div>
+    </div>
+  {/if}
+  <!-- vaul takes pointer capture on every press in the sheet, which leaves
+         a text field without iOS's hold-to-select and Paste callout: a press
+         that starts in a field never reaches it. -->
+  <div
+    class="contents"
+    onpointerdown={(event) => {
+      if (
+        (event.target as HTMLElement).closest(
+          "input, textarea, select, [contenteditable]"
+        )
+      ) {
+        event.stopPropagation();
+      }
+    }}
+    role="presentation"
+  >
+    {@render children?.()}
+  </div>
+{/snippet}

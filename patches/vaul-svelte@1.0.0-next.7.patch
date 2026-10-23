@@ -1,8 +1,19 @@
 diff --git a/dist/components/drawer/drawer-content.svelte b/dist/components/drawer/drawer-content.svelte
-index 16c10a769f5f3cb71c918cd035651f94c3dc1dc9..5469e0ff4b32e77fdd8c2b8d0fd58cbcfba351c7 100644
+index 16c10a769f5f3cb71c918cd035651f94c3dc1dc9..5bb45e9ae1048b4464551c732ef5a77c1f3134b1 100644
 --- a/dist/components/drawer/drawer-content.svelte
 +++ b/dist/components/drawer/drawer-content.svelte
-@@ -38,7 +38,12 @@
+@@ -19,8 +19,9 @@
+ 		onpointerout = noop,
+ 		onpointermove = noop,
+ 		children,
++		child: ownChild,
+ 		...restProps
+-	}: WithChildren<WithoutChildrenOrChild<ContentProps>> = $props();
++	}: ContentProps = $props();
+ 
+ 	const contentState = useDrawerContent({
+ 		id: box.with(() => id),
+@@ -38,7 +39,12 @@
  		onFocusOutside: box.with(() => onFocusOutside),
  	});
  
@@ -16,6 +27,108 @@ index 16c10a769f5f3cb71c918cd035651f94c3dc1dc9..5469e0ff4b32e77fdd8c2b8d0fd58cbc
  
  	const styleProp = $derived(
  		snapPointsOffset && snapPointsOffset.length > 0
+@@ -54,7 +60,20 @@
+ 	) as any;
+ </script>
+ 
+-<DialogPrimitive.Content {...mergedProps}>
+-	{@render children?.()}
+-	<Mounted onMounted={contentState.setMounted} />
+-</DialogPrimitive.Content>
++<!-- CawCo's patch (patches/vaul-svelte@1.0.0-next.7.patch): a `child`
++     snippet is handed on to bits-ui's Dialog.Content, which then draws the
++     element itself (the caller's) and holds the body's scroll lock only while
++     the sheet is open, not through its exit. Upstream took no `child`. -->
++{#if ownChild}
++	<DialogPrimitive.Content {...mergedProps}>
++		{#snippet child(snippetProps)}
++			{@render ownChild(snippetProps)}
++			<Mounted onMounted={contentState.setMounted} />
++		{/snippet}
++	</DialogPrimitive.Content>
++{:else}
++	<DialogPrimitive.Content {...mergedProps}>
++		{@render children?.()}
++		<Mounted onMounted={contentState.setMounted} />
++	</DialogPrimitive.Content>
++{/if}
+diff --git a/dist/components/drawer/drawer-content.svelte.d.ts b/dist/components/drawer/drawer-content.svelte.d.ts
+index 1f05f86047a3c9796b8130c3204a77a4dcef1373..08f514fa73b0846246ebe26846afe02aab61d041 100644
+--- a/dist/components/drawer/drawer-content.svelte.d.ts
++++ b/dist/components/drawer/drawer-content.svelte.d.ts
+@@ -1,5 +1,5 @@
+ import { type WithChildren } from "svelte-toolbelt";
+ import type { ContentProps } from "./index.js";
+-declare const DrawerContent: import("svelte").Component<WithChildren<Omit<ContentProps, "children">>, {}, "ref">;
++declare const DrawerContent: import("svelte").Component<ContentProps, {}, "ref">;
+ type DrawerContent = ReturnType<typeof DrawerContent>;
+ export default DrawerContent;
+diff --git a/dist/components/drawer/drawer-overlay.svelte b/dist/components/drawer/drawer-overlay.svelte
+index 26863c9f840e46662ef52cacda1295549367c2f3..dc6fb6e4034434cdf222365d06d4cf0d0fd39014 100644
+--- a/dist/components/drawer/drawer-overlay.svelte
++++ b/dist/components/drawer/drawer-overlay.svelte
+@@ -10,8 +10,9 @@
+ 		id = useId(),
+ 		ref = $bindable(null),
+ 		children,
++		child: ownChild,
+ 		...restProps
+-	}: WithChildren<WithoutChildrenOrChild<OverlayProps>> = $props();
++	}: OverlayProps = $props();
+ 
+ 	const overlayState = useDrawerOverlay({
+ 		id: box.with(() => id),
+@@ -24,9 +25,20 @@
+ 	const mergedProps = $derived(mergeProps(restProps, overlayState.props));
+ </script>
+ 
++<!-- CawCo's patch: a `child` snippet is handed on to bits-ui's
++     Dialog.Overlay, which then draws the element itself (the caller's). -->
+ {#if overlayState.shouldRender}
+-	<DialogPrimitive.Overlay {...mergedProps}>
+-		<Mounted onMounted={overlayState.setMounted} />
+-		{@render children?.()}
+-	</DialogPrimitive.Overlay>
++	{#if ownChild}
++		<DialogPrimitive.Overlay {...mergedProps}>
++			{#snippet child(snippetProps)}
++				<Mounted onMounted={overlayState.setMounted} />
++				{@render ownChild(snippetProps)}
++			{/snippet}
++		</DialogPrimitive.Overlay>
++	{:else}
++		<DialogPrimitive.Overlay {...mergedProps}>
++			<Mounted onMounted={overlayState.setMounted} />
++			{@render children?.()}
++		</DialogPrimitive.Overlay>
++	{/if}
+ {/if}
+diff --git a/dist/components/drawer/drawer-overlay.svelte.d.ts b/dist/components/drawer/drawer-overlay.svelte.d.ts
+index e9492cd50b157af42ffe461f0bc0ad5ce1ad6b57..b006a45ef419e5e1d92316938faebcd9cac94b2e 100644
+--- a/dist/components/drawer/drawer-overlay.svelte.d.ts
++++ b/dist/components/drawer/drawer-overlay.svelte.d.ts
+@@ -1,5 +1,5 @@
+ import { type WithChildren } from "svelte-toolbelt";
+ import type { OverlayProps } from "./index.js";
+-declare const DrawerOverlay: import("svelte").Component<WithChildren<Omit<OverlayProps, "children">>, {}, "ref">;
++declare const DrawerOverlay: import("svelte").Component<OverlayProps, {}, "ref">;
+ type DrawerOverlay = ReturnType<typeof DrawerOverlay>;
+ export default DrawerOverlay;
+diff --git a/dist/components/drawer/types.d.ts b/dist/components/drawer/types.d.ts
+index e1c0a242b8a0efff6f63f502aaba3f0056aec06f..645068feb00fc126caedeb7b82c48b7ef5892b0c 100644
+--- a/dist/components/drawer/types.d.ts
++++ b/dist/components/drawer/types.d.ts
+@@ -119,8 +119,8 @@ export type DrawerHandlePropsWithoutHTML = Omit<WithChild<{
+     preventCycle?: boolean;
+ }>, "child">;
+ export type DrawerHandleProps = DrawerHandlePropsWithoutHTML & Without<BitsPrimitiveDivAttributes, DrawerHandlePropsWithoutHTML>;
+-export type DrawerContentPropsWithoutHTML = WithChildren<WithoutChildrenOrChild<Omit<DialogContentPropsWithoutHTML, "preventScroll">>>;
++export type DrawerContentPropsWithoutHTML = Omit<DialogContentPropsWithoutHTML, "preventScroll">;
+ export type DrawerContentProps = DrawerContentPropsWithoutHTML & Without<BitsPrimitiveDivAttributes, DrawerContentPropsWithoutHTML>;
+-export type DrawerOverlayPropsWithoutHTML = WithChildren<WithoutChildrenOrChild<DialogOverlayPropsWithoutHTML>>;
++export type DrawerOverlayPropsWithoutHTML = DialogOverlayPropsWithoutHTML;
+ export type DrawerOverlayProps = DrawerOverlayPropsWithoutHTML & Without<BitsPrimitiveDivAttributes, DrawerOverlayPropsWithoutHTML>;
+ export type { DialogPortalPropsWithoutHTML as DrawerPortalPropsWithoutHTML, DialogPortalProps as DrawerPortalProps, DialogTriggerProps as DrawerTriggerProps, DialogTitleProps as DrawerTitleProps, DialogDescriptionProps as DrawerDescriptionProps, DialogCloseProps as DrawerCloseProps, } from "bits-ui";
 diff --git a/dist/use-drawer-content.svelte.js b/dist/use-drawer-content.svelte.js
 index 854a49f0ee696573fc6a89d673c274a1da79f5f0..39d0ac43a1ca98ddcfc75dfbdc0563a548411c04 100644
 --- a/dist/use-drawer-content.svelte.js
