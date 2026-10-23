@@ -6,8 +6,8 @@ import UIKit.UIGestureRecognizerSubclass
 import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (the
-/// artifact's name as the title menu (ArtifactMenu.swift) and its path, Send
-/// picks, a component canvas's view and Inspect, the mode, Comments, Reload, Close) over the
+/// artifact's name as the title menu (ArtifactMenu.swift) and its path, a
+/// component canvas's view and Inspect, the mode, Comments, Reload, Close) over the
 /// page, which a web view loads from the session's own preview origin (a
 /// port of the hub's, or a host name of its own). The page carries the agent's
 /// overlay, which talks to its host as an iframe talks to the dashboard: the
@@ -42,9 +42,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     fileprivate var placePick: PlacePickView?
     fileprivate weak var placePickSheet: UIViewController?
     private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
-    /// Send picks: the page's picks the session has not heard; pins and ink go by themselves.
-    private var sendButton: UIButton!
-    private var sending = false
     /// Comments: the open pins' list, floating over the page's top-right (PinList.svelte).
     private var pinsButton: UIButton!
     /// Comments' open count (PreviewPane.svelte `.count`): tabular figures in the muted ink, after its word.
@@ -103,9 +100,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var retrying = false
     private let failure = KitAlert(tone: .destructive)
     /// What the band's failure is of (PreviewPane.svelte `failure.again`):
-    /// "send" clears when the picks are sent, "field" when the page keeps the
-    /// field after all, "pins" when the pins are read again; nil, anything
-    /// else, goes again from Reload.
+    /// "field" clears when the page keeps the field after all, "pins" when the
+    /// pins are read again; nil, anything else, goes again from Reload.
     private var failureOf: String?
     private var revision: String?
     /// The line under the name, standing only while it has words to say.
@@ -197,7 +193,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// mode, the radial's Comment), until it is said something: dismissed
     /// with nothing said or written, it is taken back.
     private var madePin: String?
-    /// What went wrong with the open card's reply, resolve or send.
+    /// What went wrong with the open card's reply or resolve.
     private var cardError: String?
     private var replying = false
     private var resolving = false
@@ -287,13 +283,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             button.configuration?.background.backgroundColor = Palette.surfaceFill
         }
         inspectOpen = UserDefaults.standard.string(forKey: inspectKey) == "open"
-        sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
         pinsButton = KitButton.make("Comments", glyph: .chat, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
         // The head's one control recipe (SideSurface `.side-head` buttons: `padding: 0 space-2`), so the name keeps its room.
-        for labelled in [sendButton!, pinsButton!] {
-            labelled.configuration?.contentInsets.leading = Space.space2
-            labelled.configuration?.contentInsets.trailing = Space.space2
-        }
+        pinsButton.configuration?.contentInsets.leading = Space.space2
+        pinsButton.configuration?.contentInsets.trailing = Space.space2
         pinsBadge.isUserInteractionEnabled = false
         pinsBadge.isAccessibilityElement = false
         pinsButton.addSubview(pinsBadge)
@@ -368,7 +361,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // A component canvas's view (CanvasView.svelte), between Open in new tab and Inspect.
         canvasView = CanvasViewControl(instanceId: instanceId) { [weak self] message in self?.deliver(message) }
         let controls: [(HeadItem, UIView)] = [
-            (.send, sendButton), (.newCanvas, newCanvasButton), (.undock, undockButton), (.openTab, openTabButton),
+            (.newCanvas, newCanvasButton), (.undock, undockButton), (.openTab, openTabButton),
             (.view, canvasView.button), (.inspect, inspectButton), (.mode, modes), (.modePick, modePick), (.comments, pinsButton), (.reload, reload),
             (.expand, expandButton),
         ]
@@ -757,15 +750,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// `view` is a component canvas's view, `modePick` the mode where its
     /// three segments have no room.
     private enum HeadItem: String, CaseIterable {
-        case send, newCanvas, undock, openTab, view, inspect, mode, modePick, comments, reload, expand
+        case newCanvas, undock, openTab, view, inspect, mode, modePick, comments, reload, expand
     }
 
     /// Who keeps a place in the head when it is short of room, first to last:
-    /// the key action, then what a person reaches for on every page (its mode,
-    /// its Comments), then the panel's own (Expand, Reload), then what is
+    /// what a person reaches for on every page (its mode, its Comments), then the panel's own (Expand, Reload), then what is
     /// done now and then. The web's head stands by the same order and the
     /// same rule (side/head.ts `standing()`).
-    private static let priority: [HeadItem] = [.send, .mode, .comments, .expand, .reload, .inspect, .view, .undock, .openTab, .newCanvas]
+    private static let priority: [HeadItem] = [.mode, .comments, .expand, .reload, .inspect, .view, .undock, .openTab, .newCanvas]
     /// A touch target's side (HIG Layout: "44x44 pt").
     private static let target = 44.0
     /// The narrowest the artifact's name stands while controls go to More: its glyph and a dozen letters.
@@ -776,8 +768,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var moreSlot: HeadSlot!
     private let moreBadge = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
     private var modePick: UIButton!
-    /// The page holds picks the session has not heard, or they are going (Send picks stands).
-    private var sendWanted = false
     /// What is on show is a canvas: its own tools, no mode or Comments, and Undock.
     private var canvasShown = false
     /// The controls the head has no room for, in its order: More holds them.
@@ -795,7 +785,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Whether `item` belongs in this head at all, as the panel stands.
     private func wants(_ item: HeadItem) -> Bool {
         switch item {
-        case .send: sendWanted
         case .newCanvas, .openTab: !ownTab
         case .undock: canvasShown && !ownTab
         case .inspect, .view: inspection != nil
@@ -920,11 +909,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func overflowMenu() -> [UIMenuElement] {
         overflowed.compactMap { item -> UIMenuElement? in
             switch item {
-            case .send:
-                let words = sending ? "Sending…" : "Send picks"
-                let action = UIAction(title: words, image: Glyph.send.image) { [weak self] _ in self?.send() }
-                if !sendButton.isEnabled { action.attributes = .disabled }
-                return action
             case .newCanvas:
                 let action = UIAction(title: "New canvas", image: Glyph.plus.image) { [weak self] _ in self?.newCanvas() }
                 if making { action.attributes = .disabled }
@@ -1137,7 +1121,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // it can go back to the composer (`canUndock`).
         canvasShown = frame.artifact.kind == .canvas
         placeHeadItems()
-        paintSend()
         pageLoaded = false
         paintCover(animated: false)
         byHost = route.byHost
@@ -1395,7 +1378,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 #endif
             }
         case "cawco:doc":
-            // A pick, a note, a pin, the agent's patch or a Send's stamp: the pins and Send picks read again now.
+            // A pick, a note, a pin, the agent's patch or a Send's stamp: the pins read again now.
             refresh()
         case "cawco:pin-open":
             guard let id = Self.pinId(body["id"]) else { return }
@@ -1434,8 +1417,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
             setMode(.interact)
         case "cawco:error":
-            // wire.ts `previewErrorOf`: a send or a field carry their own way back.
-            let of = Self.text(body["of"], 20).flatMap { ["send", "field"].contains($0) ? $0 : nil }
+            // wire.ts `previewErrorOf`: a field carries its own way back; a send goes again from the page's own Send.
+            let of = Self.text(body["of"], 20).flatMap { $0 == "field" ? $0 : nil }
             failed(Self.text(body["message"], 300) ?? "The preview reported an error.", of: of)
         case "cawco:resolved":
             // The page kept the field it refused: its word leaves the band.
@@ -1473,7 +1456,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             openMenu()
         }
         #endif
-        paintSend()
         // The page's mode as the person left it, its pins shown or hidden, and the open card's pin tracked again.
         setMode(mode, place: placing)
         if !pinsShown { deliver(["type": "cawco:pins-shown", "shown": false]) }
@@ -1835,7 +1817,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintCard()
     }
 
-    /// The head's Comments, its badge the open pins (PreviewPane.svelte `.comments`), and Send picks.
+    /// The head's Comments, its badge the open pins (PreviewPane.svelte `.comments`).
     private func paintPins() {
         guard isViewLoaded else { return }
         // The open count only once read and above 0 (The Earned Count Rule), one
@@ -1847,35 +1829,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pinsButton.accessibilityLabel = "Comments\(counted ? ", \(openPins) open" : "")\(pinsShown ? "" : ", pins hidden")"
         let badge = counted ? pinsBadge.intrinsicContentSize.width + Space.space1 : 0
         pinsButton.configuration?.contentInsets.trailing = Space.space2 + badge
-        paintSend()
-    }
-
-    /// Send picks stands only while the page has picks the session has not
-    /// heard (PreviewPane.svelte `unsentPicks`); pins and ink go by themselves.
-    private func paintSend() {
-        guard isViewLoaded else { return }
-        let picks = comments.unsentPicks > 0
-        sendButton.configuration?.showsActivityIndicator = sending
-        let words = sending ? "Sending…" : "Send picks"
-        // On a narrow pane its glyph alone, as Comments' word goes there: the name keeps its room beside the mode.
-        if narrow {
-            // No title at all: an empty one still keeps the gap after the glyph.
-            sendButton.configuration?.attributedTitle = nil
-        } else {
-            KitButton.setTitle(words, of: sendButton, variant: .ghost, height: .sm)
-        }
-        sendButton.accessibilityLabel = words
-        sendButton.toolTip = words
-        #if DEBUG
-        PreviewProbe.say("preview send words=\(picks ? words : "-")")
-        #endif
-        sendWanted = picks || sending
-        #if DEBUG
-        if probeSends { sendWanted = true }
-        #endif
         placeHeadItems()
-        sendButton.isEnabled = connected && picks && !sending
-        sendButton.accessibilityHint = "Sends the page's picks to the session"
     }
 
     /// The Comments panel (PinList.svelte), the kit's floating surface hung
@@ -2251,66 +2205,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         answer.resume(returning: refused)
     }
 
-    // MARK: Send picks
-
-    /// Send picks (PreviewPane.svelte `sendPicks`): the page posts to the
-    /// listener's send beside the doc's socket, which tells the session it
-    /// has the page's picks to read. Pins, replies and ink are never sent:
-    /// the hub delivers them by themselves once quiet. A refusal stands in
-    /// the band, Send picks still there.
-    private func send() {
-        guard !sending, connected, let artifact = artifactId else { return }
-        sending = true
-        paintSend()
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                // WebKit's own method, not the Swift overlay's `async` refinement of it:
-                // that lives in libswiftWebKit, which iOS 18 does not ship, and
-                // linking it stopped the app at launch there (OS_REASON_DYLD).
-                _ = try await withCheckedThrowingContinuation { (done: CheckedContinuation<Int, any Error>) in
-                    web.__callAsyncJavaScript(Self.sendScript, arguments: ["sync": "/__cawco/artifact/\(artifact)"], inFrame: nil, in: .page) { value, error in
-                        if let error { done.resume(throwing: error) } else { done.resume(returning: (value as? NSNumber)?.intValue ?? 0) }
-                    }
-                }
-                if failureOf == "send" { clearFailure() }
-                #if DEBUG
-                PreviewProbe.say("preview send ok")
-                #endif
-            } catch {
-                let message = Self.sentence(error)
-                failed(message, of: "send")
-                #if DEBUG
-                PreviewProbe.say("preview send failed: \(message)")
-                #endif
-            }
-            sending = false
-            paintSend()
-            paintCard()
-            refresh()
-        }
-    }
-
-    /// A script's thrown error in its own words (the page's `Error: …` without its prefix).
-    private static func sentence(_ error: any Error) -> String {
-        let said = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription
-        return said.hasPrefix("Error: ") ? String(said.dropFirst(7)) : said
-    }
-
-    /// The send, in the page: the listener's send beside the doc's socket
-    /// (artifact-doc.ts `sendArtifact`).
-    private static let sendScript = """
-    const response = await fetch(`${sync}/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
-    if (!response.ok) {
-      throw new Error((await response.text()).slice(0, 300) || "The hub didn't take the picks. Send again.");
-    }
-    return 0;
-    """
-
     // MARK: Shown
 
     /// A load ended: the proxy's own page names the hop that did not answer
@@ -2394,16 +2288,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The header as the probe reads it: what toggles Comment and its centre
     /// ("Comment" at Comment's segment, or while commenting "Interact" at
     /// Interact's, the way out), the mode, Draw's centre, the open pins and
-    /// Comments' centre, Send's words and centre, Reload's, the grabber's,
-    /// and the web view's frame.
+    /// Comments' centre, Reload's, the grabber's, and the web view's frame.
     private func headLine() -> String {
         let centre = PreviewProbe.centre
         let words = mode == .comment ? "Interact" : "Comment"
         let toggle = segmentCentre(mode == .comment ? 0 : 1)
-        let sendWords = sendButton.accessibilityLabel ?? "?"
         let grab = grabArea.isHidden ? "none" : centre(grabber)
         let page = web.convert(web.bounds, to: nil)
-        return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(openPins)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
+        return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(openPins)@\(centre(pinsButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
     }
 
     /// The centre of the mode's segment at `index` in the window: the segmented's width in three.
@@ -2444,8 +2336,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     /// Every message `deliver` hands the page, as it hands it.
     var probeDelivered: (([String: Any]) -> Void)?
-    /// Send picks stands, as though the page held picks the session has not heard.
-    private var probeSends = false
     /// The room `placeHeadItems` left once it placed the controls, pt.
     private var laidLeft = 0.0
     /// What the first fit stood, when More held Comments' count and the second one was taken; nil otherwise.
@@ -2456,14 +2346,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         didSet { paintPins() }
     }
 
-    /// The panel as a component canvas's, its page holding picks: the
-    /// inspection `adoptSheet` makes for a `.component` frame, so the head
-    /// wants what it wants for one.
+    /// The panel as a component canvas's: the inspection `adoptSheet` makes
+    /// for a `.component` frame, so the head wants what it wants for one.
     func probeAsComponent(name: String) {
         titleButton.show(kind: .component, name: name)
         inspection = SheetInspection(post: { [weak self] message in self?.deliver(message) }, write: { _ in })
-        probeSends = true
-        paintSend()
+        placeHeadItems()
     }
 
     var probeCanvasView: CanvasViewControl { canvasView }
@@ -2496,7 +2384,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             let form = switch key {
             case .mode: "segments"
             case .modePick: "pick"
-            case .send, .comments: narrow ? "glyph" : "words"
+            case .comments: narrow ? "glyph" : "words"
             default: "glyph"
             }
             let box = slot.frame
@@ -2611,7 +2499,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The probe's page posts `cawco:probe` with its state and the viewport
     /// rects of what the probe taps: logged with each rect's centre in the
     /// window's points, where a simulator touch lands, after the header's own
-    /// line (`headLine`: the mode's places, Comments', Send's, Reload's, the
+    /// line (`headLine`: the mode's places, Comments', Reload's, the
     /// grabber's, and the web view's frame in the window), so every post
     /// says where everything is now.
     private func probePage(_ body: [String: Any]) {

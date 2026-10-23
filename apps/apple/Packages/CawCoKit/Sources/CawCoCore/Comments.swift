@@ -98,7 +98,7 @@ private enum PinWords {
 }
 
 /// An artifact's pins as the hub has them, and how many picks the session
-/// has not heard, which Send picks sends (PreviewPane.svelte `unsentPicks`).
+/// has not heard, which the page's own Send sends (PreviewPane.svelte `unsentPicks`).
 /// The pins go to the session by themselves once quiet (the hub's
 /// artifacts/service.ts).
 public struct ArtifactComments: Sendable, Equatable {

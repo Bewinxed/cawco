@@ -8,8 +8,7 @@
  * open count stays on More while More holds Comments. The name keeps its own
  * width up to 120pt. On a scratch fleet (real hub, agent and sessiond; Claude
  * Code against the mock model) and the built app, iOS 18.5 and 27.2, a
- * session of its own on each device makes a page whose script makes a pick,
- * so Send picks stands:
+ * session of its own on each device makes a page:
  *
  * 1. The iPad 13" side card at its default share, the narrowest split
  *    (`cawco.preview.width.<session>` 0.3, the share's floor) and the panel
@@ -58,16 +57,13 @@ const CREATE = "mcp__cawco__artifact_create";
 const NAME = "pricing-page-draft";
 /** PreviewController `nameFloor`: what a name this long keeps while controls go to More. */
 const NAME_FLOOR = 120;
-/** A page that makes a pick once it stands (`cawco.choose`), so the head's Send picks stands. */
+/** The page the head stands over. */
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Pricing</title>
 <style>body { font: 17px system-ui; padding: 24px }</style></head>
-<body><h1>Which plan?</h1><p>Pro, picked by the page itself.</p>
-<script>
-window.addEventListener("load", () => setTimeout(() => window.cawco?.choose("plan", "pro"), 800));
-</script></body></html>`;
+<body><h1>Which plan?</h1><p>Pro or Team.</p></body></html>`;
 /** What the panel wants in its head for a page, beside the side and the drawer. */
-const WANTED = ["send", "newCanvas", "openTab", "mode", "comments", "reload"];
+const WANTED = ["newCanvas", "openTab", "mode", "comments", "reload"];
 
 /** Where the captures go: outside the workspace, for the parent's capture review. */
 const keep = join(
@@ -289,19 +285,19 @@ function roomFaults(room: Room, wanted: string[]): string[] {
   return faults;
 }
 
-/** The newest head room line after `mark` that has Send picks in it (standing or in More). */
+/** The newest head room line after `mark` that has the page's Reload in it (standing or in More). */
 function roomAfter(
   on: On,
   mark: number,
   tag: string
 ): Promise<Room | undefined> {
   return until(
-    `${tag}: the head with Send picks`,
+    `${tag}: the head over the page`,
     () => readRoom(on.heard.slice(mark).findLast((line) => ROOM.test(line))),
     (room) =>
       !!room &&
-      (room.more.includes("send") ||
-        room.shown.some((slot) => slot.name === "send")),
+      (room.more.includes("reload") ||
+        room.shown.some((slot) => slot.name === "reload")),
     120_000
   ).catch(() =>
     readRoom(on.heard.slice(mark).findLast((line) => ROOM.test(line)))

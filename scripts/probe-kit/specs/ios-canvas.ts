@@ -601,7 +601,7 @@ async function formStep(on: On): Promise<string | undefined> {
     `${typedBy}; typed: ${typed ?? "nothing"}; after: ${kept ?? "nothing"}; document ${formDoc ?? "-"} → ${docAfter ?? "-"}; navigations ${formNavigations}; the tool: ${republished.slice(0, 120)}${under}`
   );
   // 3b. What the page said of itself reaches its card (ToolGroup `preview.title`, `.thumbnail`), and the
-  // head keeps the name while Send picks stands; where the transcript stands to the composer, said.
+  // head keeps the name; where the transcript stands to the composer, said.
   const captured = after(madeAt).find((line) =>
     line.startsWith("preview captured")
   );

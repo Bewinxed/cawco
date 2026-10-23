@@ -180,7 +180,7 @@ const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
 /** PreviewController's `preview page …` and `preview head …` lines. */
 const PAGE_LINE = /^preview page view=(\S+) selected=(\S+) count=(\d+)(.*)$/;
 const HEAD_LINE =
-  /^preview head comment=(.+)@(-?\d+),(-?\d+) mode=(interact|comment|draw) draw=(none|-?\d+,-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) send=(.+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
+  /^preview head comment=(.+)@(-?\d+),(-?\d+) mode=(interact|comment|draw) draw=(none|-?\d+,-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
 /** Pins.swift's `preview card …` line: the open pin's number, where its controls stand, whether it wears the live dot. */
 const CARD_LINE =
   /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) delete=(?:none|-?\d+,-?\d+) writing=(?:true|false) asking=(?:true|false) problem=(.*)$/;
@@ -270,8 +270,8 @@ interface Frame {
  * The header as the app logs it before each page post: what toggles
  * Comment and its centre ("Comment" at Comment's segment, or while
  * commenting "Interact" at Interact's, the way out), the mode, Draw's
- * centre, the open pins' count and Comments' centre, Send picks' words and
- * centre, Reload's, the grabber's, the web view's frame.
+ * centre, the open pins' count and Comments' centre, Reload's, the
+ * grabber's, the web view's frame.
  */
 interface Head {
   comment: Point;
@@ -281,8 +281,6 @@ interface Head {
   open: number;
   pins?: Point;
   reload: Point;
-  send?: Point;
-  sendWords: string;
   web: Frame;
   words: string;
 }
@@ -298,16 +296,14 @@ const headOf = (line: string): Head | undefined => {
     draw: pointOf(m[5]),
     open: Number(m[6]),
     pins: pointOf(m[7]),
-    sendWords: m[8],
-    send: pointOf(m[9]),
-    reload: { x: Number(m[10]), y: Number(m[11]) },
+    reload: { x: Number(m[8]), y: Number(m[9]) },
     grabber:
-      m[12] === undefined ? undefined : { x: Number(m[12]), y: Number(m[13]) },
+      m[10] === undefined ? undefined : { x: Number(m[10]), y: Number(m[11]) },
     web: {
-      x: Number(m[14]),
-      y: Number(m[15]),
-      width: Number(m[16]),
-      height: Number(m[17]),
+      x: Number(m[12]),
+      y: Number(m[13]),
+      width: Number(m[14]),
+      height: Number(m[15]),
     },
   };
 };
@@ -1017,9 +1013,7 @@ xcrun simctl install ${udid} "${app}"`);
   );
   // Pins and replies reach the session by themselves (1a59485f5): the hub
   // delivers a burst once the person has been quiet 10 s, never past 60 s
-  // from its first write. The head offers Send picks only for the page's
-  // own picks, which this page has none of.
-  head = await headNow("the header with the reply written");
+  // from its first write.
   /** The artifact's responses note (core ARTIFACT_RESPONSES), never a row of the person's. */
   const isResponses = (block: {
     metadata?: { subtype?: string };
@@ -1052,12 +1046,11 @@ xcrun simctl install ${udid} "${app}"`);
   );
   check(
     "with no Send, the reply reaches the session by itself: one responses note, no row of the person's carrying it, the pin and its entry stamped sentAt",
-    head.send === undefined &&
-      message !== undefined &&
+    message !== undefined &&
       asWords.length === 0 &&
       !!sentPin?.sentAt &&
       !!replySent?.sentAt,
-    `head's Send ${head.send ? `"${head.sendWords}" shown` : "hidden"}; note ${message ? JSON.stringify(message.metadata) : "not in the transcript"}; person's rows with the reply: ${asWords.length}; pin sentAt ${sentPin?.sentAt ?? "none"}, the reply's ${replySent?.sentAt ?? "none"}`
+    `note ${message ? JSON.stringify(message.metadata) : "not in the transcript"}; person's rows with the reply: ${asWords.length}; pin sentAt ${sentPin?.sentAt ?? "none"}, the reply's ${replySent?.sentAt ?? "none"}`
   );
   // The card's Close puts it and the keyboard away, as the session's answers come in.
   card = cardLast();
