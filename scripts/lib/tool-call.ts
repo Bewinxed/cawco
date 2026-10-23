@@ -37,6 +37,11 @@ export type ToolRecord<T> =
   | { refused: true; status: number; text: string };
 
 export interface ToolCallOptions {
+  /**
+   * The `tools/call`'s `_meta`, as a harness names the call there (Claude
+   * Code's `claudecode/toolUseId`, hub call-keys.ts); the MCP endpoint only.
+   */
+  meta?: Record<string, unknown>;
   /** How long the call may take before it is a failure: 300 s unless said. */
   timeoutMs?: number;
   /** The door `cawco tool` takes (default), or the MCP endpoint a harness takes. */
@@ -61,7 +66,8 @@ const request = (
   name: string,
   args: Record<string, unknown>,
   via: "door" | "mcp",
-  signal: AbortSignal
+  signal: AbortSignal,
+  meta?: Record<string, unknown>
 ): Promise<Response> =>
   via === "door"
     ? fetch(`${session.base}/api/delegation/call/${session.id}`, {
@@ -87,7 +93,7 @@ const request = (
             jsonrpc: "2.0",
             id: 1,
             method: "tools/call",
-            params: { name, arguments: args },
+            params: { name, arguments: args, ...(meta ? { _meta: meta } : {}) },
           }),
         }
       );
@@ -107,7 +113,8 @@ const call = async (
       name,
       toolArguments(args, form),
       via,
-      signal
+      signal,
+      options.meta
     );
     return { status: response.status, raw: await response.text() };
   });

@@ -186,7 +186,16 @@ export interface Reply {
    * a provider refuses a credential it does not take (`401`, chat completions
    * and Anthropic messages alike).
    */
-  deny?: { message: string; status: number };
+  deny?: {
+    message: string;
+    /**
+     * The seconds the refusal asks before the next try (`retry-after`), as
+     * a rate-limited provider says it: what OpenCode's retry waits on
+     * (its session/retry.ts `delay`).
+     */
+    retryAfterS?: number;
+    status: number;
+  };
   everyMs: number;
   /**
    * The account's usage as the answer's headers say it, as Anthropic's do on
@@ -260,11 +269,20 @@ const callsOf = (reply: Reply): ToolCall[] => [
  */
 const refusalOf = (reply: Reply, chat: boolean): Response | undefined => {
   if (reply.deny) {
+    const { message, retryAfterS, status } = reply.deny;
     return Response.json(
       {
-        error: { message: reply.deny.message, type: "authentication_error" },
+        error: {
+          message,
+          type: status === 429 ? "rate_limit_error" : "authentication_error",
+        },
       },
-      { status: reply.deny.status }
+      {
+        status,
+        ...(retryAfterS === undefined
+          ? {}
+          : { headers: { "retry-after": String(retryAfterS) } }),
+      }
     );
   }
   return reply.refuse && !chat ? limitRefusal(reply.refuse) : undefined;

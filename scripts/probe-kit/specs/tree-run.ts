@@ -1,0 +1,849 @@
+/**
+ * The delegation tree is the run (decision page workflows-future): what the
+ * workflow engine kept for its steps, kept for work items. On a scratch fleet
+ * (real hub, agent and sessiond; Claude Code and OpenCode against the mock
+ * model). Every delegate runs with host scope, so nothing cuts a workspace
+ * and the spec runs inside one.
+ *
+ * Each delegate's brief carries a tag that says what its mock model does:
+ * HOLD runs a long `sleep` (its turn stays open), CUT runs a command that
+ * prints a mark then sleeps, CUSTODY sleeps and finishes once woken, RETRY
+ * (OpenCode) is refused by its provider with a retry an hour out, BGORCH
+ * delegates one HOLD child and then holds.
+ *
+ * - k1. A `delegate` call through the MCP endpoint, sent twice under one
+ *   Claude Code tool use id (`_meta["claudecode/toolUseId"]`), answers the
+ *   same item both times, and one item is filed; a call under another id
+ *   files a second (hub call-keys.ts).
+ * - t1. An orchestrator with two delegates, one with a delegate of its own,
+ *   is stopped by its parent while its machine is frozen: the two leaves'
+ *   ends are asked, the middle and the orchestrator wait, every item is held
+ *   live, and nothing reaches the parent.
+ * - t2. Thawed, each ends before the one that started it (`ended_at`), the
+ *   orchestrator last, every item cancelled, and no stop row is left.
+ * - t3. The orchestrator's report reaches its parent, listing how each
+ *   delegate under it ended, nested.
+ * - p1. An OpenCode delegate whose provider answers 429 with `retry-after`
+ *   an hour out, with a two-minute budget: it fails at once, before its
+ *   budget, in the provider-retry words, and its parent hears it.
+ * - c1. A Claude delegate's process killed mid-command: the turn handed back
+ *   says the command was interrupted, with what it had printed.
+ * - c2. Killed again mid-command within two minutes, its item fails, and the
+ *   report its parent hears says the second command interrupted, with its
+ *   output.
+ * - r1. A routine with target `orchestrator`, made by a session through
+ *   `routine_create`: its test run is a background host-scope item in the
+ *   project's checkout, which delegates a child.
+ * - r2. The session that made the routine is stopped by the person: the
+ *   orchestrator and its child run on, no stop holds them.
+ * - u1. A delegate's process is killed while its agent is down, and the
+ *   agent comes back with its sessiond frozen: while the machine's custody
+ *   is undecided the item stays live and its parent hears nothing.
+ * - u2. Its sessiond thawed, custody decides; the session is woken, finishes,
+ *   and its parent hears the report.
+ *
+ *   bun scripts/probe-kit/run.ts tree-run
+ */
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { workWords } from "../../../packages/core/src/index";
+import { toolWords } from "../../lib/tool-call";
+import {
+  delay,
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
+import type { Kit, KitFleet, Spec } from "../kit";
+
+const TAGS = {
+  hold: "PROBE-HOLD",
+  cut: "PROBE-CUT",
+  custody: "PROBE-CUSTODY",
+  retry: "PROBE-RETRY",
+  orchestrate: "PROBE-BGORCH",
+} as const;
+
+/** What CUT's two commands print first: the marks a cut command's output carries. */
+const MARKS = ["PARTIAL-ONE-MARK", "PARTIAL-TWO-MARK"] as const;
+const cutCommand = (mark: string): string => `echo ${mark}; sleep 3600`;
+/** A HOLD command: a sleep that keeps its turn open. */
+const HOLD_COMMAND = "sleep 3600";
+/** What a woken CUSTODY session's summary says. */
+const CUSTODY_DONE = "CUSTODY-DONE";
+/** What the hand-back of a killed process says first (hub server.ts `killedWords`). */
+const KILLED = "Your process was killed";
+
+const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+const useTool = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
+
+/** A message's words: a string, or its text blocks. */
+const wordsOf = (content: unknown): string => {
+  if (typeof content === "string") {
+    return content;
+  }
+  return Array.isArray(content)
+    ? (content as { text?: string; content?: unknown }[])
+        .map((part) => part.text ?? wordsOf(part.content))
+        .join("\n")
+    : "";
+};
+
+/** A session's brief: the first user message of its conversation. */
+const briefOf = (request: Seen): string => {
+  const messages =
+    (
+      JSON.parse(request.body) as {
+        messages?: { content?: unknown; role?: string }[];
+      }
+    ).messages ?? [];
+  return wordsOf(messages.find((one) => one.role === "user")?.content);
+};
+
+/** A CawCo tool as Claude Code offers it: by name, or behind ToolSearch the first time. */
+const cawco = (
+  request: Seen,
+  key: string,
+  name: string,
+  input: object
+): Reply => {
+  const full = `mcp__cawco__${name}`;
+  if (request.toolNames.includes(full)) {
+    return useTool(full, input);
+  }
+  if (!searched.has(key) && request.toolNames.includes("ToolSearch")) {
+    searched.add(key);
+    return useTool("ToolSearch", { query: `select:${full}`, max_results: 1 });
+  }
+  return text(`${name} is not offered: ${request.toolNames.join(", ")}`);
+};
+
+/** Each session's searches made so far, by brief tag and tool. */
+const searched = new Set<string>();
+/** Briefs whose BGORCH session has delegated its child. */
+const delegated = new Set<string>();
+/** Every shell command the mock has had a session run, and when. */
+const issued: { at: number; brief: string; command: string }[] = [];
+/** The CUSTODY session's turns, whether it was woken, and whether it called finish_item. */
+const custody: { finished: boolean; turns: number; woken: boolean } = {
+  finished: false,
+  turns: 0,
+  woken: false,
+};
+/** BGORCH sessions that have held since they delegated. */
+const heldAfterDelegate = new Set<string>();
+
+/** A shell call, kept in {@link issued}. */
+const shell = (brief: string, command: string): Reply => {
+  issued.push({ at: Date.now(), brief, command });
+  return useTool("Bash", { command, description: "Run and wait" });
+};
+
+/**
+ * CUSTODY's turns: its first holds; any turn after it (the hub's wake once
+ * custody decided, whatever its words) finishes.
+ */
+const custodyReply = (request: Seen, brief: string): Reply => {
+  if (!request.afterTool) {
+    custody.turns += 1;
+    custody.woken = custody.turns > 1;
+  }
+  if (!custody.woken) {
+    return request.afterTool ? text("ok") : shell(brief, HOLD_COMMAND);
+  }
+  if (custody.finished) {
+    return text("ok");
+  }
+  const reply = cawco(request, `${brief}:finish`, "finish_item", {
+    headline: "Custody leg done.",
+    summary: CUSTODY_DONE,
+  });
+  custody.finished = reply.tool?.name === "mcp__cawco__finish_item";
+  return reply;
+};
+
+const respond = (request: Seen): Reply => {
+  if (!request.tools) {
+    return text("ok");
+  }
+  const brief = briefOf(request);
+  if (brief.includes(TAGS.retry)) {
+    return {
+      everyMs: 5,
+      words: [],
+      deny: {
+        status: 429,
+        message: "probe provider: too many requests",
+        retryAfterS: 3600,
+      },
+    };
+  }
+  if (brief.includes(TAGS.cut)) {
+    if (request.afterTool) {
+      return text("ok");
+    }
+    return shell(
+      brief,
+      cutCommand(request.last.includes(KILLED) ? MARKS[1] : MARKS[0])
+    );
+  }
+  if (brief.includes(TAGS.custody)) {
+    return custodyReply(request, brief);
+  }
+  if (brief.includes(TAGS.orchestrate) && !delegated.has(brief)) {
+    const reply = cawco(request, `${brief}:delegate`, "delegate", {
+      title: "Background child",
+      prompt: `${TAGS.hold}: a background orchestrator's child.`,
+      host: true,
+    });
+    if (reply.tool?.name === "mcp__cawco__delegate") {
+      delegated.add(brief);
+    }
+    return reply;
+  }
+  if (brief.includes(TAGS.orchestrate) && !heldAfterDelegate.has(brief)) {
+    // The delegate's answer: it holds from here.
+    heldAfterDelegate.add(brief);
+    return shell(brief, HOLD_COMMAND);
+  }
+  if (brief.includes(TAGS.hold) || brief.includes(TAGS.orchestrate)) {
+    // A shell result is the hold cut short: the turn ends. Any other turn
+    // (its brief, a wake) holds again.
+    return request.afterTool ? text("held") : shell(brief, HOLD_COMMAND);
+  }
+  return text("ok");
+};
+
+/** Until a session whose brief carries `words` has been had run `command`. */
+const ran = (label: string, words: string, command: string) =>
+  until(
+    label,
+    () =>
+      issued.some(
+        (one) => one.brief.includes(words) && one.command === command
+      ),
+    Boolean,
+    180_000
+  );
+
+interface Started {
+  instanceId: string;
+  workItemId: string;
+  workspaceId: string;
+}
+
+interface ItemRow {
+  background: number;
+  ended_at: number | null;
+  error: string | null;
+  id: string;
+  instance_id: string;
+  parent_instance_id: string;
+  state: string;
+  stopping_at: number | null;
+  workspace_id: string;
+}
+
+/**
+ * Rows of the hub's database, read again while a write of the hub's holds
+ * it (SQLITE_BUSY on a read-only connection), for 15 s at most.
+ */
+const rows = <T>(
+  fleet: KitFleet,
+  sql: string,
+  ...params: string[]
+): Promise<T[]> =>
+  until(
+    "a read of the hub's database",
+    () => fleet.query<T>(sql, ...params),
+    () => true,
+    15_000
+  );
+
+const ITEM =
+  "SELECT id, instance_id, parent_instance_id, state, error, ended_at, stopping_at, background, workspace_id FROM work_items";
+
+const itemOf = async (
+  fleet: KitFleet,
+  id: string
+): Promise<ItemRow | undefined> =>
+  (await rows<ItemRow>(fleet, `${ITEM} WHERE id = ?`, id))[0];
+
+/** A host-scope delegate of `parent`, filed as its `delegate` call files it. */
+const delegate = (
+  fleet: KitFleet,
+  parent: string,
+  title: string,
+  prompt: string,
+  extra: object = {}
+): Promise<Started> =>
+  fleet.api<Started>("/api/work-items", {
+    parentInstanceId: parent,
+    title,
+    prompt,
+    harness: "claude",
+    model: MODEL.claude,
+    host: true,
+    ...extra,
+  });
+
+/**
+ * What the parent was told since request `from`: the conversation of each
+ * request its model was asked, the parent's being the one session here whose
+ * brief carries no tag.
+ */
+const parentHeard = (fleet: KitFleet, from: number): string =>
+  fleet.seen
+    .slice(from)
+    .filter((one) => one.tools && !briefOf(one).includes("PROBE-"))
+    .map((one) => one.all)
+    .join("\n");
+
+/** A session's credential, read off its process's environment. */
+const credentialOf = async (fleet: KitFleet, id: string): Promise<string> => {
+  const environ = await Bun.file(
+    `/proc/${await fleet.sessionPid(id)}/environ`
+  ).text();
+  return (
+    environ
+      .split("\0")
+      .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
+      ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? ""
+  );
+};
+
+/** k1. */
+const keyedLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string
+): Promise<void> => {
+  const session = {
+    base: fleet.base,
+    id: parent,
+    credential: await credentialOf(fleet, parent),
+  };
+  const ask = {
+    title: "Keyed delegate",
+    prompt: `${TAGS.hold}: the keyed delegate.`,
+    host: true,
+  };
+  const toolUse = `toolu_probe_${crypto.randomUUID().slice(0, 12)}`;
+  const once = {
+    via: "mcp" as const,
+    meta: { "claudecode/toolUseId": toolUse },
+  };
+  const [first, again] = await Promise.all([
+    toolWords(session, "delegate", ask, once),
+    delay(300).then(() => toolWords(session, "delegate", ask, once)),
+  ]);
+  const later = await toolWords(session, "delegate", ask, once);
+  const filed = async () =>
+    (
+      await rows<{ id: string }>(
+        fleet,
+        "SELECT id FROM work_items WHERE title = ?",
+        ask.title
+      )
+    ).length;
+  kit.check(
+    "k1: a delegate call sent again under the same tool use id answers the same item, while it runs and once answered, and files one",
+    !first.refused &&
+      first.text === again.text &&
+      first.text === later.text &&
+      (await filed()) === 1,
+    `first ${JSON.stringify(first.text.slice(0, 160))}; again ${JSON.stringify(again.text.slice(0, 160))}; later ${JSON.stringify(later.text.slice(0, 160))}; filed ${await filed()}`
+  );
+  const other = await toolWords(session, "delegate", ask, {
+    via: "mcp",
+    meta: { "claudecode/toolUseId": `${toolUse}-other` },
+  });
+  kit.check(
+    "k1: a call under another tool use id files a second item",
+    !other.refused && other.text !== first.text && (await filed()) === 2,
+    `other ${JSON.stringify(other.text.slice(0, 160))}; filed ${await filed()}`
+  );
+};
+
+/** t1–t3. */
+const treeLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string
+): Promise<void> => {
+  const orchestrator = await delegate(
+    fleet,
+    parent,
+    "Tree orchestrator",
+    `${TAGS.hold}: the orchestrator.`,
+    { canDelegate: true }
+  );
+  const childA = await delegate(
+    fleet,
+    orchestrator.instanceId,
+    "Tree child A",
+    `${TAGS.hold}: child A.`,
+    { canDelegate: true }
+  );
+  const childB = await delegate(
+    fleet,
+    orchestrator.instanceId,
+    "Tree child B",
+    `${TAGS.hold}: child B.`
+  );
+  const grandchild = await delegate(
+    fleet,
+    childA.instanceId,
+    "Tree grandchild A1",
+    `${TAGS.hold}: grandchild A1.`
+  );
+  const all = [orchestrator, childA, childB, grandchild];
+  for (const words of [
+    "the orchestrator",
+    "child A",
+    "child B",
+    "grandchild A1",
+  ]) {
+    // biome-ignore lint/performance/noAwaitInLoops: each session's hold, one after another
+    await ran(
+      `${words} holding its turn`,
+      `${TAGS.hold}: ${words}.`,
+      HOLD_COMMAND
+    );
+  }
+  await delay(3000);
+  const heardFrom = fleet.seen.length;
+  fleet.freeze("agent", true);
+  let frozen: {
+    rows: { ended_at: number | null; instance_id: string }[];
+    items: (ItemRow | undefined)[];
+  };
+  try {
+    await fleet.api("/api/work-items/stop", {
+      from: parent,
+      instanceId: orchestrator.instanceId,
+    });
+    await delay(6000);
+    frozen = {
+      rows: await rows<{ ended_at: number | null; instance_id: string }>(
+        fleet,
+        "SELECT instance_id, ended_at FROM tree_stops"
+      ),
+      items: await Promise.all(all.map((one) => itemOf(fleet, one.workItemId))),
+    };
+  } finally {
+    fleet.freeze("agent", false);
+  }
+  const asked = (id: string) =>
+    frozen.rows.find((row) => row.instance_id === id)?.ended_at !== null &&
+    frozen.rows.some((row) => row.instance_id === id);
+  const reportedEarly = parentHeard(fleet, heardFrom).includes(
+    "Tree orchestrator"
+  );
+  kit.check(
+    "t1: frozen, the leaves' ends are asked, the middle and the orchestrator wait, every item is held live, and nothing reaches the parent",
+    frozen.rows.length === 4 &&
+      asked(grandchild.instanceId) &&
+      asked(childB.instanceId) &&
+      !asked(childA.instanceId) &&
+      !asked(orchestrator.instanceId) &&
+      frozen.items.every(
+        (item) => item?.state === "running" && item.stopping_at !== null
+      ) &&
+      !reportedEarly,
+    `rows ${JSON.stringify(frozen.rows)}; items ${JSON.stringify(frozen.items.map((item) => [item?.state, item?.stopping_at]))}; reported early ${reportedEarly}`
+  );
+  const ended = await until(
+    "the orchestrator's item cancelled",
+    () => itemOf(fleet, orchestrator.workItemId),
+    (item) => item.state === "cancelled",
+    180_000
+  ).catch(() => undefined);
+  const items = await Promise.all(
+    all.map((one) => itemOf(fleet, one.workItemId))
+  );
+  const [o, a, b, a1] = items.map((item) => item?.ended_at ?? Number.NaN);
+  const left = await rows<{ instance_id: string }>(
+    fleet,
+    "SELECT instance_id FROM tree_stops"
+  );
+  kit.check(
+    "t2: each ends before the session that started it, the orchestrator last; every item cancelled, no stop row left",
+    ended !== undefined &&
+      items.every((item) => item?.state === "cancelled") &&
+      (a1 as number) <= (a as number) &&
+      (a as number) <= (o as number) &&
+      (b as number) <= (o as number) &&
+      left.length === 0,
+    `ended_at o ${o}, a ${a}, b ${b}, a1 ${a1}; states ${items.map((item) => item?.state).join(", ")}; rows left ${left.length}`
+  );
+  const headline = workWords.stoppedHeadline("Tree orchestrator", 3);
+  const report = await until(
+    "the orchestrator's report at its parent",
+    () => {
+      const heard = parentHeard(fleet, heardFrom);
+      return heard.includes(headline) ? heard : undefined;
+    },
+    Boolean,
+    120_000
+  ).catch(() => parentHeard(fleet, heardFrom));
+  const lineOf = (title: string, nested: boolean) =>
+    new RegExp(
+      `^${nested ? " {2}" : ""}- ${title} \\(work item [0-9a-f]{8}\\): cancelled`,
+      "m"
+    ).test(report);
+  kit.check(
+    "t3: the orchestrator's report reaches its parent, listing how each delegate under it ended, the grandchild under its parent",
+    report.includes(headline) &&
+      report.includes(workWords.stoppedDelegates) &&
+      lineOf("Tree child A", false) &&
+      lineOf("Tree child B", false) &&
+      lineOf("Tree grandchild A1", true),
+    report.slice(report.indexOf(headline), report.indexOf(headline) + 900) ||
+      report.slice(-900)
+  );
+};
+
+/** p1. */
+const retryLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string
+): Promise<void> => {
+  const heardFrom = fleet.seen.length;
+  const started = Date.now();
+  const retried = await fleet.api<Started>("/api/work-items", {
+    parentInstanceId: parent,
+    title: "Retried delegate",
+    prompt: `${TAGS.retry}: ask the provider.`,
+    harness: "opencode",
+    model: MODEL.opencode,
+    host: true,
+    budget: { minutes: 2 },
+  });
+  const item = await until(
+    "the retried delegate's item ended",
+    () => itemOf(fleet, retried.workItemId),
+    (row) => row.state !== "starting" && row.state !== "running",
+    150_000
+  ).catch(() => itemOf(fleet, retried.workItemId));
+  const opening = workWords.providerRetryEnded("x", "y").split("(")[0] ?? "";
+  const heard = await until(
+    "the retried delegate's report at its parent",
+    () => {
+      const words = parentHeard(fleet, heardFrom);
+      return words.includes(opening) ? words : undefined;
+    },
+    Boolean,
+    60_000
+  ).catch(() => parentHeard(fleet, heardFrom));
+  kit.check(
+    "p1: a delegate whose provider retries past its deadline fails at once, before its budget, in the provider-retry words, and its parent hears it",
+    item?.state === "failed" &&
+      (item.error ?? "").startsWith(opening) &&
+      (item.ended_at ?? 0) - started < 120_000 &&
+      heard.includes(opening),
+    `item ${JSON.stringify(item)}; parent heard ${JSON.stringify(heard.slice(-600))}`
+  );
+};
+
+/** c1, c2. */
+const cutLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string
+): Promise<void> => {
+  const heardFrom = fleet.seen.length;
+  const cut = await delegate(
+    fleet,
+    parent,
+    "Cut delegate",
+    `${TAGS.cut}: print and wait.`
+  );
+  const kill = async (mark: string) => {
+    await ran(`the cut delegate running ${mark}`, TAGS.cut, cutCommand(mark));
+    await delay(4000);
+    const pid = await until(
+      "the cut delegate's process",
+      () => fleet.sessionPid(cut.instanceId),
+      Boolean,
+      60_000
+    );
+    // The CLI and the command it runs: a CLI killed alone leaves its
+    // command running, adopted by init (the spool it wrote stays either way).
+    await fleet.killTree(pid, "SIGKILL");
+  };
+  await kill(MARKS[0]);
+  const said = workWords.commandInterrupted(
+    cutCommand(MARKS[0]),
+    `${MARKS[0]}\n`
+  );
+  const handedBack = await until(
+    "the handed-back turn",
+    () =>
+      fleet.seen.find(
+        (one) => briefOf(one).includes(TAGS.cut) && one.last.includes(KILLED)
+      )?.last,
+    Boolean,
+    120_000
+  ).catch(() => "");
+  kit.check(
+    "c1: the turn handed back after a kill says the command interrupted, with what it had printed",
+    handedBack.includes(said),
+    handedBack.slice(0, 800)
+  );
+  await kill(MARKS[1]);
+  const item = await until(
+    "the cut delegate's item failed",
+    () => itemOf(fleet, cut.workItemId),
+    (row) => row.state === "failed",
+    120_000
+  ).catch(() => itemOf(fleet, cut.workItemId));
+  const second = workWords.commandInterrupted(
+    cutCommand(MARKS[1]),
+    `${MARKS[1]}\n`
+  );
+  const heard = await until(
+    "the cut delegate's report",
+    () => {
+      const words = parentHeard(fleet, heardFrom);
+      return words.includes(second) ? words : undefined;
+    },
+    Boolean,
+    60_000
+  ).catch(() => parentHeard(fleet, heardFrom));
+  kit.check(
+    "c2: killed again mid-command, its item fails, and its parent's report says the second command interrupted, with its output",
+    item?.state === "failed" &&
+      (item.error ?? "").includes(second) &&
+      heard.includes(second),
+    `item ${JSON.stringify(item)}; heard ${JSON.stringify(heard.slice(-800))}`
+  );
+};
+
+/** r1, r2. */
+const routineLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  src: string,
+  projectId: string
+): Promise<void> => {
+  const maker = await fleet.spawn("claude", "Routine maker", src, {
+    projectId,
+  });
+  const made = await toolWords(
+    {
+      base: fleet.base,
+      id: maker,
+      credential: await credentialOf(fleet, maker),
+    },
+    "routine_create",
+    {
+      name: "Background orchestrator",
+      prompt: `${TAGS.orchestrate}: delegate one background child.`,
+      target: "orchestrator",
+      cron: "0 0 1 1 *",
+      time_zone: "UTC",
+    }
+  );
+  const orchestrator = await until(
+    "the routine's orchestrator item",
+    () =>
+      fleet.query<ItemRow>(
+        "SELECT id, instance_id, parent_instance_id, state, error, ended_at, stopping_at, background, workspace_id FROM work_items WHERE parent_instance_id LIKE 'routine:%' AND title = ?",
+        "Background orchestrator"
+      )[0],
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const child = orchestrator
+    ? await until(
+        "the orchestrator's child item",
+        () =>
+          fleet.query<ItemRow>(
+            "SELECT id, instance_id, parent_instance_id, state, error, ended_at, stopping_at, background, workspace_id FROM work_items WHERE parent_instance_id = ?",
+            orchestrator.instance_id
+          )[0],
+        Boolean,
+        180_000
+      ).catch(() => undefined)
+    : undefined;
+  const [place] = orchestrator
+    ? await rows<{ host: number; path: string }>(
+        fleet,
+        "SELECT host, path FROM workspaces WHERE id = ?",
+        orchestrator.workspace_id
+      )
+    : [];
+  kit.check(
+    "r1: a routine with target orchestrator runs a background host-scope item in the project's checkout, which delegates a child",
+    !made.refused &&
+      orchestrator?.background === 1 &&
+      place?.host === 1 &&
+      place.path === src &&
+      child !== undefined &&
+      child.background === 0,
+    `made ${JSON.stringify(made.text.slice(0, 200))}; orchestrator ${JSON.stringify(orchestrator)}; place ${JSON.stringify(place)}; child ${JSON.stringify(child)}`
+  );
+  if (!(orchestrator && child)) {
+    return;
+  }
+  await until(
+    "the orchestrator's child running",
+    () => itemOf(fleet, child.id),
+    (row) => row.state === "running",
+    120_000
+  ).catch(() => undefined);
+  await fleet.stopSession(maker);
+  await until(
+    "the routine maker's end confirmed",
+    () =>
+      fleet.query<{ end_confirmed_at: number | null }>(
+        "SELECT end_confirmed_at FROM instances WHERE id = ?",
+        maker
+      )[0],
+    (row) => row.end_confirmed_at !== null,
+    120_000
+  ).catch(() => undefined);
+  await delay(5000);
+  const after = [
+    await itemOf(fleet, orchestrator.id),
+    await itemOf(fleet, child.id),
+  ];
+  const held = await rows<{ instance_id: string }>(
+    fleet,
+    "SELECT instance_id FROM tree_stops"
+  );
+  kit.check(
+    "r2: the session that made the routine stopped, the orchestrator and its child run on, and no stop holds them",
+    after.every(
+      (row) => row?.state === "running" && row.stopping_at === null
+    ) && held.length === 0,
+    `after ${JSON.stringify(after.map((row) => [row?.state, row?.stopping_at]))}; stop rows ${JSON.stringify(held)}`
+  );
+};
+
+/** u1, u2. */
+const custodyLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string
+): Promise<void> => {
+  const heardFrom = fleet.seen.length;
+  const held = await delegate(
+    fleet,
+    parent,
+    "Custody delegate",
+    `${TAGS.custody}: hold, then finish when woken.`
+  );
+  await ran("the custody delegate holding", TAGS.custody, HOLD_COMMAND);
+  await delay(3000);
+  const pid = await fleet.sessionPid(held.instanceId);
+  await fleet.stop("agent");
+  if (pid !== undefined) {
+    // The CLI and its command, which a CLI killed alone leaves running.
+    await fleet.killTree(pid, "SIGKILL");
+  }
+  await delay(2000);
+  fleet.freeze("sessiond", true);
+  const seenWhile: { custody?: string; state?: string; status?: string }[] = [];
+  try {
+    fleet.launch("agent");
+    for (let look = 0; look < 12; look += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one look every two seconds, while custody is undecided
+      await delay(2000);
+      const row = (
+        await fleet
+          .api<
+            { custody?: { state: string }; machineId: string; status: string }[]
+          >("/api/agents")
+          .catch(() => [])
+      ).find((one) => one.machineId === MACHINE);
+      seenWhile.push({
+        custody: row?.custody?.state,
+        status: row?.status,
+        state: (await itemOf(fleet, held.workItemId))?.state,
+      });
+    }
+  } finally {
+    fleet.freeze("sessiond", false);
+  }
+  const undecided = parentHeard(fleet, heardFrom);
+  kit.check(
+    "u1: while the machine's custody is undecided the item stays live and its parent hears nothing",
+    seenWhile.every(
+      (one) => one.state === "running" && one.custody !== "available"
+    ) && !undecided.includes("Custody delegate"),
+    JSON.stringify(seenWhile)
+  );
+  await fleet.agentUp();
+  const done = await until(
+    "the custody delegate's item done",
+    () => itemOf(fleet, held.workItemId),
+    (row) => row.state === "done" || row.state === "failed",
+    240_000
+  ).catch(() => itemOf(fleet, held.workItemId));
+  const heard = await until(
+    "the custody delegate's report",
+    () => {
+      const words = parentHeard(fleet, heardFrom);
+      return words.includes(CUSTODY_DONE) ? words : undefined;
+    },
+    Boolean,
+    60_000
+  ).catch(() => parentHeard(fleet, heardFrom));
+  kit.check(
+    "u2: custody decided, the session is woken and finishes, and its parent hears the report",
+    done?.state === "done" && heard.includes(CUSTODY_DONE),
+    `item ${JSON.stringify(done)}; heard ${JSON.stringify(heard.slice(-600))}`
+  );
+};
+
+const spec: Spec = {
+  name: "tree-run",
+  run: async (kit: Kit) => {
+    const fleet = await kit.fleet(respond);
+    const home = fleet.env.HOME as string;
+    fleet.launch("sessiond");
+    await fleet.sessiondUp();
+    fleet.launch("hub");
+    await fleet.hubUp();
+    fleet.fileAccount();
+    fleet.launch("agent");
+    await fleet.agentUp();
+    await fleet.accountSignedIn();
+    const src = join(fleet.sandbox, "src");
+    await mkdir(src, { recursive: true });
+    await writeFile(
+      join(home, ".gitconfig"),
+      "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
+    );
+    await Bun.$`sh -c ${"git init -q -b main && echo tree > README.md && git add -A && git commit -qm 'First commit'"}`
+      .cwd(src)
+      .env({ ...process.env, HOME: home })
+      .quiet();
+    const project = await fleet.api<{ id: string }>("/api/projects", {
+      name: "Tree run",
+      machineId: MACHINE,
+      cwd: src,
+      caw: false,
+    });
+    const parent = await fleet.spawn("claude", "Probe parent", src, {
+      projectId: project.id,
+    });
+    await keyedLeg(kit, fleet, parent);
+    await treeLeg(kit, fleet, parent);
+    await retryLeg(kit, fleet, parent);
+    await cutLeg(kit, fleet, parent);
+    await routineLeg(kit, fleet, src, project.id);
+    await custodyLeg(kit, fleet, parent);
+  },
+};
+
+export default spec;
