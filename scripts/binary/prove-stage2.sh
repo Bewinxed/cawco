@@ -2648,11 +2648,11 @@ ws_hook_calls_stop() {
 }
 # Every call the hook was handed was answered by a live judge and ran, and calls fell in the window between the new
 # build's agent starting and its deciding the workspace's boundary, whose work listens on a port, stays as it is
-# rather than being handed over: the agent's first journal line and its "is kept as it is while its work listens on"
-# line for this workspace (boundary.ts replaceOlder).
+# rather than being handed over: the agent's first journal line and its "is kept as it is while its work … listens on"
+# line for this workspace (boundary.ts replaceOlder; a hook call running then is named first, "runs a command (…) and").
 ws_hook_calls_answered() {
   local window from to inside
-  window=$(as_user "$joinerc" journalctl --user --no-pager -o json -u cawco-agent.service | jsonl "d => { const said = (e) => typeof e.MESSAGE === 'string' ? e.MESSAGE : ''; const h = d.filter(e => said(e).includes('$(cat "$rigdir/ws-id"): its boundary ') && said(e).includes(' is kept as it is while its work listens on $WS_LISTENER_PORT')).at(-1); if (!h) return; const first = d.find(e => e._PID === h._PID); const ms = (e) => Math.floor(Number(e.__REALTIME_TIMESTAMP) / 1000); return ms(first) + ' ' + ms(h); }")
+  window=$(as_user "$joinerc" journalctl --user --no-pager -o json -u cawco-agent.service | jsonl "d => { const said = (e) => typeof e.MESSAGE === 'string' ? e.MESSAGE : ''; const h = d.filter(e => said(e).includes('$(cat "$rigdir/ws-id"): its boundary ') && / is kept as it is while its work .*listens on .*$WS_LISTENER_PORT/.test(said(e))).at(-1); if (!h) return; const first = d.find(e => e._PID === h._PID); const ms = (e) => Math.floor(Number(e.__REALTIME_TIMESTAMP) / 1000); return ms(first) + ' ' + ms(h); }")
   read -r from to <<< "$window"
   [[ ${from:-} =~ ^[0-9]+$ && ${to:-} =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: the agent's journal does not say it keeps the workspace's boundary while its listener runs"; return 1; }
   inside=$(awk -v from="$from" -v to="$to" '$1 ~ /^[0-9]+$/ && $1 >= from && $1 <= to' "$rigdir/ws-hook-calls.txt" | wc -l)
@@ -2788,9 +2788,10 @@ workspace_across_update() {
   [[ "$(ns_of "$job")" == "$old_ns" ]]
   # The new build's agent finds the boundary of the older build's form with its work listening on the port, and keeps
   # it as it is: handing it over would put every next command in a new network where nothing listens. (The preview's
-  # served server listens in it too once the stage starts it again, so the ports it names may be both.)
-  wait_until 180 'as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep -q "'"$id"': its boundary .* is kept as it is while its work listens on .*'"$WS_LISTENER_PORT"'"' || { echo "ASSERTION FAILED: the new build's agent did not say it keeps the boundary while its listener runs"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
-  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its boundary .* is kept as it is while its work listens on .*$WS_LISTENER_PORT" | tail -n 1
+  # served server listens in it too once the stage starts it again, so the ports it names may be both. A hook call the
+  # loop above has in flight at that moment is named first: "runs a command (executor N) and listens on …".)
+  wait_until 180 'as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep -q "'"$id"': its boundary .* is kept as it is while its work .*listens on .*'"$WS_LISTENER_PORT"'"' || { echo "ASSERTION FAILED: the new build's agent did not say it keeps the boundary while its listener runs"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
+  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its boundary .* is kept as it is while its work .*listens on .*$WS_LISTENER_PORT" | tail -n 1
   # Through all of it, no call the hook was handed was refused.
   ws_hook_calls_answered
   # The generation is the one it had, its srt host still held, nothing retiring beside it, and the next command runs in
