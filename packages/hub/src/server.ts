@@ -21788,6 +21788,7 @@ export const createServer = (
       id: crypto.randomUUID(),
       queueMaxMs: QUEUE_WAIT_MAX_MS,
       ...(how.gate ? { gate: how.gate } : {}),
+      ...(how.moves ? { moves: how.moves } : {}),
     };
     const { onWait } = how;
     /**
@@ -23965,10 +23966,12 @@ export const createServer = (
       }
       return { kind: row.kind, name: row.name, html };
     },
-    // Inside the builder's workspace's boundary (core safe-git.ts).
-    run: (machineId, cwd, cmd, timeoutMs, workspace) =>
+    // Inside the builder's workspace's boundary (core safe-git.ts), but a
+    // move that writes a path the boundary keeps (`CommandOptions.moves`).
+    run: (machineId, cwd, cmd, timeoutMs, workspace, movesTo) =>
       runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
         what: "command",
+        ...(movesTo ? { moves: movesTo } : {}),
       }),
     tasks,
     workItems,

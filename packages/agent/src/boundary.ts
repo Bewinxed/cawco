@@ -7135,6 +7135,79 @@ export const whileBoundaryClosed = <T>(
   });
 
 /**
+ * What still runs in workspace `id`'s boundary `held`, in words, with its
+ * gate up: an older generation beside it, a command past the gate once
+ * {@link commandsEnded} gave up waiting, or its work ({@link workLeft});
+ * nothing once it is idle.
+ */
+const stillRuns = async (
+  id: string,
+  held: Held
+): Promise<string | undefined> => {
+  if ((await readRetiring(id)).length > 0) {
+    return "an older boundary of it still runs beside it";
+  }
+  const past = await commandsEnded(id, held.gen);
+  if (past.length > 0) {
+    return `it runs ${past.length === 1 ? "a command" : `${past.length} commands`} (executor ${past.join(", ")})`;
+  }
+  const left = await workLeft(id, held);
+  return left ? `its boundary ${left.words}` : undefined;
+};
+
+/** What {@link whileSandboxDown} answers: `work`'s own answer, or what still runs in the boundary, in words. */
+export type SandboxDown<T> = { readonly ran: T } | { readonly busy: string };
+
+/**
+ * `work` on this host with workspace `ref`'s sandbox down while its sessions
+ * live on: for a workspace a session still works in (a delegate's, whose
+ * landing rebases it), where {@link whileBoundaryClosed} would end its CLI
+ * and its judge. Behind the gate ({@link behindGate}: a command arriving
+ * meanwhile waits there, then runs through the boundary after) and in one
+ * hold against starts ({@link closedWhile}), the boundary is stopped only
+ * when nothing runs in it ({@link commandsEnded}, {@link workLeft}, no older
+ * generation beside it), as a boundary held over a stand-in is replaced
+ * ({@link restartIfIdle}); on Linux `work` runs once its sandbox is gone. Its
+ * judge, doors and hook stay, and a new boundary of the same policy starts
+ * after `work`, its or not. One that still runs something answers `busy`, in
+ * words, and nothing is stopped. With no boundary running, `work` runs as it
+ * is: nothing but the workspace's judged file tools writes the clone then.
+ */
+export const whileSandboxDown = <T>(
+  ref: WorkspaceRef,
+  work: () => Promise<T>
+): Promise<SandboxDown<T>> =>
+  closedWhile(ref.id, () =>
+    behindGate(ref.id, async (): Promise<SandboxDown<T>> => {
+      const held = await readHeld(ref.id);
+      if (!held) {
+        return { ran: await work() };
+      }
+      const busy = await stillRuns(ref.id, held);
+      if (busy) {
+        return { busy };
+      }
+      const place = await readPlace(ref.id, held.gen);
+      await stopBoundary(ref.id, held);
+      if (!(await sandboxesGone(place ? [place.inner] : []))) {
+        throw refusal(
+          ref.id,
+          `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped, so nothing was written into its clone on the host`
+        );
+      }
+      await cleanGeneration(ref.id, held);
+      try {
+        return { ran: await work() };
+      } finally {
+        const fresh = await start(await sessiond(), ref);
+        console.info(
+          `[workspace] ${ref.id}: its boundary ${held.pid} was down while the host wrote its clone, and ${fresh.pid} runs now`
+        );
+      }
+    })
+  );
+
+/**
  * Ends what still uses workspace `ref` from outside its boundary, as law
  * `live-workspace-judge-answers` counts it ({@link inUse}): every session
  * process a keeper holds in its clone ({@link attachedProcs}) and every

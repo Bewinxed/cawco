@@ -72,7 +72,7 @@ export interface Refusal {
    * `push check`: the dry run of the push before the landing gate ran a
    * step ({@link pushCheck}), its detail git's whole output.
    */
-  step: "read" | "fetch" | "push check" | "push";
+  step: "read" | "fetch" | "rebase" | "push check" | "push";
   /** The pushes made, for a `race`. */
   tries?: number;
 }
@@ -148,13 +148,17 @@ export interface LandingDeps<F> {
    * slot (machine-pause.ts `noWait`). The item's stop cancels a command
    * running then (machine-pause.ts `CommandStopped`), all but the push
    * (`lands`): one the remote may have taken already runs to its end, and
-   * the branch says whether it landed.
+   * the branch says whether it landed. `moves`, the commit a command moves
+   * the worktree to (the rebase onto origin's branch): its machine runs it
+   * on its host, the sandbox down, when it writes a path the boundary keeps
+   * from every command (machine-pause.ts `CommandOptions.moves`).
    */
   run: (
     cmd: string,
     timeoutMs: number,
     noWait?: boolean,
-    lands?: boolean
+    lands?: boolean,
+    moves?: string
   ) => Promise<CommandResult>;
   /**
    * Paths the uncommitted-work check passes over: the item's outputs, which
@@ -443,19 +447,21 @@ async function onBase<F>(
     return { kind: "nothing" };
   }
   const before = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
-  const rebase = await run(
+  const rebase = await deps.run(
     `git rebase ${target} || { files=$(git diff --name-only --diff-filter=U); git rebase --abort; printf '${CONFLICT_MARK}\\n%s\\n' "$files"; exit 1; }`,
-    LOCAL_MS
+    LOCAL_MS,
+    inTurn,
+    false,
+    `origin/${base}`
   );
   if (rebase.exitCode !== 0) {
     const at = rebase.stdout.lastIndexOf(CONFLICT_MARK);
-    return {
-      kind: "conflict",
-      files:
-        at >= 0
-          ? rebase.stdout.slice(at + CONFLICT_MARK.length).trim()
-          : detailOf(rebase),
-    };
+    return at >= 0
+      ? {
+          kind: "conflict",
+          files: rebase.stdout.slice(at + CONFLICT_MARK.length).trim(),
+        }
+      : refusal("rebase", rebase);
   }
   const head = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
   const onto = await run(`git rev-parse ${target}`, LOCAL_MS);

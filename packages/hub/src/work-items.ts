@@ -1955,6 +1955,7 @@ const refusedLine = (
   const { head, target } = landing;
   const step: Record<Refusal["step"], string> = {
     fetch: `the fetch of origin/${workspace.base}`,
+    rebase: `the rebase onto origin/${workspace.base}`,
     "push check": `the push check (git push --dry-run to ${target}, before any landing gate step)`,
     push: `the push to ${target}`,
     read: "reading the workspace's git",
@@ -4371,7 +4372,10 @@ export const createWorkItems = ({
         workspace.path,
         `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${quote(`origin/${workspace.base}`)} ${branch}`,
         GIT_TIMEOUT_MS,
-        refOf(workspace)
+        refOf(workspace),
+        // A checkout: one that left a path the boundary keeps other than
+        // the commit has it fails, never passes with it dropped.
+        { moves: made.head }
       );
       if (set.exitCode !== 0) {
         throw new Error(
@@ -6423,7 +6427,8 @@ export const createWorkItems = ({
       cmd: string,
       timeoutMs: number,
       noWait = false,
-      lands = false
+      lands = false,
+      moves?: string
     ): Promise<CommandResult> =>
       command(
         workspace.machineId,
@@ -6434,6 +6439,7 @@ export const createWorkItems = ({
         {
           onWait: (words) => landingWait(item.id, words),
           noWait,
+          ...(moves ? { moves } : {}),
           ...(lands ? {} : { stop: landingStops.get(item.id)?.signal }),
         }
       );

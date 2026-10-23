@@ -255,14 +255,16 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   /** A command in the builder's live clone, inside its boundary (core safe-git.ts). */
   const command = async (
     workspace: { id: string; machineId: string; path: string },
-    cmd: string
+    cmd: string,
+    moves?: string
   ): Promise<string> => {
     const result = await deps.run(
       workspace.machineId,
       workspace.path,
       cmd,
       COMMAND_MS,
-      { id: workspace.id, path: workspace.path }
+      { id: workspace.id, path: workspace.path },
+      moves
     );
     if (result.exitCode !== 0) {
       throw new Error(
@@ -583,7 +585,13 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       return;
     }
     try {
-      await command(workspace, RESTORE(check.head, workspace.branch));
+      // A move to its branch: the builder's commit may change a path the
+      // boundary keeps, which the checkout back writes on the host.
+      await command(
+        workspace,
+        RESTORE(check.head, workspace.branch),
+        workspace.branch
+      );
     } catch (error) {
       console.warn(
         `[design-verify] ${short(check.itemId)}: verifier ${short(actor.id)}'s clone was not put back at ${workspace.branch}: ${error instanceof Error ? error.message : String(error)}`
