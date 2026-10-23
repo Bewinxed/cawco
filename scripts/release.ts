@@ -151,12 +151,13 @@ const proofVerdicts = join(
  * included, each of which takes none of its own beneath it. Built from what
  * runs at once now: before, 17.2 GiB with lint and typecheck done before any
  * build ("cawco-nightly-7c34d9be6.service: … 17.2G memory peak", obelisk,
- * 2026-10-19); lint's peak (states-lint, 4.3 GB) and typecheck's (5.9 GB)
- * now overlap it, and the seven compiles at once peaked at 10.5 GB summed
- * (sampled every 0.5 s, 2026-10-22) where one at a time took 2.6 GB. Our
- * call until the next run's journal line gives its measured peak: 28.
+ * 2026-10-19); lint's peak (its checks at once, 10.3 GiB summed for its
+ * 14 s, 2026-10-23) and typecheck's (5.9 GB) now overlap it, and the seven
+ * compiles at once peaked at 10.5 GB summed (sampled every 0.5 s,
+ * 2026-10-22) where one at a time took 2.6 GB. Our call until the next run's
+ * journal line gives its measured peak: 34.
  */
-const RELEASE_PEAK_GIB = 28;
+const RELEASE_PEAK_GIB = 34;
 
 /** The three trees a build of `commit` runs in: one builds, one lints, one typechecks. */
 const treesOf = (commit: string) => {
@@ -377,7 +378,7 @@ const releaseSteps = (
     ...tree("typecheck"),
     // Lint and typecheck read their own trees, beside the builds; they gate
     // notarization and promotion, never the builds.
-    step("lint", ["install lint"], 199, () =>
+    step("lint", ["install lint"], 14, () =>
       run([process.execPath, "run", "lint"], trees.lint)
     ),
     step("typecheck", ["install typecheck"], 23, () =>

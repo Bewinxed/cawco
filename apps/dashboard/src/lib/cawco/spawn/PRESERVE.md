@@ -119,7 +119,7 @@ spawnSession({
 
 ## 7. Verification
 
-- Type-check the dashboard with `bun run typecheck` in `apps/dashboard`; check changed files with `bun run lint:changed` from the repository root.
+- Type-check the dashboard with `bun run typecheck` in `apps/dashboard`; lint with `bun run lint` from the repository root.
 - The form is proved in the running dashboard by probe-kit `strip-new-session` (`bun scripts/probe-kit/run.ts web strip-new-session`): the "+"'s popover and sheet, the rail's Start session's popover, a `?spawn=` link's focus, the popover's width, depth and motion, and a fork with no mode.
 
 ## Modal-Relevant Tokens

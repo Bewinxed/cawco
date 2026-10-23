@@ -1,10 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../../tsconfig.base.json",
+  // The settings of the agent's browser code. Each of its folders is its own
+  // project, a tsconfig.json there that extends this one, so a tool that
+  // finds a file's project by the nearest tsconfig.json finds it.
   "compilerOptions": {
     "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
     "jsx": "react-jsx",
     "types": ["bun"]
   },
-  "include": ["src/canvas-host", "src/preview-overlay", "src/stage-host/canvas"]
+  "include": []
 }
