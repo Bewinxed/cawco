@@ -23,6 +23,15 @@
  * d. The summariser session is no hit of an agent's find, with `by` or
  *    without, nor of the person's (`GET /api/find`), though its machine's
  *    index holds the sentence (db find.ts `hubMade`).
+ * e. Highlights mark whole tokens only, every query word the excerpt holds:
+ *    the person's line "i'm unable to comment on this stupi canvas …"
+ *    found by itself, by a query with an apostrophe, and by one of short
+ *    words ("comment to a canvas"); no mark inside a word, no query word
+ *    left unmarked.
+ * f. The person's "we literally removed the slot pool yesterday" is the top
+ *    hit for those words, its excerpt the phrase; an agent's turn that
+ *    quotes it amid a brief full of "the" ranks below it, and its excerpt
+ *    is the quote, not a window of "the" alone.
  *
  *   bun scripts/probe-kit/run.ts find-index
  */
@@ -49,6 +58,7 @@ interface Hit {
   excerpt?: string;
   id: string;
   ref?: string;
+  title?: string;
   who?: string;
 }
 interface Answer {
@@ -57,10 +67,77 @@ interface Answer {
   unsearched?: string[];
 }
 
-const respond = (request: Seen): Reply => ({
-  everyMs: 5,
-  words: [request.last.includes(MARK) ? "Noted." : "ok"],
-});
+/** The person's line about the canvas, as the owner typed it. */
+const CANVAS =
+  "i'm unable to comment on this stupi canvas it selects the whole page did u design it as a single element or an image?";
+/** The queries leg e finds it by: itself, an apostrophe's, short words'. */
+const CANVAS_QUERIES = [
+  "i'm unable to comment on this stupi canvas it selects the whole page",
+  "i'm unable",
+  "comment to a canvas",
+];
+const SLOT_QUERY = "we literally removed the slot pool yesterday";
+/** The person's line, as the owner typed it. */
+const SLOT = `${SLOT_QUERY} and AGAIN you add it`;
+const BRIEF_ASK = "PROBE-IDX-BRIEF write the brief";
+/** An agent's turn quoting the person amid a brief full of "the": what a delegate's brief or a test run says. */
+const FILLER =
+  "Paths under the clone mean the same path in your clone; there the scratch dir is the one temp files go to, and the host's caches are read-only. ";
+const BRIEF = `${FILLER.repeat(8)}He wrote "${SLOT_QUERY}" in my session. ${FILLER.repeat(8)}`;
+
+const respond = (request: Seen): Reply => {
+  if (request.last.includes(BRIEF_ASK)) {
+    return { everyMs: 1, words: [BRIEF] };
+  }
+  return {
+    everyMs: 5,
+    words: [request.last.includes(MARK) ? "Noted." : "ok"],
+  };
+};
+
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+const WORD_RUNS = /[\p{L}\p{N}]+/gu;
+const MARKED = /「([^」]*)」/g;
+
+/**
+ * Whether an excerpt's marks are whole tokens of the query, every query word
+ * it holds marked: why not, in words, or null.
+ */
+const highlightFault = (excerpt: string, query: string): string | null => {
+  const words = new Set(
+    (query.toLowerCase().match(WORD_RUNS) ?? []).map(String)
+  );
+  for (const match of excerpt.matchAll(MARKED)) {
+    const marked = (match[1] ?? "").toLowerCase().match(WORD_RUNS) ?? [];
+    // A stem the index matched ("removed" for "remove") is the word.
+    const stray = marked.filter(
+      (term) =>
+        !(
+          words.has(term) ||
+          [...words].some(
+            (word) =>
+              Math.min(word.length, term.length) >= 4 &&
+              (term.startsWith(word) || word.startsWith(term))
+          )
+        )
+    );
+    if (stray.length > 0) {
+      return `a mark on no query word: 「${match[1]}」`;
+    }
+    const before = excerpt[match.index - 1] ?? "";
+    const after = excerpt[match.index + match[0].length] ?? "";
+    if (WORD_CHAR.test(before) || WORD_CHAR.test(after)) {
+      return `a mark inside a word: …${excerpt.slice(Math.max(0, match.index - 8), match.index + match[0].length + 8)}…`;
+    }
+  }
+  const unmarked = excerpt.replace(MARKED, " ");
+  const missed = (unmarked.toLowerCase().match(WORD_RUNS) ?? []).filter(
+    (word) => words.has(word)
+  );
+  return missed.length > 0
+    ? `query words left unmarked: ${missed.join(", ")}`
+    : null;
+};
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -112,9 +189,15 @@ const run = async (kit: Kit) => {
   const summariser = await session("Summary stand-in");
   const hubs = await session("Summary of Heron log");
   const asker = await session("Asker");
+  const canvas = await session("Canvas gripe");
+  const slot = await session("Slot pool");
+  const brief = await session("Brief writer");
   await say(talker.id, MINE);
   await say(summariser.id, SUMMARISER);
   await say(hubs.id, SUMMARISER);
+  await say(canvas.id, CANVAS);
+  await say(slot.id, SLOT);
+  await say(brief.id, BRIEF_ASK);
   const find = async (args: Record<string, unknown>) => {
     const read = await toolRecord<Answer>(
       { base: fleet.base, id: asker.id, credential: asker.credential },
@@ -238,6 +321,71 @@ const run = async (kit: Kit) => {
       route.results.some((result) => result.id === talker.id) &&
       !route.results.some((result) => isHubs(result.id)),
     `summariser ${hubs.id} (session ${made?.session_id})\nagent: ${JSON.stringify(all.map((hit) => hit.id))}\nby person: ${JSON.stringify(hits.map((hit) => hit.id))}\nroute: ${JSON.stringify(route.results.map((result) => `${result.kind}:${result.id}`))}`
+  );
+
+  await highlightLegs(kit, find, canvas.id);
+  await phraseLeg(kit, find, slot.id, brief.id);
+};
+
+/** One `find` call as the asker, its record read. */
+type FindCall = (
+  args: Record<string, unknown>
+) => Promise<{ answer: Answer; text: string }>;
+
+/** e: highlights, whole tokens only. */
+const highlightLegs = async (kit: Kit, find: FindCall, canvasId: string) => {
+  for (const query of CANVAS_QUERIES) {
+    // biome-ignore lint/performance/noAwaitInLoops: one query at a time, each read whole
+    const found = await until(
+      `the canvas line for "${query}"`,
+      () => find({ query, by: "person", project: "all" }),
+      ({ answer }) => (answer.hits ?? []).some((each) => each.id === canvasId),
+      HELD_MS
+    ).catch(() => undefined);
+    const hit = found?.answer.hits?.find((each) => each.id === canvasId);
+    const fault = hit?.excerpt ? highlightFault(hit.excerpt, query) : "no hit";
+    kit.check(
+      `e: "${query}": the excerpt marks whole tokens only, every query word it holds`,
+      fault === null,
+      `${fault ?? "whole"}\nexcerpt: ${hit?.excerpt}`
+    );
+  }
+};
+
+/** An excerpt's words, its marks left out. */
+const plain = (excerpt: string | undefined) =>
+  (excerpt ?? "").replace(/[「」]/g, "");
+
+/** f: the phrase, and whose saying of it ranks first. */
+const phraseLeg = async (
+  kit: Kit,
+  find: FindCall,
+  slotId: string,
+  briefId: string
+) => {
+  const phrase = await until(
+    "the slot pool line and the brief quoting it",
+    () => find({ query: SLOT_QUERY, project: "all", limit: 20 }),
+    ({ answer }) =>
+      [slotId, briefId].every((id) =>
+        (answer.hits ?? []).some((hit) => hit.id === id)
+      ),
+    HELD_MS
+  ).catch(() => undefined);
+  const slotHits = phrase?.answer.hits ?? [];
+  const spoken = slotHits.find((hit) => hit.id === slotId);
+  const quoted = slotHits.find((hit) => hit.id === briefId);
+  kit.check(
+    "f: the person's words are the top hit for them, their excerpt the phrase; the agent's turn quoting them ranks below, its excerpt the quote",
+    slotHits[0]?.id === slotId &&
+      spoken?.who === "person" &&
+      plain(spoken.excerpt).includes(SLOT_QUERY) &&
+      quoted?.who === "agent" &&
+      slotHits.indexOf(quoted) > 0 &&
+      plain(quoted.excerpt).includes(SLOT_QUERY) &&
+      highlightFault(spoken.excerpt ?? "", SLOT_QUERY) === null &&
+      highlightFault(quoted.excerpt ?? "", SLOT_QUERY) === null,
+    `${JSON.stringify(slotHits.map((hit) => [hit.title, hit.who]))}\nperson: ${spoken?.excerpt}\nagent: ${quoted?.excerpt}`
   );
 };
 

@@ -39,7 +39,7 @@
  * filter has read them, since the word that tells a password ("my sudo
  * password is …") may stand outside the snippet's few; a moment that comes
  * without them is masked harder, every password-shaped word cut
- * (`redactOutOfSentence`), never withheld. A session the person purged
+ * (`outOfSentenceRanges`), never withheld. A session the person purged
  * (its transcript deleted) is no hit: the engine leaves it out for an agent
  * (find.ts `FindWhere.unpurged`), though a machine's index still holds its
  * words.
@@ -55,7 +55,13 @@ import {
   type TranscriptTurns,
   type TranscriptTurnsQuery,
 } from "@cawco/core";
-import { unmarked } from "@cawco/core/find-match";
+import {
+  excerptWindow,
+  type MarkedText,
+  marksOf,
+  withWords,
+  wordsOf,
+} from "@cawco/core/find-match";
 import { z } from "zod";
 import {
   cursorAt,
@@ -71,9 +77,10 @@ import { tool } from "./mcp-tool";
 import { findWords } from "./presenters/find";
 import { roleOf } from "./roles";
 import {
+  outOfSentenceRanges,
   REDACTED_SECRET,
-  redactOutOfSentence,
   redactSecrets,
+  secretRanges,
 } from "./secret-filter";
 
 export const FIND_TOOL = "find";
@@ -364,7 +371,7 @@ const momentLine = (result: FindResult, moment: FindMoment) => ({
   ref: refOf(result.id, moment.docId, moment.at),
   when: whenOf(moment.at),
   who: WHO[moment.author],
-  excerpt: excerptOf(moment.excerpt),
+  excerpt: moment.excerpt,
 });
 
 /** What a detailed hit adds: its live state and what it is for. */
@@ -582,58 +589,84 @@ const redacted = async <Value extends string | null | undefined>(
 ): Promise<Value> =>
   (typeof value === "string" ? await redactSecrets(value) : value) as Value;
 
-const MARKED = /「([^」]+)」/g;
-const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
-
 /**
- * A moment's excerpt cut from its whole turn (`turn`, already through the
- * secret filter): around the first of the words its snippet marked, those
- * words marked again; the turn's start when none of them is in its words.
- * {@link excerptOf} then cuts it to length.
+ * A moment's words rendered from `from` to `to` of `marked`: each secret
+ * (`secrets`, ranges in its unmarked words) as {@link REDACTED_SECRET} and
+ * whole, each matched token outside one between 「 and 」, on one line.
  */
-const cutFrom = (turn: string, snippet: string): string => {
-  const line = turn.replace(SPACES, " ").trim();
-  const lower = line.toLowerCase();
-  const terms = [
-    ...new Set(
-      [...snippet.matchAll(MARKED)].flatMap((match) =>
-        match[1] ? [match[1].toLowerCase()] : []
-      )
-    ),
-  ];
-  const found = terms
-    .map((term) => lower.indexOf(term))
-    .filter((at) => at >= 0);
-  const from = found.length > 0 ? Math.max(0, Math.min(...found) - 60) : 0;
-  let window = line.slice(from, from + 2 * EXCERPT_MAX);
-  for (const term of terms) {
-    window = window.replace(
-      new RegExp(term.replace(REGEX_SPECIAL, "\\$&"), "gi"),
-      (word) => `「${word}」`
-    );
+const rendered = (
+  marked: MarkedText,
+  secrets: [number, number][],
+  window: { from: number; to: number }
+): string => {
+  // A secret either edge would cut is taken whole, as REDACTED_SECRET.
+  let { from, to } = window;
+  for (const [start, end] of secrets) {
+    if (start < from && end > from) {
+      from = start;
+    }
+    if (start < to && end > to) {
+      to = end;
+    }
   }
-  return `${from > 0 ? "…" : ""}${window}`;
+  const { plain } = marked;
+  let out = "";
+  let at = from;
+  const marks = marked.marks.filter(
+    (mark) =>
+      mark.from >= from &&
+      mark.to <= to &&
+      !secrets.some(([start, end]) => mark.from < end && mark.to > start)
+  );
+  const cuts = [
+    ...secrets
+      .filter(([start, end]) => start < to && end > from)
+      .map(([start, end]) => ({ start, end, text: REDACTED_SECRET })),
+    ...marks.map((mark) => ({
+      start: mark.from,
+      end: mark.to,
+      text: `「${plain.slice(mark.from, mark.to)}」`,
+    })),
+  ].toSorted((a, b) => a.start - b.start);
+  for (const cut of cuts) {
+    out += plain.slice(at, cut.start) + cut.text;
+    at = cut.end;
+  }
+  out += plain.slice(at, to);
+  const line = out.replace(SPACES, " ").trim();
+  return `${from > 0 ? "…" : ""}${line}${to < plain.length ? "…" : ""}`;
 };
 
 /**
- * A moment as an agent reads it: its excerpt cut from the words around its
- * snippet (`context`, as its machine's index or the hub's thread holds
- * them) once the secret filter has read them ({@link cutFrom}); a moment
- * that came without them, its snippet masked harder
- * (`redactOutOfSentence`), every password-shaped word cut. The words around
- * it go no further.
+ * A moment as an agent reads it: its excerpt the window of its words around
+ * its best match of the query's `words` (core find-match.ts
+ * `excerptWindow`: the most of the query's telling words, the phrase above
+ * all, never a stop word alone), its matched tokens marked whole. The words
+ * are the moment's `context` as its machine's index marked them (by its own
+ * tokenizer), every query word it did not mark marked here, whole words
+ * only (`withWords`: a thread's message, a kind word, a short last word),
+ * read by the secret filter first; a moment that came without
+ * them is its snippet, masked harder (`outOfSentenceRanges`: every
+ * password-shaped word cut). The words around it go no further.
  */
-const shownMoment = async (moment: HeldMoment): Promise<FindMoment> => {
+const shownMoment = async (
+  moment: HeldMoment,
+  words: readonly string[]
+): Promise<FindMoment> => {
   const { context, ...shown } = moment;
+  const text = context ?? moment.excerpt;
+  const marked = withWords(marksOf(text), words);
+  const secrets =
+    context === undefined
+      ? await outOfSentenceRanges(marked.plain)
+      : await secretRanges(marked.plain);
   return {
     ...shown,
-    excerpt:
-      context === undefined
-        ? cutFrom(
-            await redactOutOfSentence(unmarked(moment.excerpt)),
-            moment.excerpt
-          )
-        : cutFrom(await redactSecrets(context), moment.excerpt),
+    excerpt: rendered(
+      marked,
+      secrets,
+      excerptWindow(marked, words, EXCERPT_MAX)
+    ),
   };
 };
 
@@ -710,13 +743,15 @@ const unsearchedOf = (coverage: FindPage["coverage"], now: number): string[] =>
 /** One hit, concise: what it is, where, when, the words that matched, its id and its moment's ref. */
 const hitOf = (result: FindResult) => {
   const [best] = momentsOf(result);
-  const summary = best ? best.excerpt : summaryOf(result);
+  // A moment's excerpt is cut already, at its best match (shownMoment).
+  const summary = best ? null : summaryOf(result);
   return {
     kind: result.kind,
     title: clip(result.title, TITLE_MAX),
     where: whereOf(result),
     when: whenOf(best?.at ?? result.lastActivity),
     ...(best ? { who: WHO[best.author] } : {}),
+    ...(best ? { excerpt: best.excerpt } : {}),
     ...(summary ? { excerpt: excerptOf(summary) } : {}),
     id: result.id,
     ...(best ? { ref: refOf(result.id, best.docId, best.at) } : {}),
@@ -1033,15 +1068,23 @@ export const createFindTool = (deps: FindToolDeps) => {
   };
 
   /** A hit's moments as an agent reads them ({@link shownMoment}). */
-  const shownMoments = (moments: FindMoment[]): Promise<FindMoment[]> =>
-    Promise.all(moments.map((moment) => shownMoment(moment as HeldMoment)));
+  const shownMoments = (
+    moments: FindMoment[],
+    words: readonly string[]
+  ): Promise<FindMoment[]> =>
+    Promise.all(
+      moments.map((moment) => shownMoment(moment as HeldMoment, words))
+    );
 
   /**
    * A hit's words as an agent reads them: its title, every moment's excerpt
    * (from the words around it), what it was for and its last word, through
    * the secret filter before any is cut to length.
    */
-  const redactedResult = async (result: FindResult): Promise<FindResult> => {
+  const redactedResult = async (
+    result: FindResult,
+    words: readonly string[]
+  ): Promise<FindResult> => {
     const title = await redactSecrets(result.title);
     switch (result.kind) {
       case "conversation":
@@ -1055,13 +1098,13 @@ export const createFindTool = (deps: FindToolDeps) => {
                 headline: await redactSecrets(result.lastReport.headline),
               }
             : null,
-          moments: await shownMoments(result.moments),
+          moments: await shownMoments(result.moments, words),
         };
       case "thread":
         return {
           ...result,
           title,
-          moments: await shownMoments(result.moments),
+          moments: await shownMoments(result.moments, words),
         };
       case "commit":
       case "file":
@@ -1143,7 +1186,10 @@ export const createFindTool = (deps: FindToolDeps) => {
       ...(input.kinds?.length ? { kinds: input.kinds as FindKind[] } : {}),
       ...(input.by ? { author: AUTHOR[input.by] } : {}),
     });
-    const results = await Promise.all(page.results.map(redactedResult));
+    const words = wordsOf(query);
+    const results = await Promise.all(
+      page.results.map((result) => redactedResult(result, words))
+    );
     const hits = bounded(
       input.response_format === "detailed"
         ? await withNeighbours(results, where.before)
@@ -1202,7 +1248,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     const page = said.slice(0, limit);
     const shown = await Promise.all(
       page.map(({ result, moment }) =>
-        redactedResult({ ...result, moments: [moment] } as FindResult)
+        redactedResult({ ...result, moments: [moment] } as FindResult, [])
       )
     );
     const hits = bounded(

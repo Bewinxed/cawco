@@ -54,7 +54,9 @@ import {
 import { detach } from "@cawco/core/detach";
 import {
   excerptOf,
+  marksOf,
   matchOf,
+  matchShape,
   parse,
   type Query,
   wordHit,
@@ -64,6 +66,7 @@ import { status, t } from "elysia";
 import { checkoutOf, type DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
 import {
+  AUTHOR_POINTS,
   artifactEntry,
   changeEntries,
   changesOf,
@@ -554,9 +557,27 @@ const withMoments = <Result extends FindResult & { moments: FindMoment[] }>(
   score: before.score + 8 * match,
 });
 
-/** The hub's match for a moment: how relevant against the best of every machine, by whose words. */
-const momentMatch = (score: number, top: number, author: MomentAuthor) =>
-  0.15 + 0.35 * (top > 0 ? score / top : 0) * MOMENT_WEIGHT[author];
+/**
+ * The hub's match for a moment, by whose words it is: mostly how much of the
+ * query it holds and whether as the phrase (core find-match.ts `matchShape`,
+ * read off the tokens its machine's index marked in its words), a little how
+ * its machine's BM25 weighs it against the best of every machine's. BM25
+ * alone ranked a long agent turn that said the query's "the" again and again
+ * over the person's line that said the query whole.
+ */
+const momentMatch = (
+  moment: HeldMoment,
+  relevance: number,
+  words: readonly string[]
+): number => {
+  const shape = matchShape(marksOf(moment.context ?? moment.excerpt), words);
+  return (
+    0.15 +
+    0.35 *
+      MOMENT_WEIGHT[moment.author] *
+      (0.2 * relevance + 0.5 * shape.covered + (shape.phrase ? 0.3 : 0))
+  );
+};
 
 /** The offset a cursor this hub gave starts at; 0 for none. */
 export const decodeCursor = (cursor: string | undefined): number => {
@@ -1079,7 +1100,8 @@ export const createFind = (deps: FindDeps) => {
     asked: Asked[],
     held: Names,
     needsYou: ReadonlySet<string>,
-    now: number
+    now: number,
+    words: readonly string[]
   ) => {
     // The hub's own conversations are no hit, nor the measure of one.
     const hits = asked.map(({ coverage, answer }) => ({
@@ -1094,7 +1116,7 @@ export const createFind = (deps: FindDeps) => {
     );
     for (const { machine, conversations } of hits) {
       for (const hit of conversations) {
-        foldHit(found, hit, machine, top, held, needsYou, now);
+        foldHit(found, hit, machine, top, held, needsYou, now, words);
       }
     }
   };
@@ -1107,10 +1129,22 @@ export const createFind = (deps: FindDeps) => {
     top: number,
     held: Names,
     needsYou: ReadonlySet<string>,
-    now: number
+    now: number,
+    words: readonly string[]
   ) => {
-    const moments = hit.moments.map(momentOf);
-    const match = momentMatch(hit.score, top, moments[0]?.author ?? "agent");
+    // Its moments best first by the hub's match: the first is the excerpt shown.
+    const relevance = top > 0 ? hit.score / top : 0;
+    const matched = hit.moments
+      .map(momentOf)
+      .map((moment) => ({
+        moment,
+        match: momentMatch(moment, relevance, words),
+      }))
+      .toSorted((a, b) => b.match - a.match);
+    const moments = matched.map((each) => each.moment);
+    const match = matched[0]?.match ?? 0;
+    // For the same match, the person's words above an agent's quoting them.
+    const said = AUTHOR_POINTS[moments[0]?.author ?? "agent"];
     const instanceId = held.bySessionId.get(hit.sessionId);
     if (instanceId === undefined) {
       const kept = held.stored.get(`${machine.id}:${hit.sessionId}`);
@@ -1128,7 +1162,7 @@ export const createFind = (deps: FindDeps) => {
               ...stored,
               moments,
               matched: ["transcript"],
-              score: rankOf(match, stored, 0, now),
+              score: rankOf(match, stored, 0, now) + said,
             }
       );
       return;
@@ -1148,7 +1182,7 @@ export const createFind = (deps: FindDeps) => {
         ...result,
         moments,
         matched: ["transcript"],
-        score: rankOf(match, result, heldEntry.entry.kin, now),
+        score: rankOf(match, result, heldEntry.entry.kin, now) + said,
       });
     }
   };
@@ -1179,7 +1213,14 @@ export const createFind = (deps: FindDeps) => {
       limit
     );
     if (!kinds || kinds.has("conversation")) {
-      foldTranscripts(found, asked, matched.held, matched.needsYou, now);
+      foldTranscripts(
+        found,
+        asked,
+        matched.held,
+        matched.needsYou,
+        now,
+        query.words
+      );
     }
     return { asked: true, machines: asked.map((each) => each.coverage) };
   };
@@ -1311,7 +1352,7 @@ export const createFind = (deps: FindDeps) => {
           LISTED_DOCS
         )
       : [];
-    foldTranscripts(found, asked, held, deps.needsYou(), now);
+    foldTranscripts(found, asked, held, deps.needsYou(), now, []);
     const purged = where.unpurged ? deps.purged() : new Set<string>();
     const ranked = [...found.values()]
       .flatMap((result) => within(result, where, purged) ?? [])

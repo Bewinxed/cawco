@@ -287,37 +287,87 @@ export interface Moment {
   /** The matching words, terms between 「 and 」. */
   snippet: string;
   /**
-   * The words its snippet was cut from, {@link CONTEXT_CHARS} either side of
-   * it, when the search asked (`context`): what the hub's secret filter reads,
-   * since a password typed in prose is told by a word that may stand outside
-   * the snippet.
+   * The words around the moment's best match, when the search asked
+   * (`context`): {@link CONTEXT_CHARS} either side of where the most of the
+   * query's different terms stand together, each token the index matched
+   * between 「 and 」 (FTS5 `highlight`, so by the index's own tokenizer and
+   * stemmer, whole tokens only). What the hub cuts an agent's excerpt from
+   * and its secret filter reads, since a password typed in prose is told by
+   * a word that may stand outside the snippet. A listing's (no query) is the
+   * start of its words, unmarked.
    */
   context?: string;
 }
 
-/** How many characters of a document a moment's context keeps either side of its snippet. */
+/** How many characters of a document a moment's context keeps either side of its best match. */
 const CONTEXT_CHARS = 1000;
-const ELLIPSIS = "…";
-const MARKS = /[「」]/g;
+const MARK_OPEN = "「";
+const MARK_CLOSE = "」";
+/** Each token the index matched, between its marks. */
+const MARKED_TOKEN = /「([^」]*)」/g;
 
 /**
- * `snippet`'s words in `doc` with {@link CONTEXT_CHARS} either side: found in
- * the first of its columns that holds them; undefined when none does.
+ * Where in `marked` (a column, its matched tokens marked) the most of the
+ * query's different terms stand within {@link CONTEXT_CHARS} of each other,
+ * and how many: a word as common as "the", matched all over a long turn,
+ * counts once, so the place that holds the whole query wins over the place
+ * that holds it again and again.
  */
-function contextOf(
-  snippet: string,
-  doc: { output: string | null; text: string; thinking: string | null },
-): string | undefined {
-  let core = snippet.replace(MARKS, "");
-  core = core.startsWith(ELLIPSIS) ? core.slice(ELLIPSIS.length) : core;
-  core = core.endsWith(ELLIPSIS) ? core.slice(0, -ELLIPSIS.length) : core;
-  for (const words of [doc.text, doc.thinking, doc.output]) {
-    const at = words && core ? words.indexOf(core) : -1;
-    if (words && at >= 0) {
-      return words.slice(Math.max(0, at - CONTEXT_CHARS), at + core.length + CONTEXT_CHARS);
+function bestCluster(marked: string): { at: number; terms: number } {
+  const marks = [...marked.matchAll(MARKED_TOKEN)].map((match) => ({
+    at: match.index,
+    term: (match[1] ?? "").toLowerCase(),
+  }));
+  let best = { at: 0, terms: 0 };
+  let end = 0;
+  for (const [start, mark] of marks.entries()) {
+    end = Math.max(end, start);
+    while (end < marks.length && (marks[end]?.at ?? 0) - mark.at <= CONTEXT_CHARS) {
+      end++;
+    }
+    const terms = new Set(marks.slice(start, end).map((each) => each.term)).size;
+    if (terms > best.terms) {
+      best = { at: mark.at, terms };
     }
   }
-  return undefined;
+  return best;
+}
+
+/** `marked` from `from` to `to`, moved out of any mark either edge would cut. */
+function uncut(marked: string, from: number, to: number): string {
+  const open = marked.lastIndexOf(MARK_OPEN, from);
+  const start = open >= 0 && marked.lastIndexOf(MARK_CLOSE, from) < open ? open : from;
+  const close = marked.indexOf(MARK_CLOSE, to);
+  const reopen = marked.indexOf(MARK_OPEN, to);
+  const end = close >= 0 && (reopen < 0 || close < reopen) ? close + 1 : to;
+  return marked.slice(Math.max(0, start), end);
+}
+
+/**
+ * A moment's context ({@link Moment.context}): its columns as the index
+ * marked them, the one whose best place holds the most of the query's
+ * terms, cut {@link CONTEXT_CHARS} either side of that place; undefined when
+ * no column holds a mark (a match in the names of the tools it called).
+ */
+function contextOf(doc: {
+  output: string | null;
+  text: string;
+  thinking: string | null;
+}): string | undefined {
+  let best: { at: number; marked: string; terms: number } | undefined;
+  for (const marked of [doc.text, doc.thinking, doc.output]) {
+    const found = marked ? bestCluster(marked) : { at: 0, terms: 0 };
+    if (marked && found.terms > (best?.terms ?? 0)) {
+      best = { ...found, marked };
+    }
+  }
+  return best
+    ? uncut(
+        best.marked,
+        Math.max(0, best.at - CONTEXT_CHARS),
+        best.at + 2 * CONTEXT_CHARS,
+      )
+    : undefined;
 }
 
 /** A conversation that matched, with its best few moments, best first. */
@@ -1042,9 +1092,20 @@ export class TranscriptIndex {
         excerpts.set(id, snip);
       }
     }
-    const words = options.context
-      ? this.#words(kept.flatMap((each) => each.moments.map((moment) => moment.id)))
-      : new Map<number, { output: string | null; text: string; thinking: string | null }>();
+    const words = new Map<
+      number,
+      { output: string | null; text: string; thinking: string | null }
+    >();
+    for (const pass of options.context
+      ? new Set(kept.flatMap((each) => each.moments.map((moment) => moment.pass)))
+      : []) {
+      const ids = kept.flatMap((each) =>
+        each.moments.filter((moment) => moment.pass === pass).map((moment) => moment.id),
+      );
+      for (const [id, marked] of this.#highlighted(pass, ids)) {
+        words.set(id, marked);
+      }
+    }
     return kept
       .map((each) => ({
         ...each.hit,
@@ -1055,7 +1116,7 @@ export class TranscriptIndex {
           }
           const snippet = excerpts.get(moment.id) ?? row.gist;
           const doc = words.get(moment.id);
-          const context = doc ? contextOf(snippet, doc) : undefined;
+          const context = doc ? contextOf(doc) : undefined;
           return [
             {
               docId: row.doc_id,
@@ -1072,7 +1133,39 @@ export class TranscriptIndex {
       .slice(0, limit);
   }
 
-  /** Every column of words of each of `ids`: what a moment's context is cut from. */
+  /**
+   * Each of `ids`'s columns of words as `pass` matched them, every token it
+   * matched between 「 and 」 (FTS5 `highlight`: the index's own tokenizer
+   * and stemmer, whole tokens only): what a moment's context is cut from.
+   */
+  #highlighted(
+    pass: Pass,
+    ids: number[],
+  ): Map<number, { output: string | null; text: string; thinking: string | null }> {
+    const from = pass.seek
+      ? "json_each(?) AS k CROSS JOIN docs_fts ON docs_fts.rowid = k.value"
+      : "docs_fts JOIN json_each(?) AS k ON k.value = docs_fts.rowid";
+    const rows = this.db
+      .prepare(
+        `SELECT docs_fts.rowid AS id,
+                highlight(docs_fts, 0, '「', '」') AS text,
+                highlight(docs_fts, 1, '「', '」') AS thinking,
+                highlight(docs_fts, 3, '「', '」') AS output
+         FROM ${from}
+         WHERE docs_fts MATCH ?`,
+      )
+      .all(JSON.stringify(ids), pass.match) as {
+      id: number;
+      output: string | null;
+      text: string | null;
+      thinking: string | null;
+    }[];
+    return new Map(
+      rows.map(({ id, text, ...doc }) => [id, { ...doc, text: text ?? "" }]),
+    );
+  }
+
+  /** Every column of words of each of `ids`: a listing's context is the start of them. */
   #words(
     ids: number[],
   ): Map<number, { output: string | null; text: string; thinking: string | null }> {

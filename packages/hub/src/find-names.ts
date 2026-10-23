@@ -85,6 +85,23 @@ export const MOMENT_WEIGHT: Record<MomentAuthor, number> = {
   injected: 0.3,
 };
 
+/**
+ * Points a conversation found by its words gains or loses by whose its best
+ * moment is, past its match: the person's own words rank above an agent's
+ * turn for the same match, whatever their recency, live state and parentage
+ * ({@link rankOf}: at most 30 + 22 + 6 points apart), so a session that
+ * quotes what the person said (a brief, a test run) never outranks their
+ * saying it. Our own call, after the rule "for the same match, the person's
+ * own words rank above an agent's turn".
+ */
+export const AUTHOR_POINTS: Record<MomentAuthor, number> = {
+  owner: 0,
+  report: -10,
+  caw: -12,
+  agent: -50,
+  injected: -60,
+};
+
 /** A commit and the files of one work item's report. */
 export interface ItemChanges {
   commits: { sha: string; subject: string }[];

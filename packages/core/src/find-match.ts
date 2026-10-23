@@ -239,3 +239,191 @@ export const unmarked = (text: string): string =>
   markedRuns(text)
     .map((run) => run.text)
     .join("");
+
+/**
+ * Words too common to place an excerpt by or to tell one match from another:
+ * a turn that holds only "the" of "we removed the slot pool" has matched
+ * nothing. Our own call: English's commonest function words.
+ */
+const STOP_WORDS: ReadonlySet<string> = new Set(
+  "a an and are as at be but by do for from had has have he her his i if in is it its me my no not of on or our she so than that the their them then there they this to us was we were what when which who will with would you your".split(
+    " "
+  )
+);
+
+/** One matched token of a marked text: where it stands in the unmarked words, and its words. */
+export interface Mark {
+  from: number;
+  terms: string[];
+  to: number;
+}
+
+/** A text its matched tokens were marked in: its words unmarked, and where each mark stood. */
+export interface MarkedText {
+  marks: Mark[];
+  plain: string;
+}
+
+/** `text`'s 「 」 marks read out ({@link markedRuns}): its words, and where each matched token stands in them. */
+export const marksOf = (text: string): MarkedText => {
+  const marks: Mark[] = [];
+  let plain = "";
+  for (const run of markedRuns(text)) {
+    if (run.matched) {
+      marks.push({
+        from: plain.length,
+        to: plain.length + run.text.length,
+        terms: wordsOf(run.text),
+      });
+    }
+    plain += run.text;
+  }
+  return { plain, marks };
+};
+
+const WORD_RUN = /[\p{L}\p{N}]+/gu;
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+/**
+ * The shortest word that matches longer words it starts (a stem: "slot" for
+ * "slots", "remove" for "removed"): four letters, so "the" never marks
+ * "there", nor "can" "canvas".
+ */
+const STEM_MIN = 4;
+
+/** Whether a matched token `term` is query word `word`: the same, or one the start of the other, {@link STEM_MIN} letters on (the index's stemming, roughly). */
+const covers = (term: string, word: string): boolean =>
+  term === word ||
+  (Math.min(term.length, word.length) >= STEM_MIN &&
+    (term.startsWith(word) || word.startsWith(term)));
+
+/**
+ * `marked` with every whole word of its text that is one of `words` marked
+ * too, where no mark stands already: what no index marked (a thread's
+ * message, kept at the hub), or what the index was not asked for (a kind
+ * word such as "canvas" or "page", which narrows the kinds rather than the
+ * words; a short last word, left out while it is typed). A word matches
+ * whole, or by its start from {@link STEM_MIN} letters on; never a letter
+ * inside a word.
+ */
+export const withWords = (
+  marked: MarkedText,
+  words: readonly string[]
+): MarkedText => {
+  const added = [...marked.plain.matchAll(WORD_RUN)].flatMap(
+    (match): Mark[] => {
+      const from = match.index;
+      const to = from + match[0].length;
+      const term = match[0].toLowerCase();
+      const taken = marked.marks.some(
+        (mark) => mark.from < to && mark.to > from
+      );
+      return !taken && words.some((word) => covers(term, word))
+        ? [{ from, to, terms: [term] }]
+        : [];
+    }
+  );
+  return {
+    plain: marked.plain,
+    marks: [...marked.marks, ...added].toSorted((a, b) => a.from - b.from),
+  };
+};
+
+/** The query's words a run of marks covers. */
+const coveredBy = (marks: readonly Mark[], words: readonly string[]) =>
+  new Set(
+    words.filter((word) =>
+      marks.some((mark) => mark.terms.some((term) => covers(term, word)))
+    )
+  );
+
+/** The words a match is told by: the query's own less {@link STOP_WORDS}, or all of them when it is only such. */
+const telling = (words: readonly string[]): string[] => {
+  const kept = [...new Set(words)].filter((word) => !STOP_WORDS.has(word));
+  return kept.length > 0 ? kept : [...new Set(words)];
+};
+
+/**
+ * The runs of marks that stand next to each other in `marked`, nothing but
+ * spaces and punctuation between them: where the query's words were said
+ * together.
+ */
+const runsOf = (marked: MarkedText): Mark[][] => {
+  const runs: Mark[][] = [];
+  for (const mark of marked.marks) {
+    const run = runs.at(-1);
+    const last = run?.at(-1);
+    const between = last ? marked.plain.slice(last.to, mark.from) : "x";
+    if (run && last && !WORD_CHAR.test(between)) {
+      run.push(mark);
+    } else {
+      runs.push([mark]);
+    }
+  }
+  return runs;
+};
+
+/**
+ * How well a marked text matches a query's `words`: the share of its
+ * telling words ({@link telling}) some mark covers, and whether a run of
+ * marks next to each other covers every one of them (the query said as a
+ * phrase).
+ */
+export const matchShape = (
+  marked: MarkedText,
+  words: readonly string[]
+): { covered: number; phrase: boolean } => {
+  const told = telling(words);
+  if (told.length === 0) {
+    return { covered: 1, phrase: true };
+  }
+  return {
+    covered: coveredBy(marked.marks, told).size / told.length,
+    phrase: runsOf(marked).some(
+      (run) => coveredBy(run, told).size === told.length
+    ),
+  };
+};
+
+/**
+ * Where an excerpt of `size` characters of `marked` stands, `from` to
+ * `to`: at its best match of the query's `words`, the window holding the
+ * most of its telling words (a stop word counts a tenth), the whole phrase
+ * most of all; never placed by a stop word while a telling word is matched
+ * elsewhere. Its start, before any mark, when nothing is marked.
+ */
+export const excerptWindow = (
+  marked: MarkedText,
+  words: readonly string[],
+  size: number
+): { from: number; to: number } => {
+  const told = new Set(telling(words));
+  const lead = Math.round(size / 4);
+  let best = { from: 0, score: -1 };
+  const phrases = runsOf(marked).filter(
+    (run) => coveredBy(run, [...told]).size === told.size
+  );
+  for (const mark of marked.marks) {
+    const from = Math.max(0, mark.from - lead);
+    const to = from + size;
+    const inside = marked.marks.filter(
+      (each) => each.from >= from && each.to <= to
+    );
+    const said = coveredBy(inside, words);
+    let score = 0;
+    for (const word of said) {
+      score += told.has(word) ? 1 : 0.1;
+    }
+    if (
+      phrases.some(
+        (run) => run[0] && run[0].from >= from && (run.at(-1)?.to ?? 0) <= to
+      )
+    ) {
+      score += 2;
+    }
+    if (score > best.score) {
+      best = { from, score };
+    }
+  }
+  const from = Math.min(best.from, Math.max(0, marked.plain.length - size));
+  return { from, to: Math.min(marked.plain.length, from + size) };
+};

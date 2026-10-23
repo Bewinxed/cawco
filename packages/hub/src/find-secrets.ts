@@ -62,9 +62,12 @@ const momentSaid = (moment: HeldMoment, index: number): Said => {
   const tail = plain.endsWith(ELLIPSIS) ? ELLIPSIS.length : 0;
   const core = plain.slice(lead, plain.length - tail);
   const field = { moment: index };
-  for (const context of moment.context === undefined
+  // The machine marks the tokens it matched in a context, as in an excerpt.
+  const words =
+    moment.context === undefined ? undefined : unmarked(moment.context);
+  for (const context of words === undefined
     ? []
-    : [moment.context, moment.context.replace(SPACES, " ")]) {
+    : [words, words.replace(SPACES, " ")]) {
     const at = core ? context.indexOf(core) : -1;
     if (at >= 0) {
       return {
