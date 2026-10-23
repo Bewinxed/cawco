@@ -1101,41 +1101,53 @@ export function startPins(deps: PinsDeps): Pins {
   const reveal = (id: string) => {
     stuck.delete(id);
     const where = placed.get(id);
-    if (!where || where.page) {
-      return;
+    if (where && !where.page && bringOut(where)) {
+      stuck.add(id);
     }
+  };
+
+  /**
+   * A pill standing at `where` (a pin's, or the comment being written)
+   * brought out as {@link reveal} says; true when no scroll brings it out
+   * from under the host's chrome.
+   */
+  const bringOut = (where: Standing & { pill?: Pill }): boolean => {
     const r = (where.pill?.box.h ?? 20) / 2;
     const x = where.at[0] - scrollX;
     const y = where.at[1] - scrollY;
     const clear = bandsAt(x, covered, r);
     if (where.shown && inBands(y, clear)) {
-      return;
+      return false;
     }
     const chain = scrollersOf(where.el);
     const landed = bringInto(chain, y, clear);
     if (landed) {
       scrollMoves(landed, motionOk() ? "smooth" : "auto");
-      return;
-    }
-    if (covered.length > 0) {
-      stuck.add(id);
+      return false;
     }
     // Out from under nothing: at least in the viewport.
     const shown = bringInto(chain, y, bandsAt(x, [], r));
     if (shown) {
       scrollMoves(shown, motionOk() ? "smooth" : "auto");
     }
+    return covered.length > 0;
   };
 
-  /** The open thread's pin, when its pill stands under what the host's chrome covers, brought out again. */
+  /**
+   * The open thread's pin, and the comment being written, when its pill
+   * stands under what the host's chrome covers (a phone's thread or composer
+   * at the well's foot), brought out again.
+   */
   const keepClear = () => {
+    const under = (at: Standing, face: Pill) =>
+      !at.page && covered.some((one) => meets(shownBox(at, face), one));
     const where = tracked ? placed.get(tracked) : undefined;
-    if (!(tracked && where?.pill) || where.page) {
-      return;
-    }
-    const box = shownBox(where, where.pill);
-    if (covered.some((one) => meets(box, one))) {
+    if (tracked && where?.pill && under(where, where.pill)) {
       reveal(tracked);
+    }
+    const draft = drafted?.parked ? undefined : drafted;
+    if (draft?.standing && draft.pill && under(draft.standing, draft.pill)) {
+      bringOut({ ...draft.standing, pill: draft.pill });
     }
   };
 
