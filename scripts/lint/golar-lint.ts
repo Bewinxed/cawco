@@ -11,7 +11,7 @@
  *
  * Golar runs under Node, which must be on PATH: it does not run under Bun
  * (auvred/golar#31). Its `lint` exits 1 when a rule reported (the Golar
- * fork, Bewinxed/golar 0.1.11-cawco.3), which a run always does, for the
+ * fork, Bewinxed/golar 0.1.11-cawco.4), which a run always does, for the
  * fixtures.
  */
 import { realpathSync } from "node:fs";
