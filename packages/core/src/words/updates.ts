@@ -38,4 +38,7 @@ export const updatesWords = {
     `Waits for its hub to finish installing ${version}`,
   /** The machine's line in the notice of an install under way, while it waits for its hub. */
   installLineWaitsForHub: (name: string) => `· ${name} · waiting for its hub`,
+  /** The agent's log line when its hub refused or dropped the connection (`code`) before it answered `what`: no answer, never a failed attempt. */
+  hubDropped: (hub: string, code: string, what: string) =>
+    `the hub at ${hub} refused or dropped the connection (${code}) before it answered ${what}; nothing was done on it, and it is asked again on the next tick`,
 };

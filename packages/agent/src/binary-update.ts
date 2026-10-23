@@ -72,6 +72,7 @@ import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { updatesWords } from "@cawco/core/words/updates";
 import { leaveRetiringKeepers } from "./boundary";
 import {
   HELPER_START_MS,
@@ -340,9 +341,36 @@ const logFailure = (error: unknown): void => {
 class HubUnreachable extends Error {}
 
 /**
+ * The `code` Bun's fetch gives a connection the hub refused, dropped or could
+ * not be routed to, before or during its answer (Bun 1.4.4: "ECONNREFUSED:
+ * Unable to connect. Is the computer able to access the url?", "ECONNRESET:
+ * The socket connection was closed unexpectedly", the latter also for a body
+ * cut part-way; "ENETUNREACH" for no route; https://github.com/oven-sh/bun/pull/36370
+ * quotes `code: "ECONNRESET"` on the same words). A hub mid-restart says
+ * these: no answer at all.
+ */
+const HUB_DROPPED = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EPIPE",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "EHOSTUNREACH",
+  "EHOSTDOWN",
+  "ETIMEDOUT",
+]);
+
+const droppedCode = (error: unknown): string | undefined => {
+  const { code } = (error ?? {}) as { code?: unknown };
+  return typeof code === "string" && HUB_DROPPED.has(code) ? code : undefined;
+};
+
+/**
  * `url` on the hub, its response read by `take`, all of it given `ms` to
- * answer. A hub that did not answer in time is {@link HubUnreachable} ("the
- * hub did not answer <what> within N s"), never an answer that refused.
+ * answer. A hub that did not answer in time, or refused or dropped the
+ * connection before its answer was whole ({@link HUB_DROPPED}), is
+ * {@link HubUnreachable} ("the hub did not answer <what> within N s"), never
+ * an answer that refused.
  */
 const askHub = async <T>(
   what: string,
@@ -353,7 +381,15 @@ const askHub = async <T>(
 ): Promise<T> => {
   const read = await readWithin(ms, async (signal) =>
     take(await fetch(url, { ...init, signal }))
-  );
+  ).catch((error: unknown) => {
+    const code = droppedCode(error);
+    if (code === undefined) {
+      throw error;
+    }
+    throw new HubUnreachable(
+      updatesWords.hubDropped(new URL(url).origin, code, what)
+    );
+  });
   switch (read.kind) {
     case "answered":
       return read.value;
@@ -1349,9 +1385,29 @@ export class BinaryUpdater {
       await this.#stage(release, installation);
       await this.#apply(release);
     } catch (error) {
+      if (error instanceof HubUnreachable) {
+        await this.#waitForHubCut();
+        throw error;
+      }
       const said = error instanceof Error ? error.message : String(error);
       await recordFailure(version, said);
       throw new AttemptFailed(said, { cause: error });
+    }
+  }
+
+  /**
+   * The hub went away under an attempt (a restart into its new build): no
+   * failure. A download it cut leaves no `downloading` behind: the machine
+   * waits for its hub, which its next register answers at once
+   * ({@link hubRegistered}).
+   */
+  async #waitForHubCut(): Promise<void> {
+    if (this.#state.phase === "downloading") {
+      await this.#set({
+        phase: "waiting-for-hub",
+        hubWait: "unanswered",
+        error: undefined,
+      });
     }
   }
 

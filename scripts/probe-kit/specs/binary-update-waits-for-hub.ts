@@ -31,17 +31,29 @@
  *    its next beat; through one more tick it still waits, nothing
  *    downloaded.
  * 4. The trial is confirmed: at its next tick the machine asks for N+1's
- *    archive, through the hub, from the mirror.
+ *    archive. The stand-in answers it 200 and sends part of it, then holds.
+ * 5. The hub is killed mid-download (it and its stand-in stop, the download's
+ *    connection cut: ECONNRESET), and stays down through an update tick (every
+ *    ask refused: ECONNREFUSED). The nightlies of 2026-10-23 recorded both as
+ *    a failed attempt, retried on the retry schedule. Here no failure is
+ *    recorded for N+1 (update-failures.json), and the machine's own state
+ *    waits for its hub (`hubWait` unanswered), never `downloading` or failed.
+ * 6. The hub comes back and answers the archive 500: at its register with the
+ *    returned hub the machine asks for the archive again at once, no retry
+ *    delay waited out; and that 500, an answer that refused, is a failed
+ *    attempt: recorded for N+1 with its retry time a minute on, its error the
+ *    download's own, never a wait's.
  *
- * The mirror answers that archive 404, so the attempt ends at its download:
- * its error is the download's own, never a wait's. The hub's record of the
- * machine is read every 250 ms from the Install now to the download: it
- * never says failed while the machine waits, and the attempt carries no
- * error from before it.
+ * No archive is ever whole, so no real build is extracted and no update
+ * helper reaches this host's service manager. The hub's record of the
+ * machine is read every 250 ms from the Install now to the 500 (a look the
+ * downed hub did not answer is skipped): it never says failed before the
+ * 500, and the attempt carries no error from before it.
  *
  *   bun scripts/probe-kit/run.ts binary-update-waits-for-hub
  */
 
+import { join } from "node:path";
 import {
   cellFor,
   displayVersion,
@@ -50,7 +62,8 @@ import {
   type BinaryUpdateState,
   hubWaitWords,
 } from "../../../packages/core/src/binary-updates";
-import { MACHINE } from "../../scratch-fleet";
+import { updatesWords } from "../../../packages/core/src/words/updates";
+import { type Fleet, MACHINE } from "../../scratch-fleet";
 import {
   checkoutSchema,
   installedOn,
@@ -58,7 +71,8 @@ import {
   nightlyMirror,
   until,
 } from "../binary-install";
-import type { Spec } from "../kit";
+import type { Kit, Spec } from "../kit";
+import { shaped } from "../words";
 
 interface UpdateReport {
   installed: boolean;
@@ -71,6 +85,124 @@ interface UpdateReport {
  * hub says (its trial confirmed).
  */
 type Plays = "old" | "restarting" | "trial" | "hub";
+
+/** How the stand-in answers N+1's archive: passed to the hub, part sent then held (cut when the hub goes), or 500. */
+type ArchivePlays = "pass" | "partial" | "500";
+
+/** What the machine's updater wrote, read from its own folder: its failure record and its state. */
+interface Failure {
+  count: number;
+  error: string;
+  nextAt: number;
+  version: string;
+}
+const readJson = async <T>(path: string): Promise<T | undefined> =>
+  (await Bun.file(path)
+    .json()
+    .catch(() => undefined)) as T | undefined;
+
+/** The stand-in's answer for N+1's archive, as it plays it; undefined passes it to the hub. */
+const archiveAnswer = (plays: ArchivePlays): Response | undefined => {
+  switch (plays) {
+    case "pass":
+      return;
+    case "500":
+      return new Response("the hub failed to supply it", { status: 500 });
+    case "partial":
+      // A first part, then nothing until the hub goes and cuts it.
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(64 * 1024));
+          },
+        })
+      );
+    default: {
+      const unhandled: never = plays;
+      throw new Error(`unhandled archive play: ${String(unhandled)}`);
+    }
+  }
+};
+
+/** Where the machine's updater keeps its failure record and its state (core binary-installation.ts `binaryRoot`). */
+const updaterFiles = (fleet: Fleet) => {
+  const binary = join(fleet.env.XDG_DATA_HOME ?? "", "cawco", "binary");
+  return {
+    failures: join(binary, "update-failures.json"),
+    state: join(binary, "update-state.json"),
+  };
+};
+
+/**
+ * Leg 5's reading, the hub down through an update tick after it cut the
+ * download: both connection errors said as a hub that did not answer, no
+ * failure recorded for `version`, and the machine's own state waiting for
+ * its hub.
+ */
+async function checkCutIsNoFailure(
+  check: Kit["check"],
+  fleet: Fleet,
+  version: string
+): Promise<void> {
+  const files = updaterFiles(fleet);
+  const kept = await readJson<Failure>(files.failures);
+  const local = await readJson<BinaryUpdateState>(files.state);
+  const dropped = shaped(updatesWords.hubDropped);
+  const said = (await fleet.logs("agent"))
+    .split("\n")
+    .filter((line) => dropped.test(line));
+  const codes = new Set(said.map((line) => dropped.exec(line)?.[2]));
+  check(
+    "a hub killed mid-download, then refusing every ask through an update tick, is one that did not answer: both said so in the agent's log (ECONNRESET, ECONNREFUSED)",
+    codes.has("ECONNRESET") && codes.has("ECONNREFUSED"),
+    JSON.stringify(said.slice(0, 4))
+  );
+  check(
+    "no failure is recorded for N+1",
+    kept?.version !== version,
+    JSON.stringify(kept ?? null)
+  );
+  check(
+    "the machine's own state waits for its hub to answer: not downloading, not failed, no error",
+    local?.phase === "waiting-for-hub" &&
+      local.hubWait === "unanswered" &&
+      local.availableVersion === version &&
+      local.error === undefined,
+    JSON.stringify(local)
+  );
+}
+
+/**
+ * Leg 6's reading, the returned hub having answered the archive 500 to the
+ * ask at `again`: a failed attempt, said with the download's own error, and
+ * recorded for `version`, its first, retried a minute on.
+ */
+async function checkRefusalFails(
+  check: Kit["check"],
+  fleet: Fleet,
+  version: string,
+  ended: BinaryUpdateState | undefined,
+  again: number
+): Promise<void> {
+  const recorded = await readJson<Failure>(updaterFiles(fleet).failures);
+  check(
+    "the hub's 500 for the archive is a failed attempt: the hub records the machine failed with the download's own error, never a wait's",
+    ended?.phase === "failed" &&
+      ended.error === "The hub could not supply the build: 500" &&
+      !(["behind", "unanswered", "trial"] as const).some(
+        (wait) => ended.error === hubWaitWords(version, wait)
+      ),
+    JSON.stringify(ended)
+  );
+  check(
+    "and records the failure for N+1, its first, with its retry time a minute on",
+    recorded?.version === version &&
+      recorded.count === 1 &&
+      recorded.nextAt >= again + 60_000 &&
+      recorded.nextAt <= again + 70_000,
+    `${JSON.stringify(recorded ?? null)}; asked at ${again}`
+  );
+}
 
 const spec: Spec = {
   name: "binary-update-waits-for-hub",
@@ -97,7 +229,27 @@ const spec: Spec = {
     let plays: Plays = "old";
     /** How many of the next offers the stand-in answers 503, as a hub whose release host's read failed. */
     let offersRefused = 0;
+    let archivePlays: ArchivePlays = "pass";
+    /** When the machine asked the stand-in for an archive, each time. */
+    const archiveAsks: number[] = [];
     let hubBase = "";
+    /** What the stand-in answers itself on `pathname`, the hub unasked; undefined passes it on. */
+    const playedAnswer = (pathname: string): Response | undefined => {
+      if (pathname === "/health" && plays === "restarting") {
+        return new Response("the hub is starting", { status: 503 });
+      }
+      if (pathname === "/api/binary-updates/latest" && offersRefused > 0) {
+        offersRefused -= 1;
+        return new Response("the release host did not answer", {
+          status: 503,
+        });
+      }
+      if (!pathname.startsWith("/api/binary-updates/artifacts/")) {
+        return;
+      }
+      archiveAsks.push(Date.now());
+      return archiveAnswer(archivePlays);
+    };
     // The stand-in, on one port for the whole run; down while the hub is,
     // as the hub's own address is (a refused connection, never an answer).
     const standInOn = (port: number) =>
@@ -106,17 +258,9 @@ const spec: Spec = {
         port,
         async fetch(request) {
           const url = new URL(request.url);
-          if (url.pathname === "/health" && plays === "restarting") {
-            return new Response("the hub is starting", { status: 503 });
-          }
-          if (
-            url.pathname === "/api/binary-updates/latest" &&
-            offersRefused > 0
-          ) {
-            offersRefused -= 1;
-            return new Response("the release host did not answer", {
-              status: 503,
-            });
+          const played = playedAnswer(url.pathname);
+          if (played) {
+            return played;
           }
           const headers = new Headers(request.headers);
           headers.delete("host");
@@ -265,7 +409,6 @@ const spec: Spec = {
       );
 
       // 3. The hub restarts into a build that speaks N+1's protocol, its trial open.
-      const restarted = Date.now();
       await fleet.stop("hub");
       await standIn.stop(true);
       plays = "trial";
@@ -299,14 +442,48 @@ const spec: Spec = {
         `the mirror was asked for ${mirror.asked.join(", ") || "nothing"}; ${JSON.stringify(held)}`
       );
 
-      // 4. The trial is confirmed.
+      // 4. The trial is confirmed; the archive comes part-way, then holds.
       plays = "hub";
+      archivePlays = "partial";
       const confirmed = Date.now();
-      await until(async () => archiveAsked(), Boolean, 75_000);
+      const downloading = await until(
+        machineState,
+        (state) => state?.phase === "downloading",
+        75_000
+      );
       check(
-        "once the hub's trial is confirmed, the machine asks for N+1's archive by itself at its next tick, on the same command",
-        archiveAsked(),
-        `${archiveAsked() ? `asked ${Date.now() - confirmed} ms after the confirm` : "never asked"}; the mirror was asked for ${mirror.asked.join(", ") || "nothing"}`
+        "once the hub's trial is confirmed, the machine asks for N+1's archive by itself at its next tick, on the same command, and the hub records it downloading",
+        archiveAsks.length === 1 && downloading?.phase === "downloading",
+        `${archiveAsks.length} asks, the first ${(archiveAsks[0] ?? confirmed) - confirmed} ms after the confirm; ${JSON.stringify(downloading)}`
+      );
+
+      // 5. The hub is killed mid-download and stays down through an update tick.
+      await fleet.stop("hub");
+      await standIn.stop(true);
+      await Bun.sleep(65_000);
+      await checkCutIsNoFailure(check, fleet, next.manifest.version);
+
+      // 6. The hub comes back, and answers the archive 500.
+      archivePlays = "500";
+      standIn = standInOn(standInPort);
+      fleet.launch("hub");
+      await fleet.hubUp();
+      const back = Date.now();
+      // The agent's socket comes back on its own backoff (daemon.ts
+      // `reconnect`), which a hub down past a minute has grown to ~30 s.
+      await fleet.agentUp();
+      const registered = Date.now();
+      await until(
+        async () => archiveAsks.length,
+        (asks) => asks >= 2,
+        15_000
+      );
+      // Never asked again: the checks below fail on it.
+      const [, again = Number.POSITIVE_INFINITY] = archiveAsks;
+      check(
+        "at its register with the returned hub, the machine asks for N+1's archive again within 5 s, no retry delay waited out",
+        again >= back && again - registered <= 5000,
+        `asked ${archiveAsks.length} times; registered ${registered - back} ms after the hub answered, asked again ${again - registered} ms after the register was seen`
       );
       const ended = await until(
         machineState,
@@ -315,23 +492,23 @@ const spec: Spec = {
       );
       sampling.abort();
       await sampler;
-      check(
-        "the attempt ends at its download (the mirror holds no archive), its error its own, never the wait's",
-        ended?.phase === "failed" &&
-          ended.error !== undefined &&
-          !(["behind", "unanswered", "trial"] as const).some(
-            (wait) => ended.error === hubWaitWords(next.manifest.version, wait)
-          ),
-        JSON.stringify(ended)
+      await checkRefusalFails(
+        check,
+        fleet,
+        next.manifest.version,
+        ended,
+        again
       );
-      // What the machine said before the hub restarted: its download's failure comes after.
-      const waited = samples.filter((state) => state.updatedAt < restarted);
+      // What the hub recorded before the 500. Its `downloading` is leg 4's
+      // check: the hub is killed the moment it is seen, so a 250 ms look
+      // may miss it.
+      const before500 = samples.filter((state) => state.updatedAt < again);
       const phases = [...new Set(samples.map((state) => state.phase))];
       check(
-        "while it waited for its hub, the hub never recorded the machine as failed",
-        waited.some((state) => state.phase === "waiting-for-hub") &&
-          waited.every((state) => state.phase !== "failed"),
-        `phases seen in order: ${phases.join(" → ")}; ${waited.length} looks before the hub restarted`
+        "until the hub's 500, the hub never recorded the machine as failed: through its waits, its download, and the hub's kill mid-download",
+        before500.some((state) => state.phase === "waiting-for-hub") &&
+          before500.every((state) => state.phase !== "failed"),
+        `phases seen in order: ${phases.join(" → ")}; ${before500.length} looks before the 500`
       );
       check(
         "no attempt carried an error from before it",

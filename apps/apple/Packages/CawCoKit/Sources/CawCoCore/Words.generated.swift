@@ -1597,6 +1597,11 @@ public enum Words {
         public static func installLineWaitsForHub(name: String) -> String {
             "· \(name) · waiting for its hub"
         }
+
+        /// The agent's log line when its hub refused or dropped the connection (`code`) before it answered `what`: no answer, never a failed attempt.
+        public static func hubDropped(hub: String, code: String, what: String) -> String {
+            "the hub at \(hub) refused or dropped the connection (\(code)) before it answered \(what); nothing was done on it, and it is asked again on the next tick"
+        }
     }
 
     public enum Connection {
