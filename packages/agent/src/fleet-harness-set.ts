@@ -147,7 +147,7 @@ export const hookStatesOn = (
     hooks.map((hook) => {
       const why = hookUnsupported(harness, hook);
       // What a workspace session makes of a hook that could rewrite input.
-      const note = hookWorkspaceNote(hook, false);
+      const note = hookWorkspaceNote(hook);
       let state: FleetItemState = { state: "applied" };
       if (why) {
         state = { state: "unsupported", detail: why };

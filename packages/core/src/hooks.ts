@@ -550,22 +550,21 @@ export const HOOK_INPUT_EVENTS: readonly HookEvent[] = [
  * asked it, and "When multiple `PreToolUse` hooks return `updatedInput` …,
  * the last one to finish takes effect" (code.claude.com/docs/en/hooks-guide),
  * so no rewrite is taken there. A command or HTTP hook runs through CawCo's
- * guard (agent fleet-hook-guard.ts), which drops it from the reply; an MCP
- * tool hook's reply CawCo never sees.
+ * guard (agent fleet-hook-guard.ts), which drops it from the reply. An MCP
+ * tool hook runs as the owner approved it, the fleet's and a project's
+ * alike, its rewrite kept: Claude Code reads its reply itself, and the owner
+ * picked "Allow them" for these ("user choice in the end", 2026-10-23).
  */
 export const hookWorkspaceWords = {
   dropped:
     "In a workspace session its input rewrite (updatedInput) is dropped: the boundary judged the call as asked. Its deny, ask and context still count.",
-  placedLeftOut:
-    "Not run in workspace sessions: an MCP tool hook's reply can rewrite the call's input, which the boundary judged as asked.",
-  fleetKept:
+  mcpToolKept:
     "In a workspace session an MCP tool hook's input rewrite is not dropped: Claude Code reads its reply itself.",
 } as const;
 
 /** The workspace word for `hook` on the machine's row, or none for a hook that cannot rewrite input. */
 export const hookWorkspaceNote = (
-  hook: Pick<FleetHook, "event" | "handler">,
-  placed: boolean
+  hook: Pick<FleetHook, "event" | "handler">
 ): string | undefined => {
   if (!HOOK_INPUT_EVENTS.includes(hook.event)) {
     return;
@@ -574,9 +573,7 @@ export const hookWorkspaceNote = (
     return hookWorkspaceWords.dropped;
   }
   if (hook.handler.type === "mcp_tool") {
-    return placed
-      ? hookWorkspaceWords.placedLeftOut
-      : hookWorkspaceWords.fleetKept;
+    return hookWorkspaceWords.mcpToolKept;
   }
 };
 
