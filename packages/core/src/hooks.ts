@@ -510,6 +510,76 @@ export const hookToolCall = (
 };
 
 /**
+ * An input in Claude Code's words back in `harness`'s own keys for `tool`:
+ * the inverse of {@link hookToolCall}'s renames, for a hook's `updatedInput`
+ * a harness applies to the call it runs.
+ */
+export const hookToolInputBack = (
+  harness: HookHarness,
+  tool: string,
+  input: Record<string, unknown>
+): Record<string, unknown> => {
+  const keys = (HOOK_TOOL_NAMES[harness] as Record<string, HookToolName>)[tool]
+    ?.input;
+  if (!keys) {
+    return input;
+  }
+  const back = Object.fromEntries(
+    Object.entries(keys).map(([own, claude]) => [claude, own])
+  );
+  return Object.fromEntries(
+    Object.entries(input).map(([key, value]) => [back[key] ?? key, value])
+  );
+};
+
+/**
+ * The events whose hooks can rewrite the call's input: Claude Code's
+ * `updatedInput`, "directly under `hookSpecificOutput`" for PreToolUse and
+ * "inside the `decision` object" for PermissionRequest
+ * (code.claude.com/docs/en/hooks).
+ */
+export const HOOK_INPUT_EVENTS: readonly HookEvent[] = [
+  "PreToolUse",
+  "PermissionRequest",
+];
+
+/**
+ * What a hook that could rewrite a call's input comes to in a workspace
+ * session, on the machine's row: the boundary judged the call as the model
+ * asked it, and "When multiple `PreToolUse` hooks return `updatedInput` …,
+ * the last one to finish takes effect" (code.claude.com/docs/en/hooks-guide),
+ * so no rewrite is taken there. A command or HTTP hook runs through CawCo's
+ * guard (agent fleet-hook-guard.ts), which drops it from the reply; an MCP
+ * tool hook's reply CawCo never sees.
+ */
+export const hookWorkspaceWords = {
+  dropped:
+    "In a workspace session its input rewrite (updatedInput) is dropped: the boundary judged the call as asked. Its deny, ask and context still count.",
+  placedLeftOut:
+    "Not run in workspace sessions: an MCP tool hook's reply can rewrite the call's input, which the boundary judged as asked.",
+  fleetKept:
+    "In a workspace session an MCP tool hook's input rewrite is not dropped: Claude Code reads its reply itself.",
+} as const;
+
+/** The workspace word for `hook` on the machine's row, or none for a hook that cannot rewrite input. */
+export const hookWorkspaceNote = (
+  hook: Pick<FleetHook, "event" | "handler">,
+  placed: boolean
+): string | undefined => {
+  if (!HOOK_INPUT_EVENTS.includes(hook.event)) {
+    return;
+  }
+  if (hook.handler.type === "command" || hook.handler.type === "http") {
+    return hookWorkspaceWords.dropped;
+  }
+  if (hook.handler.type === "mcp_tool") {
+    return placed
+      ? hookWorkspaceWords.placedLeftOut
+      : hookWorkspaceWords.fleetKept;
+  }
+};
+
+/**
  * Why `harness` cannot run `hook`, in a sentence, or undefined when it runs
  * it: an event it raises no point for ({@link HOOK_EVENTS_ON}), a handler
  * that is not a command (a prompt, an agent, an HTTP post or an MCP tool are
@@ -540,6 +610,8 @@ export interface HookVerdict {
   block?: string;
   /** Words for the model: `additionalContext`, or what a SessionStart or UserPromptSubmit hook printed. */
   context?: string;
+  /** A PreToolUse hook's rewrite of the call's input, in Claude Code's keys: taken outside a workspace only. */
+  updatedInput?: Record<string, unknown>;
 }
 
 /**
@@ -573,9 +645,16 @@ export const hookVerdict = (
   const specific = (parsed.hookSpecificOutput ?? {}) as Record<string, unknown>;
   const block = jsonBlock(parsed, specific);
   const context = saidText(specific.additionalContext);
+  const updated = specific.updatedInput;
   return {
     ...(block ? { block } : {}),
     ...(context ? { context } : {}),
+    ...(event === "PreToolUse" &&
+    updated &&
+    typeof updated === "object" &&
+    !Array.isArray(updated)
+      ? { updatedInput: updated as Record<string, unknown> }
+      : {}),
   };
 };
 

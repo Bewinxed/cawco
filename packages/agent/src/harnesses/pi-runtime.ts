@@ -19,6 +19,7 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
   hookToolCall,
+  hookToolInputBack,
   INSTALL_SESSION_CREDENTIAL,
   LEAD_GATED_TOOLS,
   MESSAGES_READ,
@@ -582,9 +583,22 @@ class FleetHooks {
           },
           context
         );
-        return verdict.block
-          ? { block: true, reason: verdict.block }
-          : undefined;
+        if (verdict.block) {
+          return { block: true, reason: verdict.block };
+        }
+        // A rewrite, taken outside a workspace only (fleet-hook-run.ts):
+        // pi takes a call's new input mutated in place ("To modify
+        // arguments, mutate `event.input` in place", types.d.ts).
+        if (verdict.updatedInput) {
+          const input = event.input as Record<string, unknown>;
+          for (const key of Object.keys(input)) {
+            delete input[key];
+          }
+          Object.assign(
+            input,
+            hookToolInputBack("pi", event.toolName, verdict.updatedInput)
+          );
+        }
       });
       pi.on("tool_result", async (event, context) => {
         const call = hookToolCall("pi", event.toolName, event.input);

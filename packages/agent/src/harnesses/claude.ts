@@ -90,6 +90,7 @@ import {
   configurePage,
   conversationGone,
   EFFORT_READ,
+  HOOK_INPUT_EVENTS,
   harnessWords,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
@@ -182,6 +183,7 @@ import {
   readFleetHarnessSet,
   type SetHook,
 } from "../fleet-harness-set";
+import { guardedHandler } from "../fleet-hook-guard";
 import { proxiedFleetMcpUrl, proxiedToolCount } from "../fleet-mcp-listing";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import { sessionGitEnv } from "../git-credential";
@@ -1466,11 +1468,27 @@ type FlagHookEntry = FlagHooks[string][number];
  * use `"*"`, the group activates on every occurrence of the event",
  * code.claude.com/docs/en/hooks), and each handler's `type` comes after its
  * other fields.
+ *
+ * Each runs through CawCo's guard (fleet-hook-guard.ts), told in a
+ * workspace session (`bounded`) to drop the hook's input rewrite: the
+ * boundary judged the call as asked. An MCP tool hook, whose reply only
+ * Claude Code reads, is not given to a workspace session on an event whose
+ * reply can rewrite input (core `hookWorkspaceNote`).
  */
-const placedHookEntries = (hooks: readonly SetHook[]): FlagHooks => {
+const placedHookEntries = (
+  hooks: readonly SetHook[],
+  bounded: boolean
+): FlagHooks => {
   const byEvent: FlagHooks = {};
   for (const hook of hooks) {
-    const { type, ...fields } = hook.handler;
+    if (
+      bounded &&
+      hook.handler.type === "mcp_tool" &&
+      HOOK_INPUT_EVENTS.includes(hook.event)
+    ) {
+      continue;
+    }
+    const { type, ...fields } = guardedHandler(hook.handler, bounded);
     const handler = { ...fields, type } as FlagHookEntry["hooks"][number];
     const matcher = hook.matcher?.trim();
     byEvent[hook.event] = [
@@ -1509,7 +1527,7 @@ const sessionSettingsOptions = (
   // A boundary's settings carry its `hooks`; no boundary, none.
   const own =
     (bounded as { settings?: { hooks?: FlagHooks } }).settings?.hooks ?? {};
-  const hooks: FlagHooks = placedHookEntries(placed);
+  const hooks: FlagHooks = placedHookEntries(placed, boundary !== undefined);
   for (const [event, entries] of Object.entries(own)) {
     hooks[event] = [...(hooks[event] ?? []), ...entries];
   }

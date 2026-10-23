@@ -23,6 +23,7 @@ import {
   type HookHarness,
   type HookMatchTest,
   hookUnsupported,
+  hookWorkspaceNote,
 } from "@cawco/core";
 import { fleetHarnessSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -133,7 +134,9 @@ export const placedAt = <T extends { cwd: string }>(
 
 /**
  * What `harness` makes of each hook, by the id the machine reports it under:
- * applied, or unsupported with why (core `hookUnsupported`), never left out.
+ * applied (with what a workspace session makes of one that could rewrite a
+ * call's input, core `hookWorkspaceNote`), or unsupported with why (core
+ * `hookUnsupported`), never left out.
  * The sync's enabled rows (`hooks` of its config), or a status read's set.
  */
 export const hookStatesOn = (
@@ -143,10 +146,15 @@ export const hookStatesOn = (
   Object.fromEntries(
     hooks.map((hook) => {
       const why = hookUnsupported(harness, hook);
-      return [
-        hook.id,
-        why ? { state: "unsupported", detail: why } : { state: "applied" },
-      ] as const;
+      // What a workspace session makes of a hook that could rewrite input.
+      const note = hookWorkspaceNote(hook, false);
+      let state: FleetItemState = { state: "applied" };
+      if (why) {
+        state = { state: "unsupported", detail: why };
+      } else if (note) {
+        state = { state: "applied", detail: note };
+      }
+      return [hook.id, state] as const;
     })
   );
 

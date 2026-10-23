@@ -23,17 +23,12 @@ import {
 } from "@cawco/core";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { type Boundary, shellQuote } from "./boundary";
+import type { Boundary } from "./boundary";
 import type { SetHook } from "./fleet-harness-set";
+import { commandLineOf } from "./fleet-hook-guard";
 
 /** Claude Code's own default for a command hook: "`command`, `http`, `mcp_tool`: 10 minutes" (code.claude.com/docs/en/hooks-guide). */
 const DEFAULT_TIMEOUT_S = 600;
-
-/** A handler's command line: its exec form quoted word by word, else its shell form as written. */
-const commandLine = (handler: HookCommandHandler): string =>
-  handler.args?.length
-    ? [handler.command ?? "", ...handler.args].map(shellQuote).join(" ")
-    : (handler.command ?? "");
 
 /** What one command hook's run printed and how it ended; `exit` null when it was killed. */
 interface Ran {
@@ -58,7 +53,7 @@ const runCommand = (
   place: HookPlace
 ): Promise<Ran> =>
   new Promise((resolve) => {
-    const line = commandLine(handler);
+    const line = commandLineOf(handler);
     const [file, ...args] = place.boundary
       ? [place.boundary.prefix, line]
       : ["bash", "-c", line];
@@ -139,13 +134,16 @@ export const runFleetHooks = async (
     hook_event_name: event,
     ...input,
   });
-  const verdicts = await Promise.all(
-    due.map(async (hook): Promise<HookVerdict> => {
+  // Each verdict in the order its hook finished: "the last one to finish
+  // takes effect" for a rewrite (code.claude.com/docs/en/hooks-guide).
+  const finished: HookVerdict[] = [];
+  await Promise.all(
+    due.map(async (hook): Promise<void> => {
       const handler = hook.handler as HookCommandHandler;
       const running = runCommand(handler, stdin, place);
       if (handler.async) {
         running.catch(() => undefined);
-        return {};
+        return;
       }
       const ran = await running;
       if (ran.exit !== 0 && ran.exit !== 2) {
@@ -153,15 +151,21 @@ export const runFleetHooks = async (
           `[${harness}] fleet hook ${hook.name} on ${event} ended ${ran.exit ?? "killed"}: ${ran.stderr.trim().slice(-400)}`
         );
       }
-      return hookVerdict(event, ran);
+      finished.push(hookVerdict(event, ran));
     })
   );
-  const blocks = verdicts.flatMap((one) => (one.block ? [one.block] : []));
-  const contexts = verdicts.flatMap((one) =>
+  const blocks = finished.flatMap((one) => (one.block ? [one.block] : []));
+  const contexts = finished.flatMap((one) =>
     one.context ? [one.context] : []
   );
+  // A workspace session takes no rewrite: its boundary judged the call as
+  // asked (core `hookWorkspaceWords`).
+  const rewrite = place.boundary
+    ? undefined
+    : finished.findLast((one) => one.updatedInput)?.updatedInput;
   return {
     ...(blocks.length > 0 ? { block: blocks.join("\n") } : {}),
     ...(contexts.length > 0 ? { context: contexts.join("\n\n") } : {}),
+    ...(rewrite ? { updatedInput: rewrite } : {}),
   };
 };

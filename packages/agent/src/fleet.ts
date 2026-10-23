@@ -46,7 +46,12 @@ import type {
   MachineMemorySet,
   SkillFile,
 } from "@cawco/core";
-import { hookMatchTest, hookProblem, memoryDocProblem } from "@cawco/core";
+import {
+  hookMatchTest,
+  hookProblem,
+  hookWorkspaceNote,
+  memoryDocProblem,
+} from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
@@ -75,6 +80,11 @@ import {
   type SetHook,
   writeFleetHarnessSet,
 } from "./fleet-harness-set";
+import {
+  guardedHandler,
+  HOOK_GUARD_SOURCE,
+  hookGuardFile,
+} from "./fleet-hook-guard";
 import { apartSignedOut, readFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome } from "./fs";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
@@ -274,10 +284,26 @@ interface ManagedHook {
   event: HookEvent;
   /** sha256 of the script cawco wrote, or of the hub's row when there is no script. */
   hash: string;
+  /** What a workspace session makes of it, said with its applied state (core `hookWorkspaceNote`). */
+  note?: string;
   /** A project's copy, handed to its sessions through the harness set. */
   placed?: true;
   scope: FleetScope;
+  /** The script cawco wrote for it, in {@link HOOKS_DIR}. */
+  script?: string;
 }
+
+/**
+ * The script cawco wrote for a hook it registered: the record's own, or the
+ * command a record from before the guard registered, when that is a script
+ * in the hooks dir or the user layer's old one.
+ */
+const scriptPathOf = (record: ManagedHook): string | undefined =>
+  record.script ??
+  (record.command.startsWith(HOOKS_DIR) ||
+  record.command.startsWith(USER_LAYER_HOOKS_DIR)
+    ? record.command
+    : undefined);
 
 const readJson = async <T>(path: string): Promise<T | undefined> => {
   const file = Bun.file(path);
@@ -2354,9 +2380,25 @@ const syncPlacedMemory = async (
  * handler carries `command`; the other four handler types do not, so an entry
  * without one is matched on its own JSON instead (see {@link withoutHooks}). */
 interface HookCommand {
+  args?: string[];
   command?: string;
   type?: string;
 }
+
+/**
+ * What one registered handler is known by: a shell-form command's line, an
+ * exec-form one's words (CawCo's guard runs every fleet HTTP hook as `perl
+ * <guard> --http <url>`, so the program alone names none of them apart), and
+ * any other handler's own JSON.
+ */
+const entryKey = (hook: HookCommand): string => {
+  if (hook.command === undefined) {
+    return JSON.stringify(hook);
+  }
+  return hook.args?.length
+    ? JSON.stringify([hook.command, ...hook.args])
+    : hook.command;
+};
 
 /** One matcher's worth of hooks; an absent `matcher` is every session start. */
 interface HookMatcher {
@@ -2378,8 +2420,7 @@ export function withoutHooks(
   commands: string[]
 ): HookMatcher[] {
   const gone = new Set(commands);
-  const isOurs = (hook: HookCommand): boolean =>
-    gone.has(hook.command === undefined ? JSON.stringify(hook) : hook.command);
+  const isOurs = (hook: HookCommand): boolean => gone.has(entryKey(hook));
   return entries.flatMap((entry) => {
     const hooks = entry.hooks ?? [];
     const kept = hooks.filter((hook) => !isOurs(hook));
@@ -2536,11 +2577,9 @@ const handlerFor = (
     : hook.handler;
 
 /** What {@link withoutHooks} removes this handler by, and what the sidecar
- * remembers registering it as. */
+ * remembers registering it as ({@link entryKey}). */
 const identityOf = (handler: HookHandler): string =>
-  handler.type === "command" && handler.command
-    ? handler.command
-    : JSON.stringify(handler);
+  entryKey(handler as HookCommand);
 
 /** What {@link syncHooks} answers: what cawco now manages, and the hooks for the harness set. */
 interface SyncedHooks {
@@ -2570,6 +2609,11 @@ const syncHooks = async (
   // it starts (core `fleetSyncedPaths`), and a dir that comes later is not
   // in a boundary already running.
   await mkdir(HOOKS_DIR, { recursive: true });
+  // The guard every fleet hook Claude Code runs goes through
+  // (fleet-hook-guard.ts), written before anything names it.
+  if ((await fileHashAt(hookGuardFile())) !== hashText(HOOK_GUARD_SOURCE)) {
+    await writeAtomic(hookGuardFile(), HOOK_GUARD_SOURCE);
+  }
   const written: Record<string, ManagedHook> = {};
   const keep = (id: string): void => {
     if (managed[id]) {
@@ -2674,6 +2718,16 @@ const syncHooks = async (
     settled.push(hook);
   }
 
+  // The script cawco wrote for a hook, which a later sync's drift check and
+  // removal read; and the applied state, with what a workspace session makes
+  // of a hook that could rewrite input (core `hookWorkspaceNote`).
+  const scriptOf = (id: string): { script?: string } => {
+    const path = scriptPaths.get(id);
+    return path ? { script: path } : {};
+  };
+  const applied = (note: string | undefined): FleetItemState =>
+    note ? { state: "applied", detail: note } : { state: "applied" };
+
   // Every settled hook as a session runs it: a project's copy goes to its
   // folder's sessions through the harness set alone, and is applied once its
   // script is written; the fleet's own is in the set for OpenCode and pi,
@@ -2696,6 +2750,7 @@ const syncHooks = async (
       continue;
     }
     set.placedHooks[hook.id] = { ...one, cwd: hook.cwd as string };
+    const note = hookWorkspaceNote(hook, true);
     written[hook.id] = {
       hash: hashes.get(hook.id) ?? hook.hash,
       command: identityOf(handler),
@@ -2703,8 +2758,10 @@ const syncHooks = async (
       scope: hook.scope ?? "project",
       cwd: hook.cwd as string,
       placed: true,
+      ...scriptOf(hook.id),
+      ...(note ? { note } : {}),
     };
-    report[hook.id] ??= { state: "applied" };
+    report[hook.id] ??= applied(note);
   }
 
   // Registration in the user settings — a hook whose row was disabled or
@@ -2744,12 +2801,20 @@ const syncHooks = async (
     for (const event of events) {
       const current = (settingsHooks[event] as HookMatcher[] | undefined) ?? [];
       const additions = (byEvent.get(event) ?? []).map((hook): HookMatcher => {
-        const handler = handlerFor(hook, scriptPaths.get(hook.id));
+        // Through the guard, which drops an input rewrite in a workspace
+        // session (fleet-hook-guard.ts).
+        const handler = guardedHandler(
+          handlerFor(hook, scriptPaths.get(hook.id)),
+          false
+        );
+        const note = hookWorkspaceNote(hook, false);
         written[hook.id] = {
           hash: hashes.get(hook.id) ?? hook.hash,
           command: identityOf(handler),
           event: hook.event,
           scope: "user",
+          ...scriptOf(hook.id),
+          ...(note ? { note } : {}),
         };
         return hook.matcher
           ? { matcher: hook.matcher, hooks: [handler] }
@@ -2789,7 +2854,7 @@ const syncHooks = async (
         };
       } else {
         // One reported failed or drifted above keeps that word.
-        report[hook.id] ??= { state: "applied" };
+        report[hook.id] ??= applied(written[hook.id]?.note);
       }
     }
   }
@@ -2801,20 +2866,20 @@ const syncHooks = async (
   // cawco wrote one) are cawco's to take away. A script still at the user
   // layer's old path goes once the hook is registered at its new one.
   const stillHere = new Set(settled.map((hook) => hook.id));
-  const commands = new Set(Object.values(written).map((one) => one.command));
+  const scripts = new Set(
+    Object.values(written).flatMap((one) => (one.script ? [one.script] : []))
+  );
   for (const [id, record] of Object.entries(managed)) {
-    const ours =
-      record.command.startsWith(HOOKS_DIR) ||
-      record.command.startsWith(USER_LAYER_HOOKS_DIR);
+    const script = scriptPathOf(record);
     if (stillHere.has(id) || written[id]) {
-      if (ours && !commands.has(record.command)) {
+      if (script && !scripts.has(script)) {
         // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this mirrors the sequential style of the rest of this sync rather than fanning out filesystem writes
-        await rm(record.command, { force: true });
+        await rm(script, { force: true });
       }
       continue;
     }
-    if (ours) {
-      await rm(record.command, { force: true });
+    if (script) {
+      await rm(script, { force: true });
     }
     report[id] = { state: "removed" };
   }
@@ -3093,8 +3158,9 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     return readSet;
   };
   for (const [id, record] of Object.entries(managed.hooks)) {
-    if (record.command.startsWith(HOOKS_DIR)) {
-      const scriptFile = Bun.file(record.command);
+    const scriptPath = scriptPathOf(record);
+    if (scriptPath?.startsWith(HOOKS_DIR)) {
+      const scriptFile = Bun.file(scriptPath);
       // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
       if (!(await scriptFile.exists())) {
         hooks[id] = { state: "failed", cause: "absent", detail: "not on disk" };
@@ -3115,11 +3181,14 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // is still where sessions take it — a project's copy in the harness set,
     // the fleet's own in the user settings. A script that was refused
     // registration is kept on disk, so a matching file is not enough.
+    const applied: FleetItemState = record.note
+      ? { state: "applied", detail: record.note }
+      : { state: "applied" };
     if (record.placed) {
       const one = (await harnessSet()).placedHooks[id];
       hooks[id] =
         one && identityOf(one.handler) === record.command
-          ? { state: "applied" }
+          ? applied
           : {
               state: "failed",
               cause: "absent",
@@ -3133,14 +3202,10 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         record.event
       ] ?? [];
     const present = entries.some((entry) =>
-      (entry.hooks ?? []).some((one) =>
-        one.command === undefined
-          ? JSON.stringify(one) === record.command
-          : one.command === record.command
-      )
+      (entry.hooks ?? []).some((one) => entryKey(one) === record.command)
     );
     hooks[id] = present
-      ? { state: "applied" }
+      ? applied
       : { state: "failed", cause: "absent", detail: `not in ${SETTINGS_PATH}` };
   }
   // Claimed here too, and for the reason `have` above is: a status overwrites
