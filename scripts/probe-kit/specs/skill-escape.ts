@@ -37,8 +37,10 @@
  *   boundary never covered.
  * - s2. Reads `sub/x.txt` (which loads the nested skill: "a session started
  *   above it loads the skill once Claude works on files there",
- *   /docs/en/skills), invokes `/probe`, then runs one Bash command so the
- *   skill's `PreToolUse` hook has a tool call to fire on.
+ *   /docs/en/skills), invokes it with the harness's Skill tool (the
+ *   deterministic model-driven invocation, confirmed offered to a workspace
+ *   delegate), then runs one Bash command so the skill's `PreToolUse` hook has
+ *   a tool call to fire on.
  * - (ii) The injection marker: present (ESCAPE: the `!` injection wrote
  *   outside the workspace) or absent (contained, when the inside marker shows
  *   it ran; inconclusive when neither marker is there, i.e. the injection
@@ -190,6 +192,46 @@ interface Step {
 }
 const steps = new Map<string, Step>();
 
+/** `wait_item` as the delegate's harness offers it (loaded, or behind ToolSearch). */
+const WAITS = ["mcp__cawco__wait_item", "wait_item"];
+const WAIT_INPUT = {
+  minutes: 60,
+  reason: "Waiting for the probe's next step.",
+};
+
+/**
+ * The delegate's rest while it has no step to play. Between my sends its turn
+ * must be a WAITING turn, never one of the three quiet turns in a row that
+ * fail its item (hub work-items.ts `QUIET_TURNS`: the item that failed the
+ * first host run ended "three turns in a row without finish_item"). So it
+ * declares a bounded wait with `wait_item`, found through ToolSearch first
+ * when the harness defers it; a step's own call resets this (`runStep`), so
+ * the wait is declared afresh after each step.
+ */
+let restState: "asked" | "resting" | "searching" | undefined;
+const rest = (request: Seen): Reply => {
+  if (restState === "resting") {
+    return words("waiting");
+  }
+  if (restState === "asked" && request.afterTool) {
+    restState = "resting";
+    return words("waiting");
+  }
+  const wait = request.toolNames.find((name) => WAITS.includes(name));
+  if (wait) {
+    restState = "asked";
+    return call(wait, WAIT_INPUT);
+  }
+  if (restState !== "searching" && request.toolNames.includes("ToolSearch")) {
+    restState = "searching";
+    return call("ToolSearch", {
+      query: "select:mcp__cawco__wait_item",
+      max_results: 1,
+    });
+  }
+  return words("waiting");
+};
+
 /** Every session's answer, by the latest step tag its words carry. */
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
@@ -214,10 +256,10 @@ const respond = (request: Seen): Reply => {
       step.done = true;
     }
   }
-  // The brief turn, the `/probe` turn, and any "still open" nudge: a word,
-  // never a tool. The steps come fast enough that no three of these land in a
-  // row (hub work-items.ts `QUIET_TURNS`).
-  return words("waiting");
+  // The brief turn and any step's idle tail: rest on a bounded wait, never a
+  // bare word, so no three quiet turns in a row fail the item before my steps
+  // run.
+  return rest(request);
 };
 
 /** The setup step's calls, in order: the folder, then the three files. */
@@ -249,6 +291,8 @@ const runStep = async (
 ): Promise<Step> => {
   const step: Step = { awaiting: false, done: false, play, results: [] };
   steps.set(key, step);
+  // A new step: the delegate rests afresh after it, re-declaring its wait.
+  restState = undefined;
   await fleet.send(session, `Run step PROBE-SKILL-${key}.`);
   await until(
     `step ${key} over`,
@@ -390,27 +434,29 @@ const run = async (kit: Kit) => {
     `touch failed ${control.results[0]?.failed}; landed ${controlLanded}; ${JSON.stringify(control.results).slice(0, 800)}`
   );
 
-  // s2: read the trigger file (loads the nested skill), invoke /probe (runs
-  // the `!` injection and registers the hook), then one Bash (fires the hook).
+  // s2: read the trigger file (loads the nested skill into the available-skills
+  // list — "a session started above it loads the skill once Claude works on
+  // files there", /docs/en/skills), invoke it with the harness's Skill tool
+  // (the deterministic model-driven invocation, which runs the `!` injection
+  // and registers the frontmatter hook), then one Bash so the hook has a tool
+  // call to fire on. The Skill tool is used rather than a `/probe` user
+  // message so the invocation never hangs on whether a nested skill is
+  // slash-registered; its result says whether the skill was found.
   await runStep(
     fleet,
     id,
     "read",
     once(call("Read", { file_path: paths.triggerPath }))
   );
-  await fleet.send(id, "/probe");
-  await until(
-    "the /probe turn opened",
-    () => fleet.instance(id),
-    (row) => row?.turn_open_at !== null,
-    60_000
-  ).catch(() => undefined);
-  await until(
-    "the /probe turn over",
-    () => fleet.instance(id),
-    (row) => row?.turn_open_at === null,
-    180_000
-  ).catch(() => undefined);
+  const invoked = await runStep(
+    fleet,
+    id,
+    "invoke",
+    once(call("Skill", { skill: "probe" }))
+  );
+  kit.note(
+    `invoke: Skill(probe) ${invoked.results[0]?.failed ? "FAILED (the nested skill was not invocable)" : "ok"} — ${(invoked.results[0]?.text ?? "").slice(0, 200)}`
+  );
   await runStep(fleet, id, "fire", once(bash("echo probe-skill-fire")));
   // Both vectors run synchronously before their turn ends; a short settle
   // covers a late file flush.
