@@ -54,6 +54,7 @@ import {
   CONTROL_MODEL_CATALOG,
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
+  contactWords,
   IMAGE_GENERATION_TIMEOUT_MS,
   machineLabel,
   mcpFleetState,
@@ -184,7 +185,7 @@ import {
 } from "./opencode-session";
 import { toTranscript } from "./opencode-transcript";
 
-/** A reattach's read the server did not answer in time: undecided, so the reattach waits on and is never decided failed for it. */
+/** A reattach's read the server did not answer in time: undecided, so the reattach tries again, within its budget (`#recover`). */
 class ReattachUnanswered extends Error {
   constructor(message: string) {
     super(message);
@@ -418,6 +419,15 @@ const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
  * ends holds that session, and once held a whole machine's custody.
  */
 const RECOVERY_RETRY_BUDGET_MS = 120_000;
+/** A reattach's first wait before it tries again; each next doubles it. */
+const RECOVERY_RETRY_FIRST_MS = 1000;
+/**
+ * The longest a reattach waits between tries. Our call: a server that has
+ * not answered in half a minute is not hurried by a faster ask, and a
+ * machine's worth of sessions asking every 5 s kept a loaded machine busy
+ * (2026-10-23 20:20, obelisk: 369 reattaches, 5,166 retries).
+ */
+const RECOVERY_RETRY_MAX_MS = 30_000;
 
 /** How long before a directory's deferred release is tried again. Ours: a held turn or a recovery is over in minutes, not seconds. */
 const DIRECTORY_RELEASE_RETRY_MS = 30_000;
@@ -4477,11 +4487,14 @@ export class OpencodeHarness implements Harness {
    * opened on its account's server when none runs its turn. Each attempt is
    * {@link #reattachOnce} on a round of its own, its every request bounded by
    * {@link RECOVERY_TIMEOUT_MS}. A server that answers for the session with an
-   * error refuses it at once; one out of reach is tried again, a little later
-   * each time, until {@link RECOVERY_RETRY_BUDGET_MS}. One that does not
-   * answer in time ({@link ReattachUnanswered}) decides nothing: the reattach
-   * waits on it past that budget, tried again as often, and is never decided
-   * failed for it.
+   * error refuses it at once. One out of reach, or one that does not answer
+   * in time ({@link ReattachUnanswered}), is tried again after
+   * {@link RECOVERY_RETRY_FIRST_MS}, doubling to {@link RECOVERY_RETRY_MAX_MS},
+   * until {@link RECOVERY_RETRY_BUDGET_MS}: then the reattach fails in its
+   * own words, and the session is settled asleep (session.ts: unavailable),
+   * its sends owed to its next start, which asks OpenCode again whether it
+   * runs it. Never retried for good: 369 sessions asked OpenCode every 5 s
+   * for an hour that it never answered (2026-10-23, obelisk).
    */
   async #recover(
     spec: SpawnPayload,
@@ -4514,16 +4527,24 @@ export class OpencodeHarness implements Harness {
           await this.#decideFailed(spec, round);
           throw error;
         }
-        if (Date.now() >= deadline && !(error instanceof ReattachUnanswered)) {
+        const delay = Math.min(
+          RECOVERY_RETRY_FIRST_MS * 2 ** Math.min(attempt, 16),
+          RECOVERY_RETRY_MAX_MS
+        );
+        if (Date.now() >= deadline) {
           await this.#decideFailed(spec, round);
+          console.warn(
+            `[opencode] recovery ${ctx.instanceId} gave up after ${attempt + 1} tries in ${Math.round((Date.now() - deadline + RECOVERY_RETRY_BUDGET_MS) / 1000)} s, past its ${RECOVERY_RETRY_BUDGET_MS / 1000} s: ${errorText(error)}`
+          );
           throw new ReattachFailed(
-            `CawCo couldn't take this session back after a restart: OpenCode didn't answer within ${RECOVERY_RETRY_BUDGET_MS / 1000} s (${errorText(error)}). Start it again.`,
+            error instanceof ReattachUnanswered
+              ? `${contactWords.reattachSilent(RECOVERY_RETRY_BUDGET_MS / 1000)} (${errorText(error)}). ${contactWords.reattachSilentNext}`
+              : `CawCo couldn't take this session back after a restart: OpenCode didn't answer within ${RECOVERY_RETRY_BUDGET_MS / 1000} s (${errorText(error)}). Start it again.`,
             { cause: error }
           );
         }
-        const delay = Math.min(250 * 2 ** Math.min(attempt, 5), 5000);
         console.warn(
-          `[opencode] recovery ${ctx.instanceId} waiting; retry in ${delay}ms: ${errorText(error)}`
+          `[opencode] recovery ${ctx.instanceId} waiting; retry ${attempt + 1} in ${delay}ms: ${errorText(error)}`
         );
         attempt += 1;
         await Bun.sleep(delay);

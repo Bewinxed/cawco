@@ -282,6 +282,7 @@ import {
   machineFaultWords,
   machineLabel,
   machinePlatform,
+  machineSilenceWords,
   mcpRunsOn,
   memoryDocProblem,
   memoryScopeProblem,
@@ -688,6 +689,7 @@ import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
+import { createMachineContact } from "./machine-contact";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import {
   type CommandOptions,
@@ -2690,6 +2692,19 @@ const UNREAD = {
 const STORED_TAIL = 50;
 
 /**
+ * Transcript reads to settle sends ({@link storedIn}) one machine is asked
+ * at once; the rest wait their turn, their deadline starting when they are
+ * asked. Our call: a machine coming back with hundreds of sessions was
+ * asked 471 reads in one second, and none was answered within 10 s
+ * (2026-10-23 19:28:56, obelisk, the hub's own machine).
+ */
+const SETTLE_READS_PER_MACHINE = 4;
+/** After a settle read its machine left unanswered, the session's next waits this long, doubling each time. */
+const SETTLE_BACKOFF_FIRST_MS = 15_000;
+/** The longest a session's next settle read waits. Our call: eight heartbeats. */
+const SETTLE_BACKOFF_MAX_MS = 120_000;
+
+/**
  * The conversation a frame says its session is writing, when it says so. Two
  * frames do: every `init` — a new process, a fork, a `/clear` that starts a
  * new conversation in the same process, and each later turn — and the
@@ -4011,6 +4026,28 @@ export const createServer = (
   const machineName = (machineId: string): string =>
     machineCalled(machineId, db.namedMachines());
   /**
+   * Whether the hub has lost a machine (machine-contact.ts): the one
+   * person-facing "didn't answer", Needs you's item and one push, for a
+   * machine silent past `MACHINE_LOST_MS` with sessions on it.
+   */
+  const contact = createMachineContact({
+    lifetime,
+    name: machineName,
+    lost: (machineId, since) => {
+      push.machineLost({
+        machineId,
+        name: machineName(machineId),
+        minutes: Math.round((Date.now() - since) / 60_000),
+        still: () => contact.lostAt(machineId) !== null,
+      });
+      publishInstances(machineId);
+    },
+    back: (machineId) => {
+      push.machineBack(machineId);
+      publishInstances(machineId);
+    },
+  });
+  /**
    * Why a machine could not take a request, as a client reads it (core
    * `machineFaultWords`): by its name, and a machine not on this hub as
    * `unknown` whatever the fault. `next: false`, the cause alone (core
@@ -4034,9 +4071,10 @@ export const createServer = (
     machineFault(machineId, answer.reason === "dead" ? "offline" : "silent");
   /** "<machine> did not answer within N s" (or is not connected), for an ask it left unanswered. */
   const silentWords = (machineId: string, answer: Unanswered): string =>
-    answer.reason === "dead"
-      ? `${machineName(machineId)} is not connected`
-      : `${machineName(machineId)} did not answer within ${Math.round(answer.after / 1000)} s`;
+    machineSilenceWords(
+      machineName(machineId),
+      answer.reason === "dead" ? undefined : answer.after
+    );
   /**
    * A read its machine left unanswered, as the read throws it: not connected
    * (or away past its deadline, `asRead`) is {@link awayError}, which a route
@@ -5627,20 +5665,110 @@ export const createServer = (
    * read links them ({@link linkEntries}). `unread`, why in words, when the
    * machine did not answer or could not read it: it has said nothing either way.
    */
-  const storedIn = async (
+  const storedIn = (
+    instanceId: string
+  ): Promise<Map<string, boolean> | { unread: string }> => {
+    const before = settleReads.get(instanceId);
+    // After the one before it, whatever became of that one.
+    const read = (before ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => settleRead(instanceId))
+      .finally(() => {
+        if (settleReads.get(instanceId) === read) {
+          settleReads.delete(instanceId);
+        }
+      });
+    settleReads.set(instanceId, read);
+    return read;
+  };
+
+  /** Each session's settle read in flight, or waiting its turn behind one: one at a time per session. */
+  const settleReads = new Map<string, Promise<unknown>>();
+  /** A session whose last settle read went unanswered: its next is asked no sooner than `until`. */
+  const settleBackoff = new Map<string, { ms: number; until: number }>();
+  /** Settle reads each machine is being asked now ({@link SETTLE_READS_PER_MACHINE} at most). */
+  const settleAsked = new Map<string, number>();
+  /** Settle reads waiting for one of their machine's turns, oldest first. */
+  const settleWaiting = new Map<string, (() => void)[]>();
+
+  /** One of the machine's settle-read turns: taken now, or when one is given back. */
+  const settleTurn = (machineId: string): Promise<void> => {
+    const asked = settleAsked.get(machineId) ?? 0;
+    if (asked < SETTLE_READS_PER_MACHINE) {
+      settleAsked.set(machineId, asked + 1);
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const queue = settleWaiting.get(machineId) ?? [];
+      queue.push(resolve);
+      settleWaiting.set(machineId, queue);
+    });
+  };
+
+  /** A turn given back: handed straight to the read waiting longest, else freed. */
+  const settleTurnBack = (machineId: string): void => {
+    const next = settleWaiting.get(machineId)?.shift();
+    if (next) {
+      next();
+      return;
+    }
+    settleWaiting.delete(machineId);
+    settleAsked.set(
+      machineId,
+      Math.max(0, (settleAsked.get(machineId) ?? 1) - 1)
+    );
+  };
+
+  /**
+   * One settle read of the session's transcript tail, asked once its backoff
+   * is over and its machine has a turn for it. One its machine left
+   * unanswered is logged with when it was asked and how long it waited, and
+   * puts the session's next read off (doubling, {@link SETTLE_BACKOFF_MAX_MS}
+   * at most); one answered clears that.
+   */
+  const askSettle = async (row: InstanceRow & { sessionId: string }) => {
+    const backoff = settleBackoff.get(row.id);
+    if (backoff && backoff.until > Date.now()) {
+      await lifetime.sleep(backoff.until - Date.now());
+    }
+    await settleTurn(row.machineId);
+    const askedAt = Date.now();
+    try {
+      const answer = await readAgent(
+        row.machineId,
+        CONTROL_GET_SESSION_MESSAGES,
+        [row.sessionId, { dir: row.cwd || undefined, tail: STORED_TAIL }],
+        READ_TIMEOUT_MS,
+        row.harness
+      );
+      if (answer.kind !== "unanswered") {
+        settleBackoff.delete(row.id);
+        return answer;
+      }
+      const ms = Math.min(
+        backoff ? backoff.ms * 2 : SETTLE_BACKOFF_FIRST_MS,
+        SETTLE_BACKOFF_MAX_MS
+      );
+      const until = Date.now() + ms;
+      settleBackoff.set(row.id, { ms, until });
+      console.warn(
+        `[hub] ${row.id}: settle read on ${machineName(row.machineId)} not answered (asked at ${askedAt}, waited ${Date.now() - askedAt} ms); its next is asked no sooner than ${until}, ${ms / 1000} s on`
+      );
+      return answer;
+    } finally {
+      settleTurnBack(row.machineId);
+    }
+  };
+
+  /** {@link storedIn}'s one read of the session, through {@link askSettle}. */
+  const settleRead = async (
     instanceId: string
   ): Promise<Map<string, boolean> | { unread: string }> => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row?.sessionId) {
       return new Map();
     }
-    const answer = await readAgent(
-      row.machineId,
-      CONTROL_GET_SESSION_MESSAGES,
-      [row.sessionId, { dir: row.cwd || undefined, tail: STORED_TAIL }],
-      READ_TIMEOUT_MS,
-      row.harness
-    );
+    const answer = await askSettle({ ...row, sessionId: row.sessionId });
     switch (answer.kind) {
       case "unanswered":
         return { unread: silentWords(row.machineId, answer) };
@@ -17302,6 +17430,8 @@ export const createServer = (
             !speaksContract(agentProtocols.get(row.machineId)))
             ? "online"
             : "offline",
+        // Live, like `status`: since when it has been lost, null while it answers.
+        lostAt: contact.lostAt(row.machineId),
         // Additive and live, like `status` above: present only for a machine that
         // has actually reported one on this connection.
         ...(binaryUpdateStates.get(row.machineId)
@@ -27504,6 +27634,7 @@ export const createServer = (
         }
         const gone = db.deleteMachine(params.machineId);
         forgetInstances(gone.instanceIds);
+        contact.forget(params.machineId);
         // A removed machine proves nothing to the git remote any more.
         machineCredentials.forget(params.machineId);
         // Its key, a connection held for it and a refusal go too: if it
@@ -31633,6 +31764,14 @@ export const createServer = (
             return;
           }
 
+          // Word from the machine (machine-contact.ts); its beat also says
+          // whether sessions run there.
+          contact.heard(
+            message.machineId,
+            message.verb === "heartbeat"
+              ? peekInstances(message.payload).length > 0
+              : undefined
+          );
           const refuseVerb = () => {
             const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
             console.warn(`[hub] ${fault}, from ${message.machineId}`);

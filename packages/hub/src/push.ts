@@ -74,6 +74,7 @@ import {
   BROWSER_ASK_TOOL,
   causeLine,
   configurePage,
+  contactWords,
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
   DESK_ACK_MS,
@@ -107,6 +108,7 @@ import {
   artifactCollapseId,
   askCollapseId,
   installCollapseId,
+  machineCollapseId,
   mcpCollapseId,
   messageCollapseId,
   type Notifications,
@@ -307,6 +309,15 @@ export type PushData =
        */
       kind: "mcp";
       server: string;
+    }
+  | {
+      /**
+       * The hub has heard nothing from a machine with sessions on it for
+       * `MACHINE_LOST_MS` (machine-contact.ts): opens Needs you. The app
+       * opens the board for a kind it does not know.
+       */
+      kind: "machine";
+      machineId: string;
     }
   | { kind: "test" };
 
@@ -2320,6 +2331,48 @@ export const createPush = ({
           data: { kind: "mcp", server: ended.name },
         },
       });
+    },
+
+    /**
+     * The hub lost a machine with sessions on it (machine-contact.ts): Needs
+     * you's item, in its words. It arrives as any item does; heard from
+     * again before it goes out, it is over ({@link machineBack}).
+     */
+    machineLost(lost: {
+      machineId: string;
+      minutes: number;
+      name: string;
+      still: () => boolean;
+    }): void {
+      const collapseId = machineCollapseId(lost.machineId);
+      const alert = alertOf(
+        contactWords.lostTitle(lost.name),
+        null,
+        contactWords.lostLine(lost.name, lost.minutes)
+      );
+      console.log(`[push] ${lost.name} is lost: arrives as ${collapseId}`);
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: new Date(),
+        still: lost.still,
+        notification: {
+          shown: alert,
+          sealed: alert,
+          category: PUSH_CATEGORIES.needs,
+          collapseId,
+          threadId: "machine",
+          data: { kind: "machine", machineId: lost.machineId },
+        },
+      });
+    },
+
+    /** A lost machine answered again: its push, if it went, comes down. */
+    machineBack(machineId: string): void {
+      const collapseId = machineCollapseId(machineId);
+      open?.items.delete(collapseId);
+      settleAtDesk(collapseId);
+      notifications.clear([collapseId], "settled");
     },
 
     /** A fleet MCP server signed in to: an ended sign-in's push, if it went, comes down. */

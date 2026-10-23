@@ -45043,6 +45043,13 @@
               }
             ]
           },
+          "lostAt": {
+            "description": "Since when (epoch ms) the hub has heard nothing from this machine, once\nthat has lasted `MACHINE_LOST_MS` with sessions on it (hub\nmachine-contact.ts): Needs you's item. Null while it answers. Live, as\n`status` is: never stored.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "machineCapabilities": {
             "$ref": "#/components/schemas/MachineCapabilities"
           },

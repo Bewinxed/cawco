@@ -67,6 +67,7 @@
     causeLine,
     configurePage,
     connectWords,
+    contactWords,
     mcpWords,
     pairingWords,
     presenceWords,
@@ -171,7 +172,8 @@
       item.kind === "choice" ||
       item.kind === "tailnet" ||
       item.kind === "desk" ||
-      item.kind === "relay"
+      item.kind === "relay" ||
+      item.kind === "machine"
     ) {
       return;
     }
@@ -216,6 +218,8 @@
         return causeLine(item.install);
       case "mcp":
         return mcpWords.signInEnded(configurePage("mcp"));
+      case "machine":
+        return contactWords.lostLine(item.name, item.minutes);
       case "task":
         return item.reason === "review"
           ? `Review the draft: it waits on you in ${item.stage}`
@@ -339,6 +343,7 @@
           .filter(Boolean)
           .join(" · ");
       case "mcp":
+      case "machine":
         return item.place;
       case "install":
         return item.install.route === "ssh"
@@ -746,6 +751,8 @@
         <IconError aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "mcp"}
         <IconKey aria-hidden="true" class="size-icon-md" />
+      {:else if item.kind === "machine"}
+        <IconServer aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "task"}
         {#if item.reason === "failed"}
           <IconError aria-hidden="true" class="size-icon-md" />

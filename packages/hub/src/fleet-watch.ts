@@ -6,7 +6,8 @@
  *
  * - **Detectors** read each session's stream as it arrives, in code, no
  *   model ({@link FLEET_WATCH_LIMITS}): the same tool error three times in
- *   its recent turns; finished turns in a row that changed no file; the same
+ *   its recent turns (never CawCo's word that a machine was slow or away,
+ *   core `isMachineSilence`); finished turns in a row that changed no file; the same
  *   tool call three times in a row; and, from its process and turn state
  *   rather than its transcript, a turn running with nothing streamed for ten
  *   minutes while its process lives and nothing is asked of you. One open
@@ -54,6 +55,7 @@ import {
   type FleetWatchSignal,
   fleetWatchNudge,
   type InstanceRow,
+  isMachineSilence,
   type NeutralMessage,
   type PermissionMode,
   type SendPayload,
@@ -926,6 +928,14 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       }
       const text = resultText(block.content).trim();
       note(watch, clip(`✗ ${text}`, ENTRY_LIMIT));
+      // CawCo's word that a machine was slow or away is the machine's
+      // state, not the session's loop: never counted here. A machine lost
+      // for good is said once, by its contact rule (machine-contact.ts).
+      // 2026-10-20, obelisk: one 10 s read of the hub's own machine, missed
+      // three times, reached the owner as "Same error 3 times".
+      if (isMachineSilence(text)) {
+        continue;
+      }
       watch.errorThisTurn = true;
       const key = errorKey(text);
       const since = watch.turn - FLEET_WATCH_LIMITS.errorTurns;

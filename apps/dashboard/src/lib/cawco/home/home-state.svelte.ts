@@ -30,6 +30,8 @@ import type {
 } from "@cawco/core";
 import {
   archiveRefusal,
+  contactWords,
+  MACHINE_LOST_MS,
   machineLabel,
   mcpWords,
   presenceWords,
@@ -460,6 +462,23 @@ export interface AdmissionItem {
 }
 
 /**
+ * A machine the hub lost (hub machine-contact.ts): nothing heard from it for
+ * `MACHINE_LOST_MS` with sessions on it. Nothing here acts on it: the
+ * machine does, and the item leaves once it answers.
+ */
+export interface LostMachineItem {
+  key: string;
+  kind: "machine";
+  /** How long it has been silent, in whole minutes, as the hub said it lost. */
+  minutes: number;
+  /** Its name, as the fleet says it. */
+  name: string;
+  place: string;
+  raisedAt: number;
+  title: string;
+}
+
+/**
  * An install of a machine that failed or was lost (hub installs.ts): it
  * opens Add machine's window on its outcome, where it is acted on.
  */
@@ -570,6 +589,7 @@ export type NeedsItem =
   | PairingItem
   | AdmissionItem
   | InstallItem
+  | LostMachineItem
   | TaskItem;
 
 /**
@@ -1318,6 +1338,22 @@ class Home {
       href: "/config/devices",
       raisedAt: machine.since,
     }));
+    // A machine the hub lost, while it stays lost.
+    const lostMachines: NeedsItem[] = cawco.machines.flatMap((machine) =>
+      typeof machine.lostAt === "number"
+        ? [
+            {
+              kind: "machine" as const,
+              key: `machine:${machine.machineId}`,
+              name: machineName(machine.machineId),
+              minutes: Math.round(MACHINE_LOST_MS / 60_000),
+              title: contactWords.lostTitle(machineName(machine.machineId)),
+              place: contactWords.lostMeta,
+              raisedAt: machine.lostAt,
+            },
+          ]
+        : []
+    );
     // An install that ended badly needs the person: its window says what to do.
     const failedInstalls: NeedsItem[] = connect.band
       .filter((one) => one.state === "failed" || one.state === "lost")
@@ -1413,6 +1449,7 @@ class Home {
       ...relaying,
       ...pairings,
       ...admissions,
+      ...lostMachines,
       ...failedInstalls,
       ...waitingTasks,
     ].sort(

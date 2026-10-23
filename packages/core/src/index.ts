@@ -880,6 +880,13 @@ export interface AgentRow {
   hostname: string;
   /** A `Date` inside the hub, the ISO string it serialises to everywhere else. */
   lastSeenAt: string | number | Date | null;
+  /**
+   * Since when (epoch ms) the hub has heard nothing from this machine, once
+   * that has lasted `MACHINE_LOST_MS` with sessions on it (hub
+   * machine-contact.ts): Needs you's item. Null while it answers. Live, as
+   * `status` is: never stored.
+   */
+  lostAt?: number | null;
   machineCapabilities?: import("./capabilities").MachineCapabilities;
   machineId: string;
   os: string;
@@ -1077,6 +1084,37 @@ export function machineFaultWords(
 ): string {
   const [cause, step] = MACHINE_FAULT_WORDS[fault];
   return `${name ?? "That machine"} ${cause}${next ? ` ${step}` : ""}`;
+}
+
+/**
+ * One ask a machine left unanswered, as the hub's log and an error that
+ * names the read before it say it: "<machine> did not answer within 10 s",
+ * or, its link gone, "<machine> is not connected". `after` is how long the
+ * ask waited, in ms; undefined when the link was gone.
+ */
+export function machineSilenceWords(
+  name: string,
+  after: number | undefined
+): string {
+  return after === undefined
+    ? `${name} is not connected`
+    : `${name} did not answer within ${Math.round(after / 1000)} s`;
+}
+
+/** The causes {@link machineFaultWords} and {@link machineSilenceWords} say a machine's silence with. */
+const MACHINE_SILENCE =
+  /(?:didn't answer in time\.|isn't connected\.|did not answer within \d+ s\b|is not connected\b)/;
+
+/**
+ * Whether an error carries CawCo's word that a machine didn't answer one
+ * ask in time or isn't connected ({@link machineFaultWords},
+ * {@link machineSilenceWords}): the machine's state, never what a session
+ * did. Fleet watch counts no such error as a session's own (hub
+ * fleet-watch.ts); a machine lost for good is said once, by the machine's
+ * contact rule (words/contact.ts `MACHINE_LOST_MS`).
+ */
+export function isMachineSilence(text: string): boolean {
+  return MACHINE_SILENCE.test(text);
 }
 
 /** What a daemon reports about the checkout it was started from. */
@@ -2131,6 +2169,7 @@ export * from "./words/configure";
 export * from "./words/connect";
 export * from "./words/connection";
 export * from "./words/connections";
+export * from "./words/contact";
 export * from "./words/containers";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
