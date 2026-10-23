@@ -686,6 +686,7 @@ public enum OpenEnums {
     /// `#/components/schemas/BinaryUpdateStateHubWait`.
     public enum BinaryUpdateStateHubWait: OpenEnum {
         case behind
+        case trial
         case unanswered
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
@@ -693,6 +694,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "behind": self = .behind
+            case "trial": self = .trial
             case "unanswered": self = .unanswered
             default: self = .unrecognized(rawValue)
             }
@@ -701,6 +703,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .behind: "behind"
+            case .trial: "trial"
             case .unanswered: "unanswered"
             case let .unrecognized(rawValue): rawValue
             }
@@ -710,7 +713,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.behind, .unanswered]
+        public static let allCases: [Self] = [.behind, .trial, .unanswered]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

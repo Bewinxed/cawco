@@ -2325,9 +2325,11 @@ rig_retry() {
 # install asked of the joined machine first, as a person's Update all asks it of the other machines before the hub's
 # own: the joined machine waits for its hub, its row saying so in the Update cell's words, never failed; it keeps
 # waiting through its own update ticks, its command standing and nothing downloaded; the hub's machine installs it;
-# and the joined machine installs it by itself once the hub runs it, at its register with the restarted hub, with no
-# check and no second press. What the hub records of the joined machine's update is sampled every half second from
-# before the ask until the end (hubwire_sampler): one `failed`, or an error carried into the install, fails the check.
+# while the hub's machine's trial of it is open the joined machine waits for the trial (a hub that rolls back must
+# never leave it ahead on a protocol the hub does not speak), and once the trial is confirmed it installs by itself,
+# at its next tick, with no check and no second press. What the hub records of the joined machine's update, and
+# whether the hub's trial is open, are sampled every half second from before the ask until the end (hubwire_sampler):
+# one `failed`, an attempt while the trial is open, or an error carried into the install fails the check.
 joiner_waits_for_hub() {
   need_hub
   local answer samples="$rigdir/hubwire-samples" sampler t0 took
@@ -2349,35 +2351,47 @@ joiner_waits_for_hub() {
   sleep 65
   [[ "$(phase $jid)" == waiting-for-hub ]]
   if has_version "$joinerc" "$WIRE"; then echo "ASSERTION FAILED: the joined machine staged $WIRE while it waited"; return 1; fi
-  # The hub's machine takes the release; the hub restarts into it.
+  # The hub's machine takes the release; the hub restarts into it, its trial open, then confirms it.
   install_now_request "$hid" > /dev/null
-  wait_until 400 '[[ "$(hub_api /health | json "d => d.build?.version")" == $WIRE ]]'
+  wait_until 400 '[[ "$(hub_api /health | json "d => d.build?.version + \" \" + d.trial")" == "$WIRE false" ]]'
   t0=$SECONDS
   wait_until 300 '[[ "$(phase $jid)" != waiting-for-hub ]]'
   took=$((SECONDS - t0))
-  echo "the joined machine went on ${took}s after the hub answered on $WIRE"
-  # At its register with the restarted hub, not at its next tick a minute on.
-  (( took <= 30 ))
+  echo "the joined machine went on ${took}s after the hub's trial of $WIRE was confirmed"
+  # At its next tick after the confirm, a minute at most.
+  (( took <= 75 ))
   wait_until 400 '[[ "$(build_version $hid)" == $WIRE && "$(phase $hid)" == installed ]]'
   wait_until 400 '[[ "$(build_version $jid)" == $WIRE && "$(phase $jid)" == installed ]]'
   [[ "$(apply_starts "$joinerc" "$WIRE")" == 1 ]]
   kill "$sampler" 2> /dev/null || true
-  echo "the hub's record of the joined machine, each change: $(uniq "$samples" | tr '\n' '|')"
-  grep -q '^waiting-for-hub -$' "$samples"
+  echo "the joined machine's record and the hub's trial, each change: $(uniq "$samples" | tr '\n' '|')"
+  grep -q '^waiting-for-hub behind ' "$samples"
+  grep -q '^waiting-for-hub trial open ' "$samples"
   if grep -q '^failed' "$samples"; then echo "ASSERTION FAILED: the hub recorded the joined machine's update as failed"; return 1; fi
-  if grep -qE '^(available|downloading|ready|installing) [^-]' "$samples"; then
-    echo "ASSERTION FAILED: an attempt carried an earlier error: $(grep -E '^(available|downloading|ready|installing) [^-]' "$samples" | head -n 1)"
+  if grep -qE '^(downloading|ready|installing) [^ ]+ open ' "$samples"; then
+    echo "ASSERTION FAILED: the joined machine went on while the hub's trial was open: $(grep -E '^(downloading|ready|installing) [^ ]+ open ' "$samples" | head -n 1)"
+    return 1
+  fi
+  if grep -qE '^(available|downloading|ready|installing) [^ ]+ [^ ]+ [^-]' "$samples"; then
+    echo "ASSERTION FAILED: an attempt carried an earlier error: $(grep -E '^(available|downloading|ready|installing) [^ ]+ [^ ]+ [^-]' "$samples" | head -n 1)"
     return 1
   fi
 }
-# Every half second, what the hub records of the joined machine's update: `<phase> <error, or ->`, one line each, into
-# $1; nothing for a look the hub did not answer (it restarts in the update).
+# Every half second, what the hub records of the joined machine's update, then whether the hub's own trial is open:
+# `<phase> <hubWait, or -> <open|closed|?> <error, or ->`, one line each, into $1; nothing for a look at the record the
+# hub did not answer (it restarts in the update), `?` for a /health it did not answer. The record is read first, so a
+# line that says it went on while the trial was open never comes of a trial that closed between the two reads.
 hubwire_sampler() {
-  local machines
+  local machines record trial
   : > "$1"
   while :; do
     if machines=$(hub_api /api/binary-updates/machines 2> /dev/null); then
-      json "d => { const m = d.machines['$jid']; return m ? m.phase + ' ' + (m.error ? JSON.stringify(m.error) : '-') : undefined; }" <<< "$machines" >> "$1" || true
+      record=$(json "d => { const m = d.machines['$jid']; return m ? m.phase + ' ' + (m.hubWait ?? '-') : undefined; }" <<< "$machines")
+      trial=$(hub_api /health 2> /dev/null | json "d => d.trial ? 'open' : 'closed'") || trial='?'
+      [[ -n $trial ]] || trial='?'
+      if [[ -n $record ]]; then
+        echo "$record $trial $(json "d => { const e = d.machines['$jid']?.error; return e ? JSON.stringify(e) : '-'; }" <<< "$machines")" >> "$1"
+      fi
     fi
     sleep 0.5
   done
@@ -2386,7 +2400,7 @@ export -f joiner_waits_for_hub hubwire_sampler
 rig_hubwire() {
   fleet base "$BASE" "hub joiner"
   setup_done
-  check "a joined machine asked to install a release its hub cannot speak to yet waits for its hub, never failed, and installs it by itself once the hub's machine has, with no check and no second press" joiner_waits_for_hub 1200
+  check "a joined machine asked to install a release its hub cannot speak to yet waits for its hub, and for the hub's trial of it, never failed, and installs it by itself once the hub's machine has confirmed it, with no check and no second press" joiner_waits_for_hub 1200
 }
 
 # ---------------------------------------------------------------- pins: the harness a build pins goes on before it,

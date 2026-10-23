@@ -8,6 +8,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   holdPhrases,
+  hubWaitWords,
   type KeptProcess,
   RESTART_WAIT_CAP_MS,
   type RetiringKeeper,
@@ -291,7 +292,7 @@ function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
       return {
         ...EMPTY(14),
         icon: "clock",
-        text: updatesWords.waitsForHub(v, u.hubWait !== "unanswered"),
+        text: hubWaitWords(v, u.hubWait ?? "behind"),
         buttons: policy.autoUpdate ? [] : ["cancel"],
       };
     case "available":

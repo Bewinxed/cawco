@@ -1575,9 +1575,19 @@ public enum Words {
             "No new builds could be looked for: \(why). Machines keep the build they run; Try again to check."
         }
 
-        /// A machine other than the hub's own is to install `version` (`waiting-for-hub`): the hub does not speak its wire protocol yet (`answered`, the state's `hubWait` "behind"), or did not say which it speaks (a hub mid-restart). It installs by itself once the hub runs a build that does.
-        public static func waitsForHub(version: String, answered: Bool) -> String {
-            answered ? "Waits for its hub to take \(version) first" : "Waits for its hub to answer before installing \(version)"
+        /// `behind`: the hub does not speak the build's wire protocol yet.
+        public static func waitsForHubToTake(version: String) -> String {
+            "Waits for its hub to take \(version) first"
+        }
+
+        /// `unanswered`: the hub did not say which protocol it speaks (a hub mid-restart).
+        public static func waitsForHubToAnswer(version: String) -> String {
+            "Waits for its hub to answer before installing \(version)"
+        }
+
+        /// `trial`: the hub speaks it, and its own machine has not yet confirmed the build it runs.
+        public static func waitsForHubTrial(version: String) -> String {
+            "Waits for its hub to finish installing \(version)"
         }
 
         /// The machine's line in the notice of an install under way, while it waits for its hub.

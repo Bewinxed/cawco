@@ -46207,7 +46207,6 @@
         ]
       },
       "BinaryUpdatePolicy": {
-        "description": "Browser-neutral release policy and machine state consumed by API clients.",
         "type": "object",
         "properties": {
           "autoUpdate": {
@@ -47857,7 +47856,7 @@
           },
           "hubWait": {
             "$ref": "#/components/schemas/BinaryUpdateStateHubWait",
-            "description": "What `waiting-for-hub` waits for: the hub to run a build whose wire\nprotocol overlaps the offered one (`behind`), or the hub to answer for\nits protocol at all (`unanswered`, a hub mid-restart)."
+            "description": "What `waiting-for-hub` waits for ({@link HubWait})."
           },
           "installedVersion": {
             "type": "string"
@@ -62280,6 +62279,7 @@
         "type": "string",
         "enum": [
           "behind",
+          "trial",
           "unanswered"
         ]
       },

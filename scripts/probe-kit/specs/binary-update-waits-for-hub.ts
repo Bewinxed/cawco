@@ -1,33 +1,40 @@
 /**
  * A machine other than the hub's own, told to install a build its hub does
  * not speak yet, waits for its hub: it never says failed, its install
- * stands, and it goes on by itself the moment its hub restarts into a build
- * that speaks it, with no check and no second press.
+ * stands through a hub that fails to answer its offer, and it goes on by
+ * itself once its hub runs a build that speaks it and has confirmed it,
+ * with no check and no second press.
  *
  * A scratch fleet laid out as a binary install on nightly N, as
  * binary-update-found's (binary-install.ts `installedOn`), the mirror serving
- * the two newest published nightlies. The machine's updater reads its hub
- * through a stand-in (installation.json `hubUrl`) that passes every request
- * on, and plays the hub's wire protocol: while it plays the old hub, its
- * `/health` names a protocol below every one N+1 speaks, then answers 503
- * as a hub mid-restart does, and once the hub has restarted it passes the
- * hub's own `/health` on. The machine's socket reaches the hub itself, so
- * the hub's restart is a register with the restarted hub. In order:
+ * the two newest published nightlies; auto-update is off, so only the one
+ * Install now moves the machine. Its updater reads its hub through a
+ * stand-in (installation.json `hubUrl`) that passes every request on and
+ * plays the hub: its offer (`/latest`) answers 503 once when told to, and
+ * its `/health` names a protocol below every one N+1 speaks (the old hub),
+ * answers 503 (a hub mid-restart), names the hub's own protocol with its
+ * machine's trial still open (`trial`), and then passes the hub's own
+ * `/health` on (the trial confirmed). The machine's socket reaches the hub
+ * itself, so the hub's restart is a register with the restarted hub. In
+ * order:
  *
- * 1. N+1 published and found; one Install now on the machine. Its answer says
- *    it waits for its hub to take N+1 first; the hub records
+ * 1. N+1 published and found; one Install now while the offer answers 503:
+ *    nothing is installed, downloaded or marked failed. At the machine's next
+ *    tick the same command finds the hub behind: the hub records
  *    `waiting-for-hub`, `hubWait` behind, no error, and the Update cell says
- *    it in its words; nothing is downloaded.
- * 2. The hub answers 503 for its health, through one of the machine's own
- *    update ticks (60 s): it still waits, now for the hub to answer, and
- *    nothing is downloaded.
- * 3. The hub restarts and speaks N+1's protocol: within 20 s of the hub
- *    answering again, the machine asks for N+1's archive, through the hub,
- *    from the mirror.
+ *    it in its words.
+ * 2. The hub answers 503 for its health, through one update tick (60 s): it
+ *    still waits, now for the hub to answer, and nothing is downloaded.
+ * 3. The hub restarts into a build that speaks N+1's protocol, its trial
+ *    open: at its register with the restarted hub the machine looks at once
+ *    and waits for the trial (`hubWait` trial), and through one more tick it
+ *    still waits, nothing downloaded.
+ * 4. The trial is confirmed: at its next tick the machine asks for N+1's
+ *    archive, through the hub, from the mirror.
  *
  * The mirror answers that archive 404, so the attempt ends at its download:
- * its error is the download's own, never the wait's. The hub's record of
- * the machine is read every 250 ms from the Install now to the download: it
+ * its error is the download's own, never a wait's. The hub's record of the
+ * machine is read every 250 ms from the Install now to the download: it
  * never says failed while the machine waits, and the attempt carries no
  * error from before it.
  *
@@ -38,8 +45,10 @@ import {
   cellFor,
   displayVersion,
 } from "../../../apps/dashboard/src/lib/cawco/updates/model";
-import type { BinaryUpdateState } from "../../../packages/core/src/binary-updates";
-import { updatesWords } from "../../../packages/core/src/words/updates";
+import {
+  type BinaryUpdateState,
+  hubWaitWords,
+} from "../../../packages/core/src/binary-updates";
 import { MACHINE } from "../../scratch-fleet";
 import {
   checkoutSchema,
@@ -55,8 +64,12 @@ interface UpdateReport {
   skipped?: string;
 }
 
-/** How the stand-in answers the machine's `/health`: as the old hub, as a hub mid-restart, or as the hub says. */
-type Plays = "old" | "restarting" | "hub";
+/**
+ * How the stand-in answers the machine's `/health`: as the old hub, as a hub
+ * mid-restart, as the restarted hub with its trial still open, or as the
+ * hub says (its trial confirmed).
+ */
+type Plays = "old" | "restarting" | "trial" | "hub";
 
 const spec: Spec = {
   name: "binary-update-waits-for-hub",
@@ -81,6 +94,8 @@ const spec: Spec = {
 
     const mirror = nightlyMirror(n);
     let plays: Plays = "old";
+    /** How many of the next offers the stand-in answers 503, as a hub whose release host's read failed. */
+    let offersRefused = 0;
     let hubBase = "";
     // The stand-in, on one port for the whole run; down while the hub is,
     // as the hub's own address is (a refused connection, never an answer).
@@ -92,6 +107,15 @@ const spec: Spec = {
           const url = new URL(request.url);
           if (url.pathname === "/health" && plays === "restarting") {
             return new Response("the hub is starting", { status: 503 });
+          }
+          if (
+            url.pathname === "/api/binary-updates/latest" &&
+            offersRefused > 0
+          ) {
+            offersRefused -= 1;
+            return new Response("the release host did not answer", {
+              status: 503,
+            });
           }
           const headers = new Headers(request.headers);
           headers.delete("host");
@@ -108,10 +132,11 @@ const spec: Spec = {
           const health = (await passed.json()) as {
             build?: { protocol?: unknown };
           };
-          return Response.json({
-            ...health,
-            build: { ...health.build, protocol: below },
-          });
+          return Response.json(
+            plays === "trial"
+              ? { ...health, trial: true }
+              : { ...health, build: { ...health.build, protocol: below } }
+          );
         },
       });
     let standIn = standInOn(0);
@@ -157,7 +182,7 @@ const spec: Spec = {
       )?.archive;
       const archiveAsked = () => mirror.asked.includes(`/nightly/${archive}`);
 
-      // 1. N+1 found; one Install now on the machine while its hub speaks below it.
+      // 1. N+1 found; one Install now while the hub's offer answers 503, its hub speaking below N+1.
       await fleet.api("/api/binary-updates/check", {});
       mirror.publish(next);
       const found = await fleet.api<{ version: string }>(
@@ -169,23 +194,27 @@ const spec: Spec = {
         found.version === next.manifest.version,
         `found ${found.version}`
       );
+      offersRefused = 1;
       const report = await fleet.api<UpdateReport>(
         `/api/agents/${MACHINE}/update`,
         { version: found.version, commandId: crypto.randomUUID() }
       );
-      const waits = updatesWords.waitsForHub(next.manifest.version, true);
+      const refused = await machineState();
       check(
-        "the Install now's answer says the machine waits for its hub to take N+1 first",
-        !report.installed && report.skipped === waits,
-        JSON.stringify(report)
+        "an Install now whose offer the hub answers 503 installs nothing, downloads nothing and is not marked failed",
+        offersRefused === 0 &&
+          !report.installed &&
+          refused?.phase !== "failed" &&
+          !archiveAsked(),
+        `${JSON.stringify(report)}; the hub records ${refused?.phase}`
       );
       const waiting = await until(
         machineState,
         (state) => state?.phase === "waiting-for-hub",
-        30_000
+        75_000
       );
       check(
-        "the hub records the machine waiting for its hub, behind, with no error",
+        "at its next tick the same command finds its hub behind: the hub records the machine waiting for its hub, with no error",
         waiting?.phase === "waiting-for-hub" &&
           waiting.hubWait === "behind" &&
           waiting.availableVersion === next.manifest.version &&
@@ -210,10 +239,7 @@ const spec: Spec = {
           cell.icon === "clock" &&
           cell.buttons.join() === "cancel" &&
           cell.text ===
-            updatesWords.waitsForHub(
-              displayVersion(next.manifest.version),
-              true
-            ),
+            hubWaitWords(displayVersion(next.manifest.version), "behind"),
         JSON.stringify(cell)
       );
 
@@ -237,21 +263,49 @@ const spec: Spec = {
         `the mirror was asked for ${mirror.asked.join(", ") || "nothing"}`
       );
 
-      // 3. The hub restarts into a build that speaks N+1's protocol.
+      // 3. The hub restarts into a build that speaks N+1's protocol, its trial open.
       const restarted = Date.now();
       await fleet.stop("hub");
       await standIn.stop(true);
-      plays = "hub";
+      plays = "trial";
       standIn = standInOn(standInPort);
       fleet.launch("hub");
       await fleet.hubUp();
       const answered = Date.now();
-      await until(async () => archiveAsked(), Boolean, 60_000);
-      const took = Date.now() - answered;
+      const onTrial = await until(
+        machineState,
+        (state) => state?.hubWait === "trial",
+        45_000
+      );
+      // When the machine wrote it, not when its next beat carried it to the hub.
+      const looked =
+        (onTrial?.updatedAt ?? Number.POSITIVE_INFINITY) - answered;
       check(
-        "within 20 s of the restarted hub answering, the machine asks for N+1's archive by itself (its register with the hub, not its next tick)",
-        archiveAsked() && took <= 20_000,
-        `${archiveAsked() ? `asked after ${took} ms` : "never asked"}; the mirror was asked for ${mirror.asked.join(", ") || "nothing"}`
+        "within 20 s of the restarted hub answering, mid-trial, the machine looks at once (its register with the hub) and waits for the trial",
+        onTrial?.phase === "waiting-for-hub" &&
+          onTrial.hubWait === "trial" &&
+          onTrial.error === undefined &&
+          looked <= 20_000,
+        `written ${looked} ms after the hub answered; ${JSON.stringify(onTrial)}`
+      );
+      await Bun.sleep(65_000);
+      const held = await machineState();
+      check(
+        "through an update tick with the hub's trial still open, it still waits, nothing downloaded",
+        held?.phase === "waiting-for-hub" &&
+          held.hubWait === "trial" &&
+          !archiveAsked(),
+        `the mirror was asked for ${mirror.asked.join(", ") || "nothing"}; ${JSON.stringify(held)}`
+      );
+
+      // 4. The trial is confirmed.
+      plays = "hub";
+      const confirmed = Date.now();
+      await until(async () => archiveAsked(), Boolean, 75_000);
+      check(
+        "once the hub's trial is confirmed, the machine asks for N+1's archive by itself at its next tick, on the same command",
+        archiveAsked(),
+        `${archiveAsked() ? `asked ${Date.now() - confirmed} ms after the confirm` : "never asked"}; the mirror was asked for ${mirror.asked.join(", ") || "nothing"}`
       );
       const ended = await until(
         machineState,
@@ -264,9 +318,9 @@ const spec: Spec = {
         "the attempt ends at its download (the mirror holds no archive), its error its own, never the wait's",
         ended?.phase === "failed" &&
           ended.error !== undefined &&
-          ended.error !== waits &&
-          ended.error !==
-            updatesWords.waitsForHub(next.manifest.version, false),
+          !(["behind", "unanswered", "trial"] as const).some(
+            (wait) => ended.error === hubWaitWords(next.manifest.version, wait)
+          ),
         JSON.stringify(ended)
       );
       // What the machine said before the hub restarted: its download's failure comes after.

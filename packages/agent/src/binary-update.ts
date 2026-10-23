@@ -46,6 +46,7 @@ import {
 import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
+  hubWaitWords,
   type KeptProcess,
   mergeHolds,
   type RestartHold,
@@ -71,7 +72,6 @@ import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
-import { updatesWords } from "@cawco/core/words/updates";
 import { leaveRetiringKeepers } from "./boundary";
 import {
   HELPER_START_MS,
@@ -160,8 +160,9 @@ async function readReadiness(
 }
 
 /**
- * The hub's wire protocol range, from its `/health`; undefined when it
- * answered without one. Given the time the offer's read is given: a machine
+ * The hub's wire protocol range, from its `/health` (undefined when it
+ * answered without one), and whether its own machine's update of the build
+ * it runs is still on trial (`trial`). Given the time the offer's read is given: a machine
  * added over SSH reaches its hub through the forward the hub holds to it,
  * which is gone while the hub restarts and comes back when the hub opens it
  * again. A hub that did not say, in time or at all, is
@@ -170,9 +171,10 @@ async function readReadiness(
  * not say its wire protocol (GET http://127.0.0.1:36201/health: no answer
  * within 3003ms)").
  */
-async function readHubProtocol(
-  hub: string
-): Promise<{ max: number; min: number } | undefined> {
+async function readHubProtocol(hub: string): Promise<{
+  protocol?: { max: number; min: number };
+  trial: boolean;
+}> {
   const health = await askHub(
     "with its wire protocol",
     20_000,
@@ -184,6 +186,7 @@ async function readHubProtocol(
       }
       return (await response.json()) as {
         build?: { protocol?: { max: number; min: number } };
+        trial?: boolean;
       };
     }
   ).catch((error: unknown) => {
@@ -194,7 +197,7 @@ async function readHubProtocol(
       `the hub at ${hub} did not say its wire protocol: ${error instanceof Error ? error.message : String(error)}`
     );
   });
-  return health.build?.protocol;
+  return { protocol: health.build?.protocol, trial: health.trial === true };
 }
 
 /** The hub's fence, for `ms` from now; 0 lowers it. */
@@ -240,16 +243,19 @@ export const hubRegistered = (): void => {
  * build speaking `offered` (`hubWait`): nothing when its hub's wire protocol
  * overlaps it, `behind` when the hub's does not or the hub names none (a
  * build from before the range), `unanswered` when the hub, which answered
- * for its offer, did not say ({@link readHubProtocol}): a wait like the
- * other, said on the machine's row, never a failed attempt.
+ * for its offer, did not say ({@link readHubProtocol}), and `trial` when it
+ * speaks it but its own machine has not yet confirmed the build it runs: a
+ * hub that rolls back must never leave this machine ahead of it on a
+ * protocol it does not speak. Each a wait, said on the machine's row, never
+ * a failed attempt.
  */
 async function hubWaitFor(
   hub: string,
   offered: { max: number; min: number }
 ): Promise<BinaryUpdateState["hubWait"]> {
-  let protocol: { max: number; min: number } | undefined;
+  let hubSays: Awaited<ReturnType<typeof readHubProtocol>>;
   try {
-    protocol = await readHubProtocol(hub);
+    hubSays = await readHubProtocol(hub);
   } catch (error) {
     if (!(error instanceof HubUnreachable)) {
       throw error;
@@ -257,9 +263,11 @@ async function hubWaitFor(
     console.info(`[update] ${error.message}; the install waits for the hub`);
     return "unanswered";
   }
-  return protocol && offered.min <= protocol.max && offered.max >= protocol.min
-    ? undefined
-    : "behind";
+  const { protocol, trial } = hubSays;
+  if (!protocol || offered.min > protocol.max || offered.max < protocol.min) {
+    return "behind";
+  }
+  return trial ? "trial" : undefined;
 }
 
 /** One session keeper as it answered: its held sessions, what it speaks, and every live child it holds. */
@@ -594,10 +602,7 @@ export class BinaryUpdater {
       return `the hub offers ${offered.version}, not ${named}, the build this install named`;
     }
     if (phase === "waiting-for-hub" && availableVersion) {
-      return updatesWords.waitsForHub(
-        availableVersion,
-        hubWait !== "unanswered"
-      );
+      return hubWaitWords(availableVersion, hubWait ?? "behind");
     }
     if (waitingOn?.length) {
       return waitingWords(waitingOn);
@@ -1185,6 +1190,15 @@ export class BinaryUpdater {
       `${hub}/api/binary-updates/latest`,
       {},
       async (response) => {
+        // A hub that failed to answer its offer (its release host's read
+        // failed, it is starting up) is no answer: the command stands and
+        // the next tick asks again. A refusal (no build, a damaged policy)
+        // is its answer, and settles it.
+        if (response.status >= 500) {
+          throw new HubUnreachable(
+            `the hub did not offer a build (latest: ${response.status}); nothing was done on it, and it is asked again on the next tick`
+          );
+        }
         if (!response.ok) {
           throw new Error(
             `The hub has no build to offer (latest: ${response.status})`
