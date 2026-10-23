@@ -21,7 +21,7 @@
 import { untrack } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { cawco, commandRecord } from "../client.svelte";
-import { readAs } from "../find/mention.svelte";
+import { readAs } from "../find/mention-marks";
 import { CURVE, dur, motionOk } from "../motion/curves.svelte";
 import { departBox } from "../motion/share.svelte";
 import type { Message } from "../types";

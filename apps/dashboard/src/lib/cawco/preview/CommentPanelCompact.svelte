@@ -18,9 +18,9 @@
   `--ease-drawer`, the session card's glide from tab to tab), never folding.
 -->
 <script lang="ts">
-  import { commentWords as said } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
+  import { commentWords as said } from "@cawco/core/words/comments";
   import type { Snippet } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
@@ -72,6 +72,8 @@
   /** The card glides: another row was opened while it hung. */
   let gliding = $state(false);
   let card = $state<HTMLElement | null>(null);
+  /** The card stands drawn out of its row: the row draws its foot, one shape with the card (HangCard `joined`). */
+  let joined = $state(false);
   $effect(() => {
     const next = open ? (rows.get(open) ?? null) : null;
     gliding = !!(anchor && next && anchor !== next);
@@ -92,14 +94,24 @@
   $effect(() => {
     const at = anchor;
     const holder = panel;
+    const surface = card;
     if (!(at && holder)) {
       return;
     }
     const read = () => {
+      // The card's own edge and padding stand round what this caps.
+      const style = surface ? getComputedStyle(surface) : null;
+      const chrome = style
+        ? (Number.parseFloat(style.paddingTop) || 0) +
+          (Number.parseFloat(style.paddingBottom) || 0) +
+          (Number.parseFloat(style.borderTopWidth) || 0) +
+          (Number.parseFloat(style.borderBottomWidth) || 0)
+        : 0;
       room =
         holder.getBoundingClientRect().bottom -
         at.getBoundingClientRect().bottom -
-        (numberOf("--space-2") || 7);
+        (numberOf("--space-2") || 7) -
+        chrome;
     };
     read();
     const watch = frameObserver(read);
@@ -148,7 +160,11 @@
       <li class="flex-none">
         <button
           aria-expanded={opened}
-          class="flex w-full items-start gap-space-2 rounded-sm border-none bg-transparent px-space-2 py-space-2 text-start transition-[background-color] duration-(--dur-control) ease-out not-aria-expanded:hover:bg-surface-hover aria-expanded:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+          class="flex w-full items-start gap-space-2 rounded-sm border border-transparent bg-transparent px-space-2 py-space-2 text-start transition-[background-color] duration-(--dur-control) ease-out not-aria-expanded:hover:bg-surface-hover aria-expanded:bg-(--open-bg) data-joined:rounded-b-none data-joined:border-border-control data-joined:border-b-transparent focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+          data-joined={(opened && joined) || undefined}
+          style:--open-bg={opened && joined
+            ? "var(--surface-raised)"
+            : "var(--selected-bg)"}
           data-pin-row={pin.number}
           data-slot="pin-row"
           onclick={() => (opened ? onshut() : onopen(pin.id))}
@@ -168,14 +184,14 @@
             <span
               class={[
                 "truncate type-label font-medium",
-                opened ? "text-selected-ink" : "text-ink-row",
+                opened && !joined ? "text-selected-ink" : "text-ink-row",
               ]}>{pinName(pin)}</span
             >
             {#if firstWords(pin)}
               <span
                 class={[
                   "mt-space-row truncate type-meta",
-                  opened ? "text-selected-ink" : "text-ink-muted",
+                  opened && !joined ? "text-selected-ink" : "text-ink-muted",
                 ]}>{firstWords(pin)}</span
               >
             {/if}
@@ -198,6 +214,8 @@
     {anchor}
     align="end"
     avoidCollisions={false}
+    inPlace
+    strategy="absolute"
     class="w-c-pin-card-reading-w"
     customAnchor={anchor}
     data-slot="pin-card"
@@ -206,6 +224,7 @@
     side="bottom"
     sideOffset={0}
     trapFocus={false}
+    bind:joined
     bind:ref={card}
   >
     <!-- As tall as the panel's room under its row; the thread scrolls

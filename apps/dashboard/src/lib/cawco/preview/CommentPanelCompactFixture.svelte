@@ -3,12 +3,15 @@
   CommentPanelCompact.stories.ts): a preview pane at a narrow window's size
   used with a mouse, its page drawn here (it stands for the artifact's
   frame), and the compact panel beside it, the open comment's thread the
-  real PinCard hung from its row. What is open is a prop, so a story's flow
-  moves the live panel and its own hang plays.
+  real card's face (PinCardFace) hung from its row, no store read: the reply
+  under it is the app's composer, which PinCard hands the face, and is not
+  drawn here. Each story draws its state from its first frame (what
+  is open starts as its args say); a flow's `update` moves the live panel,
+  and its own hang plays.
 -->
 <script lang="ts">
   import { pinName } from "@cawco/core/pin-name";
-  import { ComposerDraft } from "../transcript/composer-draft.svelte";
+  import { untrack } from "svelte";
   import CommentPanelCompact from "./CommentPanelCompact.svelte";
   import {
     AGENT,
@@ -16,7 +19,7 @@
     OPEN_TEXT,
     OTHER_PINS,
   } from "./comment-panel-fixture";
-  import PinCard from "./PinCard.svelte";
+  import PinCardFace from "./PinCardFace.svelte";
 
   let {
     pane,
@@ -30,8 +33,8 @@
 
   const pins = [...OTHER_PINS.slice(0, 2), OPEN_PIN, OTHER_PINS[2]];
   const unread = new Set([OPEN_PIN.id]);
-  const draft = new ComposerDraft({ byReference: true });
-  let shown = $state<string | null>(null);
+  /** What is open: as the story's args say from the first frame, then as its flow or a press moves it. */
+  let shown = $state<string | null>(untrack(() => open));
   $effect(() => {
     shown = open;
   });
@@ -86,25 +89,21 @@
     >
       {#snippet thread()}
         {#if pin}
-          <PinCard
+          <PinCardFace
             agentName={AGENT}
-            {draft}
-            link={`https://hub.local/a/reconnect-doc#pin-${pin.number}`}
-            marked={false}
+            more={[]}
             name={pinName(pin)}
+            onaskdelete={none}
             onclose={() => {
               shown = null;
             }}
-            ondelete={async () => undefined}
             onfind={none}
             onplace={none}
-            onreply={none}
             onresolve={none}
             onretry={none}
             parent="Retry policy"
             {pin}
-            problem={null}
-          />
+          ></PinCardFace>
         {/if}
       {/snippet}
     </CommentPanelCompact>

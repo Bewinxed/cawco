@@ -58,8 +58,8 @@
     MentionState,
     madeChip,
     remember,
-    SERIALISED,
   } from "./mention.svelte";
+  import { SERIALISED } from "./mention-marks";
 
   type Handlers = Pick<
     HTMLAttributes<HTMLDivElement>,

@@ -68,6 +68,8 @@
     "./words/spawn": "./src/words/spawn.ts",
     "./words/shell": "./src/words/shell.ts",
     "./words/updates": "./src/words/updates.ts",
+    "./words/comments": "./src/words/comments.ts",
+    "./words/artifacts": "./src/words/artifacts.ts",
     "./canvas": "./src/canvas.ts",
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",

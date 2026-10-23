@@ -29,7 +29,7 @@
     theme as streamdownTheme,
     type Theme,
   } from "svelte-streamdown";
-  import { markMentions } from "#lib/cawco/find/mention.svelte.js";
+  import { markMentions } from "#lib/cawco/find/mention-marks.js";
   import {
     markdownFleetHere,
     plainReferenceOf,

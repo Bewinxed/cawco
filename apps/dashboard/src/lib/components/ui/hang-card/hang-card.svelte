@@ -200,6 +200,8 @@
     flared?: boolean;
     /** It hangs from the top bar's glass. */
     glass?: boolean;
+    /** Drawn where it is mounted, never portaled: inside the frame or panel that holds it (a glass card always is). */
+    inPlace?: boolean;
     /**
      * The face it frames: the glass card's (GlassCard: Caw's panel, the
      * machines, Jump or Files, each its own width, padding and height), or
@@ -232,6 +234,7 @@
     as: Content = PopoverContent,
     flared = true,
     glass = false,
+    inPlace = false,
     frame,
     surface,
     tab = false,
@@ -530,7 +533,7 @@
 <Content
   data-glass-card={glass || undefined}
   {...kitSurface ? { motion: "hang" as const } : {}}
-  {...glass ? { portalProps: { disabled: true } } : {}}
+  {...glass || inPlace ? { portalProps: { disabled: true } } : {}}
   {...rest}
   class={cn(
     floatingSurface({ motion: "hang" }),
