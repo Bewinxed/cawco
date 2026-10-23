@@ -9,7 +9,12 @@
  * the one that asks the least. pi reports no modes and is offered none. The
  * SDK has more (`dontAsk`, `auto`); a session that reports one is named by it.
  */
-import type { HarnessKind, HarnessReport, PermissionMode } from "@cawco/core";
+import {
+  type HarnessKind,
+  type HarnessReport,
+  type PermissionMode,
+  spawnWords,
+} from "@cawco/core";
 import { speakerName } from "./transcript/speaker";
 
 export interface PermissionModeOption {
@@ -26,13 +31,7 @@ const ORDER: PermissionMode[] = [
   "fullSend",
 ];
 
-const LABELS: Partial<Record<PermissionMode, string>> = {
-  default: "Ask first",
-  plan: "Plan first",
-  acceptEdits: "Accept edits",
-  bypassPermissions: "Bypass",
-  fullSend: "Full Send",
-};
+const LABELS: Partial<Record<PermissionMode, string>> = spawnWords.modes;
 
 /**
  * What each mode does on each harness that has modes, in a line the picker's

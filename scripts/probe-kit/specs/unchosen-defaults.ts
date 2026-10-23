@@ -69,6 +69,8 @@ import {
   type Spec,
   settle,
 } from "../kit";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
+import { startsWith } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -77,7 +79,7 @@ const SERVE = join(ROOT, "apps/dashboard/serve.js");
 /** The fleet board's ways into the New Session dialog. */
 const STARTER = /^(New session|Start session)$/;
 const MACHINES = /^Machines:/;
-const PERMISSION = /^Permission mode:/;
+const PERMISSION = startsWith(spawnWords.permissionModeHead);
 /** What the probe's OpenCode says as it refuses to start. */
 const OPENCODE_REFUSES = "probe: this opencode will not start";
 /** What check 7's Claude Code says as it refuses to start a session. */

@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
-  import { accountsWords } from "@cawco/core";
+  import { spawnWords, accountsWords } from "@cawco/core";
 
   /** Why the effort chip offers no level, in the chip's words and its title's. */
   export interface EffortOff {
@@ -65,7 +65,7 @@
   import { permissionLook } from "./permission-look";
 
   /** The permission chip while no mode is chosen. */
-  const UNCHOSEN_MODE = "Choose a mode";
+  const UNCHOSEN_MODE = spawnWords.unchosenMode;
 
   let {
     tools,
@@ -226,7 +226,7 @@
           <NsPopover
             align="end"
             id={`${id}-permission`}
-            label={`Permission mode: ${look?.name ?? UNCHOSEN_MODE}`}
+            label={spawnWords.permissionMode(look?.name ?? UNCHOSEN_MODE)}
             onchange={(value) => {
               pop = value ? "permission" : null;
             }}

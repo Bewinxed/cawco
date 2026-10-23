@@ -48,6 +48,7 @@ import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 import { transcriptWords } from "../../../../packages/core/src/words/transcript";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 
 const PLUS = '[data-slot="strip-new"] [data-tnew]';
 const POPOVER = "[data-ns-popover]";
@@ -231,7 +232,7 @@ async function runLeg(
   }
   kit.check(
     `${leg.label}: Start is disabled, the mode chip saying "Choose a mode", until a mode is picked`,
-    opened.startDisabled === true && opened.chip === "Choose a mode",
+    opened.startDisabled === true && opened.chip === spawnWords.unchosenMode,
     JSON.stringify({
       startDisabled: opened.startDisabled,
       chip: opened.chip,
@@ -272,7 +273,7 @@ async function runLeg(
   const picked = await readForm(page, leg.form);
   kit.check(
     `${leg.label}: a mode picked, Start is live`,
-    picked.startDisabled === false && picked.chip !== "Choose a mode",
+    picked.startDisabled === false && picked.chip !== spawnWords.unchosenMode,
     JSON.stringify({ startDisabled: picked.startDisabled, chip: picked.chip })
   );
   await press(form.locator(START), leg);
@@ -363,7 +364,7 @@ async function railLeg(kit: Kit, base: string) {
   );
   kit.check(
     "1440 (fine), the rail's Start session: Esc closes the popover, the focus back on Start session",
-    gone === "detached" && back === "Start session",
+    gone === "detached" && back === spawnWords.startSession,
     `${gone}; focus on ${back}`
   );
   await page.close();
@@ -905,10 +906,10 @@ async function forkLeg(
   kit.check(
     "1440 (fine): a fork of a row with no mode, from its menu, opens the New Session form on the fork, Start waiting for a mode, never the hub's refusal",
     shown === "" &&
-      form.title === "Fork session" &&
+      form.title === spawnWords.forkSession &&
       form.start?.startsWith("Fork") === true &&
       form.disabled === true &&
-      form.chip === "Choose a mode" &&
+      form.chip === spawnWords.unchosenMode &&
       !form.refusal,
     JSON.stringify({ shown, ...form })
   );
@@ -1085,9 +1086,9 @@ async function forkHereLeg(kit: Kit, base: string, source: string) {
   kit.check(
     "1440 (fine): Fork from here on that stopped session opens the New Session form at the button, a popover on the fork, Start waiting for a mode",
     shown === "" &&
-      form.title === "Fork session" &&
+      form.title === spawnWords.forkSession &&
       form.disabled === true &&
-      form.chip === "Choose a mode" &&
+      form.chip === spawnWords.unchosenMode &&
       form.side === "bottom" &&
       form.gap !== null &&
       Math.abs(form.gap - SIDE_OFFSET) <= 1 &&
@@ -1154,7 +1155,7 @@ async function reviveLeg(
   // holds its pending words too ("Choose a modeStarting it…").
   const chooser = await page
     .locator('[data-slot="turn"][data-you]', { hasText: revive.words })
-    .getByRole("button", { name: "Choose a mode", exact: true })
+    .getByRole("button", { name: spawnWords.unchosenMode, exact: true })
     .first()
     .boundingBox()
     .catch(() => null);
@@ -1405,7 +1406,7 @@ async function keyStartLeg(kit: Kit, base: string, source: string) {
   kit.check(
     "1440 (fine): Ctrl+Enter with no mode picked sends no spawn (the key waits as Start does); with one picked it sends one on it",
     unpicked.startDisabled === true &&
-      unpicked.chip === "Choose a mode" &&
+      unpicked.chip === spawnWords.unchosenMode &&
       unpicked.spawns === 0 &&
       unpicked.open &&
       picked?.mode === MODE,

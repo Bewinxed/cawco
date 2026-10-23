@@ -37,6 +37,7 @@ import {
   STUDIO_MACHINE,
   type Variant,
 } from "./scene";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
 
 export type Width = "desk" | "tablet" | "phone";
 
@@ -392,11 +393,11 @@ const manyProjects = (page: Page) =>
   });
 
 /** The Full Send ask's yes (PermissionSection's). */
-const SWITCH_FULL_SEND = /^Switch to Full Send$/;
+const SWITCH_FULL_SEND = exactly(spawnWords.switchToFullSend);
 /** The permission mode the scene's sessions run on. */
 const SCENE_MODE = "bypassPermissions";
 /** A refused send's way back: its row's Choose a mode (MessageRow). */
-const CHOOSE_A_MODE = /^Choose a mode$/;
+const CHOOSE_A_MODE = exactly(spawnWords.unchosenMode);
 /** No machine at all, where a page needs one (config NoMachines' title). */
 const NO_MACHINES = new RegExp(literal(commonWords.noMachines));
 /** A model's combobox (ModelCombobox's "Model"). */
@@ -503,7 +504,7 @@ const DELEGATE_CARD = new RegExp(`^${DELEGATE_TITLE}`);
 /** The spawn sheet's chips, each its popover's trigger (NsPopover's `label`). */
 const LOCATION_CHIP = /^Location: /;
 const EFFORT_CHIP = /^Effort: /;
-const PERMISSION_CHIP = /^Permission mode: /;
+const PERMISSION_CHIP = startsWith(spawnWords.permissionMode(""));
 const ACCOUNT_CHIP = /^Account: /;
 /** The artifact's page in its session's pane. */
 const PREVIEW_FRAME = 'iframe[title="Preview"]';
@@ -1055,7 +1056,7 @@ const TRANSCRIPT_READ = "**/api/instances/*/transcript*";
 const PROJECT_CHIP = /^Project: /;
 const MACHINES_CHIP = /^Machines: /;
 const CAWCO_PROJECT = /^cawco\b/;
-const MOVE_AND_START = /^Move & start$/;
+const MOVE_AND_START = exactly(spawnWords.moveAndStart);
 /** A row in the Machines chip's popover (MachinesChip's), and a machine's, not its Add. */
 const MACHINE_ROW_ANY = "button[data-slot=row]";
 const MACHINE_ROW = `${MACHINE_ROW_ANY}:not([data-add])`;
@@ -1778,7 +1779,7 @@ const inspectSheet = async (page: Page) => {
 const inSheet =
   (...steps: ((page: Page) => Promise<unknown>)[]) =>
   async (page: Page) => {
-    await press("Start session")(page);
+    await press(spawnWords.startSession)(page);
     for (const step of steps) {
       // biome-ignore lint/performance/noAwaitInLoops: one step of the sheet at a time
       await step(page);
@@ -3814,7 +3815,7 @@ export const SURFACES: Surface[] = [
       {
         name: "insert",
         act: inSheet(async (page) => {
-          await page.getByRole("textbox", { name: "First prompt" }).click();
+          await page.getByRole("textbox", { name: spawnWords.firstPrompt }).click();
           await page.keyboard.type("/");
         }),
         root: "body",
@@ -3829,7 +3830,7 @@ export const SURFACES: Surface[] = [
         name: "chip",
         act: inSheet(async (page) => {
           // The prompt's draft is kept across the sheet's openings: emptied first.
-          await page.getByRole("textbox", { name: "First prompt" }).click();
+          await page.getByRole("textbox", { name: spawnWords.firstPrompt }).click();
           await page.keyboard.press("ControlOrMeta+a");
           await page.keyboard.press("Delete");
           await page.keyboard.type("/");

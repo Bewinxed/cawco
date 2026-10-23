@@ -46,6 +46,8 @@ import {
   type Spec,
   type View,
 } from "../../kit";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
+import { literal } from "../../words";
 
 /** The New Session form: the desk's popover, the phone's bottom sheet. */
 const FORM = "[data-ns-popover], [data-session-card][data-vaul-drawer]";
@@ -53,7 +55,7 @@ const FORM = "[data-ns-popover], [data-session-card][data-vaul-drawer]";
 const AWAY_LINE = '[data-slot="machine-away"]';
 const SOURCE_TITLE = "Away source";
 /** The sizing the continue form reads once the hub answers it. */
-const SIZED = /Current context/;
+const SIZED = new RegExp(literal(spawnWords.currentContext));
 /** How long the line may take: the hub's read deadline (server.ts `READ_TIMEOUT_MS`), and a margin. */
 const LINE_WITHIN_MS = 30_000;
 /** How long the answer may take once the machine is back. */

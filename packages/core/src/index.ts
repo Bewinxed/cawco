@@ -2239,6 +2239,7 @@ export * from "./words/sheet";
 export * from "./words/side";
 export * from "./words/sidebar";
 export * from "./words/skills";
+export * from "./words/spawn";
 export * from "./words/spend";
 export * from "./words/tailnet";
 export * from "./words/transcript";

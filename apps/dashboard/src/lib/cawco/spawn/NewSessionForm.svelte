@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { 
+  import { spawnWords, 
     type AccountProvider,
     accountNameAmong,
     CLAUDE_PROVIDER,
@@ -912,7 +912,7 @@
       bytes + lfsBytes > 0 ? ` (${sizeWords(bytes + lfsBytes)})` : "";
     const work =
       uncommittedFiles > 0 ? `, with your uncommitted work on ${source}` : "";
-    return `${project.name} isn't on ${there} yet. Move & start clones it there first${work}${size}.`;
+    return `${project.name} isn't on ${there} yet. ${spawnWords.moveAndStart} clones it there first${work}${size}.`;
   });
   const reading = $derived.by(() => {
     if (cawco.hub !== "connected") {
@@ -983,9 +983,9 @@
       return "Reading the session's context…";
     }
     if (carry === "asks") {
-      return `Current context ${tokens(estimate.liveContextTokens)} → your ${estimate.asks} message${estimate.asks === 1 ? "" : "s"}, ${tokens(estimate.openingTokens)}`;
+      return `${spawnWords.currentContext} ${tokens(estimate.liveContextTokens)} → your ${estimate.asks} message${estimate.asks === 1 ? "" : "s"}, ${tokens(estimate.openingTokens)}`;
     }
-    return `Current context ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} to summarise`;
+    return `${spawnWords.currentContext} ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} to summarise`;
   });
   /** Continue mode: the other start, sized afresh by the hub. */
   function chooseCarry(value: "summary" | "asks") {
@@ -1041,11 +1041,11 @@
       return "Fork";
     }
     if (moving) {
-      return moveStep ? "Move it" : "Move & start";
+      return moveStep ? spawnWords.moveIt : spawnWords.moveAndStart;
     }
     return machineIds.length > 1
       ? `Start ${machineIds.length} sessions`
-      : "Start session";
+      : spawnWords.startSession;
   });
   function chooseHarness(value: HarnessKind) {
     harness = value;
@@ -1944,9 +1944,9 @@
       return moveEstimated.ask.title;
     }
     if (continueFrom) {
-      return "Continue session";
+      return spawnWords.continueSession;
     }
-    return forking ? "Fork session" : commonWords.newSession;
+    return forking ? spawnWords.forkSession : commonWords.newSession;
   });
   /** The form's name as its head says it, for a frame that draws the head (the sheet). */
   export function title(): string {
@@ -2169,7 +2169,7 @@
         <SectionHeader
           hue="var(--hue-blue-500)"
           icon={Chat}
-          label={continueFrom ? "Next step (optional)" : "First prompt"}
+          label={continueFrom ? spawnWords.nextStep : spawnWords.firstPrompt}
         />
       </div>
       <div
@@ -2459,8 +2459,8 @@
       <IconShield />
       <AlertTitle
         >{fullSendCarried
-          ? "Full Send is on, from your last start"
-          : "Full Send is on"}</AlertTitle
+          ? spawnWords.fullSendCarried
+          : spawnWords.fullSendOn}</AlertTitle
       >
       <AlertDescription>{fullSendWarning}</AlertDescription>
     </Alert>

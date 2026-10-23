@@ -53,6 +53,7 @@ import {
   settle,
   type View,
 } from "../../kit";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 
 const BENCH = "/motion/delegate-tray";
 const LOG = '[data-slot="tr"][role="log"]';
@@ -1134,7 +1135,7 @@ async function modePicker(
   );
   // The yes closes the picker: what stands outside it is read settled.
   await page
-    .locator(`${PICKER_ASK} button`, { hasText: "Switch to Full Send" })
+    .locator(`${PICKER_ASK} button`, { hasText: spawnWords.switchToFullSend })
     .click();
   await settle(page, 800);
   const after = await read();

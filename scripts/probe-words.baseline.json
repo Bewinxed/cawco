@@ -21,12 +21,8 @@
     "More for": 1
   },
   "scripts/probe-kit/journeys/j3-spawn.ts": {
-    "Ask first": 1,
-    "Full Send": 1,
     "in its own view": 1,
-    "Permission mode:": 1,
-    "Session details": 1,
-    "Switch to Full Send": 1
+    "Session details": 1
   },
   "scripts/probe-kit/journeys/j5-task-review.ts": {
     "Send back": 1,
@@ -464,9 +460,6 @@
     "earlier commit": 1,
     "its text holds": 1
   },
-  "scripts/probe-kit/specs/page-marks.ts": {
-    "Permission mode:": 1
-  },
   "scripts/probe-kit/specs/place-repo-home.ts": {
     "is the home folder on this machine, which holds far more than one project, so CawCo won't make it a git repository.": 1,
     "Make a folder for the project": 1,
@@ -602,8 +595,7 @@
   },
   "scripts/probe-kit/specs/unchosen-defaults.ts": {
     "A permission mode must be chosen": 1,
-    "couldn't read its models": 1,
-    "Permission mode:": 1
+    "couldn't read its models": 1
   },
   "scripts/probe-kit/specs/upstream-guard.ts": {
     "git push": 1,
@@ -632,13 +624,9 @@
   },
   "scripts/probe-kit/specs/web/caw-guided.ts": {
     "Caw · could not start": 1,
-    "First prompt": 1,
     "Message Caw…": 1,
     "Spin off": 1,
     "What’s next for": 2
-  },
-  "scripts/probe-kit/specs/web/composer-layers.ts": {
-    "Switch to Full Send": 1
   },
   "scripts/probe-kit/specs/web/control-select.ts": {
     "Search models": 1,
@@ -659,12 +647,9 @@
     "Open session": 1
   },
   "scripts/probe-kit/specs/web/machine-away.ts": {
-    "Current context": 1,
     "Fetched. The machines": 1
   },
   "scripts/probe-kit/specs/web/parked-start.ts": {
-    "Choose a mode": 1,
-    "Continue session": 3,
     "Started on": 2
   },
   "scripts/probe-kit/specs/web/project-details.ts": {
@@ -691,10 +676,7 @@
   },
   "scripts/probe-kit/specs/web/strip-new-session.ts": {
     "A permission mode must be chosen": 3,
-    "Choose a mode": 6,
-    "Fork session": 2,
-    "Nothing was started": 2,
-    "Start session": 1
+    "Nothing was started": 2
   },
   "scripts/probe-kit/specs/web/tabs-region-errors.ts": {
     "[object Error]": 1
@@ -755,31 +737,26 @@
     "Catching up…": 1,
     "Caw, lead of": 1,
     "CawCo saves the folder": 1,
-    "Choose a mode": 1,
     "Connect a machine to run sessions": 1,
     "Expand diff (full view)": 1,
-    "First prompt": 2,
     "fleet memory": 1,
     "is unlocked": 1,
     "It reaches the hub at": 1,
     "Its element is gone from the page": 1,
     "Last activity": 1,
     "Login password for": 1,
-    "Move & start": 1,
     "New workflow": 1,
     "None of your machines are online": 1,
     "Other people's repositories": 1,
     "Page not found": 1,
     "Pairing didn't start": 1,
     "Pause until": 1,
-    "Permission mode:": 1,
     "Pick stages": 1,
     "Reading what runs in": 1,
     "Show every limit": 1,
     "Show the whole error": 1,
     "Sign-in didn't finish": 1,
     "Sort sessions": 1,
-    "Switch to Full Send": 1,
     "This project has no stages of its own yet": 2,
     "Unlock keychain…": 1
   }

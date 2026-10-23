@@ -30,6 +30,8 @@ import type { Page } from "playwright-core";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
+import { startsWith } from "../words";
 
 /** A replaced selector and the attribute that says the same, on one kind of element. */
 interface Pair {
@@ -47,7 +49,7 @@ const SCRIM =
   ':is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="drawer-overlay"], [data-slot="sheet-overlay"])';
 const NEW_SESSION = /^(New session|Start session)$/;
 const PROJECT_CHIP = /^Project:/;
-const PERMISSION_MODE = /^Permission mode:/;
+const PERMISSION_MODE = startsWith(spawnWords.permissionModeHead);
 const PAIRS: Pair[] = [
   {
     name: "bar floating",

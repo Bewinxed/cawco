@@ -61,6 +61,7 @@ import {
   settle,
 } from "../../kit";
 import { transcriptWords } from "../../../../packages/core/src/words/transcript";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 
 /** The form on a desk: the popover. */
 const DESK_FORM = "[data-ns-popover]";
@@ -289,7 +290,7 @@ async function fill(page: Page, words: string) {
 /** A permission mode picked, when the form waits for one. */
 async function pickMode(page: Page) {
   const chip = page.locator(`${FORM} [aria-label^="Permission mode"]`).first();
-  if ((await chip.textContent())?.trim() !== "Choose a mode") {
+  if ((await chip.textContent())?.trim() !== spawnWords.unchosenMode) {
     return;
   }
   await chip.click();
@@ -505,7 +506,7 @@ async function continueLegs(
   kit.check(
     `${label}: a reload opens the continuation form again, on the same source, with the same words and chip`,
     reloaded.open &&
-      reloaded.head === "Continue session" &&
+      reloaded.head === spawnWords.continueSession &&
       reloaded.prompt.includes(words) &&
       reloaded.chips.some((chip) => chip.includes(FILE)),
     JSON.stringify(reloaded)
@@ -534,7 +535,7 @@ async function continueLegs(
   kit.check(
     `${label}: a press on the row brings the form back on the running continuation: its words, Start pending with its stage`,
     back.open &&
-      back.head === "Continue session" &&
+      back.head === spawnWords.continueSession &&
       back.prompt.includes(words) &&
       back.busy &&
       STAGE.test(back.startWords),
@@ -634,7 +635,7 @@ async function continueLegs(
   const reopened = await readForm(page);
   kit.check(
     `${label}: Reopen opens the continuation form on it, the refusal's words on its line, no toast`,
-    reopened.head === "Continue session" &&
+    reopened.head === spawnWords.continueSession &&
       reopened.reading.includes(REFUSAL) &&
       reopened.prompt.includes("PROBE-PARK refused continue") &&
       reopened.toasts === 0,

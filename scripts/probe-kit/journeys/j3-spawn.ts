@@ -38,6 +38,8 @@ import {
   shows,
 } from "./suite";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
+import { startsWith } from "../words";
 
 const SPAWN = "JOURNEY-SPAWN";
 const START = /^Start/;
@@ -47,11 +49,11 @@ const MACHINES_CHIP = /^Machines:/;
 const PROJECT_CHIP = /^Project:/;
 const SESSION_TABS = "Open sessions in this group";
 const MODE_FLAG = "--permission-mode";
-const PERMISSION_MODE = /^Permission mode:/;
-const IN_FULL_SEND = /^Permission mode: Full Send/;
-const FULL_SEND = /^Full Send/;
-const ASK_FIRST = /^Ask first/;
-const IN_ASK_FIRST = /^Permission mode: Ask first/;
+const PERMISSION_MODE = startsWith(spawnWords.permissionModeHead);
+const IN_FULL_SEND = startsWith(spawnWords.permissionMode(spawnWords.modes.fullSend));
+const FULL_SEND = startsWith(spawnWords.modes.fullSend);
+const ASK_FIRST = startsWith(spawnWords.modes.default);
+const IN_ASK_FIRST = startsWith(spawnWords.permissionMode(spawnWords.modes.default));
 const SPACES = /\s+/;
 const REGEX_SIGNS = /[.*+?^${}()|[\]\\]/g;
 /** What the new session says to its first message. */
@@ -328,7 +330,7 @@ async function walk(leg: Leg): Promise<void> {
     async () => {
       await card.getByRole("button", { name: PERMISSION_MODE }).click();
       await page.getByRole("radio", { name: FULL_SEND }).click();
-      await page.getByRole("button", { name: "Switch to Full Send" }).click();
+      await page.getByRole("button", { name: spawnWords.switchToFullSend }).click();
     },
     async () => {
       await eventually(

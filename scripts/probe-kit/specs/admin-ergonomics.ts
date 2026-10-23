@@ -59,6 +59,7 @@ import { toolRecord } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, pressAt, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
 
 const PREVIEW = "probe-preview";
 const DECISION = "probe-decision";
@@ -612,7 +613,7 @@ const run = async (kit: Kit) => {
       permissions: { ask: [`Bash(${ASK_RULE_COMMAND})`] },
     })
   );
-  const sent = await fleet.spawn("claude", "Full Send", fullSendPlace, {
+  const sent = await fleet.spawn("claude", spawnWords.modes.fullSend, fullSendPlace, {
     permissionMode: "fullSend",
   });
 

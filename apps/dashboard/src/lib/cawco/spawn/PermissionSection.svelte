@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { spawnWords } from "@cawco/core";
   import type { HarnessKind, PermissionMode } from "@cawco/core";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
@@ -53,9 +54,9 @@
     // biome-ignore lint/complexity/noVoid: the question answers itself; a Cancel changes nothing
     void asks.ask({
       at: "fullSend",
-      title: "Switch to Full Send?",
+      title: spawnWords.switchToFullSendTitle,
       body: restarts ? [...copy.confirm, copy.restarts] : copy.confirm,
-      confirmLabel: "Switch to Full Send",
+      confirmLabel: spawnWords.switchToFullSend,
       pendingLabel: "Switching…",
       grant: true,
       // The yes is what this asks for: the change then says how it goes

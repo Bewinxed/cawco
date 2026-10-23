@@ -68,6 +68,7 @@ import {
   type Theme,
   type View,
 } from "../../kit";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -176,7 +177,7 @@ const legPage = async (kit: Kit, { view, width }: Leg, theme: Theme) => {
 
 /** The panel, its parts, the head and the board, as the engine lays them out. */
 const readPanel = (page: Page) =>
-  page.evaluate((panelSel) => {
+  page.evaluate(([panelSel, firstPromptLabel]) => {
     const box = (el: Element | null | undefined) => {
       const r = el?.getBoundingClientRect();
       return r
@@ -327,7 +328,7 @@ const readPanel = (page: Page) =>
           );
         })
         .map((input) => input.placeholder),
-      firstPrompt: document.body.innerText.includes("First prompt"),
+      firstPrompt: document.body.innerText.includes(firstPromptLabel),
       empty: box(document.querySelector('[data-slot="caw-empty"]')),
       head: box(document.querySelector('[data-slot="project-head"]')),
       title: box(
@@ -383,7 +384,7 @@ const readPanel = (page: Page) =>
           }
         : null,
     };
-  }, PANEL);
+  }, [PANEL, spawnWords.firstPrompt] as const);
 
 type PanelRead = Awaited<ReturnType<typeof readPanel>>;
 type Box = NonNullable<PanelRead["panel"]>;
