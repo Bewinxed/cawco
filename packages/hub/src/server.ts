@@ -22754,7 +22754,7 @@ export const createServer = (
     // A held item's notice in Needs you: fleet watch keeps them, made once
     // the hub is up (`watch`), before any sweep runs.
     tellYou: (row, title, body) => watch?.tellYou(row, title, body),
-    untellYou: (instanceId) => watch?.humanSend(instanceId),
+    untellYou: (instanceId) => watch?.untell(instanceId),
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     between: (row) => sessionIdle(row),
     // What a work item's session cannot start again without: the type it

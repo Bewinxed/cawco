@@ -3154,11 +3154,9 @@ export const createWorkItems = ({
     const block: ItemBlock = { ...missing, since: Date.now() };
     update(item.id, { blocked: block });
     console.log(`[work-items] ${item.id} is blocked: ${blockWords(block)}`);
-    // After the send that found it is taken: a person's own message takes
-    // down the notices about its session (fleet-watch.ts `humanSend`).
-    soon(() =>
-      tellYou(row, workWords.blockedTitle(item.title), blockWords(block))
-    );
+    // It stands until the block clears, whatever you write to the item
+    // (fleet-watch.ts `humanSend`).
+    tellYou(row, workWords.blockedTitle(item.title), blockWords(block));
     return block;
   };
 

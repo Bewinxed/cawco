@@ -26,8 +26,9 @@
  * - (e) A deleted delegate type: an item's type is deleted while its session
  *   sleeps, and the hub restarts. A message to it does not start it: the item
  *   is blocked, not failed, the message kept at the hub under `blocked`, and
- *   Needs you tells you it is blocked and why (its notice, as a held item's).
- *   The type back, the block clears, its notice goes and the message goes.
+ *   Needs you tells you it is blocked and why (its notice, as a held item's),
+ *   a notice that stands when you write to it again. The type back, the
+ *   block clears, its notice goes and both messages go.
  * - (f) A background command cut by a restart: a session's command runs in
  *   the background, printing; the machine's processes and the hub all die
  *   and start again. The session is told the command was interrupted, its
@@ -647,6 +648,24 @@ const legE = async (legs: Legs) => {
       told?.title === workWords.blockedTitle("Restart leg E") &&
       told.body === workWords.missingType(TYPE_E),
     `type put ${madeType.status}, deleted ${deleted.status}; asleep: ${status}; item: ${blocked?.state} ${blocked?.blocked ?? "no block"} ${blocked?.error ?? ""}; send: ${JSON.stringify(send)}; Needs you: ${told ? `${told.title}: ${told.body}` : "no notice"}`
+  );
+  // You write to it again while it is blocked: the notice stands.
+  const again = await fleet.send(session, "PROBE-RH-E: still there?");
+  await Bun.sleep(5000);
+  const [standing] = fleet.query<{ title: string }>(
+    "SELECT title FROM fleet_watch_notices WHERE instance_id = ?",
+    session
+  );
+  const [kept] = fleet.query<{ hold: string | null; state: string }>(
+    "SELECT state, hold FROM sent_messages WHERE uuid = ?",
+    again
+  );
+  check(
+    "(e) you write to the blocked item: its notice stands, and your message waits at the hub held `blocked`",
+    standing?.title === workWords.blockedTitle("Restart leg E") &&
+      kept?.state === "pending" &&
+      kept.hold === "blocked",
+    `notice: ${standing?.title ?? "gone"}; your message: ${JSON.stringify(kept)}`
   );
   const back = await put("PUT");
   const went = await until(

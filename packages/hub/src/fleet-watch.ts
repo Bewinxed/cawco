@@ -1070,8 +1070,25 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     pulse: (id: string, busy: boolean): void =>
       guarded(id, () => pulse(id, busy)),
 
-    /** You sent to the session: its notice is yours now, and goes. */
+    /**
+     * You sent to the session: its notice is yours now, and goes; but for a
+     * blocked work item's (work-items.ts `blockIfMissing`), which stands
+     * until the block clears ({@link untell}): your words start nothing
+     * while what its session needs is missing.
+     */
     humanSend(id: string): void {
+      const [row] = deps.db.getInstancesByIds([id]);
+      const item = row?.workItemId
+        ? deps.db.workItem(row.workItemId)
+        : undefined;
+      if (item?.blocked) {
+        return;
+      }
+      dropNotice(id);
+    },
+
+    /** The hold a notice of the hub's own told of is over (work-items.ts `untellYou`): it goes. */
+    untell(id: string): void {
       dropNotice(id);
     },
 
