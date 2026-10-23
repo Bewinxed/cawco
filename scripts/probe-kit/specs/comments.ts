@@ -97,8 +97,9 @@
  * g. A press on the intro paragraph pins that paragraph; a press in the
  *    page's padding beside it pins it too, the nearest content, never `main`.
  *    Each finishes, its picture drawn, with no main-thread task of the
- *    page's past 50ms, and its picture is the paragraph's box with its 24px
- *    margin, never the page.
+ *    page's that takes past 50ms of the thread's CPU (its thread time: the
+ *    page's own work, whatever else the machine runs), and its picture is
+ *    the paragraph's box with its 24px margin, never the page.
  *
  * And the owner's report (2026-10-18: "also when commenting on sth in the
  * preview the slhoettes don't line up?", on a page showing desks as frames
@@ -266,7 +267,7 @@ import { commonWords } from "../../../packages/core/src/words/common";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type BreathRead, readBreath } from "../breath";
-import { traceMain } from "../frames";
+import { type MainTask, traceMain } from "../frames";
 import {
   COMPOSER,
   type Kit,
@@ -279,7 +280,6 @@ import {
 import {
   docOf,
   dragFromIcon,
-  longestIn,
   type On,
   pageFrame,
   paneMode,
@@ -287,7 +287,6 @@ import {
   screenBox,
   strokeOver,
   TEST_MAP,
-  tasksOver,
   testMapFrame,
   watchPictures,
 } from "./ink";
@@ -4868,6 +4867,28 @@ const LONG_TASK_MS = 50;
 /** A mark's crop margin (pins.ts `CROP_PAD`), px. */
 const CROP_PAD = 24;
 
+/**
+ * The page's own main-thread work between two of its marks: each task by the
+ * CPU its thread spent in it (the trace's thread time), which is what the
+ * page ran however the machine shared its cores. A task's wall time also
+ * counts the turns the thread waited for a core: on the desk under its
+ * normal load, a press's pointermove ran 12.6ms of CPU across 120.6ms of
+ * wall, and a load event 14.0ms across 71.6ms. Said as `ran CPU in wall`.
+ */
+const ownWork = (tasks: MainTask[], from: number, to: number) => {
+  const inside = tasks.filter((task) => task.at >= from && task.at < to);
+  const said = (task: MainTask) =>
+    `${task.ran} ${task.cpu.toFixed(1)}ms of CPU in ${task.wall.toFixed(1)}ms`;
+  const longest = inside.reduce<MainTask | undefined>(
+    (most, task) => (most && most.cpu >= task.cpu ? most : task),
+    undefined
+  );
+  return {
+    over: inside.filter((task) => task.cpu > LONG_TASK_MS).map(said),
+    longest: longest ? said(longest) : "no task",
+  };
+};
+
 /** (g) Presses on test-map: on its intro paragraph, and in the page's padding beside it. */
 const mapPressChecks = async (on: On) => {
   await on.call(CREATE, {
@@ -4942,8 +4963,7 @@ const mapPressChecks = async (on: On) => {
     return {
       names,
       selector: pin?.anchor.selector,
-      over: tasksOver(main.tasks, at("press"), at("press-after"), LONG_TASK_MS),
-      longest: longestIn(main.tasks, at("press"), at("press-after")),
+      ...ownWork(main.tasks, at("press"), at("press-after")),
       size: posted ? pngSize(posted.png) : null,
     };
   };
@@ -4959,9 +4979,9 @@ const mapPressChecks = async (on: On) => {
       `on the text: ${onText.names.tag} ${onText.selector}; in the padding: ${inPadding.names.tag} ${inPadding.selector}`
     );
     on.kit.check(
-      `g: each press finishes, its picture drawn, with no task of the page's past ${LONG_TASK_MS}ms`,
+      `g: each press finishes, its picture drawn, with no task of the page's that takes its main thread past ${LONG_TASK_MS}ms of CPU`,
       onText.over.length === 0 && inPadding.over.length === 0,
-      `longest ${onText.longest.toFixed(1)}ms and ${inPadding.longest.toFixed(1)}ms; over: ${[...onText.over, ...inPadding.over].join(", ") || "none"}`
+      `longest ${onText.longest} and ${inPadding.longest}; over: ${[...onText.over, ...inPadding.over].join(", ") || "none"}`
     );
     const crop = {
       w: intro.w + 2 * CROP_PAD,
@@ -8770,8 +8790,30 @@ const pageOnlyChecks = async (on: On, id: string) => {
       afterReload.send === commonWords.tryAgain,
     `before ${JSON.stringify(down)}; on the hub ${heldBefore}; after a reload ${JSON.stringify(afterReload)}; kept ${!!kept}`
   );
-  // The link back: Try again takes it to the hub, then to the session.
-  link.down = false;
+  // The link back: Try again takes it to the hub, then to the session. The
+  // link comes back with the press itself: the page's own socket tries again
+  // on y-websocket's backoff (2.5s at most), and a comment the link held back
+  // goes as the link opens (PreviewPane `retryPin`), so a link back before the
+  // press lets the page's next try take the comment, and its Try again with
+  // it, before the press lands. Told at the press's pointerdown, before the
+  // click that opens the socket again (artifact.ts `reconnect`).
+  await tab.exposeBinding("probeLinkBack", () => {
+    link.down = false;
+  });
+  await tab.evaluate(() =>
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest('[data-slot="pin-retry"]')
+        ) {
+          (window as unknown as { probeLinkBack: () => void }).probeLinkBack();
+        }
+      },
+      { capture: true }
+    )
+  );
   const rail = await rowsOf(there);
   await rail
     .locator(

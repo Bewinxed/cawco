@@ -862,6 +862,14 @@ export class Run {
   private readonly ending: { closing: boolean } = { closing: false };
   /** The launch tags of {@link browsers}: they stay open across specs and are checked as the run closes. */
   private readonly sharedLaunches = new Set<string>();
+  /**
+   * Each renderer a Chromium of the kit's said it lost, in order: its
+   * target's address, and how it ended as the browser read it (CDP
+   * `Target.targetCrashed`: `status` crashed, killed, oom or abnormal, and
+   * its exit code or signal). Playwright's page `crash` carries none of it
+   * (`Inspector.targetCrashed` has no parameters).
+   */
+  private readonly rendererEnds: string[] = [];
 
   /**
    * Fails `what` when a process carrying one of `tags` outlives its closed
@@ -967,33 +975,63 @@ export class Run {
           }),
       firefox: () => firefox.launch({ env }),
       chromium: () =>
-        chromium.launch({
-          headless: true,
-          args: [
-            "--no-sandbox",
-            "--disable-gpu",
-            ...(wholeRaster ? ["--disable-partial-raster"] : []),
-            ...(oneProcess
-              ? [
-                  "--disable-site-isolation-trials",
-                  "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
-                ]
-              : []),
-            ...(hostRules
-              ? [
-                  `--host-resolver-rules=${hostRules}`,
-                  "--proxy-server=direct://",
-                ]
-              : []),
-            DESK_POINTER,
-          ],
-          ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
-          env,
-        }),
+        chromium
+          .launch({
+            headless: true,
+            args: [
+              "--no-sandbox",
+              "--disable-gpu",
+              ...(wholeRaster ? ["--disable-partial-raster"] : []),
+              ...(oneProcess
+                ? [
+                    "--disable-site-isolation-trials",
+                    "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
+                  ]
+                : []),
+              ...(hostRules
+                ? [
+                    `--host-resolver-rules=${hostRules}`,
+                    "--proxy-server=direct://",
+                  ]
+                : []),
+              DESK_POINTER,
+            ],
+            ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
+            env,
+          })
+          .then(async (browser) => {
+            await this.hearRendererEnds(browser);
+            return browser;
+          }),
     } satisfies Record<Engine, () => Promise<Browser>>;
     const launched = launch[engine]();
     this.browsers.set(key, launched);
     return launched;
+  }
+
+  /** Keeps how each of `browser`'s renderers ended ({@link rendererEnds}). */
+  private async hearRendererEnds(browser: Browser): Promise<void> {
+    const cdp = await browser.newBrowserCDPSession();
+    const urls = new Map<string, string>();
+    const known = ({
+      targetInfo,
+    }: {
+      targetInfo: { targetId: string; url: string };
+    }) => urls.set(targetInfo.targetId, targetInfo.url);
+    cdp.on("Target.targetCreated", known);
+    cdp.on("Target.targetInfoChanged", known);
+    cdp.on("Target.targetCrashed", ({ errorCode, status, targetId }) => {
+      this.rendererEnds.push(
+        `${urls.get(targetId) ?? targetId}: ${status}, code ${errorCode}`
+      );
+    });
+    await cdp.send("Target.setDiscoverTargets", { discover: true });
+  }
+
+  /** How the browser said its lost renderers ended, once it has had `ms` to say: each since the last read. */
+  private async rendererEndsSaid(ms = 1000): Promise<string> {
+    await Bun.sleep(ms);
+    return this.rendererEnds.splice(0).join("; ") || "the browser said none";
   }
 
   bench(): Promise<string> {
@@ -1185,15 +1223,26 @@ export class Run {
         // session's send waits on it for ever: closing the page rejects
         // every send still waiting, so the crash fails the spec, never hangs it.
         page.on("crash", () => {
-          kit.check("the page's renderer runs to the end", false, page.url());
+          const url = page.url();
           // What it was doing as it died (crash-watch.ts): its last frames'
           // animations, and its browser's own last lines.
           if (engine === "webkit") {
             console.log(
-              `CRASH ${page.url()}\n${crashText(page, this.logs.get(browser))}`
+              `CRASH ${url}\n${crashText(page, this.logs.get(browser))}`
             );
           }
           page.close().catch(() => undefined);
+          if (engine !== "chromium") {
+            kit.check("the page's renderer runs to the end", false, url);
+            return;
+          }
+          this.rendererEndsSaid().then((said) =>
+            kit.check(
+              "the page's renderer runs to the end",
+              false,
+              `${url}; how it ended, as the browser said: ${said}`
+            )
+          );
         });
         // The page stands for its device in what it points with: a desk's
         // mouse, a touch screen's finger (DESK_POINTER). A leg on a page that
