@@ -8,6 +8,8 @@
    */
   import type { ProjectView } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { provideMarkdownFleet } from "#lib/cawco/markdown-fleet.js";
+  import { liveMarkdown } from "#lib/cawco/markdown-live.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
@@ -18,6 +20,10 @@
   import { IconAlert } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+
+  // The view's markdown draws its references and skill chips from the live
+  // store, as the app's does (markdown-fleet.ts).
+  provideMarkdownFleet(() => liveMarkdown);
 
   const projectId = $derived(page.params.id ?? "");
   const name = $derived(page.params.name ?? "");

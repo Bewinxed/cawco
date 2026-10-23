@@ -6,8 +6,9 @@
  * starts it), on scratch states files, each opened in turn on a fresh stage:
  *
  * 1. PinCard.svelte, a thread and its reply composer: its modules and
- *    bytes, and which of `CHAT_PARTS` it fetched (its thread's words,
- *    MessageBody, read the store through the markdown's references).
+ *    bytes, and the fleet store (client.svelte.ts) not among them: its
+ *    thread's markdown, with no host's references handed in
+ *    (markdown-fleet.ts), draws each reference as its label.
  * 2. transcript/Composer.svelte as a comment's reply mounts it
  *    (CommentComposer's props: no fleet, no session, no tray, no ask): its
  *    modules and bytes, and none of `CHAT_PARTS` among them (the fleet
@@ -301,12 +302,15 @@ const run = async (kit: Kit) => {
 
     const pin = await weigh(STORIES.pin.file);
     kit.check(
-      `1: PinCard's sheet (${pin.states.join(", ")}): ${said(pin.weight)}; of CHAT_PARTS it fetched (its thread's MessageBody, not its reply): ${
+      `1: PinCard's sheet (${pin.states.join(", ")}): ${said(pin.weight)}; of CHAT_PARTS it fetched: ${
         partsIn(pin.fetched)
           .map((part) => part.split("/").at(-1))
           .join(", ") || "none"
       }`,
-      !!pin.weight,
+      !!pin.weight &&
+        !pin.fetched.some((url) =>
+          url.endsWith("src/lib/cawco/client.svelte.ts")
+        ),
       pin.errors.join(" | ")
     );
     /** Each part imported in turn on the reply's page: the modules it fetches that nothing before it did. */

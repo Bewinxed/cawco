@@ -22,18 +22,16 @@ import type { Component } from "svelte";
 import ArtifactReference from "./ArtifactReference.svelte";
 import { artifactNamed } from "./artifact-names.svelte";
 import DecisionReference from "./DecisionReference.svelte";
+import {
+  type Drawn,
+  type ElementProps,
+  plainReferenceOf,
+} from "./markdown-fleet";
 import PinReference from "./PinReference.svelte";
 import { type ThingKind, thingNamed } from "./reference-things.svelte";
 import SessionReference from "./SessionReference.svelte";
 import { sessionNamed } from "./session-names.svelte";
 import ThingReference from "./ThingReference.svelte";
-
-/** What an element is given: the id `find` answered, its kind, and the link's written label. */
-interface ElementProps {
-  id: string;
-  kind: ReferenceKind;
-  label?: string;
-}
 
 interface ReferenceElement {
   /** What draws it. */
@@ -105,31 +103,14 @@ export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
   machine: thing("machine"),
 };
 
-/** A backslash escape in a link's label (core `referenceLink` writes them). */
-const ESCAPED = /\\([\\[\]])/g;
-
-/** A link's label as written, its escapes read: what an element falls back to. */
-export const writtenLabel = (text: string | undefined): string =>
-  (text ?? "").replace(ESCAPED, "$1");
-
 const isKind = (kind: string): kind is ReferenceKind =>
   Object.hasOwn(REFERENCE_ELEMENTS, kind);
-
-export type Drawn =
-  | { draw: "link" }
-  | { draw: "label" }
-  | {
-      draw: "element";
-      element: Component<ElementProps>;
-      id: string;
-      kind: ReferenceKind;
-    };
 
 /** What a written link whose destination is `href` draws as. */
 export function referenceOf(href: string): Drawn {
   const reference = parseReference(href);
   if (!reference) {
-    return href.startsWith("cawco:") ? { draw: "label" } : { draw: "link" };
+    return plainReferenceOf(href);
   }
   if (!isKind(reference.kind)) {
     return { draw: "label" };

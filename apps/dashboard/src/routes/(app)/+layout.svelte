@@ -13,6 +13,8 @@
   import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
   import { hubAuth, mustPair, readAuth } from "#lib/cawco/hub-auth.svelte.js";
   import LawsBroken from "#lib/cawco/LawsBroken.svelte";
+  import { provideMarkdownFleet } from "#lib/cawco/markdown-fleet.js";
+  import { liveMarkdown } from "#lib/cawco/markdown-live.js";
   import { restWhenHidden } from "#lib/cawco/motion/rest.js";
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
   import { departAll } from "#lib/cawco/motion/share.svelte.js";
@@ -37,6 +39,9 @@
   // Every artifact pane under the app (the session panel beside a
   // conversation) reads the fleet store (preview/pane-fleet.ts).
   setPaneFleet(fleetPane);
+  // Every message's markdown under the app draws its references and skill
+  // chips from the live store (markdown-fleet.ts).
+  provideMarkdownFleet(() => liveMarkdown);
 
   /**
    * Where toasts appear. A phone's bottom edge belongs to the composer, so

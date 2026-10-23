@@ -25,7 +25,7 @@ import {
   retryRelaunch,
 } from "../harness-block.svelte";
 import CawFace from "../home/CawFace.svelte";
-import { hubSeam } from "../hub-seam";
+import { hubSeam } from "../hub-live";
 import SkillChip from "../SkillChip.svelte";
 import { CanvasRoom } from "./canvas-room.svelte";
 import DelegateTray from "./DelegateTray.svelte";

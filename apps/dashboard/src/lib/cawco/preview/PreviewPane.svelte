@@ -104,6 +104,11 @@
   import { frameObserver, frameSize } from "../frame-observer";
   import { resolveSessionTitle } from "../links";
   import {
+    type MarkdownFleet,
+    markdownFleetAbove,
+    provideMarkdownFleet,
+  } from "../markdown-fleet";
+  import {
     appear,
     dur,
     easeDrawer,
@@ -1781,12 +1786,25 @@
     commentDrafts: typeof import("./comment-drafts.svelte").commentDrafts;
   } | null>(null);
   let kitLoading: Promise<void> | null = null;
+  /**
+   * What a thread's markdown reads of the fleet (markdown-fleet.ts): the
+   * app's, under the app; on an artifact's own tab, the live one, loaded
+   * with the kit, so a thread's references draw as they do in the app from
+   * its first frame.
+   */
+  const markdownAbove = markdownFleetAbove();
+  let ownMarkdown = $state.raw<MarkdownFleet | undefined>(undefined);
+  if (!markdownAbove) {
+    provideMarkdownFleet(() => ownMarkdown);
+  }
   function loadKit(): Promise<void> {
     kitLoading ??= Promise.all([
       import("./CommentComposer.svelte"),
       import("./PinCard.svelte"),
       import("./comment-drafts.svelte"),
-    ]).then(([composer, card, kept]) => {
+      markdownAbove ? null : import("../markdown-live"),
+    ]).then(([composer, card, kept, markdown]) => {
+      ownMarkdown = markdown?.liveMarkdown;
       kit = {
         CommentComposer: composer.default,
         PinCard: card.default,

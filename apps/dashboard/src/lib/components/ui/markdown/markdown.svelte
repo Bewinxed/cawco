@@ -30,10 +30,13 @@
     type Theme,
   } from "svelte-streamdown";
   import { markMentions } from "#lib/cawco/find/mention.svelte.js";
+  import {
+    markdownFleetHere,
+    plainReferenceOf,
+    writtenLabel,
+  } from "#lib/cawco/markdown-fleet.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { outsideCode } from "#lib/cawco/outside-code.js";
-  import { referenceOf, writtenLabel } from "#lib/cawco/references.js";
-  import SkillChip from "#lib/cawco/SkillChip.svelte";
   import {
     markSkills,
     skillNamed,
@@ -82,6 +85,12 @@
    * chip, in anyone's words.
    */
   const skills = skillsHere();
+  /**
+   * What this markdown reads of the fleet, as its host provides it: a
+   * reference's chip and a skill's. None on the stage or in a comment
+   * card's thread, which draw each reference as its label and load no store.
+   */
+  const fleet = markdownFleetHere();
 
   // Streamdown's stock themes hardcode a Tailwind palette (bg-gray-100,
   // text-blue-600, marker:hidden) that would out-shout PROSE. Blank every
@@ -374,8 +383,9 @@
       children: Snippet;
     })}
       {@const skill = skillNamed(skills(), token.text)}
-      {#if skill}
-        <SkillChip {skill} />
+      {@const Chip = fleet()?.SkillChip}
+      {#if skill && Chip}
+        <Chip {skill} />
       {:else}
         <code>{@render children()}</code>
       {/if}
@@ -395,7 +405,7 @@
       /** The fields of marked's link token read here. */
       token: { href: string; text?: string; title?: string | null };
     })}
-      {@const drawn = referenceOf(token.href)}
+      {@const drawn = (fleet()?.referenceOf ?? plainReferenceOf)(token.href)}
       {#if drawn.draw === "element"}
         <drawn.element
           id={drawn.id}

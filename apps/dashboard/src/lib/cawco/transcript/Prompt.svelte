@@ -45,7 +45,7 @@
     permissionAnswer,
     takeOverBrowser,
   } from "../client.svelte";
-  import { hubSeam } from "../hub-seam";
+  import { hubSeam } from "../hub-live";
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
