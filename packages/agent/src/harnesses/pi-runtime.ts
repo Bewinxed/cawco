@@ -523,7 +523,8 @@ const resultText = (content: readonly { type: string; text?: string }[]) =>
  *
  * - PreToolUse on `tool_call`: a block refuses the call, its reason pi's
  *   error for it ("`tool_call` can mutate input or block execution", pi
- *   docs/extensions.md);
+ *   docs/extensions.md); what it says goes with the call's result; a
+ *   rewrite is taken outside a workspace only;
  * - PostToolUse and PostToolUseFailure on `tool_result`, by its `isError`:
  *   what a hook says (a block's reason, `additionalContext`) is added to the
  *   result the model reads, as Claude Code shows the model a PostToolUse
@@ -546,6 +547,8 @@ class FleetHooks {
   readonly #place: HookPlace;
   /** What SessionStart hooks said, for the session's next prompt. */
   readonly #pending: string[] = [];
+  /** What PreToolUse hooks said of a call, by its id, for its result. */
+  readonly #before = new Map<string, string>();
   /** The turn running now was started by a Stop hook's block. */
   #stopActive = false;
 
@@ -586,6 +589,11 @@ class FleetHooks {
         if (verdict.block) {
           return { block: true, reason: verdict.block };
         }
+        // Its words go with the call's result, as Claude Code adds a
+        // PreToolUse hook's `additionalContext` for the model.
+        if (verdict.context) {
+          this.#before.set(event.toolCallId, verdict.context);
+        }
         // A rewrite, taken outside a workspace only (fleet-hook-run.ts):
         // pi takes a call's new input mutated in place ("To modify
         // arguments, mutate `event.input` in place", types.d.ts).
@@ -615,7 +623,12 @@ class FleetHooks {
           },
           context
         );
-        const said = [verdict.block, verdict.context].filter(Boolean);
+        const said = [
+          this.#before.get(event.toolCallId),
+          verdict.block,
+          verdict.context,
+        ].filter(Boolean);
+        this.#before.delete(event.toolCallId);
         return said.length > 0
           ? {
               content: [
