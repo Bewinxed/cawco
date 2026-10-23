@@ -340,6 +340,7 @@
   "patchedDependencies": {
     "golar@0.1.11": "patches/golar@0.1.11.patch",
     "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch",
+    "@shadcn/lint@0.2.3": "patches/@shadcn%2Flint@0.2.3.patch",
     "virtua@0.53.4": "patches/virtua@0.53.4.patch",
     "bits-ui@2.19.5": "patches/bits-ui@2.19.5.patch",
   },

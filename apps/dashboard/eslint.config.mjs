@@ -44,10 +44,11 @@ const PLACEMENT = [
   ...["w", "min-w", "max-w", "inline-size", "min-inline-size"],
   "max-inline-size",
   // Markers that style nothing themselves: a group or peer named for a
-  // descendant or sibling to read (`peer` is no class group, so shadcn/lint
-  // warns once that it matches by name: `peer` and `peer/<name>`), and the
-  // hit areas, a transparent box round the part that draws nothing
-  // (DESIGN.md, The 44 Touch Rule, The 24 Pointer Rule).
+  // descendant or sibling to read (each entry matches the marker and its
+  // `/<name>`; patches/@shadcn%2Flint@0.2.3.patch lets `peer` pass the
+  // entry check as the marker it is), and the hit areas, a transparent box
+  // round the part that draws nothing (DESIGN.md, The 44 Touch Rule, The 24
+  // Pointer Rule).
   ...["group", "peer", "touch-hit", "pointer-hit"],
 ];
 const rules = {
