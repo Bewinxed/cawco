@@ -18,6 +18,7 @@
  *   bun scripts/probe-kit/run.ts web control-select
  */
 import type { Page } from "playwright-core";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { COMPOSER, type Kit, open, type Spec, settle } from "../../kit";
 
@@ -166,7 +167,7 @@ const run = async (kit: Kit) => {
   const dialog = page.getByRole("dialog", { name: "New Session" });
   await dialog.waitFor({ timeout: 30_000 });
   await dialog
-    .getByRole("textbox", { name: "Search models" })
+    .getByRole("textbox", { name: spawnWords.searchModels })
     .fill(CUSTOM_MODEL);
   const custom = dialog.getByRole("button", { name: CUSTOM_ROW });
   await custom.waitFor({ timeout: 15_000 });

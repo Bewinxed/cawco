@@ -7,7 +7,7 @@
  *
  * - Every text field, editor and search strip standing in a touched state
  *   (Find's strip, the composer, New session's prompt, model search and
- *   path, Recent's search, a task's fields, a hook's editor, the memory
+ *   path (the model search's frame is the picker's card), Recent's search, a task's fields, a hook's editor, the memory
  *   editor, a comment's composer), focused by a click and again by Tab
  *   (⇧Tab, Tab back onto it): it holds the focus; neither it nor any box
  *   round it draws the focus ring (no outline and no box-shadow in
@@ -24,6 +24,7 @@
  * The canvas's selected frame is canvas-design's 3b.
  */
 import type { Page } from "playwright-core";
+import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { scan } from "../../journeys/scan";
 import type { Kit, Spec } from "../../kit";
 import { chosen } from "../../surfaces/catalogue";
@@ -197,9 +198,10 @@ async function fieldsOf(
   kit: Kit,
   page: Page,
   at: string
-): Promise<{ count: number; framed: number }> {
+): Promise<{ count: number; framed: number; framedNames: string[] }> {
   const count = await markFields(page);
   let framed = 0;
+  const framedNames: string[] = [];
   for (let i = 0; i < count; i += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: one field focused at a time
     await blur(page);
@@ -209,6 +211,7 @@ async function fieldsOf(
     }
     if (rest.frame) {
       framed += 1;
+      framedNames.push(rest.name);
     }
     // A person's press at its middle, once it is scrolled into view; a
     // field another layer stands over (an open popover's ground) is not
@@ -252,7 +255,7 @@ async function fieldsOf(
     );
   }
   await blur(page);
-  return { count, framed };
+  return { count, framed, framedNames };
 }
 
 /**
@@ -430,6 +433,14 @@ const spec: Spec = {
         fields += read.count;
         framed += read.framed;
         kit.check(`${at}: a text field stands to read`, read.count > 0);
+        if (`${surface.name}/${state.name}` === "new-session/open") {
+          // Its frame is the model picker's whole card (ModelSection).
+          kit.check(
+            `${at}: "${spawnWords.searchModels}" is a framed field (field-edge), read above`,
+            read.framedNames.includes(spawnWords.searchModels),
+            `framed: ${JSON.stringify(read.framedNames)}`
+          );
+        }
         if (`${surface.name}/${state.name}` === "session/rest") {
           await button(kit, page, at);
         }

@@ -71,6 +71,9 @@
  *     in thumbnails Down lands on the card directly below; Enter opens it,
  *     the focus on the panel's name; Files opened again, Tab enters on the
  *     card on show.
+ * 40. the drawer at 390 (Chromium and WebKit): Tab from the Artifacts
+ *     segment goes to the view switch and then the first card, never to
+ *     the segment's panel (it holds the cards, so it takes no Tab stop).
  *
  * One capture per state at 390 and 1440, light and dark, in the run's output
  * folder (`kit.out`).
@@ -192,7 +195,9 @@ const watch = (page: Page) => {
   errors.set(page, seen);
   page.on("console", (message) => {
     if (message.type() === "error" && !kitsOwnMessage(message.text())) {
-      seen.push(message.text());
+      // A resource's refusal names no address in its text: the address said.
+      const { url } = message.location();
+      seen.push(url ? `${message.text()} (${url})` : message.text());
     }
   });
   page.on("pageerror", (error) => seen.push(String(error)));
@@ -1164,11 +1169,14 @@ const reviewLegs = async (
     const want = getComputedStyle(swatch).color;
     swatch.remove();
     const style = field ? getComputedStyle(field) : null;
+    const input = field?.querySelector("input");
+    const own = input ? getComputedStyle(input) : null;
     return {
       inputFocused:
         document.activeElement?.closest("[data-files-search]") !== null,
       outline: style ? `${style.outlineStyle} ${style.outlineWidth}` : null,
-      color: style?.outlineColor ?? null,
+      inputOutline: own?.outlineStyle ?? null,
+      shadowRing: !!style?.boxShadow.includes(want),
       want,
     };
   });
@@ -1183,10 +1191,11 @@ const reviewLegs = async (
     return el ? getComputedStyle(el).outlineOffset : null;
   });
   kit.check(
-    "16: the search field draws the focus ring when its input has keyboard focus, and a card's ring stands inside its own edge (outline-offset = --focus-ring-inset)",
+    "16: the search field's focus is its caret (The Caret Rule): with its input focused, neither the strip nor the input draws an outline or the ring; and a card's ring stands inside its own edge (outline-offset = --focus-ring-inset)",
     ring.inputFocused &&
-      ring.outline === "solid 2px" &&
-      ring.color === ring.want &&
+      !!ring.outline?.startsWith("none") &&
+      ring.inputOutline === "none" &&
+      !ring.shadowRing &&
       !!card?.card &&
       cardRing === "-2px",
     `field ${JSON.stringify(ring)}; card ${JSON.stringify(card)} offset ${cardRing}`
@@ -1625,7 +1634,7 @@ const lengths = (runs: readonly MotionRun[]) =>
  *  26. C: a streamed reply with no attachment reads no attachments again;
  *  27. A: a new attachment keeps the focus on the row it was on;
  *  28. Attach a file opens the composer's own picker, and Files goes;
- *  30. Jump's field draws the house ring (FindField);
+ *  30. Jump's field: its caret alone, no ring (The Caret Rule);
  *  31. the skeleton gives its place to the empty state in its reveal.
  */
 const roundThree = async (
@@ -1934,7 +1943,7 @@ const roundThree = async (
   );
   await attach.close();
 
-  // 30. Jump's field draws the house ring.
+  // 30. Jump's field: its caret alone (The Caret Rule).
   const jump = await openSession(kit, base, "desk", "light", ids.many);
   // The page stands hydrated once open (kit `pageReady`), so the shortcut is
   // its own; the ring is read once the focus is in Jump's field.
@@ -1959,18 +1968,20 @@ const roundThree = async (
     document.body.append(swatch);
     const want = getComputedStyle(swatch).color;
     swatch.remove();
+    const input = ringed?.querySelector("input");
     return {
       outline: style ? `${style.outlineStyle} ${style.outlineWidth}` : null,
-      color: style?.outlineColor ?? null,
-      want,
+      inputOutline: input ? getComputedStyle(input).outlineStyle : null,
+      shadowRing: !!style?.boxShadow.includes(want),
       focused: !!document.activeElement?.closest("[data-slot='finder-field']"),
     };
   });
   kit.check(
-    "30: Jump's field draws the house focus ring when its input has keyboard focus (the ring lives in FindField)",
+    "30: Jump's field's focus is its caret (The Caret Rule): with its input focused, neither the strip nor the input draws an outline or the ring",
     jumpRing.focused &&
-      jumpRing.outline === "solid 2px" &&
-      jumpRing.color === jumpRing.want,
+      !!jumpRing.outline?.startsWith("none") &&
+      jumpRing.inputOutline === "none" &&
+      !jumpRing.shadowRing,
     JSON.stringify(jumpRing)
   );
   await jump.close();
@@ -2506,6 +2517,9 @@ const viewLegs = async (
   await rowOpensLeg(kit, base, ids.many);
   await pickLegs(kit, base, ids.many);
   await keysLegs(kit, base, ids.many);
+  for (const engine of ["chromium", "webkit"] as const) {
+    await panelStopLeg(kit, base, engine, ids.many);
+  }
   await switchMotionLeg(kit, base, ids.many);
 };
 
@@ -2704,6 +2718,77 @@ const keysLeg = async (
     `entered on ${again}, on show ${opened}`
   );
   await sweep(page, `keys ${leg}`);
+  await page.close();
+};
+
+/**
+ * 40: the drawer at 390 (Chromium and WebKit): from the Artifacts segment,
+ * Tab goes to the view switch and then the first card, never to the
+ * segment's panel, which holds them and so takes no Tab stop of its own
+ * (W3C APG, Tabs Pattern, note 4).
+ */
+const panelStopLeg = async (
+  kit: Kit,
+  base: string,
+  engine: Engine,
+  id: string
+) => {
+  const page = await openSession(
+    kit,
+    base,
+    "phone",
+    "light",
+    id,
+    undefined,
+    engine
+  );
+  await openFiles(page, "phone");
+  await atRest(page);
+  await page.locator('[data-files-segment="artifacts"]').focus();
+  const where = () =>
+    page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) {
+        return "none";
+      }
+      if (el.getAttribute("role") === "tabpanel") {
+        return "tabpanel";
+      }
+      if (el.matches("[data-files-cards] [data-files-card]")) {
+        return `card ${el.dataset.artifact ?? ""}`;
+      }
+      if (el.hasAttribute("data-rail-item")) {
+        return `switch ${el.getAttribute("data-rail-item")}`;
+      }
+      if (el.hasAttribute("data-files-segment")) {
+        return `segment ${el.getAttribute("data-files-segment")}`;
+      }
+      return el.localName;
+    });
+  const path = [await where()];
+  for (let i = 0; i < 4 && !path.at(-1)?.startsWith("card"); i += 1) {
+    await page.keyboard.press("Tab");
+    path.push(await where());
+  }
+  const read = await page.evaluate(() => ({
+    first:
+      document.querySelector<HTMLElement>(
+        "[data-files-cards] [data-files-card]"
+      )?.dataset.artifact ?? null,
+    panel: document
+      .querySelector('[data-files-region="artifacts"][role="tabpanel"]')
+      ?.getAttribute("tabindex"),
+  }));
+  kit.check(
+    `40 (${engine} 390): in the drawer, Tab from the Artifacts segment goes to the view switch, then the first card, never stopping on the segment's panel (its tabindex -1)`,
+    path[0] === "segment artifacts" &&
+      path[1]?.startsWith("switch") === true &&
+      path[2] === `card ${read.first}` &&
+      !path.includes("tabpanel") &&
+      read.panel === "-1",
+    `path ${JSON.stringify(path)}; first card ${read.first}; panel tabindex ${read.panel}`
+  );
+  await sweep(page, `panel stop ${engine} 390`);
   await page.close();
 };
 

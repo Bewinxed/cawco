@@ -4,7 +4,12 @@
    * list with the slide-swap on harness change. Codex is shown but disabled
    * ("Coming soon"); the list is the app's catalogue, canonical names only.
    */
-  import { accountsWords, HARNESSES, type HarnessKind } from "@cawco/core";
+  import {
+    accountsWords,
+    HARNESSES,
+    type HarnessKind,
+    spawnWords,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import { crossfade } from "svelte/transition";
   import { frameSize } from "#lib/cawco/frame-observer.js";
@@ -298,7 +303,7 @@
   {/if}
   <div
     data-slot="picker"
-    class="relative grid rounded-md border border-border-control bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--c-row-h) data-railed:grid-cols-(--cols)"
+    class="field-edge transition-control relative grid rounded-md border border-border-control bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--c-row-h) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
     style:--rail-gap="calc(var(--rail-step) - var(--c-btn-h))"
@@ -355,7 +360,7 @@
         />
         <input
           aria-controls={`${uid}-models`}
-          aria-label="Search models"
+          aria-label={spawnWords.searchModels}
           autocapitalize="off"
           autocorrect="off"
           class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-body font-normal text-ink-strong placeholder:text-ink-muted"

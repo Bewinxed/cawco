@@ -307,11 +307,7 @@
     "Nothing to land": 2
   },
   "scripts/probe-kit/specs/landing-gate.ts": {
-    "clears the hub's landing gate": 1,
-    "Landing gate, run by the hub:": 2
-  },
-  "scripts/probe-kit/specs/landing-recut.ts": {
-    "Landing gate, run by the hub:": 1
+    "clears the hub's landing gate": 1
   },
   "scripts/probe-kit/specs/limit-admission.ts": {
     "moves from": 1
@@ -521,7 +517,6 @@
     "What’s next for": 2
   },
   "scripts/probe-kit/specs/web/control-select.ts": {
-    "Search models": 1,
     "Use custom model id": 1
   },
   "scripts/probe-kit/specs/web/hub-states.ts": {
