@@ -66,7 +66,7 @@ import {
 import { type Boundary, boundaryCommand } from "../boundary";
 import type { BrowserDoor } from "../browser/door";
 import { callDelegationTool, delegationTools } from "../delegation";
-import { hooksAt, readFleetHarnessSet } from "../fleet-harness-set";
+import { hooksAt, placedAt, readFleetHarnessSet } from "../fleet-harness-set";
 import { type HookPlace, runFleetHooks } from "../fleet-hook-run";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
@@ -1595,10 +1595,17 @@ export async function startPiHost(
         cwd: ctx.cwd,
         ...(ctx.boundary ? { boundary: ctx.boundary } : {}),
       });
+  const placed = await readFleetHarnessSet();
   const resourceLoader = new DefaultResourceLoader({
     cwd: ctx.cwd,
     agentDir,
     settingsManager,
+    // The project's skills placed at its folder: pi reads no `.claude/skills`
+    // (fleet-harness-set.ts `placedSkills`), and "if a directory contains
+    // SKILL.md, treat it as a skill root" (pi 1.3.0 skills.js).
+    additionalSkillPaths: placedAt(placed.placedSkills, ctx.cwd).map(
+      (skill) => skill.dir
+    ),
     extensionFactories: [
       tools.extension(await piHandoffTools(ctx.instanceId, credential)),
       ...mcp,
