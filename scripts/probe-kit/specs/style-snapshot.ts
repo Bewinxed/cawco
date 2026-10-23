@@ -656,7 +656,9 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   kit.note(
     `coverage: ${files.length - uncovered.length} of ${files.length} .svelte files are rendered by a state (${relative(ROOT, COVERAGE)})`
   );
-  const unread = asked.filter(({ key }) => !whole.has(key)).map(({ key }) => key);
+  const unread = asked
+    .filter(({ key }) => !whole.has(key))
+    .map(({ key }) => key);
   if (unread.length > 0) {
     kit.note(
       `coverage: ${unread.length} state(s) not read at every pass keep the map's last files: ${unread.join(", ")}`
