@@ -297,13 +297,14 @@ const cutInto = async (result, name, folderOf) => {
 };
 
 // Each session's CawCo identity, by OpenCode session id, as the agent records
-// it when the session opens.
+// it when the session opens, with its doors to the container runtimes
+// (DOCKER_HOST, CONTAINER_HOST: agent session-containers.ts).
 const sessionHeld = (sessionID) => {
   try { return JSON.parse(readFileSync(cawcoCredentials, "utf8"))[sessionID]; } catch { return undefined; }
 };
 const sessionEnv = (sessionID) => {
   const held = sessionHeld(sessionID);
-  return held ? { ${JSON.stringify(CAWCO_ENV.instanceId)}: held.instanceId, ${JSON.stringify(CAWCO_ENV.sessionCredential)}: held.credential } : {};
+  return held ? { ...held.containerEnv, ${JSON.stringify(CAWCO_ENV.instanceId)}: held.instanceId, ${JSON.stringify(CAWCO_ENV.sessionCredential)}: held.credential } : {};
 };
 // What every shell and local MCP server gets: the machine's own data dir, no
 // password, and none of CawCo's wiring but what the session's own tools read.

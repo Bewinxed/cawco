@@ -549,6 +549,8 @@ export async function spawnPi(
         : {}),
       // Its shells' git reaches the hub's remote as this session (git-credential.ts).
       ...sessionGitEnv(),
+      // Its container runtimes through its own doors (session-containers.ts).
+      ...ctx.containerEnv,
       // In a workspace, the outputs its bash saves land in the session's own
       // folder, which the boundary reads (`PiHarness.spill`); each command
       // runs with the workspace's scratch as its `TMPDIR` all the same.

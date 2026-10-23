@@ -55,6 +55,7 @@ import {
   BOUNDARY_RELAUNCH,
   CAWCO_SCRATCH_TAG,
   CLI_OUTDATED,
+  CONTAINERS_ENDED,
   CONTROL_CARRY_SESSIONS,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
@@ -199,6 +200,14 @@ import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
+import {
+  beginEnding,
+  containersEndedWords,
+  endSessionContainers,
+  finishEnding,
+  openContainerDoors,
+  sessionsOwedEnding,
+} from "./session-containers";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { stopStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
@@ -3225,6 +3234,19 @@ export class SessionSupervisor {
       spec.workspace ? spec.projectId : undefined,
       spill
     );
+    // Its doors to the machine's container runtimes (session-containers.ts),
+    // so what its work starts stops with it. A workspace's boundary reaches
+    // no runtime at all: a bounded session gets none.
+    const containerEnv = boundary
+      ? undefined
+      : await openContainerDoors(spec.instanceId).catch(
+          (error: unknown): Record<string, string> => {
+            warn(
+              `${spec.instanceId}: its doors to the container runtimes did not open, so containers it starts are not stopped with it: ${errorText(error)}`
+            );
+            return {};
+          }
+        );
     const ctx = this.#context(
       spec.instanceId,
       workdir,
@@ -3241,7 +3263,8 @@ export class SessionSupervisor {
         : () =>
             place
               ? browserDoor(place.id)
-              : browserDoor(spec.instanceId, spec.projectId)
+              : browserDoor(spec.instanceId, spec.projectId),
+      containerEnv
     );
     return { boundary, ctx };
   }
@@ -3262,7 +3285,8 @@ export class SessionSupervisor {
     bounded?: { boundary: Boundary; workspace: string },
     sessionCredential?: string,
     recovery = false,
-    browser?: () => Promise<BrowserDoor>
+    browser?: () => Promise<BrowserDoor>,
+    containerEnv?: Readonly<Record<string, string>>
   ): SessiondAwareContext {
     const boundary = bounded?.boundary;
     if (!processGeneration) {
@@ -3319,6 +3343,7 @@ export class SessionSupervisor {
         : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
       ...(browser ? { browserDoor: browser } : {}),
+      ...(containerEnv ? { containerEnv } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,
@@ -4111,6 +4136,85 @@ export class SessionSupervisor {
   }
 
   /**
+   * Every container session `instanceId`'s work started, stopped as it ends
+   * (session-containers.ts `endSessionContainers`), and the hub told what
+   * was done ({@link CONTAINERS_ENDED}), which tells the session that
+   * delegated it, else the session. Its ending, written down before
+   * ({@link beginEnding}), is crossed off once done; one that fails stays
+   * written down for the next agent's start, and is said.
+   */
+  #endContainers(instanceId: string, harness: HarnessKind): void {
+    endSessionContainers(instanceId)
+      .then(async (ended) => {
+        const content = containersEndedWords(ended);
+        if (content) {
+          console.info(`[containers] ${instanceId}: ${content}`);
+          this.#sayGone({
+            kind: "frame",
+            instanceId,
+            harness,
+            message: {
+              type: "system",
+              subtype: CONTAINERS_ENDED,
+              uuid: `containers-ended-${instanceId}-${Date.now()}`,
+              session_id: "",
+              content,
+            } as unknown as NeutralMessage,
+          });
+        }
+        if (ended.failed.length === 0) {
+          await finishEnding(instanceId);
+        }
+      })
+      .catch((error: unknown) =>
+        warn(
+          `${instanceId}: it ended, but the containers it started could not be read, so they were not stopped: ${errorText(error)}`
+        )
+      );
+  }
+
+  /**
+   * As the hub welcomes this agent: the containers owed an ending
+   * ({@link sessionsOwedEnding}) ended. Of a session whose ending an earlier
+   * agent wrote down and did not finish, as its stop would have; of one the
+   * hub no longer has on this machine (`instances`), only said in the log,
+   * as nobody is there to tell. A welcome naming no list is a wire error:
+   * nothing is ended.
+   */
+  sweepContainers(welcome: unknown): void {
+    const named = (welcome as { instances?: unknown } | undefined)?.instances;
+    if (!(
+      Array.isArray(named) && named.every((id) => typeof id === "string")
+    )) {
+      return;
+    }
+    sessionsOwedEnding(named)
+      .then(async ({ gone, unfinished }) => {
+        for (const instanceId of unfinished) {
+          this.#endContainers(
+            instanceId,
+            this.#placed.get(instanceId)?.harness ?? "claude"
+          );
+        }
+        await Promise.all(
+          gone.map(async (instanceId) => {
+            const content = containersEndedWords(
+              await endSessionContainers(instanceId)
+            );
+            console.info(
+              `[containers] ${instanceId}, a session this hub no longer has: ${content ?? "nothing was there"}`
+            );
+          })
+        );
+      })
+      .catch((error: unknown) =>
+        warn(
+          `the containers of ended sessions could not be read as the hub welcomed this agent: ${errorText(error)}`
+        )
+      );
+  }
+
+  /**
    * The keeper refused this session's process its input. Said here with the
    * session and the keeper's reason; the session fails with it, as a start
    * that failed does, and is no longer one this daemon hands work to. What it
@@ -4734,6 +4838,11 @@ export class SessionSupervisor {
       // Its process is gone, and sessiond swept what it started on the host;
       // what its commands left inside its workspace's boundary goes too.
       await this.#endWork(instanceId, "stopped", cwd);
+      // And every container its work started (session-containers.ts),
+      // written down first so an agent that stops midway ends them as it
+      // starts again. The stop is not held for their stop timeouts.
+      await beginEnding(instanceId);
+      this.#endContainers(instanceId, kind);
       this.#resumable.delete(instanceId);
       this.#handed.delete(instanceId);
       forgetTaken(instanceId);

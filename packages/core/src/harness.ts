@@ -390,6 +390,16 @@ export const LIMIT_REACHED = "limit_reached";
 export const LEAK_FOUND = "leak_found";
 
 /**
+ * A session ended, and the containers its work started were stopped with it
+ * (agent session-containers.ts): the agent's frame to the hub (`content`
+ * names each container and what was done to it; `uuid` names this ending,
+ * so one said again is told once). The hub tells the session that delegated
+ * it, else the session itself, in its own word (hub server.ts
+ * `tellContainersEnded`).
+ */
+export const CONTAINERS_ENDED = "containers_ended";
+
+/**
  * A session's start waits for its machine's memory: the machine's room on
  * memory (core machine-room.ts `measureMemoryRoom`: Linux's memory available
  * and the room under its keeper's cgroup limit; the Mac's pressure level)

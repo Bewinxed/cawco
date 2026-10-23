@@ -1207,6 +1207,9 @@ const sessionEnv = (
   ...(ctx.boundary ? { CLAUDE_CODE_TMPDIR: ctx.boundary.claudeTmp } : {}),
   // The session's git reaches the hub's remote as this session (git-credential.ts).
   ...sessionGitEnv({ ...process.env, ...specEnv }),
+  // Its container runtimes through its own doors (session-containers.ts):
+  // what its work starts there stops as it ends.
+  ...ctx.containerEnv,
   // The session's shell acts as this session and no other: `cawco tool`
   // there sends the credential its CawCo MCP sends.
   [CAWCO_ENV.instanceId]: ctx.instanceId,

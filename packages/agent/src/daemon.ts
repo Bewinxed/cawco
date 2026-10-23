@@ -2765,6 +2765,8 @@ const attach = (
         sweepAccounts(envelope.payload as RegisterAckPayload);
         // The welcome read whole: the doors of sessions it no longer has go.
         sweepBrowserDoors(envelope.payload);
+        // And the containers of sessions that ended while no agent was here.
+        supervisor.sweepContainers(envelope.payload);
         return true;
       }
       if (envelope.verb !== "spawn") {

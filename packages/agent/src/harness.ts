@@ -116,6 +116,14 @@ export interface HarnessContext {
   /** The session's event loop ended; the supervisor drops its routing entry. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   closed?(): void;
+  /**
+   * What its environment names the machine's container runtimes by: its own
+   * doors to them (session-containers.ts `openContainerDoors`), as
+   * `DOCKER_HOST` and `CONTAINER_HOST`, so every container its work starts
+   * is known as its and stops as it ends. Absent on a bounded session, whose
+   * boundary reaches no runtime.
+   */
+  readonly containerEnv?: Readonly<Record<string, string>>;
   /** The resolved working directory (after worktree / bootstrap). */
   readonly cwd: string;
   /**

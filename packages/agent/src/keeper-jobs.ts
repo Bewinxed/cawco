@@ -20,12 +20,15 @@
  * else was started by someone else and only placed here, and the stop is
  * refused ({@link KeeperKept}): the keeper is kept, each such pid is said
  * with its command line, and the caller tries again on its next look. A
- * process is never moved out at stop time. A tool that outlives its launcher
- * claims a unit of its own as it starts (podman's `libpod-conmon-<id>.scope`,
- * `systemd-run --scope`), and CawCo gives no session its keeper's
- * `INVOCATION_ID` (core session-env.ts), which is what keeps podman's conmon
- * in its caller's cgroup. `force` is the one override: the person asked for
- * the stop outright.
+ * process is never moved out at stop time. A keeper's stop is not a
+ * session's end, so it reaches no container: a session's podman and docker
+ * reach their runtime's service through the session's own door
+ * (session-containers.ts), whose containers run under the service, never in
+ * the keeper's unit, and CawCo gives no session its keeper's `INVOCATION_ID`
+ * (core session-env.ts), which would keep a local podman's conmon in its
+ * caller's cgroup. Those containers stop as their session ends
+ * (session-containers.ts `endSessionContainers`), and only then. `force` is
+ * the one override: the person asked for the stop outright.
  *
  * macOS has no cgroups. launchd ends a job's process group as the job stops
  * (launchd.plist(5) `AbandonProcessGroup`: "When a job dies, launchd kills any

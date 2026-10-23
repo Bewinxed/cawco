@@ -158,6 +158,7 @@ import {
   CLI_OUTDATED,
   COMPACTION_ORIGIN,
   CONFIGURE_BINARY_UPDATES,
+  CONTAINERS_ENDED,
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
@@ -437,6 +438,7 @@ import {
   readForgeAsk,
 } from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
+import { containerWords } from "@cawco/core/words/containers";
 import { leakWords } from "@cawco/core/words/leaks";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { isPlace } from "@cawco/core/workspace-policy";
@@ -1220,6 +1222,8 @@ const LIMIT_ORIGIN = "limit";
 
 /** The system origin name of the hub's word that something a session started leaks (core `LEAK_FOUND`). */
 const LEAK_ORIGIN = "leak";
+/** The system origin name of the hub's word that a session's containers stopped as it ended (core `CONTAINERS_ENDED`). */
+const CONTAINERS_ORIGIN = "containers";
 /** The leaks told so far, by session and leak, most recent last: one an agent says again (after a restart) is told once. */
 const LEAKS_KEPT = 4096;
 
@@ -25417,7 +25421,7 @@ export const createServer = (
     });
   };
 
-  /** The leaks each session was told of, by `<session> <leak>` ({@link LEAKS_KEPT}). */
+  /** The leaks and container endings each session was told of, by `<session> <id>` ({@link LEAKS_KEPT}). */
   const leaksTold = new Set<string>();
   /**
    * A leak its machine found in what a session started (core `LEAK_FOUND`):
@@ -25482,6 +25486,57 @@ export const createServer = (
     }
     console.warn(`[leak] ${row.id}: ${said.content}`);
     tellSession(row.id, said.content, LEAK_ORIGIN);
+  };
+
+  /**
+   * A session ended, and its machine stopped the containers its work started
+   * (core `CONTAINERS_ENDED`, agent session-containers.ts). The session that
+   * delegated it is told, naming it and its item; a session nobody delegated
+   * is the person's own, and is told itself, in the hub's word, which waits
+   * for whoever wakes it next. Once per ending; one from a machine that does
+   * not run the session is nobody's.
+   */
+  const tellContainersEnded = (
+    machineId: string,
+    instanceId: string,
+    said: { uuid?: unknown; content?: unknown }
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (
+      !row ||
+      row.machineId !== machineId ||
+      typeof said.uuid !== "string" ||
+      typeof said.content !== "string"
+    ) {
+      return;
+    }
+    const key = `${row.id} ${said.uuid}`;
+    if (leaksTold.has(key)) {
+      return;
+    }
+    leaksTold.add(key);
+    const [oldest] = leaksTold;
+    if (leaksTold.size > LEAKS_KEPT && oldest !== undefined) {
+      leaksTold.delete(oldest);
+    }
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    const parent = item?.parentInstanceId;
+    console.info(
+      `[containers] ${row.id}${parent ? `, told to ${parent}` : ""}: ${said.content}`
+    );
+    if (item && parent) {
+      tellSession(
+        parent,
+        containerWords.delegateEnded(
+          item.title,
+          item.id.slice(0, 8),
+          said.content
+        ),
+        CONTAINERS_ORIGIN
+      );
+      return;
+    }
+    tellSession(row.id, said.content, CONTAINERS_ORIGIN);
   };
 
   /**
@@ -32649,6 +32704,19 @@ export const createServer = (
                   frame.message.subtype === LEAK_FOUND
                 ) {
                   tellLeak(
+                    message.machineId,
+                    message.instanceId,
+                    frame.message as { uuid?: unknown; content?: unknown }
+                  );
+                  break;
+                }
+                // The containers its work started stopped as it ended (agent
+                // session-containers.ts): its parent, else it, is told.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === CONTAINERS_ENDED
+                ) {
+                  tellContainersEnded(
                     message.machineId,
                     message.instanceId,
                     frame.message as { uuid?: unknown; content?: unknown }

@@ -1024,11 +1024,12 @@ export class SessiondServer {
    * ONLY WHAT IS STILL IN THE CHILD'S CGROUP IS ITS TREE. A process that left
    * it was put elsewhere on purpose, by itself or by the service manager:
    * conmon, which podman moves into a `libpod-conmon-<id>.scope` of its own
-   * after its double fork and `setsid()`, or anything a user or CawCo moved
-   * into a scope to outlive the session. It is dropped from the tree, here
-   * and in every later reading, and never signalled: CawCo signals no process
-   * it did not start. The child itself is its own while it lives, wherever it
-   * is.
+   * after its double fork and `setsid()`, or anything a user moved into a
+   * scope of its own. It is dropped from the tree, here and in every later
+   * reading, and never signalled: CawCo signals no process it did not start.
+   * A container a session's work started is ended through its runtime as the
+   * session ends (agent session-containers.ts), never by a signal from here.
+   * The child itself is its own while it lives, wherever it is.
    */
   async #survey(proc: Proc, table: Listed[]): Promise<Pid[]> {
     const root = proc.pid;

@@ -2222,6 +2222,7 @@ export * from "./words/configure";
 export * from "./words/connect";
 export * from "./words/connection";
 export * from "./words/connections";
+export * from "./words/containers";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
 export * from "./words/files";
