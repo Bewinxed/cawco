@@ -318,6 +318,16 @@ const ERRORS = /"errors":(\[[^\]]*\])/;
 const ID = /"id":"([0-9a-f-]{36})"/;
 const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 500);
 
+/** The files of a detailed design_map record's components, or undefined when the answer is not that record. */
+const componentFiles = (said: string): string[] | undefined => {
+  try {
+    const record = JSON.parse(said) as { components?: { file: string }[] };
+    return record.components?.map((one) => one.file);
+  } catch {
+    return undefined;
+  }
+};
+
 /** A place id no session names: what a dashboard's raw stage control could invent. */
 const FORGED_PLACE = "0badc0de-caw";
 
@@ -1226,8 +1236,10 @@ const run = async (kit: Kit) => {
   ) => {
     asks.set(n, {
       name,
-      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
-      input: { response_format: "detailed", ...input },
+      // A CawCo tool answers the hub's record, which this spec reads, only when asked for detailed (mcp-tool.ts); the harness's own tools take no such argument.
+      input: name.startsWith("mcp__cawco__")
+        ? { response_format: "detailed", ...input }
+        : input,
     });
     await fleet.send(who, `PROBE-CALL:${n}`);
     return (await until(
@@ -1239,9 +1251,7 @@ const run = async (kit: Kit) => {
   };
 
   // 1. The components of the session's folder.
-  const listed = await call("1", "mcp__cawco__design_map", {
-    response_format: "detailed",
-  });
+  const listed = await call("1", "mcp__cawco__design_map", {});
   kit.check(
     "1: design_map answers the folder's components, Card.svelte with its states file",
     !listed.includes(REFUSAL) &&
@@ -1303,12 +1313,7 @@ const run = async (kit: Kit) => {
       .text();
   const untouched = await status();
   const kitSession = await fleet.spawn("claude", "Kit", kitDir);
-  const kitListed = await call(
-    "6",
-    "mcp__cawco__design_map",
-    { response_format: "detailed" },
-    kitSession
-  );
+  const kitListed = await call("6", "mcp__cawco__design_map", {}, kitSession);
   kit.check(
     "6: design_map in a checkout read-only to its boundary answers src/lib/Card.svelte with its states file",
     kitListed.includes('"src/lib/Card.svelte"') &&
@@ -1430,12 +1435,14 @@ const run = async (kit: Kit) => {
       { dir: "src/lib" },
       kitSession
     );
+    // The record names each component's stories too, so the components are read from its list, not counted by "name".
+    const files = componentFiles(scoped);
     kit.check(
       "13: design_map with dir src/lib answers src/lib/Card.svelte alone, not src/other/Other.svelte",
-      scoped.includes('"src/lib/Card.svelte"') &&
-        !scoped.includes("Other.svelte") &&
-        (scoped.match(/"name":/g)?.length ?? 0) === 1,
-      short(scoped)
+      files?.length === 1 &&
+        files[0] === "src/lib/Card.svelte" &&
+        !scoped.includes("Other.svelte"),
+      `components ${JSON.stringify(files)}; ${short(scoped)}`
     );
 
     // 14. A dir outside the session's folder is refused in words.
