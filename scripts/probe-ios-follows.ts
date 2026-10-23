@@ -198,8 +198,6 @@ try {
     );
   const mark = async () => (await lines()).length;
   const since = async (from: number) => (await lines()).slice(from);
-  const shot = (name: string) =>
-    sh(`xcrun simctl io ${udid} screenshot "${join(out, `${name}.png`)}"`);
   const ui = () => sh(`/opt/homebrew/bin/axe describe-ui --udid ${udid}`);
   interface Node {
     AXLabel?: string | null;
@@ -294,7 +292,6 @@ try {
     ofB.length > 0,
     `${ofB.length} of B's events reached the app while B answered PROBE-B2`
   );
-  await shot("after-close");
 
   // ── 6. A opened again: followed, whole, streaming ────────────────────
   const closed = await ui();
@@ -312,7 +309,6 @@ try {
   );
   const reopened = await ui();
   await writeFile(join(out, "ui-reopened.json"), reopened);
-  await shot("reopened");
   check(
     "A reopened shows the turn it answered unfollowed",
     reopened.includes("PROBE-A2"),
@@ -329,7 +325,6 @@ try {
     again.length > 0 && showing.includes("PROBE-A3"),
     `${again.length} of A's events reached the app; PROBE-A3 on screen: ${showing.includes("PROBE-A3")}`
   );
-  await shot("new-turn");
   stream.kill();
   await writeFile(join(out, "ledger.log"), await log());
 } catch (error) {
@@ -343,7 +338,7 @@ try {
   await fleet.close();
   await fleet.clean(keep);
 }
-console.log(`  captures and logs: ${out}`);
+console.log(`  logs: ${out}`);
 console.log(
   failed === 0 ? "all checks pass" : `${failed} failed:\n${failures.join("\n")}`
 );

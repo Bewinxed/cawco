@@ -30,13 +30,11 @@
  *
  * and each state swept for spills and overlaps (journeys/scan.ts).
  */
-import { join } from "node:path";
 import type { Page, WebSocketRoute } from "playwright-core";
 import { connectionWords } from "../../../../packages/core/src/words/connection";
 import { bezierAt, sameCurve } from "../../anim";
 import { scan } from "../../journeys/scan";
 import {
-  entrySlug,
   frames,
   type Kit,
   open,
@@ -550,10 +548,6 @@ const cardPlace = (page: Page) =>
 
 /** The sweep (journeys/scan.ts): nothing spills, no control covers text. */
 async function sweep(kit: Kit, page: Page, name: string, state: string) {
-  // The state as drawn, for the reviewer (never read by this spec).
-  await page.screenshot({
-    path: join(kit.out, `${entrySlug(`${name} ${state}`)}.png`),
-  });
   const found = await page.evaluate(scan);
   kit.check(
     `${name}, ${state}: nothing spills or overlaps`,
@@ -716,18 +710,7 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
       `${listed} in the rail`
     );
   }
-  const found = await sweep(kit, page, name, "board 502");
-  if (name.endsWith("light")) {
-    // What the tunnel sent, as a browser draws it, beside what the board
-    // says of it (for the reviewer; never read by this spec).
-    const raw = await page.context().newPage();
-    await raw.setContent(PROXY_502);
-    await raw.screenshot({
-      path: join(kit.out, `${entrySlug(`${name} the tunnel's 502 body`)}.png`),
-    });
-    await raw.close();
-  }
-  return found;
+  return await sweep(kit, page, name, "board 502");
 }
 
 interface CardFrame {
@@ -854,12 +837,8 @@ async function search(kit: Kit, page: Page, name: string, view: View) {
   // Words nothing here holds (the hub keeps a project named Probe), so the
   // answer is the one line "No sessions for …".
   await page.fill(`${CARD} [data-slot="finder-field"] input`, "lantern");
-  // The answer is held 800 ms: the placeholder rows, as drawn, for the
-  // reviewer (never read by this spec).
+  // The answer is held 800 ms: the placeholder rows are read inside it.
   await page.waitForTimeout(250);
-  await page.screenshot({
-    path: join(kit.out, `${entrySlug(`${name} search loading`)}.png`),
-  });
   const loading = await cardPlace(page);
   // With no machine to ask, the hub alone searches: never "0 machines".
   const searching = await page.evaluate(
@@ -1407,15 +1386,9 @@ async function searchOrder(kit: Kit, page: Page, name: string, view: View) {
   // leave (DESIGN.md, The Nothing Jumps Rule).
   await page.waitForTimeout(550);
   const loading = await listKinds(page);
-  await page.screenshot({
-    path: join(kit.out, `${entrySlug(`${name} search loading`)}.png`),
-  });
   await page.waitForTimeout(2000);
   await settle(page, 200);
   const answered = await listKinds(page);
-  await page.screenshot({
-    path: join(kit.out, `${entrySlug(`${name} search answered`)}.png`),
-  });
   // Every section that answers stands where its placeholders stood, in
   // their order on this form; a section that answers empty folds away.
   let at = 0;
@@ -1629,10 +1602,6 @@ async function conversationLeg(
       Math.abs(after.rowTop - before.rowTop - fold.height) <= 1,
     JSON.stringify({ before, after, fold: fold?.height })
   );
-  await page.screenshot({
-    path: join(kit.out, `${entrySlug(`${name} hub away`)}.png`),
-  });
-
   // Back, then the same with less motion: the row lands at once.
   socket.mode = "proxy";
   await page

@@ -9,8 +9,8 @@ import UIKit
 /// opened through the shell as a person opens it, one change is made through
 /// the function its control runs, and what the section draws is said in the
 /// ConfigProbe log; the spec reads the hub, which is what the web reads.
-/// `-config-probe-capture <url>` sends the window at each stage there as
-/// `<stage>.png`, for the paired captures beside the dashboard.
+/// At each stage what a person cannot read whole, and the card's geometry,
+/// are said in the log too.
 @MainActor
 enum ConfigProbe {
     static let on = ProcessInfo.processInfo.arguments.contains("-config-probe")
@@ -25,10 +25,6 @@ enum ConfigProbe {
             return parts.count == 2 ? (parts[0], parts[1]) : nil
         }, uniquingKeysWith: { _, last in last })
     }()
-
-    private static let captureURL = ProcessInfo.processInfo.arguments.firstIndex(of: "-config-probe-capture").flatMap { at in
-        ProcessInfo.processInfo.arguments.indices.contains(at + 1) ? URL(string: ProcessInfo.processInfo.arguments[at + 1]) : nil
-    }
 
     static func start(shell: ShellController) {
         Task { @MainActor [weak shell] in
@@ -85,11 +81,12 @@ enum ConfigProbe {
         }
         try? await Task.sleep(for: .seconds(1))
         say("\(slug) opened", AccountsProbe.texts(in: section.view).joined(separator: " | "))
-        await capture("\(slug)-list", shell)
+        await atStage("\(slug)-list", shell)
         return section
     }
 
-    private static func capture(_ stage: String, _ shell: ShellController) async {
+    /// A stage as laid out: what a person cannot read whole, and the card's geometry, into the log.
+    private static func atStage(_ stage: String, _ shell: ShellController) async {
         // What a step just changed is laid out, and a hint line's fold has run, before anything is measured.
         try? await Task.sleep(for: .seconds(Motion.durControl + 0.4))
         shell.view.window?.layoutIfNeeded()
@@ -98,14 +95,6 @@ enum ConfigProbe {
             say("clipped \(stage)", cut.isEmpty ? "none" : cut.joined(separator: " / "))
             geometry(stage, in: window)
         }
-        guard let base = captureURL, let window = shell.view.window,
-              let png = UIGraphicsImageRenderer(bounds: window.bounds).image(actions: { _ in
-                  window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-              }).pngData() else { return }
-        var request = URLRequest(url: base.appending(path: "\(stage).png"))
-        request.httpMethod = "PUT"
-        let status = await (try? URLSession.shared.upload(for: request, from: png)).map { ($0.1 as? HTTPURLResponse)?.statusCode ?? 0 }
-        log.notice("capture \(stage, privacy: .public): \(status.map { "sent, \($0)" } ?? "not sent", privacy: .public)")
     }
 
     /// The engine's view of the card on screen: its width beside the pane's,
@@ -185,7 +174,7 @@ enum ConfigProbe {
         defer { FleetConnections.probeSent = nil }
         for service in ["gitea", "gitlab", "github", "linear", "slack"] {
             say("connections address \(service)", connections.probeOpenAddress(service: service)?.said ?? "no service")
-            if service == "gitlab" { await capture("connections-gitlab", shell) }
+            if service == "gitlab" { await atStage("connections-gitlab", shell) }
             connections.probeCloseForm()
             try? await Task.sleep(for: .seconds(Motion.durControl + 0.2))
         }
@@ -195,7 +184,7 @@ enum ConfigProbe {
         let refused = connections.probeSendAddress("gitea.local/mcp", account: "probe", key: "probe-token")
         try? await Task.sleep(for: .seconds(1))
         say("connections address refused", "\(refused.said) | posts \(posts.count)")
-        await capture("connections-gitea-refused", shell)
+        await atStage("connections-gitea-refused", shell)
         // (d): a long address in a window 320pt wide.
         if let window = shell.view.window {
             let was = window.frame
@@ -206,7 +195,7 @@ enum ConfigProbe {
             window.layoutIfNeeded()
             let cut = AccountsProbe.clipped(in: window)
             say("connections address 320", "window \(Int(window.bounds.width)) | \(connections.probeAddressRead.said) | clipped \(cut.isEmpty ? "none" : cut.joined(separator: " / "))")
-            await capture("connections-gitea-320", shell)
+            await atStage("connections-gitea-320", shell)
             window.frame = was
             window.layoutIfNeeded()
         }
@@ -238,7 +227,7 @@ enum ConfigProbe {
         if let types = await open("delegate-types", DelegateTypesSectionController.self, shell) {
             // The project's own types under its name, and the file that made none; a row opens its file.
             if await until(30, { types.probeProjectsDrawn }) {
-                await capture("delegate-types-projects", shell)
+                await atStage("delegate-types-projects", shell)
                 say("delegate-types projects", types.probeProjects())
                 types.probeOpenFile("writer")
                 let opened = await until(30) { onScreen(FolderFileController.self, shell)?.probeShown != nil }
@@ -264,7 +253,7 @@ enum ConfigProbe {
             guard await until(30, { onScreen(DelegateTypeEditorController.self, shell) != nil }),
                   let reopened = onScreen(DelegateTypeEditorController.self, shell) else { return say("delegate-types editor", "never reopened") }
             say("delegate-types reopened", AccountsProbe.texts(in: reopened.view).joined(separator: " | "))
-            await capture("delegate-types-editor", shell)
+            await atStage("delegate-types-editor", shell)
             reopened.probeRunSave()
             await until { onScreen(DelegateTypesSectionController.self, shell) != nil && onScreen(DelegateTypeEditorController.self, shell) == nil }
             try? await Task.sleep(for: .seconds(1))
@@ -278,7 +267,7 @@ enum ConfigProbe {
             guard await until(30, { onScreen(McpEditorController.self, shell) != nil }),
                   let editor = onScreen(McpEditorController.self, shell) else { return say("mcp editor", "never opened") }
             editor.probeFill(name: "probe-mcp", command: "true", args: "--probe", projectId: project)
-            await capture("mcp-editor", shell)
+            await atStage("mcp-editor", shell)
             say("mcp editor", AccountsProbe.texts(in: editor.view).joined(separator: " | "))
             editor.probeRunSave()
             await until { onScreen(McpEditorController.self, shell) == nil }
@@ -297,11 +286,11 @@ enum ConfigProbe {
             await until { connections.probeRow("github-probe")?.projects.contains(project) == true }
             try? await Task.sleep(for: .seconds(1))
             say("connections saved", AccountsProbe.texts(in: connections.view).joined(separator: " | "))
-            await capture("connections-saved", shell)
+            await atStage("connections-saved", shell)
             // Linear's app way: the callback URL its settings must list, then its client's fields.
             try? await Task.sleep(for: .seconds(1))
             say("connections linear app", connections.probeOpen(service: "linear", way: "Linear app"))
-            await capture("connections-linear-app", shell)
+            await atStage("connections-linear-app", shell)
             connections.probeCloseForm()
             // A GitHub App, its registration typed in the form: the hub holds it, sealed.
             if let key = ids["appkey"].flatMap({ Data(base64Encoded: $0) }).flatMap({ String(data: $0, encoding: .utf8) }) {
@@ -321,7 +310,7 @@ enum ConfigProbe {
             await until { hub.configuration.snapshot?.skills.first { $0.name == ids["skill"] ?? "probe-skill" }?.enabled == false }
             try? await Task.sleep(for: .seconds(1))
             say("skills saved", AccountsProbe.texts(in: skills.view).joined(separator: " | "))
-            await capture("skills-saved", shell)
+            await atStage("skills-saved", shell)
         }
 
         // Memory: a new document, written, loaded into leaf sessions.
@@ -330,7 +319,7 @@ enum ConfigProbe {
             guard await until(60, { onScreen(MemoryEditorController.self, shell) != nil }),
                   let editor = onScreen(MemoryEditorController.self, shell) else { return say("memory editor", "never opened") }
             editor.probeWrite("# Probe notes\n\nReleases are cut on **Thursdays**; see `release.md`.\n", role: "leaf")
-            await capture("memory-editor", shell)
+            await atStage("memory-editor", shell)
             say("memory editor", AccountsProbe.texts(in: editor.view).joined(separator: " | "))
             editor.probeRunSave()
             await until { hub.configuration.snapshot?.memoryDocs.first { $0.path == "probe/notes.md" }?.content.contains("Thursdays") == true }
@@ -338,8 +327,7 @@ enum ConfigProbe {
             say("memory saved", AccountsProbe.texts(in: editor.view).joined(separator: " | "))
         }
 
-        // Each section once more, as every change above left it: the app's half
-        // of the pair the spec captures the dashboard's same pages beside.
+        // Each section once more, as every change above left it.
         for slug in ["spend", "delegate-types", "mcp", "connections", "skills", "memory"] {
             shell.openConfigure(slug)
             guard await until(30, { onScreen(ConfigSectionController.self, shell).map { $0.section.slug == slug && $0.ready } ?? false }) else {
@@ -347,7 +335,7 @@ enum ConfigProbe {
                 continue
             }
             try? await Task.sleep(for: .seconds(1.5))
-            await capture(slug, shell)
+            await atStage(slug, shell)
         }
     }
 }

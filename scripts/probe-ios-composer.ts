@@ -193,7 +193,6 @@ interface Ink {
   clock: number;
   icons: number;
 }
-const BMP_MARK = "--BMP--";
 /** The darkest luminance in a box of points, read off a BMP's pixels (no decoder needed). */
 const darkestIn = (
   bmp: Buffer,
@@ -228,22 +227,16 @@ const darkestIn = (
   return darkest;
 };
 /**
- * Saves a capture as `name.png` and reads the status bar's ink off that
- * same frame: one screenshot, saved as it is and converted (`sips`) to a
- * BMP for its pixels, so what is measured is what is saved.
+ * The status bar's ink, read off one screenshot converted (`sips`) to a BMP
+ * for its pixels; nothing is kept.
  */
-const shot = async (name: string): Promise<Ink> => {
+const statusInk = async (): Promise<Ink> => {
   const points = (await tree())[0]?.frame?.width ?? 402;
-  const both = await mac(`F=$(mktemp -d)
+  const bmpText = await mac(`F=$(mktemp -d)
 xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
 sips -s format bmp "$F/s.png" --out "$F/s.bmp" >/dev/null 2>&1
-base64 < "$F/s.png"
-echo "${BMP_MARK}"
 base64 < "$F/s.bmp"
 rm -rf "$F"`);
-  const [png, bmpText] = both.split(BMP_MARK);
-  const file = join(out, `${name}.png`);
-  await Bun.write(file, Buffer.from(png.replace(/\s/g, ""), "base64"));
   const bmp = Buffer.from(bmpText.replace(/\s/g, ""), "base64");
   // The clock left of the island; wifi and battery right of it.
   const ink = {
@@ -255,9 +248,6 @@ rm -rf "$F"`);
       y1: 48,
     }),
   };
-  console.log(
-    `  capture: ${file} (status bar ink: clock ${ink.clock.toFixed(2)}, icons ${ink.icons.toFixed(2)})`
-  );
   return ink;
 };
 const appearance = (mode: "light" | "dark") =>
@@ -400,7 +390,6 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     rows.length > 0 && rows.every((r) => (r.label ?? "").startsWith("/")),
     `${rows.filter((r) => r.label).length} of ${rows.length} rows labelled`
   );
-  await shot("slash-light");
 
   await mac(`${AXE} type 'sh' --udid ${udid}`);
   await pause(1500);
@@ -414,10 +403,8 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
       labels.every((l) => l.includes("sh")),
     `${rows.length} rows: ${rows.map((r) => `${r.label}${r.value ? ` — ${r.value}` : ""}`).join(" | ")}`
   );
-  await shot("slash-sh-light");
   await appearance("dark");
   await pause(800);
-  await shot("slash-sh-dark");
 
   // ── 6. Swipe up from the composer ──────────────────────────────────────
   const sx = Math.round(f.x + Math.min(40, f.width / 4));
@@ -512,15 +499,14 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   console.log(
     `  history rows above the line: ${above.map((n) => n.label).join(" | ") || "none"}`
   );
-  await shot("wheel-dark");
   await appearance("light");
   // Long enough for the status bar to redraw in the new appearance.
   await pause(2500);
-  // Measured on the very PNG saved as wheel-light: dark ink in light, at
-  // the clock and at the icons both (a style the app set would turn both).
-  const ink = await shot("wheel-light");
+  // Dark ink in light, at the clock and at the icons both (a style the app
+  // set would turn both).
+  const ink = await statusInk();
   check(
-    "the status bar reads dark on light, in wheel-light.png itself",
+    "the status bar reads dark on light",
     ink.clock < 0.35 && ink.icons < 0.35,
     `darkest luminance: clock ${ink.clock.toFixed(2)}, wifi and battery ${ink.icons.toFixed(2)} (cream is about 0.95)`
   );
@@ -542,7 +528,6 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
       ? `${draft.label} at y ${Math.round(draft.frame?.y ?? 0)}; at its place: ${said(draftAt)}`
       : "no draft row on the line"
   );
-  await shot("wheel-draft-light");
 
   // Dismissed with a tap outside it, on the transcript halfway up the screen.
   await mac(`${AXE} tap -x ${cx} -y ${Math.round(sy / 2)} --udid ${udid}`);
@@ -594,7 +579,6 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
       ? `after a 1.5s press on the field: ${after.length === 0 ? "no draft row" : after.map((w) => w.label).join(" | ")}`
       : "the wheel could not be closed first, so the press proves nothing"
   );
-  await shot("long-press-light");
 } catch (error) {
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {

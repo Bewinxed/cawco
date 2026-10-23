@@ -197,7 +197,6 @@ const run = async (kit: Kit) => {
     30_000
   ).catch(() => drawn(page, PEEK_PLAN));
   const firstHead = await heading(page);
-  await page.screenshot({ path: `${kit.out}/plan-peek-before.png` });
   kit.check(
     "1: the peek draws the hub's steps: words, depths and statuses in order, under Plan · 1 of 4",
     peeked === said(hubPlan) && firstHead === "Plan · 1 of 4",
@@ -222,7 +221,6 @@ const run = async (kit: Kit) => {
   const navigations = await page.evaluate(
     () => performance.getEntriesByType("navigation").length
   );
-  await page.screenshot({ path: `${kit.out}/plan-peek-after.png` });
   kit.check(
     "2: the session's tick reaches the open peek without a reload, the same as the hub's plan after, under Plan · 2 of 4",
     ticked === said(hubAfter) &&

@@ -527,16 +527,6 @@ const flick = async (at: Place) => {
   await pause(1600);
 };
 
-const shot = async (name: string) => {
-  const png = await mac(`F=$(mktemp -d)
-xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
-base64 < "$F/s.png"
-rm -rf "$F"`);
-  const file = join(out, `${name}.png`);
-  await Bun.write(file, Buffer.from(png.replace(/\s/g, ""), "base64"));
-  console.log(`  capture: ${file}`);
-};
-
 /** The app's Transcript log, streamed while it runs. */
 const listen = () => {
   logLines.length = 0;
@@ -652,7 +642,6 @@ xcrun simctl install ${udid} "${app}"`);
   await pause(5000);
   const opened = await placed();
   console.log(`  open: ${said(opened)}`);
-  await shot(`${label ? "before-" : ""}open`);
   const log = logged();
   check(
     `${label}(b) opening reads the newest page only`,
@@ -679,7 +668,6 @@ async function nearTheTop(label: string, opened: Place): Promise<Place> {
     at = await placed();
   }
   if (first) {
-    await shot(`${label ? "before-" : ""}first-page-joined`);
     // Nothing more is read while the reader stands where the page left them.
     await pause(2500);
     check(
@@ -742,7 +730,6 @@ async function toTheStart(
   wire.holding = false;
   const top = await placed();
   console.log(`  at the start: ${said(top)}`);
-  await shot(`${label ? "before-" : ""}start`);
   const last = olderReads().at(-1);
   const total = wire.reads.length;
   check(

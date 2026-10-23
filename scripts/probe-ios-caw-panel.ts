@@ -574,16 +574,6 @@ const toolRow = (nodes: Node[]) =>
     (n) => n.frame && (n.value === "Collapsed" || n.value === "Expanded")
   );
 
-const shot = async (udid: string, name: string) => {
-  const png = await mac(`F=$(mktemp -d)
-xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
-base64 < "$F/s.png"
-rm -rf "$F"`);
-  const file = join(out, `${name}.png`);
-  await Bun.write(file, Buffer.from(png.replace(/\s/g, ""), "base64"));
-  console.log(`  capture: ${file}`);
-};
-
 /** A simulator slot's booted simulator of the newest runtime's `pattern` device (an iPhone Pro, an iPad Pro). */
 async function simulator(pattern: string): Promise<MacSim> {
   const sim = await macSim({ newest: pattern, ssh: true });
@@ -665,10 +655,8 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   if (kind === "pad") {
     await movedLoginsListed(kind, udid, nodes, ask);
   }
-  await shot(udid, `${kind}-panel-light`);
   await mac(`xcrun simctl ui ${udid} appearance dark`);
   await pause(1500);
-  await shot(udid, `${kind}-panel-dark`);
   await mac(`xcrun simctl ui ${udid} appearance light`);
   await pause(1500);
   if (kind === "phone") {
@@ -1075,7 +1063,6 @@ async function tapThrough(name: string, udid: string, given: Frame) {
       ? "the panel's Approve is still on screen"
       : `closed; Caw's value "${caw(nodes)?.value ?? ""}"`
   );
-  await shot(udid, `${name}-after-tap-light`);
 }
 
 /**
@@ -1121,7 +1108,6 @@ async function chooseRow(kind: Kind, udid: string) {
   if (!(closed && call !== undefined)) {
     await pressEvidence(kind, udid);
   }
-  await shot(udid, `${kind}-chosen-light`);
 }
 
 /**
@@ -1272,7 +1258,6 @@ async function answerFromPanel(kind: Kind, udid: string) {
   if (panelAt === undefined) {
     await answerEvidence(udid);
   }
-  await shot(udid, `${kind}-answered-light`);
 }
 
 const STAGE_WORDS =

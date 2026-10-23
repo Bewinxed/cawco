@@ -24,9 +24,6 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
@@ -50,14 +47,6 @@ const STEPS = [
   "Ship",
 ].map((content) => ({ content, status: "pending" }));
 const ANSWERED = /answered accept project=(\S+) setup=(\S+)/;
-
-/** Where the paired captures go: outside the workspace, for a later review of app against web. */
-const keep = join(
-  process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-  "cawco-captures",
-  "prd-parity",
-  "b4-project-offer"
-);
 
 const pause = (ms: number) => Bun.sleep(ms);
 
@@ -199,9 +188,7 @@ const run = async (kit: Kit) => {
         `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -preview-probe ${flags} >/dev/null`
       );
 
-    // 1. The offer on the composer, in the hub's words; captured beside the web's, light and dark.
-    await mkdir(keep, { recursive: true });
-    const dashboard = await fleet.dashboard();
+    // 1. The offer on the composer, in the hub's words, light and dark.
     let standing: string | undefined;
     for (const theme of ["light", "dark"] as const) {
       // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
@@ -214,29 +201,8 @@ const run = async (kit: Kit) => {
         Boolean,
         90_000
       ).catch(() => standing);
-      await pause(1500);
-      await sh(
-        `xcrun simctl io ${udid} screenshot "${join(keep, `app-offer-${theme}.png`)}" >/dev/null`
-      );
-      try {
-        const page = await kit.page("iphone", { engine: "webkit", theme });
-        await page.goto(`${dashboard}/session/${session}`, {
-          waitUntil: "domcontentloaded",
-        });
-        await page
-          .locator(`[data-offer="${session}"]`)
-          .waitFor({ timeout: 30_000 });
-        await pause(800);
-        await page.screenshot({ path: join(keep, `web-offer-${theme}.png`) });
-        await page.close();
-      } catch (error) {
-        console.log(
-          `  the web ${theme} offer wasn't captured: ${(error as Error).message.split("\n")[0]}`
-        );
-      }
     }
     await sh(`xcrun simctl ui ${udid} appearance light`);
-    console.log(`  captures: ${keep}`);
     kit.check(
       "1: the app stands the offer on the session's composer, in the hub's own sentence",
       standing ===
@@ -262,10 +228,6 @@ const run = async (kit: Kit) => {
     const threads = projectId
       ? await fleet.api<{ id: string }[]>(`/api/projects/${projectId}/threads`)
       : [];
-    await pause(1500);
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-project-offer-accepted.png")}" >/dev/null`
-    );
     kit.check(
       "2: Create project from the app makes the project from the session and answers its Setup thread: the hub holds no offer, the session's row names the project, its threads hold the Setup thread",
       !!projectId &&

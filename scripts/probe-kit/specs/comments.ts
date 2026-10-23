@@ -256,9 +256,6 @@
  *    its realm ran one Yjs, the one module it loaded, whose constructor
  *    checks hold; and a comment on its paragraph is written, anchored on
  *    it, and goes to the session by itself.
- * The captures for the reviewer (light and dark, desk and 390) are written
- * under the run's output folder (`kit.out`/commenting); nothing here opens
- * them.
  *
  *   bun scripts/probe-kit/run.ts comments
  *   bun scripts/probe-kit/run.ts comments --leg yjs   # y1 and y2 alone
@@ -288,7 +285,6 @@ import {
   pressAt as pressFramePoint,
   type Spec,
   settle,
-  specOut,
 } from "../kit";
 import {
   docOf,
@@ -6157,24 +6153,6 @@ const inkOf = (screen: Page, token: string) =>
     return color;
   }, token);
 
-/** Where the captures for the separate reviewer go (they don't land). */
-const CAPTURES = join(specOut("comments"), "commenting");
-
-/** A capture of `what` on `screen`, kept for the reviewer as `<name>.png`. */
-const capture = async (
-  screen: Page,
-  name: string,
-  what: Locator | null = null
-) => {
-  await mkdir(CAPTURES, { recursive: true });
-  const path = join(CAPTURES, `${name}.png`);
-  await (
-    what
-      ? what.screenshot({ path, animations: "disabled" })
-      : screen.screenshot({ path, animations: "disabled" })
-  ).catch(() => undefined);
-};
-
 /** A composer at the element as it stands: its sizes, its hint, its chips' lines. */
 const composerRead = (screen: Page) =>
   screen.locator(COMPOSE).evaluate((el) => {
@@ -6327,8 +6305,8 @@ const rowDress = (screen: Page, number: number) =>
  * reference, their pills on one baseline; a picture alone sending; the
  * pill's tail turning at the page's edges; the rail beside the page, its
  * rows dressed part by part, the thumb strip, search, sort and the toggle's
- * count; a thread from a row standing in the well; the captures for the
- * reviewer, by day and night. The phone after it ({@link phoneRailChecks}).
+ * count; a thread from a row standing in the well. The phone after it
+ * ({@link phoneRailChecks}).
  */
 const listChecks = async (on: On) => {
   const made = await on.call(CREATE, {
@@ -6423,7 +6401,6 @@ const pickChecks = async (on: On, rig: RailRig) => {
   await pressOn("#a");
   await settle(on.page, 300);
   const empty = await composerRead(on.page);
-  await capture(on.page, "p4-element-empty-light-desk", on.page.locator(PANE));
   on.kit.check(
     `the 280px card: the composer at the element is ${empty.card?.w}px wide, its field ${empty.field?.w}px (178px or wider), its hint commentWords.composeHint.full uncut, its pill ${empty.pill?.h}px at one line (about 87px), Attach the ghost paperclip`,
     Math.round(empty.card?.w ?? 0) === 280 &&
@@ -6440,7 +6417,6 @@ const pickChecks = async (on: On, rig: RailRig) => {
     .locator(COMPOSE)
     .getByRole("combobox")
     .fill("Make this heading a bit bigger");
-  await capture(on.page, "p4-element-typed-light-desk", on.page.locator(PANE));
   await submit("");
 
   // Pictures and a file by reference; their pills on one line each.
@@ -6458,7 +6434,6 @@ const pickChecks = async (on: On, rig: RailRig) => {
     },
   ]);
   const carried = await composerRead(on.page);
-  await capture(on.page, "decided-attach-light-desk", on.page.locator(COMPOSE));
   const fileChip = carried.chips.find((one) => one.name === "spec.csv");
   on.kit.check(
     `the attachment pill: five chips, each one pill; the file's name and size within 0.5px of one baseline (${fileChip?.baselines}px), every ✕ centred on its pill and its glyph on its box within 0.5px`,
@@ -6483,7 +6458,6 @@ const pickChecks = async (on: On, rig: RailRig) => {
     },
   ]);
   const alone = await composerRead(on.page);
-  await capture(on.page, "p6-alone-light-desk", on.page.locator(COMPOSE));
   await submit("");
   const pictureOnly = Object.values(await pinsNow()).find(
     (pin) => (pin.anchor as { selector?: string }).selector === "#c"
@@ -6542,7 +6516,6 @@ const pickChecks = async (on: On, rig: RailRig) => {
       edgeFace.x + edgeFace.width <= pageWidth + 1,
     JSON.stringify({ tails, onA, onEdge, onTop, edgeFace, pageWidth })
   );
-  await capture(on.page, "p2-tail-panel-light-desk", on.page.locator(PANE));
 };
 
 /** The comments with attachments go by themselves, by reference; an answer, a reply and a dropped element after it. */
@@ -6585,7 +6558,6 @@ const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
     `images ${images}; section ${JSON.stringify(cSection)}; file ${file?.last.slice(0, 300) ?? "never"}; ${words.slice(0, 500)}`
   );
   await settle(on.page, 600);
-  await capture(on.page, "p3-send-sent-light-desk", on.page.locator(PANE));
 
   // The person's own reply on the paragraph, sent by itself; then the agent answers on the heading (unread); one more comment.
   const pinIdOn = async (selector: string) =>
@@ -6748,7 +6720,6 @@ const hierarchyChecks = async (
       aloneRow.more === null,
     JSON.stringify({ strip: you.strip, more: you.more, alone: aloneRow.strip })
   );
-  await capture(on.page, "decided-rail-light-desk", on.page.locator(PANE));
 
   return { countOpen, well: geometry.well as Box4 };
 };
@@ -6886,8 +6857,6 @@ const railUseChecks = async (
       gallery >= 5,
     JSON.stringify({ thread: threadBox, well, gallery })
   );
-  await capture(on.page, "p1-card-panel-light-desk", on.page.locator(PANE));
-  await capture(on.page, "p1-card-thread-light-desk", thread);
   await thread.getByRole("button", { name: "Close", exact: true }).click();
 
   await shutList(on);
@@ -6923,10 +6892,10 @@ const railFrameOn = async (screen: Page): Promise<Frame | null> => {
 };
 
 /**
- * The reviewer's captures at night on the desk, and by day and night on a
- * 390 phone, from the artifact's own tab; and on the phone, the rail as the
- * well's foot sheet, a row's thread rising as the foot sheet in its place
- * with the pill clear of it.
+ * The rail page at night on the desk, and by day and night on a 390 phone,
+ * from the artifact's own tab: its top strip reads; and on the phone, the
+ * rail as the well's foot sheet, a row's thread rising as the foot sheet in
+ * its place with the pill clear of it.
  */
 const railScenes = async (on: On, artifactId: string) => {
   const { origin } = new URL(on.page.url());
@@ -7001,8 +6970,6 @@ const railScenes = async (on: On, artifactId: string) => {
     const rail = screen.locator(RAIL);
     await rail.waitFor({ timeout: 5000 }).catch(() => undefined);
     await settle(screen, 600);
-    const tag = `${theme}-${view === "phone" ? "390" : "desk"}`;
-    await capture(screen, `decided-rail-${tag}`, screen.locator(PANE));
     if (view === "phone") {
       const read = await screen.evaluate(
         ({ railSel, pane }) => {
@@ -7104,12 +7071,6 @@ const railScenes = async (on: On, artifactId: string) => {
         titleWhole(sheetTitle),
         JSON.stringify(sheetTitle)
       );
-      await capture(screen, `p1-card-thread-${tag}`, screen.locator(PANE));
-      await screen.keyboard.press("Escape");
-    } else {
-      await rail.locator('[data-slot="pin-row"]').first().click();
-      await settle(screen, 700);
-      await capture(screen, `p1-card-panel-${tag}`, screen.locator(PANE));
       await screen.keyboard.press("Escape");
     }
     await screen.close();

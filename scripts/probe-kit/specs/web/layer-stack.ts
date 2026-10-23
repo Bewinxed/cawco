@@ -44,8 +44,7 @@
  * returns, from the top, named by the nearest `data-slot` (or its tag), with
  * the computed `z-index` of the stacked box it belongs to.
  */
-import { mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import type { Page } from "playwright-core";
 import type { InstancesFrame } from "../../../../packages/core/src/frames";
 import type { Envelope } from "../../../../packages/core/src/index";
@@ -205,8 +204,6 @@ const GONE = "00000000-dead-4000-8000-000000000000";
 const SAID_ID = "reference-chip-said";
 /** The markdown the answer is drawn in: an agent's row carries no message id of its own. */
 const MESSAGE = `[data-pane="${SHOWN}"] [data-slot="md"]:has([data-session-chip])`;
-/** The answer's box (the markdown root is `display: contents`). */
-const MESSAGE_BOX = `[data-pane="${SHOWN}"] [data-slot="msg"]:has([data-session-chip])`;
 const SAID = `Handed the cap to [the tray chip work](cawco:session/${NAMED}). The earlier run, [an earlier try](cawco:session/${GONE}), is gone, and [a pin](cawco:pin/p1) is a kind of its own.
 
 The cap lands in three places, and each reads the pane it stands in rather than the window, so a split pane keeps its own measure while the other half grows. The work itself sits with [the tray chip work](cawco:session/${NAMED}) for now, and its notes say the label truncates at its end while the count stays whole, the figures tabular, the glyph untouched, and nothing reaching the pane's edge at the narrowest width the shell allows.`;
@@ -339,11 +336,6 @@ async function sessionChip(
     [message, chip] as const
   );
   kit.note(`session chip, the message reads: ${read.words}`);
-  // For the review item: the answer as drawn, and below with the panel open.
-  mkdirSync(kit.out, { recursive: true });
-  await page
-    .locator(MESSAGE_BOX)
-    .screenshot({ path: join(kit.out, "session-chip-message.png") });
   kit.check(
     `session-chip: cawco:session/<id> of a board row draws as its chip, titled as the row is ("${NAMED_TITLE}")`,
     read.tag === "button" && read.title === NAMED_TITLE && read.height > 0,
@@ -437,23 +429,6 @@ async function sessionChip(
   const at = await centre(page, panel);
   const over = await chainAt(page, at.x, at.y);
   kit.note(`session chip, the panel's centre: ${said(over)}`);
-  const shot = await page.locator(MESSAGE_BOX).boundingBox();
-  const panelBox = await page.locator(panel).boundingBox();
-  if (shot && panelBox) {
-    const x = Math.min(shot.x, panelBox.x) - 16;
-    const y = Math.min(shot.y, panelBox.y) - 16;
-    await page.screenshot({
-      path: join(kit.out, "session-chip-open.png"),
-      clip: {
-        x,
-        y,
-        width:
-          Math.max(shot.x + shot.width, panelBox.x + panelBox.width) - x + 16,
-        height:
-          Math.max(shot.y + shot.height, panelBox.y + panelBox.height) - y + 16,
-      },
-    });
-  }
   kit.check(
     `session-chip: the panel (--layer-float ${float}) stands over the bench (${bench})`,
     over[0]?.z === float && over.findIndex((h) => h.z === bench) > 0
@@ -639,13 +614,6 @@ async function skillChips(
       );
     }
   }
-  mkdirSync(kit.out, { recursive: true });
-  await person.screenshot({
-    path: join(kit.out, `skill-chip-person-${engine}.png`),
-  });
-  await agent.screenshot({
-    path: join(kit.out, `skill-chip-agent-${engine}.png`),
-  });
 
   const chip = agent.locator('[data-skill-chip="clean-copy"]');
   await chip.click();

@@ -114,10 +114,6 @@
  * the old `@container (width < 640px)` label rule queried. D
  * (`CANVAS_DESIGN=desk` alone): at session-sheet leg 18's 523px desk pane
  * that box is under 640 and Comments' word is not drawn.
- *
- * Captures for a second review (never read here) go to the run's output
- * folder (`kit.out`): `canvas-{390,523,desk}-{light,dark}.png`, the panel's
- * pane at 2×, and `map-{desk,phone}-{light,dark}.png`.
  */
 import { Database } from "bun:sqlite";
 import { type ChildProcess, spawn } from "node:child_process";
@@ -138,7 +134,7 @@ import { previewWords } from "../../../packages/core/src/words/preview";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
-import { type Kit, open as openPage, ROOT, type Spec, specOut } from "../kit";
+import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
 import { shaped } from "../words";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
@@ -148,7 +144,6 @@ const ARTIFACT_SOCKET = /\/ws\/artifact\//;
 const MORE_COUNT = /^More, Comments [1-9]\d* open$/;
 /** The crumb's words: which frame of how many. */
 const FRAME_COUNT = /^Frame \d+ of \d+$/;
-const CAPS = specOut("canvas-design");
 /** A states file of the probe's own, in the stage's git-ignored folder: one story with no doc comment. */
 const UNNAMED_FILE = ".cawco/probe/Unnamed.stories.ts";
 const FILES = [
@@ -1610,16 +1605,6 @@ async function headLeg(
     );
   }
 
-  if (width < 390) {
-    await page.close();
-    return standing;
-  }
-  mkdirSync(CAPS, { recursive: true });
-  const name = width < 640 ? String(width) : "desk";
-  await page
-    .locator("[data-bench-pane]")
-    .screenshot({ path: join(CAPS, `canvas-${name}-${theme}.png`) });
-  kit.note(`capture: ${join(CAPS, `canvas-${name}-${theme}.png`)}`);
   await page.close();
   return standing;
 }
@@ -1887,14 +1872,6 @@ async function mapLeg(
       `${JSON.stringify(read)}; live canvas drew ${drewLive} sections`
     );
   }
-  mkdirSync(CAPS, { recursive: true });
-  await page.locator("[data-bench-pane]").screenshot({
-    path: join(CAPS, `map-${phone ? "phone" : "desk"}-${theme}.png`),
-  });
-  kit.note(
-    `capture: ${join(CAPS, `map-${phone ? "phone" : "desk"}-${theme}.png`)}`
-  );
-
   // Another card chosen: it draws live, the canvas's card its thumbnail.
   await page
     .locator("[data-bench-pane] [data-slot=map-card][data-role=usedIn]")
@@ -2389,18 +2366,6 @@ async function refusedLeg(
             !!seen.failed.frame)),
       `after ${took}ms: ${JSON.stringify(seen)}`
     );
-    // For a reviewer: the pane with the section folded, then its details open.
-    mkdirSync(CAPS, { recursive: true });
-    const pane = page.locator("[data-bench-pane]");
-    await pane.screenshot({ path: join(CAPS, `refused-${leg}-${theme}.png`) });
-    const canvas = page
-      .frames()
-      .find((frame) => frame.url().includes("/@cawco/canvas"));
-    await canvas?.locator(".cawco-section-failed summary").click();
-    await page.waitForTimeout(300);
-    await pane.screenshot({
-      path: join(CAPS, `refused-${leg}-${theme}-open.png`),
-    });
     await page.close();
   }
   await keptLeg(kit, bench, stage, theme);

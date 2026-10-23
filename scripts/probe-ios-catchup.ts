@@ -26,8 +26,7 @@
  *     in a page the new read does not hold, so the pages before it are read
  *     back to it while the pill says "Catching up…";
  *  5. reads the app's own log of the pill (`dock Catching up… shown|hidden`)
- *     and counts its transitions, overall and per second, while captures of
- *     the load go to the capture folder;
+ *     and counts its transitions, overall and per second;
  *  6. once the place is in hand, captures the head with rows under it in
  *     light and dark, and the short session at its very top in both.
  *
@@ -1010,7 +1009,6 @@ xcrun simctl install ${udid} "${app}"`);
     );
     const strip = (await tree()).find((n) => n.label?.startsWith(BEHIND));
     const lines = Math.round((strip?.frame?.height ?? 0) / META_LINE);
-    await shot("away-note");
     check(
       `${label}: the pane says it is not caught up, and what comes next, in at most two lines`,
       strip?.label?.endsWith(OFFLINE_NEXT) === true && lines <= 2,
@@ -1203,13 +1201,8 @@ xcrun simctl install ${udid} "${app}"`);
   // The scene's saved state brings the session back at its place; `-open-session`
   // names the same session and lands through the same route (ShellController `land`).
   await launch(sessionId);
-  const loadShots: string[] = [];
-  while (Date.now() - relaunched < 9000) {
-    const name = `load-${String(loadShots.length).padStart(2, "0")}`;
-    // biome-ignore lint/performance/noAwaitInLoops: one capture after the other
-    loadShots.push(await shot(name));
-    await pause(250);
-  }
+  // The load runs its first nine seconds before anything is read.
+  await pause(Math.max(0, 9000 - (Date.now() - relaunched)));
   /** What the screen says: its labelled elements, top to bottom (for the log). */
   const screen = async () =>
     (await tree())
@@ -1250,7 +1243,6 @@ xcrun simctl install ${udid} "${app}"`);
     newest === 1 && distinct === older.length,
     `${newest} newest read(s), ${older.length} older read(s) (${distinct} distinct cursors)`
   );
-  console.log(`  load captures: ${loadShots.length} (${loadShots[0]} …)`);
 
   // The head with rows under it, light and dark, at the restored place.
   await shot("head-light");

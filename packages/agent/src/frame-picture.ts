@@ -1,7 +1,6 @@
 /**
  * A picture of one frame of a component canvas: the one path every picture
- * of a frame is taken by, the daemon's render (stage-render.ts) and the
- * probe kit's captures (scripts/probe-kit/canvas-shots.ts) alike.
+ * of a frame is taken by (the daemon's render, stage-render.ts).
  *
  * The canvas draws its frames in one world that pans and zooms by a single
  * transform, inside a box that clips it (stage-host canvas runtime.ts). So

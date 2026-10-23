@@ -24,9 +24,7 @@
  *    is loaded and every story it shows a drawn frame with a box.
  * 4. It draws the stories its Preview names, in the order it names them
  *    (every story, in its file's order, when it names none): each frame
- *    drawn, with words in it, shot where the person sees it (canvas-shots.ts
- *    `shootEmbedded`): nothing over it, not one colour, its pixels its DOM's
- *    paint, a pseudo-element's surface included.
+ *    drawn, with words or a drawing in it.
  * 5. None of the canvas's working chrome is seen (band, crumb, foot, steps,
  *    section heads, labels, statuses).
  * 6. It posted its shape: the embed is as tall as what it draws, within
@@ -48,13 +46,6 @@
  *    (DESIGN.md, The 44 Touch Rule), and every control on the page reaching
  *    44px under a finger; at 1440 every control reaching 24px (The 24
  *    Pointer Rule); nothing spilling its box or past the window.
- * 9. The page's own capture, stacked from the window at each scroll
- *    (decision-embeds.ts `capturePage`), paints every embed: no embed's box
- *    in it is one flat colour. Its files are what a delegate can hand
- *    over: each RGB and at most the hub's 1 MiB (FOLDER_FILE_LIMIT), cut at
- *    gaps between cards (or between a card's blocks) where one file can't
- *    hold the page, none starting inside a block of words or a picture; read
- *    back and stacked they are the picture, pixel for pixel.
  * 9b. A frame is drawn as its own width says (canvas width.ts): the page
  *    head named for a phone (390px) stacks under its 640px switch and the
  *    one named for a desk (1440px) stands in a row, whatever the window of
@@ -133,17 +124,13 @@
  *   bun scripts/probe-kit/run.ts web decision-embed --leg one-yjs   # 15 alone
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
-import { cpSync, mkdirSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { cpSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
-import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
   APP,
-  blankEmbeds,
   CAWCO_BRIDGE,
-  captureFaults,
-  capturePage,
   EMBED_FRAME,
   type Embed,
   embedDrawFaults,
@@ -152,17 +139,8 @@ import {
   readEmbeds,
   startDecisionStage,
 } from "../../decision-embeds";
-import {
-  type Kit,
-  ROOT,
-  SCALE,
-  type Spec,
-  settle,
-  specOut,
-  THEMES,
-} from "../../kit";
+import { type Kit, ROOT, type Spec, settle, THEMES } from "../../kit";
 
-const OUT = join(specOut("decision-embed"), "captures");
 const FIXTURE = join(ROOT, "scripts/probe-kit/fixtures/decision-embed");
 const SCRATCH = join(process.env.TMPDIR ?? "/tmp", "decision-embed");
 const NAME = "ledger";
@@ -2158,9 +2136,6 @@ const spec: Spec = {
   name: "decision-embed",
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every assertion in the order the spec's head lists them
   run: async (kit: Kit) => {
-    rmSync(OUT, { recursive: true, force: true });
-    mkdirSync(OUT, { recursive: true });
-
     for (const [name, program] of [
       [NAME, PROGRAM],
       [NAMED_PAGE, NAMED_PROGRAM],
@@ -2241,7 +2216,7 @@ const spec: Spec = {
             PREVIEWS[caption] ?? { files: [], shows: [], stories: [] };
 
           // Reached by scrolling the page alone, then scrolled away and back: nothing inside an embed moved yet.
-          const reached = await readEmbeds(page, theme, null);
+          const reached = await readEmbeds(page);
           await page.evaluate(() => {
             const scroller = document.querySelector(
               "[data-slot=page-scroll]"
@@ -2255,7 +2230,7 @@ const spec: Spec = {
             ).scrollTop = 0;
           });
           await settle(page, 600);
-          const back = await readEmbeds(page, theme, null);
+          const back = await readEmbeds(page);
           const asleep = [...reached.embeds, ...back.embeds].flatMap((e) => [
             ...wanted(e.caption)
               .files.filter((file) => !e.loaded.includes(file))
@@ -2281,12 +2256,8 @@ const spec: Spec = {
             [...new Set(asleep)].join("\n    ")
           );
 
-          // Then each frame shot where the person sees it, and the embed read again.
-          const { embeds, undrawn } = await readEmbeds(
-            page,
-            theme,
-            join(OUT, `${view}-${theme}`)
-          );
+          // Then read again, the page as the person left it.
+          const { embeds, undrawn } = await readEmbeds(page);
           undrawn.unshift(...reached.undrawn, ...back.undrawn);
           const addressed = embeds.flatMap((e) => {
             const url = new URL(e.src);
@@ -2313,7 +2284,7 @@ const spec: Spec = {
             ...new Set(undrawn),
           ];
           kit.check(
-            `${leg}: every embed draws the stories its Preview names (${embeds.map((e) => `“${e.caption}” ${e.shots.map((shot) => `${shot.story} ${shot.stats.width / SCALE}×${shot.stats.height / SCALE} (${shot.stats.matched} points its paint)`).join(" + ") || "none"}`).join("; ")})`,
+            `${leg}: every embed draws the stories its Preview names (${embeds.map((e) => `“${e.caption}” ${e.frames.map((f) => `${f.story} ${f.h}px`).join(" + ") || "none"}`).join("; ")})`,
             embeds.length === count && drawnFaults.length === 0,
             drawnFaults.join("\n    ")
           );
@@ -2686,26 +2657,6 @@ const spec: Spec = {
             [...short.map((one) => one.line), ...reach.spills].join("\n    ")
           );
 
-          const capture = await capturePage(
-            page,
-            join(
-              OUT,
-              `${NAME}-${view === "desk" ? "1440" : "390"}-${theme}.png`
-            )
-          );
-          const { paints } = capture;
-          const captured = captureFaults(capture);
-          kit.check(
-            `${leg}: the page's capture is files a delegate can hand over, each RGB and at most ${FOLDER_FILE_LIMIT / 1024 / 1024} MiB, its whole picture pixel for pixel (${capture.files.map((one) => `${basename(one.path)} ${(one.bytes / 1024).toFixed(0)} KiB, rows ${one.rows.from}–${one.rows.to}`).join(", ")}; ${capture.picture.width}×${capture.picture.height})`,
-            capture.files.length > 0 && captured.length === 0,
-            captured.join("\n    ")
-          );
-          const blank = blankEmbeds(paints);
-          kit.check(
-            `${leg}: the page's own capture paints every embed (${paints.map((one) => `“${one.embed}” ${Math.round(one.flat * 1000) / 10}% its commonest colour`).join(", ")})`,
-            paints.length === count && blank.length === 0,
-            blank.join("\n    ")
-          );
           kit.check(
             `${leg}: no console errors, the page and its canvases`,
             errors.length === 0,

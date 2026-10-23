@@ -75,11 +75,6 @@
  *     than finishing it, so the hover frame is drawn with its delta; the
  *     loop is landed before the rest snapshot too, so that delta is the
  *     hover's background alone, no opacity read mid-breath.
- *
-
- * Captures of the canvas (desk and phone, light and dark, its move's
- * timeline and its dials open) go to the run's output folder (`kit.out`)
- * for a reviewer; this spec never reads them.
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
@@ -102,11 +97,10 @@ import type {
 } from "../../../packages/core/src/stage";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec, specOut } from "../kit";
+import { type Kit, ROOT, type Spec } from "../kit";
 
 const FIXTURES = join(ROOT, "scripts/probe-kit/fixtures/component-canvas");
 const SCRATCH = join(process.env.TMPDIR ?? "/tmp", "component-canvas");
-const CAPS = specOut("component-canvas");
 
 type Framework = "svelte" | "react" | "vue" | "solid";
 
@@ -248,11 +242,6 @@ function errorsOf(page: Page): string[] {
   });
   page.on("pageerror", (error) => errors.push(error.message));
   return errors;
-}
-
-async function capture(page: Page, name: string): Promise<void> {
-  mkdirSync(CAPS, { recursive: true });
-  await page.screenshot({ path: join(CAPS, `${name}.png`) });
 }
 
 /** A timeline clip's duration key in DialKit's store: `<clip>.duration`. */
@@ -566,8 +555,6 @@ async function svelteKit(kit: Kit, stage: Stage): Promise<void> {
     `unnamed ${JSON.stringify(report.unnamed)}; marked frames ${unnamedLabel}`
   );
 
-  await capture(page, "canvas-desk-light");
-
   // Both schemes side by side.
   await page.evaluate(() =>
     dispatchEvent(
@@ -604,7 +591,7 @@ async function svelteKit(kit: Kit, stage: Stage): Promise<void> {
   await page.close();
 }
 
-/** Leg 11 at 390 and in dark, with captures. */
+/** Leg 11 at 390 and in dark. */
 async function views(kit: Kit, stage: Stage): Promise<void> {
   for (const theme of ["light", "dark"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one theme's pages at a time
@@ -626,7 +613,6 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
         scheme === "dark",
         scheme
       );
-      await capture(desk, "canvas-desk-dark");
     }
     kit.check(
       `12b: no console errors at desk, ${theme}`,
@@ -718,7 +704,6 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
         after.timelines === 1,
       `before ${JSON.stringify(shown)}; after ${JSON.stringify(after)}`
     );
-    await capture(phone, `canvas-phone-${theme}`);
     kit.check(
       `12c: no console errors at 390, ${theme}`,
       phoneErrors.length === 0,

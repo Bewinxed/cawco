@@ -588,9 +588,6 @@ const run = async (kit: Kit) => {
     await page.waitForSelector(NEEDS_ROW, { timeout: 30_000 });
     await settle(page, 300);
     const read = await page.evaluate(readChoiceRow, NEEDS_ROW);
-    await page
-      .locator(NEEDS_ROW)
-      .screenshot({ path: join(kit.out, `needs-row-${view}.png`) });
     const [keep, ask, allow] = read?.buttons ?? [];
     check(
       `a, ${view}: Needs you asks it in one row: its title, its risk, onboarding's line, and opens nothing`,
@@ -670,9 +667,6 @@ const run = async (kit: Kit) => {
     await open(page, projectUrl, `[aria-label="${commonWords.moreFor(NAME)}"]`);
     await settle(page, 400);
     const menu = await openUpstream(page, view);
-    await page
-      .locator(OPEN_SUB)
-      .screenshot({ path: join(kit.out, `upstream-menu-${view}.png`) });
     const b = menu.box;
     check(
       `m, ${view}: ⋯ › ${UPSTREAM_WORDS.title} opens a submenu inside the viewport`,
@@ -1113,7 +1107,6 @@ const run = async (kit: Kit) => {
   );
   elsewhere.stop();
   githubApi.stop(true);
-  kit.note(`captures: ${kit.out}`);
 };
 
 /** A post held for the person, as `/api/pending` lists it. */

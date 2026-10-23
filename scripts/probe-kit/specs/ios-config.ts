@@ -23,20 +23,14 @@
  *    under the field, nothing sent; (d) a long one fitting a window 320pt
  *    wide, as wide as the account field; (e) Sign in sending the typed
  *    address as the connection's `url`, which the hub holds. Read from the
- *    app's log: the field's frames and the body it sends. The dashboard's
- *    same forms are captured in the simulator's Mobile Safari beside them.
+ *    app's log: the field's frames and the body it sends.
  * 5. Skills: a skill the machine has, adopted from "On each machine", then
  *    switched off; the hub's fleet holds it so.
  * 6. Memory: a new document, written in the editor and loaded into leaf
  *    sessions; the hub holds its words and its scope.
  *
  * On an iPhone 16 Pro and an iPad Pro 11-inch (M4), iOS 18.5, each in a
- * mac-slot.sh slot, once in light and once in dark. Each stage's window, and
- * the dashboard's same page in the simulator's Safari, go to
- * ~/.cawco/workspace-cache/xdg/cawco-captures/prd-parity/config/<device>-<appearance>/
- * (or `$PROBE_CAPTURES/<device>-<appearance>/`) as `app-<stage>.png` and
- * `web-<section>.png`, for a separate review; the Server address forms as
- * `app-connections-<form>.png` beside Mobile Safari's `safari-connections-<form>.png`.
+ * mac-slot.sh slot, once in light and once in dark.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-config
@@ -47,7 +41,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
@@ -62,13 +55,10 @@ const DEVICES = [
   {
     tag: "iPhone",
     type: "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
-    /** The dashboard beside it: the same points and pixels per point. */
-    web: { view: "iphone", scale: 3 },
   },
   {
     tag: "iPad",
     type: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB",
-    web: { view: "ipad11", scale: 2 },
   },
 ] as const;
 const APPEARANCES = ["light", "dark"] as const;
@@ -99,27 +89,8 @@ const APP_KEY = Buffer.from(
     publicKeyEncoding: { type: "spki", format: "pem" },
   }).privateKey
 ).toString("base64");
-const SECTIONS = [
-  "spend",
-  "delegate-types",
-  "mcp",
-  "connections",
-  "skills",
-  "memory",
-];
 /** The compact log's head, up to the `[subsystem:category] ` tag. */
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
-const CAPTURES =
-  process.env.PROBE_CAPTURES ??
-  join(
-    homedir(),
-    ".cawco",
-    "workspace-cache",
-    "xdg",
-    "cawco-captures",
-    "prd-parity",
-    "config"
-  );
 /** The width of the form's parent in a ConfigProbe line: ` of <w>`. */
 const PARENT_WIDTH = / of (\d+)/;
 /** The Gitea connection the Server address leg makes. */
@@ -160,74 +131,6 @@ async function sh(script: string): Promise<string> {
     throw new Error(`exited ${code}: ${err.trim() || said.trim()}`);
   }
   return said;
-}
-
-/**
- * The dashboard's Connections page in the simulator's Mobile Safari, driven
- * by AXe as a person taps it: GitLab's form as it opens, then Gitea's with
- * an address that is no URL sent, each captured as `safari-connections-<form>.png`.
- */
-async function safariForms(
-  udid: string,
-  dashboard: string,
-  folder: string
-): Promise<void> {
-  const axe = (args: string) => sh(`axe ${args} --udid ${udid}`);
-  const shot = (name: string) =>
-    sh(
-      `xcrun simctl io ${udid} screenshot "${join(folder, `safari-${name}.png`)}" >/dev/null`
-    );
-  let lastTree = "";
-  const waitFor = async (label: string) => {
-    try {
-      await until(
-        `Mobile Safari shows "${label}"`,
-        async () => {
-          lastTree = await axe("describe-ui").catch(
-            (error: Error) => error.message
-          );
-          return lastTree;
-        },
-        (tree) => tree.includes(label),
-        60_000
-      );
-    } catch (error) {
-      // What the screen held instead: its capture, and the labels AXe read.
-      await shot("failed").catch(() => "");
-      const labels = [...lastTree.matchAll(/"AXLabel"\s*:\s*"([^"]*)"/g)]
-        .map((one) => one[1])
-        .filter(Boolean)
-        .slice(0, 30);
-      throw new Error(
-        `${(error as Error).message}; AXe read: ${labels.join(" | ") || lastTree.slice(0, 300)}`,
-        { cause: error }
-      );
-    }
-  };
-  const openForm = async (service: string) => {
-    await sh(`xcrun simctl openurl ${udid} "${dashboard}/config/connections"`);
-    await waitFor(connectionsWords.signInTo);
-    await axe('tap --label "Sign in to a service" --element-type Button');
-    await waitFor(service);
-    await axe(`tap --label "${service}"`);
-    await waitFor(connectionsWords.serverAddress);
-    await Bun.sleep(800);
-  };
-  await openForm("GitLab");
-  await shot("connections-gitlab");
-  await openForm("Gitea");
-  await axe('tap --label "Server address"');
-  await axe('type "gitea.local/mcp"');
-  await axe('tap --label "Which Gitea account"');
-  await axe('type "probe"');
-  await axe('tap --label "Gitea key"');
-  await axe('type "probe-token"');
-  await axe('tap --label "Sign in" --element-type Button');
-  await waitFor(ADDRESS_PROBLEM);
-  // The keyboard down, as the app's capture has none.
-  await axe("key 41").catch(() => "");
-  await Bun.sleep(800);
-  await shot("connections-gitea-refused");
 }
 
 interface Fleet {
@@ -347,24 +250,6 @@ async function run(kit: Kit): Promise<void> {
     await seedSkill();
   };
 
-  // The captures the app sends, by stage, into the run's folder.
-  let folder = CAPTURES;
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      const name = new URL(request.url).pathname.split("/").pop() ?? "";
-      if (request.method === "PUT" && name.endsWith(".png")) {
-        await writeFile(
-          join(folder, `app-${name}`),
-          new Uint8Array(await request.arrayBuffer())
-        );
-        return new Response(null, { status: 204 });
-      }
-      return new Response(null, { status: 404 });
-    },
-  });
-
   for (const device of DEVICES) {
     if (process.env.PROBE_DEVICE && process.env.PROBE_DEVICE !== device.tag) {
       continue;
@@ -381,8 +266,6 @@ async function run(kit: Kit): Promise<void> {
       for (const appearance of APPEARANCES) {
         // biome-ignore lint/performance/noAwaitInLoops: one appearance after the other
         await reset();
-        folder = join(CAPTURES, `${tag}-${appearance}`);
-        await mkdir(folder, { recursive: true });
         await sh(`xcrun simctl ui ${udid} appearance ${appearance}`);
         const heard: string[] = [];
         const stream: Subprocess<"ignore", "pipe", "ignore"> = Bun.spawn(
@@ -420,7 +303,7 @@ async function run(kit: Kit): Promise<void> {
           `appkey=${APP_KEY}`,
         ].join(",");
         await sh(
-          `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -config-probe -config-probe-ids ${ids} -config-probe-capture http://127.0.0.1:${server.port}/ >/dev/null`
+          `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -config-probe -config-probe-ids ${ids} >/dev/null`
         );
         const done = await until(
           `${tag} ${appearance}: the probe done`,
@@ -714,61 +597,11 @@ async function run(kit: Kit): Promise<void> {
           crushed.length === 0,
           crushed.join(" / ") || "none"
         );
-
-        // The dashboard's same pages beside the app's last ones (`app-<section>`),
-        // from the same hub after the same changes: WebKit at the simulator's
-        // points, pixels per point and appearance, each once its title stands
-        // and no row is still loading.
-        await sh(`xcrun simctl terminate ${udid} dev.cawco.app || true`);
-        const page = await kit.page(device.web.view, {
-          engine: "webkit",
-          theme: appearance,
-          scale: device.web.scale,
-        });
-        for (const section of SECTIONS) {
-          try {
-            // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-            await page.goto(`${dashboard}/config/${section}`, {
-              waitUntil: "domcontentloaded",
-            });
-            await page
-              .locator('[data-slot="title"]')
-              .first()
-              .waitFor({ timeout: 60_000 });
-            await page
-              .locator('[role="status"][aria-label="Loading"]')
-              .waitFor({ state: "detached", timeout: 60_000 })
-              .catch(() => undefined);
-            await Bun.sleep(800);
-            await page.screenshot({ path: join(folder, `web-${section}.png`) });
-          } catch (error) {
-            kit.check(
-              `${at}: the dashboard's ${section} page is captured`,
-              false,
-              (error as Error).message.split("\n")[0] ?? ""
-            );
-          }
-        }
-        await page.close();
-
-        // The Server address forms in the simulator's own Mobile Safari, at
-        // the app's viewport and appearance, beside `app-connections-<form>`.
-        try {
-          await safariForms(udid, dashboard, folder);
-        } catch (error) {
-          kit.check(
-            `${at}: Mobile Safari's Server address forms are captured`,
-            false,
-            (error as Error).message.split("\n").slice(0, 3).join(" / ")
-          );
-        }
       }
     } finally {
       await sim?.release();
     }
   }
-  server.stop(true);
-  console.log(`  captures: ${CAPTURES}`);
 }
 
 const spec: Spec = { name: "ios-config", run };

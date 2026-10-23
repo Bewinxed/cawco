@@ -27,7 +27,6 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: a project's few threads, read one by one
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each leg's steps are read in order.
 import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
@@ -194,7 +193,6 @@ const run = async (kit: Kit) => {
             buttons.map((button) => button.textContent?.trim() ?? "")
           ),
       };
-      await desk.screenshot({ path: join(kit.out, "offer-card.png") });
       break;
     }
   }
@@ -317,7 +315,6 @@ const run = async (kit: Kit) => {
     (field) => document.querySelector(field)?.textContent?.trim() ?? "",
     `${PANEL} ${COMPOSER_FIELD}`
   );
-  await desk.screenshot({ path: join(kit.out, "starter.png") });
   kit.check(
     "5: the design starter opens Caw's panel with its words in his composer, and sends nothing",
     shown.includes(STARTER) &&
@@ -396,8 +393,7 @@ const run = async (kit: Kit) => {
     await quietly(1500);
     const launch = (flags: string[] = []) =>
       Bun.$`xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${`thread:${threadId}`} ${flags}`.quiet();
-    // Captured beside the web's thread, light and dark, while the offer stands.
-    await mkdir(KEEP, { recursive: true });
+    // The offer standing in the app, light and dark.
     let standing: string | undefined;
     for (const theme of ["light", "dark"] as const) {
       await Bun.$`xcrun simctl ui ${udid} appearance ${theme}`.quiet();
@@ -412,27 +408,8 @@ const run = async (kit: Kit) => {
         Boolean,
         90_000
       ).catch(() => standing);
-      await quietly(1500);
-      await Bun.$`xcrun simctl io ${udid} screenshot ${join(KEEP, `app-design-offer-${theme}.png`)}`.quiet();
-      const phone = await kit.page("iphone", { engine: "webkit", theme });
-      await open(
-        phone,
-        `${base}/session/thread:${threadId}`,
-        () => document.body.innerText.length > 0
-      );
-      await phone
-        .locator(`[data-design-offer='${osprey.id}'] button`)
-        .first()
-        .waitFor({ timeout: 15_000 })
-        .catch(() => undefined);
-      await settle(phone, 600);
-      await phone.screenshot({
-        path: join(KEEP, `web-design-offer-${theme}.png`),
-      });
-      await phone.close();
     }
     await Bun.$`xcrun simctl ui ${udid} appearance light`.quiet();
-    console.log(`  captures: ${KEEP}`);
     await launch(["-design-offer-build"]);
     const built6 = await until(
       "the app's Build answered",
@@ -463,12 +440,5 @@ const IOS_SIM = {
   device: "iPhone 16 Pro",
 };
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
-/** Where the paired captures go: outside the workspace, for a later review of app against web. */
-const KEEP = join(
-  process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-  "cawco-captures",
-  "prd-parity",
-  "b4-design-offer"
-);
 
 export default { name: "design-offers", run } satisfies Spec;

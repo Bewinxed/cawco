@@ -2,8 +2,7 @@
  * Three things the web did that the app did not (owner: every web feature
  * exists natively, its styling and words the web's), each driven in the
  * built app on an iPhone 16 Pro and an iPad Pro 13-inch (M4), iOS 18.5,
- * light and dark, and captured beside the dashboard at the same viewport
- * in WebKit (the kit's `iphone` and `ipad` views):
+ * light and dark:
  *
  * 1. A harness that didn't list its sessions: two machines whose OpenCode
  *    is a stand-in, one that exits at once (its listing throws: `failed`)
@@ -25,22 +24,18 @@
  *
  * The app is this checkout's simulator build, built first when there is
  * none (scripts/lib/apple-app.ts `freshApp`). `PROBE_DEVICE=iPhone` (or
- * `iPad`) runs one device. The captures are copied to
- * `$XDG_CACHE_HOME/cawco-captures/ios-web-gaps/<run>`, which outlives the
- * workspace, and that folder is said at the end.
+ * `iPad`) runs one device.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: each device, theme and tap in order, as a hand makes them
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each device's steps are read in order.
-import { chmod, cp, mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import type { Page } from "playwright-core";
 import { seedDecisions } from "../../decisions-preview/seed";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, ROOT, type Spec, type Theme } from "../kit";
+import { type Kit, ROOT, type Spec, type Theme } from "../kit";
 
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 const DEVICES = [
@@ -178,13 +173,6 @@ async function run(kit: Kit): Promise<void> {
   if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     return;
   }
-  const keep = join(
-    process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-    "cawco-captures",
-    "ios-web-gaps",
-    new Date().toISOString().replaceAll(":", "-").slice(0, 19)
-  );
-  await mkdir(keep, { recursive: true });
   const server = refusingServer();
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -272,15 +260,6 @@ async function run(kit: Kit): Promise<void> {
       id
     )[0]?.state;
 
-  const web = await fleet.dashboard();
-  const webPage = async (view: "iphone" | "ipad", theme: Theme) =>
-    await kit.page(view, { engine: "webkit", theme });
-  const webShot = async (page: Page, name: string) => {
-    const file = join(keep, `${name}.png`);
-    await page.screenshot({ path: file });
-    return file;
-  };
-
   for (const device of DEVICES) {
     if (process.env.PROBE_DEVICE && process.env.PROBE_DEVICE !== device.tag) {
       continue;
@@ -339,13 +318,6 @@ async function run(kit: Kit): Promise<void> {
       })().catch(() => undefined);
       await Bun.sleep(1500);
 
-      const appShot = async (name: string) => {
-        const file = join(keep, `${name}.png`);
-        await sh(
-          `xcrun simctl io ${udid} screenshot "${file}" >/dev/null 2>&1`
-        );
-        return file;
-      };
       const heardSince = (start: number, test: (line: string) => boolean) =>
         heard.slice(start).find(test);
       /**
@@ -371,7 +343,7 @@ async function run(kit: Kit): Promise<void> {
           return true;
         } catch {
           await writeFile(
-            join(keep, `${tag}-untapped-${id}.json`),
+            join(kit.out, `${tag}-untapped-${id}.json`),
             await sh(`${AXE} describe-ui --udid ${udid}`).catch(String)
           );
           return false;
@@ -409,7 +381,6 @@ async function run(kit: Kit): Promise<void> {
                 machine === FAILING ? "couldn't list" : "didn't answer"
               )
           );
-          const shot = said ? await appShot(`${at}-toast-${machine}`) : "";
           const words =
             machine === FAILING
               ? "couldn't list its stored sessions (" // core catalogWords.harnessCouldntList
@@ -419,7 +390,7 @@ async function run(kit: Kit): Promise<void> {
             Boolean(
               said && toast?.includes("opencode on ") && toast.includes(words)
             ),
-            `${toast ?? said ?? "no toast"}${shot ? ` → ${shot}` : ""}`
+            toast ?? said ?? "no toast"
           );
         }
         // 2 and 3: the task's sheet, its actions and its decision line.
@@ -439,8 +410,6 @@ async function run(kit: Kit): Promise<void> {
           Boolean,
           60_000
         ).catch(() => false);
-        await Bun.sleep(4500); // the toasts gone, the sheet alone
-        const sheetShot = await appShot(`${at}-sheet`);
         const decided = heardSince(
           from,
           (line) =>
@@ -459,39 +428,13 @@ async function run(kit: Kit): Promise<void> {
                   line.includes(`part task-action-approve-${id} `)
                 )
             ),
-          `→ ${sheetShot}`
+          [first, second].join(", ")
         );
         kit.check(
           `${at}: 3: the head says "Decided on" the page and its card`,
           Boolean(decided),
           decided ?? "no task-decided line"
         );
-
-        // The web's counterpart at the same viewport.
-        const page = await webPage(device.view, theme);
-        await open(
-          page,
-          `${web}/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(taskId)}`,
-          "[data-slot='needs']"
-        );
-        const webToast = await page
-          .waitForSelector(`[data-sonner-toast]:has-text("couldn't list")`, {
-            timeout: 30_000,
-          })
-          .then(() => webShot(page, `${at}-web-toast-${FAILING}`))
-          .catch(() => "");
-        await page
-          .waitForSelector(`[data-sonner-toast]:has-text("didn't answer")`, {
-            timeout: 30_000,
-          })
-          .then(() => webShot(page, `${at}-web-toast-${SILENT}`))
-          .catch(() => "");
-        await page.waitForTimeout(4500);
-        const webSheet = await webShot(page, `${at}-web-sheet`);
-        kit.note(
-          `${at}: web counterparts ${webToast || "(no toast)"} ${webSheet}`
-        );
-        await page.close();
       }
 
       // The taps, once per device, in the dark: Deny, Approve, Remove, Decided on.
@@ -537,23 +480,11 @@ async function run(kit: Kit): Promise<void> {
         Boolean,
         30_000
       ).catch(() => undefined);
-      const failedShot = await appShot(`${at}-action-failed`);
       kit.check(
         `${at}: 2: Approve runs the call; the service's refusal comes back failed, with Remove`,
         approved && failed && Boolean(removeShown),
-        `tapped ${approved}; state ${stateOf(left)}; → ${failedShot}`
+        `tapped ${approved}; state ${stateOf(left)}`
       );
-      const failedPage = await webPage(device.view, "dark");
-      await open(
-        failedPage,
-        `${web}/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(taskId)}`,
-        "[data-slot='needs']"
-      );
-      await failedPage.waitForTimeout(4500);
-      kit.note(
-        `${at}: web failed card ${await webShot(failedPage, `${at}-web-action-failed`)}`
-      );
-      await failedPage.close();
       from = heard.length;
       const removed = await tap(`task-action-remove-${left}`);
       const checked = await until(
@@ -583,8 +514,6 @@ async function run(kit: Kit): Promise<void> {
         Boolean,
         30_000
       ).catch(() => undefined);
-      await Bun.sleep(4000);
-      const openedShot = await appShot(`${at}-decided-opened`);
       const artifact = seeded.artifacts.pricing;
       kit.check(
         `${at}: 3: "Decided on" opens the pricing page's artifact in its writer's session`,
@@ -594,19 +523,15 @@ async function run(kit: Kit): Promise<void> {
               `artifact ${artifact} in ${seeded.writers.pricing}`
             )
           ),
-        `${opened ?? `tapped ${pressed}; no open line`} → ${openedShot}`
+        opened ?? `tapped ${pressed}; no open line`
       );
-      await writeFile(join(keep, `${tag}.log`), heard.join("\n"));
+      await writeFile(join(kit.out, `${tag}.log`), heard.join("\n"));
     } finally {
       stream?.kill();
       await sim?.release();
     }
   }
   await server.stop(true);
-  await cp(kit.out, join(keep, "kit-out"), { recursive: true }).catch(
-    () => undefined
-  );
-  kit.note(`captures: ${keep}`);
 }
 
 export default { name: "ios-web-gaps", run } satisfies Spec;

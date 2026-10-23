@@ -13,7 +13,7 @@
  *    tailnet", its line, and the two steps in order: the admin console's
  *    switches with Open Tailscale's DNS page at console.tailscale.com/admin/dns,
  *    and `sudo tailscale set --operator=<user>` whole in its command box. At
- *    the desk and on the phone, light and dark: each captured, nothing wider
+ *    the desk and on the phone, light and dark: nothing wider
  *    than the row, the command never cut.
  * 4. Each step ticks by itself, in either order: the operator given first
  *    (its tick, the admin step still standing), then HTTPS on with the
@@ -335,15 +335,15 @@ const treeReads = (tree: string, row: Row): boolean => {
   );
 };
 
-/** Where the row is read and captured: the desk light first, its words' reference. */
-const SHOTS = [
+/** Where the row is read: the desk light first, its words' reference. */
+const PASSES = [
   { view: "desk", theme: "light" },
   { view: "desk", theme: "dark" },
   { view: "phone", theme: "light" },
   { view: "phone", theme: "dark" },
 ] as const;
 
-type Hand = (typeof SHOTS)[number]["view"];
+type Hand = (typeof PASSES)[number]["view"];
 
 /** A press where a hand presses: the mouse at the desk, a finger's tap on the phone. */
 const press = async (page: Page, view: Hand, selector: string) => {
@@ -515,7 +515,7 @@ const run = async (kit: Kit) => {
   // Caw's panel open at the desk and on the phone, light and dark, as a hand
   // opens it: the mouse at the desk, a finger's tap on the phone.
   const pages = await Promise.all(
-    SHOTS.map(async (shot) => {
+    PASSES.map(async (shot) => {
       const page = await kit.page(shot.view, { theme: shot.theme });
       page.setDefaultTimeout(60_000);
       await openNeeds(page, shot.view, base);
@@ -528,11 +528,10 @@ const run = async (kit: Kit) => {
   }
   const { page } = desk;
 
-  /** Every step whose label wrapped to two lines or more, in any capture. */
+  /** Every step whose label wrapped to two lines or more, on any page. */
   const wrapped: Row["steps"] = [];
   /**
-   * The row on every page once `ready` holds, captured as
-   * `<name>-<view>-<theme>.png` in the spec's folder; each page held to
+   * The row on every page once `ready` holds, each page held to
    * nothing wider than the row, every command whole in its box, and every
    * step's mark on its label's first line.
    */
@@ -546,9 +545,6 @@ const run = async (kit: Kit) => {
         30_000
       );
       await settle(one.page, 300);
-      await one.page.locator(ROW).screenshot({
-        path: join(kit.out, `${name}-${one.view}-${one.theme}.png`),
-      });
       rows[one.label] = row;
       if (row.steps.length > 0) {
         const tree = await one.page
@@ -633,9 +629,6 @@ const run = async (kit: Kit) => {
       (row) => row.steps.some((todo) => todo.lines >= 2),
       30_000
     );
-    await narrow.page
-      .locator(ROW)
-      .screenshot({ path: join(kit.out, "fresh-phone320-light.png") });
     wrapped.push(...squeezed.steps.filter((todo) => todo.lines >= 2));
     kit.check(
       "3, phone 320 light: nothing in the row is wider than it, and the command shows whole with no word broken; its text and a hand selection over it copy the command with its spaces",

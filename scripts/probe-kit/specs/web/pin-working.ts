@@ -19,9 +19,6 @@
  *    thread's own coordinates, its scroll counted), and the working turn is
  *    gone.
  *
- * With `PROBE_SHOTS_DIR` set, each viewport and scheme is captured there,
- * working and landed, for review.
- *
  * At 1440, in both schemes, one clock: put to work by one change, the
  * card's working mark and the pin's own pill each run one `breath`, of
  * equal length and curve, each begun on the one clock (core breath.ts: a
@@ -54,8 +51,6 @@ const PILL_DOT =
   '[data-slot="pin-room"] > span > [data-mark] [data-dot="live"]';
 /** The accessible name the working state keeps. */
 const SAID = commentWords.working;
-/** Where each state's capture goes for review, when set: a run's output, never the repository. */
-const SHOTS = process.env.PROBE_SHOTS_DIR;
 
 interface Box {
   bottom: number;
@@ -185,11 +180,6 @@ async function boxes(kit: Kit, base: string): Promise<void> {
       await page.waitForTimeout(400);
       const read = await page.evaluate(readWorking);
       const at = `${width} ${theme}`;
-      if (SHOTS) {
-        await page.screenshot({
-          path: `${SHOTS}/pin-working-${width}-${theme}.png`,
-        });
-      }
       const stack = [read.head, ...read.entries, read.turn, read.foot];
       const stacked =
         stack.every(Boolean) &&
@@ -234,11 +224,6 @@ async function boxes(kit: Kit, base: string): Promise<void> {
         .waitFor({ timeout: 5000 });
       await page.waitForTimeout(200);
       const landed = await page.evaluate(readLanded);
-      if (SHOTS) {
-        await page.screenshot({
-          path: `${SHOTS}/pin-landed-${width}-${theme}.png`,
-        });
-      }
       kit.check(
         `${at}: the landed reply's mark stands where the working mark stood, and the working turn is gone`,
         !!(landed.inRoom && read.inRoom) &&

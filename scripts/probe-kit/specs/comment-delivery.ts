@@ -1778,7 +1778,6 @@ const run = async (kit: Kit) => {
       drawn.person.length === 0,
     JSON.stringify(drawn)
   );
-  await page.screenshot({ path: join(kit.out, "comment-delivery-first.png") });
 
   // 3. A reply to pin 2 later: one more delivery by itself, pin 2 alone.
   const before3 = heard.length;
@@ -1878,7 +1877,6 @@ const run = async (kit: Kit) => {
       ownImages(ink) === 1,
     `groups ${Object.keys(inked.ink).length}; pictures ${ink ? ownImages(ink) : "-"}; heard ${words5.slice(0, 500)}`
   );
-  await page.screenshot({ path: join(kit.out, "comment-delivery-last.png") });
 
   // 9. A comment on the page as a whole, whose words then change.
   await wholePageChecks(on, frame);

@@ -23,7 +23,6 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
@@ -321,9 +320,6 @@ async function run(kit: Kit): Promise<void> {
       .map((line) => placedAs(line, id8))
       .findLast(Boolean);
     const stillBusy = Date.now() - busyAt < BUSY_S * 1000;
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-artifact-responses-waiting.png")}" >/dev/null`
-    );
     kit.check(
       "2: the app draws the waiting event as ui.system_note/artifact_responses in its queue, nothing as user, while the turn runs",
       !!queued &&
@@ -347,9 +343,6 @@ async function run(kit: Kit): Promise<void> {
     ).catch(() => undefined);
     await pause(1500);
     const last = drawnLine(() => true);
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-artifact-responses-read.png")}" >/dev/null`
-    );
     kit.check(
       "3: once read, the row is among the blocks and still the note",
       read === "blocks:read" &&

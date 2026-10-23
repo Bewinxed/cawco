@@ -241,19 +241,12 @@ interface Pixels {
   bmp: Buffer;
   points: number;
 }
-async function pixels(
-  udid: string,
-  points: number,
-  save?: string
-): Promise<Pixels> {
-  const file = join(out, `${save ?? "scratch"}.png`);
+async function pixels(udid: string, points: number): Promise<Pixels> {
+  const file = join(out, "scratch.png");
   await sh(`xcrun simctl io ${udid} screenshot "${file}" >/dev/null 2>&1
 sips -s format bmp "${file}" --out "${file}.bmp" >/dev/null 2>&1`);
   const bmp = Buffer.from(await Bun.file(`${file}.bmp`).arrayBuffer());
-  await sh(`rm -f "${file}.bmp"${save ? "" : ` "${file}"`}`);
-  if (save) {
-    console.log(`  capture: ${file}`);
-  }
+  await sh(`rm -f "${file}.bmp" "${file}"`);
   return { bmp, points };
 }
 /** The mean colour, [r, g, b], of the 1pt square at a point. */
@@ -449,7 +442,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     return;
   }
   await pullChecks(kind, udid, at, width, panel);
-  await rowChecks(kind, udid, at, width, panel, passStart);
+  await rowChecks(kind, udid, at, panel, passStart);
 }
 
 /** The pulls on Caw: down slow past half and under it, a flick down, a flick up. */
@@ -467,7 +460,7 @@ async function pullChecks(
   const going = swipe(udid, at, { x: at.x, y: at.y + travel }, 3);
   await pause(1700);
   const shotAt = Date.now();
-  const mid = await pixels(udid, width, `${kind}-pull-mid-light`);
+  const mid = await pixels(udid, width);
   const shotEnd = Date.now();
   await going;
   await pause(900);
@@ -524,7 +517,6 @@ async function pullChecks(
   const short = Math.round(h * 0.3);
   const goingDark = swipe(udid, at, { x: at.x, y: at.y + short }, 2);
   await pause(1300);
-  await pixels(udid, width, `${kind}-pull-mid-dark`);
   await goingDark;
   await pause(1000);
   const under = await releases(udid, since);
@@ -556,7 +548,6 @@ async function rowChecks(
   kind: Kind,
   udid: string,
   at: Point,
-  width: number,
   panel: Frame,
   passStart: number
 ) {
@@ -631,7 +622,6 @@ async function rowChecks(
     1.6
   );
   await pause(1100);
-  await pixels(udid, width, `${kind}-swipe-mid-light`);
   await swiping;
   await pause(900);
   await logged(udid, since, "notice release");

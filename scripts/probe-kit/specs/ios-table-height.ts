@@ -50,14 +50,12 @@
  *
  * `PROBE_IOS_RUNTIME=iOS-27-0` runs it on another runtime than iOS 18.5.
  *
- * `PROBE_CAPTURE=<dir>` also writes the iPhone's table, light and dark, there.
- *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-table-height
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { freshApp } from "../../lib/apple-app";
 import { macSim } from "../../lib/mac-sim";
@@ -496,7 +494,7 @@ interface Turns {
   stream: () => Promise<unknown>;
 }
 
-/** One device: the table, the scroll past the calls, then the iPad's width change or the iPhone's captures and streamed turn. */
+/** One device: the table, the scroll past the calls, then the iPad's width change or the iPhone's streamed turn. */
 async function leg(
   kit: Kit,
   device: { tag: string; type: string },
@@ -531,7 +529,6 @@ async function leg(
     if (device.tag === "iPad") {
       await widen(kit, udid, heard, shown);
     } else {
-      await captures(udid);
       await streamed(kit, heard, on.turns);
     }
     judgeDrift(kit, device.tag, heard);
@@ -567,24 +564,6 @@ async function widen(
     wider
   );
   judgeBounds(kit, "iPad, sidebar hidden", heard, from);
-}
-
-/** `PROBE_CAPTURE=<dir>`: the iPhone's screen, light and dark, there. */
-async function captures(udid: string): Promise<void> {
-  const capture = process.env.PROBE_CAPTURE;
-  if (!capture) {
-    return;
-  }
-  await mkdir(capture, { recursive: true });
-  for (const look of ["light", "dark"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one appearance after the other
-    await sh(`xcrun simctl ui ${udid} appearance ${look}`);
-    await Bun.sleep(1500);
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(capture, `ios-table-${look}.png`)}" >/dev/null 2>&1`
-    );
-  }
-  await sh(`xcrun simctl ui ${udid} appearance light`);
 }
 
 /** The same message streamed a word at a time: what each word appended costs the tables, and the table it lands as. */

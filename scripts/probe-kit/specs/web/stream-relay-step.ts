@@ -25,13 +25,10 @@
  *
  * Nothing in any state scrolls sideways. Every relay failure is checked for
  * the error formula's order, and no failure nor step word names port 80,
- * 443, a sysctl or `ip_unprivileged_port_start`. A capture of each state and width goes to
- * the run's output folder (`kit.out`) for the review item to read.
+ * 443, a sysctl or `ip_unprivileged_port_start`.
  *
  *   bun scripts/probe-kit/run.ts web stream-relay-step
  */
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type {
   RelayAnswer,
@@ -44,7 +41,7 @@ import {
   STREAM_RELAY_WORDS as words,
 } from "../../../../packages/core/src/stream-relay";
 import type { Kit, Spec, View } from "../../kit";
-import { open, settle, specOut, type Theme } from "../../kit";
+import { open, settle, type Theme } from "../../kit";
 
 const LEGS: { name: string; view: View }[] = [
   { name: "390", view: "phone" },
@@ -52,7 +49,6 @@ const LEGS: { name: string; view: View }[] = [
   { name: "1440", view: "desk" },
 ];
 
-const CAPTURES = specOut("stream-relay-step");
 const DOMAIN = "outpost.example.com";
 const NAME = "turn.example.com";
 const machine = { name: "relay", address: "198.18.4.20", lan: "192.168.1.20" };
@@ -189,14 +185,6 @@ const sideways = (page: Page) =>
     };
   });
 
-const capture = async (page: Page, name: string): Promise<void> => {
-  await mkdir(CAPTURES, { recursive: true });
-  await page.screenshot({
-    path: join(CAPTURES, `${name}.png`),
-    fullPage: true,
-  });
-};
-
 const URL_PATH = "/config/browsers";
 
 /** A page on Settings › Browsers with `journey` mocked, its section in. */
@@ -267,7 +255,6 @@ const before = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
         scroll.section === 0,
       JSON.stringify({ read, scroll })
     );
-    await capture(page, `set-up-${domain ? "domain" : "plain"}-${leg.name}`);
   }
 };
 
@@ -370,7 +357,6 @@ const journeyLeg = async (
       JSON.stringify({ units: read.units, copied })
     );
   }
-  await capture(page, `journey-name-${leg.name}`);
 };
 
 /** No port 80, 443, sysctl or unprivileged-port floor in the words a person reads. */
@@ -428,7 +414,6 @@ const certificateLeg = async (
     ),
     JSON.stringify(acts)
   );
-  await capture(page, `certificate-token-${leg.name}`);
 };
 
 const summaryLeg = async (
@@ -507,7 +492,6 @@ const summaryLeg = async (
     gap !== null && gap.apart === gap.space4,
     JSON.stringify(gap)
   );
-  await capture(page, `summary-${leg.name}`);
   await page.click("[data-relay-remove]");
   await page.waitForSelector('section[data-ask="relay-remove"]');
   await settle(page, 500);
@@ -545,7 +529,6 @@ const summaryLeg = async (
       scroll.section === 0,
     JSON.stringify({ asked, scroll })
   );
-  await capture(page, `summary-remove-asked-${leg.name}`);
 };
 
 const otherStates = async (
@@ -576,7 +559,6 @@ const otherStates = async (
       stoppedRead.chips === 0,
     JSON.stringify(stoppedRead)
   );
-  await capture(stopped, `summary-stopped-${leg.name}`);
   const plain = await look(
     kit,
     base,
@@ -608,7 +590,6 @@ const otherStates = async (
       scroll.page <= 0,
     JSON.stringify(plainRead)
   );
-  await capture(plain, `summary-no-name-${leg.name}`);
 };
 
 /** The contrast of each element's text on the ground under it, colours read through a canvas. */
@@ -710,7 +691,6 @@ const dark = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
       on && ratios.every((r) => r.ratio >= 4.5),
       JSON.stringify(ratios)
     );
-    await capture(page, `${item.name}-dark-${leg.name}`);
   }
 };
 
@@ -807,7 +787,6 @@ const focus = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
         read.clipped === null,
       JSON.stringify({ reached, read })
     );
-    await capture(page, `focus-${item.name}-${leg.name}`);
   }
 };
 

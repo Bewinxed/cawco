@@ -17,8 +17,7 @@
  *    `preview head room …` line: what stands and what More holds are every
  *    control the panel wants, once; each slot at least 44×44; the name at its
  *    floor or more; the mode on the head; Comments' count on the head or on
- *    More; and nothing past the head's width. The head is captured light and
- *    dark.
+ *    More; and nothing past the head's width.
  * 2. On the iPad's card, a finger's tap on More and on its Reload (axe):
  *    the page loads again, a document committed (`preview document`) with a
  *    new document clock (`preview doc origin=`).
@@ -28,8 +27,6 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
@@ -64,14 +61,6 @@ const PAGE = `<!doctype html>
 <body><h1>Which plan?</h1><p>Pro or Team.</p></body></html>`;
 /** What the panel wants in its head for a page, beside the side and the drawer. */
 const WANTED = ["newCanvas", "openTab", "mode", "comments", "reload"];
-
-/** Where the captures go: outside the workspace, for the parent's capture review. */
-const keep = join(
-  process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-  "cawco-captures",
-  "prd-parity",
-  "preview-head"
-);
 
 async function sh(script: string): Promise<string> {
   const child = Bun.spawn(["bash", "-s"], {
@@ -199,7 +188,6 @@ interface On {
   heard: string[];
   kit: Kit;
   session: string;
-  shots: string;
   tag: string;
   udid: string;
 }
@@ -304,21 +292,7 @@ function roomAfter(
   );
 }
 
-/** The screen light and dark, named for the read. */
-async function capture(on: On, read: string): Promise<void> {
-  for (const theme of ["light", "dark"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
-    await sh(`xcrun simctl ui ${on.udid} appearance ${theme}`);
-    await Bun.sleep(2000);
-    await sh(
-      `xcrun simctl io ${on.udid} screenshot "${join(on.shots, `${read}-${theme}.png`)}" >/dev/null`
-    );
-  }
-  await sh(`xcrun simctl ui ${on.udid} appearance light`);
-  await Bun.sleep(1000);
-}
-
-/** One width's read: the head as the app last laid it out, checked and captured. */
+/** One width's read: the head as the app last laid it out, checked. */
 async function readAt(
   on: On,
   read: string,
@@ -345,7 +319,6 @@ async function readAt(
     faults.length === 0,
     `${room?.line ?? "no head room line"}; ${more ?? "no More line"}${faults.length > 0 ? `; ${faults.join("; ")}` : ""}${said}`
   );
-  await capture(on, read);
 }
 
 /** 2. Reload through More: the page loads again, its document clock new. */
@@ -383,8 +356,6 @@ async function onDevice(
   const pad = device === IPAD;
   const label = `${tag}-${pad ? "ipad" : "iphone"}`;
   const session = await fleet.spawn("claude", `Head ${label}`, fleet.repo);
-  const shots = join(keep, label);
-  await mkdir(shots, { recursive: true });
   let sim: Awaited<ReturnType<typeof openSim>> | undefined;
   try {
     sim = await openSim({ runtime, device }, app);
@@ -393,7 +364,6 @@ async function onDevice(
       heard: sim.heard,
       kit,
       session,
-      shots,
       tag: label,
       udid: sim.sim.udid,
     };
@@ -429,7 +399,6 @@ async function onDevice(
       await launch(extra);
       await readAt(on, read, mark, [...WANTED, "expand"]);
     }
-    console.log(`  captures: ${shots}`);
   } finally {
     await Bun.write(
       join(kit.out, `ios-preview-head-${label}.log`),

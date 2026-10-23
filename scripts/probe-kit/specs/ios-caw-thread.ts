@@ -625,14 +625,6 @@ async function onDevice(
       `${first} | hub ${hubOrder.join(" | ")}`
     );
 
-    /** The screen as it stands, into the run's out folder as `<device>-<name>.png`. */
-    const capture = async (name: string) => {
-      await mkdir(kit.out, { recursive: true });
-      await sh(
-        `xcrun simctl io ${udid} screenshot "${join(kit.out, `${tag}-${name}.png`)}" >/dev/null 2>&1`
-      );
-    };
-
     // 2. A message from the app lands in the hub's thread, and the web thread shows it.
     await ctx.idle();
     const words = `PROBE-REPLY-${TAG} from the app`;
@@ -664,7 +656,6 @@ async function onDevice(
       "Caw's reply in the thread"
     );
     // The thread at rest, for the screen's review beside the web's.
-    await capture("thread");
     kit.check(
       `3 ${tag}: Caw's reply appears in the app thread`,
       !!replied?.includes(`caw:PROBE-REPLY-${TAG} done`),
@@ -695,7 +686,6 @@ async function onDevice(
     await Bun.sleep(800);
     await sh(`${AXE} type '${own}' --udid ${udid}`);
     // The question on the composer with its own answer written, for the review.
-    await capture("question-other");
     await tap("prompt-answer");
     const answered = await until(
       `${tag}: your own answer in the thread`,
@@ -914,7 +904,6 @@ async function onDevice(
       Boolean,
       90_000
     ).catch(() => undefined);
-    await capture("question-long");
     longVerdict(kit, tag, optionsLine);
     // Digits pick, the current question first: 2 is Warm, then the next question's 4.
     const keyed = heard.length;

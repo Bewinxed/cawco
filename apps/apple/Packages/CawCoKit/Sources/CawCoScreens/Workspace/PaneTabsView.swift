@@ -1042,19 +1042,11 @@ extension PaneTabsView {
         guard let window else { return }
         let style = traitCollection.userInterfaceStyle == .dark ? "dark" : "light"
         let idiom = traitCollection.userInterfaceIdiom == .pad ? "pad" : "phone"
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tabs-probe", isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // The window as drawn, read for the rims and the feet; nothing is kept.
         let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
             _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
         let file = "\(idiom)-\(style)-\(name)"
-        try? image.pngData()?.write(to: folder.appendingPathComponent("\(file).png"))
-        let strip = convert(bounds, to: window).insetBy(dx: 0, dy: -6).intersection(window.bounds)
-        let scale = image.scale
-        let pixels = CGRect(x: strip.minX * scale, y: strip.minY * scale, width: strip.width * scale, height: strip.height * scale)
-        if let crop = image.cgImage?.cropping(to: pixels) {
-            try? UIImage(cgImage: crop, scale: scale, orientation: .up).pngData()?.write(to: folder.appendingPathComponent("\(file)-strip.png"))
-        }
         Self.probeLog.notice("tabs probe hold \(file, privacy: .public)")
         probeGeometry(name)
         probeRims(name, in: image, window: window)

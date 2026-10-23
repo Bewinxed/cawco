@@ -34,7 +34,7 @@
  *     control and rect as its centre in window points, and the web view's
  *     frame in the window;
  *  4. reads what stands in front with Maestro's runner (CawCo, or the run
- *     stops with a screenshot of what does), then taps, types and drags
+ *     stops naming what does), then taps, types and drags
  *     with that runner's touches at the places the app logs, each page
  *     point inside the web view's frame, and reads the page's answers from
  *     that log and the hub's from its own routes (the pins through
@@ -645,18 +645,12 @@ xcrun simctl install ${udid} "${app}"`);
     hello ?? "no hello line"
   );
   // What stands in front before the first tap: the app, or a system alert,
-  // the paywall or SpringBoard, saved as a screenshot in the sandbox.
+  // the paywall or SpringBoard.
   const inFront = await front();
-  const shot = join(fleet.sandbox, "front.png");
-  if (inFront !== "CawCo") {
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${shot}" >/dev/null 2>&1`
-    ).catch(() => undefined);
-  }
   check(
     "the app stands in front before the first tap",
     inFront === "CawCo",
-    `Maestro reads "${inFront}" in front${inFront === "CawCo" ? "" : `; the screen: ${shot}`}`
+    `Maestro reads "${inFront}" in front`
   );
   if (inFront !== "CawCo") {
     throw new Error(`"${inFront}" stands over the app`);

@@ -34,7 +34,6 @@
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
 import { mkdir, symlink, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
@@ -92,14 +91,6 @@ const PAGE = (words: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${words}</title></head><body><p>${words}</p></body></html>`;
 
 const pause = (ms: number) => Bun.sleep(ms);
-
-/** Where the paired captures go: outside the workspace, for a later review of app against web. */
-const keep = join(
-  process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-  "cawco-captures",
-  "prd-parity",
-  "b1-artifact-panel"
-);
 
 async function sh(script: string): Promise<string> {
   const child = Bun.spawn(["bash", "-s"], {
@@ -315,9 +306,6 @@ const run = async (kit: Kit) => {
     );
     const tagged = (name: string) =>
       name === "kept" ? `kept[Promoted ${commit}]` : name;
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-sheet-inspector-menu.png")}" >/dev/null`
-    );
     kit.check(
       "1: the menu lists the hub's artifacts newest first, the promoted one tagged with its short commit; Remove takes notes out of the menu and the hub",
       listedBefore.map((row) => row.name).join() === "draft,notes,kept" &&
@@ -328,46 +316,6 @@ const run = async (kit: Kit) => {
         listedAfter.map((row) => row.name).join() === "draft,kept",
       `hub before: ${listedBefore.map((row) => row.name).join()}; first: ${firstRows}; removed: ${removed}; last: ${lastRows}; hub after: ${listedAfter.map((row) => row.name).join()}`
     );
-
-    // The menu open beside the dashboard's, at the simulator's viewport, light and dark, for a later review.
-    await mkdir(keep, { recursive: true });
-    const dashboard = await fleet.dashboard();
-    for (const theme of ["light", "dark"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
-      await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
-      const opened = said("artifact menu open").length;
-      await launch("-menu-remove notes");
-      await until(
-        `the ${theme} menu`,
-        () => said("artifact menu open").length > opened,
-        Boolean,
-        90_000
-      ).catch(() => undefined);
-      await pause(2000);
-      await sh(
-        `xcrun simctl io ${udid} screenshot "${join(keep, `app-menu-${theme}.png`)}" >/dev/null`
-      );
-      try {
-        const page = await kit.page("iphone", { engine: "webkit", theme });
-        await page.goto(`${dashboard}/session/${session}`, {
-          waitUntil: "domcontentloaded",
-        });
-        await page
-          .locator("[data-artifact-trigger]")
-          .first()
-          .click({ timeout: 30_000 });
-        await page.locator("[data-artifact-list]").waitFor({ timeout: 10_000 });
-        await pause(500);
-        await page.screenshot({ path: join(keep, `web-menu-${theme}.png`) });
-        await page.close();
-      } catch (error) {
-        console.log(
-          `  the web ${theme} menu wasn't captured: ${(error as Error).message.split("\n")[0]}`
-        );
-      }
-    }
-    await sh(`xcrun simctl ui ${udid} appearance light`);
-    console.log(`  captures: ${keep}`);
 
     // 2. The inspector: the sheet heard, tone set, Saved into the story file.
     const tree = await sh(`git -C "${fleet.repo}" status --porcelain`);
@@ -418,9 +366,6 @@ const run = async (kit: Kit) => {
     const diff = await sh(`git -C "${fleet.repo}" diff -U0 -- ${STORY}`);
     const changed = diff.split("\n").filter((line) => CHANGED_LINE.test(line));
     const files = stat.trim().split("\n").slice(0, -1);
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-sheet-inspector-saved.png")}" >/dev/null`
-    );
     kit.check(
       "2b: the inspector hears the sheet, sets tone and Saves: one file changed, the story file, its args literal alone",
       !!heardSheet?.includes("stories=One") &&

@@ -23,11 +23,6 @@ import UIKit
 /// - the display link's frame times through a 2s glide over the session's
 ///   200 sent messages, and the rows' own drawing cost in each frame;
 /// - the older pages read as the wheel nears its oldest entry.
-///
-/// Captures (at rest, mid-glide, a search) go to the app's temporary folder
-/// under `recall/`. After the action the keyboard is up, in a window of its
-/// own: that state is held five seconds on a `holds … with the keyboard up`
-/// line, for the probe script to capture the screen.
 @MainActor
 enum RecallProbe {
     private static var armed = ProcessInfo.processInfo.arguments.contains("-recall-probe")
@@ -55,14 +50,6 @@ enum RecallProbe {
         String(format: "%.\(places)f", value)
     }
 
-    private static func snap(_ window: UIWindow, _ dir: URL, _ name: String) {
-        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-            _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-        }
-        try? image.pngData()?.write(to: dir.appending(path: "\(name).png"))
-        say("capture \(name).png")
-    }
-
     private static func run(_ composer: ComposerView) async {
         // The transcript's newest page lands after the composer binds: wait for what it sent.
         for _ in 0 ..< 120 where composer.probeEntries.count < 20 || composer.window == nil {
@@ -72,9 +59,6 @@ enum RecallProbe {
         let entries = composer.probeEntries
         let regular = composer.traitCollection.horizontalSizeClass == .regular
         let device = window.traitCollection.userInterfaceIdiom == .pad ? "ipad" : "iphone"
-        let dir = FileManager.default.temporaryDirectory.appending(path: "recall")
-        try? FileManager.default.removeItem(at: dir)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         say("begin \(device) window \(f(window.bounds.width, 0))x\(f(window.bounds.height, 0)) \(regular ? "regular" : "compact") width, \(entries.count) sent")
 
         let buttons = composer.probeButtons
@@ -97,10 +81,8 @@ enum RecallProbe {
             await settled(composer, "\(name) opening")
             await wait(1.0)
             measure(composer, "\(name) keyboard down", regular: regular)
-            snap(window, dir, "\(name)-rest")
             composer.wheel?.probeSpin(to: 14)
             await wait(0.14)
-            snap(window, dir, "\(name)-glide")
             await settled(composer, "\(name) a roll to row 14")
             await wait(0.4)
             composer.wheel?.dismiss()
@@ -115,10 +97,6 @@ enum RecallProbe {
             check("\(name) the action brings the wheel up", acted && composer.wheel != nil, "handled \(acted), wheel up \(composer.wheel != nil)")
             if composer.wheel != nil {
                 measure(composer, "\(name) after the action", regular: regular)
-                // The keyboard is its own window, which a capture of this one doesn't draw: held
-                // a while, and captured from outside the app (the probe script, on this line).
-                say("holds \(name)-action with the keyboard up")
-                await wait(5)
                 composer.wheel?.dismiss()
             }
             composer.field.resignFirstResponder()
@@ -137,7 +115,6 @@ enum RecallProbe {
                       "\(state.matches) of \(held) sent; on the line: row \(line.map { "\($0.index)" } ?? "none")")
                 widths(state, window, "\(name) search")
                 measure(composer, "\(name) search", regular: regular, search: true)
-                snap(window, dir, "\(name)-search")
                 wheel.dismiss()
             }
             await wait(0.6)
@@ -155,7 +132,7 @@ enum RecallProbe {
         window.overrideUserInterfaceStyle = .unspecified
         await wait(0.6)
         await glide(composer, window: window, first: entries.count)
-        say("done \(dir.path)")
+        say("done")
     }
 
     /// The wheel as it stands: its top against the reach, every row's

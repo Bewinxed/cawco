@@ -26,9 +26,6 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { machineLabel } from "../../../packages/core/src/index";
 import { freshApp } from "../../lib/apple-app";
@@ -62,14 +59,6 @@ const PAGE = `<!doctype html>
     setTimeout(ask, 500);
   });
 </script></body></html>`;
-
-/** Where the paired captures go: outside the workspace, for a later review of app against web. */
-const keep = join(
-  process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-  "cawco-captures",
-  "prd-parity",
-  "place-pick"
-);
 
 const pause = (ms: number) => Bun.sleep(ms);
 
@@ -230,46 +219,6 @@ const run = async (kit: Kit) => {
       sh(
         `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -preview-probe ${flags} >/dev/null`
       );
-
-    // The picker open beside the dashboard's, light and dark, for a later review.
-    await mkdir(keep, { recursive: true });
-    const dashboard = await fleet.dashboard();
-    for (const theme of ["light", "dark"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
-      await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
-      const before = said("place pick opened").length;
-      await launch("");
-      await until(
-        `the ${theme} picker`,
-        () => said("place pick opened").length > before,
-        Boolean,
-        120_000
-      ).catch(() => undefined);
-      await pause(2000);
-      await sh(
-        `xcrun simctl io ${udid} screenshot "${join(keep, `app-place-pick-${theme}.png`)}" >/dev/null`
-      );
-      try {
-        const page = await kit.page("iphone", { engine: "webkit", theme });
-        await page.goto(`${dashboard}/session/${session}`, {
-          waitUntil: "domcontentloaded",
-        });
-        await page
-          .locator('form[data-slot="place-pick"]')
-          .waitFor({ timeout: 60_000 });
-        await pause(800);
-        await page.screenshot({
-          path: join(keep, `web-place-pick-${theme}.png`),
-        });
-        await page.close();
-      } catch (error) {
-        console.log(
-          `  the web ${theme} picker wasn't captured: ${(error as Error).message.split("\n")[0]}`
-        );
-      }
-    }
-    await sh(`xcrun simctl ui ${udid} appearance light`);
-    console.log(`  captures: ${keep}`);
 
     // 1. The picker on no machine, the machine chosen, Use this place.
     const opened = said("place pick opened").length;

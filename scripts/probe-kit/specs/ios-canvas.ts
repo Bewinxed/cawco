@@ -42,8 +42,6 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
@@ -120,14 +118,6 @@ function report() {
 </script></body></html>`;
 
 const pause = (ms: number) => Bun.sleep(ms);
-
-/** Where the paired captures go: outside the workspace, for a later review of app against web. */
-const keep = join(
-  process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-  "cawco-captures",
-  "prd-parity",
-  "p4-canvas"
-);
 
 async function sh(script: string): Promise<string> {
   const child = Bun.spawn(["bash", "-s"], {
@@ -303,8 +293,6 @@ async function onRuntime(
   }: { app: string; choice: SimChoice; dashboard: string; tag: string }
 ): Promise<void> {
   const session = await fleet.spawn("claude", `P4 ${tag}`, fleet.repo);
-  const shots = join(keep, tag);
-  await mkdir(shots, { recursive: true });
   let pad: Awaited<ReturnType<typeof openSim>> | undefined;
   try {
     pad = await openSim(choice, app);
@@ -314,7 +302,6 @@ async function onRuntime(
       heard: pad.heard,
       kit,
       session,
-      shots,
       tag,
       udid: pad.sim.udid,
     };
@@ -324,10 +311,8 @@ async function onRuntime(
       return;
     }
     await editStep(on, canvasId);
-    await captureCanvas(on);
     const pageId = await formStep(on);
     await openTabStep(on, pageId);
-    console.log(`  captures: ${shots}`);
   } finally {
     await Bun.write(
       join(kit.out, `ios-canvas-${tag}.log`),
@@ -345,7 +330,6 @@ interface On {
   heard: string[];
   kit: Kit;
   session: string;
-  shots: string;
   tag: string;
   udid: string;
 }
@@ -501,40 +485,9 @@ async function editStep(on: On, canvasId: string): Promise<void> {
   );
 }
 
-/** The canvas in the panel beside the dashboard's at the iPad's viewport, light and dark. */
-async function captureCanvas(on: On): Promise<void> {
-  const { dashboard, kit, session, shots, udid } = on;
-  for (const theme of ["light", "dark"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
-    await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
-    await pause(2500);
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(shots, `app-canvas-${theme}.png`)}" >/dev/null`
-    );
-    try {
-      const page = await kit.page("ipadWide", { engine: "webkit", theme });
-      await page.goto(`${dashboard}/session/${session}`, {
-        waitUntil: "domcontentloaded",
-      });
-      await page
-        .locator('[data-slot="preview-pane"]')
-        .first()
-        .waitFor({ timeout: 60_000 });
-      await pause(4000);
-      await page.screenshot({ path: join(shots, `web-canvas-${theme}.png`) });
-      await page.close();
-    } catch (error) {
-      console.log(
-        `  the web ${theme} canvas wasn't captured: ${(error as Error).message.split("\n")[0]}`
-      );
-    }
-  }
-  await sh(`xcrun simctl ui ${udid} appearance light`);
-}
-
 /** 3. A form re-published keeps what was typed. */
 async function formStep(on: On): Promise<string | undefined> {
-  const { fleet, heard, kit, session, shots, tag, udid } = on;
+  const { fleet, heard, kit, session, tag, udid } = on;
   const after = (mark: number) => heard.slice(mark);
   const madeAt = heard.length;
   const made = await call(fleet, session, CREATE, {
@@ -563,9 +516,6 @@ async function formStep(on: On): Promise<string | undefined> {
   const formDoc = after(madeAt).findLast((line) => DOC.test(line));
   const formOrigin = formDoc?.match(DOC)?.[1];
   const under = typed?.includes(typedLine) ? "" : await underTap(udid, field);
-  await sh(
-    `xcrun simctl io ${udid} screenshot "${join(shots, "app-form-typed.png")}" >/dev/null`
-  );
   const republishAt = heard.length;
   const republished = pageId
     ? await call(fleet, session, UPDATE, { id: pageId, html: form(true) })
@@ -582,9 +532,6 @@ async function formStep(on: On): Promise<string | undefined> {
   const formNavigations = after(republishAt).filter(
     (line) => line === "preview document"
   ).length;
-  await sh(
-    `xcrun simctl io ${udid} screenshot "${join(shots, "app-form-republished.png")}" >/dev/null`
-  );
   kit.check(
     `${tag} 3: a form re-published while its field holds typed words and the focus keeps both: the revision stands, the same document at the panel's width and scale 1 (as the web's iframe), no navigation`,
     !!typed?.includes(typedLine) &&
@@ -659,9 +606,6 @@ async function openTabStep(on: On, pageId: string | undefined): Promise<void> {
   );
   const shows = lines.findLast((line) =>
     line.startsWith(`artifact tab ${pageId} shows`)
-  );
-  await sh(
-    `xcrun simctl io ${udid} screenshot "${join(on.shots, "app-artifact-tab.png")}" >/dev/null`
   );
   kit.check(
     `${tag} 4: the head's Open in new tab opens a tab of kind artifact:<id>, in front, and it shows the artifact`,

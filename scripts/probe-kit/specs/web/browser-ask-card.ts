@@ -36,15 +36,11 @@
  *
  * Every state at every width is swept for overflow and overlap: each text
  * element inside its container and the viewport, and no two text elements
- * overlapping; the sweep's total must be zero. A capture of each goes to
- * the run's output folder (`kit.out`), once every finite animation on the page has
- * landed.
+ * overlapping; the sweep's total must be zero.
  *
  *   bun scripts/probe-kit/run.ts web browser-ask-card
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one width, one state at a time, each on its own page
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { askWords } from "../../../../packages/core/src/words/asks";
 import { MACHINE, type Reply } from "../../../scratch-fleet";
@@ -55,7 +51,6 @@ import {
   open,
   type Spec,
   settle,
-  specOut,
   type Theme,
   type View,
 } from "../../kit";
@@ -76,7 +71,6 @@ const ORIGIN =
 const CONSEQUENCE =
   "No agent can see or use this browser until you hand it back.";
 const REFUSAL = "The browser did not start.";
-const CAPTURES = specOut("browser-ask-card");
 const CARD = '[data-slot="ask"]';
 const KEY = "machine:scratch-fleet";
 
@@ -494,13 +488,6 @@ const countCardRuns = () => {
   document.addEventListener("animationstart", count, true);
 };
 
-/** Each capture once every finite animation on the page has landed. */
-const capture = async (page: Page, file: string): Promise<void> => {
-  await settle(page);
-  await mkdir(CAPTURES, { recursive: true });
-  await page.screenshot({ path: join(CAPTURES, file) });
-};
-
 /** The session's composer with the card up, its parts settled. */
 const cardUp = async (page: Page, base: string, id: string): Promise<void> => {
   await open(page, `${base}/session/${id}`, COMPOSER, 90_000);
@@ -575,7 +562,7 @@ async function rest(
     String(card.sideways)
   );
   await sweepCheck(kit, page, `${label} rest`, CARD);
-  await capture(page, `${name}-${which}.png`);
+  await settle(page);
 
   // "Other": the question card's chip; its line opens beside it.
   const before = card;
@@ -612,7 +599,7 @@ async function rest(
   );
   await field.fill("Not on this account");
   await sweepCheck(kit, page, `${label} other`, CARD);
-  await capture(page, `${name}-${which}-other.png`);
+  await settle(page);
   if (which === "short") {
     await field.press("Enter");
     await page.waitForTimeout(800);
@@ -661,7 +648,7 @@ async function taking(
     JSON.stringify({ posted: held.posted, labels: pending?.labels })
   );
   await sweepCheck(kit, held.page, `${name} pending`, CARD);
-  await capture(held.page, `${name}-pending.png`);
+  await settle(held.page);
   held.release();
   await held.page.close();
 
@@ -729,7 +716,7 @@ async function taking(
     })
   );
   await sweepCheck(kit, refused.page, `${name} refused`, CARD);
-  await capture(refused.page, `${name}-refused.png`);
+  await settle(refused.page);
   await refused.page.close();
 }
 
@@ -753,7 +740,7 @@ async function dark(
   );
   kit.check(`${name} dark: the dark scheme is on`, isDark, String(isDark));
   await sweepCheck(kit, page, `${name} dark`, CARD);
-  await capture(page, `${name}-dark.png`);
+  await settle(page);
   await page.close();
 }
 
@@ -878,13 +865,9 @@ async function needs(
     JSON.stringify(row)
   );
   await sweepCheck(kit, page, `${name} Needs you`, "[data-probe-row]");
-  await mkdir(CAPTURES, { recursive: true });
-  await page
-    .locator("[data-probe-row]")
-    .screenshot({ path: join(CAPTURES, `${name}-needs-row.png`) });
   await settle(page);
   cardStaysWhole(kit, name, cardBefore, await page.evaluate(cardDrawn));
-  await capture(page, `${name}-needs.png`);
+  await settle(page);
 
   // Take over from the row: the transcript card's take-over, the same POST
   // with the same body (`taking`), never a permission answer on the socket.

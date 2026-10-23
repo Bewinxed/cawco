@@ -1107,10 +1107,6 @@ const legs = async (
     await open(page, `${base}/project/${gh}?task=${t1}`, '[data-slot="issue"]');
     await settle(page, 300);
     const line = await readIssueLine(page);
-    await page
-      .locator('[data-slot="issue"]')
-      .first()
-      .screenshot({ path: join(kit.out, `issue-line-${view}.png`) });
     check(
       `U1, ${view}: the linked task's pane says “#1 on GitHub Issues”, its ref a link to the issue, inside the pane; nothing scrolls sideways`,
       line?.words === "#1 on GitHub Issues" &&
@@ -1320,9 +1316,6 @@ const legs = async (
         .trim(),
     };
   });
-  await desk
-    .locator('[data-detail="tracker"]')
-    .screenshot({ path: join(kit.out, "details-tracker.png") });
   // Every issue opened on the repository after binding becomes a task here,
   // the P legs' too, as the minute's poll finds them: the row shows the
   // hub's count from just before the tray opened or just after it was read.
@@ -1480,9 +1473,6 @@ const legs = async (
         document.documentElement.clientWidth,
     };
   });
-  await desk
-    .locator('[data-detail="tracker"]')
-    .screenshot({ path: join(kit.out, "details-github-project.png") });
   check(
     "U7: the bound row names its Project; Change opens the form on it, each stage on its Status option, working on Review as bound",
     named === "Stages show on Probe roadmap, in its Status." &&
@@ -1527,9 +1517,6 @@ const legs = async (
   const hidden = await desk.getAttribute("#connection-private-key", "type");
   await desk.getByRole("button", { name: "Show the private key" }).click();
   const shown = await desk.getAttribute("#connection-private-key", "type");
-  await desk
-    .locator('form[aria-label="Sign in to GitHub"]')
-    .screenshot({ path: join(kit.out, "connections-github-app.png") });
   const mintsOf = () =>
     github.calls.filter(
       (one) =>
@@ -1572,7 +1559,6 @@ const legs = async (
     thrown.length === 0,
     thrown.join(" | ") || "none"
   );
-  kit.note(`captures: ${kit.out}`);
 };
 
 /** A task pane's issue line as the engine lays it out: its words, link, fault and box. */

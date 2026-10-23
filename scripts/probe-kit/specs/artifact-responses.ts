@@ -415,9 +415,6 @@ const run = async (kit: Kit) => {
     busyFor < BUSY_S * 1000 && reading.heard === undefined,
     `${busyFor} ms into a ${BUSY_S} s answer; the notice ${reading.heard ? "already heard" : "not heard yet"}`
   );
-  await page.screenshot({
-    path: join(kit.out, "artifact-responses-waiting.png"),
-  });
 
   // 5. The agent reads it once the slow tool ends.
   await until(
@@ -454,7 +451,6 @@ const run = async (kit: Kit) => {
     readWord === "read" && (await line.count()) === 1,
     readWord
   );
-  await page.screenshot({ path: join(kit.out, "artifact-responses-read.png") });
 
   // 7. A pick after the Send is offered again.
   await pressIn(frame, '[data-option="original"]');

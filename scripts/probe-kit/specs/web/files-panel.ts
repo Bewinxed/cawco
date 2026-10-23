@@ -74,13 +74,8 @@
  * 40. the drawer at 390 (Chromium and WebKit): Tab from the Artifacts
  *     segment goes to the view switch and then the first card, never to
  *     the segment's panel (it holds the cards, so it takes no Tab stop).
- *
- * One capture per state at 390 and 1440, light and dark, in the run's output
- * folder (`kit.out`).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { filesWords } from "../../../../packages/core/src/words/files";
@@ -96,14 +91,12 @@ import {
   open,
   readMotion,
   type Spec,
-  specOut,
   stillWithin,
   THEMES,
   type Theme,
   type View,
 } from "../../kit";
 
-const CAPS = specOut("files-panel");
 const MANY = 42;
 const LONG_NAME =
   "a-page-whose-name-runs-on-and-on-to-the-very-end-of-what-it-may";
@@ -349,11 +342,6 @@ const sweep = async (page: Page, state: string) => {
     state,
     findings: restless ? [restless] : await page.evaluate(scan),
   });
-};
-
-const shot = async (page: Page, name: string) => {
-  await mkdir(CAPS, { recursive: true });
-  await page.screenshot({ path: join(CAPS, `${name}.png`) });
 };
 
 /** The page's own scroll height against its viewport: Files never grows the page. */
@@ -683,7 +671,6 @@ const desk = async (
       bar.overlap === 0,
     JSON.stringify(bar)
   );
-  await shot(page, `closed-1440-${theme}`);
   await sweep(page, `closed 1440 ${theme}`);
 
   const heightBefore = await page.evaluate(
@@ -863,7 +850,6 @@ const desk = async (
     !!long?.cut && long.inside,
     JSON.stringify(long)
   );
-  await shot(page, `open-many-1440-${theme}`);
   await sweep(page, `open many 1440 ${theme}`);
 
   // 6. Search: by title, by the words on a page, and nothing.
@@ -885,7 +871,6 @@ const desk = async (
       (mark) => mark.textContent
     ),
   }));
-  await shot(page, `search-content-1440-${theme}`);
   await sweep(page, `search content 1440 ${theme}`);
   await field.fill("tall board");
   await until(
@@ -913,7 +898,6 @@ const desk = async (
     15_000
   ).catch(() => 0);
   const nothing = await page.locator("[data-files-none]").allTextContents();
-  await shot(page, `search-none-1440-${theme}`);
   await sweep(page, `search none 1440 ${theme}`);
   kit.check(
     `6 (${theme}): search finds by the words on a page (marked), by title, and says when nothing matches`,
@@ -946,7 +930,6 @@ const desk = async (
       !(await pageGrows(page)),
     `${JSON.stringify(picked)} (picked ${pricingId})`
   );
-  await shot(page, `picked-1440-${theme}`);
   await sweep(page, `picked 1440 ${theme}`);
   await page.close();
 
@@ -975,7 +958,6 @@ const desk = async (
         : !said.empty && said.cards === 1,
       JSON.stringify(said)
     );
-    await shot(each, `${state}-1440-${theme}`);
     await sweep(each, `${state} 1440 ${theme}`);
     await each.close();
   }
@@ -997,7 +979,6 @@ const desk = async (
         .count()) > 0,
     failedSaid ?? ""
   );
-  await shot(offline, `offline-1440-${theme}`);
   await sweep(offline, `offline 1440 ${theme}`);
   errors.delete(offline);
   await offline.close();
@@ -2327,9 +2308,6 @@ const narrowLeg = async (
     (label) => !!label && FILES_COUNTED.test(label),
     60_000
   ).catch(() => null);
-  if (view === "phone") {
-    await shot(page, `sidebar-${width}-${theme}`);
-  }
   await row.click();
   const sheet = page.locator("[data-files-sheet]");
   await sheet.waitFor();
@@ -2356,21 +2334,12 @@ const narrowLeg = async (
       !(await pageGrows(page)),
     JSON.stringify(drawer)
   );
-  if (view === "phone") {
-    await shot(page, `drawer-artifacts-${width}-${theme}`);
-  }
   await sweep(page, `drawer artifacts ${width} ${theme}`);
   await page.locator('[data-files-segment="attachments"]').click();
   await page.locator("[data-files-row]").first().waitFor();
-  if (view === "phone") {
-    await shot(page, `drawer-attachments-${width}-${theme}`);
-  }
   await sweep(page, `drawer attachments ${width} ${theme}`);
   await page.locator("[data-files-search] input").fill("invoice");
   await page.locator("[data-files-none]").first().waitFor({ timeout: 15_000 });
-  if (view === "phone") {
-    await shot(page, `drawer-search-none-${width}-${theme}`);
-  }
   await sweep(page, `drawer search none ${width} ${theme}`);
   await page.close();
 };
@@ -2852,9 +2821,6 @@ const viewLeg = async (
       ? `${list.past} rows past the foot, the sign says ${list.sign}; ${list.overflow.length} past Files${list.overflow.length ? `: ${list.overflow.slice(0, 4).join(" | ")}` : ""}`
       : "Files not found"
   );
-  if (view !== "narrowDesk" && count === "many") {
-    await shot(page, `list-${SLOT_WIDTHS[view]}-${engine}`);
-  }
   await sweep(page, `list ${leg}`);
   await page.locator(VIEW_PICK("thumbnails")).click();
   await page

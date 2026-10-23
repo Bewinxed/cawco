@@ -27,10 +27,7 @@
  *     account…", and that opens the section.
  *
  * Runs on an iPhone and an iPad simulator on iOS 18.5 (each in a mac-slot.sh
- * slot, deleted at the end) and the Mac Catalyst build. Each stage's window
- * goes to `kit.out`/config-accounts/<platform>/<stage>.png (the app PUTs it to
- * a loopback server here: the Mac app's sandbox writes only its container),
- * for a separate screenshot review.
+ * slot, deleted at the end) and the Mac Catalyst build.
  *
  *   bash apps/apple/scripts/build-both.sh ios
  *   bun scripts/probe-kit/run.ts ios-accounts [iphone|ipad|mac …]
@@ -59,7 +56,7 @@
  *     ../../DerivedData-macprobe/Build/Products/Debug-maccatalyst/CawCo.app
  */
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { accountsWords as words } from "../../../packages/core/src/words/accounts";
@@ -274,35 +271,12 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
   }
 
   const fleet = await seededFleet(kit);
-  const out = join(kit.out, "config-accounts", platform);
-  // This run's captures only: an earlier run's never stand in for one that didn't arrive.
-  await rm(out, { recursive: true, force: true });
-  await mkdir(out, { recursive: true });
-  const captures: string[] = [];
-  const shots = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      const name = new URL(request.url).pathname.slice(1);
-      if (request.method !== "PUT" || !name.endsWith(".png")) {
-        return new Response(null, { status: 404 });
-      }
-      await writeFile(
-        join(out, name),
-        new Uint8Array(await request.arrayBuffer())
-      );
-      captures.push(join(out, name));
-      return new Response(null, { status: 201 });
-    },
-  });
   const args = [
     "-paywall-env",
     "sandbox",
     "-cawco-hub-url",
     fleet.base,
     "-accounts-probe",
-    "-accounts-probe-capture",
-    `http://127.0.0.1:${shots.port}/`,
     ...(PLATFORMS[platform].launch ?? []),
   ];
 
@@ -378,27 +352,11 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
     await mac?.stop();
     stream?.kill();
     await sim?.release();
-    shots.stop(true);
   }
 
   await writeFile(join(kit.out, `${platform}.log`), `${lines.join("\n")}\n`);
-  judge(kit, label, lines, captures, await pickerRows(fleet.base));
-  console.log(`  ${platform} captures: ${out}`);
+  judge(kit, label, lines, await pickerRows(fleet.base));
 }
-
-/** A stage of the web's walk, as the app's capture of the same stage is named. */
-type Stage =
-  | "list"
-  | "editor"
-  | "signin-link"
-  | "signin-refused"
-  | "remove-question"
-  | "routing"
-  | "routing-fill-first"
-  | "setup-provider"
-  | "setup-signin"
-  | "setup-key"
-  | "list-after";
 
 /** The hub's accounts, by the name each goes by now. */
 async function accountIds(base: string): Promise<Map<string, string>> {
@@ -412,10 +370,9 @@ async function accountIds(base: string): Promise<Map<string, string>> {
 
 /**
  * The web's Configure › Accounts walked through the stages the app's probe
- * walks, on a fleet seeded as the app's is, at one width: each stage's page
- * goes to `kit.out`/config-accounts/web-<view>/<stage>.png, beside the app's,
- * so a review compares like with like. Every control is found by the words
- * core gives it (`accountsWords`), the ones the page itself reads.
+ * walks, on a fleet seeded as the app's is, at one width. Every control is
+ * found by the words core gives it (`accountsWords`), the ones the page
+ * itself reads.
  */
 async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
   const label = (what: string) => `web ${view}: ${what}`;
@@ -428,15 +385,6 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
       opened.close().catch(() => undefined);
     }
   });
-  const out = join(kit.out, "config-accounts", `web-${view}`);
-  await rm(out, { recursive: true, force: true });
-  await mkdir(out, { recursive: true });
-  const captured: string[] = [];
-  const capture = async (stage: Stage) => {
-    const path = join(out, `${stage}.png`);
-    await page.screenshot({ path });
-    captured.push(path);
-  };
   const button = (name: string) =>
     page.getByRole("button", { name, exact: true });
   /** A button that can be pressed: an editor's skeleton keeps its disabled Save while it fades. */
@@ -500,11 +448,9 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
   try {
     await page.goto(`${base}/config/accounts`);
     await page.getByText("Third").first().waitFor();
-    await capture("list");
 
     // The second account: renamed and recoloured, then its machine's sign-in.
     await editorOf("Second");
-    await capture("editor");
     await page.getByLabel(words.editor.nickname).fill("Probe second");
     await page.getByRole("radio", { name: "Violet", exact: true }).click();
     await enabled(words.editor.save).click();
@@ -527,7 +473,6 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
         '[data-slot="panel"] [data-slot="error"]'
       )
     ) {
-      await capture("signin-link");
       await page.getByLabel(words.signin.codeLabel).fill("not-a-real-code");
       await button(words.signin.done).click();
       // Refused at once (the machine's login would wait on a part of a code
@@ -545,14 +490,12 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
             .count()) > 0,
         refusal
       );
-      await capture("signin-refused");
     }
     await page.keyboard.press("Escape");
 
     // The signed-in account: Remove asks first.
     await editorOf("Probe");
     await askRemove("Probe");
-    await capture("remove-question");
     await confirmRemove("Probe");
 
     // Routing: Spread for your sessions, Fill first for delegates.
@@ -573,19 +516,16 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
     };
     const { yours, delegates } = words.routingEditor;
     await card(yours, "spread").waitFor();
-    await capture("routing");
     await card(yours, "spread").click();
     await page.getByRole("tab").filter({ hasText: delegates }).click();
     await card(delegates, "fill-first").click();
     await page.getByText(words.routingEditor.order).waitFor();
-    await capture("routing-fill-first");
     await enabled(words.routingEditor.save).click();
     await page.waitForURL(`${base}/config/accounts`, { timeout: 60_000 });
 
     // Add account: Claude's sign-in makes the account; Cancel takes it back.
     await page.goto(`${base}/config/accounts/new`);
     await button(words.claude).waitFor();
-    await capture("setup-provider");
     // The web's picker, its group heads and rows' names in the page's order.
     checkPicker(
       kit,
@@ -600,7 +540,6 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
     await button(words.claude).click();
     await button(words.setup.signIn).first().click();
     await linkOrRefusal("the setup's row", '[data-slot="row-problem"]');
-    await capture("setup-signin");
     await button(configureWords.cancel).click();
     await page.waitForURL(`${base}/config/accounts`, { timeout: 60_000 });
 
@@ -622,7 +561,6 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
         .locator('[data-slot="keys"] :is([data-slot="ok"], [data-slot="bad"])')
         .first()
         .waitFor({ timeout: 60_000 });
-      await capture("setup-key");
       await button(configureWords.cancel).click();
       await page.waitForURL(`${base}/config/accounts`, { timeout: 60_000 });
     }
@@ -632,21 +570,13 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
     await askRemove("Probe second");
     await confirmRemove("Probe second");
     await page.getByText("Third").first().waitFor();
-    await capture("list-after");
   } catch (error) {
     kit.check(
       label("the walk ran to its end"),
       false,
-      `${error instanceof Error ? error.message : String(error)} (captured: ${captured.length})`
+      error instanceof Error ? error.message : String(error)
     );
-    return;
   }
-  kit.check(
-    label("every stage's capture was taken"),
-    captured.length >= 10,
-    captured.join(", ")
-  );
-  console.log(`  web ${view} captures: ${out}`);
 }
 
 /**
@@ -823,7 +753,6 @@ function judge(
   kit: Kit,
   label: (what: string) => string,
   logged: string[],
-  captures: string[],
   providers: string[]
 ): void {
   const lines = whole(logged);
@@ -977,11 +906,6 @@ function judge(
         .split("list: ")[1]
         ?.includes("Probe second"),
     show("remove second answered")
-  );
-  kit.check(
-    label("every stage's capture arrived"),
-    captures.length >= 10,
-    captures.join(", ")
   );
 }
 

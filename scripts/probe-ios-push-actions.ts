@@ -804,17 +804,6 @@ try {
   // The flow ends once Allow is tapped and gone, or when a step fails.
   const allowedBy = await allowing;
   if (!allowed) {
-    const shot = join(out, "permission-prompt.png");
-    const png = await mac(`F=$(mktemp -d)
-xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
-base64 < "$F/s.png"
-rm -rf "$F"`).catch(() => "");
-    if (png) {
-      await Bun.write(shot, Buffer.from(png.replace(/\s/g, ""), "base64"));
-    }
-    console.log(
-      `  the screen when it wasn't allowed: ${png ? shot : "no capture"}`
-    );
     // What Maestro read there: whether the prompt's buttons were in its tree.
     const tree = await hierarchy();
     const labels = [

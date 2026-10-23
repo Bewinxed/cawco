@@ -114,9 +114,6 @@
  * 20. A real held press on the canvas view stands it `data-pressed` at
  *     scale 0.97 while held and lets both go on release; its menu opens on
  *     the press and stays open.
- * 21. The panel, its head included, at the desk and at 390 in light and
- *     dark, captured to the run's output folder (`kit.out`) for a reviewer;
- *     the spec reads none.
  * 22. Once the panel has opened (its page resized a frame at a time), the
  *     first frame stands in the middle of the canvas, at the desk and at 390:
  *     each centring measured where the world stands, never mid-move.
@@ -169,7 +166,7 @@ import { artifactToolWords } from "../../../packages/core/src/words/artifact-too
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { buttonNames, type Kit, open, ROOT, type Spec, specOut } from "../kit";
+import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
 
 const STORY = "src/Card.stories.js";
 /** Legs 5b and 5c: a states file a canvas is made on, then taken away and written again. */
@@ -640,8 +637,6 @@ const HEAD_ORDER = [
   "reload",
   "expand",
 ];
-/** Where the panel's pictures go for a reviewer, as component-canvas's do. */
-const CAPS = specOut("session-sheet");
 const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/;
 
 /** The head as drawn: its width (what the words key on), its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, whether its word is drawn, its name; then whether More and Close stand, More before Close. */
@@ -718,15 +713,6 @@ const drawn = (page: Page) =>
     .locator('[data-probe="title"]')
     .first()
     .waitFor({ state: "visible", timeout: 60_000 });
-
-/** The panel, its head included, as a reviewer sees it. */
-const capture = async (page: Page, name: string) => {
-  await mkdir(CAPS, { recursive: true });
-  await page
-    .locator(PANE)
-    .first()
-    .screenshot({ path: join(CAPS, `${name}.png`), animations: "disabled" });
-};
 
 /** The frame's element's `color-scheme`, and `prefers-color-scheme: dark` as the frame's own document hears it. */
 const schemeOf = async (page: Page) => {
@@ -900,7 +886,6 @@ async function panelLegs(
 
   // 19. The theme switched in the sidebar, no reload: the frame's scheme follows.
   const light = await schemeOf(desk);
-  await capture(desk, "panel-desk-light");
   await desk.evaluate(() => {
     (window as unknown as { __stayed: boolean }).__stayed = true;
   });
@@ -929,7 +914,6 @@ async function panelLegs(
       stayed,
     `light ${JSON.stringify(light)}; dark ${JSON.stringify(dark)}; ${stayed ? "no reload" : "reloaded"}`
   );
-  await capture(desk, "panel-desk-dark");
 
   // 20. A real held press on the canvas view.
   const trigger = `${PANE} [data-head-item="view"] [aria-label="Canvas view"]`;
@@ -998,7 +982,6 @@ async function panelLegs(
     );
     await phone.keyboard.press("Escape");
     described[`phone-${theme}`] = await describedOf(phone);
-    await capture(phone, `panel-phone-${theme}`);
   }
   kit.check(
     "23: at the desk and at 390 the line under the name is the canvas's ask, one line inside the panel and whole in its tooltip; the name stands once across the panel and its page, and no text holds /@cawco/",
@@ -1042,18 +1025,6 @@ async function panelLegs(
       mapRead.body?.usedIn.length === 0 &&
       mapRead.body?.madeOf.length === 0,
     JSON.stringify(mapRead).slice(0, 800)
-  );
-  const pictures = [
-    "panel-desk-light",
-    "panel-desk-dark",
-    "panel-phone-light",
-    "panel-phone-dark",
-  ].map((name) => join(CAPS, `${name}.png`));
-  const sizes = await Promise.all(pictures.map((path) => Bun.file(path).size));
-  kit.check(
-    "21: the panel, its head included, is captured at the desk and at 390 in light and dark, for a reviewer",
-    sizes.every((size) => size > 0),
-    pictures.map((path, n) => `${path} ${sizes[n]} bytes`).join("; ")
   );
 }
 

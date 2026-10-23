@@ -57,8 +57,7 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { blocksWords } from "../../../packages/core/src/words/blocks";
@@ -71,29 +70,16 @@ import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
-/** The paired captures of the board's page with a view placed on it, by device. */
-const CAPTURES = join(
-  homedir(),
-  ".cawco",
-  "workspace-cache",
-  "xdg",
-  "cawco-captures",
-  "prd-parity",
-  "blocks"
-);
 /** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 const DEVICES = [
   {
     tag: "iPhone",
     type: "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
-    /** The dashboard beside it: the same points and pixels per point. */
-    web: { view: "iphone", scale: 3 },
   },
   {
     tag: "iPad",
     type: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB",
-    web: { view: "ipad11", scale: 2 },
   },
 ] as const;
 const PROJECT = "Views probe";
@@ -1560,14 +1546,10 @@ async function run(kit: Kit): Promise<void> {
       await leg("ask", () =>
         askViewLeg(kit, on, decisions.projectId, (path) => fleet.api(path))
       );
-      // The board's page with the view placed on it: the app's and the
-      // dashboard's, light and dark, for the paired review (prd-parity/blocks).
+      // The board's page with the view placed on it, light and dark.
       const { udid } = sim;
-      const { web } = DEVICES.find((one) => one.tag === tag) ?? DEVICES[0];
-      await leg("captures", async () => {
+      await leg("board blocks", async () => {
         await placeOnBoard();
-        const folder = join(CAPTURES, tag);
-        await mkdir(folder, { recursive: true });
         for (const appearance of ["light", "dark"] as const) {
           // biome-ignore lint/performance/noAwaitInLoops: one appearance after the other, on one simulator
           await sh(`xcrun simctl ui ${udid} appearance ${appearance}`);
@@ -1597,35 +1579,9 @@ async function run(kit: Kit): Promise<void> {
             boardAt - stripAt > 0 && boardAt - stripAt < 120,
             `strip ${stripAt}, board's ⋯ ${boardAt}`
           );
-          await sh(
-            `xcrun simctl io ${udid} screenshot "${join(folder, `app-blocks-${appearance}.png`)}"`
-          );
-          // The dashboard's same page from the same hub: WebKit at the
-          // simulator's points, pixels per point and appearance, once both
-          // blocks stand.
-          const page = await kit.page(web.view, {
-            engine: "webkit",
-            theme: appearance,
-            scale: web.scale,
-          });
-          await page.goto(`${dashboard}/project/${project.id}`, {
-            waitUntil: "domcontentloaded",
-          });
-          await until(
-            `${tag}: the dashboard's two blocks`,
-            () => page.locator('[data-slot="block"]').count(),
-            (count) => count >= 2,
-            60_000
-          );
-          await Bun.sleep(2000);
-          await page.screenshot({
-            path: join(folder, `web-blocks-${appearance}.png`),
-          });
-          await page.close();
         }
         await sh(`xcrun simctl ui ${udid} appearance light`);
         await clearPages();
-        console.log(`  ${tag}: captures in ${folder}`);
       });
       // Never once in the run did the head and the strip stand taller than
       // their content (ProjectViewController `probeStretch`).

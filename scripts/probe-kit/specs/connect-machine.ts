@@ -2362,10 +2362,7 @@ async function chipAdds(
  * the viewport; and nothing outside the window moves while it stands, on
  * either tab, against the same page with it closed. The hub's addresses
  * read as a tailnet hub's would (a workspace's machine lists none), so the
- * command tab holds its longest rows. Dark in Chromium at 390 and 1440,
- * each tab is captured for review, into the run's output folder
- * (`kit.out`/add-machine): a capture is the run's output, never a tracked
- * file a plain run would rewrite.
+ * command tab holds its longest rows.
  */
 async function tabsFit(
   kit: Kit,
@@ -2373,9 +2370,6 @@ async function tabsFit(
   dashboard: string
 ): Promise<void> {
   await clearInstalls(fleet);
-  const captures = join(kit.out, "add-machine");
-  mkdirSync(captures, { recursive: true });
-  const saved: string[] = [];
   const said: string[] = [];
   let fits = true;
   let still = true;
@@ -2457,9 +2451,9 @@ async function tabsFit(
       });
       await openWindow(page, dashboard, "new");
       const shown: string[] = [];
-      for (const [tab, has, file] of [
-        [connectWords.overSsh, connectWords.reachItAt, "ssh"],
-        [connectWords.byCommand, connectWords.reachesHubAt, "command"],
+      for (const [tab, has] of [
+        [connectWords.overSsh, connectWords.reachItAt],
+        [connectWords.byCommand, connectWords.reachesHubAt],
       ] as const) {
         // biome-ignore lint/performance/noAwaitInLoops: one tab after the other, each measured where it stands
         if ((await chosenTab(page)) !== tab) {
@@ -2478,12 +2472,6 @@ async function tabsFit(
         );
         fits &&= ok;
         said.push(`${engine} ${view} ${tab}: ${JSON.stringify(at)}`);
-        if (engine === "chromium" && view !== "narrowDesk") {
-          const name = `${view}-dark-${file}.png`;
-          const path = join(captures, name);
-          await page.screenshot({ path });
-          saved.push(path);
-        }
       }
       await page.locator(CLOSE).click();
       await page.waitForFunction(
@@ -2515,7 +2503,6 @@ async function tabsFit(
     still,
     said.filter((line) => line.includes("moved")).join("; ") || "still"
   );
-  kit.note(`captures for review: ${saved.join(", ")}`);
 }
 
 export default { name: "connect-machine", run } satisfies Spec;

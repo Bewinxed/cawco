@@ -35,8 +35,8 @@
  *     straight after it a finger's drag on the pages toward the third (axe
  *     drag), which takes the pages while the tap's switch runs: retried
  *     until it takes the tap's own switch between 0.1 and 0.9 of the way;
- *  4. checks every logged frame and copies the captures and the log to
- *     $TMPDIR/ios-tabs/ (or ./.probe/ios-tabs). At each held stop it also
+ *  4. checks every logged frame and copies the log to $TMPDIR/ios-tabs/
+ *     (or ./.probe/ios-tabs). At each held stop it also
  *     reads every tab's flared feet (the web proof's "feet"): every tab
  *     stands on the flared foot, chosen or not, so each foot in front and in
  *     view draws its ink within 0.03 of 1 - its seam's glide, against the
@@ -1290,13 +1290,6 @@ try {
       );
       stream.kill();
       await writeFile(join(out, `${kind}-${style}.log`), log);
-      const container = (
-        await sh(`xcrun simctl get_app_container ${udid} dev.cawco.app data`)
-      ).trim();
-      // Each run's captures are named by idiom and style, so none is overwritten.
-      await sh(
-        `cp "${container}/tmp/tabs-probe/${kind}-${style}-"*.png "${out}/"`
-      );
       const begins = [
         ...log.matchAll(/tabs probe begin (\S+) from=(\S+) to=(\S+)/g),
       ];
@@ -1323,7 +1316,7 @@ try {
       const held = samples
         .filter((s) => s.label.endsWith("held") && s.t !== "landed")
         .map((s) => `${s.label}@${s.f}`);
-      check(`${run} stops captured`, held.length === 18, held.join(" "));
+      check(`${run} stops held`, held.length === 18, held.join(" "));
       judgeRims(run, log);
       judgeFeet(run, log);
       judgeGeometry(run, log);
@@ -1362,7 +1355,7 @@ try {
   await fleet.close();
   await fleet.clean(keep);
 }
-console.log(`  captures and logs: ${out}`);
+console.log(`  logs: ${out}`);
 console.log(
   failed === 0 ? "all checks pass" : `${failed} failed:\n${failures.join("\n")}`
 );

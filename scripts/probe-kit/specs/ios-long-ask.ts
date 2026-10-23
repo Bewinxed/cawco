@@ -572,9 +572,6 @@ async function run(kit: Kit): Promise<void> {
       }
       await pause(20_000);
       const foot = await rest(launched, "live-foot");
-      await sh(
-        `xcrun simctl io ${udid} screenshot "${join(kit.out, "live-foot.png")}" >/dev/null 2>&1 || true`
-      );
       kit.check(
         `live: at the transcript's foot, the main thread busy under ${REST_SHARE * 100}% of ${REST_S}s`,
         foot.share < REST_SHARE,
@@ -635,9 +632,6 @@ async function run(kit: Kit): Promise<void> {
     }
     await pause(2000);
     const standing = await rest(launched, "standing");
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(kit.out, "card.png")}" >/dev/null 2>&1 || true`
-    );
     kit.check(
       `standing, the app is at rest: its main thread busy under ${REST_SHARE * 100}% of ${REST_S}s`,
       standing.share < REST_SHARE,
@@ -744,9 +738,6 @@ async function run(kit: Kit): Promise<void> {
     const opened = await tap(askWords.wholeCommand);
     await pause(2000);
     const open = await rest(launched, "opened");
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(kit.out, "card-open.png")}" >/dev/null 2>&1 || true`
-    );
     kit.check(
       `the chevron opens the whole command, and the app is at rest again: its main thread busy under ${REST_SHARE * 100}%`,
       opened && open.share < REST_SHARE,

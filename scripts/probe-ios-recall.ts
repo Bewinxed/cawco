@@ -18,16 +18,14 @@
  *     simulator of its own, launches the app on that session with
  *     `-recall-probe` (ComposerRecallProbe.swift), which reads the wheel's
  *     state light and dark and logs it in the Probe category;
- *  4. prints those lines, and copies the probe's captures into
- *     $TMPDIR/recall-review/ with an INDEX.md, for a separate review.
+ *  4. prints those lines.
  *
  * It stops only what it started: the fleet's processes by PID and the
  * simulators it created (deleted at the end). `--keep` keeps the fleet's
  * sandbox. Prints the app's `PASS …` / `FAIL …` lines and exits 0 only if
  * every check passed on both devices.
  */
-import { mkdir, readdir, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { simulatorApp, staleApp } from "./lib/apple-app";
 import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
@@ -39,10 +37,6 @@ const { scratchFleet, until } = await import("./scratch-fleet");
 const keep = process.argv.includes("--keep");
 const build = !process.argv.includes("--no-build");
 const root = resolve(import.meta.dir, "..");
-const scratch = process.env.TMPDIR ?? "/tmp";
-const out = join(scratch, "recall-review");
-await rm(out, { recursive: true, force: true });
-await mkdir(out, { recursive: true });
 console.log(
   `  at ${(await Bun.$`git -C ${root} log -1 --format=%h\ %s`.text()).trim()}`
 );
@@ -136,8 +130,6 @@ const sims: MacSim[] = [];
 const DEVICES = ["iPhone 16 Pro", "iPad Pro 11-inch (M4)"];
 /** What `log show --style compact` puts before a Probe line's own words. */
 const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
-/** The app holding the wheel up with the keyboard: `<device>-<style>`. */
-const KEYBOARD_HOLD = /recall holds (\S+)-action with the keyboard up/;
 
 try {
   fleet.launch("sessiond");
@@ -176,63 +168,8 @@ try {
     sims.push(sim);
     const { udid } = sim;
     console.log(`  ${name}: simulator ${udid}`);
-    await sh(`# The keyboard's first-use tips ("Speed up your typing…") would cover the wheel in a capture.
-xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
-xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences KeyboardDidShowProductivityTutorial -bool true
-xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
-xcrun simctl ui ${udid} appearance light
+    await sh(`xcrun simctl ui ${udid} appearance light
 xcrun simctl install ${udid} "${app}"`);
-    // The keyboard is a window the app's own captures don't draw: on the app's
-    // "holds <name>-action with the keyboard up" line, the screen is captured
-    // here, the system's appearance set to the pass's first (the keyboard
-    // follows it, not the window's override).
-    const stream = Bun.spawn(
-      [
-        "xcrun",
-        "simctl",
-        "spawn",
-        udid,
-        "log",
-        "stream",
-        "--style",
-        "compact",
-        "--predicate",
-        'subsystem == "dev.cawco.app" AND category == "Probe"',
-      ],
-      { stdout: "pipe", stderr: "ignore" }
-    );
-    // Cancelled when the pass is done: the simulator's own `log` keeps the
-    // pipe open after `simctl spawn` is stopped, so the read never ends by itself.
-    const reader = stream.stdout.getReader();
-    const held = (async () => {
-      const decoder = new TextDecoder();
-      let rest = "";
-      for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: a stream is read a chunk at a time
-        const { value, done } = await reader.read();
-        if (done) {
-          break;
-        }
-        rest += decoder.decode(value, { stream: true });
-        const parts = rest.split("\n");
-        rest = parts.pop() ?? "";
-        for (const part of parts) {
-          const hold = part.match(KEYBOARD_HOLD);
-          if (!hold) {
-            continue;
-          }
-          const shot = `${hold[1]}-action.png`;
-          const style = hold[1].endsWith("-dark") ? "dark" : "light";
-          // biome-ignore lint/performance/noAwaitInLoops: one hold at a time, as the app holds them
-          await sh(`xcrun simctl ui ${udid} appearance ${style}
-sleep 1.5
-xcrun simctl io ${udid} screenshot "${join(out, shot)}" >/dev/null 2>&1`);
-          console.log(
-            `  ${name}: captured ${shot} on "${part.replace(PROBE_PREFIX, "")}"`
-          );
-        }
-      }
-    })();
     await sh(
       `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${id} -recall-probe >/dev/null`
     );
@@ -266,46 +203,8 @@ xcrun simctl io ${udid} screenshot "${join(out, shot)}" >/dev/null 2>&1`);
     if (!lines.some((l) => l.startsWith("recall PASS"))) {
       fail(`${name}: no checks ran`);
     }
-    await reader.cancel();
-    await held;
-    stream.kill();
-    const data = (
-      await sh(`xcrun simctl get_app_container ${udid} dev.cawco.app data`)
-    ).trim();
-    await sh(`cp "${data}/tmp/recall/"*.png "${out}/" 2>/dev/null || true`);
     await sim.release();
   }
-
-  // ── 4. The review folder ───────────────────────────────────────────────
-  const shots = (await readdir(out)).filter((f) => f.endsWith(".png")).sort();
-  const say: Record<string, string> = {
-    rest: "the wheel up at rest, keyboard down, the newest message on the field's line",
-    glide: "mid-glide, 140ms into a roll toward the 14th entry",
-    action:
-      'brought up by VoiceOver\'s "Show what you sent" (the field focused, the keyboard up: the wheel re-measured to the room above it)',
-    search: "a search typed into the empty draft, one word with a match",
-  };
-  const index = [
-    "# Recall wheel review",
-    "",
-    "The iOS composer's recall wheel after the change: it stands half the window tall on the iPhone (compact width) and 40% on the iPad (regular width), the depth (lean, width, blur, fade) spread across every row so the oldest ends at the 3rd row's values on the phone and the 5th's on the iPad; the history button is gone (Attach and Send only); the shape rises evenly across the pill's width.",
-    "",
-    `Captured in-app (window.drawHierarchy) by \`-recall-probe\` on iOS 18.5 simulators, a scratch session holding ${SENDS} sent messages. Each starts with its own word (alpha, bravo, …). The keyboard-up captures (\`-action\`) are of the whole screen (\`simctl io screenshot\`), taken on the app's own "holds … with the keyboard up" line, so the keyboard is in frame.`,
-    "",
-    "| File | Device | Appearance | What it shows |",
-    "| --- | --- | --- | --- |",
-    ...shots.map((file) => {
-      const [device, appearance, state] = file.replace(".png", "").split("-");
-      return `| ${file} | ${device === "ipad" ? "iPad Pro 11-inch (M4)" : "iPhone 16 Pro"} | ${appearance} | ${say[state] ?? state} |`;
-    }),
-    "",
-    "Look for: the shape's top near the window's middle (iPhone) or 60% of the way down, the wheel taking the bottom 40% (iPad); with the keyboard up, the same shares of the room above the keyboard; every row readable, none cut by the top fade, the blur softening the top rows but never smearing them; light and dark the same apart from colour; in a search, the row on the line stopping short of the query chip and the rows above it across the shape; no history button in the pill; Attach and Send keep their sizes and spacing.",
-    "",
-    "The probe's own measures (its log, printed by the script) prove what a picture cannot: each row's strongest ink pixel against the shape's surface in a capture of the window, at least 4.5:1, light and dark, on both devices; each soft row's blurred copy showing the moment a roll settles; the search rows' widths against the shape and the chip; the shape's height as a share of the room; and the glide's frame times.",
-    "",
-  ].join("\n");
-  await Bun.write(join(out, "INDEX.md"), index);
-  console.log(`  review: ${out} (${shots.length} captures, INDEX.md)`);
 } catch (error) {
   fail(`probe: ${error instanceof Error ? error.message : String(error)}`);
 } finally {

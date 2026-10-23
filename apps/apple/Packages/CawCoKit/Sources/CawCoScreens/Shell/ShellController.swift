@@ -726,9 +726,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         probe.notice("probe loops n=\(loops.count) \(counts, privacy: .public) \(loops.joined(separator: " | "), privacy: .public)")
     }
 
-    /// A Mac pass's `-mac-probe <dir>`: once the fleet is read, at a 1400pt
-    /// and then a 1000pt wide window, it renders the window into `dir`
-    /// (board, Caw's panel, the Machines popover) and prints, per width: the
+    /// A Mac pass's `-mac-probe`: once the fleet is read, at a 1400pt and
+    /// then a 1000pt wide window, it prints, per width: the
     /// bar as drawn (from the window's top), its height against the web's,
     /// its controls' centre line against its own; the traffic lights' frame
     /// against the rail, its header and the bar's first control; each bar
@@ -743,29 +742,19 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// from). Then the panel's and the popover's frames against their
     /// anchors. Last, a 640pt window: whether the rail
     /// still stands beside the page.
-    private lazy var macProbeDir: URL? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let at = arguments.firstIndex(of: "-mac-probe"), arguments.indices.contains(at + 1) else { return nil }
-        return URL(fileURLWithPath: arguments[at + 1])
-    }()
+    private let macProbeOn = ProcessInfo.processInfo.arguments.contains("-mac-probe")
 
     private var macProbeRan = false
 
     private func runMacProbe() {
         #if targetEnvironment(macCatalyst)
-        guard let dir = macProbeDir, !macProbeRan, home.ready, let window = view.window, let scene = window.windowScene else { return }
+        guard macProbeOn, !macProbeRan, home.ready, let window = view.window, let scene = window.windowScene else { return }
         macProbeRan = true
         Task { @MainActor [weak self] in
             guard let self else { return }
             func say(_ line: String) {
                 Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
                 print("probe mac \(line)")
-            }
-            func snap(_ name: String) {
-                let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-                    _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-                }
-                try? image.pngData()?.write(to: dir.appending(path: "\(name).png"))
             }
             func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f (maxX %.1f)", r.minX, r.minY, r.width, r.height, r.maxX) }
             func tabs(in view: UIView) -> [TabView] {
@@ -791,7 +780,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 say("\(name) bar centre \(barBox.midY) cluster glass \(box(glassBox)) centred \(abs(glassBox.midY - barBox.midY) < 0.5) tabs' floor \(tabs(in: bar).first.map { $0.convert($0.bounds, to: window).maxY } ?? -1) bar floor \(barBox.maxY) page content top \(pageTop)")
                 say("\(name) titlebar title hidden \(titlebar?.titleVisibility == .hidden) toolbar \(titlebar?.toolbar == nil ? "none" : "present") railToggle on screen \(railToggle.window != nil)")
                 say("\(name) board takes clicks \(view.isUserInteractionEnabled) alpha \(view.alpha) pro board open \(Pro.shared.boardOpen) access \(String(describing: Pro.shared.access))")
-                snap("\(name)-board")
                 var holder = tabs(in: bar).first?.superview
                 while let at = holder, !(at is UIScrollView) { holder = at.superview }
                 let strip = holder as? UIScrollView
@@ -859,7 +847,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 let railPoint = rail.view.convert(CGPoint(x: rail.view.bounds.midX, y: 160), to: window)
                 let railHit = window.hitTest(railPoint, with: nil)
                 say("\(name) rail \(box(rail.view.convert(rail.view.bounds, to: window))) hit at \(railPoint) lands in rail \(railHit?.isDescendant(of: rail.view) == true) (\(railHit.map { "\(type(of: $0))" } ?? "nil"))")
-                await probeGlassCards(window: window, say: { say("\(name) \($0)") }, snap: { snap("\(name)-\($0)") })
+                await probeGlassCards(window: window, say: { say("\(name) \($0)") })
             }
             let frame = scene.effectiveGeometry.systemFrame
             scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: 640, height: 820)))
@@ -867,7 +855,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             let lights = appKit.lights
             let bar = macBar
             say("w640 window \(box(window.bounds)) display mode \(displayMode.rawValue) collapsed \(isCollapsed) compact \(compact) rail \(box(rail.view.convert(rail.view.bounds, to: window))) on screen \(rail.view.window != nil) bar \(box(bar.convert(bar.bounds, to: window))) lights \(lights.map(box) ?? "not found")")
-            snap("w640-board")
             say("done")
         }
         #endif
@@ -885,7 +872,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// with its trailing edge and top against the glass's flank and foot. Then
     /// ⌘K: Jump goes at once and stands again at once, read in the same turn
     /// as the key, with no frame between and no animation in the card.
-    private func probeGlassCards(window: UIWindow, say: (String) -> Void, snap: (String) -> Void) async {
+    private func probeGlassCards(window: UIWindow, say: (String) -> Void) async {
         func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f (maxX %.1f)", r.minX, r.minY, r.width, r.height, r.maxX) }
         let card = glassCard
         let identity = "\(ObjectIdentifier(card))"
@@ -903,21 +890,18 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         card.show(cawPanel, from: cluster.caw, glass: cluster.glass)
         try? await Task.sleep(for: .seconds(0.8))
         row()
-        snap("caw-panel")
         if !compact {
-            await scrubMorph("panel-to-machines", say: say, snap: snap) { openMachines(from: mainCluster.machinesItem) }
+            await scrubMorph("panel-to-machines", say: say) { openMachines(from: mainCluster.machinesItem) }
             row()
             if let machinesCard { say(Self.rulesReading(machinesCard)) }
-            snap("machines")
         }
-        await scrubMorph(compact ? "panel-to-jump" : "machines-to-jump", say: say, snap: snap) { openJump(.press(compact ? nil : mainCluster.jumpItem)) }
+        await scrubMorph(compact ? "panel-to-jump" : "machines-to-jump", say: say) { openJump(.press(compact ? nil : mainCluster.jumpItem)) }
         row()
         if let jumpCard {
             say(Self.rulesReading(jumpCard))
             say("jump field focused \(jumpCard.fieldFocused)")
         }
-        snap("jump")
-        await scrubMorph("jump-to-panel", say: say, snap: snap) { card.show(cawPanel, from: cluster.caw, glass: cluster.glass) }
+        await scrubMorph("jump-to-panel", say: say) { card.show(cawPanel, from: cluster.caw, glass: cluster.glass) }
         row()
         // ⌘K into Jump while Caw's panel hangs: swapped at once, read in the key's own turn.
         openJump(.key)
@@ -931,7 +915,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         let instant = !card.isHidden && card.card.revealed >= 1 && card.showing === jumpCard
         say("cmd-k open: jump standing at once \(instant) revealed \(card.card.revealed) glass joined \(cluster.glass.joined) field focused \(jumpCard?.fieldFocused ?? false) animation keys \(Self.animationKeys(card.layer))")
         try? await Task.sleep(for: .seconds(0.4))
-        snap("jump-by-key")
         jumpCard?.leaveByKey()
         try? await Task.sleep(for: .seconds(0.6))
     }
@@ -1009,8 +992,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// would be the slider's `transform`), then the card's layer held
     /// (`speed` 0) at 0, 50 and 100% of the tween by `timeOffset`, its
     /// presentation's trailing edge and top against the glass's flank and
-    /// foot, captured at 50%; then let run on, and captured at its end.
-    private func scrubMorph(_ label: String, say: (String) -> Void, snap: (String) -> Void, start: () -> Void) async {
+    /// foot; then let run on, and read at its end.
+    private func scrubMorph(_ label: String, say: (String) -> Void, start: () -> Void) async {
         let card = glassCard
         let layer = card.layer
         let from = card.showing?.name ?? "nothing"
@@ -1096,9 +1079,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             if fraction == half {
                 say(String(format: "\(label) holds half the size at time %.3f: w %.1f (%.1f to %.1f) h %.1f (%.1f to %.1f)", (layer.timeOffset - at) / tween.duration,
                            drawn.width, startSize.width, endSize.width, drawn.height, startSize.height, endSize.height))
-                snap("\(label)-50")
-                // Held a while longer, so a capture from outside the app (the system's status bar with it) can be taken.
-                try? await Task.sleep(for: .seconds(6))
             }
         }
         let held = layer.timeOffset
@@ -1118,9 +1098,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         say(String(format: "\(label) settled: shows %@ hidden %@ revealed %.2f card x %.1f y %.1f w %.1f h %.1f contents [%@] moving [%@]",
                    card.showing?.name ?? "nothing", card.isHidden ? "true" : "false", card.card.revealed, drawn.minX, drawn.minY, drawn.width, drawn.height,
                    contents.joined(separator: ", "), moving.joined(separator: ", ")))
-        snap("\(label)-end")
-        // Held as it settled, so a capture from outside the app shows this state and no later one.
-        try? await Task.sleep(for: .seconds(5))
     }
 
     /// What stands on the glass at rest, against the glass's own bounds: every
@@ -1177,30 +1154,21 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     #if !targetEnvironment(macCatalyst)
     /// A simulator pass's `-hang-probe`: once the fleet is read, the glass's
-    /// cards (`probeGlassCards`), each capture saved into the app's
-    /// temporary folder under `hang/`, every line in the Probe log.
+    /// cards (`probeGlassCards`), every line in the Probe log.
     private var hangProbeRan = false
 
     private func runHangProbe() {
         guard ProcessInfo.processInfo.arguments.contains("-hang-probe"), !hangProbeRan, home.ready, let window = view.window else { return }
         hangProbeRan = true
-        let dir = FileManager.default.temporaryDirectory.appending(path: "hang")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let style = traitCollection.userInterfaceStyle == .dark ? "dark" : "light"
         let device = traitCollection.userInterfaceIdiom == .pad ? "ipad" : "iphone"
         Task { @MainActor [weak self] in
             guard let self else { return }
             func say(_ line: String) { Logger(subsystem: "dev.cawco.app", category: "Probe").notice("hang \(line, privacy: .public)") }
-            func snap(_ name: String) {
-                let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-                    _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-                }
-                try? image.pngData()?.write(to: dir.appending(path: "\(device)-\(style)-\(name).png"))
-            }
             try? await Task.sleep(for: .seconds(3))
             say("\(device) \(style) window \(window.bounds) compact \(compact)")
-            await probeGlassCards(window: window, say: say, snap: snap)
-            say("done \(dir.path)")
+            await probeGlassCards(window: window, say: say)
+            say("done")
         }
     }
     #endif

@@ -313,16 +313,6 @@ export const ENCLOSING_GIT_ENV =
 export const BOUNDARY_INSIDE =
   "a workspace boundary cannot start inside another (bwrap on Linux is refused its namespaces, macOS's Seatbelt does not nest)";
 
-/**
- * An entry's name as a file takes it: lower case, every run of other
- * characters one dash ("phone 390" is `phone-390`).
- */
-export const entrySlug = (entry: string): string =>
-  entry
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-
 export interface Kit {
   /** The dev server against no hub: the `/motion/` benches, which need none. */
   bench: () => Promise<string>;

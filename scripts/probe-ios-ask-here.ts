@@ -307,9 +307,6 @@ try {
     300_000
   );
   clearInterval(holds);
-  await sh(
-    `xcrun simctl io ${udid} screenshot "${join(out, "end.png")}"`
-  ).catch(() => "");
   stream.kill();
   const all = await log();
   await writeFile(join(out, "ask.log"), all);
@@ -539,7 +536,7 @@ try {
   await fleet.close();
   await fleet.clean(keep);
 }
-console.log(`  captures and logs: ${out}`);
+console.log(`  logs: ${out}`);
 console.log(
   failed === 0 ? "all checks pass" : `${failed} failed:\n${failures.join("\n")}`
 );

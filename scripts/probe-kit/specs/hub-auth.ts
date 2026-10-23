@@ -705,8 +705,6 @@ const spec: Spec = {
       )
       .innerText();
     const code = CODE.exec(shown)?.[0] ?? "";
-    // For a reviewer: what an unpaired browser shows.
-    await stranger.screenshot({ path: join(kit.out, "pairing-screen.png") });
     check(
       "(p5) an unpaired browser sees the pairing screen with a code",
       code.length === 7,
@@ -722,8 +720,6 @@ const spec: Spec = {
       .locator(`button[aria-label^="Approve "][aria-label$="code ${code}"]`)
       .first();
     await approve.waitFor({ timeout: 30_000 });
-    // For a reviewer: Configure › Devices with a pairing waiting.
-    await paired.screenshot({ path: join(kit.out, "devices.png") });
     await approve.click();
     const strangerAuth = await until(
       "the new browser paired",

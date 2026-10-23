@@ -37,8 +37,8 @@
  *   machine until a converge writes it (agent fleet-desired.ts), and the
  *   machine's file ends equal to the fleet's. Main lost the Overwrite.
  *
- * Each row's rendered text is printed, and a capture of it kept in the run's
- * out dir. The GitHub legs read github.com, as the live check does.
+ * Each row's rendered text is printed. The GitHub legs read github.com, as
+ * the live check does.
  *
  *   bun scripts/probe-kit/run.ts skill-updates
  */
@@ -152,7 +152,7 @@ async function install(
 const rowOf = (page: Page, name: string): Locator =>
   page.locator(`li[data-row-name="${name}"]`);
 
-/** The row's rendered text, said in the run's output, and a capture of it kept. */
+/** The row's rendered text, said in the run's output. */
 async function readRow(
   kit: Kit,
   page: Page,
@@ -162,7 +162,6 @@ async function readRow(
   const row = rowOf(page, name);
   const text = (await row.innerText()).replace(LINE_BREAKS, " | ");
   kit.note(`${name} [${state}]: ${text}`);
-  await row.screenshot({ path: join(kit.out, `${state}.png`) });
   return text;
 }
 
@@ -646,7 +645,7 @@ const told = (log: string, agentLog: string, what: string) =>
 /**
  * Every drawn part of the skill's row (its meta line, the update badge and
  * its action, the note) inside the row's box, the row and the page with
- * nothing to scroll sideways: read off the engine, then a capture kept. A
+ * nothing to scroll sideways, read off the engine. A
  * control's touch area under a finger (`touch-hit`, 44px, DESIGN.md "without
  * changing its drawn size") may reach past the row into the page's gutter,
  * so the row's own overflow is read with those areas off (`scrollBare`), and
@@ -729,9 +728,6 @@ async function fitsRow(
       parts,
     };
   }, name);
-  await rowOf(page, name).screenshot({
-    path: join(kit.out, `phone-${leg.replaceAll(" ", "-")}.png`),
-  });
   kit.check(
     `${leg}: every drawn part inside the row, nothing scrolls sideways, every touch area on screen`,
     read !== undefined &&

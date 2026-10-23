@@ -24,8 +24,9 @@
  * Launches carry only the hub's address (`-cawco-hub-url`, a defaults key)
  * and the paywall's sandbox: never `-open-session`.
  * `--hold` stands everything up, prints the simulators, and waits for
- * `<captures>/stop` before cleaning up, for driving the app by hand.
- * Captures go to $TMPDIR/ios-restore/ (or .probe/ outside a workspace).
+ * `<out>/stop` before cleaning up, for driving the app by hand.
+ * What AXe read at each step goes to $TMPDIR/ios-restore/ (or .probe/
+ * outside a workspace).
  */
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -280,15 +281,12 @@ const find = async (
     (n) => n !== undefined,
     ms
   )) as Node & { frame: Frame };
-let shots = 0;
-const shot = async (name: string) => {
-  shots += 1;
-  const file = join(out, `${device}-${name}.png`);
-  await sh(`xcrun simctl io ${udid} screenshot "${file}" >/dev/null 2>&1`);
-  await writeFile(
-    join(out, `${device}-${name}.json`),
-    JSON.stringify(lastTree)
-  );
+let trees = 0;
+/** The accessibility tree AXe last read, kept as `<device>-<name>.json`. */
+const keepTree = async (name: string) => {
+  trees += 1;
+  const file = join(out, `${device}-${name}.json`);
+  await writeFile(file, JSON.stringify(lastTree));
   return file;
 };
 let logger: Subprocess | undefined;
@@ -422,7 +420,7 @@ async function sessionLeftScrolledUp(kind: string) {
   console.log(
     `  ${kind}: left scrolled up, rows ${at.rows[0]}…${at.rows.at(-1)} in view (marking row-${want})`
   );
-  await shot("session-left");
+  await keepTree("session-left");
   for (let run = 1; run <= RUNS; run += 1) {
     const from = logLines.length;
     // biome-ignore lint/performance/noAwaitInLoops: one relaunch after the other
@@ -430,7 +428,7 @@ async function sessionLeftScrolledUp(kind: string) {
     await launch();
     await settle();
     const now = await place();
-    await shot(`session-relaunch-${run}`);
+    await keepTree(`session-relaunch-${run}`);
     check(
       `${kind} relaunch ${run} into the session left scrolled up`,
       now.transcript && want !== undefined && now.rows.includes(want),
@@ -474,14 +472,14 @@ async function fromHome(kind: string) {
     await until("Home before leaving", tree, isHome, 20_000);
   }
   console.log(`  ${kind}: on Home: ${await screen()}`);
-  await shot("home-left");
+  await keepTree("home-left");
   for (let run = 1; run <= RUNS; run += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: one relaunch after the other
     await leave();
     await launch();
     await settle();
     const nodes = await tree();
-    await shot(`home-relaunch-${run}`);
+    await keepTree(`home-relaunch-${run}`);
     const homeShown =
       isHome(nodes) || (kind === "pad" && !isUsage(nodes) && nodes.some(named));
     check(
@@ -507,14 +505,14 @@ async function fromUsage(kind: string) {
   );
   await until("the Usage page", tree, isUsage, 20_000);
   await pause(2000);
-  await shot("usage-left");
+  await keepTree("usage-left");
   for (let run = 1; run <= RUNS; run += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: one relaunch after the other
     await leave();
     await launch();
     await settle();
     const nodes = await tree();
-    await shot(`usage-relaunch-${run}`);
+    await keepTree(`usage-relaunch-${run}`);
     check(
       `${kind} relaunch ${run} from the Usage page`,
       isUsage(nodes),
@@ -554,7 +552,7 @@ try {
         error instanceof Error ? error.message : String(error)
       );
       await tree()
-        .then(() => shot("error"))
+        .then(() => keepTree("error"))
         .catch(() => undefined);
     } finally {
       logger?.kill();
@@ -571,6 +569,6 @@ try {
   await fleet.clean(keep || failures > 0);
 }
 
-console.log(`Captures: ${out} (${shots})`);
+console.log(`Trees: ${out} (${trees})`);
 console.log(failures === 0 ? "ALL PASS" : `${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

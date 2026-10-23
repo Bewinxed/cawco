@@ -342,9 +342,6 @@ const leg = async (
     before !== null && after !== null && after > before && standing === 1,
     `scroll ${before} → ${after}; task ${taskId}; ${standing} tray`
   );
-  if (theme === "light") {
-    await page.screenshot({ path: join(kit.out, `${name}-${theme}-open.png`) });
-  }
   // Escape folds it; ⋯ › Project details… opens it again.
   await page.locator(`${TRAY} [data-details-done]`).focus();
   await page.keyboard.press("Escape");
@@ -361,9 +358,6 @@ const leg = async (
     `${tag}: Escape folds it, and ⋯ › Project details… opens it again`,
     (await page.locator(TRAY).count()) === 1
   );
-  if (theme === "dark") {
-    await page.screenshot({ path: join(kit.out, `${name}-${theme}-open.png`) });
-  }
   await page.close();
 };
 
@@ -566,7 +560,6 @@ const refusals = async (kit: Kit, { base, fleet, gone }: Setup) => {
       afterReview === afterLands.review,
     `“${reviewWords}”; ${afterLands.review} → ${afterReview}`
   );
-  await page.screenshot({ path: join(kit.out, "1440-dark-refused.png") });
   await page.close();
 };
 

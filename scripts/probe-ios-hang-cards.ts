@@ -18,30 +18,25 @@
  * and Jump's rules are printed with their resolved colour against `seam` and
  * `border-hairline`.
  *
- *   bun scripts/probe-ios-hang-cards.ts <CawCo.app> <hub url> [out dir]
+ *   bun scripts/probe-ios-hang-cards.ts <CawCo.app> <hub url>
  *
  * Run on the Mac (a CawCo workspace on it is fine): it takes an iPhone 16
  * Pro and then an iPad Pro 11-inch (M4) simulator on iOS 18.5 in the Mac's
  * simulator slots (scripts/lib/mac-sim.ts), and on each, light
  * then dark, installs the app, launches it with `-hang-probe` on the hub
- * given, reads the app's `hang …` lines from the Probe log, prints `PASS` /
- * `FAIL` per check, and copies the app's captures (`tmp/hang/*.png`) into the
- * out folder (default `$TMPDIR/hang-ios`). Each slot deletes its simulator.
+ * given, reads the app's `hang …` lines from the Probe log, and prints
+ * `PASS` / `FAIL` per check. Each slot deletes its simulator.
  * Exits 0 only if every check passed.
  */
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import { type MacSim, macSim } from "./lib/mac-sim";
 
-const [app, hub, outArg] = process.argv.slice(2);
+const [app, hub] = process.argv.slice(2);
 if (!(app && hub)) {
   console.error(
-    "usage: bun scripts/probe-ios-hang-cards.ts <CawCo.app> <hub url> [out dir]"
+    "usage: bun scripts/probe-ios-hang-cards.ts <CawCo.app> <hub url>"
   );
   process.exit(2);
 }
-const out = outArg ?? join(process.env.TMPDIR ?? "/tmp", "hang-ios");
-await mkdir(out, { recursive: true });
 
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 const DEVICES = [
@@ -103,11 +98,7 @@ try {
     const sim = await macSim({ runtime: RUNTIME, device: device.type });
     sims.push(sim);
     const { udid } = sim;
-    await sh(`# Jump's field raises the keyboard: its first-use tips ("Speed up your typing…") would cover the card in a capture.
-xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
-xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences KeyboardDidShowProductivityTutorial -bool true
-xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
-xcrun simctl install ${udid} "${app}"`);
+    await sh(`xcrun simctl install ${udid} "${app}"`);
     for (const style of ["light", "dark"]) {
       const label = `${device.kind} ${style}`;
       await sh(`xcrun simctl ui ${udid} appearance ${style}`);
@@ -375,10 +366,6 @@ xcrun simctl install ${udid} "${app}"`);
         ),
         "standing in the key's turn"
       );
-      const data = await sh(
-        `xcrun simctl get_app_container ${udid} dev.cawco.app data`
-      );
-      await sh(`cp "${data}"/tmp/hang/*.png "${out}"/ 2>/dev/null`);
     }
     await sim.release();
   }
@@ -387,8 +374,5 @@ xcrun simctl install ${udid} "${app}"`);
     await sim.release();
   }
 }
-console.log(
-  `captures in ${out}: ${(await sh(`ls "${out}" | tr '\\n' ' '`)) || "none"}`
-);
 console.log(failures === 0 ? "ALL PASS" : `${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -33,9 +33,6 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
@@ -73,14 +70,6 @@ const SPLIT =
   /^split pane=(-?\d+),(-?\d+),(\d+),(\d+) preview=(-?\d+),(-?\d+),(\d+),(\d+) transcript=(\d+) .* composerShare=([\d.]+) .*card=plan/;
 
 const pause = (ms: number) => Bun.sleep(ms);
-
-/** Where the paired captures go: outside the workspace, for a later review of app against web. */
-const keep = join(
-  process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-  "cawco-captures",
-  "prd-parity",
-  "b2-plan"
-);
 
 async function sh(script: string): Promise<string> {
   const child = Bun.spawn(["bash", "-s"], {
@@ -243,8 +232,6 @@ const run = async (kit: Kit) => {
   ) {
     return;
   }
-  const dashboard = await fleet.dashboard();
-  await mkdir(keep, { recursive: true });
 
   let phone: Awaited<ReturnType<typeof openSim>> | undefined;
   try {
@@ -286,9 +273,6 @@ const run = async (kit: Kit) => {
       Boolean,
       30_000
     ).catch(() => undefined);
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-plan-sheet.png")}" >/dev/null`
-    );
     kit.check(
       "2: the plan's sheet draws the hub's steps and its spec",
       drawn ===
@@ -316,48 +300,6 @@ const run = async (kit: Kit) => {
       `${sheetLine ?? "no sheet line"}; ${rail ?? "no rail line"}`
     );
 
-    // The plan's sheet beside the dashboard's, at the simulator's viewport, light and dark, for a later review.
-    for (const theme of ["light", "dark"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
-      await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
-      const opened = heard.filter((line) =>
-        line.startsWith("plan opened")
-      ).length;
-      await sh(
-        `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -preview-probe -open-plan >/dev/null`
-      );
-      await until(
-        `the ${theme} sheet`,
-        () =>
-          heard.filter((line) => line.startsWith("plan opened")).length >
-          opened,
-        Boolean,
-        90_000
-      ).catch(() => undefined);
-      await pause(2000);
-      await sh(
-        `xcrun simctl io ${udid} screenshot "${join(keep, `app-plan-${theme}.png`)}" >/dev/null`
-      );
-      try {
-        const page = await kit.page("iphone", { engine: "webkit", theme });
-        await page.goto(`${dashboard}/session/${session}`, {
-          waitUntil: "domcontentloaded",
-        });
-        await page
-          .locator('[data-slot="plan-ring"]')
-          .first()
-          .click({ timeout: 30_000 });
-        await pause(1500);
-        await page.screenshot({ path: join(keep, `web-plan-${theme}.png`) });
-        await page.close();
-      } catch (error) {
-        console.log(
-          `  the web ${theme} plan wasn't captured: ${(error as Error).message.split("\n")[0]}`
-        );
-      }
-    }
-    await sh(`xcrun simctl ui ${udid} appearance light`);
-
     // 3. A tick: the step under way completed.
     const before = planLines().length;
     const tickedAt = await call({
@@ -382,7 +324,7 @@ const run = async (kit: Kit) => {
     phone?.stream.kill();
     await phone?.sim.release();
   }
-  await onIpad(kit, { app, base: fleet.base, call, dashboard, session });
+  await onIpad(kit, { app, base: fleet.base, call, session });
 };
 
 /** Legs 4 and 5: the plan beside the conversation on an iPad, and the switch. */
@@ -392,13 +334,11 @@ async function onIpad(
     app,
     base,
     call,
-    dashboard,
     session,
   }: {
     app: string;
     base: string;
     call: (input: object, name?: string) => Promise<number>;
-    dashboard: string;
     session: string;
   }
 ): Promise<void> {
@@ -412,50 +352,6 @@ async function onIpad(
         `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${base} -open-session ${session} -preview-probe -open-plan ${flags} >/dev/null`
       );
     const sideAlone = `side ${session} shown=plan opened=plan regular=true`;
-
-    // The plan beside the conversation, beside the dashboard's at the iPad's viewport, light and dark.
-    for (const theme of ["light", "dark"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
-      await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
-      const mark = heard.length;
-      await until(
-        `the ${theme} launch`,
-        () => launch("").then(() => true),
-        Boolean,
-        60_000
-      );
-      await until(
-        `the ${theme} plan beside`,
-        () => heard.slice(mark).some((line) => SPLIT.test(line)),
-        Boolean,
-        120_000
-      ).catch(() => undefined);
-      await pause(2000);
-      await sh(
-        `xcrun simctl io ${udid} screenshot "${join(keep, `app-ipad-plan-${theme}.png`)}" >/dev/null`
-      );
-      try {
-        const page = await kit.page("ipadWide", { engine: "webkit", theme });
-        await page.goto(`${dashboard}/session/${session}`, {
-          waitUntil: "domcontentloaded",
-        });
-        await page
-          .locator('[data-slot="plan-ring"]')
-          .first()
-          .click({ timeout: 30_000 });
-        await pause(1500);
-        await page.screenshot({
-          path: join(keep, `web-ipad-plan-${theme}.png`),
-        });
-        await page.close();
-      } catch (error) {
-        console.log(
-          `  the web ${theme} iPad plan wasn't captured: ${(error as Error).message.split("\n")[0]}`
-        );
-      }
-    }
-    await sh(`xcrun simctl ui ${udid} appearance light`);
-    console.log(`  captures: ${keep}`);
 
     // 4. The ring opens the plan beside the conversation.
     const mark = heard.length;
@@ -511,9 +407,6 @@ async function onIpad(
     const after = heard.slice(shownAt);
     const switched = after.findLast((line) =>
       line.startsWith(`plan side ${session}`)
-    );
-    await sh(
-      `xcrun simctl io ${udid} screenshot "${join(keep, "app-ipad-plan-switch.png")}" >/dev/null`
     );
     kit.check(
       "5: a page shown while the plan stands there takes the front, Plan | Preview open; the switch brings the plan back, the switch in its head",

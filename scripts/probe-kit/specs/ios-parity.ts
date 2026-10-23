@@ -806,9 +806,6 @@ async function run(kit: Kit): Promise<void> {
         fleet.freeze("hub", false);
       }
       await writeFile(join(kit.out, `${tag}.log`), heard.join("\n"));
-      await sh(
-        `xcrun simctl io ${udid} screenshot "${join(kit.out, `${tag}-end.png`)}"`
-      ).catch(() => "");
 
       const line = (step: string, id: string) =>
         heard.find((one) => one.includes(`${step} [${id}]`)) ?? "";

@@ -8,9 +8,8 @@ import UIKit
 /// hub. Each flow runs through the function its control runs, and what the
 /// list, the account page's rows and footer, the routing editor and the
 /// setup draw is read off their views at each stage into the AccountsProbe
-/// log, beside the hub's word. `-accounts-probe-capture <url>` sends the
-/// window at each named stage there as `<stage>.png` (scripts/probe-kit
-/// specs/ios-accounts.ts serves it, for a separate screenshot review).
+/// log, beside the hub's word, with what a person cannot read whole at each
+/// named stage (scripts/probe-kit specs/ios-accounts.ts reads the log).
 @MainActor
 enum AccountsProbe {
     static let on = ProcessInfo.processInfo.arguments.contains("-accounts-probe")
@@ -115,26 +114,11 @@ enum AccountsProbe {
         controllers(T.self, from: shell).first { $0.view.window != nil }
     }
 
-    /// Where the probe's spec takes the captures: a loopback address it
-    /// serves, since the Mac app's sandbox writes only its own container.
-    private static let captureURL = ProcessInfo.processInfo.arguments.firstIndex(of: "-accounts-probe-capture").flatMap { at in
-        ProcessInfo.processInfo.arguments.indices.contains(at + 1) ? URL(string: ProcessInfo.processInfo.arguments[at + 1]) : nil
-    }
-
-    /// Sends the window as `<stage>.png` to the capture address, when one was named.
-    private static func capture(_ stage: String, _ shell: ShellController) async {
-        if let window = shell.view.window {
-            let cut = clipped(in: window)
-            say("clipped \(stage)", cut.isEmpty ? "none" : cut.joined(separator: " / "))
-        }
-        guard let base = captureURL, let window = shell.view.window,
-              let png = UIGraphicsImageRenderer(bounds: window.bounds).image(actions: { _ in
-                  window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-              }).pngData() else { return }
-        var request = URLRequest(url: base.appending(path: "\(stage).png"))
-        request.httpMethod = "PUT"
-        let status = await (try? URLSession.shared.upload(for: request, from: png)).map { ($0.1 as? HTTPURLResponse)?.statusCode ?? 0 }
-        log.notice("capture \(stage, privacy: .public): \(status.map { "sent, \($0)" } ?? "not sent", privacy: .public)")
+    /// What a person cannot read whole at a named stage, into the log.
+    private static func atStage(_ stage: String, _ shell: ShellController) {
+        guard let window = shell.view.window else { return }
+        let cut = clipped(in: window)
+        say("clipped \(stage)", cut.isEmpty ? "none" : cut.joined(separator: " / "))
     }
 
     /// One step's words, as one log message. Unified logging cuts a message's
@@ -202,7 +186,7 @@ enum AccountsProbe {
         say("list row", "count \(config.count(hub).map(String.init) ?? "-") badge \(config.badge(hub).map { "\($0.count)" } ?? "none")")
         say("configure nav", controllers(ConfigureController.self, from: shell).first { $0.isViewLoaded }?.probeNav ?? "no Configure loaded")
         say("list gaps", section.probeGaps)
-        await capture("list", shell)
+        atStage("list", shell)
         var switches: [String] = []
 
         guard let view = FleetAccounts.view(hub) else { return }
@@ -219,7 +203,7 @@ enum AccountsProbe {
             say("editor", texts(in: editor.view).joined(separator: " / "))
             say("editor remove", editor.probeDelete)
             switches.append("never backup \(editor.probeSwitch)")
-            await capture("editor", shell)
+            atStage("editor", shell)
             editor.probeType(nickname: "Probe second")
             editor.probePick(hue: "violet")
             say("editor dirty", editor.probeFooter)
@@ -239,7 +223,7 @@ enum AccountsProbe {
             await until(40) { row?.probeState.contains("Opening") == false }
             await wait(1)
             say("sign in link", "\(row?.probeState ?? "no row") | opened \(SignInBrowser.lastOpened?.host() ?? "nothing")")
-            await capture("signin-link", shell)
+            atStage("signin-link", shell)
             if SignInBrowser.lastOpened != nil, let panel = row?.current as? PastePanel {
                 panel.probeSubmit("not-a-real-code")
                 // The press's own task starts the check: wait for it to begin (or to
@@ -249,7 +233,7 @@ enum AccountsProbe {
                 await until(30) { panel.probePhase != .checking }
                 await wait(1)
                 say("sign in code refused", "\(row?.probeState ?? "no row") | problem: \(panel.probeProblem ?? "")")
-                await capture("signin-refused", shell)
+                atStage("signin-refused", shell)
             }
             rows.probeToggle(machine.machineId)
             await wait(0.6)
@@ -282,7 +266,7 @@ enum AccountsProbe {
                 editor.probeRunDelete()
                 await wait(0.6)
                 say("remove asks", editor.probeFooter)
-                await capture("remove-question", shell)
+                atStage("remove-question", shell)
                 editor.probeConfirm()
                 say("remove pending", editor.probeFooter)
                 await until(40) { !editor.probeFooter.contains("Removing") }
@@ -301,7 +285,7 @@ enum AccountsProbe {
             await wait(1.2)
             if let routing = onScreen(RoutingEditorController.self, shell) {
                 say("routing", texts(in: routing.view).joined(separator: " / "))
-                await capture("routing", shell)
+                atStage("routing", shell)
                 routing.probePicker?.probeChoose("spread")
                 routing.probeTab(1)
                 await wait(0.8)
@@ -312,7 +296,7 @@ enum AccountsProbe {
                 routing.probeLimit?.probeSet(move: true, wait: 20)
                 say("routing dirty", "\(routing.probePicker?.probeState ?? "-") | limit figure \(routing.probeLimit?.probeFigure ?? "-") | \(routing.probeFooter)")
                 switches.append("move \(routing.probeLimit?.probeSwitch ?? "not drawn")")
-                await capture("routing-fill-first", shell)
+                atStage("routing-fill-first", shell)
                 routing.probeRunSave()
                 await until { routing.probeFooter.contains("Saved") || routing.probeRefusal != nil }
                 let held = FleetAccounts.view(hub).flatMap { FleetAccounts.routing($0, provider: FleetAccounts.claude) }
@@ -334,7 +318,7 @@ enum AccountsProbe {
             let picker = (try? JSONEncoder().encode(setup.probePicker)).flatMap { String(data: $0, encoding: .utf8) }
             say("setup picker", picker ?? "[]")
             say("setup steps", setup.probeSteps)
-            await capture("setup-provider", shell)
+            atStage("setup-provider", shell)
             setup.probeChoose("anthropic:subscription")
             await until { setup.probeStep == "Sign in" }
             await wait(1)
@@ -344,7 +328,7 @@ enum AccountsProbe {
             await until(40) { setup.probeCreated != nil && setup.probeRows.first?.probeState.contains("Opening") == false }
             await wait(1)
             say("setup signing in", "created \(setup.probeCreated ?? "nothing") | hub accounts \(before) → \(FleetAccounts.view(hub)?.accounts.count ?? 0) | \(setup.probeRows.map(\.probeState).joined(separator: " // ")) | \(setup.probeFoot)")
-            await capture("setup-signin", shell)
+            atStage("setup-signin", shell)
             setup.probeCancel()
             await until { setup.view.window == nil || setup.probeFoot.contains("refused") }
             await wait(1)
@@ -365,7 +349,7 @@ enum AccountsProbe {
                 await until(40) { setup.probeKeyPanel.map { !texts(in: $0).contains { $0.contains("Sending") } } ?? true }
                 await wait(1)
                 say("key sent", "\(setup.probeContent.joined(separator: " / ")) | \(setup.probeFoot)")
-                await capture("setup-key", shell)
+                atStage("setup-key", shell)
                 setup.probeCancel()
                 await until { setup.view.window == nil }
                 await wait(1)
@@ -386,7 +370,7 @@ enum AccountsProbe {
                 await wait(1)
                 say("remove second answered", "\(editor.view.window == nil ? "editor closed" : editor.probeFooter) | list: \(section.probeLines.joined(separator: " / "))")
                 say("list after gaps", section.probeGaps)
-                await capture("list-after", shell)
+                atStage("list-after", shell)
             }
         }
         // 10. With nobody signed in on the machine, its menu offers "Sign in an

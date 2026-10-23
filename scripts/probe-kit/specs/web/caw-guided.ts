@@ -39,8 +39,6 @@
  * 6. New project lands on the project's page with Caw's panel open on its
  *    Setup thread.
  *
- * Captures for a reviewer: round2/<width>-<theme>-<first-open|sent|filed>.png.
- *
  *   bun scripts/probe-kit/run.ts web caw-guided
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one step at a time, as a hand makes them
@@ -413,12 +411,6 @@ const openPanel = async (page: Page, url: string) => {
 /** The overflow sweep (journeys/scan.ts) over the page with the panel open. */
 const sweep = (page: Page) => page.evaluate(scan);
 
-/** A capture for the reviewer, under round2/. */
-const shot = async (kit: Kit, page: Page, name: string) => {
-  await mkdir(join(kit.out, "round2"), { recursive: true });
-  await page.screenshot({ path: join(kit.out, "round2", `${name}.png`) });
-};
-
 /** Where the panel stood over the empty board, and the name's start edge, by leg (light). */
 const firstOpen = new Map<string, { dock: Box | null; title: Box | null }>();
 /** The desk's room under the panel, 1440 light: 680's panel keeps it. */
@@ -704,7 +696,6 @@ const leg = async (kit: Kit, setup: Setup, one: Leg, theme: Theme) => {
     spill.length === 0,
     spill.join(" | ")
   );
-  await shot(kit, page, `${name}-${theme}-first-open`);
 
   // 2. Put away, then Ask Caw: the panel on a new thread, no popover.
   await page.keyboard.press("Escape");
@@ -972,19 +963,6 @@ const starterSends = async (kit: Kit, setup: Setup) => {
   return threads[0]?.id ?? "";
 };
 
-/** "Sent" for the reviewer: every leg's panel on the thread, Caw's answer or why under your words. */
-const sentShots = async (kit: Kit, setup: Setup) => {
-  for (const one of LEGS) {
-    for (const theme of THEMES) {
-      const page = await legPage(kit, one, theme);
-      await openPanel(page, setup.url);
-      await settle(page, 400);
-      await shot(kit, page, `${one.name}-${theme}-sent`);
-      await page.close();
-    }
-  }
-};
-
 /** A page whose dashboard socket lets the spec hand it a hub frame (`payload`). */
 const hubFrames = async (page: Page) => {
   let inject: ((data: string) => void) | null = null;
@@ -1241,7 +1219,6 @@ const filedLegs = async (
         spill.length === 0,
         spill.join(" | ")
       );
-      await shot(kit, page, `${one.name}-${theme}-filed`);
       await page.close();
     }
   }
@@ -1516,7 +1493,6 @@ const run = async (kit: Kit) => {
       }
     }
     const threadId = await starterSends(kit, setup);
-    await sentShots(kit, setup);
     const ids = await filedTasks(kit, setup, threadId);
     await filedLegs(kit, setup, threadId, ids);
     for (const width of [1280, 900, 899]) {
