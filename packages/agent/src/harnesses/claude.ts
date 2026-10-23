@@ -1879,6 +1879,38 @@ const launchFleet = async (
 };
 
 /**
+ * The settings options a session's `query()` takes ({@link
+ * sessionSettingsOptions}), from what only a launch has (its folder's placed
+ * hooks and the fleet's settings), and the flag settings its CLI is handed:
+ * none known at an attach, which starts nothing and keeps whatever its CLI
+ * was handed.
+ */
+const launchSettings = (
+  ctx: HarnessContext,
+  lead: boolean,
+  fence: boolean,
+  launch: {
+    fleetMcp?: Record<string, McpServerConfig>;
+    fleetSettings?: Record<string, unknown>;
+    placedHooks?: SetHook[];
+  }
+) => {
+  const options = sessionSettingsOptions(
+    ctx.boundary,
+    lead,
+    fence,
+    launch.placedHooks ?? [],
+    launch.fleetSettings ?? {}
+  );
+  return {
+    options,
+    handed: launch.fleetMcp
+      ? (options.settings as Record<string, unknown>)
+      : undefined,
+  };
+};
+
+/**
  * The fleet's Claude Code settings rows and those of the project placed at
  * `cwd` (fleet-harness-set.ts `configAt`), merged key by key in that order,
  * so a project's key is over the fleet's: what a session's flag settings
@@ -2150,12 +2182,7 @@ class ClaudeSession implements HarnessSession {
      * Code settings ({@link launchFleet}). An attach starts nothing and
      * passes none of them: its CLI keeps the settings it was launched with.
      */
-    {
-      conversationKept,
-      fleetMcp,
-      placedHooks = [],
-      fleetSettings = {},
-    }: {
+    launch: {
       conversationKept?: () => Promise<boolean>;
       fleetMcp?: Record<string, McpServerConfig>;
       placedHooks?: SetHook[];
@@ -2183,6 +2210,7 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
+    const { conversationKept, fleetMcp } = launch;
     const {
       options,
       permissionMode,
@@ -2224,18 +2252,13 @@ class ClaudeSession implements HarnessSession {
     this.#turn = turn;
     const extraArgs = sessionExtraArgs(options, fence, lead);
 
-    const launchedOptions = sessionSettingsOptions(
-      ctx.boundary,
+    const { options: launchedOptions, handed } = launchSettings(
+      ctx,
       lead,
       fence,
-      placedHooks,
-      fleetSettings
+      launch
     );
-    // What a launch hands its CLI; an attach starts nothing, and keeps
-    // whatever its CLI was handed.
-    this.#flagSettings = fleetMcp
-      ? (launchedOptions.settings as Record<string, unknown>)
-      : undefined;
+    this.#flagSettings = handed;
     const handle = query({
       prompt: input,
       options: {
