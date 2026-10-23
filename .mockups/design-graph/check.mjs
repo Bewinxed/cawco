@@ -515,7 +515,12 @@ const compactViews = [
   { id: "1280x540-short", screen: "short", layout: "sheet", viewport: { width: 1280, height: 540 }, colorScheme: "light" },
 ];
 
-const browser = await chromium.launch({ executablePath: CHROME });
+// Every browser runs with this run's tag in its environment, so what it forks away and leaves behind can be
+// found once it has closed (scripts/probe-kit/browser-leftovers.ts: Chromium's chrome_crashpad_handler is
+// double-forked out of the browser's tree with setsid and reparented, and ends once its browser has gone).
+const TAG = "DESIGN_GRAPH_CHECK=" + process.pid + "-" + Math.random().toString(36).slice(2, 8);
+const ENV = { ...process.env, DESIGN_GRAPH_CHECK: TAG.split("=")[1] };
+const browser = await chromium.launch({ executablePath: CHROME, env: ENV });
 // CHECK_ONLY=views,classes,reduced,twox,engines,morph,grep runs those parts alone (a whole run is the proof).
 const only = (part) => !process.env.CHECK_ONLY || process.env.CHECK_ONLY.split(",").includes(part);
 // CHECK_VIEWS=1440-light,1180-touch runs those views alone.
@@ -528,6 +533,15 @@ if (only("engines")) for (const engine of ["webkit", "firefox"]) for (const sche
 if (only("morph")) for (const engine of (process.env.MORPH_ENGINES || "chromium,webkit,firefox").split(",")) for (const scheme of ["light", "dark"]) await runMorph(engine, scheme);
 if (only("grep")) grepCheck();
 await browser.close();
+// Every browser closed leaves nothing of its own running: no process carrying the run's tag, after up to 5s
+// for a closed browser's crash handlers to end (they end in under half a second once their browser has gone).
+{
+  const { readdirSync, readFileSync: read } = await import("node:fs");
+  const left = () => readdirSync("/proc").filter((p) => /^\d+$/.test(p) && +p !== process.pid).flatMap((p) => { try { return read("/proc/" + p + "/environ", "utf8").split("\0").includes(TAG) ? [p + " " + read("/proc/" + p + "/cmdline", "utf8").split("\0").join(" ").slice(0, 120)] : []; } catch { return []; } });
+  let rest = left();
+  for (let i = 0; i < 20 && rest.length; i++) { await new Promise((r) => setTimeout(r, 250)); rest = left(); }
+  ok("run", "every browser closed leaves no process of its own behind (no chrome_crashpad_handler carrying the run's tag)", rest.length === 0, rest.join(" | "));
+}
 console.log("\n" + passes + " passed, " + fails + " failed");
 process.exit(fails ? 1 : 0);
 
@@ -558,7 +572,7 @@ function mkHelpers(V, ev) {
 
 async function runView(view) {
   const V = view.id, touch = !!view.touch;
-  const own = view.args ? await chromium.launch({ executablePath: CHROME, args: view.args }) : null;
+  const own = view.args ? await chromium.launch({ executablePath: CHROME, args: view.args, env: ENV }) : null;
   const ctx = await (own || browser).newContext({ viewport: view.viewport, colorScheme: view.colorScheme, hasTouch: !!view.hasTouch, isMobile: !!view.isMobile, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = [];
@@ -777,7 +791,10 @@ async function runView(view) {
     const at = [g0.tool.left + Rp, g0.tool.bottom - Rp], off = Math.hypot(g0.cx - at[0], g0.cy - at[1]);
     ok(V, "3 handle at rest: concentric with the panel's resizing corner, its circle's centre within 0.5px of the corner radius's, its radius the panel's " + Rp + "px less the inset (" + r2(want.r) + "px)", g0.shown && off <= 0.5 && Math.abs(g0.r - want.r) <= 0.1, JSON.stringify({ centre: [r2(g0.cx), r2(g0.cy)], corner: at.map(r2), off: r2(off), r: r2(g0.r) }));
     ok(V, "3 handle at rest: the stroke " + r2(want.w) + "px its whole length, round caps, its body sweeping " + r2(want.sweep) + "° centred on the corner's diagonal (135°)" + (finger ? ", straight legs on along both edges to " + MEAS.touchLen + "px in all" : ""), Math.abs(g0.wMid - want.w) <= 0.05 && Math.abs(g0.w0 - want.w) <= 0.05 && Math.abs(g0.wN - want.w) <= 0.05 && Math.abs(g0.wMax - want.w) <= 0.05 && Math.abs(g0.sweep - want.sweep) <= 0.5 && Math.abs(diag(g0) - 135) <= 0.5 && Math.abs(g0.len - want.len) <= 0.2, JSON.stringify({ w: [r2(g0.w0), r2(g0.wMid), r2(g0.wN)], sweep: r2(g0.sweep), diagonal: diag(g0), len: r2(g0.len), points: g0.points }));
-    ok(V, "3 handle at rest: Apple's contrast, " + MEAS.contrast + ":1 on the raised surface (--c-handle-ink-rest, the strong ink mixed into it, opaque)", inkIs(g0.fill, g0.rest) && g0.fill[3] === 1 && Math.abs(g0.ratio - MEAS.contrast) <= 0.3, g0.ratio + ":1");
+    // By day Apple's contrast; at night a step up the ink ladder, the stat ink (round 29: Apple's 8.7:1 at night
+    // was the quietest state on the page).
+    const night = view.colorScheme === "dark", stat = await ev(() => __k.tokenColor("--ink-stat"));
+    ok(V, "3 handle at rest: " + (night ? "at night the stat ink, a step up from Apple's 8.7:1 (" + g0.ratio + ":1 on the raised surface)" : "Apple's contrast, " + MEAS.contrast + ":1 on the raised surface (--c-handle-ink-rest, the strong ink mixed into it, opaque)"), inkIs(g0.fill, g0.rest) && g0.fill[3] === 1 && (night ? inkIs(g0.fill, stat) && g0.ratio > MEAS.contrast + 2 : Math.abs(g0.ratio - MEAS.contrast) <= 0.3), g0.ratio + ":1");
     const p = await profile("gripC"); want.restRun = p.run;
     ok(V, "3 handle at rest, the line read end to end: one opaque fill, the same width at mirrored points, mirrored about the diagonal, no step anywhere", lineOK(p, want), JSON.stringify(p));
   }
@@ -1876,7 +1893,7 @@ async function runEngine(name, scheme) {
   const exe = (name === "firefox" && process.env.FIREFOX) || pw[name].executablePath();
   const { existsSync } = await import("node:fs");
   if (!existsSync(exe)) { ok(V, "the " + name + " build is installed", false, exe + " is missing: node node_modules/playwright-core/cli.js install " + name); return; }
-  const wk = await pw[name].launch({ executablePath: exe });
+  const wk = await pw[name].launch({ executablePath: exe, env: ENV });
   // At 2×, so the held frame's ink is read the same way as Chromium's (inkProfile).
   const page = await wk.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, deviceScaleFactor: 2 });
   const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
@@ -1924,7 +1941,7 @@ async function runMorph(name, scheme) {
   const { existsSync } = await import("node:fs");
   const exe = name === "chromium" ? CHROME : (name === "firefox" && process.env.FIREFOX) || pw[name].executablePath();
   if (!existsSync(exe)) { ok(V, "the " + name + " build is installed", false, exe + " is missing: node node_modules/playwright-core/cli.js install " + name); return; }
-  const eng = name === "chromium" ? browser : await pw[name].launch({ executablePath: exe });
+  const eng = name === "chromium" ? browser : await pw[name].launch({ executablePath: exe, env: ENV });
   const ctx = await eng.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
   const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
@@ -1938,7 +1955,7 @@ async function runMorph(name, scheme) {
     const subpaths = ((path.getAttribute("d") || "").match(/[Mm]/g) || []).length;
     const clocks = [svg, ...svg.querySelectorAll("*")].flatMap((el) => el.getAnimations()).map((a) => a.transitionProperty || "keyframes");
     const corner = id === "gripC";
-    return { p: Math.round(parseFloat(getComputedStyle(path).getPropertyValue("--grip-p")) * 10000) / 10000, len: q(g.len), wMid: q(g.wMid), wMax: q(g.wMax), reach: corner ? q(b.bottom - g.box.top) : q((g.box.right - g.box.left) / 2), along: corner ? q(g.box.right - b.left) : q((g.box.right + g.box.left) / 2 - (b.left + b.width / 2)), ink: g.fill.slice(0, 3), painting, subpaths, clocks, sym: pr.sym, turn: pr.turn, solid: pr.solid, gap: pr.gap };
+    return { p: Math.round(parseFloat(getComputedStyle(path).getPropertyValue("--grip-p")) * 10000) / 10000, len: q(g.len), wMid: q(g.wMid), wMax: q(g.wMax), reach: corner ? q(b.bottom - g.box.top) : q((g.box.right - g.box.left) / 2), along: corner ? q(g.box.right - b.left) : q((g.box.right + g.box.left) / 2 - (b.left + b.width / 2)), ink: g.fill.slice(0, 3), painting, subpaths, clocks, sym: pr.sym, turn: pr.turn, solid: pr.solid, gap: pr.gap, body: g.mid.slice(g.runN, g.runN + GRIP_BODY + 1).map(([x, y]) => [x - b.left, y - b.top]) };
   }, id);
   // The change is made in the page by the state's own attribute (the one the real input sets: data-pointing is
   // the hover's own rule, data-resizing what a press sets, the let-go what a release does), and its transition
@@ -2001,7 +2018,9 @@ async function runMorph(name, scheme) {
     verdict(which, "rest → hover", s1, rest, hover, 1, tok.control, tok.easeOut);
     await page.mouse.move(x, y); await page.waitForTimeout(tok.control + 200);
     same("pointer on the grip", hover, await read(id));
-    ok(V, which + " hover: the arc where it stood at rest, Apple's width, its ends grown into the start of the run (progress " + tok.hover + "), in the strong ink, nothing else drawn", near(hover.p, tok.hover, 0.001) && near(hover.wMid, rest.wMid, 0.05) && near(hover.wMax, rest.wMax, 0.05) && hover.len > rest.len + 4 && hover.reach > rest.reach + 4 && hover.painting === 1, JSON.stringify({ rest: { len: rest.len, reach: rest.reach, w: rest.wMid, ink: rest.ink }, hover: { len: hover.len, reach: hover.reach, w: hover.wMid, ink: hover.ink } }));
+    // The body (the rest mark's own centreline: the corner's arc, the dock's capsule) stands exactly where it stood.
+    const moved = Math.max(...hover.body.map(([x, y], i) => Math.hypot(x - rest.body[i][0], y - rest.body[i][1])));
+    ok(V, which + " hover: the " + (which === "corner" ? "arc" : "capsule") + " where it stood at rest (its centreline moved " + Math.round(moved * 1000) / 1000 + "px), Apple's width, only its ends grown into the start of the run (progress " + tok.hover + "), in the strong ink, nothing else drawn", moved <= 0.01 && near(hover.p, tok.hover, 0.001) && near(hover.wMid, rest.wMid, 0.05) && near(hover.wMax, rest.wMax, 0.05) && hover.len > rest.len + 4 && hover.reach > rest.reach + 4 && hover.painting === 1, JSON.stringify({ rest: { len: rest.len, reach: rest.reach, w: rest.wMid, ink: rest.ink }, hover: { len: hover.len, reach: hover.reach, w: hover.wMid, ink: hover.ink } }));
     if (keep) shots[which].hover = await grab(which);
     // Hover → drag; then the press and the drag itself.
     const s2 = await scrub(id, "drag");
@@ -2041,20 +2060,26 @@ async function runMorph(name, scheme) {
     // The sheet: the four states in a row, the corner over the dock's edge, each labelled, on the page's ground.
     const sheet = await ev(async ([sh, states, title]) => {
       const load = async (b64) => { const i = new Image(); i.src = "data:image/png;base64," + b64; await i.decode(); return i; };
-      const rows = Object.keys(sh), pad = 24, gap = 16, lab = 28, imgs = {};
+      // The labels in the page's body type at the crops' 2×, in the strong ink and the strong weight (the owner:
+      // "barely readable lables").
+      const probe = document.createElement("span"); probe.style.font = "var(--type-body)"; probe.style.color = "var(--ink-strong)"; probe.style.fontWeight = "var(--weight-strong)"; document.body.append(probe);
+      const pcs = getComputedStyle(probe), body = parseFloat(pcs.fontSize), size = 2 * body, face = pcs.fontWeight + " " + size + "px " + pcs.fontFamily, ink = "rgb(" + __k.rgba(pcs.color).slice(0, 3).join(" ") + ")"; probe.remove();
+      await document.fonts.load(face);
+      const rows = Object.keys(sh), pad = 32, gap = 16, lab = Math.ceil(size * 1.6), imgs = {};
       for (const r of rows) for (const s of states) imgs[r + s] = await load(sh[r][s]);
       const cw = Math.max(...Object.values(imgs).map((i) => i.width)), rh = rows.map((r) => Math.max(...states.map((s) => imgs[r + s].height)));
       const cv = document.createElement("canvas"); cv.width = 2 * pad + states.length * cw + (states.length - 1) * gap; cv.height = 2 * pad + 2 * lab + rh.reduce((a, b) => a + b, 0) + (rows.length - 1) * gap;
       const cx = cv.getContext("2d"), cs = getComputedStyle(document.body);
       cx.fillStyle = cs.backgroundColor; cx.fillRect(0, 0, cv.width, cv.height);
-      cx.fillStyle = cs.color; cx.font = "600 26px " + cs.fontFamily; cx.fillText(title, pad, pad + 22);
-      cx.font = "22px " + cs.fontFamily;
-      states.forEach((s, i) => cx.fillText(s, pad + i * (cw + gap), pad + lab + 22));
+      cx.fillStyle = ink; cx.font = face; cx.textBaseline = "alphabetic";
+      cx.fillText(title, pad, pad + size);
+      states.forEach((s, i) => cx.fillText(s, pad + i * (cw + gap), pad + lab + size));
       let y = pad + 2 * lab;
       rows.forEach((r, j) => { states.forEach((s, i) => cx.drawImage(imgs[r + s], pad + i * (cw + gap), y)); y += rh[j] + gap; });
-      return cv.toDataURL("image/png").split(",")[1];
+      return { png: cv.toDataURL("image/png").split(",")[1], face, ink, body, ratio: Math.round(__k.ratio(__k.rgba(ink), __k.rgba(cs.backgroundColor)) * 100) / 100 };
     }, [Object.fromEntries(Object.entries(shots).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).map(([s, b]) => [s, b.toString("base64")]))])), states, name + " · 1440 · " + scheme + " · 2×"]);
-    writeFileSync(join(REVIEW, "sheet-" + name + "-1440-" + scheme + ".png"), Buffer.from(sheet, "base64"));
+    writeFileSync(join(REVIEW, "sheet-" + name + "-1440-" + scheme + ".png"), Buffer.from(sheet.png, "base64"));
+    ok(V, "the review sheet's labels are the page's body type at the crops' 2× (" + 2 * sheet.body + "px), the strong weight, the strong ink (" + sheet.ratio + ":1 on the sheet's ground)", sheet.face.startsWith("500 " + 2 * sheet.body + "px") && sheet.ratio >= 7, JSON.stringify({ face: sheet.face, ink: sheet.ink }));
   }
   await ctx.close();
   if (eng !== browser) await eng.close();

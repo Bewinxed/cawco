@@ -1828,9 +1828,11 @@
   --c-grip-len: calc((var(--radius-panel) - var(--c-grip-inset)) * 1.1449);
   /* Apple's handle is opaque near-black, rgb(24 24 24), on its window, 8.7:1 against it; white on a dark window
      (rehafachperson.ch, "Accessility Tools in iOS 26": "a white (dark colour scheme) or black corner"). At rest
-     ours stands at Apple's 8.7:1 on the raised surface, an opaque mix of the strong ink into it (84% by day,
-     81% at night); under the pointer and in a drag it brightens to the strong ink itself. */
-  --c-handle-ink-rest: light-dark(color-mix(in oklab, var(--ink-strong) 84%, var(--surface-raised)), color-mix(in oklab, var(--ink-strong) 81%, var(--surface-raised)));
+     ours stands by day at Apple's 8.7:1 on the raised surface, an opaque mix of the strong ink into it (84%).
+     At night that ink (8.7:1, just over the muted ink's 8:1) was the quietest state on the page (the r29 review),
+     so it takes the ink ladder's next step up, the stat ink (11.5:1). Under the pointer and in a drag it rises
+     to the strong ink itself. */
+  --c-handle-ink-rest: light-dark(color-mix(in oklab, var(--ink-strong) 84%, var(--surface-raised)), var(--ink-stat));
   /* My call: how far the held handle runs out from each end of its body, three radii: past the corner's curve
      (one R) and two radii on along each straight edge, enough to show which two edges move, short enough that
      it stays the corner's mark and never becomes a lit edge. Its bend onto the hairline takes one radius. */
