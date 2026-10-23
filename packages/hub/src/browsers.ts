@@ -105,7 +105,7 @@ export interface BrowsersDeps {
   instance: (id: string) => InstanceRow | undefined;
   /** Whether the session's work item ended: its browser artifact went with it (server.ts `endBrowserOf`), and none is made again. */
   itemEnded: (instance: InstanceRow) => boolean;
-  /** The session's live peers: every session on `machineId` in `projectId` (null: in none) that runs or sleeps. */
+  /** The session's live peers: every session on `machineId` in `projectId` (null: in none) whose process runs; one asleep is never told. */
   liveSessions: (machineId: string, projectId: string | null) => InstanceRow[];
   machineName: (machineId: string) => string;
   /** A credential of the fleet's stream relay, or null while it has none. */
@@ -294,7 +294,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     return artifact.id;
   };
 
-  /** Every other live session of the browser's project (or machine) told in one line. */
+  /** Every other live session of the browser's project (or machine) told in one line, a note its next turn reads. */
   const tellPeers = (
     machineId: string,
     key: BrowserKey,

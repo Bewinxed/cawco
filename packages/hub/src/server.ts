@@ -355,6 +355,7 @@ import {
   validateWorkflow,
   WIRE_PROTOCOL,
   WITHDRAW_PERMISSION,
+  WORK_ITEM_ORIGIN,
   WORKSPACE_CREATE_TIMEOUT_MS,
   type WorkInFlight,
   withMovedLine,
@@ -705,6 +706,7 @@ import {
   createTurnWatch,
   inboxNotes,
   memoryRoutes,
+  ROUTINE_ORIGIN,
 } from "./memory";
 import {
   documentFacts,
@@ -1387,6 +1389,30 @@ const askerWords = (by: ContinuationAsker): string => {
 };
 /** The origin of the hub's word to a sender that its message did not arrive. */
 const UNDELIVERED_ORIGIN = "undelivered";
+/**
+ * The hub's words that may start a turn in a session at rest (asleep or
+ * failed, no process): each is the far end of something a person, the
+ * session's parent or the session itself set going. Every other word of the
+ * hub's (a rule's reply, a browser's take-over, a leak or containers notice,
+ * a pause's carry-on, a fork's or a plan's note, an undelivered notice) is
+ * a note: kept at the hub and read at the session's next turn, never the
+ * cause of one ({@link startsTurnIn}). A routine's own words
+ * (`routine:<id>`, memory.ts) wake too.
+ */
+const WAKES_AT_REST: ReadonlySet<string> = new Set([
+  // Its open work item: the sweep's wake, a declared wait's end.
+  WORK_ITEM_ORIGIN,
+  // The turn its account's limit cut, carried on at the reset.
+  LIMIT_ORIGIN,
+  // The turn a restart or a kill cut, handed back once (`resumeCutTurn`).
+  "restore",
+  // The person's answer to its admin ask (admin-asks.ts).
+  "admin",
+  // A project's Caw, woken by his project's events (caw.ts).
+  "caw",
+  // Its looping delegate, for it as that delegate's lead (fleet-watch.ts).
+  "fleet-watch",
+]);
 /** The words a continuation stopped by its Cancel ends with. */
 const CONTINUATION_CANCELLED = "the continuation was cancelled";
 /**
@@ -3201,8 +3227,16 @@ export const createServer = (
     // A project's Caw asks in his thread (caw.ts, made further down).
     threadOf: (actor) => lead?.askThread(actor),
   });
-  /** Says something to a session, as the hub (`origin` names who). */
-  const tellSession = (instanceId: string, text: string, name: string) => {
+  /**
+   * Says something to a session, as the hub (`name` names who). `quiet`: a
+   * note its next turn reads, which starts none.
+   */
+  const tellSession = (
+    instanceId: string,
+    text: string,
+    name: string,
+    quiet = false
+  ) => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
       return;
@@ -3219,6 +3253,7 @@ export const createServer = (
           message: { role: "user", content: text },
           parent_tool_use_id: null,
           origin: { kind: "system", name },
+          ...(quiet ? { shouldQuery: false } : {}),
         },
       },
     });
@@ -3233,6 +3268,9 @@ export const createServer = (
     db: { artifacts: db.artifacts, browsers: db.browsers },
     instance: (id) => db.getInstancesByIds([id])[0],
     itemEnded: (row) => itemEnded(row),
+    // Live is a process its machine holds now: a session asleep is told
+    // nothing, as nothing the hub does on its own wakes one (2026-10-23: a
+    // take-over of obelisk's browser woke its every sleeping session).
     liveSessions: (machineId, projectId) =>
       db
         .listInstances()
@@ -3240,7 +3278,8 @@ export const createServer = (
           (row) =>
             row.machineId === machineId &&
             (row.projectId ?? null) === projectId &&
-            (row.status === "running" || row.status === "sleeping")
+            row.status === "running" &&
+            lifecycle.holds(machineId, row.id)
         ),
     machineName: (machineId) => machineName(machineId),
     mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
@@ -3261,7 +3300,8 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame });
       artifactSessions.refresh();
     },
-    tell: (instanceId, text) => tellSession(instanceId, text, "browser"),
+    // A note its next turn reads: the take-over asks nothing of it.
+    tell: (instanceId, text) => tellSession(instanceId, text, "browser", true),
     // The gate id its browser door is (agent door.ts): its workspace's,
     // else the session's own.
     workspaceOf: (row) => sessionWorkspace(row)?.id ?? row.id,
@@ -4031,8 +4071,13 @@ export const createServer = (
    * upstream post: core `byPerson`) or by its
    * own parent:
    * a delegate's report, another session's hand-off and every hub notice
-   * wait for one of them. A sleeping or failed one is woken by anything but
-   * the hub's word that a message did not arrive, which asks nothing of it.
+   * wait for one of them. A sleeping or failed one is woken by another
+   * session's word (a delegate's report, a hand-off) and by the hub's words
+   * that finish what was set going for it ({@link WAKES_AT_REST}: its work
+   * item, its routine, a turn a limit or a restart cut); never by the hub's
+   * own notices (a rule, a browser, a leak, a pause, a carry): nothing the
+   * hub does on its own wakes a session that was not live (2026-10-23, 157
+   * September sessions on obelisk woken by browser and leak notices).
    * A send that may not wake its session is kept at the hub, owed, and goes
    * to it in order when a send that may wake it arrives
    * ({@link deliverSend}, {@link releaseOwed}).
@@ -4055,7 +4100,11 @@ export const createServer = (
     if (row.status === "stopping" || row.status === "stopped") {
       return false;
     }
-    return !(origin.kind === "system" && origin.name === UNDELIVERED_ORIGIN);
+    if (origin.kind !== "system") {
+      return true;
+    }
+    const name = origin.name ?? "";
+    return WAKES_AT_REST.has(name) || name.startsWith(ROUTINE_ORIGIN);
   };
   /** Whether the sends owed to `instanceId` include one that may wake it ({@link startsTurnIn}). */
   const owedWakes = (row: {
@@ -31900,13 +31949,14 @@ export const createServer = (
               for (const instanceId of peekInstances(message.payload)) {
                 settlePending(instanceId, UNREAD.ended, "wait");
               }
-              // The daemon went away and came back. A session whose conversation
-              // the harness still has is not finished — it lost its process, which
-              // is this hub's problem to fix rather than the user's to notice. Put
+              // The daemon went away and came back. A session whose turn it
+              // cut is not finished — it lost its process mid-turn, which is
+              // this hub's problem to fix rather than the user's to notice. Put
               // it back exactly as it was: same directory, same model, same
-              // permission mode, resumed onto the same session.
+              // permission mode, resumed onto the same session, and its turn
+              // handed back. One that was between turns is asleep, not lost.
               //
-              // But *bounded*, which it was not. Every resumable orphan was
+              // And *bounded*, which it was not. Every resumable orphan was
               // respawned unconditionally on every register, which is how a
               // machine that had been away for a day and a half came back and was
               // handed its entire history as a work queue: 178 rows, spawned
@@ -31945,10 +31995,21 @@ export const createServer = (
                 .map((row) => ({ row, resumes: true }));
               const held = [...settled.filter(outlived), ...filedAway];
               const heldRows = new Set(held.map(({ row }) => row.id));
+              // Only a turn the restart cut starts a process again, to hand
+              // that turn back once (`resumeCutTurn`): a session between
+              // turns, its process gone, is filed asleep and stays so until
+              // a person, its parent or its own wait wakes it. A reboot of
+              // obelisk (2026-10-23) restored every row marked running
+              // whatever it was doing.
               const fresh = settled
                 .filter(() => custody.state === "available")
                 .filter(({ row }) => !heldRows.has(row.id))
                 .filter((orphan) => orphan.resumes && orphan.row.sessionId)
+                .filter(
+                  ({ row }) =>
+                    row.turnOpenAt !== null &&
+                    row.turnOpenAt !== TURN_UNRECORDED
+                )
                 // `row` is the pre-settle snapshot, so this reads when the session
                 // last moved, not when the settle just now touched it.
                 .sort(

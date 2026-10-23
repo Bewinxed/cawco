@@ -2058,6 +2058,16 @@ export class SessionSupervisor {
     }
     for (const request of requests) {
       const outcome = outcomes[request.instanceId];
+      // One already in its dir is no news: an agent's start carries every
+      // conversation on the machine, thousands of lines of nothing moved
+      // (obelisk, 2026-10-23); the start's count says them.
+      if (
+        outcome?.state === "carried" &&
+        outcome.entries === 0 &&
+        !outcome.ended
+      ) {
+        continue;
+      }
       console.info(
         `[carry] ${request.instanceId}: ${carryWords(outcome)}, ${Date.now() - began} ms after it started`
       );
