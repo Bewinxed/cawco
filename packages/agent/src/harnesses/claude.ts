@@ -91,7 +91,6 @@ import {
   configurePage,
   conversationGone,
   EFFORT_READ,
-  HOOK_INPUT_EVENTS,
   harnessWords,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
@@ -1470,11 +1469,11 @@ type FlagHookEntry = FlagHooks[string][number];
  * code.claude.com/docs/en/hooks), and each handler's `type` comes after its
  * other fields.
  *
- * Each runs through CawCo's guard (fleet-hook-guard.ts), told in a
- * workspace session (`bounded`) to drop the hook's input rewrite: the
- * boundary judged the call as asked. An MCP tool hook, whose reply only
- * Claude Code reads, is not given to a workspace session on an event whose
- * reply can rewrite input (core `hookWorkspaceNote`).
+ * Each command or HTTP hook runs through CawCo's guard
+ * (fleet-hook-guard.ts), told in a workspace session (`bounded`) to drop
+ * the hook's input rewrite: the boundary judged the call as asked. An MCP
+ * tool hook, whose reply only Claude Code reads, runs as the owner approved
+ * it, its rewrite kept (core `hookWorkspaceNote`).
  */
 const placedHookEntries = (
   hooks: readonly SetHook[],
@@ -1482,13 +1481,6 @@ const placedHookEntries = (
 ): FlagHooks => {
   const byEvent: FlagHooks = {};
   for (const hook of hooks) {
-    if (
-      bounded &&
-      hook.handler.type === "mcp_tool" &&
-      HOOK_INPUT_EVENTS.includes(hook.event)
-    ) {
-      continue;
-    }
     const { type, ...fields } = guardedHandler(hook.handler, bounded);
     const handler = { ...fields, type } as FlagHookEntry["hooks"][number];
     const matcher = hook.matcher?.trim();
