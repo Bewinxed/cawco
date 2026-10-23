@@ -40,12 +40,6 @@
  *
  * Every pass a step skips by is written by that step's own pass, under
  * node_modules/.cache/cawco/, keyed by the content it read.
- *
- * Until the Golar fork's packages land, Golar 0.1.11 leaves the 23 SvelteKit
- * pages that stand beside a same-named `.ts` out of the dashboard's program
- * (its `.svelte` extension shares TypeScript's first priority group, so the
- * `.ts` wins). svelte-check checks those pages alone, and only those; the
- * runner says so when it runs it. It goes when the fork does.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -380,16 +374,6 @@ if (tscProjects.length > 0) {
     ],
     after: SYNC,
     stamp: { file: stampFile("golar-tsc-codegen"), key: codegen },
-  });
-}
-
-/* The bridge: the pages Golar 0.1.11 drops, on svelte-check alone. */
-if (svelteProject && affected.includes(svelteProject)) {
-  checks.push({
-    name: "svelte-check, the 23 pages Golar 0.1.11 leaves out (until the Golar fork lands)",
-    dir: join(ROOT, DASHBOARD),
-    argv: [BUN, "scripts/svelte-check.ts"],
-    after: SYNC,
   });
 }
 

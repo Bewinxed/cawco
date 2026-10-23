@@ -17,10 +17,8 @@
  * A switch over a type that is not a union (`string`, `number`) has a type,
  * and is left alone, as the rule leaves it.
  *
- * Golar 0.1.11's rule API is worked around in three places, each to go when
- * Golar does it itself:
- * - it reads a report's range as UTF-8 bytes, while nodes carry UTF-16
- *   offsets ({@link bytesTo});
+ * Golar's rule API is worked around in two places, each to go when Golar
+ * does it itself:
  * - a type parameter's decoded type has no constraint, so the rule reads
  *   the `extends` clause from the declaration ({@link constrained});
  * - its file list is globs (golar.config.ts escapes each path).
@@ -49,11 +47,6 @@ const LITERAL_LIKE = [
   TypeFlags.Null,
   TypeFlags.UniqueESSymbol,
 ];
-
-const encoder = new TextEncoder();
-/** The UTF-8 byte offset of `at`, a UTF-16 offset into `text`. */
-const bytesTo = (text: string, at: number): number =>
-  encoder.encode(text.slice(0, at)).length;
 
 /** The `extends` clause of the type parameter `name` in scope at `at`, if it has one. */
 const constraintAt = (name: string, at: Node): Node | undefined => {
@@ -182,8 +175,8 @@ export const switchExhaustiveness = defineRule({
           context.report({
             message,
             range: {
-              begin: bytesTo(file.text, node.expression.getStart(file)),
-              end: bytesTo(file.text, node.expression.end),
+              begin: node.expression.getStart(file),
+              end: node.expression.end,
             },
           });
         }

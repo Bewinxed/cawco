@@ -17,6 +17,7 @@
  * Bun (auvred/golar#31).
  */
 import { execFileSync } from "node:child_process";
+import { getEnvironmentData, isMainThread } from "node:worker_threads";
 import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
@@ -70,14 +71,15 @@ const designed = within(
 );
 
 // The design rules load Tailwind's design system and Svelte's parser: only
-// `golar lint` reads them, not `golar tsc`.
-const linting = process.argv.includes("lint");
+// `golar lint` reads them, not `golar tsc`. A lint worker thread hears its
+// mode from Golar's environment data (golar cli.js `golar-env`).
+const linting = isMainThread
+  ? process.argv.includes("lint")
+  : (getEnvironmentData("golar-env") as { mode?: string } | undefined)?.mode ===
+    "lint";
 const design = linting
   ? (await import("./scripts/lint/design/index.mjs")).designRules
   : [];
-if (linting) {
-  (await import("./scripts/lint/design/model.mjs")).keepMappings();
-}
 
 export default defineConfig({
   lint: {

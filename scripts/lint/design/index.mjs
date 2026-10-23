@@ -319,7 +319,7 @@ export const designRules = Object.entries(FIND).map(([name, find]) =>
       const model = modelOf(file);
       for (const finding of find(model, options)) {
         if (!ignored(model, name, finding.start)) {
-          reportAt(context, model, finding.start, finding.end, finding.message);
+          reportAt(context, finding.start, finding.end, finding.message);
         }
       }
     },

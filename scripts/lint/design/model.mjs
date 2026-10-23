@@ -8,20 +8,13 @@
 // the parser Svelte reads `<script lang="ts">` with (acorn and
 // @sveltejs/acorn-typescript). Positions are the file's UTF-16 offsets.
 //
-// A report goes to Golar as a range in the text it checks, in UTF-8 bytes
-// (auvred/golar 0.1.11 reads a report's range so: cmd/golar/exports.go), and
-// Golar maps it back to the file through svelte2tsx's mappings. So the
-// mappings are kept as @golar/svelte makes them (golar.config.ts wraps its
-// createServiceCode, {@link keepMappings}), and a file offset becomes the
-// generated offset the mapping that holds it gives. An offset no mapping
-// holds (svelte2tsx writes no code for a `class:x` name) is reported at the
-// nearest mapped place before it, on its line where one is: Golar 0.1.11 has
-// no way to report an unmapped place (the Golar fork's "unmapped reports").
+// A report goes to Golar as a range in that text (`sourceRange`, the Golar
+// fork's report in the file as read from disk), so a place svelte2tsx writes
+// no code for (a `class:x` name, a `style` attribute) is reported where it is.
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { globalState } from "golar/unstable";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(HERE, "../../..");
@@ -53,96 +46,11 @@ export function parseScript(text) {
 
 export { parseSvelte };
 
-/* ---------------------------------------------------------------- mappings */
-
-const mappingsByFile = new Map();
-
-/**
- * Keeps what @golar/svelte's codegen answers for each file, so a report can
- * be placed in the code Golar checks. golar.config.ts calls this once, after
- * it imports @golar/svelte.
- */
-export function keepMappings() {
-  const plugin = globalState.codegenPlugins.get("svelte");
-  if (!plugin) {
-    throw new Error("design rules: @golar/svelte is not registered");
-  }
-  const create = plugin.createServiceCode;
-  plugin.createServiceCode = async (cwd, config, fileName, sourceText) => {
-    const answer = await create(cwd, config, fileName, sourceText);
-    if ("mappings" in answer) {
-      mappingsByFile.set(fileName, {
-        serviceText: answer.serviceText,
-        mappings: [...answer.mappings].sort(
-          (a, b) => a.sourceOffset - b.sourceOffset
-        ),
-      });
-    }
-    return answer;
-  };
-}
-
-const encoder = new TextEncoder();
-const bytesTo = (text, at) => encoder.encode(text.slice(0, at)).length;
-
-/** The generated UTF-16 offset a file offset stands at, through the mappings. */
-function serviceOffset(mapped, text, at) {
-  let before = null;
-  let after = null;
-  for (const m of mapped.mappings) {
-    if (m.sourceOffset <= at && at < m.sourceOffset + m.sourceLength) {
-      const within = Math.min(
-        at - m.sourceOffset,
-        (m.serviceLength ?? m.sourceLength) - 1
-      );
-      return m.serviceOffset + Math.max(0, within);
-    }
-    if (m.sourceOffset + m.sourceLength <= at) {
-      before = m;
-    } else if (!after && m.sourceOffset > at) {
-      after = m;
-    }
-  }
-  const onLine = (from, to) => !text.slice(from, to).includes("\n");
-  // The nearest mapped place on the same line, after it or before it.
-  if (after && onLine(at, after.sourceOffset)) {
-    return after.serviceOffset;
-  }
-  if (before && onLine(before.sourceOffset, at)) {
-    return (
-      before.serviceOffset +
-      Math.max(0, (before.serviceLength ?? before.sourceLength) - 1)
-    );
-  }
-  return (after ?? before)?.serviceOffset ?? 0;
-}
-
 /** Reports `message` at `[start, end)` of the file's own text. */
-export function reportAt(context, model, start, end, message) {
-  if (model.kind !== "svelte") {
-    context.report({
-      message,
-      range: {
-        begin: bytesTo(model.text, start),
-        end: bytesTo(model.text, Math.max(end, start)),
-      },
-    });
-    return;
-  }
-  const mapped = mappingsByFile.get(model.file);
-  if (!mapped) {
-    context.report({ message, range: { begin: 0, end: 0 } });
-    return;
-  }
-  const service = mapped.serviceText;
-  const begin = serviceOffset(mapped, model.text, start);
-  const last = serviceOffset(mapped, model.text, Math.max(start, end - 1));
+export function reportAt(context, start, end, message) {
   context.report({
     message,
-    range: {
-      begin: bytesTo(service, begin),
-      end: bytesTo(service, Math.max(begin + 1, last + 1)),
-    },
+    sourceRange: { begin: start, end: Math.max(end, start + 1) },
   });
 }
 

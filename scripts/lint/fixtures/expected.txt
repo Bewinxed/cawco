@@ -2,21 +2,19 @@
 # at its place, and nothing else there (scripts/lint/golar-lint.ts holds a
 # run to this list): `<file>:<line>:<column> <rule>`.
 #
-# `fork` marks a place stock Golar 0.1.11 cannot report: svelte2tsx writes no
-# code for a directive's name or a `style` attribute, so the report lands at
-# the nearest place it does, on the same line. Until the Golar fork's
-# packages are the root package.json's `overrides`, its line is required and
-# its column is not; from then on both are (the fork's "unmapped reports").
+# A directive's name and a `style` attribute have no code in svelte2tsx's
+# output; the design rules report them in the file's own text (the Golar
+# fork's `sourceRange`), so each is held to its column too.
 scripts/lint/fixtures/unhandled-state.ts:11:11 switch-exhaustiveness-check
 scripts/lint/fixtures/design/planted.svelte:15:23 house/no-raw-duration-read
 scripts/lint/fixtures/design/planted.svelte:18:13 design/no-unknown-classes
 scripts/lint/fixtures/design/planted.svelte:19:13 design/no-arbitrary-values
-scripts/lint/fixtures/design/planted.svelte:20:12 design/no-unknown-classes fork
+scripts/lint/fixtures/design/planted.svelte:20:12 design/no-unknown-classes
 scripts/lint/fixtures/design/planted.svelte:21:16 design/no-restyle
 scripts/lint/fixtures/design/planted.svelte:22:16 design/require-static-classes
-scripts/lint/fixtures/design/planted.svelte:23:6 design/no-inline-styles fork
-scripts/lint/fixtures/design/planted.svelte:24:6 design/no-inline-styles fork
-scripts/lint/fixtures/design/planted.svelte:25:6 house/no-dimension-binding fork
+scripts/lint/fixtures/design/planted.svelte:23:6 design/no-inline-styles
+scripts/lint/fixtures/design/planted.svelte:24:6 design/no-inline-styles
+scripts/lint/fixtures/design/planted.svelte:25:6 house/no-dimension-binding
 scripts/lint/fixtures/design/planted.svelte:26:13 house/variant-order
 scripts/lint/fixtures/design/planted.svelte:27:13 house/group-not-needs-ancestor
 scripts/lint/fixtures/design/planted.ts:7:36 design/no-arbitrary-values

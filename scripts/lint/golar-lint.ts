@@ -7,12 +7,12 @@
  * The rules must report each planted finding at its place and nothing else
  * there: a rule that quietly reads nothing finds nothing, and fails here
  * instead of passing in silence. A finding outside the fixtures fails the
- * run. A `fork` entry's column is held only once the Golar fork's packages
- * are the root package.json's `overrides` (expected.txt says why).
+ * run.
  *
  * Golar runs under Node, which must be on PATH: it does not run under Bun
- * (auvred/golar#31). Its `lint` exits 1 when a rule reported
- * (patches/golar@0.1.11.patch), which a run always does, for the fixtures.
+ * (auvred/golar#31). Its `lint` exits 1 when a rule reported (the Golar
+ * fork, Bewinxed/golar 0.1.11-cawco.1), which a run always does, for the
+ * fixtures.
  */
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
@@ -41,15 +41,9 @@ if (realpathSync(node as string) === realpathSync(process.execPath)) {
   fail(`\`node\` on PATH is Bun (${node}); Golar needs Node itself`);
 }
 
-const manifest = (await Bun.file(join(ROOT, "package.json")).json()) as {
-  overrides?: Record<string, string>;
-};
-const forked = Boolean(manifest.overrides?.golar);
-
 interface Expected {
   column: number;
   file: string;
-  fork: boolean;
   line: number;
   rule: string;
 }
@@ -59,14 +53,13 @@ const expected: Expected[] = (
   .split("\n")
   .filter((line) => line.trim() && !line.startsWith("#"))
   .map((line) => {
-    const [place = "", rule = "", mark] = line.trim().split(SPACES);
+    const [place = "", rule = ""] = line.trim().split(SPACES);
     const [file = "", at = "0", column = "0"] = place.split(":");
     return {
       file,
       line: Number(at),
       column: Number(column),
       rule,
-      fork: mark === "fork",
     };
   });
 
@@ -107,7 +100,7 @@ const matches = (e: Expected, f: (typeof findings)[number]): boolean =>
   e.file === f.file &&
   e.rule === f.rule &&
   e.line === f.line &&
-  (e.column === f.column || (e.fork && !forked));
+  e.column === f.column;
 const missing = expected.filter((e) => !proof.some((f) => matches(e, f)));
 const extra = proof.filter((f) => !expected.some((e) => matches(e, f)));
 if (missing.length > 0 || extra.length > 0) {
@@ -125,7 +118,5 @@ if (found.length > 0) {
   fail(`${found.length} finding(s)`, found.map((f) => f.text).join("\n"));
 }
 console.log(
-  `golar lint: every rule found its planted mistakes (${proof.length}) and nothing else${
-    forked ? "" : "; a fork entry's column waits on the Golar fork"
-  }`
+  `golar lint: every rule found its planted mistakes (${proof.length}) and nothing else`
 );
