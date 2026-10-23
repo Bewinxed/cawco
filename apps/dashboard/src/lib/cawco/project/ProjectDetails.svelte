@@ -210,6 +210,7 @@
   const stepFacts = (step: DeclaredStep): string =>
     [
       step.inputs?.length ? `on ${step.inputs.join(", ")}` : null,
+      step.targetMap ? `builds what ${step.targetMap} maps a change to` : null,
       step.needs ? `needs ${step.needs}` : null,
       step.timeoutSec ? `within ${durationWords(step.timeoutSec)}` : null,
       step.stopsRest ? "stops the rest if it fails" : null,

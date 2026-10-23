@@ -1,0 +1,123 @@
+{
+  "wholeApp": [
+    "apps/apple/Package.resolved",
+    "apps/apple/Packages/CawCoKit/Package.swift",
+    "apps/apple/project.yml",
+    "apps/apple/targets.json"
+  ],
+  "targets": [
+    {
+      "name": "CawCoAPI",
+      "kind": "package",
+      "sources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoAPI"
+      ],
+      "resources": [],
+      "dependencies": []
+    },
+    {
+      "name": "CawCoPush",
+      "kind": "package",
+      "sources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoPush"
+      ],
+      "resources": [],
+      "dependencies": []
+    },
+    {
+      "name": "CawCoCore",
+      "kind": "package",
+      "sources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoCore"
+      ],
+      "resources": [],
+      "dependencies": [
+        "CawCoAPI",
+        "CawCoPush"
+      ]
+    },
+    {
+      "name": "CawCoDesign",
+      "kind": "package",
+      "sources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoDesign"
+      ],
+      "resources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Resources"
+      ],
+      "dependencies": [
+        "CawCoCore"
+      ]
+    },
+    {
+      "name": "CawCoMascot",
+      "kind": "package",
+      "sources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoMascot"
+      ],
+      "resources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources"
+      ],
+      "dependencies": [
+        "CawCoDesign"
+      ]
+    },
+    {
+      "name": "CawCoTranscript",
+      "kind": "package",
+      "sources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoTranscript"
+      ],
+      "resources": [],
+      "dependencies": [
+        "CawCoCore",
+        "CawCoDesign",
+        "CawCoMascot"
+      ]
+    },
+    {
+      "name": "CawCoScreens",
+      "kind": "package",
+      "sources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoScreens"
+      ],
+      "resources": [
+        "apps/apple/Packages/CawCoKit/Sources/CawCoScreens/Resources"
+      ],
+      "dependencies": [
+        "CawCoCore",
+        "CawCoDesign",
+        "CawCoMascot",
+        "CawCoTranscript"
+      ]
+    },
+    {
+      "name": "NotificationService",
+      "kind": "app",
+      "sources": [
+        "apps/apple/NotificationService"
+      ],
+      "resources": [],
+      "dependencies": [
+        "CawCoPush"
+      ]
+    },
+    {
+      "name": "CawCo",
+      "kind": "app",
+      "sources": [
+        "apps/apple/CawCo"
+      ],
+      "resources": [],
+      "dependencies": [
+        "CawCoAPI",
+        "CawCoCore",
+        "CawCoDesign",
+        "CawCoMascot",
+        "CawCoScreens",
+        "CawCoTranscript",
+        "NotificationService"
+      ]
+    }
+  ]
+}

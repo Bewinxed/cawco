@@ -122,6 +122,7 @@ import {
   IGNORED_STATUS,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
+import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
 import { briefingFor } from "./briefings";
 import type {
   DbShape,
@@ -143,7 +144,6 @@ import {
   capableWaitFor,
   capableWaitReason,
   changedPathsCommand,
-  covers,
   diffPaths,
   GATE_FILE,
   lastCapable,
@@ -1591,6 +1591,8 @@ const gateTails = (result: CommandResult): CommandResult => ({
 interface StepOutcome {
   durationMs: number;
   exitCode: number;
+  /** Why the step had nothing to run (GateStep `nothing`): it passes, and its line says this. */
+  nothing?: string;
   passed: boolean;
   result: CommandResult;
   /**
@@ -1664,7 +1666,8 @@ const passKey = (
   ]);
   return {
     key: `inputs ${parts.join(" ")}`,
-    said: (stage) => `passed ${stage} on the same ${inputs.join(" and ")} tree`,
+    said: (stage) =>
+      `passed ${stage} on the same ${step.inputsSaid ?? inputs.join(" and ")} tree`,
   };
 };
 
@@ -1824,7 +1827,11 @@ const stepLine = ({
   skipped,
   unrun,
   where,
+  nothing,
 }: StepOutcome): string => {
+  if (nothing) {
+    return `- ${step.name}: ${nothing}`;
+  }
   if (skipped) {
     return `- ${step.name}: pass (not run again: ${skipped})`;
   }
@@ -1875,6 +1882,7 @@ const landedLine = (
   steps: string[]
 ): string => {
   const ran = turn?.outcomes
+    .filter((each) => !each.nothing)
     .map((each) =>
       each.skipped
         ? `${each.step.name} not run again (${each.skipped})`
@@ -6374,13 +6382,15 @@ export const createWorkItems = ({
     const state = await treeState(workspace, item, inputPaths, how.inTurn);
     const kept = passes.get(item.id);
     const prior = steps.map((step): string | undefined => {
-      if (!state) {
+      if (!state || step.nothing) {
         return undefined;
       }
       const { key, said } = passKey(step, state);
       return priorPass(step, kept?.get(key) ?? [], said);
     });
-    const due = steps.filter((_, at) => prior[at] === undefined);
+    const due = steps.filter(
+      (step, at) => !step.nothing && prior[at] === undefined
+    );
     const run =
       due.length > 0
         ? await runGate(workspace, item, due, how)
@@ -6405,6 +6415,16 @@ export const createWorkItems = ({
     return {
       declared: gate.declared,
       outcomes: steps.map((step, at) => {
+        if (step.nothing) {
+          return {
+            step,
+            nothing: step.nothing,
+            passed: true,
+            exitCode: 0,
+            durationMs: 0,
+            result: { exitCode: 0, stdout: "", stderr: "" },
+          };
+        }
         const skipped = prior[at];
         return skipped === undefined
           ? (ran.shift() as StepOutcome)
@@ -7259,12 +7279,22 @@ export const createWorkItems = ({
         refusal: `Not landed: this project's ${GATE_FILE}, which declares its landing gate, does not read, so the hub cannot tell what to run. ${declared.problems.join(" ")} It is in the project's folder on the hub: ask your parent or the person to fix it there, then call finish_item again.`,
       };
     }
-    const touched = declared.steps.some((step) => step.inputs)
+    const touched = declared.steps.some((step) => step.inputs || step.targetMap)
       ? await changedPaths(workspace, item)
       : [];
+    const maps = await targetMapsOf(workspace, item, declared.steps, touched);
+    if ("refusal" in maps) {
+      return maps;
+    }
     const steps: GateStep[] = [];
     for (const step of declared.steps) {
-      const due = dueStep(workspace, projectId, step, touched);
+      const due = dueStep(
+        workspace,
+        projectId,
+        step,
+        touched,
+        step.targetMap ? maps.get(step.targetMap) : undefined
+      );
       if ("refusal" in due) {
         return due;
       }
@@ -7273,29 +7303,72 @@ export const createWorkItems = ({
     return { declared: true, steps };
   };
 
+  /** The target map of every `targets:` step in `steps`, by its path ({@link targetMapOf}), or the first refusal. */
+  const targetMapsOf = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    steps: readonly DeclaredStep[],
+    touched: readonly string[]
+  ): Promise<Map<string, TargetMap> | GateRefusal> => {
+    const maps = new Map<string, TargetMap>();
+    for (const path of new Set(steps.flatMap((step) => step.targetMap ?? []))) {
+      // biome-ignore lint/performance/noAwaitInLoops: one map per gate, and a gate names one
+      const map = await targetMapOf(workspace, item, path, touched);
+      if ("refusal" in map) {
+        return map;
+      }
+      maps.set(path, map);
+    }
+    return maps;
+  };
+
+  /**
+   * The target map at `path` (app-targets.ts) as the tree that lands holds
+   * it: the item's own (HEAD's) when its diff `touched` changes it, else its
+   * target's (`origin/<base>`). A refusal in words when it does not read.
+   */
+  const targetMapOf = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    path: string,
+    touched: readonly string[]
+  ): Promise<TargetMap | GateRefusal> => {
+    const ref = touched.includes(path) ? "HEAD" : `origin/${workspace.base}`;
+    const shown = await runIn(workspace, item)(
+      `git show ${quote(`${ref}:${path}`)}`,
+      GIT_TIMEOUT_MS
+    );
+    const map =
+      shown.exitCode === 0
+        ? readTargetMap(shown.stdout)
+        : { problem: failedWith(shown) };
+    return "problem" in map
+      ? {
+          refusal: `Not landed: this project's landing gate builds what its target map, ${path}, gives a change, and ${ref}'s ${path} does not read: ${map.problem}. Write it with apps/apple/scripts/targets-map.sh --write on the Mac and commit it, or ask your parent; then call finish_item again.`,
+        }
+      : map;
+  };
+
   /**
    * One declared step as the gate runs it for an item whose diff is
-   * `touched`: none when it runs `on:` paths the diff leaves alone; on an
-   * online machine with the capability it `needs:`, else `refusal`.
+   * `touched` (app-targets.ts `gateStepFor`, with its target `map` for a
+   * `targets:` step): none, or one with nothing to run, when the diff
+   * leaves what it reads alone; on an online machine with the capability it
+   * `needs:`, else `refusal`, naming the changed paths that made it due.
    */
   const dueStep = (
     workspace: WorkspaceRow,
     projectId: string,
     step: DeclaredStep,
-    touched: readonly string[]
+    touched: readonly string[],
+    map: TargetMap | undefined
   ): { steps: GateStep[] } | GateRefusal => {
-    const { inputs, needs } = step;
-    const reads = inputs ? touched.filter((path) => covers(inputs, path)) : [];
-    if (inputs && reads.length === 0) {
-      return { steps: [] };
+    const shaped = gateStepFor(step, touched, map);
+    if ("steps" in shaped) {
+      return shaped;
     }
-    const base: GateStep = {
-      name: step.name,
-      command: step.command,
-      stopsRest: step.stopsRest,
-      ...(inputs ? { inputs } : {}),
-      ...(step.timeoutSec ? { timeoutSec: step.timeoutSec } : {}),
-    };
+    const { base, reads } = shaped;
+    const { needs } = step;
     if (!needs) {
       return { steps: [base] };
     }

@@ -2,7 +2,7 @@
 # Builds the CawCo app on the Mac for an iPhone simulator, then for the Mac
 # (Mac Catalyst), and
 # proves each build starts and stays up for 8 s. A launch-time abort fails it.
-# Run from anywhere in the repo: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only|--gate]
+# Run from anywhere in the repo: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only|--gate [--targets A,B,…]]
 # (or `build-both.sh update-packages`, below).
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
 # BUILT macOS, LAUNCHED macOS, BUILT iOS 18.5, LAUNCHED iOS 18.5.
@@ -21,6 +21,14 @@
 # the last tree it compiled: the rsync below makes the root's apps/apple
 # that tree exactly (--checksum --delete; a changed file is written anew,
 # an unchanged one keeps its mtime), and Xcode's incremental build follows.
+# `--targets A,B,…` (with --compile-only or --gate) builds only those
+# schemes, in the order given (deps first), for each destination, and says
+# which in one TARGETS line; without it the one scheme built is the app,
+# CawCo, which compiles every target. The landing gate passes the targets
+# its map gives the item's change (apps/apple/targets.json, packages/hub
+# app-targets.ts) and runs nothing on the Mac when they are none. A --gate
+# run also holds the map to Package.swift and project.yml
+# (targets-map.sh --check) and fails when it differs.
 # No probe reads that root; a workspace's own builds stay in its own. Each
 # gate run's logs are a folder of their own there, logs/<commit>-<time>, so a
 # failure's log outlives the runs after it; the newest 20 stay.
@@ -109,7 +117,14 @@ fi
 ROOT=$(git rev-parse --show-toplevel)
 PLATFORM=${1:-both}
 COMPILE_ONLY=${2:-}
-[[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only || $COMPILE_ONLY == --gate ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only|--gate]" >&2; exit 2; }
+USAGE="usage: build-both.sh [ios|macos|both] [--compile-only|--gate [--targets A,B,…]]"
+[[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only || $COMPILE_ONLY == --gate ]] || { echo "$USAGE" >&2; exit 2; }
+# The schemes to build, comma-separated: the app alone unless --targets names them.
+SCHEMES=CawCo
+if [[ -n ${3:-} ]]; then
+  [[ $3 == --targets && -n $COMPILE_ONLY && ${4:-} =~ ^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$ && -z ${5:-} ]] || { echo "$USAGE (--targets compiles only, so it goes with --compile-only or --gate)" >&2; exit 2; }
+  SCHEMES=$4
+fi
 BUILD=$(basename "$ROOT")
 if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
 # A gate run's logs folder: the commit it compiles (the item's last) and when.
@@ -309,11 +324,15 @@ SETTLE=8
 TREE=$(<"$5/$BUILD/tree")
 # This build holds the Mac build slot: mac-slot.sh may take a simulator slot
 # inside it.
-export CAWCO_MAC_SLOT=build DD LOGS SETTLE TREE
+export CAWCO_MAC_SLOT=build DD LOGS SETTLE TREE SCHEMES
+echo "TARGETS ${SCHEMES//,/, }"
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 "$XCODEGEN" generate --quiet
+# The gate's targets came from apps/apple/targets.json: a map Package.swift
+# or project.yml no longer makes fails it here.
+if [[ $BUILD == gate ]]; then bash scripts/targets-map.sh --check; fi
 # The committed pins, in the generated project where Xcode reads them, over
 # whatever an earlier build of this root resolved: resolution is off below,
 # so this file alone says which version of each package the build compiles.
@@ -326,27 +345,34 @@ build() { # <destination> <label> [signed]
   # keychain unlocked, as TestFlight's do (scripts/signed.sh); a simulator's
   # needs no identity.
   # (No empty-array expansion here: the Mac's bash 3.2 calls it unbound under `set -u`.)
-  local runner=env archs=
+  local runner=env archs= scheme stamp log
   [[ ${3:-} != signed ]] || runner=scripts/signed.sh
   # The generic simulator destination has no active arch, so Xcode builds
   # every one it supports; arm64 is the one the Mac's simulators run.
   case $1 in generic/*) archs=ARCHS=arm64 ;; esac
-  # A simulator app is stamped with the apps/apple it is built from
-  # (tree-stamp.sh), and only once it is: the stamp goes as the build starts.
-  local stamp="$DD/Build/Products/Debug-iphonesimulator/CawCo.app.tree"
-  case $1 in *"iOS Simulator"*) rm -f "$stamp" ;; *) stamp= ;; esac
-  "$runner" xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
-    -derivedDataPath "$DD" -skipPackagePluginValidation -disableAutomaticPackageResolution ${archs:+"$archs"} build \
-    >"$LOGS/build-$2.log" 2>&1 || {
-    if grep -a -q -E "error:|BUILD FAILED" "$LOGS/build-$2.log"; then
-      grep -a -E "error:|BUILD FAILED" "$LOGS/build-$2.log" | sort -u | head -40 || true
-    else
-      tail -20 "$LOGS/build-$2.log" || true
+  # Each scheme SCHEMES names, in its order, into the one DerivedData.
+  for scheme in ${SCHEMES//,/ }; do
+    # A simulator app is stamped with the apps/apple it is built from
+    # (tree-stamp.sh), and only once it is: the stamp goes as the build starts.
+    stamp=
+    if [[ $scheme == CawCo ]]; then
+      stamp="$DD/Build/Products/Debug-iphonesimulator/CawCo.app.tree"
+      case $1 in *"iOS Simulator"*) rm -f "$stamp" ;; *) stamp= ;; esac
     fi
-    echo "FAILED $2 (full log: mac:$LOGS/build-$2.log)"
-    exit 1
-  }
-  [[ -z $stamp ]] || printf '%s\n' "$TREE" >"$stamp"
+    log="$LOGS/build-$2-$scheme.log"
+    "$runner" xcodebuild -project CawCo.xcodeproj -scheme "$scheme" -destination "$1" \
+      -derivedDataPath "$DD" -skipPackagePluginValidation -disableAutomaticPackageResolution ${archs:+"$archs"} build \
+      >"$log" 2>&1 || {
+      if grep -a -q -E "error:|BUILD FAILED" "$log"; then
+        grep -a -E "error:|BUILD FAILED" "$log" | sort -u | head -40 || true
+      else
+        tail -20 "$log" || true
+      fi
+      echo "FAILED $2 $scheme (full log: mac:$log)"
+      exit 1
+    }
+    [[ -z $stamp ]] || printf '%s\n' "$TREE" >"$stamp"
+  done
   echo "BUILT $2"
 }
 
@@ -444,8 +470,8 @@ if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 
 DISK_ROOM=$(<scripts/lib/disk-room.sh)
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q LOG_RUN=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
-  "$PLATFORM" "$COMPILE_ONLY" "$LOG_RUN" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q LOG_RUN=%q SCHEMES=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$LOG_RUN" "$SCHEMES" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&

@@ -18,6 +18,12 @@ export interface DeclaredStep {
   needs?: RunsOnCapability;
   /** A failure leaves the steps after it unrun. */
   stopsRest: boolean;
+  /**
+   * Its target map (`targets:`, hub app-targets.ts): it runs only for a diff
+   * that changes what the map's targets compile, given the targets to build
+   * in its command's `{targets}`; absent: `inputs` decides.
+   */
+  targetMap?: string;
   /** Seconds before it is killed; the gate's default when absent. */
   timeoutSec?: number;
 }

@@ -328,12 +328,20 @@ export interface GateStep {
   command: string;
   /** The paths it reads (`on:`): its pass is kept by their trees, not the whole tree's. */
   inputs?: readonly string[];
+  /** How a skip names `inputs` (“what CawCoScreens and CawCo compile”); the paths when absent. */
+  inputsSaid?: string;
   /** The machine it runs on, by machineId, when not the workspace's own. */
   machine?: string;
   /** What the report calls it: its `name:`, or the command. */
   name: string;
   /** The capability its machine needs (`needs:`): a paused one gives way to another that has it. */
   needs?: RunsOnCapability;
+  /**
+   * Why it has nothing to run, as its report line says it: a `targets:`
+   * step for a diff that changes nothing its map's targets compile
+   * (`no app build: nothing the app compiles changed`). It never runs.
+   */
+  nothing?: string;
   /** A failure leaves the steps after it unrun (`on-fail: stop`). */
   stopsRest?: boolean;
   /** Seconds before the command is killed; 600 when not given. */

@@ -36233,6 +36233,10 @@
             "description": "A failure leaves the steps after it unrun.",
             "type": "boolean"
           },
+          "targetMap": {
+            "description": "Its target map (`targets:`, hub app-targets.ts): it runs only for a diff\nthat changes what the map's targets compile, given the targets to build\nin its command's `{targets}`; absent: `inputs` decides.",
+            "type": "string"
+          },
           "timeoutSec": {
             "description": "Seconds before it is killed; the gate's default when absent.",
             "type": "number"

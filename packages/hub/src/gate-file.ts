@@ -13,9 +13,9 @@
  *   on-fail: stop
  * bun run lint:changed
  * bun run typecheck
- * bash apps/apple/scripts/build-both.sh ios --gate
+ * bash apps/apple/scripts/build-both.sh ios --gate --targets {targets}
  *   name: iOS build compiles
- *   on: apps/apple, scripts/lib/disk-room.sh
+ *   targets: apps/apple/targets.json
  *   needs: apple
  *   timeout: 30m
  * Caw edits:
@@ -36,6 +36,15 @@
  *     whose diff against its target touches one. Without `on:` it always
  *     runs. A step with `on:` keeps its pass by those paths' trees, so a
  *     rebase that left them alone does not run it again.
+ *   - `targets:` a target map (app-targets.ts: which folders feed which
+ *     build target, and which files every build reads), from the
+ *     repository's root, in place of `on:`. The step runs only when the
+ *     item's diff changes a file the map gives a target, with `{targets}` in
+ *     its command the targets to build: those, plus every target depending
+ *     on them, deps first, comma-separated. A diff that changes none runs
+ *     nothing, and its report says so. Its pass is kept by the trees of
+ *     what those targets compile. The hub reads the map as the tree that
+ *     lands holds it: the item's own when it changes it, else its target's.
  *   - `needs:` a machine capability (runs-on.ts: `apple`, `linux`): the step
  *     runs on an online machine that has it, in a gate workspace there at
  *     the item's last commit. With none online the item does not land, and
@@ -107,7 +116,9 @@ const MOST_SEC = 86_400;
 const GLOB = /[*?[\]{}]/;
 const TRAILING = /\/(\*\*)?$/;
 const LEADING = /^\.\//;
-const KEYS = ["name", "on", "needs", "timeout", "on-fail"] as const;
+const KEYS = ["name", "on", "targets", "needs", "timeout", "on-fail"] as const;
+/** The word in a `targets:` step's command the hub gives the targets to build. */
+export const TARGETS_PLACE = "{targets}";
 /** The margin line that opens the files Caw may edit, any case. */
 const CAW_EDITS = /^caw edits:\s*(.*)$/i;
 /** The margin line that declares the ship command, any case. */
@@ -165,6 +176,14 @@ const applyOption = (
         paths.push(read.path);
       }
       step.inputs = [...new Set(paths)];
+      return;
+    }
+    case "targets": {
+      const read = inputPath(value);
+      if ("problem" in read) {
+        return read.problem.replace("on:", "targets:");
+      }
+      step.targetMap = read.path;
       return;
     }
     case "needs":
@@ -312,6 +331,23 @@ const indentedLine = (read: BlockRead, text: string): void => {
   }
 };
 
+/**
+ * What a step's `targets:` asks of it, in words: none of `on:` beside it,
+ * and `{targets}` in its command exactly when it names a map.
+ */
+const targetsProblem = (step: DeclaredStep): string | undefined => {
+  const placed = step.command.includes(TARGETS_PLACE);
+  if (step.targetMap && step.inputs) {
+    return `“${step.command}” gives both on: and targets:; its map says which changes run it, so drop on:.`;
+  }
+  if (step.targetMap && !placed) {
+    return `“${step.command}” names a target map (targets: ${step.targetMap}) but no ${TARGETS_PLACE}, where the hub gives it the targets to build.`;
+  }
+  if (placed && !step.targetMap) {
+    return `“${step.command}” has ${TARGETS_PLACE} but no targets: map to fill it from.`;
+  }
+};
+
 /** gate.md's block as steps and Caw edits, or every problem it has. */
 export const readGate = (content: string): GateReading => {
   const lines = content.split(LINE_SPLIT);
@@ -345,7 +381,11 @@ export const readGate = (content: string): GateReading => {
       marginLine(read, text);
     }
   }
-  const { cawEdits, problems, ship, steps } = read;
+  const { cawEdits, ship, steps } = read;
+  const problems = [
+    ...read.problems,
+    ...steps.flatMap((step) => targetsProblem(step) ?? []),
+  ];
   if (problems.length > 0) {
     return { ok: false, problems };
   }

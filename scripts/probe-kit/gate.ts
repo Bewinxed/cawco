@@ -18,8 +18,11 @@ bun run typecheck
 `;
 
 /**
- * CawCo's own iOS build step alone: run on a Mac in the item's gate
- * workspace there, only for work that changes what the Swift build reads.
+ * An iOS build step alone, by `on:` paths: run on a Mac in the item's gate
+ * workspace there, only for work that changes apps/apple. The scratch
+ * repositories the specs here stand up hold no target map; CawCo's own gate
+ * names apps/apple/targets.json instead (`targets:`, specs/app-targets.ts
+ * `MAPPED_APPLE_GATE`) and builds only the targets the change reaches.
  */
 export const APPLE_GATE = `---
 bash apps/apple/scripts/build-both.sh ios --gate
