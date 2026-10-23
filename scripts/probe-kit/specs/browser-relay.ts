@@ -88,7 +88,12 @@ import {
   STREAM_RELAY_TLS_PORT,
   streamRelayUrls,
 } from "../../../packages/core/src/stream-relay";
-import { END_SIGNALS, signalEnding, until } from "../../scratch-fleet";
+import {
+  END_SIGNALS,
+  type EndSignal,
+  endsTheProcess,
+} from "../../lib/stop-signals";
+import { signalEnding, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 type Relay = typeof import("../../../packages/agent/src/browser/relay");
@@ -199,12 +204,12 @@ export const madeOn = (docker: Docker): MadeHere => {
     return removing;
   };
   const handlers = Object.entries(END_SIGNALS).map(([name, number]) => {
-    const signal = name as keyof typeof END_SIGNALS;
-    const handler = () => {
+    const signal = name as EndSignal;
+    const handler = endsTheProcess(() => {
       remove()
         .then(signalEnding)
         .finally(() => process.exit(128 + number));
-    };
+    });
     process.on(signal, handler);
     return { signal, handler };
   });

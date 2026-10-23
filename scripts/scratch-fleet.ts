@@ -60,6 +60,7 @@ import { installDeps } from "./lib/deps";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
 import { welcomed } from "./lib/keeper-dial";
+import { anotherEnds, END_SIGNALS, type EndSignal } from "./lib/stop-signals";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 import { STAND_INS_ENV, type StandIns } from "./stand-ins/index";
 
@@ -1267,7 +1268,6 @@ async function removeKept(scratch: string, name: string): Promise<string[]> {
 
 /** The fleets of this process whose folders still stand. */
 const LIVE = new Set<FleetDirs>();
-export const END_SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 /** The fleets' own ending on a stop signal, while it runs. */
 let ending: Promise<unknown> | undefined;
 
@@ -1285,18 +1285,21 @@ const removeLive = () => {
 };
 // This process ending, however it ends but a SIGKILL, takes its fleets'
 // folders with it (their services end under the leash). On a signal it then
-// ends as the signal would have, unless something else of the probe's
-// listens for it too and ends it its own way (its own close and clean).
+// ends as the signal would have, unless a listener of the probe's ends it its
+// own way after its own close and clean (lib/stop-signals.ts
+// `endsTheProcess`). A library's listener (Playwright's, closing its
+// browsers) keeps nothing running: one counted as an ender left a signalled
+// run going on with its browsers closed.
 process.on("exit", removeLive);
 for (const [name, number] of Object.entries(END_SIGNALS)) {
-  const signal = name as keyof typeof END_SIGNALS;
+  const signal = name as EndSignal;
   const onSignal = () => {
     // The browsers first, while the records that name them stand.
     ending = Promise.allSettled(
       [...LIVE].map((one) => one.removeBrowsers())
     ).finally(() => {
       removeLive();
-      if (process.listenerCount(signal) === 1) {
+      if (!anotherEnds(signal)) {
         process.exit(128 + number);
       }
     });

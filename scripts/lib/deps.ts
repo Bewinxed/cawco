@@ -23,13 +23,18 @@
  * no `node_modules` in it, so after the install an import there still finds
  * none ("Cannot find package 'tldts' from packages/core/src/stream-relay.ts")
  * though the package is on disk. So an entry whose `ensureDeps` installed
- * runs again, whole, in a fresh process, and exits with its exit.
+ * runs again, whole, in a fresh process tied to it (tied-child.ts: stop
+ * signals passed on, the child stopping once this one is gone), and exits
+ * with its exit. Every entry that awaits this imports tied-child.ts with it,
+ * so its child side watches for a parent that started it that way.
  *
- * This module imports nothing a dependency provides (deps.ts imports
- * nothing), so it loads in a checkout that has none.
+ * This module imports nothing a dependency provides (deps.ts and
+ * tied-child.ts import nothing that does), so it loads in a checkout that
+ * has none.
  */
 import { resolve } from "node:path";
 import { DEPS_INSTALLING, depsScript } from "../../packages/core/src/deps";
+import { runTied } from "./tied-child";
 
 const ROOT = resolve(import.meta.dir, "..", "..");
 
@@ -62,8 +67,8 @@ export const installDeps = (): Promise<boolean> => {
 
 /**
  * An entry's first await: {@link installDeps}, and when it installed, the
- * entry again in a fresh process (its own arguments, environment and stdio),
- * this one exiting with its exit, so no import resolves against what this
+ * entry again in a fresh process tied to this one (its own arguments,
+ * environment and stdio), this one exiting with its exit, so no import resolves against what this
  * process read before the install.
  */
 export const ensureDeps = async (): Promise<void> => {
@@ -73,8 +78,5 @@ export const ensureDeps = async (): Promise<void> => {
   console.log(
     "… running again in a fresh process, on the installed dependencies"
   );
-  const again = Bun.spawn([process.execPath, ...process.argv.slice(1)], {
-    stdio: ["inherit", "inherit", "inherit"],
-  });
-  process.exit(await again.exited);
+  process.exit(await runTied([process.execPath, ...process.argv.slice(1)]));
 };

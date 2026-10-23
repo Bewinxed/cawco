@@ -63,6 +63,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDeps } from "../lib/deps";
 import { holdAwake } from "../lib/hold-awake";
+import { runTied } from "../lib/tied-child";
 import type { Approval, Spec } from "./kit";
 
 // The dependencies first (lib/deps.ts): the kit and the fleet load after them.
@@ -199,7 +200,11 @@ const runOwnHome = async (spec: Spec): Promise<number> => {
         entry[1] !== undefined && !ENCLOSING_GIT_ENV.test(entry[0])
     )
   );
-  const child = Bun.spawn(
+  // A stop signal reaching this run while the spec runs ends it here, once
+  // the spec's own run has torn down (lib/tied-child.ts): its HOME goes then.
+  const removeHome = () => rmSync(home, { recursive: true, force: true });
+  process.once("exit", removeHome);
+  const code = await runTied(
     [
       process.execPath,
       import.meta.path,
@@ -209,17 +214,14 @@ const runOwnHome = async (spec: Spec): Promise<number> => {
       ...options,
     ],
     {
-      env: {
-        ...env,
-        HOME: home,
-        [OWN_HOME_ENV]: home,
-        ...(review === null ? {} : { [REVIEW_DIR_ENV]: review }),
-      },
-      stdio: ["inherit", "inherit", "inherit"],
+      ...env,
+      HOME: home,
+      [OWN_HOME_ENV]: home,
+      ...(review === null ? {} : { [REVIEW_DIR_ENV]: review }),
     }
   );
-  const code = await child.exited;
-  rmSync(home, { recursive: true, force: true });
+  process.off("exit", removeHome);
+  removeHome();
   return code;
 };
 
