@@ -69,6 +69,14 @@ they are paused, sought and played on. A spec never waits frames for a run to
 begin or polls `getAnimations()` for one to end: on a slow frame the whole
 motion is over before the poll sees it.
 
+A read begins on a still surface: before the action, `readMotion` waits
+until nothing inside `within` has run for two frames (`stillWithin`), so the
+last motion there (a menu's exit WebKit started 173ms late) is never held as
+the action's, and a run made before the read is never its own. A read of
+boxes (an overflow sweep) waits on `stillWithin` too, and on the boxes it
+reads standing for three frames: WebKit has told a transition finished while
+its box still moved.
+
 `handOn(page)` is a finger and a resting mouse cursor: raw touch through CDP
 on Chromium, PointerEvents made in the page elsewhere (Playwright drives no
 touch drag in WebKit), the finger's capture kept by the hand. A boundary

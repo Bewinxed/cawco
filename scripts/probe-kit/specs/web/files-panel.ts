@@ -60,6 +60,7 @@ import {
   ROOT,
   readMotion,
   type Spec,
+  stillWithin,
   THEMES,
   type Theme,
   type View,
@@ -163,10 +164,61 @@ const watch = (page: Page) => {
   page.on("pageerror", (error) => seen.push(String(error)));
 };
 
-/** The overflow sweep's findings, summed over every state. */
+/** What Files is drawn in: the drawer, the bar's card, each region and its "N more" sign, and a picked artifact's float. */
+const FILES_PARTS =
+  "[data-files-sheet], [data-glass-card-frame='files-pop'], [data-files-region], [data-files-more], [data-files-float]";
+
+/**
+ * Waits until Files stands as the person comes to see it: nothing on the
+ * page running (kit `stillWithin`), no words mid-morph (MorphText draws its
+ * letters only while it swaps them), and Files' boxes and counts the same
+ * for three frames. WebKit told the drawer's rise to its stop as finished
+ * while its box still stood 15–40px under it (680: transform 264.6 →
+ * 246.9, landing at 225), and an "N more" sign's count rolled from 37 to
+ * 41 as the sweep read it: the sweep named both a spill. Answers why it
+ * never stood still, or null.
+ */
+const filesAtRest = async (page: Page): Promise<string | null> => {
+  const moving = await stillWithin(page, "body", { ms: 5000 });
+  if (moving.length > 0) {
+    return `the page still moves: ${moving.slice(0, 4).join(", ")}`;
+  }
+  return page.evaluate(async (parts) => {
+    const read = () =>
+      [...document.querySelectorAll(parts)]
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return `${r.x},${r.y},${r.width},${r.height} ${el.getAttribute("data-files-more") ?? ""}`;
+        })
+        .join(" | ");
+    const morphing = () =>
+      document.querySelector(
+        '[data-slot="morph-text"] [data-slot="letters"]'
+      ) !== null;
+    const deadline = performance.now() + 5000;
+    let last = read();
+    for (let same = 0; same < 3;) {
+      if (performance.now() > deadline) {
+        return `Files never stood still for three frames${morphing() ? " (words still morphing)" : ""}: ${last}`;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until three pass still
+      await new Promise((done) => requestAnimationFrame(done));
+      const now = read();
+      same = now === last && !morphing() ? same + 1 : 0;
+      last = now;
+    }
+    return null;
+  }, FILES_PARTS);
+};
+
+/** The overflow sweep's findings, summed over every state: each read once Files stands still. */
 const sweeps: { state: string; findings: string[] }[] = [];
 const sweep = async (page: Page, state: string) => {
-  sweeps.push({ state, findings: await page.evaluate(scan) });
+  const restless = await filesAtRest(page);
+  sweeps.push({
+    state,
+    findings: restless ? [restless] : await page.evaluate(scan),
+  });
 };
 
 const shot = async (page: Page, name: string) => {
@@ -754,7 +806,7 @@ const desk = async (
   await page.locator(`[data-files-card][title="${PRICING}"]`).click();
   const float = page.locator("[data-files-float]");
   await float.waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(600);
+  await filesAtRest(page);
   const picked = await page.evaluate(() => {
     const pop = document
       .querySelector("[data-glass-card-frame='files-pop']")
@@ -2082,7 +2134,8 @@ const slotLeg = async (
     (ready) => ready,
     30_000
   ).catch(() => false);
-  await page.waitForTimeout(400);
+  // Read once Files stands still; the sweep after it says so if it never does.
+  await filesAtRest(page);
   const read = await page.evaluate(slotsOf);
   kit.check(
     `33 (${leg}): every card and everything its thumbnail draws lie inside the card's slot, every card inside Files' region`,

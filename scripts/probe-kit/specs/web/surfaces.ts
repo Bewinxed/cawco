@@ -38,6 +38,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { CDPSession, Page } from "playwright-core";
 import { diff } from "../../diff";
 import { entrySlug, type Spec } from "../../kit";
 import { chosen } from "../../surfaces/catalogue";
@@ -80,6 +81,32 @@ async function atRest(): Promise<number> {
   return held.length;
 }
 
+/**
+ * Every layer painted again from the document as it stands: DevTools'
+ * LayerTree domain switched on for two of the browser's frames and off for
+ * two more. Switching it on has Chromium paint every layer afresh for the
+ * layer tree it reports, and the fresh drawing stays once it is off; no
+ * element, style or emulated metric is touched. Chromium otherwise kept a
+ * stale drawing of some text: artifact comments-beside, desk dark, drew its
+ * pin's "1" one of two ways over runs whose every element read the same to
+ * full precision (ancestors, transforms, its text's box at 1140.5,
+ * 276.640625), 29px apart; light, the same. Four walks, each read as taken
+ * and after this step: as taken dark gave cb59… three times and 52fa… once,
+ * light b97d… and 03c1… twice each; after it, dark 0c8b… and light c0a0…
+ * all four times, from either picture, and five walks more with the step
+ * gave the same two. The page's scale set to 2 and back re-rastered at a
+ * new scale and kept whichever of the two pictures it had.
+ */
+async function repaint(page: Page, cdp: CDPSession): Promise<void> {
+  await cdp.send("LayerTree.enable");
+  await page.evaluate(() => window.__ssReader?.frames(2));
+  await cdp.send("LayerTree.disable");
+  await page.evaluate(() => window.__ssReader?.frames(2));
+}
+
+/** Each page's DevTools session, opened at its first capture. */
+const sessions = new WeakMap<Page, Promise<CDPSession>>();
+
 const spec: Spec = {
   name: "surfaces",
   async run(kit) {
@@ -119,6 +146,12 @@ const spec: Spec = {
             })()
           : undefined;
         await page.evaluate(atRest);
+        let cdp = sessions.get(page);
+        if (!cdp) {
+          cdp = page.context().newCDPSession(page);
+          sessions.set(page, cdp);
+        }
+        await repaint(page, await cdp);
         // Read before the capture's comparison, as the picture was taken.
         const dump = await page.evaluate(pageDump);
         const differs = await diff(kit, page, entry, {

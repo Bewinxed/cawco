@@ -1946,10 +1946,12 @@ const onChromium = (page: Page) =>
  * 7fca29883): a CSS transition or animation is held from a
  * MutationObserver's callback (a microtask after the write that makes it,
  * before any frame: `getAnimations()` there makes the run and returns it),
- * a Web Animation as `Element.animate` returns it; a run already under way
- * as the read begins is none of its motion and is left alone. Held is a
- * playback rate
- * of 0: the run stays `running` and its start time resolves on the frame
+ * or as its `transitionrun` / `animationstart` is told where no write made
+ * it, a Web Animation as `Element.animate` returns it; a run already made
+ * as the read begins is none of its motion and is left alone. Before the
+ * action, the read waits for `within` to stand still (`stillInside`), so
+ * the last motion there is over and none of it is read as this one's.
+ * Held is a playback rate of 0: the run stays `running` and its start time resolves on the frame
  * that starts it, as the page's own runs' do (a page that reads one run to
  * start another, SideSheet's clip, reads it unchanged), its clock at 0
  * however long frames take. Once each has started and two frames pass with
@@ -1969,9 +1971,87 @@ export async function readMotion<T = undefined>(
   options: MotionOptions<T> = {}
 ): Promise<MotionRead<T>> {
   const ms = options.ms ?? 3000;
+  const moving = await stillWithin(page, within, {
+    own: options.own,
+    ms,
+  });
+  if (moving.length > 0) {
+    throw new Error(
+      `${within} still moves ${ms}ms on, before the action: ${moving.join(", ")}`
+    );
+  }
   return onChromium(page)
     ? await clockRead(page, action, within, ms, options)
     : await heldRead(page, action, within, ms, options);
+}
+
+/**
+ * Waits, in the page, until nothing inside `within` moves: two frames in a
+ * row with no run of some length running there. A read starts from a
+ * still surface, or the action's motion is read on top of the last one.
+ * WebKit ran a menu's exit 173ms after Svelte's zero-length lead-in that
+ * starts it (composer-layers, the `@` menu), past a settle's wait: the exit
+ * stood pending as the next read began, was held at its start as if the
+ * press had made it, and the press then reversed the menu from fully open,
+ * a run of no length. The lead-in's own end makes the exit in the frame
+ * that ends it, before that frame's callbacks, so two quiet frames see
+ * every link of such a chain. Run with `page.evaluate`; answers the runs
+ * still moving at `ms`, none once still.
+ */
+async function stillInside({
+  ms,
+  own,
+  within,
+}: {
+  ms: number;
+  own: boolean;
+  within: string;
+}): Promise<string[]> {
+  const moving = () =>
+    window.kitRuns().filter((run) => {
+      const target = (run.effect as KeyframeEffect | null)?.target;
+      const timing = run.effect?.getComputedTiming();
+      const end = Number(timing?.endTime ?? 0);
+      return (
+        run.playState === "running" &&
+        (run.timeline === null || run.timeline instanceof DocumentTimeline) &&
+        end > 0 &&
+        Number.isFinite(end) &&
+        Number(timing?.iterations ?? 1) <= 1 &&
+        (own
+          ? (target?.matches(within) ?? false)
+          : window.kitInside(target, within))
+      );
+    });
+  const deadline = performance.now() + ms;
+  for (let quiet = 0; quiet < 2;) {
+    if (performance.now() > deadline) {
+      return moving().map((run) => {
+        const named = run as Animation & {
+          animationName?: string;
+          transitionProperty?: string;
+        };
+        return `${run.constructor.name} ${named.transitionProperty ?? named.animationName ?? run.id} at ${Math.round(Number(run.currentTime ?? 0))}ms`;
+      });
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until two pass still
+    await new Promise((done) => requestAnimationFrame(done));
+    quiet = moving().length === 0 ? quiet + 1 : 0;
+  }
+  return [];
+}
+
+/**
+ * Until nothing inside `within` moves (`stillInside`), or `ms`: the runs
+ * still moving then, none once still. A read of the page's boxes waits on
+ * it, as a motion read does before its action.
+ */
+export function stillWithin(
+  page: Page,
+  within: string,
+  { ms = 3000, own = false }: { ms?: number; own?: boolean } = {}
+): Promise<string[]> {
+  return page.evaluate(stillInside, { within, own, ms });
 }
 
 /** Runs let go, played out: each one's own `finished`, given `ms`, not a frame watched for it. */
@@ -2195,12 +2275,13 @@ function holdMotion({ own, within }: { own: boolean; within: string }): void {
       ? (target?.matches(within) ?? false)
       : window.kitInside(target, within);
   };
-  // Where the document's clock stood as the read began: a run already
-  // under way then (a band's arrival still easing in) is none of the
-  // action's motion, and held, it would never end.
-  const armedAt = Number(document.timeline.currentTime ?? 0);
-  const fresh = (run: Animation) =>
-    run.startTime === null || Number(run.startTime) >= armedAt;
+  // Every run on the page as the read begins: one already made then (a
+  // band's arrival still easing in elsewhere) is none of the action's
+  // motion, and held, it would never end. Made, not started: a run made
+  // before the read whose first frame had not yet come (its start time
+  // still unresolved) was taken for the action's by a start-time test.
+  const before = new Set(window.kitRuns());
+  const fresh = (run: Animation) => !before.has(run);
   /** A run on time: one a scroller drives (`animation-timeline`) has no length in ms. */
   const timed = (run: Animation) =>
     run.timeline === null || run.timeline instanceof DocumentTimeline;
@@ -2224,12 +2305,23 @@ function holdMotion({ own, within }: { own: boolean; within: string }): void {
   };
   // A microtask after each write to the page, before any frame: asked
   // there, `getAnimations()` makes the run the write starts and returns it.
+  // A text's own edit too (typing into a field): a run its `:empty` or
+  // `:has()` starts follows no element's write.
   const watch = new MutationObserver(() => hold(window.kitRuns()));
   watch.observe(document.documentElement, {
     attributes: true,
+    characterData: true,
     childList: true,
     subtree: true,
   });
+  // A run no write starts (a state the press puts on, `:focus-visible`,
+  // `:active`) is told by the engine as it makes it, in the frame after
+  // the press, before that frame's callbacks and its paint.
+  const heard = () => hold(window.kitRuns());
+  const RUN_EVENTS = ["transitionrun", "animationstart"] as const;
+  for (const type of RUN_EVENTS) {
+    addEventListener(type, heard, true);
+  }
   const { animate } = Element.prototype;
   Element.prototype.animate = function (
     this: Element,
@@ -2306,6 +2398,9 @@ function holdMotion({ own, within }: { own: boolean; within: string }): void {
   };
   const stop = () => {
     watch.disconnect();
+    for (const type of RUN_EVENTS) {
+      removeEventListener(type, heard, true);
+    }
     Element.prototype.animate = animate;
   };
   window.kitHeld = {
