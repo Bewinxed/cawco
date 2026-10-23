@@ -188,9 +188,16 @@ const marksLfs = (git: Git, repo: string, treeish: string): Promise<boolean> =>
  * an outside origin's runs with this machine's own filters and credential
  * helpers, its access `basic` only when those hold one for the endpoint
  * (host-lfs.ts `hostSigns`). An ssh origin's endpoint is not pinned: git-lfs
- * derives it, and authenticates over ssh. A `.lfsconfig` at `start` that
- * names any other endpoint leaves every large file a pointer
- * (`GIT_LFS_SKIP_SMUDGE=1`), and the project's thread is told.
+ * derives it, and authenticates over ssh. Outside the hub, a `.lfsconfig`
+ * at `start` that names any other endpoint leaves every large file a
+ * pointer (`GIT_LFS_SKIP_SMUDGE=1`), and the project's thread is told. A
+ * hub origin's checkout is never so refused: its `lfs.url` and
+ * `lfs.pushurl` are pinned in git's own environment config (move.ts
+ * `hubGitEnv`), and "Settings from Git configuration files override the
+ * `.lfsconfig` file" (git-lfs-config(5)), so no `.lfsconfig` moves it; its
+ * large files come from the project's own repository on the hub (probe-kit
+ * landing-cutoff E, where a landed `.lfsconfig` naming another project's
+ * repository left a workspace cut after it with pointers).
  */
 export const lfsCheckout = async ({
   deadline,
@@ -211,11 +218,9 @@ export const lfsCheckout = async ({
 }): Promise<Git> => {
   const origin = hub ?? (await plain(path, "remote", "get-url", "origin"));
   const own = originEndpoint(origin);
-  const refused = await undeclaredEndpoint(
-    path,
-    [start],
-    [own, declared?.endpoint]
-  );
+  const refused = hub
+    ? undefined
+    : await undeclaredEndpoint(path, [start], [own, declared?.endpoint]);
   const project =
     typeof projectId === "string" && projectId ? projectId : undefined;
   if (refused) {

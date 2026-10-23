@@ -805,11 +805,12 @@ const watchedHosts = new Map<string, SessiondClient>();
  * stderr the keeper drains unread, so these lines are the one record of it.
  * From `afterSeq` (its ready line, so nothing is missed between the start and
  * this), or from now for a boundary an earlier agent started. A watch lives
- * on its keeper connection, so a new connection watches again.
+ * on its keeper connection, so a new connection watches again. A host that
+ * exits unasked has its boundary started again ({@link restartUnasked}).
  */
 const watchHost = async (
   id: string,
-  held: Pick<Held, "gen" | "pid">,
+  held: Pick<Held, "gen" | "path" | "pid">,
   afterSeq?: number
 ): Promise<void> => {
   if (process.platform !== "linux") {
@@ -845,9 +846,63 @@ const watchHost = async (
         }
         stop();
         client.release(procId, pid);
+        restartUnasked(id, held).catch((error: unknown) => {
+          console.warn(
+            `[workspace] ${id}: its boundary ${held.pid} ended unasked and could not be started again: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
       },
     },
     afterSeq
+  );
+};
+
+/** How soon after one unasked start a second is not made ({@link restartUnasked}). Ours: a minute is longer than any start, and short enough that a later crash is started again. */
+const UNASKED_RESTART_MS = 60_000;
+
+/** When each workspace's boundary was last started again unasked ({@link restartUnasked}). */
+const unaskedAt = new Map<string, number>();
+
+/**
+ * A BOUNDARY THAT ENDS UNASKED IS STARTED AGAIN WHILE ITS RECORD STANDS. Its
+ * srt host exited, and nothing of the agent's ended it: no close or start of
+ * the workspace's is under way ({@link closing}, {@link starting}), and its
+ * record (`boundary.json`) still names this generation, which every close
+ * takes away and every replacement names anew. Its sessions' commands would
+ * otherwise each be refused until the workspace's next session
+ * ({@link stoppedLine}): a sandbox that ended (its runner gone, an OOM
+ * kill), its host signalled, its host's own close. The executor waits for
+ * the new one ({@link execScript}). A clone gone is refused at the start, as
+ * any start refuses it. One that ends unasked again within {@link
+ * UNASKED_RESTART_MS} of its last such start is left down, said: a sandbox
+ * that cannot stay up is not started in a loop, and the workspace's next
+ * session starts it.
+ */
+const restartUnasked = async (
+  id: string,
+  held: Pick<Held, "gen" | "path" | "pid">
+): Promise<void> => {
+  if (closing.has(id) || starting.has(id)) {
+    return;
+  }
+  const now = await readHeld(id).catch(() => undefined);
+  if (now?.gen !== held.gen) {
+    return;
+  }
+  const last = unaskedAt.get(id);
+  if (last !== undefined && Date.now() - last < UNASKED_RESTART_MS) {
+    console.warn(
+      `[workspace] ${id}: its boundary ${held.pid} ended unasked again within ${UNASKED_RESTART_MS / 1000}s of being started again, so it is left down; the workspace's next session starts it`
+    );
+    return;
+  }
+  unaskedAt.set(id, Date.now());
+  console.info(
+    `[workspace] ${id}: its boundary ${held.pid} ended unasked while its record stands, so it starts again`
+  );
+  const fresh = await ensureBoundary({ id, path: held.path });
+  console.info(
+    `[workspace] ${id}: its boundary ${held.pid} is started again as ${fresh.pid}`
   );
 };
 
@@ -5897,6 +5952,20 @@ const FORGE_TOKEN_ENV = [
   "BITBUCKET_*",
 ];
 
+/**
+ * Linux: an executor whose boundary ended unasked waits for the one the
+ * agent starts again ({@link restartUnasked}), which writes this executor
+ * anew (a new file, so a new inode at `$0`), then runs through it.
+ */
+const restartWait = `  rm -f "$mark"
+  self=$(ls -di "$0" 2>/dev/null)
+  for _ in $(seq ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 100}); do
+    sleep 0.1
+    now=$(ls -di "$0" 2>/dev/null)
+    if [ -n "$now" ] && [ "$now" != "$self" ]; then PATH=$caller_path exec "$0" "$@"; fi
+  done
+`;
+
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
 
@@ -6025,7 +6094,7 @@ if [ -e "$gate" ]; then
 fi
 fifo=${shellQuote(fifoOf(id, held.gen))}
 if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
-  echo ${shellQuote(stoppedLine(id))} >&2
+${linux ? restartWait : ""}  echo ${shellQuote(stoppedLine(id))} >&2
   exit 126
 fi
 ${linux ? mountCheck(id, held.gen, pid) : ""}
