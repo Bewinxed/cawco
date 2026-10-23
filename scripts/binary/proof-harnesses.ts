@@ -76,6 +76,37 @@ const keepers = new KeeperPool();
 /** A line of a message the session runs as a tool call, as a model calls a tool its prompt names: `cawco tool <name> [json]`. */
 const TOOL_LINE = /^cawco tool (\S+)(?: (.+))?$/;
 
+/** The `State:` line of a process's /proc status file. */
+const PROCESS_STATE = /^State:\s*(\S+)/m;
+
+/**
+ * The environment of the session's process once it carries its instance id (a
+ * child's environ is its keeper's until it execs), read every 50 ms for 10 s;
+ * else one line saying what the process showed instead.
+ */
+const environOnceSet = async (
+  pid: number
+): Promise<{ environ: string } | { line: string }> => {
+  const key = `${CAWCO_ENV.instanceId}=`;
+  for (let tries = 0; tries < 200; tries += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read waits on the process's exec
+    const environ = await Bun.file(`/proc/${pid}/environ`)
+      .text()
+      .catch(() => "");
+    if (environ.split("\0").some((pair) => pair.startsWith(key))) {
+      return { environ };
+    }
+    await Bun.sleep(50);
+  }
+  const status = await Bun.file(`/proc/${pid}/status`)
+    .text()
+    .catch(() => "");
+  const state = PROCESS_STATE.exec(status)?.[1] ?? "gone";
+  return {
+    line: `the session's process ${pid} never showed its environment (state ${state})`,
+  };
+};
+
 /**
  * The tool calls `text` names, run one by one as the session itself: the
  * agent's own binary's `cawco tool`, in the environment of the session's own
@@ -97,13 +128,15 @@ const toolCalls = async (procId: string, text: string): Promise<string[]> => {
   if (!proc) {
     return [`no keeper holds the session's process ${procId}`];
   }
+  const shown = await environOnceSet(proc.pid);
+  if ("line" in shown) {
+    return [shown.line];
+  }
   const env = Object.fromEntries(
-    (await Bun.file(`/proc/${proc.pid}/environ`).text())
-      .split("\0")
-      .flatMap((pair) => {
-        const at = pair.indexOf("=");
-        return at > 0 ? [[pair.slice(0, at), pair.slice(at + 1)]] : [];
-      })
+    shown.environ.split("\0").flatMap((pair) => {
+      const at = pair.indexOf("=");
+      return at > 0 ? [[pair.slice(0, at), pair.slice(at + 1)]] : [];
+    })
   );
   const said: string[] = [];
   for (const [, name, json] of calls) {
