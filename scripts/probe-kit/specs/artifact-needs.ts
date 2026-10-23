@@ -35,6 +35,11 @@
  *   asking replies in a burst's window are the row "3 new answers" and one
  *   push saying so; the person's reply on one makes it 2, and the device's
  *   notification is replaced in place, quietly, saying 2; a resolve 1.
+ * - on a pick page with three pins: the person answers one while the
+ *   burst holding their asking replies is still open, and the one push
+ *   that goes out says 2; then they answer the last two, and the
+ *   artifact's notification is taken down (the device's cleared ledger
+ *   names `artifact-<id>`) while its row stands on its unsent pick.
  *
  * Retirement:
  * - answered: a partial Send leaves the picks not made, once the session
@@ -1190,6 +1195,177 @@ const pinAsks = async (
   await page.close();
 };
 
+/**
+ * The two other ways an artifact's push follows its pins asking down, on a
+ * pick page whose unsent pick keeps it in Needs you (an unsent pick is the
+ * person's, which no turn of the writer retires): the person answers one
+ * while the burst holding the asking replies is still open, and the one
+ * push that goes out says the lower count; then they answer the rest, and
+ * the device's notification is taken down while the row stands.
+ */
+const pinAsksFall = async (
+  at: At,
+  session: string,
+  phone: ReturnType<typeof standInPhone>
+) => {
+  const { fleet, kit } = at;
+  const id = await create(fleet, session, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the pins page's head",
+    name: "pins-pick",
+    html: kitPage("The pins page's head", ["head"]),
+  });
+  const reply = (pin: string, words: string) =>
+    fleet.api(`/api/instances/${session}/artifacts/comments/${pin}/reply`, {
+      text: words,
+      asks: true,
+    });
+  const ours = (from: number) =>
+    phone.pushed
+      .slice(from)
+      .filter((one) => one.collapseId === `artifact-${id}`);
+  // The tab stays open throughout: the person answers from it with no new look.
+  const page = await ownTab(at, id);
+  const frame = page.frameLocator(FRAME);
+  await frame.locator('[data-option="head-a"]').waitFor({ timeout: 60_000 });
+  await pressIn(frame, '[data-option="head-a"]');
+  await lineIs(fleet, id, artifactWords.unsent(1));
+  /**
+   * Each answer reaches the session by itself and its turn ends; the person
+   * has it in front then (a look), so that turn's own push stays out of
+   * the artifact's burst.
+   */
+  const lookAfterTurn = async (since: number) => {
+    await until(
+      "the answer's turn",
+      () => turnEndedAt(fleet, session),
+      (end) => end > since,
+      60_000
+    ).catch(() => 0);
+    await fleet.api("/api/seen", { ids: [session], kind: "look" });
+  };
+  await inDoc(page, (doc) => {
+    const now = new Date().toISOString();
+    doc.transact(() => {
+      for (const n of [1, 2, 3]) {
+        doc.getMap("pins").set(`fall-pin-${n}`, {
+          id: `fall-pin-${n}`,
+          number: n,
+          kind: "comment",
+          anchor: { selector: "#head" },
+          at: now,
+          by: "person",
+          elements: [],
+          point: { x: 0.5, y: 0.5 },
+          thread: [
+            { id: `fall-entry-${n}`, by: "person", text: `Mark ${n}`, at: now },
+          ],
+        });
+      }
+    });
+  });
+  await Bun.sleep(4500);
+  await Bun.sleep(BURST_QUIET_MS);
+
+  // In the burst: three asking replies, then the person answers one before it goes out.
+  const burstFrom = phone.pushed.length;
+  const repliedAt = Date.now();
+  await reply("fall-pin-1", "Bigger or the same?");
+  await reply("fall-pin-2", "Left or centred?");
+  await reply("fall-pin-3", "Keep the rule under it?");
+  await inDoc(page, (doc) => {
+    const marks = doc.getMap("pins");
+    const pin = marks.get("fall-pin-3") as { thread: object[] };
+    doc.transact(() =>
+      marks.set("fall-pin-3", {
+        ...pin,
+        thread: [
+          ...pin.thread,
+          {
+            id: "fall-entry-3b",
+            by: "person",
+            text: "Keep it.",
+            at: new Date().toISOString(),
+          },
+        ],
+      })
+    );
+  });
+  const answeredAt = Date.now();
+  const burstLine = `${artifactWords.unsent(1)} · ${artifactWords.newAnswers(2)}`;
+  const two = await lineIs(fleet, id, burstLine);
+  await lookAfterTurn(answeredAt);
+  await until(
+    "the burst's push",
+    () => ours(burstFrom)[0],
+    Boolean,
+    PUSH_MS
+  ).catch(() => undefined);
+  await Bun.sleep(BURST_QUIET_MS);
+  const went = ours(burstFrom);
+  const wentSealed = went[0]?.payload.e
+    ? await phone.open(went[0].payload.e)
+    : null;
+  kit.check(
+    "in the burst: the person answers one of three asking pins before the burst goes out, and the one push that goes out says 2 (shown and sealed), with its sound",
+    two === burstLine &&
+      went.length === 1 &&
+      went[0]?.payload.aps?.alert?.body === artifactWords.newAnswers(2) &&
+      went[0].payload.aps.sound === "default" &&
+      wentSealed?.body === artifactWords.newAnswers(2),
+    JSON.stringify({
+      line: two,
+      pushes: went.length,
+      aps: went.map((one) => one.payload.aps),
+      sealed: wentSealed,
+      answeredMsAfterFirstReply: answeredAt - repliedAt,
+    })
+  );
+
+  // At 0: the person answers the last two; the unsent pick keeps the row.
+  const zeroFrom = phone.pushed.length;
+  const clearedSince = Date.now() - 1000;
+  await inDoc(page, (doc) => {
+    const marks = doc.getMap("pins");
+    const now = new Date().toISOString();
+    doc.transact(() => {
+      for (const n of [1, 2]) {
+        const pin = marks.get(`fall-pin-${n}`) as { thread: object[] };
+        marks.set(`fall-pin-${n}`, {
+          ...pin,
+          thread: [
+            ...pin.thread,
+            { id: `fall-entry-${n}b`, by: "person", text: "Yes.", at: now },
+          ],
+        });
+      }
+    });
+  });
+  const stands = await lineIs(fleet, id, artifactWords.unsent(1));
+  const ledger = await until(
+    "the artifact's notification in the cleared ledger",
+    () =>
+      fleet.api<{ cleared: { collapseId: string }[] }>(
+        `/api/notifications/cleared?since=${clearedSince}`
+      ),
+    (read) => read.cleared.some((one) => one.collapseId === `artifact-${id}`),
+    LANE_MS
+  ).catch(() => null);
+  kit.check(
+    "at 0: the person answers the last asking pins, the device's notification under artifact-<id> is taken down (the cleared ledger names it), no push goes, and the row stands on its unsent pick ('1 unsent')",
+    stands === artifactWords.unsent(1) &&
+      !!ledger?.cleared.some((one) => one.collapseId === `artifact-${id}`) &&
+      ours(zeroFrom).length === 0,
+    JSON.stringify({
+      line: stands,
+      cleared: ledger?.cleared.map((one) => one.collapseId),
+      pushes: ours(zeroFrom).length,
+    })
+  );
+  await page.close();
+};
+
 /* ── The dashboard: the count and arcs, Files' dot, the row's boxes ─────── */
 
 /** Caw's panel opened on `page`: its Needs-you rows. */
@@ -2165,6 +2341,7 @@ const run = async (kit: Kit) => {
   await picks(at, picking);
   await pins(at, judging, judge);
   await pinAsks(at, judging, judge, phone);
+  await pinAsksFall(at, judging, phone);
   const writing = await fleet.spawn("claude", "Writing", fleet.repo);
   await movedOn(at, writing);
   const parking = await fleet.spawn("claude", "Parking", fleet.repo);

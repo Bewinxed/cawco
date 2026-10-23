@@ -1627,6 +1627,9 @@ export const createPush = ({
     }
     const next = pinArrival(need, count);
     if (open?.items.has(id)) {
+      console.log(
+        `[notify] push ${id}: ${was} pins asked, now ${count}; goes out so with ${open.id}`
+      );
       open.items.set(id, next);
     } else if (alone.has(id)) {
       console.log(
