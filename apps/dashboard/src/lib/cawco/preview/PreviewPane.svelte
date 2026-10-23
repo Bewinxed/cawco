@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {
+  import { 
     artifactWords,commentWords, 
     commonWords,
     hostModeDomain,
@@ -11,7 +11,7 @@
     previewWords,
     projectPagePlace,
     type ShownFailure,
-    sheetWords
+    sheetWords, shellWords
   } from "@cawco/core";
   import {
     type ChangedItem,
@@ -3579,7 +3579,7 @@
                 data-details
                 aria-controls={stageDetailsId}
                 aria-expanded={stageDetails}
-                label={stageDetails ? "Hide details" : "Show details"}
+                label={stageDetails ? shellWords.hideDetails : shellWords.showDetails}
                 onclick={() => {
                   stageDetails = !stageDetails;
                 }}
@@ -3640,7 +3640,7 @@
                 data-details
                 aria-controls={stageDetailsId}
                 aria-expanded={stageDetails}
-                label={stageDetails ? "Hide details" : "Show details"}
+                label={stageDetails ? shellWords.hideDetails : shellWords.showDetails}
                 onclick={() => {
                   stageDetails = !stageDetails;
                 }}

@@ -15,6 +15,7 @@
    * With `present` off the words fade and Caw leaves; `ongone` says when he
    * has, and the place lets it go.
    */
+  import { shellWords } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
@@ -82,7 +83,7 @@
             data-slot="title"
             class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
-            Connect a machine to run sessions
+            {shellWords.noMachines}
           </h1>
           <p
             class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
@@ -129,7 +130,7 @@
             data-slot="title"
             class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
-            None of your machines are online
+            {shellWords.noneOnline}
           </h1>
           <p
             class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { sidebarWords } from "@cawco/core";
+  import { shellWords, sidebarWords } from "@cawco/core";
   import {
     type ShellShortcut,
     shellShortcutOf,
@@ -1304,14 +1304,14 @@
                  own class and the bar group's (`[data-machines]`), both on
                  the shell container's desk line (`@max-desk/shell`), so the
                  first client render keeps the bar the server drew. -->
-            <Tip keys="⌘K" label="Jump to session">
+            <Tip keys="⌘K" label={shellWords.jumpToSession}>
               {#snippet children(tip)}
                 <button
                   data-bar-item
                   {...tip}
                   aria-expanded={barGlass.open === "jump"}
                   aria-haspopup="dialog"
-                  aria-label="Jump to session"
+                  aria-label={shellWords.jumpToSession}
                   class="select-none touch-hit press-tint @max-desk/shell:hidden"
                   data-share="jump"
                   onclick={() => {

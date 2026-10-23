@@ -11,6 +11,8 @@
  * here or nowhere.
  */
 export const connectionWords = {
+  /** The hub isn't answering: the band's, the home's quiet line, the status line's lead. */
+  unreachable: "Hub unreachable",
   /** The hub restarts for the update to `version` (null when unnamed), named when it is. */
   updating: (version: string | null) =>
     `CawCo is updating${(version ?? "").length > 0 ? ` to ${version ?? ""}` : ""}.`,

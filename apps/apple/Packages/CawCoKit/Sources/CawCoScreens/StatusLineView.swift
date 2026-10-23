@@ -132,10 +132,10 @@ final class StatusLineView: UIView {
             words.text = Words.Connection.updated(version: hub.updated?.version)
         case .unreachable:
             if hub.socket == .connecting {
-                words.text = "Hub unreachable, retrying now"
+                words.text = "\(Words.Connection.unreachable), retrying now"
             } else {
                 let seconds = hub.retryAt.map { max(0, Int($0.timeIntervalSinceNow.rounded(.up))) } ?? 0
-                words.text = "Hub unreachable, retrying in \(seconds)s"
+                words.text = "\(Words.Connection.unreachable), retrying in \(seconds)s"
             }
         case .connecting:
             words.text = "Connecting…"

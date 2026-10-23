@@ -14,9 +14,12 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
+import { exactly } from "../words";
 import {
   eventually,
   expect,
@@ -25,11 +28,10 @@ import {
   type Leg,
   shows,
 } from "./suite";
-import { transcriptWords } from "../../../packages/core/src/words/transcript";
 
 const SAID = "JOURNEY-SAID";
 const MORE = "JOURNEY-MORE";
-const JUMP = /^Jump to session$/;
+const JUMP = exactly(shellWords.jumpToSession);
 const OPEN_NAVIGATION = sidebarWords.openNavigation;
 const SHEET_SEARCH = "Search sessions, projects, machines";
 const FIND = "Find a session, or a task, preview, decision";

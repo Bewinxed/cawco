@@ -42,6 +42,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
+import { shellWords } from "../../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { type Kit, open, type Spec } from "../../kit";
 
@@ -395,7 +396,7 @@ const run = async (kit: Kit) => {
     const frameDay = await frameDrawn(desk, frame);
     // Night: the dashboard's own theme switch (the sidebar's), pressed as a person does.
     await desk
-      .getByRole("button", { name: "Light mode" })
+      .getByRole("button", { name: shellWords.lightMode })
       .first()
       .evaluate((el) => (el as HTMLElement).click());
     await until(

@@ -2236,6 +2236,7 @@ export * from "./words/presence";
 export * from "./words/preview";
 export * from "./words/routines";
 export * from "./words/sheet";
+export * from "./words/shell";
 export * from "./words/side";
 export * from "./words/sidebar";
 export * from "./words/skills";

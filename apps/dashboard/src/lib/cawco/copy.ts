@@ -6,6 +6,7 @@
  * Rule): the control says {@link copyRefused} on its own line (RowFault),
  * with Try again and the text itself under Show details to copy by hand.
  */
+import { shellWords } from "@cawco/core";
 import { toast } from "./toasts";
 
 export async function copyToClipboard(
@@ -25,6 +26,6 @@ export async function copyToClipboard(
 /** A copy the browser refused, in the error formula, for the control's own line. */
 export const copyRefused = (
   what: string,
-  byHand = "from Show details"
+  byHand = shellWords.fromShowDetails
 ): string =>
   `The browser didn't allow copying the ${what.toLowerCase()}. Try again, or copy it by hand ${byHand}.`;

@@ -55,6 +55,7 @@
 import type { Page, WebSocketRoute } from "playwright-core";
 import { HOOK_TEMPLATES } from "../../../../packages/core/src/hooks";
 import { commonWords } from "../../../../packages/core/src/words/common";
+import { shellWords } from "../../../../packages/core/src/words/shell";
 import { MACHINE, type Seen } from "../../../scratch-fleet";
 import {
   type Engine,
@@ -1265,9 +1266,7 @@ const LONG_WHY =
 /** What a refusal line says and offers: its words, and whether Try again stands in it. */
 const faultOf = (page: Page, selector: string) =>
   page.evaluate(
-    ({ sel, again }) => {
-      // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, where nothing of the module's reaches
-      const showDetails = /Show details/;
+    ({ sel, again, showDetails }) => {
       const line = document.querySelector(sel);
       return {
         text: line?.textContent?.replace(/\s+/g, " ").trim() ?? "",
@@ -1275,12 +1274,12 @@ const faultOf = (page: Page, selector: string) =>
           (button.textContent ?? "").includes(again)
         ),
         details: [...(line?.querySelectorAll("button") ?? [])].some((button) =>
-          showDetails.test(button.textContent ?? "")
+          (button.textContent ?? "").includes(showDetails)
         ),
       };
     },
-    // Try again's words go in as the read's argument: it runs in the page.
-    { sel: selector, again: commonWords.tryAgain }
+    // Try again's and Show details' words go in as the read's argument: it runs in the page.
+    { sel: selector, again: commonWords.tryAgain, showDetails: shellWords.showDetails }
   );
 
 /** Toasts on screen now: none may be, after any refusal. */

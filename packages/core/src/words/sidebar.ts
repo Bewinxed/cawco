@@ -14,4 +14,7 @@ export const sidebarWords = {
   noProjects: "No projects yet — name a checkout to group its sessions.",
   /** The phone's and narrow window's burger, which opens the sidebar over the page. */
   openNavigation: "Open navigation",
+  /** The sessions' sort: its button, named with the order it holds, and the order by last activity. */
+  sortSessions: (order: string) => `Sort sessions — currently ${order}`,
+  lastActivity: "Last activity",
 };

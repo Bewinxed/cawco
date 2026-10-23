@@ -21,6 +21,7 @@ import { connectWords } from "../../../packages/core/src/words/connect";
 import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { memoryWords } from "../../../packages/core/src/words/memory";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { skillsWords } from "../../../packages/core/src/words/skills";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
@@ -177,7 +178,7 @@ const SIGN_IN_UNFINISHED = /^Sign-in didn't finish/;
 const START_SIGN_IN = startsWith(accountsWords.device.start);
 const GROWN_DRAFT =
   /Wrap the chip's label at the badge\.\s*Keep the count whole\.\s*Then measure it on a phone\./;
-const CATCHING_UP_LINE = /^Catching up…$/;
+const CATCHING_UP_LINE = exactly(shellWords.catchingUp);
 /** A preview drawn in its frame, the pane's Comments rail, and the page's where-to-start (MachinesEmpty's title). */
 const PREVIEW_READY = "iframe[data-ready=true]";
 const PIN_LIST = 'aside[data-slot=comment-rail][aria-label="Comments"]';
@@ -321,7 +322,7 @@ const TOOL_ROWS = [
   /Searched/,
 ];
 /** The rail's sort menu. */
-const SORT = /Sort sessions/;
+const SORT = startsWith(sidebarWords.sortSessions(""));
 /** The phone rail's way into Jump. */
 const JUMP_BUTTON = /Jump|Search/;
 /** The skills page's way in for a skill from a source. */
@@ -2589,7 +2590,7 @@ export const SURFACES: Surface[] = [
         root: LAYER,
         ready: {
           shows: `${OPEN_MENU}[data-slot=dropdown-menu-content]`,
-          says: /Last activity/,
+          says: new RegExp(literal(sidebarWords.lastActivity)),
         },
       },
       {
@@ -4637,7 +4638,7 @@ export const SURFACES: Surface[] = [
       {
         name: "rest",
         root: "body",
-        ready: { shows: "main p", says: /^Page not found$/ },
+        ready: { shows: "main p", says: exactly(shellWords.pageNotFound) },
       },
     ],
   },
@@ -4688,7 +4689,7 @@ export const SURFACES: Surface[] = [
         widths: ["tablet", "phone"],
         ready: {
           shows: MACHINES_EMPTY,
-          says: /^None of your machines are online$/,
+          says: exactly(shellWords.noneOnline),
         },
       },
       // No machine at all, every one removed: where the page says to add one.
@@ -4698,7 +4699,7 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: MACHINES_EMPTY,
-          says: /^Connect a machine to run sessions$/,
+          says: exactly(shellWords.noMachines),
         },
       },
       {
@@ -4764,7 +4765,7 @@ export const SURFACES: Surface[] = [
             );
             await p.evaluate(() => window.sessionStorage.clear());
           })(page);
-          await page.getByTitle("Show the whole error").first().click();
+          await page.getByTitle(shellWords.wholeError).first().click();
         },
         root: "body",
         ready: {

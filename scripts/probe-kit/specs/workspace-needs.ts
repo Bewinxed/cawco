@@ -36,6 +36,7 @@ import {
   workspaceNeeds,
 } from "../../../packages/agent/src/workspace-needs";
 import type { MachineCapability } from "../../../packages/core/src/capabilities";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import {
   workspaceNeedsDetails,
   workspaceNeedsReason,
@@ -355,7 +356,7 @@ const legD = async (
   );
   await page
     .locator(`li[data-machine="${MACHINE}"] [data-workspace-needs]`)
-    .getByRole("button", { name: "Show details" })
+    .getByRole("button", { name: shellWords.showDetails })
     .click();
   await page
     .locator(

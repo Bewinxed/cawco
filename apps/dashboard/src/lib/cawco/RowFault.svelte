@@ -28,7 +28,7 @@
    * row above (`--fault-indent`, `--fault-end`); a host that sets those for
    * every row inside it passes neither.
    */
-  import { configureWords } from "@cawco/core";
+  import { configureWords, shellWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -135,7 +135,7 @@
             aria-controls={detailsId}
             aria-expanded={shown}
             class="flex-none"
-            label={shown ? "Hide details" : "Show details"}
+            label={shown ? shellWords.hideDetails : shellWords.showDetails}
             onclick={() => {
               shown = !shown;
             }}

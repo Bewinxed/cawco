@@ -214,7 +214,7 @@
         );
       case "lost":
       case "retrying":
-        return `Hub unreachable — ${retry}.`;
+        return `${connectionWords.unreachable} — ${retry}.`;
       case "refused":
         return `— ${retry}.`;
       case "back":

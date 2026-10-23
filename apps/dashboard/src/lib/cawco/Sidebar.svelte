@@ -486,7 +486,7 @@
   }
 
   const SORT_LABEL: Record<RailSort, string> = {
-    recent: "Last activity",
+    recent: sidebarWords.lastActivity,
     name: "Name",
     state: "State",
   };
@@ -628,7 +628,7 @@
     const at = lastAt(row);
     return at === 0
       ? "No activity recorded"
-      : `Last activity ${formatDistanceToNow(new Date(at))}`;
+      : `${sidebarWords.lastActivity} ${formatDistanceToNow(new Date(at))}`;
   };
 
   /* ---- helpers -------------------------------------------------------- */
@@ -970,9 +970,7 @@
                 {#snippet child({ props })}
                   <Button
                     {...props}
-                    aria-label="Sort sessions — currently {SORT_LABEL[
-                      rail.sort
-                    ]}"
+                    aria-label={sidebarWords.sortSessions(SORT_LABEL[rail.sort])}
                     size="icon-sm"
                     title="Sort sessions — {SORT_LABEL[rail.sort]}"
                     variant="ghost"
@@ -991,7 +989,7 @@
                     value={rail.sort}
                   >
                     <DropdownMenu.RadioItem value="recent"
-                      >Last activity</DropdownMenu.RadioItem
+                      >{sidebarWords.lastActivity}</DropdownMenu.RadioItem
                     >
                     <DropdownMenu.RadioItem value="name"
                       >Name</DropdownMenu.RadioItem

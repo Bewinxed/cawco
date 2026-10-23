@@ -36,6 +36,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { accountsWords, commonWords } from "../../../packages/core/src";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import { type Engine, type Kit, type KitFleet, open, type Spec } from "../kit";
 
@@ -302,7 +303,7 @@ async function leg(
   );
   check(
     `${engine} · the page stays the account's page, never the error page`,
-    !title.includes("Something went wrong") &&
+    !title.includes(shellWords.somethingWentWrong) &&
       new URL(page.url()).pathname === `/config/accounts/${made.id}`,
     `${title} · ${page.url()}`
   );

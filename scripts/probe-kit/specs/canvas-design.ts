@@ -132,6 +132,7 @@ import type {
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
 
@@ -2199,11 +2200,11 @@ async function stageDownLeg(
       folded.title === "The stage for apps/dashboard didn't start" &&
       folded.line ===
         "Vite stopped before it served the canvas. Try again starts it again." &&
-      folded.button === "Show details" &&
+      folded.button === shellWords.showDetails &&
       folded.expanded === "false" &&
       folded.details === null &&
       !folded.said &&
-      open.button === "Hide details" &&
+      open.button === shellWords.hideDetails &&
       open.expanded === "true" &&
       open.details === NIGHTLY_ERROR &&
       open.inside,
@@ -2369,7 +2370,7 @@ async function refusedLeg(
       `${leg}: ${theme}: ${what} says so within ${REFUSED_MS / 1000}s in the error formula's line, the stage's own words under Show details on a ground recessed from its card${place ? ", its place whole on one line and Vite's code frame under them" : ""}, and the pane never says "Compiling…"`,
       !seen.compiling &&
         !!seen.failed &&
-        seen.failed.summary === "Show details" &&
+        seen.failed.summary === shellWords.showDetails &&
         seen.failed.line === line &&
         said(seen.failed.details) &&
         seen.failed.ground !== seen.failed.card &&

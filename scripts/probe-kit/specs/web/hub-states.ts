@@ -32,6 +32,7 @@
  */
 import { join } from "node:path";
 import type { Page, WebSocketRoute } from "playwright-core";
+import { connectionWords } from "../../../../packages/core/src/words/connection";
 import { bezierAt, sameCurve } from "../../anim";
 import { scan } from "../../journeys/scan";
 import {
@@ -44,6 +45,7 @@ import {
   settle,
   type View,
 } from "../../kit";
+import { literal } from "../../words";
 
 const BAND = '[data-slot="hub-band"]';
 const CARD = "[data-glass-card-frame]";
@@ -61,7 +63,7 @@ const installing = (phase: "installing" | "available") => ({
 const AWAY =
   /hub unreachable|can.t reach the hub|reach the hub|retrying in|retrying now|reconnecting|reconnect/i;
 
-const UNREACHABLE = /Hub unreachable/;
+const UNREACHABLE = new RegExp(literal(connectionWords.unreachable));
 const RECONNECTED = /reconnected/i;
 /** The build's name kept whole: a word joiner may follow its hyphen. */
 const UPDATING_PROBE = /updating to 9\.9\.9-\u2060?probe/;

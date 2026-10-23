@@ -824,6 +824,13 @@ public enum Words {
 
         /// The phone's and narrow window's burger, which opens the sidebar over the page.
         public static let openNavigation = "Open navigation"
+
+        /// The sessions' sort: its button, named with the order it holds, and the order by last activity.
+        public static func sortSessions(order: String) -> String {
+            "Sort sessions — currently \(order)"
+        }
+
+        public static let lastActivity = "Last activity"
     }
 
     public enum Upstream {
@@ -1452,6 +1459,9 @@ public enum Words {
 
     public enum Connection {
         // packages/core/src/words/connection.ts `connectionWords`
+        /// The hub isn't answering: the band's, the home's quiet line, the status line's lead.
+        public static let unreachable = "Hub unreachable"
+
         /// The hub restarts for the update to `version` (null when unnamed), named when it is.
         public static func updating(version: String?) -> String {
             "CawCo is updating\((version ?? "").count > 0 ? " to \(version ?? "")" : "")."

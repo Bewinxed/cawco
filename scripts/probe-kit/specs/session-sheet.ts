@@ -165,6 +165,7 @@ import {
   STAGE_READY_MS,
 } from "../../../packages/core/src/stage";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
 
@@ -893,7 +894,7 @@ async function panelLegs(
   await desk.evaluate(() => {
     (window as unknown as { __stayed: boolean }).__stayed = true;
   });
-  await desk.getByRole("button", { name: "Light mode" }).first().click();
+  await desk.getByRole("button", { name: shellWords.lightMode }).first().click();
   await desk.waitForFunction(() =>
     document.documentElement.classList.contains("dark")
   );

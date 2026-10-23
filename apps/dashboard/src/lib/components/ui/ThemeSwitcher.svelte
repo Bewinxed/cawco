@@ -1,17 +1,18 @@
 <script lang="ts">
+  import { shellWords } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconMoon, IconSun } from "#lib/icons.js";
   import { theme, toggleTheme } from "#lib/theme.svelte.js";
 
   const themeLabels = {
-    light: "Light mode",
-    dark: "Dark mode",
+    light: shellWords.lightMode,
+    dark: shellWords.darkMode,
     system: "System",
   };
 
   const isDark = $derived(theme.resolved === "dark");
-  const label = $derived(themeLabels[theme.current] || "Light mode");
+  const label = $derived(themeLabels[theme.current] || shellWords.lightMode);
 </script>
 
 <Tip {label}>

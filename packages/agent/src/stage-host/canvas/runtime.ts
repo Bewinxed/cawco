@@ -40,6 +40,7 @@ import {
   type Story,
   sectionName,
 } from "@cawco/core/stage";
+import { shellWords } from "@cawco/core/words/shell";
 import { Chrome } from "./chrome";
 import {
   deltaOf,
@@ -953,10 +954,12 @@ export function boot(options: BootOptions): void {
     line.textContent = FAILED_LINE[kind](section.name);
     const details = document.createElement("details");
     const summary = document.createElement("summary");
-    summary.textContent = "Show details";
+    summary.textContent = shellWords.showDetails;
     // The house's disclosure (dashboard RowFault): its words say what a press does.
     details.addEventListener("toggle", () => {
-      summary.textContent = details.open ? "Hide details" : "Show details";
+      summary.textContent = details.open
+        ? shellWords.hideDetails
+        : shellWords.showDetails;
     });
     const words = document.createElement("pre");
     words.textContent = error.message;

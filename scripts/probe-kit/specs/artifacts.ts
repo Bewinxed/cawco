@@ -146,6 +146,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   type Kit,
@@ -1991,7 +1992,7 @@ async function headLines(page: Page) {
 const flipTheme = (page: Page, from: "light" | "dark") =>
   page
     .getByRole("button", {
-      name: from === "light" ? "Light mode" : "Dark mode",
+      name: from === "light" ? shellWords.lightMode : shellWords.darkMode,
     })
     .first()
     .click();

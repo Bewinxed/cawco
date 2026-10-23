@@ -100,6 +100,7 @@ import type {
   FrameRender,
   RenderReport,
 } from "../../../packages/core/src/stage";
+import { shellWords } from "../../../packages/core/src/words/shell";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -1156,10 +1157,10 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
   // The details' toggle event is a task after the press: its words follow it.
   await broken
     .waitForFunction(
-      () =>
+      (hide) =>
         document.querySelector(".cawco-section-failed summary")?.textContent ===
-        "Hide details",
-      null,
+        hide,
+      shellWords.hideDetails,
       { timeout: 2000 }
     )
     .catch(() => undefined);
@@ -1199,12 +1200,12 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
     "15: a section that didn't load says so in its place, named by its component, its error and place under Show details, the report holding the page error, no skeleton left",
     before.title === "Badge" &&
       before.line === "Badge didn't load, so none of its stories are drawn." &&
-      before.summary === "Show details" &&
+      before.summary === shellWords.showDetails &&
       !before.open &&
       before.role === "alert" &&
       before.left === 0 &&
       details.height > 0 &&
-      details.summary === "Hide details" &&
+      details.summary === shellWords.hideDetails &&
       details.marker === "none" &&
       details.text.includes("The states file's helper broke as it loaded") &&
       details.place.includes("src/broken.js:2:") &&
