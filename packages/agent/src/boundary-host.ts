@@ -492,8 +492,10 @@ const standIn = (): void => {
  * Every clone-side deny path the guard covers, relative to the clone: what
  * host git runs or reads (its config, hooks, submodules' git dirs) and the
  * harness project config a host harness loads at the workspace's next
- * session (Claude Code's project settings, hooks, commands and agents,
- * OpenCode's config, `.mcp.json`), and srt's own mandatory names at the
+ * session (Claude Code's project settings, hooks, commands, agents,
+ * workflows, routines, scheduled tasks, launch config and output styles,
+ * OpenCode's config, pi's `.pi`, `.agents/skills`, `.mcp.json`), the placed
+ * skills and memory documents, and srt's own mandatory names at the
  * clone's root, each given a stand-in too. The guard covers these whatever DENIES
  * names, and every path DENIES names besides (`cloneDenies` in
  * workspace-policy.ts, the policy's list, which names the same).
@@ -508,14 +510,24 @@ const PROTECTED = [
     "hooks",
     "commands",
     "agents",
+    "workflows",
+    "routines",
+    "output-styles",
+    "launch.json",
+    "scheduled_tasks.json",
+    "loop.md",
     // The skills the fleet places, and the store their links land in.
     "skills",
     TREE_STORE_DIR,
+    // The project's memory documents as the fleet places them.
+    "rules/cawco",
   ].map((name) => projectClaudeRelative(name)),
   "opencode.json",
   "opencode.jsonc",
   ".opencode",
   ".mcp.json",
+  ".pi",
+  ".agents/skills",
   // srt's own mandatory names at the clone's root (`DANGEROUS_FILES`,
   // `getDangerousDirectories()` in sandbox-utils.js at 0.0.81).
   ".gitconfig",
