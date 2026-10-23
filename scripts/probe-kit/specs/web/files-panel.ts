@@ -2427,7 +2427,7 @@ const viewLeg = async (
     .locator('[data-files-cards][data-files-view="list"]')
     .waitFor({ timeout: 10_000 });
   // The slide played out, and the sign's count read after it.
-  await page.waitForTimeout(900);
+  await filesAtRest(page);
   const list = await page.evaluate(listOf);
   kit.check(
     `34 (${leg}): in the list, one row each (${count === "one" ? 1 : MANY}), no row over another, nothing a row draws past its row or the region, the switch inside the Artifacts head and Files, its List checked`,
@@ -2459,7 +2459,7 @@ const viewLeg = async (
   await page
     .locator('[data-files-cards][data-files-view="thumbnails"]')
     .waitFor({ timeout: 10_000 });
-  await page.waitForTimeout(900);
+  await filesAtRest(page);
   const back = await page.evaluate(slotsOf);
   kit.check(
     `34 (${leg}): back in thumbnails every card lies inside its slot again, and an overflow scan of Files totals zero`,

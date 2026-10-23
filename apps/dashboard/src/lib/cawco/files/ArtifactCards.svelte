@@ -416,8 +416,7 @@
   <span
     class="relative grid size-c-row-lead flex-none place-items-center text-ink-muted"
     data-box
-    style:--dot-at="calc((var(--c-row-lead) - var(--icon-md)) / 2 -
-    var(--status-dot-size))"
+    style:--dot-at={"calc((var(--c-row-lead) - var(--icon-md)) / 2 - var(--status-dot-size))"}
   >
     <Glyph aria-hidden="true" class="size-icon-md" />
     {#if artifact.pending}{@render needsDot()}{/if}
