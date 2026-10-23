@@ -273,15 +273,20 @@ async function leg(
     (now) => now.view && now.frames > 0 && now.width > 0,
     5 * 60_000
   ).catch(() => viewOf(page));
-  // The page in front made to paint every frame: frames must then advance.
-  const paging = await movePages(key).catch((error: unknown) => {
-    kit.check(
-      `${name}: the browser's pages loaded the moving page`,
-      false,
-      String(error)
-    );
-    return 0;
-  });
+  // The page in front made to paint every frame, once the browser is live
+  // and its view drew: frames must then advance. A browser that never went
+  // live has no DevTools to reach; the checks below say what the view shows.
+  const live = (await recordOf(key)).state === "live" && first.frames > 0;
+  const paging = live
+    ? await movePages(key).catch((error: unknown) => {
+        kit.check(
+          `${name}: the browser's pages loaded the moving page`,
+          false,
+          String(error)
+        );
+        return 0;
+      })
+    : 0;
   await page.waitForTimeout(1000);
   const moving = await viewOf(page);
   await page.waitForTimeout(2000);
@@ -322,7 +327,11 @@ async function leg(
   );
 
   if (host === "container") {
-    const control = await nekoControl(key);
+    // A neko that never started answers nothing: said in the check, and the run goes on.
+    const control = await nekoControl(key).catch((error: unknown) => ({
+      has_host: false,
+      host_id: `neko didn't answer: ${String(error)}`,
+    }));
     kit.check(
       `${name}: neko's control is held by the view's session (${control?.host_id})`,
       control?.has_host === true && !!control.host_id,
@@ -330,11 +339,22 @@ async function leg(
     );
   }
 
-  // Hand back from the panel's head.
-  await page
+  // Hand back from the panel's head; with no take-over standing there is none
+  // to press, which is said, and the leg ends.
+  const pressed = await page
     .getByRole("button", { name: browserWords.handBack, exact: true })
     .first()
-    .click();
+    .click({ timeout: 30_000 })
+    .then(
+      () => null,
+      (error: unknown) => String(error)
+    );
+  if (pressed) {
+    kit.check(`${name}: Hand back stands in the head`, false, pressed);
+    holder.close();
+    await page.close();
+    return;
+  }
   const said = await answered;
   kit.check(
     `${name}: Hand back answers A's tool ("${said.kind === "answered" ? said.value : said.kind}")`,

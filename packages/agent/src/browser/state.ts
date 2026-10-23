@@ -17,6 +17,7 @@
  * those writes would be queued by fseventsd for the daemon and handed to it.
  */
 import { randomBytes } from "node:crypto";
+import { createSocket } from "node:dgram";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
@@ -270,13 +271,36 @@ export const withBrowser = async <T>(
   return holding(join(browserDir(key), "lock"), `The browser ${key}`, work);
 };
 
-/** Whether nothing on this machine listens on 127.0.0.1:`port` now. */
-const portFree = (port: number): Promise<boolean> =>
+/** Whether TCP `port` binds on every address now. */
+const tcpFree = (port: number): Promise<boolean> =>
   new Promise((resolve) => {
     const server = createServer();
     server.once("error", () => resolve(false));
-    server.listen(port, "127.0.0.1", () => server.close(() => resolve(true)));
+    server.listen(port, "0.0.0.0", () => server.close(() => resolve(true)));
   });
+
+/** Whether UDP `port` binds on every address now. */
+const udpFree = (port: number): Promise<boolean> =>
+  new Promise((resolve) => {
+    const socket = createSocket("udp4");
+    socket.once("error", () => {
+      socket.close();
+      resolve(false);
+    });
+    socket.bind(port, "0.0.0.0", () => socket.close(() => resolve(true)));
+  });
+
+/**
+ * Whether `port` is free for a browser now, as its runtime binds it: TCP and
+ * UDP on every address (the media port is published on 0.0.0.0 for both,
+ * container-host.ts). A probe on 127.0.0.1 alone misses a socket on another
+ * address holding the port, such as a connection's ephemeral port, which
+ * still refuses the runtime's 0.0.0.0 bind (r247 on obelisk: "rootlessport
+ * listen tcp 0.0.0.0:43012: bind: address already in use" for a slot a
+ * 127.0.0.1 probe called free).
+ */
+const portFree = async (port: number): Promise<boolean> =>
+  (await tcpFree(port)) && (await udpFree(port));
 
 /**
  * The record of `key`, made when it has none: asleep, holding no ports until

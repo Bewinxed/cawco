@@ -508,51 +508,92 @@ export const startBrowser = (
     // restart, a connection's ephemeral port): it moves to a slot whose
     // ports are free, rather than failing to bind them.
     if (!(await host.running(record)) && (await portsTaken(record))) {
-      const from = portsOf(record);
-      const { slot: taken, ...unslotted } = record;
-      record = await slotted(unslotted, new Set([...held, taken as number]));
-      console.info(
-        `[browser] ${key}: another program holds its ports (${Object.values(from).join(", ")}); moved to ${Object.values(portsOf(record)).join(", ")}`
-      );
+      record = await moveSlot(record, held, "another program holds them");
     }
-    starting.set(key, { state: "starting" });
-    told();
-    try {
-      record = await host.start(record, {
-        ...(relay ? { relay } : {}),
-        progress: (progress) => {
-          starting.set(key, progress);
-          told();
-        },
-      });
-      const { why: _why, runtimeAway: _away, ...live } = record;
-      record = { ...live, state: "live", lastUsedAt: Date.now() };
-      await writeBrowser(record);
-      // Made with the rules wanted now: no remake waits on a release.
-      rulesWaiting.delete(key);
-      console.info(`[browser] ${key} live on the ${host.kind} host`);
-      gateFor(record);
-      starting.delete(key);
-      return rowOf(record);
-    } catch (error) {
-      // A browser that didn't start shows the person nothing to hold: a
-      // take-over it carried (from before a restart) ends with it, and the
-      // shield's watch answers its ask as stopped. One still running keeps it.
-      const running = await host.running(record).catch(() => false);
-      record = {
-        ...record,
-        state: "failed",
-        why: why(error),
-        ...(running ? {} : { takeover: null }),
-      };
-      await writeBrowser(record);
-      console.warn(`[browser] ${key} failed to start: ${record.why}`);
-      throw error;
-    } finally {
-      starting.delete(key);
-      told();
-    }
+    return launch(record, host, relay, held);
   });
+};
+
+/** A runtime's or a process's refusal to bind a port another socket holds. */
+const BIND_REFUSED = /address already in use|EADDRINUSE/i;
+
+/** `record` on a slot whose ports are free now, none of `held` nor its own; said in the log with `why`. */
+const moveSlot = async (
+  record: BrowserRecord,
+  held: ReadonlySet<number>,
+  said: string
+): Promise<BrowserRecord> => {
+  const from = portsOf(record);
+  const { slot: taken, ...unslotted } = record;
+  const placed = await slotted(unslotted, new Set([...held, taken as number]));
+  console.info(
+    `[browser] ${record.key}: its ports (${Object.values(from).join(", ")}): ${said}; moved to ${Object.values(portsOf(placed)).join(", ")}`
+  );
+  return placed;
+};
+
+/**
+ * Starts `record` on `host` and answers its row once live. A port taken
+ * between the slot's probe and the runtime's bind moves it once more, to a
+ * slot whose ports are free then, and it starts there (its container made
+ * again on its volume for its ports). A browser that didn't start shows the
+ * person nothing to hold: a take-over it carried (from before a restart)
+ * ends with it, and the shield's watch answers its ask as stopped; one still
+ * running keeps it.
+ */
+const launch = async (
+  record: BrowserRecord,
+  host: BrowserHost,
+  relay: BrowserRelay | undefined,
+  held: ReadonlySet<number>,
+  moved = false
+): Promise<BrowserRow> => {
+  const { key } = record;
+  starting.set(key, { state: "starting" });
+  told();
+  try {
+    const started = await host.start(record, {
+      ...(relay ? { relay } : {}),
+      progress: (progress) => {
+        starting.set(key, progress);
+        told();
+      },
+    });
+    const { why: _why, runtimeAway: _away, ...live } = started;
+    const now: BrowserRecord = {
+      ...live,
+      state: "live",
+      lastUsedAt: Date.now(),
+    };
+    await writeBrowser(now);
+    // Made with the rules wanted now: no remake waits on a release.
+    rulesWaiting.delete(key);
+    console.info(`[browser] ${key} live on the ${host.kind} host`);
+    gateFor(now);
+    return rowOf(now);
+  } catch (error) {
+    const running = await host.running(record).catch(() => false);
+    if (!(moved || running) && BIND_REFUSED.test(why(error))) {
+      const placed = await moveSlot(
+        record,
+        held,
+        `refused at start (${why(error)})`
+      );
+      return launch(placed, host, relay, held, true);
+    }
+    const failed: BrowserRecord = {
+      ...record,
+      state: "failed",
+      why: why(error),
+      ...(running ? {} : { takeover: null }),
+    };
+    await writeBrowser(failed);
+    console.warn(`[browser] ${key} failed to start: ${failed.why}`);
+    throw error;
+  } finally {
+    starting.delete(key);
+    told();
+  }
 };
 
 /** How long a reservation waits for another process making the same key's record. */
